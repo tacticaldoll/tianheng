@@ -275,6 +275,28 @@ fn every_observer_declares_exactly_its_dimension_s_bounds() {
     }
 }
 
+/// A source with no `fn bounds` is a **refusal to judge**, not a pass.
+///
+/// The reaction panics naming the dimension when the method is absent from the file its array entry points at.
+/// That path is unreachable for a conforming `Observer` — the trait requires the method, so a rename fails to
+/// compile — and reachable the moment an impl moves to a file the array does not name. Asserted here because the
+/// scenario states it: a reaction that finds nothing to read has not observed that the obligation holds, and the
+/// distinction between "no body" and "an empty body" is what decides whether it refuses or reports.
+#[test]
+fn a_source_with_no_bounds_method_yields_no_body_to_judge() {
+    assert!(
+        bounds_body(&Source::of("fn other() -> u8 { 0 }\n")).is_none(),
+        "no `fn bounds` means nothing to judge, which the reaction turns into a refusal rather than a pass"
+    );
+    // The discriminator: a body that exists and is EMPTY is `Some(vec![])`, which the reaction reports as an
+    // offence. Without this, the assertion above would also hold for a recognizer that never finds anything.
+    assert_eq!(
+        bounds_body(&Source::of("fn bounds(&self) -> Vec<BoundDecl> {\n}\n")),
+        Some(Vec::new()),
+        "an empty body is found and judged, so absence and emptiness are distinguished"
+    );
+}
+
 /// The one statement a conforming `bounds()` body holds.
 const DELEGATION: &str = "observation_bounds()";
 

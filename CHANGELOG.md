@@ -163,6 +163,14 @@ them.
   deliberate counter-example lives outside the workspace: `examples/observer-participant`'s declarations are
   computed on purpose, which is what the owned form is for.
 
+  Two scenarios of the protocol's own requirements gained the reactions they were written without, both found by
+  the closing review's seventh round. *An observer's bounds method cannot be found where the reaction looks* is now
+  asserted, with the discriminator that an **empty** body is found and judged — so absence and emptiness are
+  distinguished rather than both reading as nothing to do. And *joining a run would require no new export* stops
+  being a claim in prose: the example measures its own reach, one dependency and no import of a family crate past
+  the shell, so a future edit importing around the published surface fails instead of quietly making the example
+  prove the opposite of its point.
+
 - `xingbiao::audit_corpus_and_anchor` derives a workspace's audit corpus **and** the directory every observed
   file's identity label is made relative to, in one call and from one `cargo metadata` read. 漏刻's observer and
   the composed shell both need that pair, and computing it twice is a twin derivation of **baseline identity** —

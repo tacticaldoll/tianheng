@@ -157,6 +157,74 @@ fn a_header_below_a_leading_comment_over_reacts() {
     );
 }
 
+/// **The published surface is enough**, checked rather than claimed.
+///
+/// The example's whole load-bearing result is that joining a run needed no addition to any crate's public API —
+/// and the spec says that if an outside crate *cannot* do it with the published surface alone, that is the finding
+/// rather than a reason to publish whatever the example wanted. An assertion in prose cannot hold that: a future
+/// edit reaching into `guibiao` or `xuanji` directly would keep every other test green while quietly making the
+/// example prove the opposite of what it exists to prove.
+///
+/// So the reach is measured from this crate's own sources: exactly one dependency, and no import of a family crate
+/// other than the shell.
+#[test]
+fn the_participant_reaches_only_the_published_shell() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let manifest = std::fs::read_to_string(root.join("Cargo.toml")).expect("this crate's manifest");
+    let dependencies: Vec<&str> = manifest
+        .lines()
+        .skip_while(|line| line.trim() != "[dependencies]")
+        .skip(1)
+        .take_while(|line| !line.trim_start().starts_with('['))
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect();
+    assert_eq!(
+        dependencies.len(),
+        1,
+        "one dependency, the shell: {dependencies:?}"
+    );
+    assert!(
+        dependencies[0].starts_with("tianheng"),
+        "and it is the shell: {dependencies:?}"
+    );
+
+    // The dimensions and 璇璣 are published crates an example could reach past the shell into. Naming them
+    // rather than allow-listing the shell keeps the property about what is forbidden — a new family crate would
+    // have to be added here deliberately, which is the visible edit.
+    const PAST_THE_SHELL: [&str; 5] = ["xuanji", "xingbiao", "guibiao", "hunyi", "louke"];
+    let mut reaching = Vec::new();
+    for directory in ["src", "src/bin", "tests"] {
+        let Ok(entries) = std::fs::read_dir(root.join(directory)) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("a readable source file");
+            for line in text.lines() {
+                let trimmed = line.trim_start();
+                // Executed text only: this very file names all five crates in the constant above.
+                if trimmed.starts_with("//") || !trimmed.starts_with("use ") {
+                    continue;
+                }
+                for crate_ in PAST_THE_SHELL {
+                    if trimmed.starts_with(&format!("use {crate_}::")) {
+                        reaching.push(format!("{}: {trimmed}", path.display()));
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        reaching.is_empty(),
+        "a participant reaching past the shell is the example disproving its own point — if the published \
+         surface is not enough, that is the finding rather than a reason to import around it: {reaching:?}"
+    );
+}
+
 /// A temporary governed subtree, qualified by process id and removed on drop.
 ///
 /// Both properties are the repository's own discipline rather than caution: a fixed path makes two concurrent
