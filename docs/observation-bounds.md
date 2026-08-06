@@ -49,7 +49,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## crate-source-boundary
 
-### `crate-source-boundary/a-git-plus-version-dependency-is-flagged-though-it-would-publish-a-stated-conservative-bound`
+### `crate-source-boundary/a-git-plus-version-dependency-is-flagged-though-it-would-publish-a-stated-bound`
 
 > the system classifies it as `Git` (its declared source is `git+…`) and emits a violation — even though such a dependency would `cargo publish` successfully — because the rule governs the declared source kind, a stated conservative bound, not publish-eligibility
 
@@ -57,25 +57,25 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## external-crate-confinement
 
-### `external-crate-confinement/cfg-gated-code-is-observed-as-written-a-stated-scanner-bound`
+### `external-crate-confinement/cfg-gated-code-is-observed-as-written-a-stated-bound`
 
 > the system observes it as written rather than evaluating the predicate, so the reaction is cfg-blind — inherited from the module scanner and stated here, never a silent claim about which branch is live
 
 - **pinned by**: `confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms`
 
-### `external-crate-confinement/the-lib-and-bin-conventional-path-conflation-is-a-stated-scanner-bound`
+### `external-crate-confinement/the-lib-and-bin-conventional-path-conflation-is-a-stated-bound`
 
 > the system does not distinguish their module graphs — the conflation inherited from the module scanner, stated rather than silently resolved
 
 - **pinned by**: `confine_external_crate_conflates_coincident_lib_and_bin_conventional_paths`
 
-### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-coverage-bound`
+### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
 > the system reports no violation, because comments, string literals, and macro bodies are stripped before scanning, matching the scanner's stated bounds
 
 - **pinned by**: `confine_ignores_a_use_inside_a_string_literal`
 
-### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-inherited-bound`
+### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
 > the system reports no violation, because the rule is use-only and observes `use` imports rather
 
@@ -83,7 +83,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## inline-symbol-path-confinement
 
-### `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-adopter-owned-bound`
+### `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound`
 
 > the system does NOT react (a false negative the adopter owns by narrowing), rather than the engine silently guessing which verbs are reads
 
@@ -121,37 +121,37 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## runtime-origin-assertion
 
-### `runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-corpus-bound`
+### `runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-bound`
 
 > the audit does not read it, its corpus being the member's library and binary targets — a stated bound shared with the semantic dimension, never a silent claim of coverage
 
 - **pinned by**: `source_outside_lib_or_bin_target_subtree_is_out_of_scope_corpus_bound`
 
-### `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-cfg-blind-bound`
+### `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound`
 
 > the audit counts it as coverage, being cfg-blind, so a seam whose production probe lives there is reported as probed — a stated bound, never a silent pass
 
 - **pinned by**: `production_probe_behind_non_production_cfg_is_counted_as_coverage`
 
-### `runtime-origin-assertion/identical-expression-repeated-in-the-same-function-collapses-to-one-finding-a-stated-identity-bound`
+### `runtime-origin-assertion/identical-expression-repeated-in-the-same-function-collapses-to-one-finding-a-stated-bound`
 
 > `audit_probe_coverage` emits one un-auditable-probe violation for that site — a stated bound, since no further source content distinguishes the two occurrences
 
 - **pinned by**: `identical_expression_repeated_in_the_same_function_collapses_to_one_violation`
 
-### `runtime-origin-assertion/an-absolute-path-literal-s-target-outside-the-anchor-keeps-its-absolute-label-a-stated-label-bound`
+### `runtime-origin-assertion/an-absolute-path-literal-s-target-outside-the-anchor-keeps-its-absolute-label-a-stated-bound`
 
 > `audit_probe_coverage` still emits the un-auditable-probe violation, naming the site with the raw absolute path — a stated bound, since the literal has no textual relationship to the anchor
 
 - **pinned by**: `an_absolute_path_literal_outside_the_anchor_keeps_the_path_the_literal_wrote`
 
-### `runtime-origin-assertion/a-composite-shape-yields-a-truncated-origin-a-stated-shape-bound`
+### `runtime-origin-assertion/a-composite-shape-yields-a-truncated-origin-a-stated-bound`
 
 > the derived origin is a truncated rendering that equals no module name, so it matches no allowlist entry and in particular never the wrapped type's own defining module; the crossing reacts fail-closed rather than being admitted through the wrapper
 
 - **pinned by**: `the_derived_origin_honors_its_stated_shape_bounds`
 
-### `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-corpus-bound`
+### `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound`
 
 > the root-file run reports the seam covered, while the directory run reports it unprobed — the
 
@@ -167,7 +167,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## semantic-dyn-trait-boundary
 
-### `semantic-dyn-trait-boundary/a-public-item-naming-such-an-alias-is-not-expanded-a-stated-coverage-bound`
+### `semantic-dyn-trait-boundary/a-public-item-naming-such-an-alias-is-not-expanded-a-stated-bound`
 
 > the system reacts at the alias declaration but emits **no additional** reaction for `make` via alias expansion — the `dyn` is already caught at the alias, and `type` aliases are not expanded (a stated bound)
 
@@ -179,13 +179,13 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **pinned by**: `a_private_alias_hiding_a_dyn_is_a_stated_bound`
 
-### `semantic-dyn-trait-boundary/a-macro-generated-dyn-is-a-documented-coverage-bound`
+### `semantic-dyn-trait-boundary/a-macro-generated-dyn-is-a-documented-bound`
 
 > the system does not claim to observe it (the universal 渾儀 macro-expansion bound), rather than silently asserting the boundary is clean
 
 - **pinned by**: `a_macro_generated_dyn_is_a_documented_coverage_bound`
 
-### `semantic-dyn-trait-boundary/an-unrenderable-sub-node-is-a-stated-rendering-bound`
+### `semantic-dyn-trait-boundary/an-unrenderable-sub-node-is-a-stated-bound`
 
 > the system does not claim to distinguish them: they share a canonical `subject` field and key at the same seam (each still *reacts* on first occurrence; only baseline-dedup granularity is bounded). This is a **stated subject-rendering bound** — the same `(target, rule_key, fact)` granularity bound `semantic-trait-impl-locality`'s `(impl for <self_ty>)` fact carries — declared here, never a silent claim of cleanliness
 
@@ -217,7 +217,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## semantic-reexport-exposure
 
-### `semantic-reexport-exposure/an-underscore-rename-is-a-documented-non-observed-bound`
+### `semantic-reexport-exposure/an-underscore-rename-is-a-documented-bound`
 
 > the system does not react — `as _` binds no nameable path a consumer can reach — and this is a stated bound, not a silent claim of cleanliness
 
@@ -267,7 +267,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **pinned by**: `a_cfg_if_inside_an_impl_body_is_a_stated_bound`
 
-### `semantic-signature-coupling/a-macro-under-another-name-is-not-treated-as-transparent-a-stated-coverage-bound`
+### `semantic-signature-coupling/a-macro-under-another-name-is-not-treated-as-transparent-a-stated-bound`
 
 > the system reports no exposure — the invocation is not transparent, so its body stays a stated coverage bound; extracting from it would read the `impl` body's braces as an arm and report an item the macro may never emit
 
@@ -288,7 +288,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## semantic-trait-impl-exposure
 
-### `semantic-trait-impl-exposure/a-glob-imported-type-in-an-impl-position-is-a-documented-coverage-bound`
+### `semantic-trait-impl-exposure/a-glob-imported-type-in-an-impl-position-is-a-documented-bound`
 
 > the system does not claim to observe it (inherited glob bound), rather than silently asserting the boundary is clean
 
@@ -296,13 +296,13 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## semantic-trait-impl-locality
 
-### `semantic-trait-impl-locality/a-macro-generated-impl-is-a-documented-coverage-bound`
+### `semantic-trait-impl-locality/a-macro-generated-impl-is-a-documented-bound`
 
 > the system does not claim to observe it (out of scope, the same nature as the existing macro bound), rather than silently asserting the boundary is clean
 
 - **pinned by**: `a_macro_generated_impl_is_a_documented_bound`
 
-### `semantic-trait-impl-locality/a-cfg-gated-module-with-an-absent-file-is-skipped-not-a-scan-error-a-stated-coverage-bound`
+### `semantic-trait-impl-locality/a-cfg-gated-module-with-an-absent-file-is-skipped-not-a-scan-error-a-stated-bound`
 
 > the whole-crate walk skips the module (a stated coverage bound) rather than failing the gate with a scan error (exit 2)
 
@@ -324,7 +324,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-### `semantic-visibility-boundary/a-pub-in-narrow-path-item-may-over-react-under-a-tight-ceiling-a-stated-over-reaction-bound`
+### `semantic-visibility-boundary/a-pub-in-narrow-path-item-may-over-react-under-a-tight-ceiling-a-stated-bound`
 
 > the system MAY react (the conservative `Crate` rank exceeds the `Module` ceiling), a stated over-reaction bound, never a silent pass
 

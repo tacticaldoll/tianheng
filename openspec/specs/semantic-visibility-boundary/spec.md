@@ -124,7 +124,7 @@ Within the observed scope there SHALL be no false negative: an item whose declar
 - **WHEN** the governed module declares `#[macro_export] macro_rules! m { … }` (crate-public, but carrying no visibility keyword)
 - **THEN** the system does not react (attribute-derived public surface is the deferred attribute capability's domain), and the capability's stated scope is the declared keyword, not crate-reachability
 
-#### Scenario: A pub(in narrow-path) item may over-react under a tight ceiling — a stated over-reaction bound
+#### Scenario: A pub(in narrow-path) item may over-react under a tight ceiling — a stated bound
 
 - **WHEN** the governed module has ceiling `Module` and declares `pub(in crate::a) fn helper()` where the item is itself directly in `crate::a` (effectively private)
 - **THEN** the system MAY react (the conservative `Crate` rank exceeds the `Module` ceiling), a stated over-reaction bound, never a silent pass

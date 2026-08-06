@@ -701,6 +701,33 @@ expect_pass "$qualified" 'bound register ok (1 declared bounds'
 qualified_absent=$(new_repo qualified-absent "$(spec_with '- **PINNED-BY** `nosuchcrate::a_probe_bound_is_pinned`')")
 expect_fail "$qualified_absent" 1 'which no function under crates/ defines'
 
+# --- the marker admits no qualifier, and detection deliberately still does ---
+
+# The classification a qualifier used to carry now lives in `xuanji::Extent`, so the marker is adjacent. This
+# direction is refused EXPLICITLY rather than by non-match: an unmatched heading is not read as a bound at all,
+# so it would surface through the prose floor below with a misleading message and the wrong repair.
+# The fixture carries a properly-marked bound as WELL as the qualified one, deliberately. A repository whose
+# only bound is refused parses zero bounds, and the vacuity guard then exits 2 before this direction can be
+# seen — measured on the first version of this case, which conflated the qualifier refusal with the
+# heading-form-changed guard and asserted the wrong code.
+qualified_heading=$(new_repo qualified-heading "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`' \
+    '
+#### Scenario: Another probed shape is a stated coverage bound
+- **WHEN** the probe meets that shape
+- **THEN** it declines to look
+- **PINNED-BY** `a_probe_bound_is_pinned`')")
+expect_fail "$qualified_heading" 1 'marks a bound with a qualifier'
+
+# And the other half of that change, which is the one a later reader is most likely to "fix" into consistency:
+# the PROSE recognizer still admits the qualified wording the heading rule forbids. It is the register's
+# detection floor, not a requirement on authored form, so narrowing it in step would stop it reporting a bound
+# stated in prose with a qualifier — a false negative in the direction that stops the register being completed
+# by declaring only the convenient bounds.
+qualified_prose=$(new_repo qualified-prose "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`' \
+    '
+Some paragraph that calls something a stated coverage bound without declaring it.')")
+expect_fail "$qualified_prose" 1 'states a bound outside any declared bound scenario'
+
 # --- the prose floor, and the reference that clears it ---
 
 stray_prose=$(new_repo stray-prose "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`' \
