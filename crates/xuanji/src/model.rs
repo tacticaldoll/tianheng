@@ -79,6 +79,25 @@ impl ScanDepth {
 }
 
 /// The repair direction a boundary-drift violation points to.
+///
+/// # When a violation carries none
+///
+/// A polarity names a repair *direction*, so it belongs only to a finding that has one, and
+/// [`Violation::polarity`](crate::Violation) being an `Option` is not a gap.
+///
+/// 圭表's crate and module rules answer through **exhaustive matches returning `Polarity`**, and 渾儀 emits every
+/// finding through a context carrying a **non-optional** one — so for those dimensions a new rule variant cannot
+/// compile without declaring a direction. That is a stronger guard than a reaction, and a reaction asserting the
+/// same thing would be a second copy of a fact the compiler already holds, able to disagree with it.
+///
+/// The one production path that carries `None` is 漏刻's **probe audit**, and there it is correct rather than
+/// missing: a declared seam with no probe is repaired by probing it *or* by dropping the declaration, and a probe
+/// naming an undeclared seam by declaring it *or* by deleting the probe. Neither is a deny breach or an allowlist
+/// gap, so assigning either value would name a direction that does not exist.
+///
+/// Written down because an `Option` with no stated rule reads as an omission — measured, a review read it exactly
+/// that way and filed it as a rule kind missing its direction. See `runtime-origin-assertion`'s requirement *An
+/// audit finding SHALL carry no repair polarity, and that SHALL be stated*.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Polarity {
