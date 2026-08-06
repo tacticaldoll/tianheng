@@ -22,6 +22,69 @@ them.
 
 ## [Unreleased]
 
+### Documentation
+- The previous entry's own repair created a hole, and a review proved it with a fixture. A `(bound: …)`
+  reference was only ever resolved through a bound-prose record, and rewording that sentence dropped its line
+  out of the scan's pattern — so the two references the repair added were **never resolved again**. Every
+  reference is now resolved **wherever it sits**, independent of the wording around it: a Purpose paragraph, a
+  requirement's prose, or inside a declared bound scenario. Every reference in the tree already resolved when
+  the direction was adopted, so it is a free guard rather than a migration.
+- `` `extern crate`-blind `` was an **undeclared and undefended** bound in the same capability, stated twice
+  and invisible to the register both times — once with no trigger words, once as "a stated, inherited bound"
+  whose comma breaks the adjacency the scan needs, which is the very wording the projection's first residual
+  cites as its example. It is now the capability's **fourth declared bound**, pinned by
+  `confine_ignores_an_extern_crate_declaration`: probed before declaring, and discriminating because the
+  sibling test puts `use libc as c;` in the identical fixture shape and gets a violation. **Every bound the
+  register holds is cited**, which the reaction requires rather than this note asserting a count.
+- The projection's **content** is now asserted by the companion test, not only its freshness. Byte-for-byte
+  staleness proves the document and the reaction agree; it can never prove either is right, because both come
+  from one renderer. That is how `` `author\s:` `` — a shell quoting artifact where an apostrophe was meant —
+  reached the tracked document and survived a review, alongside a sentence that did not parse. Both are fixed,
+  and every disclosure the requirements oblige the header to make is now grepped literally, with a rendered
+  backslash refused outright.
+- A **retired bound was still alive** in `external-crate-confinement`'s overview paragraph: it listed
+  `` `#[path]`-blind `` among the module scanner's inherited bounds while the resolution paragraph in the same
+  file, corrected in this window, says a `#[path]`-remapped module is followed and its imports observed. One
+  file said both, and the overview reads as permission — the failure this register exists to end, committed
+  inside it. The stale name is deleted and each remaining bound in that sentence, and in the resolution
+  paragraph, now carries its own `(bound: …)` reference.
+- `docs/observation-bounds.md`'s header now enumerates **every** residual of the undeclared-prose direction
+  and the one exemption, instead of stating the first and leaving the rest in the reaction's comments: a
+  reference clears the prose it sits with regardless of how many bounds that prose states (the mechanism that
+  let the bound above survive two sweeps), the scan is line-oriented, unrecognized wording is invisible, and
+  prose under a requirement whose heading names bounds is exempt at the price of that requirement declaring at
+  least one bound scenario. Scanning paragraphs instead of lines was measured against that defect and would
+  not have caught it, so it is recorded as rejected rather than left to be re-proposed.
+- Three measurements were stated in the present tense and had gone stale within this same unreleased window:
+  the count of bounds sitting under the requirement they qualify, the number of specs carrying an
+  Observation-bounds requirement, and a `CHANGELOG.md` entry whose bound count contradicted a sibling five
+  lines away. Each is now number-free or reacted to rather than restated here.
+- The register's shared-bound requirement claimed that one behaviour change cannot leave several specs
+  stale. Its reaction reaches one shape — a single pinning test cited by two capabilities — so the claim
+  is narrowed to that and the residual is stated in `docs/observation-bounds.md`'s header beside the
+  prose floor already there: two declarations of one behaviour citing two *different* tests are invisible.
+  Telling those apart from two genuine bounds over sibling shapes is a semantic judgment nothing can
+  observe, so it is stated rather than declared as a bound — two operand dimensions here declare
+  identically-worded bounds over `dyn` and `impl Trait`, each defended by its own test, and each must
+  declare its own. The record of the two historical restatements is corrected in the same edit, since it
+  was doing the overclaiming: the `#[path]`-remap bound was prose in one capability and a scenario in the
+  other, so the undeclared-prose direction is what reached it. For a reader of the register the
+  consequence is the point — it is a floor in two directions now, and says so.
+- `observation-bound-register`'s `Purpose` was still the placeholder its archive step generated, the only
+  one of 30 specs that was.
+- Two specs claimed that a `#[path]`-remapped module stays outside the scanner's observation, long after
+  it stopped being true. `inline-symbol-path-confinement` carried it as a **declared bound** ("the system
+  does not claim to observe it"), and `external-crate-confinement` listed it among the resolution's
+  out-of-scope bounds. Measured on this tree, both forms react: a call inside a `#[path]`-remapped child
+  of a clock-confined module is reported against that module, whether the attribute is written directly
+  or wrapped in `cfg_attr`, and so is an import of a confined external crate. The scanner began following
+  an unconditional remap in `0.2.2` and union-scanning a `cfg_attr`-wrapped one in `0.3.x`; the prose
+  outlived the behaviour on both counts. Both claims are corrected and the behaviour is now pinned by
+  `inline_path_remapped_child_is_observed` and
+  `confine_observes_an_import_inside_a_path_remapped_module`. No reaction changed — only what the specs
+  said about it, which for an adopter is the difference between reading a real escape as a defect and
+  dismissing it as governed policy.
+
 ### Added
 - The crates.io publish now runs through a source gate (`scripts/check_publish_source.sh`, reached via
   `scripts/publish.sh`) that refuses any source other than the signed-and-annotated-tagged
@@ -99,114 +162,12 @@ them.
   deliberate counter-example lives outside the workspace: `examples/observer-participant`'s declarations are
   computed on purpose, which is what the owned form is for.
 
-### Fixed
-- **The pre-publish gate now verifies the release tag's signature instead of matching its shape.** It grepped the
-  whole tag object — message included — so an annotated-but-unsigned tag whose message quoted a
-  `-----BEGIN SSH SIGNATURE-----` block, a pasted verification log, satisfied it. `cargo publish` stamps a
-  permanent, non-re-uploadable commit pointer and this is the last automated check before it, so an adopter
-  auditing a tarball's provenance is the reader who cares. Verification now runs through
-  `ssh-keygen -Y check-novalidate`, which needs no configuration; `git verify-tag` was measured and cannot be
-  used, reporting an identical `allowedSignersFile needs to be configured` for a genuinely signed tag and an
-  unsigned one alike. A signature the gate cannot read, and a tag-object read failure, are both cannot-judge
-  rather than a wrong source.
-
-  The gate's own stated bound had the cause **backwards** — it said verification needs an allowed-signers file, so
-  the gate could only match a shape. Verification does not; **attribution** does. That is corrected, and what
-  remains is a declared observation bound: the gate does not judge whether the signer is authorized, owned by the
-  verification environment rather than by this family, because giving CI an allowed-signers file is what would
-  close it. `publish-source-integrity` is the new capability that finally states the gate's contract — until now
-  it lived only in the script's own header, in no specification at all.
-
-- **`list`'s refusal now names the check-only flag that was supplied**, instead of one sentence naming none of
-  them. Every other refusal on this surface already named what the invocation did — all twenty malformed
-  value-flag cells, and the `--format` *value* refusal which names the value and explains why `sarif` is not a
-  `list` format — so this was the one place the surface moved the search onto the reader. It mattered most for
-  `--manifest-path`, which is in the rejected set and is the flag typed by habit: told only that "list takes only
-  `--format`", someone who passed both was being shown the flag they got right. Every supplied flag is named, not
-  the first. No invocation's verdict changes: what was refused is still refused, with the same exit `2`.
-
-  Found by sweeping the CLI surface against an enumeration rather than against invented shapes, and the defect was
-  in the **requirements**, not the code: `list`'s own requirement asked only for usage guidance and exit 2, while
-  the requirement covering the same conflict inside `check` cites it as "the rule the `list` requirement above
-  states" and requires the flag to be named. Each implementation satisfied its own. The same sweep found that
-  requirement enumerating four check-only flags while the runner rejected five, so the set is now derived rather
-  than listed in prose.
-
-- **`observer-protocol`'s equality reaction now covers all three dimensions, and two assertions that could not
-  fail were replaced by ones that can.** The reaction promises the trait-driven fold and the built-in path cannot
-  disagree silently; it proved that for one dimension. Its fixture declared only a violated static boundary, and
-  an empty declaration is clean on this workspace, so the semantic and runtime arms compared clean against clean
-  — measured, replacing `SemanticObserver::observe`'s body with `Clean` left the suite passing. The fixture now
-  violates a boundary in **each** dimension and the reaction asserts each one reacted, so a fixture that goes
-  vacuous because the workspace changed under it fails naming the dimension to repair rather than quietly proving
-  less. Verified by short-circuiting each of the three observers in turn.
-
-  The bound-set half was worse: it asserted `observer.bounds() == dimension::observation_bounds()` while every
-  `bounds()` **is** that call, so it compared a function with itself — drifting a declaration's extent with its id
-  untouched left it passing. Nothing was unguarded (that drift fails the extent projection, which is where the
-  content is held), but an assertion that cannot fail reads as a guarantee. What the requirement refuses is a
-  *second, divergent list*, which is something written in a body, so the reaction is now over each `bounds()`
-  body's shape — exactly the delegation, recognized by position within the method — and it fails when a body
-  holds a list of its own.
-
-  Behind both: `check_constitution`'s runtime arm was a hand-copied twin of `RuntimeObserver::observe`, down to a
-  duplicated `cannot read workspace` message, so equality for that dimension rested on nobody editing one of the
-  copies. It now delegates. **Nothing to migrate** — no public API moves and both paths keep their exact
-  behaviour, which is what the reaction proves.
-
-- **`Observer::bounds` has a consumer, and the protocol has a third-party implementor.** The method is required
-  precisely so a participant cannot join a run without declaring what it does not observe — and nothing read the
-  answer: measured, no call site anywhere outside a comment, so a dimension could have answered anything without
-  moving a verdict. Three implementors and 54 classified bounds made it look answered, because the register
-  reached those through each dimension's free function while the trait method was a parallel door nobody walked
-  through. The bijection now reads each dimension **through `Observer::bounds`**; returning the wrong set from one
-  fails it, naming every id left unclassified. The shell's own declarations keep coming from its free function,
-  because the shell composes dimensions rather than being one.
-
-  Nothing in the repository had ever been a **third party** to the protocol either — all three implementors are
-  family crates returning literal lists. `examples/observer-participant` is a crate outside the family that
-  implements `Observer` and joins a composed run: its house rule (every module file opens with a `//!` header) is
-  one no dimension of 三儀 has a DSL for, its violations carry its own structured identity, a subtree it was told
-  to read and could not is exit `2`, and its bounds are **computed** — id, shape, reason and pin all built with
-  `format!` from what it was configured to read. That is the first caller of `BoundId`'s owned-or-borrowed form
-  that is not a literal; it shipped in this window for a caller that did not yet exist. The example needed **no
-  addition to any crate's public API**, which is the load-bearing result: the published surface is enough to join
-  a run. A `COOKBOOK.md` entry shows the same shape at teaching size.
-
-  What it found, recorded in `BACKLOG.md` rather than worked around: `BoundaryKind` has no value a participant
-  owns, so an outsider's violation must claim one of the family's four kinds.
-
-- **`Polarity` now says when a violation carries none.** It is an `Option` on `Violation`, and nothing stated the
-  rule, so a reader — this window's own review included — reads the absence as a rule kind missing its repair
-  direction. Measured across every production emission site: 圭表's crate and module rules answer through
-  **exhaustive matches returning `Polarity`** and 渾儀 emits every finding through a context carrying a
-  **non-optional** one, so in those dimensions a new rule variant cannot compile without declaring a direction —
-  a stronger guard than a reaction, and one a reaction could only duplicate and disagree with. The single path
-  carrying `None` is 漏刻's **probe audit**, where it is correct: a declared seam with no probe is repaired by
-  probing it *or* by dropping the declaration, which is neither a deny breach nor an allowlist gap. Documentation
-  and a `runtime-origin-assertion` requirement, no code change and no new variant.
-
-- **The lexical trait-object guard states where it stops, and checks the premise it rested on.** The reaction
-  keeping the composed shell free of trait objects has to be lexical — 渾儀 governs no module of `tianheng`, and
-  the `dyn` DSL has no allow-except form — but it read only top-level `src/*.rs` without saying so. Eight files
-  under `src/runner/` were never opened, and an injected `pub fn … -> Option<Box<dyn Debug>>` among them left it
-  passing. Not an exposure, because those modules are private — but the soundness rested on an **unchecked
-  premise**, and `pub mod runner;` would have removed eight files from the reaction's reach in silence. That
-  premise is now asserted, and making the module public fails the reaction telling you to recurse. What genuinely
-  remains is declared as the register's 55th bound: the recognizer is handed one line at a time, so a trait object
-  on a wrapped signature's continuation line is text it is never presented with. Pinned by a test that feeds the
-  recognizer the one-line control and the wrapped form.
-
-- **A declared bound was narrowed after its stated cause was found wrong about its own history.**
-  `gate-shape-contract`'s `1-versus-2` bound said the judgment it declines to make is what let a
-  `return`-instead-of-`exit` inversion ride green. Read back against that inversion, it produced **both** of the
-  bound's directions in one gate — every refusal was `1`, so a shallow clone reported *"the release surfaces
-  disagree"*, while the exit-contract backstop turned every genuine incoherence into `2` — but what let it pass CI
-  was the matrix asserting a **non-zero status rather than a code**, in that commit's own words. That mechanism is
-  closed: the `exit codes` property requires the exact code from every twin and cites this very instance. So the
-  residual is only the semantic judgment, and the bound now says so at all **three** sites it was written — the
-  spec's THEN clause, the typed declaration's rationale, and the projections derived from them. A bound reads as
-  *permission*, so one that overstates what is unobserved misleads exactly as much as one that understates it.
+- `tianheng::testing::assert_projection_matches` is the bless-and-diff rule for **any** generated document, not
+  only a rendered `Constitution`. A free function rather than a method, because blessing an unrelated document has
+  nothing to do with a `Constitution` and requiring one would be a dependency invented by the API's shape.
+  `GovernanceTest::assert_projection_fresh` delegates to it, so an adopter holding their own generated document —
+  a register, a table, a report — gets the same `BLESS=1` behaviour and the same diff instead of writing a second
+  copy of it.
 
 ### Changed
 - **The census direction now judges tracked content and every figure on a line**, closing three ways the
@@ -244,78 +205,6 @@ them.
   shell `grep -qE` whose whitespace classes differed — and clearing disagreeing with resolution about which
   references exist is the divergence that cost this window a review round.
 
-### Added
-- `tianheng::testing::assert_projection_matches` is the bless-and-diff rule for **any** generated document, not
-  only a rendered `Constitution`. A free function rather than a method, because blessing an unrelated document has
-  nothing to do with a `Constitution` and requiring one would be a dependency invented by the API's shape.
-  `GovernanceTest::assert_projection_fresh` delegates to it, so an adopter holding their own generated document —
-  a register, a table, a report — gets the same `BLESS=1` behaviour and the same diff instead of writing a second
-  copy of it.
-
-### Documentation
-- The previous entry's own repair created a hole, and a review proved it with a fixture. A `(bound: …)`
-  reference was only ever resolved through a bound-prose record, and rewording that sentence dropped its line
-  out of the scan's pattern — so the two references the repair added were **never resolved again**. Every
-  reference is now resolved **wherever it sits**, independent of the wording around it: a Purpose paragraph, a
-  requirement's prose, or inside a declared bound scenario. Every reference in the tree already resolved when
-  the direction was adopted, so it is a free guard rather than a migration.
-- `` `extern crate`-blind `` was an **undeclared and undefended** bound in the same capability, stated twice
-  and invisible to the register both times — once with no trigger words, once as "a stated, inherited bound"
-  whose comma breaks the adjacency the scan needs, which is the very wording the projection's first residual
-  cites as its example. It is now the capability's **fourth declared bound**, pinned by
-  `confine_ignores_an_extern_crate_declaration`: probed before declaring, and discriminating because the
-  sibling test puts `use libc as c;` in the identical fixture shape and gets a violation. **Every bound the
-  register holds is cited**, which the reaction requires rather than this note asserting a count.
-- The projection's **content** is now asserted by the companion test, not only its freshness. Byte-for-byte
-  staleness proves the document and the reaction agree; it can never prove either is right, because both come
-  from one renderer. That is how `` `author\s:` `` — a shell quoting artifact where an apostrophe was meant —
-  reached the tracked document and survived a review, alongside a sentence that did not parse. Both are fixed,
-  and every disclosure the requirements oblige the header to make is now grepped literally, with a rendered
-  backslash refused outright.
-- A **retired bound was still alive** in `external-crate-confinement`'s overview paragraph: it listed
-  `` `#[path]`-blind `` among the module scanner's inherited bounds while the resolution paragraph in the same
-  file, corrected in this window, says a `#[path]`-remapped module is followed and its imports observed. One
-  file said both, and the overview reads as permission — the failure this register exists to end, committed
-  inside it. The stale name is deleted and each remaining bound in that sentence, and in the resolution
-  paragraph, now carries its own `(bound: …)` reference.
-- `docs/observation-bounds.md`'s header now enumerates **every** residual of the undeclared-prose direction
-  and the one exemption, instead of stating the first and leaving the rest in the reaction's comments: a
-  reference clears the prose it sits with regardless of how many bounds that prose states (the mechanism that
-  let the bound above survive two sweeps), the scan is line-oriented, unrecognized wording is invisible, and
-  prose under a requirement whose heading names bounds is exempt at the price of that requirement declaring at
-  least one bound scenario. Scanning paragraphs instead of lines was measured against that defect and would
-  not have caught it, so it is recorded as rejected rather than left to be re-proposed.
-- Three measurements were stated in the present tense and had gone stale within this same unreleased window:
-  the count of bounds sitting under the requirement they qualify, the number of specs carrying an
-  Observation-bounds requirement, and a `CHANGELOG.md` entry whose bound count contradicted a sibling five
-  lines away. Each is now number-free or reacted to rather than restated here.
-- The register's shared-bound requirement claimed that one behaviour change cannot leave several specs
-  stale. Its reaction reaches one shape — a single pinning test cited by two capabilities — so the claim
-  is narrowed to that and the residual is stated in `docs/observation-bounds.md`'s header beside the
-  prose floor already there: two declarations of one behaviour citing two *different* tests are invisible.
-  Telling those apart from two genuine bounds over sibling shapes is a semantic judgment nothing can
-  observe, so it is stated rather than declared as a bound — two operand dimensions here declare
-  identically-worded bounds over `dyn` and `impl Trait`, each defended by its own test, and each must
-  declare its own. The record of the two historical restatements is corrected in the same edit, since it
-  was doing the overclaiming: the `#[path]`-remap bound was prose in one capability and a scenario in the
-  other, so the undeclared-prose direction is what reached it. For a reader of the register the
-  consequence is the point — it is a floor in two directions now, and says so.
-- `observation-bound-register`'s `Purpose` was still the placeholder its archive step generated, the only
-  one of 30 specs that was.
-- Two specs claimed that a `#[path]`-remapped module stays outside the scanner's observation, long after
-  it stopped being true. `inline-symbol-path-confinement` carried it as a **declared bound** ("the system
-  does not claim to observe it"), and `external-crate-confinement` listed it among the resolution's
-  out-of-scope bounds. Measured on this tree, both forms react: a call inside a `#[path]`-remapped child
-  of a clock-confined module is reported against that module, whether the attribute is written directly
-  or wrapped in `cfg_attr`, and so is an import of a confined external crate. The scanner began following
-  an unconditional remap in `0.2.2` and union-scanning a `cfg_attr`-wrapped one in `0.3.x`; the prose
-  outlived the behaviour on both counts. Both claims are corrected and the behaviour is now pinned by
-  `inline_path_remapped_child_is_observed` and
-  `confine_observes_an_import_inside_a_path_remapped_module`. No reaction changed — only what the specs
-  said about it, which for an adopter is the difference between reading a real escape as a defect and
-  dismissing it as governed policy.
-
-### Changed
 - Every `(bound: …)` reference on a line is now resolved, not just one of them. The extraction was greedy, so
   only the **last** reference was ever examined and an earlier dangling one passed while the line reported
   clean. This does not close the residual noted above — that reference resolved — and is not offered as its fix.
@@ -504,6 +393,115 @@ them.
   operand) and left a raw identifier unmatched. `BACKLOG.md`'s closed entry carries that history, where it
   explains the shape; a release note written from an unreleased baseline would describe an upgrade nobody
   performs.*
+
+### Fixed
+- **The pre-publish gate now verifies the release tag's signature instead of matching its shape.** It grepped the
+  whole tag object — message included — so an annotated-but-unsigned tag whose message quoted a
+  `-----BEGIN SSH SIGNATURE-----` block, a pasted verification log, satisfied it. `cargo publish` stamps a
+  permanent, non-re-uploadable commit pointer and this is the last automated check before it, so an adopter
+  auditing a tarball's provenance is the reader who cares. Verification now runs through
+  `ssh-keygen -Y check-novalidate`, which needs no configuration; `git verify-tag` was measured and cannot be
+  used, reporting an identical `allowedSignersFile needs to be configured` for a genuinely signed tag and an
+  unsigned one alike. A signature the gate cannot read, and a tag-object read failure, are both cannot-judge
+  rather than a wrong source.
+
+  The gate's own stated bound had the cause **backwards** — it said verification needs an allowed-signers file, so
+  the gate could only match a shape. Verification does not; **attribution** does. That is corrected, and what
+  remains is a declared observation bound: the gate does not judge whether the signer is authorized, owned by the
+  verification environment rather than by this family, because giving CI an allowed-signers file is what would
+  close it. `publish-source-integrity` is the new capability that finally states the gate's contract — until now
+  it lived only in the script's own header, in no specification at all.
+
+- **`list`'s refusal now names the check-only flag that was supplied**, instead of one sentence naming none of
+  them. Every other refusal on this surface already named what the invocation did — all twenty malformed
+  value-flag cells, and the `--format` *value* refusal which names the value and explains why `sarif` is not a
+  `list` format — so this was the one place the surface moved the search onto the reader. It mattered most for
+  `--manifest-path`, which is in the rejected set and is the flag typed by habit: told only that "list takes only
+  `--format`", someone who passed both was being shown the flag they got right. Every supplied flag is named, not
+  the first. No invocation's verdict changes: what was refused is still refused, with the same exit `2`.
+
+  Found by sweeping the CLI surface against an enumeration rather than against invented shapes, and the defect was
+  in the **requirements**, not the code: `list`'s own requirement asked only for usage guidance and exit 2, while
+  the requirement covering the same conflict inside `check` cites it as "the rule the `list` requirement above
+  states" and requires the flag to be named. Each implementation satisfied its own. The same sweep found that
+  requirement enumerating four check-only flags while the runner rejected five, so the set is now derived rather
+  than listed in prose.
+
+- **`observer-protocol`'s equality reaction now covers all three dimensions, and two assertions that could not
+  fail were replaced by ones that can.** The reaction promises the trait-driven fold and the built-in path cannot
+  disagree silently; it proved that for one dimension. Its fixture declared only a violated static boundary, and
+  an empty declaration is clean on this workspace, so the semantic and runtime arms compared clean against clean
+  — measured, replacing `SemanticObserver::observe`'s body with `Clean` left the suite passing. The fixture now
+  violates a boundary in **each** dimension and the reaction asserts each one reacted, so a fixture that goes
+  vacuous because the workspace changed under it fails naming the dimension to repair rather than quietly proving
+  less. Verified by short-circuiting each of the three observers in turn.
+
+  The bound-set half was worse: it asserted `observer.bounds() == dimension::observation_bounds()` while every
+  `bounds()` **is** that call, so it compared a function with itself — drifting a declaration's extent with its id
+  untouched left it passing. Nothing was unguarded (that drift fails the extent projection, which is where the
+  content is held), but an assertion that cannot fail reads as a guarantee. What the requirement refuses is a
+  *second, divergent list*, which is something written in a body, so the reaction is now over each `bounds()`
+  body's shape — exactly the delegation, recognized by position within the method — and it fails when a body
+  holds a list of its own.
+
+  Behind both: `check_constitution`'s runtime arm was a hand-copied twin of `RuntimeObserver::observe`, down to a
+  duplicated `cannot read workspace` message, so equality for that dimension rested on nobody editing one of the
+  copies. It now delegates. **Nothing to migrate** — no public API moves and both paths keep their exact
+  behaviour, which is what the reaction proves.
+
+- **`Observer::bounds` has a consumer, and the protocol has a third-party implementor.** The method is required
+  precisely so a participant cannot join a run without declaring what it does not observe — and nothing read the
+  answer: measured, no call site anywhere outside a comment, so a dimension could have answered anything without
+  moving a verdict. Three implementors and 54 classified bounds made it look answered, because the register
+  reached those through each dimension's free function while the trait method was a parallel door nobody walked
+  through. The bijection now reads each dimension **through `Observer::bounds`**; returning the wrong set from one
+  fails it, naming every id left unclassified. The shell's own declarations keep coming from its free function,
+  because the shell composes dimensions rather than being one.
+
+  Nothing in the repository had ever been a **third party** to the protocol either — all three implementors are
+  family crates returning literal lists. `examples/observer-participant` is a crate outside the family that
+  implements `Observer` and joins a composed run: its house rule (every module file opens with a `//!` header) is
+  one no dimension of 三儀 has a DSL for, its violations carry its own structured identity, a subtree it was told
+  to read and could not is exit `2`, and its bounds are **computed** — id, shape, reason and pin all built with
+  `format!` from what it was configured to read. That is the first caller of `BoundId`'s owned-or-borrowed form
+  that is not a literal; it shipped in this window for a caller that did not yet exist. The example needed **no
+  addition to any crate's public API**, which is the load-bearing result: the published surface is enough to join
+  a run. A `COOKBOOK.md` entry shows the same shape at teaching size.
+
+  What it found, recorded in `BACKLOG.md` rather than worked around: `BoundaryKind` has no value a participant
+  owns, so an outsider's violation must claim one of the family's four kinds.
+
+- **`Polarity` now says when a violation carries none.** It is an `Option` on `Violation`, and nothing stated the
+  rule, so a reader — this window's own review included — reads the absence as a rule kind missing its repair
+  direction. Measured across every production emission site: 圭表's crate and module rules answer through
+  **exhaustive matches returning `Polarity`** and 渾儀 emits every finding through a context carrying a
+  **non-optional** one, so in those dimensions a new rule variant cannot compile without declaring a direction —
+  a stronger guard than a reaction, and one a reaction could only duplicate and disagree with. The single path
+  carrying `None` is 漏刻's **probe audit**, where it is correct: a declared seam with no probe is repaired by
+  probing it *or* by dropping the declaration, which is neither a deny breach nor an allowlist gap. Documentation
+  and a `runtime-origin-assertion` requirement, no code change and no new variant.
+
+- **The lexical trait-object guard states where it stops, and checks the premise it rested on.** The reaction
+  keeping the composed shell free of trait objects has to be lexical — 渾儀 governs no module of `tianheng`, and
+  the `dyn` DSL has no allow-except form — but it read only top-level `src/*.rs` without saying so. Eight files
+  under `src/runner/` were never opened, and an injected `pub fn … -> Option<Box<dyn Debug>>` among them left it
+  passing. Not an exposure, because those modules are private — but the soundness rested on an **unchecked
+  premise**, and `pub mod runner;` would have removed eight files from the reaction's reach in silence. That
+  premise is now asserted, and making the module public fails the reaction telling you to recurse. What genuinely
+  remains is declared as the register's 55th bound: the recognizer is handed one line at a time, so a trait object
+  on a wrapped signature's continuation line is text it is never presented with. Pinned by a test that feeds the
+  recognizer the one-line control and the wrapped form.
+
+- **A declared bound was narrowed after its stated cause was found wrong about its own history.**
+  `gate-shape-contract`'s `1-versus-2` bound said the judgment it declines to make is what let a
+  `return`-instead-of-`exit` inversion ride green. Read back against that inversion, it produced **both** of the
+  bound's directions in one gate — every refusal was `1`, so a shallow clone reported *"the release surfaces
+  disagree"*, while the exit-contract backstop turned every genuine incoherence into `2` — but what let it pass CI
+  was the matrix asserting a **non-zero status rather than a code**, in that commit's own words. That mechanism is
+  closed: the `exit codes` property requires the exact code from every twin and cites this very instance. So the
+  residual is only the semantic judgment, and the bound now says so at all **three** sites it was written — the
+  spec's THEN clause, the typed declaration's rationale, and the projections derived from them. A bound reads as
+  *permission*, so one that overstates what is unobserved misleads exactly as much as one that understates it.
 
 ## [0.4.0] - 2026-08-04
 
