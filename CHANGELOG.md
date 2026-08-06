@@ -471,7 +471,7 @@ them.
 - **`Observer::bounds` has a consumer, and the protocol has a third-party implementor.** The method is required
   precisely so a participant cannot join a run without declaring what it does not observe — and nothing read the
   answer: measured, no call site anywhere outside a comment, so a dimension could have answered anything without
-  moving a verdict. Three implementors and 54 classified bounds made it look answered, because the register
+  moving a verdict. Three implementors and a register full of classified bounds made it look answered, because it
   reached those through each dimension's free function while the trait method was a parallel door nobody walked
   through. The bijection now reads each dimension **through `Observer::bounds`**; returning the wrong set from one
   fails it, naming every id left unclassified. The shell's own declarations keep coming from its free function,
