@@ -261,6 +261,12 @@ them.
   `|| true`, so a tracked document the census direction claims to cover went unexamined behind a clean
   report. What is left in a process substitution is computation over data this run already materialized, and
   the reaction says which rather than leaving the scope to be inferred.
+- `check_dod_coherence.sh` gains the **last missing failure matrix**, so every `check_*` gate now has a
+  `test_*` twin and every one of the five asserts the expected exit **code**. This gate's subject is a claim
+  `AGENTS.md` makes about itself — that its Definition of Done block is the single source for the local gate
+  list, and that CI runs a superset — so until now that claim rested on a reaction nobody had watched refuse.
+  The direction that matters most is the vacuous one: without its zero-commands guard the gate reports
+  `ok: every local Definition of Done command (0 parsed) is run by CI` and exits 0.
 - `check_whitespace_hygiene.sh` gains a **companion failure matrix** and a target-directory argument, which
   is what made one possible — the same argument the register and reference-integrity gates take. It was the
   only gate whose refusals were asserted nowhere, and it is where the shared exit-contract backstop first

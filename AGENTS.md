@@ -273,6 +273,9 @@ bash scripts/test_reference_integrity.sh # prove every refusal of in-repo path r
 bash scripts/check_reference_integrity.sh # every in-repo path a document or comment points at must exist:
                                            # this class was hand-swept twice (once for .md only) and a module
                                            # split landing after that sweep reintroduced it in nine places
+bash scripts/test_dod_coherence.sh       # prove every refusal of the coherence gate that binds this list to
+                                           # CI: it was the last gate with no matrix, so the claim this block
+                                           # makes about itself rested on a reaction nobody had watched refuse
 bash scripts/check_dod_coherence.sh     # this list is a subset of CI's — checked, not promised
 bash scripts/test_release_coherence.sh # prove every release state and failure direction
 bash scripts/check_release_coherence.sh # react against this checkout (requires release history)

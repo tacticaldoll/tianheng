@@ -75,19 +75,18 @@ consumer for an undemonstrated deduplication.
   visible to CI, because this matrix asserted a non-zero status rather than a code. All five gate matrices now
   assert the code, which is the property that would have caught it.
 
-- ~~**Two gates have no companion failure matrix.**~~ **Half closed** in the open window.
-  `check_whitespace_hygiene.sh` now has `test_whitespace_hygiene.sh`, which was worth building rather than
-  recording: that gate is where the shared exit-contract backstop first misfired, and its clean-run assertion
-  is what catches it — removing the backstop's subshell guard fails that matrix and no other. The gate gained
-  a target-directory argument to make it possible, the same argument the register and reference-integrity
-  gates take for the same stated reason.
+- ~~**Two gates have no companion failure matrix.**~~ **CLOSED** in the open window. Both now have one, and
+  both were worth building rather than recording. `test_whitespace_hygiene.sh` is the only fixture that pins
+  the exit-contract backstop's subshell misfire — removing that guard fails it and no other matrix.
+  `test_dod_coherence.sh` closes the gate whose subject is a claim `AGENTS.md` makes about **itself**, so a
+  reaction nobody had watched refuse was all that stood behind it; its zero-commands direction is the one that
+  matters most, since without that guard the gate reports `ok: every local Definition of Done command (0
+  parsed) is run by CI` and exits 0. Each gate gained the target-directory argument that makes a fixture
+  possible, the same argument the register and reference-integrity gates already took.
 
-  **Still open**: `check_dod_coherence.sh` has no matrix. Class: READY-PATCH. Observed pressure: it is now the
-  only `check_*` gate without a `test_*` twin, so its two `cannot judge` refusals and its violation direction
-  are asserted nowhere. Observation source: `ls scripts/`. Risk: LOW — the gate is a text comparison over two
-  tracked files, and its failure direction is loud rather than silent. Promotion trigger: none needed.
-  Version class: PATCH. Authority: the register capability's proof requirement, and this repository's own
-  standard that a gate which has not been observed failing is a restatement rather than a defence.
+  Every `check_*` gate now has a `test_*` twin, and every one of those five matrices asserts the expected exit
+  **code** rather than a non-zero status — the property whose absence let a 1-into-2 collapse ride green
+  through CI in the release-coherence gate.
 
 - **The 天衡 shell's baseline-writing and CLI surface has never been swept.** Class: READY-PATCH (a sweep;
   its corrections are classified when they exist). Observed pressure: measured on the window's own history —
