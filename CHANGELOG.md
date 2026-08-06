@@ -486,9 +486,10 @@ them.
   the `dyn` DSL has no allow-except form — but it read only top-level `src/*.rs` without saying so. Eight files
   under `src/runner/` were never opened, and an injected `pub fn … -> Option<Box<dyn Debug>>` among them left it
   passing. Not an exposure, because those modules are private — but the soundness rested on an **unchecked
-  premise**, and `pub mod runner;` would have removed eight files from the reaction's reach in silence. That
+  premise**, and `pub mod runner;` would have removed every file beneath it from the reaction's reach in
+  silence. That
   premise is now asserted, and making the module public fails the reaction telling you to recurse. What genuinely
-  remains is declared as the register's 55th bound: the recognizer is handed one line at a time, so a trait object
+  remains is declared as a bound in the register: the recognizer is handed one line at a time, so a trait object
   on a wrapped signature's continuation line is text it is never presented with. Pinned by a test that feeds the
   recognizer the one-line control and the wrapped form.
 
