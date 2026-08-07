@@ -53,10 +53,11 @@ impl Source {
         })
     }
 
-    /// Prose: outside every fenced block **and** every HTML comment.
+    /// Prose: outside every fenced block **and** outside every HTML comment span.
     ///
     /// Where a reader is sent. A fence is where a command lives, and an HTML comment is invisible to the reader
-    /// the requirement is about — that second exclusion is a measured defect, not a precaution.
+    /// the requirement is about — that second exclusion is a measured defect, not a precaution. The comment
+    /// **span** is what is excluded, never the line carrying it: see [`Prose::lines`].
     pub fn prose(&self) -> Prose<'_> {
         Prose(&self.0)
     }
@@ -119,7 +120,7 @@ impl<'a> Header<'a> {
     }
 }
 
-/// Prose: outside every fenced block and every HTML comment.
+/// Prose: outside every fenced block and outside every HTML comment span.
 pub struct Prose<'a>(&'a str);
 
 impl<'a> Prose<'a> {
@@ -127,35 +128,58 @@ impl<'a> Prose<'a> {
         self.lines().any(|line| line.contains(needle))
     }
 
-    /// Prose lines. A fence toggles on any line whose trimmed start is ```` ``` ````; an HTML comment spans from
-    /// `<!--` to `-->`, which may be one line or several.
-    pub fn lines(&self) -> impl Iterator<Item = &'a str> + use<'a> {
+    /// Prose lines, each carrying only the text a reader sees. A fence toggles on any line whose trimmed start
+    /// is ```` ``` ````; an HTML comment spans from `<!--` to `-->`, which may be one line or several.
+    ///
+    /// The comment **span** is excised, never the line holding it. The requirement this serves says a path
+    /// appearing *only* inside an HTML comment is not a mention — so a line carrying a visible mention *and* a
+    /// comment must keep the mention. Dropping the whole line answered a different question and refused a
+    /// document that satisfies the rule: a path followed on its own line by an HTML comment counted as
+    /// unmentioned, a false refusal where the reader the requirement is about has been served.
+    ///
+    /// Yields owned text because excision produces a new string; a fully-commented line yields an empty one,
+    /// which is what the whole-line drop it replaces already amounted to for every caller.
+    pub fn lines(&self) -> impl Iterator<Item = String> + use<'a> {
         let mut fenced = false;
         let mut commented = false;
-        self.0.lines().filter(move |line| {
+        self.0.lines().filter_map(move |line| {
             let trimmed = line.trim_start();
             if trimmed.starts_with("```") {
                 fenced = !fenced;
-                return false;
+                return None;
             }
             if fenced {
-                return false;
+                return None;
             }
-            // An HTML comment opening and closing on one line hides only that line.
-            if trimmed.contains("<!--") && trimmed.contains("-->") {
-                return false;
-            }
-            if trimmed.contains("<!--") {
-                commented = true;
-                return false;
-            }
-            if commented {
-                if trimmed.contains("-->") {
-                    commented = false;
+            // Walk the line, alternating between visible text and comment span. `rest` strictly shrinks on
+            // every branch, so this terminates; `commented` carries across lines for a span that does not close
+            // on the one it opened.
+            let mut visible = String::new();
+            let mut rest = line;
+            loop {
+                if commented {
+                    match rest.find("-->") {
+                        Some(at) => {
+                            commented = false;
+                            rest = &rest[at + "-->".len()..];
+                        }
+                        None => break,
+                    }
+                } else {
+                    match rest.find("<!--") {
+                        Some(at) => {
+                            visible.push_str(&rest[..at]);
+                            commented = true;
+                            rest = &rest[at + "<!--".len()..];
+                        }
+                        None => {
+                            visible.push_str(rest);
+                            break;
+                        }
+                    }
                 }
-                return false;
             }
-            true
+            Some(visible)
         })
     }
 }

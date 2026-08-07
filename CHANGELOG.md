@@ -147,7 +147,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **58 bounds across 21 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **59 bounds across 21 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
@@ -495,6 +495,29 @@ them.
   performs.*
 
 ### Fixed
+- **Three text recognizers read past the region they observe, each in the direction its own comment said it did
+  not.** One class, found by a review of this window and repaired together. The bound register's attribute walk
+  stops at a blank line so an attribute cannot cover the item beneath it — but it read the preceding lines
+  through a command substitution, which strips every trailing newline, so the blank *directly* above a
+  definition was deleted before the walk began: `#[test]`, blank, `pub fn cited()` was accepted, and the gate
+  reported clean over a citation defending nothing. The observer-protocol delegation reaction counted braces
+  through comments, so `observation_bounds(); // }` closed the body at the comment and a second list beneath it
+  was never presented to the comparison — the one thing that reaction exists to refuse, passing as the
+  delegation; the comment tail is now removed **before** the braces are counted. And the projection register's
+  prose reader dropped a whole line carrying an HTML comment, where the requirement is that a path appearing
+  *only* inside one is not a mention — so a path a reader plainly sees was discarded and a conforming document
+  refused. The comment **span** is now excised and the visible text kept. Each is pinned by the direction that
+  fails without it, and the first two were confirmed against the unrepaired code. Adopter-facing effect: none —
+  all three are this repository's own governance reactions, and `tianheng::observation_bounds()` returns one
+  more entry, an additive read-only surface no baseline or verdict depends on.
+- What the brace count still cannot separate is now a **declared bound** of `observer-protocol` rather than an
+  unwritten limit: a `{` or `}` inside a block comment or a string literal still moves the body extent, because
+  telling one from the other needs the string-literal lexing this tree defeats, its own lexer suites putting
+  comment delimiters inside string literals. It is declared with the direction measured rather than assumed: no
+  brace-carrying
+  construct survives the exact one-statement comparison, so a moved extent refuses a **conforming** body instead
+  of accepting a divergent one, which is an over-reaction an author argues with and never a silent pass. Its pin
+  carries that control.
 - The publish-source gate now owns cleanup before acquiring its temporary signature workspace, so a partial
   acquisition that creates a directory and then fails cannot leave that directory behind.
 - The publish-source gate now reports cannot-judge when Git's extracted signature is not the tag object's exact

@@ -557,10 +557,17 @@ definition_is_test() {
     # The preceding lines are READ here, so this is an IO of the observation source rather than a
     # computation over what was already read — a `sed` failure would empty the attribute run and report a
     # real test as carrying no `#[test]`. Its status is checked for the same reason every other read's is.
-    local above_text
-    above_text=$(sed -n "1,$((line - 1))p" -- "$file") \
+    #
+    # Buffered in a FILE rather than a command substitution, and that is the blank-line stop below working at
+    # all rather than a style choice. `$(…)` strips every trailing newline, so the blank line directly above a
+    # definition never reached `mapfile`: `#[test]`, blank, `fn cited()` read as `#[test]`, `fn cited()` and
+    # was ACCEPTED — the attribute leaking across a blank line that this walk's stop conditions exist to
+    # refuse, and the one direction here whose error is a silent pass. Every other read in this gate is
+    # buffered for its status; this one is buffered for its content too.
+    [[ -n $attribute_run ]] || attribute_run=$(mktemp)
+    sed -n "1,$((line - 1))p" -- "$file" >"$attribute_run" \
         || cannot_judge "could not read $file while checking whether the definition at line $line is a test; a citation refused because a file could not be read is a violation invented from an IO failure"
-    mapfile -t above <<<"$above_text"
+    mapfile -t above <"$attribute_run"
     for ((n = ${#above[@]}; n >= 1; n--)); do
         trimmed=${above[n - 1]}
         trimmed=${trimmed#"${trimmed%%[![:space:]]*}"}
@@ -644,7 +651,11 @@ definition_hits=
 # The qualified-heading scan's buffer, same reason and same expansion: `grep`'s status and its output are both
 # needed, so the output cannot come back through a process substitution whose status no one reads.
 qualified_hits=
-trap 'rm -f "$records" "$ids" "$reference_targets" "$restatements" ${rendered:+"$rendered"} ${cargo_errors:+"$cargo_errors"} ${tracked_list:+"$tracked_list"} ${definition_hits:+"$definition_hits"} ${qualified_hits:+"$qualified_hits"}' EXIT
+# The attribute-run buffer, created on first use under the same expansion. Unlike its siblings this one is a
+# file for its CONTENT as much as its status: command substitution strips trailing newlines, which silently
+# deleted the blank line a definition sits under — see `definition_is_test`.
+attribute_run=
+trap 'rm -f "$records" "$ids" "$reference_targets" "$restatements" ${rendered:+"$rendered"} ${cargo_errors:+"$cargo_errors"} ${tracked_list:+"$tracked_list"} ${definition_hits:+"$definition_hits"} ${qualified_hits:+"$qualified_hits"} ${attribute_run:+"$attribute_run"}' EXIT
 
 # Through the same enumerator, so a `git` failure here names the enumeration rather than reporting that
 # the repository holds no spec. `git ls-files` lists tracked paths in index order, which is path-sorted,

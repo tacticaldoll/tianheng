@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**16 of 58 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**16 of 59 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound` — owner: engine
@@ -325,7 +325,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (6)
+## over-reacts (7)
 
 ### `crate-source-boundary/a-git-plus-version-dependency-is-flagged-though-it-would-publish-a-stated-bound`
 
@@ -342,6 +342,14 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **because**: the predicate is never evaluated, so a dead arm is observed as live — cfg-blindness inherited from the module scanner, which reacts wider than the build
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms`
+
+### `observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound`
+
+> an inspected body carrying `{` or `}` inside a block comment or a string literal
+
+- **because**: the extent is found by counting braces outside line comments only, and separating a brace in code from one inside a string literal needs the lexing this tree's own lexer suites defeat, their fixtures putting comment delimiters inside string literals
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_brace_in_a_block_comment_moves_the_body_extent`
 
 ### `runtime-origin-assertion/a-composite-shape-yields-a-truncated-origin-a-stated-bound`
 
