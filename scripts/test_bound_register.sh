@@ -135,6 +135,15 @@ expect_pass "$pinned" 'bound register ok (1 declared bounds across 1 spec files)
 tracked=$(new_repo tracked "$(spec_with '- **UNPINNED** BACKLOG.md "probe debt"')")
 expect_pass "$tracked" 'bound register ok (1 declared bounds'
 
+# A repository argument keeps naming the same judged root after the tracked-Markdown census enters it. The
+# fixture is blessed through its absolute path, then judged from its parent through a relative spelling, so
+# reaching projection comparison after the directory transition cannot accidentally look for `repo/repo/docs`.
+relative_root=$(new_repo relative-root "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+relative_status=0
+relative_output=$(cd "$fixture_root" && "$check" "${relative_root##*/}" 2>&1) || relative_status=$?
+[[ $relative_status -eq 0 && $relative_output == *'bound register ok (1 declared bounds across 1 spec files)'* ]] \
+    || { printf 'a relative repository path must keep one projection root, got exit %d: %s\n' "$relative_status" "$relative_output" >&2; exit 1; }
+
 # --- the citation directions ---
 
 no_citation=$(new_repo no-citation "$(spec_with '')")

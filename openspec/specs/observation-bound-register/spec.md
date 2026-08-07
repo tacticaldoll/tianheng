@@ -614,6 +614,11 @@ while an empty tracker or citation list refuses every bound in the register and 
 the projection is written, since a tree the reaction could only partly read cannot produce a whole
 register.
 
+The repository argument SHALL be resolved to one stable physical root before any scan, directory transition,
+or projection access. A relative and an absolute spelling of the same repository SHALL judge and regenerate
+the same projection; entering the repository for the tracked-Markdown census SHALL NOT make later paths relative
+to that repository a second time.
+
 Before scanning tracked Markdown for a written census, the reaction SHALL enter the judged repository in a
 separately checked step. Failure to enter SHALL exit 2 cannot-judge and SHALL NOT be interpreted as grep's ordinary
 exit 1 no-match result.
@@ -656,6 +661,11 @@ exit 1 no-match result.
   reading the empty result as a repository holding nothing: that reading reports clean over a census it
   never examined, and refuses every tracker and citation in the register for a failure that is not the
   register's
+
+#### Scenario: Relative and absolute repository paths share one projection root
+
+- **WHEN** the gate is invoked from a repository's parent with a relative path to a register carrying tracked Markdown
+- **THEN** it judges and regenerates the same projection as an absolute invocation, without looking beneath a second copy of the relative repository path
 
 #### Scenario: The repository disappears before the written-census scan
 

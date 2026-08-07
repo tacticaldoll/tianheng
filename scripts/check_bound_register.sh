@@ -605,6 +605,13 @@ tracker_names_a_tracked_path() {
     return 1
 }
 
+# Resolve the caller's spelling once before the first observation. The tracked-Markdown census later enters
+# this directory deliberately; retaining a relative spelling across that transition would make subsequent
+# projection paths relative to the repository a second time.
+repo_input=$repo
+repo=$(cd "$repo_input" && pwd -P) \
+    || cannot_judge "repository root $repo_input cannot be resolved to a stable physical directory"
+
 git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
     || cannot_judge "repository root $repo is not a git worktree; this gate judges tracked content"
 
