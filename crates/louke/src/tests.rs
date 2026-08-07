@@ -540,3 +540,64 @@ fn the_origin_guarantee_is_stated_as_derived_on_every_surface() {
         );
     }
 }
+
+// ── the feature-gated export ────────────────────────────────────────────────────────────────────────
+//
+// `observation-bound-model`'s scenario *A build compiles none of the reaction a declaration describes* had no
+// reaction: the gating was proved once by a throwaway crate that read `observation_bounds().len()`, and that crate
+// was deleted. So the property rested on nobody changing the `cfg`, which is the shape the bound register exists
+// to end one level down.
+//
+// Each configuration asserts **its own** count, because the workspace suite runs with `--all-features` and would
+// never see the audit-OFF answer. `cargo test -p louke` is in the Definition of Done for this: the clippy pass
+// beside it catches an unused item, not a declaration that should have been compiled out.
+
+/// Audit-OFF exports exactly the declaration whose reaction the build still contains.
+#[cfg(not(feature = "audit"))]
+#[test]
+fn an_audit_off_build_declares_only_the_always_present_bound() {
+    let declared = crate::observation_bounds();
+    assert_eq!(
+        declared.len(),
+        1,
+        "an audit-OFF build compiles none of the probe audit, so it must declare no bound describing it: {:?}",
+        declared.iter().map(|d| d.id().as_str()).collect::<Vec<_>>()
+    );
+    assert!(
+        declared[0]
+            .id()
+            .as_str()
+            .contains("a-composite-shape-yields-a-truncated-origin"),
+        "and the one that survives is the origin derivation on the always-present hot path: {}",
+        declared[0].id()
+    );
+}
+
+/// Audit-ON exports the whole set, so the gate narrows the export and does not shrink the declaration list.
+#[cfg(feature = "audit")]
+#[test]
+fn an_audit_on_build_declares_every_bound_including_the_probe_audit_s() {
+    let declared = crate::observation_bounds();
+    assert!(
+        declared.len() > 1,
+        "the audit's own bounds must be present when the audit is compiled: {:?}",
+        declared.iter().map(|d| d.id().as_str()).collect::<Vec<_>>()
+    );
+    // The discriminator: the always-present one is there in BOTH configurations, so its presence alone would not
+    // distinguish them. What must appear only here is a bound describing the probe audit.
+    assert!(
+        declared.iter().any(|d| d
+            .id()
+            .as_str()
+            .contains("a-composite-shape-yields-a-truncated-origin")),
+        "the hot-path bound is declared in every configuration"
+    );
+    assert!(
+        declared
+            .iter()
+            .any(|d| d.id().as_str().contains("has-no-configured-probe")
+                || d.id().as_str().contains("probe")),
+        "and at least one bound describing the probe audit appears only when the audit is compiled: {:?}",
+        declared.iter().map(|d| d.id().as_str()).collect::<Vec<_>>()
+    );
+}

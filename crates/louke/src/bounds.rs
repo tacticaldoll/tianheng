@@ -5,10 +5,12 @@
 //! type is nested.
 //!
 //! **The set depends on the `audit` feature**, because a bound is a property of a *reaction* and an audit-OFF
-//! build contains none of the probe audit. Five of the six declarations describe `audit_probe_coverage` — the
-//! scanner that lives behind `audit`, as `observer` does and for the same reason — so declaring them in a build
-//! that compiles no scanner would tell a reader a bound exists for a reaction the crate does not have. The one
-//! that survives audit-OFF describes the always-present origin derivation on the hot path.
+//! build contains none of the probe audit. Every declaration describing `audit_probe_coverage` is gated with it —
+//! that scanner lives behind `audit`, as `observer` does and for the same reason — because declaring one in a build
+//! that compiles no scanner would tell a reader a bound exists for a reaction the crate does not have. What
+//! survives audit-OFF is the declaration describing the always-present origin derivation on the hot path. How many
+//! that is on each side is deliberately not written here: it is asserted in `tests.rs`, in both directions, which
+//! is where a figure about this set belongs.
 
 use xuanji::{BoundDecl, BoundId, Extent, Reached};
 // Only the audit-scoped declarations name an owner or a fact granularity, so both imports are gated with
@@ -18,8 +20,9 @@ use xuanji::{FactGranularity, Owner};
 
 /// The observation bounds 漏刻 declares **in this build**.
 ///
-/// Not "every bound its spec declares": five of the six describe the probe audit, which an audit-OFF build does
-/// not contain. See this module's header.
+/// Not "every bound its spec declares": all but one describe the probe audit, which an audit-OFF build does not
+/// contain. See this module's header — and `tests.rs` for the counts, asserted in both directions rather than
+/// written here.
 pub fn observation_bounds() -> Vec<BoundDecl> {
     // Mutable only where something extends it. The allow is scoped to the configuration where the statement
     // below is compiled out, rather than blanket — `cargo clippy -p louke` reported this the moment the five
