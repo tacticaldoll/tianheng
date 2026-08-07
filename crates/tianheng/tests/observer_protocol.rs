@@ -336,11 +336,17 @@ fn a_brace_in_a_comment_tail_no_longer_closes_the_body() {
 /// comment delimiters inside string literals, several of them nested, so a delimiter-counting stripper opens a
 /// phantom comment at the first of them.
 ///
-/// It is declared rather than closed because the error direction is the safe one, which this pin is what shows:
-/// a moved extent makes a **conforming** body read as non-conforming, because no brace-carrying construct
-/// survives the exact one-statement comparison. An author meets a refusal to argue with, never a silent pass.
-/// The control is the same body with the comment removed, so the refusal is the brace's doing and not the
-/// recognizer refusing everything.
+/// It is declared rather than closed because **for this comparison** the error direction is the safe one, which
+/// this pin is what shows: a moved extent makes a **conforming** body read as non-conforming, because no
+/// brace-carrying construct survives the exact one-statement comparison. An author meets a refusal to argue
+/// with, never a silent pass. The control is the same body with the comment removed, so the refusal is the
+/// brace's doing and not the recognizer refusing everything.
+///
+/// The direction belongs to the comparison and not to the extent, and reading it as a property of the extent is
+/// how the same moved extent went four windows accepting a divergent body elsewhere: the shell-delegation
+/// reaction compares by count and containment, both of which a truncated remainder satisfies. That reader
+/// refuses rather than inheriting this bound — see
+/// [`an_ambiguous_delegation_extent_is_refused_rather_than_judged`].
 #[test]
 fn a_brace_in_a_block_comment_moves_the_body_extent() {
     let braced_block_comment = Source::of(
@@ -363,12 +369,74 @@ fn a_brace_in_a_block_comment_moves_the_body_extent() {
     );
 }
 
+/// What the reaction concluded about a composition body's semantic delegation.
+///
+/// `CannotJudge` is a distinct answer rather than a flavour of failure, because the two say opposite things to
+/// whoever reads the reaction: one is a claim about the shell's code, the other a claim about this recognizer's
+/// reach.
+#[derive(Debug, PartialEq, Eq)]
+enum Delegation {
+    /// One semantic-boundary access, and it is the direct `hunyi::check_all` argument.
+    Delegates,
+    /// The body was read and does not delegate as the requirement demands.
+    Diverges(String),
+    /// The extent read may not be the function's body, so no verdict is given.
+    CannotJudge(String),
+}
+
+/// Delimiters that can hide a brace from the extent count, so their presence makes the extent unsafe to judge.
+///
+/// A `"` or a `'` opens a literal whose braces are text; `/*` and `*/` bound a comment whose braces are text
+/// too. `*/` is listed on its own because a block comment opened above the signature and closed inside the body
+/// presents only its closing half to the extent. Both quote forms matter for the same reason and neither is
+/// hypothetical: a `//` inside a string makes [`mask_line_comment_braces`] blank a *real* opening brace, and
+/// `let c = '}';` closes the body at a character literal.
+const EXTENT_AMBIGUITY: [&str; 4] = ["\"", "'", "/*", "*/"];
+
+/// Whether the shell's composition body delegates semantic emptiness, or `None` if the function is absent.
+///
+/// Split out of the reaction so it can be driven by a fixture. Reading only the tracked `runner.rs` left the
+/// reaction with no negative run available: every claim about what it refuses was a claim about text that does
+/// not exist, which is how it went four release windows accepting a body it was written to refuse.
+///
+/// **The ambiguity check runs before the comparison, not after.** The comparison is a count and a containment,
+/// and both survive a truncated extent unharmed — a second semantic-boundary access sitting past the cut is
+/// simply absent from what is compared, so the one shape this reaction refuses reads as the delegation it
+/// demands. Checking afterwards would be checking a verdict already formed on the wrong text.
+fn judge_delegation(source: &Source) -> Option<Delegation> {
+    let body = function_body(source, "fn evaluate_constitution(")?;
+    if let Some(delimiter) = EXTENT_AMBIGUITY
+        .iter()
+        .find(|delimiter| body.rust().contains(delimiter))
+    {
+        return Some(Delegation::CannotJudge((*delimiter).to_string()));
+    }
+    let compact = compact_executed_rust(&body);
+    let accessor = "constitution.semantic_boundaries()";
+    let accesses = compact.matches(accessor).count();
+    if accesses != 1 {
+        return Some(Delegation::Diverges(format!(
+            "{accesses} semantic-boundary accesses, and the requirement admits exactly one"
+        )));
+    }
+    if !compact.contains(SEMANTIC_DELEGATION) {
+        return Some(Delegation::Diverges(
+            "the access is not the direct `hunyi::check_all` argument".to_string(),
+        ));
+    }
+    Some(Delegation::Delegates)
+}
+
 /// The shell reads semantic boundaries only to pass them directly into 渾儀's public composed entry point.
 ///
 /// A behavioral comparison cannot observe a local empty-bundle guard here: the static dimension has already
 /// read the same manifest, and `hunyi::check_all` would return the same `Clean`. The source shape is therefore
 /// the observation level that moved. Exactly one accessor occurrence rules out a second shell-local decision,
 /// while the required direct call rules out hiding that decision behind an alias or wrapper.
+///
+/// This is also the spec's *tracked composition body is still judged* scenario: it asserts `Delegates`, which a
+/// refusal is not, so a refusal broad enough to swallow every input fails here rather than passing as the
+/// closure it was added for.
 #[test]
 fn the_shell_delegates_semantic_emptiness_to_the_public_entry_point() {
     let Some(root) = workspace_root() else {
@@ -379,23 +447,119 @@ fn the_shell_delegates_semantic_emptiness_to_the_public_entry_point() {
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("cannot read {path:?}: {error}"));
     let source = Source::of(text);
-    let body = function_body(&source, "fn evaluate_constitution(").unwrap_or_else(|| {
-        panic!(
+    match judge_delegation(&source) {
+        None => panic!(
             "no `fn evaluate_constitution` body in {relative} — the shell delegation reaction cannot judge"
-        )
-    });
-    let compact = compact_executed_rust(&body);
-    let accessor = "constitution.semantic_boundaries()";
-    assert_eq!(
-        compact.matches(accessor).count(),
-        1,
-        "the shell must access semantic boundaries exactly once, as the direct `hunyi::check_all` argument; \
-         another access is an independent shell decision: {relative}"
-    );
+        ),
+        Some(Delegation::Delegates) => {}
+        Some(Delegation::Diverges(why)) => panic!(
+            "the shell must access semantic boundaries exactly once, as the direct `hunyi::check_all` \
+             argument; another access is an independent shell decision — {why}: {relative}"
+        ),
+        Some(Delegation::CannotJudge(delimiter)) => panic!(
+            "the extent read for `evaluate_constitution` carries `{delimiter}` on an executed line, so it may \
+             not be the function's body and no verdict is given. Separating a brace in code from one inside a \
+             literal or block comment needs the lexing this repository measured and rejected; move the \
+             construct out of the composition function, or widen the reaction deliberately: {relative}"
+        ),
+    }
+}
+
+/// A composition body in the shape the reaction reads, with `interposed` between the delegation and a second
+/// semantic-boundary access.
+///
+/// The second access is the shape the requirement refuses, so every fixture built here *should* be reported as
+/// divergent. What each interposed construct changes is whether the reaction can see it at all.
+fn composition_body(interposed: &[&str]) -> Source {
+    let mut lines = vec![
+        "fn evaluate_constitution(",
+        "    constitution: &Constitution,",
+        "    manifest_path: &Path,",
+        ") -> (Outcome, Option<Coverage>) {",
+        "    let mut outcome = merge_outcomes(",
+        "        outcome,",
+        "        hunyi::check_all(constitution.semantic_boundaries(), manifest_path),",
+        "    );",
+    ];
+    lines.extend_from_slice(interposed);
+    lines.extend_from_slice(&[
+        "    if constitution.semantic_boundaries().is_empty() {",
+        "        outcome = early();",
+        "    }",
+        "    (outcome, None)",
+        "}",
+        "",
+    ]);
+    Source::of(lines.join("\n"))
+}
+
+/// The control: with nothing hiding the extent, the second access is seen and reported.
+///
+/// Without it, a reaction that refused or failed on everything would satisfy
+/// [`an_ambiguous_delegation_extent_is_refused_rather_than_judged`] while observing nothing at all.
+#[test]
+fn a_divergent_composition_body_is_reported_when_nothing_moves_its_extent() {
     assert!(
-        compact.contains(SEMANTIC_DELEGATION),
-        "the shell must pass semantic boundaries directly to `hunyi::check_all`; an alias or wrapper can \
-         reintroduce a second behavior owner: {relative}"
+        matches!(
+            judge_delegation(&composition_body(&[])),
+            Some(Delegation::Diverges(_))
+        ),
+        "a second semantic-boundary access with no interposed construct is plainly visible, so the reaction \
+         must report it"
+    );
+}
+
+/// An extent that may not be the body earns a refusal, not a verdict — a declared bound.
+///
+/// Each construct below moves the extent so that the second semantic-boundary access beneath it falls outside
+/// what is compared. Measured before the refusal existed: all four read as a conforming delegation, because a
+/// count of one and a containment are both satisfied by the truncated remainder. That is the false negative the
+/// Core Contract forbids, reached by four spellings of one mechanism.
+///
+/// The control is [`a_divergent_composition_body_is_reported_when_nothing_moves_its_extent`], which shares the
+/// fixture and differs only by the interposed construct.
+#[test]
+fn an_ambiguous_delegation_extent_is_refused_rather_than_judged() {
+    let routes: [(&str, Vec<&str>); 4] = [
+        (
+            "a `//` inside a string literal, blanking a real opening brace",
+            vec![
+                "    if \"https://host\".is_empty() {",
+                "        log();",
+                "    }",
+            ],
+        ),
+        (
+            "a closing brace inside a string literal",
+            vec!["    let fence = \"}\";"],
+        ),
+        (
+            "a closing brace inside a block comment",
+            vec!["    /* } */"],
+        ),
+        (
+            "a closing brace inside a character literal",
+            vec!["    let closer = '}';"],
+        ),
+    ];
+    // Every route is judged before anything is asserted, so a regression reports each spelling it re-opened
+    // rather than only the first. The four are one mechanism, and seeing one name is not seeing the mechanism.
+    // The verdict is carried into the message, not just the label: "not refused" spans both a loud `Diverges`
+    // and the silent `Delegates` that is the actual defect, and a regression report that cannot tell them
+    // apart cannot say whether the false negative came back or merely a worse diagnostic.
+    let unrefused: Vec<String> = routes
+        .iter()
+        .filter_map(
+            |(label, interposed)| match judge_delegation(&composition_body(interposed)) {
+                Some(Delegation::CannotJudge(_)) => None,
+                other => Some(format!("{label} -> {other:?}")),
+            },
+        )
+        .collect();
+    assert!(
+        unrefused.is_empty(),
+        "the extent is moved, so the reaction must refuse rather than read the truncated remainder as the \
+         delegation it demands — not refused: {unrefused:#?}"
     );
 }
 
@@ -503,6 +667,13 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
 ///
 /// [`Executed`] cannot do this job: it filters lines whose trimmed start is `//`, so a comment TAIL — which is
 /// the shape above — survives it whole, brace and all.
+///
+/// What it does **not** do is understand literals: a `//` inside a string blanks a real opening brace whose
+/// match is on a later line, and a brace inside a string, a character literal, or a block comment is counted as
+/// code. The extent then moves, and what that costs depends entirely on the comparison reading it — refusal for
+/// an exact equality, a silent pass for a count. Consumers that cannot detect their own truncation check
+/// [`EXTENT_AMBIGUITY`] before comparing; this function does not do it for them, because the safe answer is not
+/// the same for every reader.
 fn mask_line_comment_braces(text: &str) -> String {
     let mut bytes = text.as_bytes().to_vec();
     let mut line_start = 0usize;

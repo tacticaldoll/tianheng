@@ -147,7 +147,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **59 bounds across 21 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **60 bounds across 21 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
@@ -495,6 +495,30 @@ them.
   performs.*
 
 ### Fixed
+- **The shell-delegation reaction accepted the one body shape it exists to refuse, and a declared bound said
+  that was safe.** The reaction reads `evaluate_constitution`'s extent by counting braces, and a string
+  literal, a character literal, or a block comment inside it moves that extent. The comparison is a count and a
+  containment, and a truncated remainder satisfies both — so a second `constitution.semantic_boundaries()`
+  access sitting past the cut was never presented to it, and the divergent body read as a conforming
+  delegation. Measured on four spellings of the mechanism, every one returning the conforming verdict: a `//`
+  inside a string (which blanks a *real* opening brace whose match is on a later line), and a closing brace
+  inside a string, a block comment, or a character literal. The reaction now refuses to judge when the extent
+  it read carries `"`, `'`, `/*`, or `*/` on an executed line, and the refusal names the delimiter. Over-refusal
+  is the chosen direction: a lifetime shares the character-literal delimiter, so a composition body naming one
+  is refused too, loudly and in the commit that causes it.
+- **A bound was typed for the harmless one of its two readers.**
+  `a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent` recorded the moved extent as
+  *over-reacting*, read off the bounds-method comparison, where an exact one-statement equality cannot survive a
+  moved extent and so refuses a conforming body. The shell-delegation reaction arrived later with a comparison
+  that survives one intact, and the rationale was never re-derived against it — leaving a bound on the safe side
+  of the false-negative line describing a reader on the unsafe side, which reads as permission. It is now two
+  bounds: the surviving over-reaction on the bounds-method comparison, and a *refuses to judge* on the
+  delegation reaction, each with its own pin. No adopter action: `tianheng::observation_bounds()` is absent at
+  `v0.4.0`, so neither identity has ever shipped.
+- `docs/observation-bound-extents.md` asserted that **refuses to judge** carried no bound while rendering one
+  under that heading two sections below. The claim was a literal in the generator's template, which is the one
+  place a freshness check cannot catch a falsehood — the comparison is the generator's own text against itself.
+  The lesson it carried does not need the membership claim, so the claim is gone rather than re-typed.
 - **Three text recognizers read past the region they observe, each in the direction its own comment said it did
   not.** One class, found by a review of this window and repaired together. The bound register's attribute walk
   stops at a blank line so an attribute cannot cover the item beneath it — but it read the preceding lines

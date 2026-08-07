@@ -87,7 +87,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios, against the register's
-  **59 bounds across 21 capabilities** — written in that exact form because it is the one phrasing
+  **60 bounds across 21 capabilities** — written in that exact form because it is the one phrasing
   `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
   the drift class this family already refuses. *First step, and why it is not simply "add a gate":* the binding must

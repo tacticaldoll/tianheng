@@ -456,11 +456,16 @@ fn render_extents(code: &BTreeMap<String, BoundDecl>) -> String {
          point observed it has no extent of its own and is recorded as under-reacting with the entry point as \
          its owner, and a bound both out of reach and granularity-limited cannot be expressed at all.\n\n",
     );
+    // The membership claim this paragraph used to make — that **refuses to judge** carried no bound — was a
+    // literal in this template, which is the one place a freshness check cannot catch a falsehood: the
+    // comparison is the generator's own text against itself, so it stayed "true" while the sections below
+    // rendered a bound under that very heading. The lesson it carries does not need the count, so the count is
+    // gone rather than re-typed; which values carry bounds is what the sections are.
     out.push_str(
-        "One value carries no bound today and is kept deliberately: **refuses to judge**. The \
-         misclassification this model exists to prevent was exactly a confusion between that and *out of \
-         reach* — a prediction of a silent false negative where the real behaviour was a fail-loud refusal — \
-         and a direction that cannot be named cannot be predicted with.\n",
+        "**refuses to judge** and *out of reach* are kept distinct deliberately. The misclassification this \
+         model exists to prevent was exactly a confusion between them — a prediction of a silent false \
+         negative where the real behaviour was a fail-loud refusal — and a direction that cannot be named \
+         cannot be predicted with.\n",
     );
 
     let mut by_extent: BTreeMap<&str, Vec<(&String, &BoundDecl)>> = BTreeMap::new();

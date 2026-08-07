@@ -93,12 +93,17 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "a_trait_object_on_a_continuation_line_is_not_recognized",
         ),
+        // The moved extent is one mechanism with two readers, and they sit on opposite sides of the
+        // false-negative line, so it is two bounds rather than one. Which side a reader lands on is decided by
+        // its comparison, not by the extent: an exact one-statement equality cannot survive a moved extent and
+        // therefore over-reacts, while a count-and-containment survives one intact and would accept a divergent
+        // body. The second reader refuses instead, and declares that refusal below.
         BoundDecl::pinned(
             BoundId::new(
                 "observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound",
             ),
-            "an inspected body carrying `{` or `}` inside a block comment or a string literal",
-            // Over-reacting rather than under-reacting, and that is read off the comparison rather than
+            "an inspected bounds-method body carrying `{` or `}` inside a block comment or a string literal",
+            // Over-reacting rather than under-reacting, and that is read off this comparison rather than
             // preferred: the body is required to be one exact statement, which no brace-carrying construct
             // survives, so a moved extent refuses a conforming body instead of admitting a divergent one.
             Extent::Reached(Reached::OverReacts {
@@ -108,6 +113,22 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                           literals".into(),
             }),
             "a_brace_in_a_block_comment_moves_the_body_extent",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "observer-protocol/the-composition-body-carries-a-delimiter-that-can-move-the-read-extent-a-stated-bound",
+            ),
+            "the extent read for `evaluate_constitution` carrying `\"`, `'`, `/*`, or `*/` on an executed line",
+            // Refusing rather than over-reacting, because this comparison cannot detect its own truncation: a
+            // count of one and a containment are both satisfied by the remainder, so a second semantic-boundary
+            // access past the cut reads as the delegation the requirement demands.
+            Extent::Reached(Reached::RefusesToJudge {
+                because: "a string, character, or block-comment delimiter can hide a brace from the extent \
+                          count, so the text read may not be the function's body, and separating the two needs \
+                          the lexing this tree's own lexer suites defeat — a verdict withheld is loud, while \
+                          the verdict this comparison would give is a silent pass".into(),
+            }),
+            "an_ambiguous_delegation_extent_is_refused_rather_than_judged",
         ),
         // --- gate-shape-contract ---
         //
