@@ -42,7 +42,9 @@ mod violation;
 mod tests;
 
 pub use baseline::{Baseline, BaselineEntry, ViolationId, apply_baseline};
-pub use bound::{BoundDecl, BoundId, Demonstrates, Extent, FactGranularity, Owner, Reached};
+pub use bound::{
+    BoundDecl, BoundId, Defence, Demonstrates, Extent, FactGranularity, Owner, Reached,
+};
 pub use finding::Finding;
 pub use identity::{RuleKey, StructuredFactIdentity};
 pub use model::{BoundaryKind, Outcome, Polarity, ScanDepth, Severity};

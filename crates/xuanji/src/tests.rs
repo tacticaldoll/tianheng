@@ -679,7 +679,7 @@ fn a_fixed_violation_leaves_a_stale_baseline_entry() {
 // proof; the nesting is the proof.
 
 fn out_of_reach_bound() -> BoundDecl {
-    BoundDecl::new(
+    BoundDecl::pinned(
         BoundId::new(
             "external-crate-confinement/a-confined-crate-use-inside-a-string-is-a-stated-bound",
         ),
@@ -807,8 +807,8 @@ fn a_declaration_reports_the_id_shape_extent_and_pin_it_was_given() {
     assert_eq!(bound.extent().as_str(), "out of reach");
     assert_eq!(bound.extent().demonstrates(), Demonstrates::DoesNotReact);
     assert_eq!(
-        bound.pinned_by(),
-        "a_confined_use_inside_a_string_or_macro_body_is_not_observed"
+        bound.defence().pinned_by(),
+        Some("a_confined_use_inside_a_string_or_macro_body_is_not_observed")
     );
     // The id renders as itself, so a diagnostic can name a bound without a lookup table.
     assert_eq!(bound.id().to_string(), bound.id().as_str());
@@ -881,7 +881,7 @@ fn a_bound_may_be_declared_from_computed_strings() {
     // strings are owned-or-borrowed; without the change it does not compile, which is the honest negative run for
     // a type-level guard.
     let discovered = "plugin-42";
-    let declaration = BoundDecl::new(
+    let declaration = BoundDecl::pinned(
         BoundId::new(format!(
             "third-party-observer/{discovered}-is-not-scanned-a-stated-bound"
         )),
@@ -899,7 +899,10 @@ fn a_bound_may_be_declared_from_computed_strings() {
         declaration.id().as_str(),
         "third-party-observer/plugin-42-is-not-scanned-a-stated-bound"
     );
-    assert_eq!(declaration.pinned_by(), "a_plugin_42_bound_is_pinned");
+    assert_eq!(
+        declaration.defence().pinned_by(),
+        Some("a_plugin_42_bound_is_pinned")
+    );
     // And it behaves exactly as a literal declaration does: the extent still decides the predicted evidence, and
     // an out-of-reach bound is still not a declared false negative.
     assert_eq!(
@@ -919,7 +922,7 @@ fn a_literal_declaration_borrows_rather_than_allocating() {
     // fifty-four — a census in prose with no observation source, which `check_bound_register.sh` prints on every
     // clean run precisely so a number like that is read rather than remembered.
     const SHAPE: &str = "a shape whose pointer identity is what this test reads";
-    let declaration = BoundDecl::new(
+    let declaration = BoundDecl::pinned(
         BoundId::new("probe-capability/a-literal-declaration-a-stated-bound"),
         SHAPE,
         Extent::OutOfReach {
@@ -937,6 +940,48 @@ fn a_literal_declaration_borrows_rather_than_allocating() {
     );
 }
 
+#[test]
+fn an_unpinned_declaration_carries_a_tracker_and_no_test() {
+    let declaration = BoundDecl::unpinned(
+        BoundId::new("probe-capability/an-unpinned-declaration-a-stated-bound"),
+        "a shape whose missing defence is explicit",
+        Extent::OutOfReach {
+            because: "the source does not reach the fixture".into(),
+        },
+        "BACKLOG.md READY-PATCH missing-defence",
+    );
+
+    assert_eq!(declaration.defence().pinned_by(), None);
+    assert_eq!(
+        declaration.defence().tracker(),
+        Some("BACKLOG.md READY-PATCH missing-defence")
+    );
+    assert!(declaration.borrows_every_string());
+}
+
+#[test]
+fn a_pinned_declaration_carries_every_test_and_cannot_be_empty() {
+    let declaration = BoundDecl::pinned_by_many(
+        BoundId::new("probe-capability/a-multiply-pinned-declaration-a-stated-bound"),
+        "two fixture shapes sharing one declared bound",
+        Extent::OutOfReach {
+            because: "both shapes stop at the same observation edge".into(),
+        },
+        "the_first_shape_is_pinned",
+        ["the_second_shape_is_pinned"],
+    );
+
+    assert_eq!(
+        declaration
+            .defence()
+            .pinning_tests()
+            .expect("the declaration is pinned")
+            .collect::<Vec<_>>(),
+        ["the_first_shape_is_pinned", "the_second_shape_is_pinned"]
+    );
+    assert_eq!(declaration.defence().tracker(), None);
+}
+
 /// The discriminant answers **`false`** for a computed string in **each position, independently**.
 ///
 /// Without this the reaction over the family's declarations would be untestable in the direction that matters. A
@@ -945,14 +990,14 @@ fn a_literal_declaration_borrows_rather_than_allocating() {
 /// position is perturbed on its own, with every other string left literal, and the answer must be `false` for all
 /// of them.
 ///
-/// The positions are the five strings a declaration carries: its id, the shape it names, the test that pins it,
-/// its extent's rationale, and the layer an inherited ownership names.
+/// The positions include both defence variants: the test that pins a bound and the tracker owning an unpinned
+/// bound, as well as its id, shape, extent rationale, and inherited ownership layer.
 #[test]
 fn a_computed_string_in_any_position_is_not_a_borrowing_declaration() {
     let literal_id = || BoundId::new("probe-capability/a-computed-declaration-a-stated-bound");
     let computed = || format!("built at {}", 1 + 1);
 
-    let owned_id = BoundDecl::new(
+    let owned_id = BoundDecl::pinned(
         BoundId::new(computed()),
         "a literal shape",
         Extent::OutOfReach {
@@ -962,7 +1007,7 @@ fn a_computed_string_in_any_position_is_not_a_borrowing_declaration() {
     );
     assert!(!owned_id.borrows_every_string(), "the id is computed");
 
-    let owned_shape = BoundDecl::new(
+    let owned_shape = BoundDecl::pinned(
         literal_id(),
         computed(),
         Extent::OutOfReach {
@@ -972,7 +1017,7 @@ fn a_computed_string_in_any_position_is_not_a_borrowing_declaration() {
     );
     assert!(!owned_shape.borrows_every_string(), "the shape is computed");
 
-    let owned_pin = BoundDecl::new(
+    let owned_pin = BoundDecl::pinned(
         literal_id(),
         "a literal shape",
         Extent::OutOfReach {
@@ -982,7 +1027,34 @@ fn a_computed_string_in_any_position_is_not_a_borrowing_declaration() {
     );
     assert!(!owned_pin.borrows_every_string(), "the pin is computed");
 
-    let owned_rationale = BoundDecl::new(
+    let owned_additional_pin = BoundDecl::pinned_by_many(
+        literal_id(),
+        "a literal shape",
+        Extent::OutOfReach {
+            because: "a literal rationale".into(),
+        },
+        "a_literal_pin",
+        [computed()],
+    );
+    assert!(
+        !owned_additional_pin.borrows_every_string(),
+        "an additional pin is computed"
+    );
+
+    let owned_tracker = BoundDecl::unpinned(
+        literal_id(),
+        "a literal shape",
+        Extent::OutOfReach {
+            because: "a literal rationale".into(),
+        },
+        computed(),
+    );
+    assert!(
+        !owned_tracker.borrows_every_string(),
+        "the unpinned tracker is computed"
+    );
+
+    let owned_rationale = BoundDecl::pinned(
         literal_id(),
         "a literal shape",
         Extent::OutOfReach {
@@ -996,7 +1068,7 @@ fn a_computed_string_in_any_position_is_not_a_borrowing_declaration() {
     );
 
     // The deepest string a declaration carries: nested two levels, inside the one extent that names an owner.
-    let owned_layer = BoundDecl::new(
+    let owned_layer = BoundDecl::pinned(
         literal_id(),
         "a literal shape",
         Extent::Reached(Reached::UnderReacts {
@@ -1014,7 +1086,7 @@ fn a_computed_string_in_any_position_is_not_a_borrowing_declaration() {
 
     // And the control: the same nested shape, all literal, must still answer `true` — otherwise the assertions
     // above would hold for the wrong reason, an extent this deep simply always reading as owned.
-    let all_literal = BoundDecl::new(
+    let all_literal = BoundDecl::pinned(
         literal_id(),
         "a literal shape",
         Extent::Reached(Reached::UnderReacts {

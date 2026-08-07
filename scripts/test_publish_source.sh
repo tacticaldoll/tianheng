@@ -152,6 +152,31 @@ absent_output=$(PATH="$keygen_stub:$PATH" "$check" "$publishable" 2>&1) || absen
 [[ $absent_status -eq 2 ]] \
     || { printf 'an unverifiable signature must be cannot-judge, got %d: %s\n' "$absent_status" "$absent_output" >&2; exit 1; }
 
+# If extraction and the object disagree, suffix removal would silently return the whole object and turn a
+# reconstruction failure into a wrong-source verdict. Corrupt only the extracted block so the distinction is
+# exercised after a real signed tag and a working signature mechanism have both been established.
+signature_git_stub=$fixture_root/signature-git-stub
+mkdir -p "$signature_git_stub"
+real_git_for_signature=$(command -v git)
+cat >"$signature_git_stub/git" <<STUB
+#!/usr/bin/env bash
+signature_query=0
+for arg in "\$@"; do
+    [[ \$arg == '--format=%(contents:signature)' ]] && signature_query=1
+done
+if [[ \$signature_query -eq 1 ]]; then
+    "$real_git_for_signature" "\$@"
+    printf '%s\n' 'altered-after-extraction'
+    exit 0
+fi
+exec "$real_git_for_signature" "\$@"
+STUB
+chmod +x "$signature_git_stub/git"
+signature_status=0
+signature_output=$(PATH="$signature_git_stub:$PATH" "$check" "$publishable" 2>&1) || signature_status=$?
+[[ $signature_status -eq 2 && $signature_output == *"extracted signature is not the tag object's suffix"* ]] \
+    || { printf 'a mismatched extracted signature must exit 2, got %d: %s\n' "$signature_status" "$signature_output" >&2; exit 1; }
+
 # Tag and HEAD both plausible on their own, naming different commits. Caught before the remote check,
 # so the diagnostic names the tag rather than the branch tip.
 tag_elsewhere=$(new_release_repo tag-elsewhere)

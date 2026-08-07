@@ -579,7 +579,7 @@ impl Observer for ModuleHeaderObserver {
 
     fn bounds(&self) -> Vec<BoundDecl> {
         // Computed, because WHICH bounds you have depends on what you were configured to read.
-        self.subtrees.iter().map(|subtree| BoundDecl::new(
+        self.subtrees.iter().map(|subtree| BoundDecl::pinned(
             BoundId::new(format!("house-rules/a-file-nested-below-{subtree}-is-out-of-reach")),
             format!("a `.rs` file in a directory below `{subtree}`"),
             Extent::OutOfReach {

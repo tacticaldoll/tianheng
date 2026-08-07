@@ -28,7 +28,8 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
     // below is compiled out, rather than blanket — `cargo clippy -p louke` reported this the moment the five
     // audit declarations moved behind the gate, which is the pass that exists for exactly this class.
     #[cfg_attr(not(feature = "audit"), allow(unused_mut))]
-    let mut bounds = vec![        BoundDecl::new(
+    let mut bounds = vec![
+        BoundDecl::pinned(
             BoundId::new(
                 "runtime-origin-assertion/a-composite-shape-yields-a-truncated-origin-a-stated-bound",
             ),
@@ -52,7 +53,8 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
 /// this list is free — every projection of the register sorts by id.
 #[cfg(feature = "audit")]
 fn audit_bounds() -> Vec<BoundDecl> {
-    vec![        BoundDecl::new(
+    vec![
+        BoundDecl::pinned(
             BoundId::new(
                 "runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-bound",
             ),
@@ -63,7 +65,7 @@ fn audit_bounds() -> Vec<BoundDecl> {
             },
             "source_outside_lib_or_bin_target_subtree_is_out_of_scope_corpus_bound",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound",
             ),
@@ -75,7 +77,7 @@ fn audit_bounds() -> Vec<BoundDecl> {
             }),
             "production_probe_behind_non_production_cfg_is_counted_as_coverage",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "runtime-origin-assertion/identical-expression-repeated-in-the-same-function-collapses-to-one-finding-a-stated-bound",
             ),
@@ -87,7 +89,7 @@ fn audit_bounds() -> Vec<BoundDecl> {
             }),
             "identical_expression_repeated_in_the_same_function_collapses_to_one_violation",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "runtime-origin-assertion/an-absolute-path-literal-s-target-outside-the-anchor-keeps-its-absolute-label-a-stated-bound",
             ),
@@ -99,7 +101,7 @@ fn audit_bounds() -> Vec<BoundDecl> {
             }),
             "an_absolute_path_literal_outside_the_anchor_keeps_the_path_the_literal_wrote",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound",
             ),

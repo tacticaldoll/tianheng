@@ -11,7 +11,7 @@ use crate::{BoundDecl, BoundId, Extent, FactGranularity, Owner, Reached};
 /// Every observation bound `observation-bound-model` declares.
 pub fn observation_bounds() -> Vec<BoundDecl> {
     vec![
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "observation-bound-model/whether-a-declaration-s-stated-cause-is-the-real-cause-is-not-observed-a-stated-bound",
             ),
@@ -22,7 +22,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "a_rationale_that_contradicts_its_extent_is_a_stated_bound",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "observation-bound-model/an-answer-that-depends-on-the-corpus-entry-point-has-no-extent-of-its-own-a-stated-bound",
             ),
@@ -39,7 +39,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "an_entry_dependent_bound_is_declared_as_under_reacting",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "observation-bound-model/a-bound-both-out-of-reach-and-granularity-limited-cannot-be-expressed-a-stated-bound",
             ),
@@ -53,7 +53,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "granularity_is_carried_only_by_the_as_intended_extent",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "observer-protocol/whether-an-observer-s-declared-bounds-are-complete-is-not-observed-a-stated-bound",
             ),
@@ -64,7 +64,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "an_observer_may_under_declare_its_bounds",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound",
             ),
@@ -76,7 +76,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "the_fold_does_not_adjudicate_a_participant_s_verdict",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "observer-protocol/a-trait-object-on-a-wrapped-signature-s-continuation-line-is-not-seen-a-stated-bound",
             ),
@@ -96,7 +96,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // Its reaction is `tests/gate_shape_contract.rs`, so this crate owns these too. The four are read out
         // of each scenario's WHEN and THEN rather than out of a shared adjective: three name shapes the
         // reaction never looks at, and one names a shape it looks straight at and declines to judge.
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "gate-shape-contract/whether-an-enumeration-carries-a-vacuity-guard-is-not-observed-a-stated-bound",
             ),
@@ -108,7 +108,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "a_missing_vacuity_guard_is_a_stated_semantic_bound",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "gate-shape-contract/whether-a-read-s-status-is-checked-in-the-parent-shell-is-not-observed-a-stated-bound",
             ),
@@ -127,7 +127,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "an_unchecked_read_status_is_a_stated_semantic_bound",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "gate-shape-contract/whether-a-gate-s-1-versus-2-assignment-is-correct-is-not-observed-a-stated-bound",
             ),
@@ -147,7 +147,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound",
             ),
@@ -165,7 +165,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_builtin_piped_into_an_external_command_is_a_stated_bound",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "gate-shape-contract/shell-units-that-are-not-a-gate-or-its-twin-are-outside-the-surface-a-stated-bound",
             ),
@@ -183,7 +183,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // Its reaction is a shell gate, and `PINNED-BY` resolves only a harness-registered Rust function — so
         // its citation is `tests/publish_source_integrity.rs`, a file that exists for this one bound. The shell
         // gate defends it too, and cannot be cited.
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound",
             ),
@@ -208,7 +208,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // Its reaction is `tests/projection_register.rs`, so this crate owns these too. The two sit on opposite
         // sides of the false-negative line, which is exactly what the retired adjective slot could not express:
         // one is a shape the reaction never evaluates, the other a shape it can read and does not react to.
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "projection-register/whether-a-stated-regeneration-command-regenerates-its-document-is-not-observed-a-stated-bound",
             ),
@@ -221,7 +221,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "a_regeneration_command_is_registered_and_never_run",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound",
             ),

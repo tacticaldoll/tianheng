@@ -145,7 +145,7 @@ impl Observer for ModuleHeaderObserver {
             .flat_map(|subtree| {
                 let slug = subtree.replace(['/', '-', '.'], "_");
                 [
-                    BoundDecl::new(
+                    BoundDecl::pinned(
                         BoundId::new(format!(
                             "house-rules/a-file-nested-below-{subtree}-is-out-of-reach"
                         )),
@@ -167,7 +167,7 @@ impl Observer for ModuleHeaderObserver {
                     // Declared rather than closed on purpose. Skipping a leading comment block would trade this
                     // edge for a `/* … */` header and an inner attribute above the doc comment, and would leave
                     // the rule's wording saying something other than what the code does.
-                    BoundDecl::new(
+                    BoundDecl::pinned(
                         BoundId::new(format!(
                             "house-rules/a-header-below-a-leading-comment-in-{subtree}-over-reacts"
                         )),

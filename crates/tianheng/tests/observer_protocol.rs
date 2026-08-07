@@ -337,7 +337,7 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
     }
     let body = Source::of(&text[open + 1..close?]);
     Some(
-        body.executed()
+        body.rust()
             .lines()
             .map(str::trim)
             .filter(|line| !line.is_empty())
@@ -556,12 +556,8 @@ fn exposes_a_trait_object(line: &str) -> bool {
 /// the exposure instead of governing it — and this assertion is what keeps that true, since 渾儀 is not watching
 /// this crate.
 ///
-/// It reads this crate's **top-level** source files only, and that is sound because of a premise this test now
-/// checks rather than assumes: every subdirectory of `src/` is reached through a non-`pub` `mod`, so nothing
-/// beneath one is reachable from outside the crate. Measured, the files under `src/runner/` are never opened here
-/// and an injected `pub fn … -> Option<Box<dyn Debug>>` among them leaves this passing — harmless while those
-/// modules are private, and invisible the moment one is not. How many files that is is deliberately not written:
-/// a count of an enumerable set, kept by hand, is the census this window already dismantled once.
+/// It reads every Rust source recursively. Public re-exports can make an item in a private nested module
+/// reachable, so module visibility is not a sound premise for excluding that file from the corpus.
 #[test]
 fn composition_introduces_no_trait_object() {
     let src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -572,31 +568,7 @@ fn composition_introduces_no_trait_object() {
         );
         return;
     }
-    let mut offenders = Vec::new();
-    let mut files = 0usize;
-    let mut subdirectories = Vec::new();
-    for entry in std::fs::read_dir(&src).expect("the crate's source directory is readable") {
-        let path = entry.expect("a readable directory entry").path();
-        if path.is_dir() {
-            subdirectories.push(path);
-            continue;
-        }
-        if path.extension().is_none_or(|ext| ext != "rs") {
-            continue;
-        }
-        files += 1;
-        let text = std::fs::read_to_string(&path).expect("a readable source file");
-        for (number, line) in text.lines().enumerate() {
-            if exposes_a_trait_object(line) {
-                offenders.push(format!(
-                    "{}:{}: {}",
-                    path.display(),
-                    number + 1,
-                    line.trim_start()
-                ));
-            }
-        }
-    }
+    let (files, offenders) = trait_object_offenders(&src);
     assert!(
         files > 0,
         "no source file was inspected, so this assertion would hold vacuously"
@@ -607,44 +579,62 @@ fn composition_introduces_no_trait_object() {
          governed, because governing it was not available:\n{}",
         offenders.join("\n")
     );
+}
 
-    // The premise, checked. Reading only the top level is sound exactly while every subdirectory sits behind a
-    // private `mod`; making one public would take its files out of this reaction's reach with nothing to say so,
-    // which is the difference between a bounded reaction and one that quietly shrank.
-    for directory in &subdirectories {
-        let name = directory
-            .file_name()
-            .and_then(|name| name.to_str())
-            .expect("a source subdirectory has a UTF-8 name");
-        // A subdirectory `foo` is declared either in `src/foo.rs` or in `src/lib.rs`.
-        let declaring = [src.join(format!("{name}.rs")), src.join("lib.rs")];
-        let declaration = declaring
-            .iter()
-            .filter_map(|candidate| std::fs::read_to_string(candidate).ok())
-            .find_map(|text| {
-                text.lines()
-                    .map(str::trim_start)
-                    .find(|line| {
-                        line.starts_with(&format!("mod {name};"))
-                            || line.starts_with(&format!("pub mod {name};"))
-                            || line.starts_with(&format!("pub(crate) mod {name};"))
-                    })
-                    .map(str::to_string)
-            })
-            .unwrap_or_else(|| {
-                panic!(
-                    "no `mod {name};` declaration found for the source subdirectory {directory:?} — this \
-                     reaction reads only the top level, and it cannot judge that soundness without finding \
-                     how the subdirectory is reached"
-                )
-            });
-        assert!(
-            !declaration.starts_with("pub mod "),
-            "`{declaration}` makes {directory:?} publicly reachable, so this reaction's premise no longer \
-             holds: it reads only this crate's top-level files, and the ones beneath that module would leave \
-             its reach unnoticed. Recurse into subdirectories, or keep the module private."
-        );
+fn trait_object_offenders(root: &Path) -> (usize, Vec<String>) {
+    let mut pending = vec![root.to_path_buf()];
+    let mut files = 0usize;
+    let mut offenders = Vec::new();
+    while let Some(directory) = pending.pop() {
+        for entry in std::fs::read_dir(&directory)
+            .unwrap_or_else(|error| panic!("cannot read source directory {directory:?}: {error}"))
+        {
+            let path = entry.expect("a readable source directory entry").path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                files += 1;
+                let text = std::fs::read_to_string(&path)
+                    .unwrap_or_else(|error| panic!("cannot read Rust source {path:?}: {error}"));
+                for (number, line) in Source::of(text).rust().numbered_lines() {
+                    if exposes_a_trait_object(line) {
+                        offenders.push(format!(
+                            "{}:{}: {}",
+                            path.display(),
+                            number,
+                            line.trim_start()
+                        ));
+                    }
+                }
+            }
+        }
     }
+    (files, offenders)
+}
+
+#[test]
+fn a_trait_object_in_a_nested_source_file_is_observed() {
+    let root = std::env::temp_dir().join(format!(
+        "tianheng-observer-protocol-nested-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    let nested = root.join("runner");
+    std::fs::create_dir_all(&nested).expect("create nested source fixture");
+    std::fs::write(root.join("lib.rs"), "mod runner;\n").expect("write fixture root");
+    std::fs::write(
+        nested.join("projection.rs"),
+        "pub fn leaked() -> Box<dyn std::fmt::Debug> { todo!() }\n",
+    )
+    .expect("write nested fixture");
+
+    let (_, offenders) = trait_object_offenders(&root);
+    let _ = std::fs::remove_dir_all(&root);
+    assert_eq!(
+        offenders.len(),
+        1,
+        "a private module can re-export a nested public item, so nesting must not remove it from the corpus"
+    );
 }
 
 /// The declared bound: the recognizer reads **one line**, so a wrapped signature's continuation is invisible.

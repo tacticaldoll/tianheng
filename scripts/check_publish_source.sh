@@ -145,6 +145,9 @@ tag_signature=$(git -C "$repo" for-each-ref --format='%(contents:signature)' "re
 [[ $tag_signature == '-----BEGIN SSH SIGNATURE-----'* ]] \
     || cannot_judge "$tag carries a signature this gate cannot verify — it reads SSH signatures, and this block begins ${tag_signature%%$'\n'*}"
 
+[[ $tag_object == *"$tag_signature" ]] \
+    || cannot_judge "$tag's extracted signature is not the tag object's suffix, so the signed payload cannot be reconstructed reliably"
+
 # The signed payload is the tag object with the signature block removed as a SUFFIX, never by stripping from the
 # first line that resembles a signature header. Measured on a genuinely signed tag whose message ALSO quotes a
 # verification log: stripping from the first such line truncates the payload and refuses a real signature — a

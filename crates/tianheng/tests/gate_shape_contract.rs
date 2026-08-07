@@ -360,14 +360,12 @@ fn gate_header(gate: &Source) -> &str {
 /// unhandled command's own status into the family's cannot-judge, and a gate that sourced without invoking
 /// would exit 7 or 131 with no output.
 fn installs_the_backstop(gate: &Source) -> bool {
-    let sourced = gate.executed().lines().any(|line| {
+    let sourced = gate.shell().lines().any(|line| {
         let trimmed = line.trim_start();
         (trimmed.starts_with("source ") || trimmed.starts_with(". "))
             && trimmed.contains("lib/exit_contract.sh")
     });
-    let invoked = gate
-        .executed()
-        .starts_a_line_with(&format!("{BACKSTOP} ")[..]);
+    let invoked = gate.shell().starts_a_line_with(&format!("{BACKSTOP} ")[..]);
     sourced && invoked
 }
 
@@ -389,7 +387,7 @@ enum BackstopLabel {
 /// the shell never sees.
 fn backstop_label(gate: &Source) -> BackstopLabel {
     let invocation = gate
-        .executed()
+        .shell()
         .lines()
         .find(|line| line.trim_start().starts_with(&format!("{BACKSTOP} ")[..]));
     let Some(line) = invocation else {
@@ -443,7 +441,7 @@ fn name_from_basename(gate: &str) -> String {
 /// Every occurrence on a line is checked, not the first: a line whose first producer is a builtin and whose second
 /// is `git` would otherwise pass.
 fn reads_through_one_checked_capture(gate: &Source) -> bool {
-    gate.executed().lines().all(|line| {
+    gate.shell().lines().all(|line| {
         line.split("< <(").skip(1).all(|producer| {
             matches!(
                 producer.split_whitespace().next().unwrap_or(""),
@@ -611,12 +609,12 @@ fn declares_the_three_way_contract(gate: &Source) -> bool {
 
 /// Property 3 — the gate takes the repository to judge as an argument.
 fn accepts_a_target_directory(gate: &Source) -> bool {
-    gate.executed().contains("${1:-")
+    gate.shell().contains("${1:-")
 }
 
 /// Property 5 — the twin asserts an expected exit **code**.
 fn asserts_exit_codes(twin: &Source) -> bool {
-    twin.executed().contains("expected_status")
+    twin.shell().contains("expected_status")
 }
 
 /// Property 6 — the twin holds both a passing and a refusing direction.
@@ -625,7 +623,7 @@ fn asserts_exit_codes(twin: &Source) -> bool {
 /// authored in this repository for this purpose, the same line `observation-bound-register` draws when it
 /// requires a scenario heading's form while declining to require a pinning test's name.
 fn holds_both_directions(twin: &Source) -> bool {
-    twin.executed().contains("expect_pass") && twin.executed().contains("expect_fail")
+    twin.shell().contains("expect_pass") && twin.shell().contains("expect_fail")
 }
 
 /// Property 7 — the twin asserts the judged repository is unchanged.
@@ -635,7 +633,7 @@ fn holds_both_directions(twin: &Source) -> bool {
 /// walk in four combinations — so what is required is the authored diagnostic, on the same ownership
 /// argument as property 6.
 fn asserts_read_only(twin: &Source) -> bool {
-    twin.executed().contains("mutated")
+    twin.shell().contains("mutated")
 }
 
 /// Property 8 — the twin asserts a clean run's stderr is empty.
@@ -646,7 +644,7 @@ fn asserts_read_only(twin: &Source) -> bool {
 /// emptiness, which has no wording to keep in step.
 fn asserts_a_silent_clean_run(twin: &Source) -> bool {
     let captures: Vec<&str> = twin
-        .executed()
+        .shell()
         .lines()
         .filter(|line| line.contains("2>&1 >/dev/null"))
         .filter_map(|line| line.trim_start().split_once("=$(").map(|(name, _)| name))
@@ -658,7 +656,7 @@ fn asserts_a_silent_clean_run(twin: &Source) -> bool {
         })
         .collect();
     captures.iter().any(|name| {
-        twin.executed().lines().any(|line| {
+        twin.shell().lines().any(|line| {
             line.contains("-z")
                 && (line.contains(&format!("${name}")) || line.contains(&format!("${{{name}}}")))
         })
@@ -928,7 +926,7 @@ fn no_unit_outside_the_pairing_carries_the_gate_contract() {
     // backstop by an unusual spelling is still seen. The exclusion from the surface is by *naming*, so this is
     // what stops it becoming a place a gate can hide — a `verify_*.sh` carrying the contract would otherwise
     // leave the surface by rename rather than by a spec change.
-    let carries = |path: &str| read(&root, path).executed().contains(BACKSTOP);
+    let carries = |path: &str| read(&root, path).shell().contains(BACKSTOP);
 
     // The one exception is checked live, and BEFORE the loop it protects. Written after that loop first, and
     // the observation was that it never ran: pointing the exception at a unit carrying nothing made the real

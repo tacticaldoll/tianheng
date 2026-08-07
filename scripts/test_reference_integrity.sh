@@ -52,16 +52,17 @@ expect_pass() {
 }
 
 expect_fail() {
-    expect_fail_env "" "$@"
+    local repo=$1 expected_status=$2 expected=$3 output status=0
+    output=$("$check" "$repo" 2>&1) || status=$?
+    [[ $status -eq $expected_status ]] \
+        || { printf 'expected exit %d containing %q, got exit %d: %s\n' "$expected_status" "$expected" "$status" "$output" >&2; exit 1; }
+    grep -Fq "$expected" <<<"$output" \
+        || { printf 'expected exit %d containing %q, got: %s\n' "$expected_status" "$expected" "$output" >&2; exit 1; }
 }
 
-expect_fail_env() {
+expect_fail_fixture_policy() {
     local gov_docs=$1 repo=$2 expected_status=$3 expected=$4 output status=0
-    if [ -n "$gov_docs" ]; then
-        output=$(GOVERNANCE_DOCUMENTS="$gov_docs" "$check" "$repo" 2>&1) || status=$?
-    else
-        output=$("$check" "$repo" 2>&1) || status=$?
-    fi
+    output=$("$check" "$repo" --fixture-governance-documents "$gov_docs" 2>&1) || status=$?
     [[ $status -eq $expected_status ]] \
         || { printf 'expected exit %d containing %q, got exit %d: %s\n' "$expected_status" "$expected" "$status" "$output" >&2; exit 1; }
     grep -Fq "$expected" <<<"$output" \
@@ -78,6 +79,13 @@ git -C "$repo_missing_gov" rm -q PROJECT.md
 git -C "$repo_missing_gov" commit -qm 'remove PROJECT.md'
 expect_fail "$repo_missing_gov" 2 "cannot judge: 'PROJECT.md' is named as one of this repository's governance documents"
 
+# Ambient state cannot weaken the required set used for a real run.
+poisoned_status=0
+poisoned_output=$(GOVERNANCE_DOCUMENTS='Cargo.toml deny.toml' "$check" "$repo_missing_gov" 2>&1) \
+    || poisoned_status=$?
+[[ $poisoned_status -eq 2 && $poisoned_output == *"'PROJECT.md' is named"* ]] \
+    || { printf 'ambient GOVERNANCE_DOCUMENTS changed policy: exit %d: %s\n' "$poisoned_status" "$poisoned_output" >&2; exit 1; }
+
 # 3. No workspace member crates (exit 2)
 repo_no_members=$(new_valid_repo no_members)
 git -C "$repo_no_members" rm -rf -q crates/
@@ -90,7 +98,7 @@ expect_fail "$repo_no_members" 2 "cannot judge: found no workspace member under 
 repo_no_inspected=$(new_valid_repo no_inspected)
 git -C "$repo_no_inspected" rm -rf -q '*.md' crates/probe/src/lib.rs
 git -C "$repo_no_inspected" commit -qm 'remove all md and rs files'
-expect_fail_env "Cargo.toml deny.toml" "$repo_no_inspected" 2 "cannot judge: inspected 0 files"
+expect_fail_fixture_policy "Cargo.toml deny.toml" "$repo_no_inspected" 2 "cannot judge: inspected 0 files"
 
 # 5. Stale prose path reference (exit 1)
 repo_stale_prose=$(new_valid_repo stale_prose)

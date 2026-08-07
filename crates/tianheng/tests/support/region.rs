@@ -26,9 +26,20 @@ impl Source {
         Self(text.into())
     }
 
-    /// Lines that are not comments — what a property of *executed* text is about.
-    pub fn executed(&self) -> Executed<'_> {
-        Executed(&self.0)
+    /// Executed Rust text. Rust attributes beginning with `#` remain code.
+    pub fn rust(&self) -> Executed<'_> {
+        Executed {
+            text: &self.0,
+            comment: "//",
+        }
+    }
+
+    /// Executed shell text. Shell comments beginning with `#` are excluded.
+    pub fn shell(&self) -> Executed<'_> {
+        Executed {
+            text: &self.0,
+            comment: "#",
+        }
     }
 
     /// Everything above the first `##` heading.
@@ -57,20 +68,30 @@ impl Source {
     }
 }
 
-/// Executed text: line comments removed.
-///
-/// Both markers, because this family's reactions read **shell** and **Rust** with one region rule. Written filtering
-/// only `#` first, and a Rust `///` line in the reaction's own source was then counted as a call site — the region
-/// was correct for the language it was written against and wrong for the one it was used on. A region type that is
-/// language-blind is only useful if it is blind in the safe direction.
-pub struct Executed<'a>(&'a str);
+/// Executed text with the source language's line-comment marker removed.
+pub struct Executed<'a> {
+    text: &'a str,
+    comment: &'static str,
+}
 
 impl<'a> Executed<'a> {
     pub fn lines(&self) -> impl Iterator<Item = &'a str> + use<'a> {
-        self.0.lines().filter(|line| {
+        let comment = self.comment;
+        self.text.lines().filter(move |line| {
             let trimmed = line.trim_start();
-            !trimmed.starts_with('#') && !trimmed.starts_with("//")
+            !trimmed.starts_with(comment)
         })
+    }
+
+    /// Executed lines with their one-based position in the original source.
+    pub fn numbered_lines(&self) -> impl Iterator<Item = (usize, &'a str)> + use<'a> {
+        let comment = self.comment;
+        self.text
+            .lines()
+            .enumerate()
+            .filter_map(move |(index, line)| {
+                (!line.trim_start().starts_with(comment)).then_some((index + 1, line))
+            })
     }
 
     /// Whether any executed line contains `needle`.
@@ -140,5 +161,21 @@ impl<'a> Prose<'a> {
             }
             true
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Source;
+
+    #[test]
+    fn executed_regions_respect_the_source_language() {
+        let rust = Source::of("#[cfg(test)]\n// hidden\nfn guarded() {}\n");
+        assert!(rust.rust().contains("#[cfg(test)]"));
+        assert!(!rust.rust().contains("hidden"));
+
+        let shell = Source::of("# hidden\nprintf '%s\\n' '# data'\n");
+        assert!(!shell.shell().contains("hidden"));
+        assert!(shell.shell().contains("# data"));
     }
 }

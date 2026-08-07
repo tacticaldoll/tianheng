@@ -87,6 +87,17 @@ reported when more than one observer cannot judge. Deterministic and stated, nev
 - **THEN** the fold reports one clean outcome, and an empty observer set SHALL NOT be reported as clean —
   composing nothing is a misconfiguration, not a passing run
 
+### Requirement: An empty semantic observer SHALL not read workspace metadata
+
+A semantic observer with no declared boundary SHALL return `Clean` without reading the manifest. This SHALL
+match the built-in composition path's empty-dimension behaviour, including when the supplied manifest does not
+exist.
+
+#### Scenario: Empty semantic boundaries with an unreadable manifest
+
+- **WHEN** a semantic observer has no boundaries and receives a path that cannot be read
+- **THEN** it returns `Clean`, because there is no semantic observation to perform
+
 ### Requirement: The built-in path SHALL keep its behaviour, and the two paths SHALL be held equal
 
 `check_constitution` and the CLI SHALL keep their present composition path and observable behaviour, coverage
@@ -187,12 +198,9 @@ Because that same measurement leaves 渾儀 unable to watch this crate, the reac
 - It SHALL over-approximate in the safe direction: it cannot distinguish a `pub` item in a private module from a
   publicly reachable one, and flags both. A false positive here is a sentence to write; a false negative is an
   exposure nobody governs.
-- It reads this crate's **top-level** source files only. That is sound exactly while every subdirectory of `src/`
-  is reached through a non-`pub` `mod` declaration, so nothing beneath one is reachable from outside the crate —
-  and the reaction SHALL **assert that premise** rather than rest on it. Measured, the files under `src/runner/`
-  are never opened, and an injected `pub fn … -> Option<Box<dyn Debug>>` among them leaves the reaction passing:
-  harmless while those modules are private, and invisible the moment one is not. How many files that is is
-  deliberately not written here — a count of an enumerable set, kept by hand, goes stale in silence.
+- It SHALL read every Rust source below this crate's `src/` recursively. A private module can publicly re-export
+  an item from a nested file, so module visibility is not a sound premise for excluding that file from the
+  corpus. An injected public trait-object signature in a nested source file SHALL therefore fail the reaction.
 - Reading one line at a time leaves a residual the premise check cannot remove, declared as an observation bound
   below.
 
@@ -207,11 +215,12 @@ Because that same measurement leaves 渾儀 unable to watch this crate, the reac
 - **THEN** that observer is not evaluated, because a verdict resting on a boundary that could not be evaluated
   is not a verdict, and evaluating further would spend work on an answer that cannot be reported
 
-#### Scenario: A source subdirectory becomes publicly reachable
+#### Scenario: A nested source file exposes a trait object
 
-- **WHEN** a subdirectory of `src/` is reached through a `pub mod` declaration
-- **THEN** the reaction fails, because the premise justifying its top-level-only reading no longer holds and the
-  files beneath that module would otherwise leave its reach with nothing said
+- **WHEN** any Rust source below `src/`, including a file in a private nested module, carries a public signature
+  naming a trait object
+- **THEN** the reaction fails, because a public re-export can make the nested item reachable without changing
+  that module declaration
 
 #### Scenario: A trait object on a wrapped signature's continuation line is not seen — a stated bound
 

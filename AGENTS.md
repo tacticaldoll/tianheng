@@ -335,14 +335,9 @@ bash scripts/check_bound_register.sh    # every declared observation bound names
                                            # (a cfg-removed #[test], an uninvoked macro body, a definition inside
                                            # a string or comment). Run on a cold checkout they compile the
                                            # workspace; run in this order the enumeration is warm (≈1s)
-bash scripts/test_published_family_coverage.sh # prove the published-family ledger refuses: a family with no
-                                           # fulfilled owner, and an owner claiming a family the inventory does
-                                           # not list. The ledger runs inside test_examples.sh below; these are
-                                           # the proofs that it still refuses, and nothing ran them
-bash scripts/test_example_quality_gate.sh # prove a real isolated-workspace warning stops the gate before
-                                           # reaction acceptance
-bash scripts/test_example_suite.sh       # prove example ownership and invocation-local artifact cleanup
-bash scripts/test_examples.sh            # every dogfood example still reacts as declared
+bash scripts/test_examples.sh            # the single example-suite entry: proves the published-family ledger,
+                                           # quality gate, and suite ownership refusals, then runs every dogfood
+                                           # example and checks its declared reaction
 ```
 
 The self-governance gate (`self_governance.rs`, run under `cargo test`) and its projection
@@ -366,6 +361,11 @@ bundling, the packaged-tarball self-test, and the reaction on the clean/violatin
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 ## Versioning — SemVer honesty (the modou lesson)
+
+Version literals in prose name only an immutable historical/provenance fact, a migration target, or the active
+release-planning surface. Long-lived comments and live documentation do not restate a "current" or prospective
+version: say `[Unreleased]`, workspace version, manifest requirement, or this checkout instead. The release
+coherence reaction owns the mutable version-bearing surfaces; do not add a general prose-number detector.
 
 - Pre-1.0 and at `0.0.x`: **no inter-release compatibility is promised**; any release may
   break. Do not vanity-bump the minor for a non-breaking change.

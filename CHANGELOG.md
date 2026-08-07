@@ -87,6 +87,9 @@ them.
   dismissing it as governed policy.
 
 ### Added
+- `guibiao`, `hunyi`, and `louke` now expose the same explicit observer and observation-bound model from each
+  dimension root, including `Defence`; an adopter no longer needs a direct `xuanji` dependency merely to name
+  the protocol types a standalone dimension already implements.
 - The crates.io publish now runs through a source gate (`scripts/check_publish_source.sh`, reached via
   `scripts/publish.sh`) that refuses any source other than the signed-and-annotated-tagged
   `release: X.Y.Z` commit at the live tip of `main`. `cargo publish` records the commit it ran on in
@@ -191,6 +194,14 @@ them.
   copy of it.
 
 ### Changed
+- **BREAKING:** `BoundDecl` now carries a typed `Defence`: non-empty `PinnedBy { first, additional }` or
+  `Unpinned { tracker }`; scenarios with several `PINNED-BY` citations retain every test instead of silently
+  keeping only the last one.
+  `BoundDecl::new` is replaced by `BoundDecl::pinned`, `BoundDecl::pinned_by_many`, and
+  `BoundDecl::unpinned`, making the register's existing
+  `PINNED-BY` / `UNPINNED` states mutually exclusive and both expressible in code. Migrate a former
+  `BoundDecl::new(id, shape, extent, test)` call by renaming it to `BoundDecl::pinned`; use `unpinned` only with
+  an explicit tracked owner for missing evidence.
 - **The census direction now judges tracked content and every figure on a line**, closing three ways the
   direction added one change earlier missed or overreached. It walked the filesystem, so an untracked scratch
   note and an ignored vendored tree each failed the reaction — a local file breaking a developer's run while a
@@ -335,14 +346,9 @@ them.
   `|| true`, so a tracked document the census direction claims to cover went unexamined behind a clean
   report. What is left in a process substitution is computation over data this run already materialized, and
   the reaction says which rather than leaving the scope to be inferred.
-- Three failure matrices that existed but **nothing ran** are now in the Definition of Done and CI:
-  `test_published_family_coverage.sh`, `test_example_quality_gate.sh`, and `test_example_suite.sh`. The
-  reactions they prove *were* wired — `test_examples.sh` sources all three libraries and closes the
-  published-family ledger with `verify_family_coverage` — so the ledger has been running; what nobody ran
-  were the proofs that it still **refuses**. An unrun matrix is worse than an absent one: a reader who finds
-  `test_published_family_coverage.sh` in `scripts/` reasonably concludes the ledger's refusals are defended,
-  and nothing was keeping that true. All three passed when first run, so the wiring closes a latent gap
-  rather than a live defect.
+- `test_examples.sh` is the single Definition-of-Done and CI entry for the example family. It invokes the
+  published-family, quality-gate, and suite-ownership failure matrices before running dogfood reactions, so
+  their refusals are proved exactly once rather than repeated by every caller of the orchestrator.
 - `check_dod_coherence.sh` gains the **last missing failure matrix**, so every `check_*` gate now has a
   `test_*` twin and every one of the five asserts the expected exit **code**. This gate's subject is a claim
   `AGENTS.md` makes about itself — that its Definition of Done block is the single source for the local gate
@@ -478,6 +484,14 @@ them.
   performs.*
 
 ### Fixed
+- Empty `SemanticObserver` declarations now return `Clean` without reading workspace metadata, matching the
+  built-in composition path even when the supplied manifest does not exist. The lexical trait-object reaction
+  now scans nested Rust source recursively; private modules can publicly re-export nested items, so top-level
+  files were not a sound corpus boundary.
+- The bound-register census now distinguishes failure to enter its repository from grep's ordinary no-match
+  status; reference integrity no longer lets ambient `GOVERNANCE_DOCUMENTS` weaken the required set; and the
+  pre-publish signature check refuses to reconstruct a payload unless the extracted signature is the tag
+  object's actual suffix. Each cannot-judge direction is covered by its companion failure matrix.
 - **The pre-publish gate now verifies the release tag's signature instead of matching its shape.** It grepped the
   whole tag object — message included — so an annotated-but-unsigned tag whose message quoted a
   `-----BEGIN SSH SIGNATURE-----` block, a pasted verification log, satisfied it. `cargo publish` stamps a
