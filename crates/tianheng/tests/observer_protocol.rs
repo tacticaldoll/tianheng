@@ -221,9 +221,11 @@ fn the_trait_driven_fold_agrees_with_the_built_in_path() {
             dimension.label
         );
     }
+    // Compared by VALUE, not by rendered `Debug` text. `Outcome` derives `PartialEq`, so the comparison the
+    // requirement asks for is available directly; going through `format!` asked a reader to trust that two
+    // distinct outcomes cannot render alike, and gave a failure one long line instead of two structures.
     assert_eq!(
-        format!("{built_in:?}"),
-        format!("{folded:?}"),
+        built_in, folded,
         "the two composition paths must produce one verdict; an additional entry that quietly judges \
          differently is worse than no entry at all"
     );
