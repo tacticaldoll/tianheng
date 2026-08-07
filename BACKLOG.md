@@ -60,25 +60,32 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **Every normative SHALL either has a reaction or is a declared bound.** *Observed pressure:* **seven** found
-  and closed in the 0.5.0 window — the family's declarations staying literal, the equality fixture reacting in
-  every dimension, an observer declaring exactly its dimension's bounds (a comparison that was `f() == f()`), the
-  protocol's required `bounds` method having no consumer at all, *an audit finding carries no repair polarity*, *an
-  observer's bounds method cannot be found where the reaction looks*, and *joining a run would require no new
-  export*. Every one found by hand. *Observation source:* the window's closing review, rounds 1–7; each is recorded
-  in `CHANGELOG.md`'s `[Unreleased]` with the perturbation that proved it.
+- **Every normative SHALL either has a reaction or is a declared bound.** *Observed pressure:* **ten** found
+  and closed through re-review #3 of the 0.5.0 window. The first seven were the family's declarations staying
+  literal, the equality fixture reacting in every dimension, an observer declaring exactly its dimension's bounds
+  (a comparison that was `f() == f()`), the protocol's required `bounds` method having no consumer at all, *an
+  audit finding carries no repair polarity*, *an observer's bounds method cannot be found where the reaction
+  looks*, and *joining a run would require no new export*. Re-review #3 added three more: a requirement prescribed
+  wording for the projected shell reason that no reaction observed, a reason-only correction claimed verdict
+  stability through an impossible-to-fail scenario, and the shell's semantic delegation scenario could not detect a
+  duplicated local guard. Every one was found by hand. *Observation source:* the window's closing review, rounds
+  1–7 and re-review #3; the first seven are recorded in `CHANGELOG.md`'s `[Unreleased]` with the perturbation that
+  proved them.
 
-  **Promoted from WATCH because its own trigger fired, three times.** That trigger was *a normative SHALL found
+  **Promoted from WATCH because its own trigger fired, six times.** That trigger was *a normative SHALL found
   un-reacted **after** this window's sweep* — the sweep being the control, so the four found before it could not
   stand as evidence for themselves. Rounds 6 and 7 then found three more, and **all three were requirements this
   window had just written**: a SHALL added in one change and left unreacted, in the window whose whole subject was
   closing that class. That is stronger evidence than the original four, because it shows the class reproducing under
-  authors actively watching for it.
+  authors actively watching for it. Re-review #3 then found the fourth through sixth post-sweep recurrences, again
+  in requirements or scenarios written in the same window; two were removed as inert, and semantic delegation
+  gained a source-shape reaction.
 
   *Current reaction or bound:* none. Only a **bound** carries a `PINNED-BY`; an ordinary requirement is bound to
   nothing, so no gate can tell a SHALL with a reaction from one without. *Risk:* the class recurring and being found
   by hand or not at all — a normative rule nothing enforces is indistinguishable from one that is enforced, which is
-  the failure the bound register was built to end one level down. *Measured cost, not estimated:* the specs hold
+  the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
+  specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios, against the register's
   **56 bounds across 20 capabilities** — written in that exact form because it is the one phrasing
   `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
@@ -90,6 +97,11 @@ consumer for an undemonstrated deduplication.
   review of a window would be the same haste this entry documents. *Version class:* not release-affecting; a new
   capability with its own gate, preserving every published API. *Authority:* `observation-bound-register`, which
   solves the same problem for bounds and is the shape any answer here would have to generalize.
+
+  *Interim discipline:* `AGENTS.md` now requires a scenario entering main specs to name an existing reaction in
+  the same change or arrive with a new guard and its negative run; a construction-guaranteed property stays in
+  requirement prose instead. This does not close the entry — review convention cannot derive the missing binding —
+  but it prevents sync from knowingly admitting another un-reacted scenario while the derived capability is designed.
 
 - ~~**`check_release_coherence.sh`'s subshell reads have not been audited for a swallowed status.**~~
   **CLOSED** in the open window. Audited read by read rather than swept: four of the five consumers already
