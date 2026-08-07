@@ -82,6 +82,17 @@ impl<'a> Executed<'a> {
             .filter(move |line| !line.trim_start().starts_with(comment))
     }
 
+    /// Executed lines with their one-based position in the original source.
+    pub fn numbered_lines(&self) -> impl Iterator<Item = (usize, &'a str)> + use<'a> {
+        let comment = self.comment;
+        self.text
+            .lines()
+            .enumerate()
+            .filter_map(move |(index, line)| {
+                (!line.trim_start().starts_with(comment)).then_some((index + 1, line))
+            })
+    }
+
     /// Whether any executed line contains `needle`.
     pub fn contains(&self, needle: &str) -> bool {
         self.lines().any(|line| line.contains(needle))
