@@ -20,7 +20,7 @@ Two faults are deliberate and neither is a bug: `src/api.rs` imports `crate::inf
 
 ## What this example is here to prove
 
-**The published surface is enough.** Everything the participant needs — `Observer`, `Violation::new`,
+**The public surface is enough.** Everything the participant needs — `Observer`, `Violation::new`,
 `ViolationId`, `RuleKey`, `StructuredFactIdentity`, `BoundDecl`, `BoundId`, `Extent` — comes from
 `tianheng::prelude`. Nothing was added to any crate to make this compile. If it had needed an export, that would
 have been the finding: a protocol a third party cannot use is not a protocol.

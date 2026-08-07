@@ -106,7 +106,7 @@ them.
   `main` correctly and then force-pushed away an hour later — and neither disagreement affects any
   published crate's content. The eleven `0.1.x` releases point at commits the 2026-07-17 history
   rewrite dissolved, so whether they came from `main` is no longer knowable.
-- An **observation participant** is now a published protocol: `Observer` (in `xuanji`, re-exported through
+- An **observation participant** is now a public protocol: `Observer` (in `xuanji`, re-exported through
   the dimensions and `tianheng::prelude`) asks a participant to observe a workspace and to **declare what it does
   not observe**. Neither method has a default body, so a participant that says nothing about its limits cannot be
   written — and adding a stage later is deliberately a **breaking change**, because a declaration written before
@@ -177,7 +177,7 @@ them.
   asserted, with the discriminator that an **empty** body is found and judged — so absence and emptiness are
   distinguished rather than both reading as nothing to do. And *joining a run would require no new export* stops
   being a claim in prose: the example measures its own reach, one dependency and no import of a family crate past
-  the shell, so a future edit importing around the published surface fails instead of quietly making the example
+  the shell, so a future edit importing around the public surface fails instead of quietly making the example
   prove the opposite of its point.
 
 - `xingbiao::audit_corpus_and_anchor` derives a workspace's audit corpus **and** the directory every observed
@@ -579,7 +579,7 @@ them.
   to read and could not is exit `2`, and its bounds are **computed** — id, shape, reason and pin all built with
   `format!` from what it was configured to read. That is the first caller of `BoundId`'s owned-or-borrowed form
   that is not a literal; it shipped in this window for a caller that did not yet exist. The example needed **no
-  addition to any crate's public API**, which is the load-bearing result: the published surface is enough to join
+  addition to any crate's public API**, which is the load-bearing result: the public surface is enough to join
   a run. A `COOKBOOK.md` entry shows the same shape at teaching size.
 
   What it found, recorded in `BACKLOG.md` rather than worked around: `BoundaryKind` has no value a participant
