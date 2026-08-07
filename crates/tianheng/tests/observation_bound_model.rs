@@ -84,6 +84,25 @@ enum SpecDefence {
     Unpinned { tracker: String },
 }
 
+fn declared_defence(decl: &BoundDecl) -> SpecDefence {
+    match decl.defence() {
+        Defence::PinnedBy { .. } => SpecDefence::PinnedBy(
+            decl.defence()
+                .pinning_tests()
+                .expect("the matched pinned defence carries tests")
+                .map(str::to_string)
+                .collect(),
+        ),
+        Defence::Unpinned { tracker } => SpecDefence::Unpinned {
+            tracker: tracker.to_string(),
+        },
+        _ => panic!(
+            "{}: the bound model does not know how to compare this defence variant",
+            decl.id().as_str()
+        ),
+    }
+}
+
 fn spec_defence(line: &str) -> Option<SpecDefence> {
     let line = line.trim();
     if let Some(rest) = line.strip_prefix("- **PINNED-BY** ") {
@@ -95,6 +114,17 @@ fn spec_defence(line: &str) -> Option<SpecDefence> {
         .map(|tracker| SpecDefence::Unpinned {
             tracker: tracker.trim().to_string(),
         })
+}
+
+fn unpinned_fixture() -> BoundDecl {
+    BoundDecl::unpinned(
+        tianheng::BoundId::new("probe-capability/an-unpinned-fixture-a-stated-bound"),
+        "a synthetic bound kept outside the live declaration set",
+        Extent::OutOfReach {
+            because: "the fixture exists only to exercise a supported defence state".into(),
+        },
+        "BACKLOG.md READY-PATCH fixture-defence",
+    )
 }
 
 /// Every declared bound the specs state, keyed by derived id.
@@ -181,6 +211,31 @@ fn an_unpinned_spec_defence_keeps_its_tracker_and_no_test() {
         Some(SpecDefence::Unpinned {
             tracker: "BACKLOG.md READY-PATCH missing-defence".to_string(),
         })
+    );
+}
+
+#[test]
+fn an_unpinned_typed_defence_compares_with_its_tracker() {
+    assert_eq!(
+        declared_defence(&unpinned_fixture()),
+        SpecDefence::Unpinned {
+            tracker: "BACKLOG.md READY-PATCH fixture-defence".to_string(),
+        }
+    );
+}
+
+#[test]
+fn an_unpinned_typed_defence_projects_its_tracker() {
+    let fixture = unpinned_fixture();
+    let mut declarations = BTreeMap::new();
+    declarations.insert(fixture.id().as_str().to_string(), fixture);
+
+    let rendered = render_extents(&declarations);
+    assert!(
+        rendered.lines().any(
+            |line| line == "- **unpinned**, tracked by: BACKLOG.md READY-PATCH fixture-defence"
+        ),
+        "the unpinned projection must preserve the tracker in the register vocabulary:\n{rendered}"
     );
 }
 
@@ -295,19 +350,7 @@ fn every_classification_cites_the_test_its_spec_cites() {
         let Some(spec) = specs.get(id) else {
             continue; // the bijection test above owns that direction
         };
-        let declared = match decl.defence() {
-            Defence::PinnedBy { .. } => SpecDefence::PinnedBy(
-                decl.defence()
-                    .pinning_tests()
-                    .expect("the matched pinned defence carries tests")
-                    .map(str::to_string)
-                    .collect(),
-            ),
-            Defence::Unpinned { tracker } => SpecDefence::Unpinned {
-                tracker: tracker.to_string(),
-            },
-            _ => panic!("{id}: the bound model does not know how to compare this defence variant"),
-        };
+        let declared = declared_defence(decl);
         if spec.defence.as_ref() != Some(&declared) {
             disagreements.push(format!(
                 "{id}: {} declares {:?}, the typed declaration carries {:?}",
