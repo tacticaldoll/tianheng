@@ -292,7 +292,7 @@ The example SHALL therefore exhibit **more than one extent**, so it demonstrates
 call that declares a bound.
 
 The example SHALL require **no addition to any crate's public API**. If joining a run needs an export the family
-does not publish, the protocol is not usable by a third party, and that is the finding rather than a reason to add
+does not expose, the protocol is not usable by a third party, and that is the finding rather than a reason to add
 the export.
 
 #### Scenario: A third-party participant joins a composed run
@@ -315,6 +315,6 @@ the export.
 
 #### Scenario: Joining a run would require a new export
 
-- **WHEN** an outside crate cannot implement or compose the protocol with the published surface alone
-- **THEN** that is a defect in the published surface, reported as such, and not repaired by publishing whatever
+- **WHEN** an outside crate cannot implement or compose the protocol with the public surface alone
+- **THEN** that is a defect in the public surface, reported as such, and not repaired by adding whatever export
   the example happened to need
