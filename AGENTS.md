@@ -337,12 +337,12 @@ bash scripts/check_bound_register.sh    # every declared observation bound names
                                            # workspace; run in this order the enumeration is warm (≈1s)
 bash scripts/test_published_family_coverage.sh # prove the published-family ledger refuses: a family with no
                                            # fulfilled owner, and an owner claiming a family the inventory does
-                                           # not list. The ledger runs inside test_examples.sh below; these are
-                                           # the proofs that it still refuses, and nothing ran them
+                                           # not list. This focused proof stays a top-level gate before the
+                                           # positive example driver, which does not recursively rerun it
 bash scripts/test_example_quality_gate.sh # prove a real isolated-workspace warning stops the gate before
                                            # reaction acceptance
 bash scripts/test_example_suite.sh       # prove example ownership and invocation-local artifact cleanup
-bash scripts/test_examples.sh            # every dogfood example still reacts as declared
+bash scripts/test_examples.sh            # after those focused refusals, every dogfood example reacts as declared
 ```
 
 The self-governance gate (`self_governance.rs`, run under `cargo test`) and its projection
