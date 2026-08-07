@@ -196,9 +196,7 @@ fn evaluate_constitution(
     let (static_outcome, observed_coverage) =
         check_and_cover(constitution.static_boundaries(), manifest_path);
     let mut outcome = static_outcome;
-    if !matches!(outcome, Outcome::ConstitutionError(_))
-        && !constitution.semantic_boundaries().is_empty()
-    {
+    if !matches!(outcome, Outcome::ConstitutionError(_)) {
         outcome = merge_outcomes(
             outcome,
             hunyi::check_all(constitution.semantic_boundaries(), manifest_path),

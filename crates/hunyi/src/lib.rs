@@ -119,7 +119,7 @@ use crate::visibility::check_visibility_boundary;
 
 /// The 渾儀 (semantic) dimension's boundaries, gathered so the shell takes the dimension as
 /// one unit rather than one parameter per capability. Each field is one capability's
-/// boundaries; [`check_all`] evaluates them all with a single `cargo metadata` read.
+/// boundaries; [`check_all`] evaluates every non-empty bundle with a single `cargo metadata` read.
 #[derive(Debug, Clone, Default)]
 pub struct SemanticBoundaries {
     /// Exposure boundaries (`semantic-signature-coupling`).
@@ -247,7 +247,7 @@ impl SemanticBoundaries {
     }
 }
 
-// --- Composition: evaluate every capability with a single metadata read ------
+// --- Composition: evaluate every declared capability with a single metadata read ------
 
 /// Evaluate every declared semantic capability against `metadata` into the one accumulator, in a
 /// fixed order (shared with [`SemanticBoundaries::capability_sets`]); the first constitution error
@@ -266,9 +266,13 @@ fn eval_all(
 
 /// Evaluate every declared semantic boundary against the workspace with a **single**
 /// `cargo metadata` read, merging all findings into one outcome. A constitution error on any
-/// boundary supersedes (exit 2). The per-capability `check`/`check_trait_impl_locality`/
-/// `check_visibility` entries remain for direct use; the shell composes via this.
+/// boundary supersedes (exit 2). An empty bundle returns [`Outcome::Clean`] before metadata is
+/// read. The per-capability `check`/`check_trait_impl_locality`/`check_visibility` entries remain
+/// for direct use; the shell and [`SemanticObserver`] compose via this.
 pub fn check_all(boundaries: &SemanticBoundaries, manifest_path: &Path) -> Outcome {
+    if boundaries.is_empty() {
+        return Outcome::Clean;
+    }
     let metadata = match read_metadata(manifest_path) {
         Ok(metadata) => metadata,
         Err(outcome) => return outcome,

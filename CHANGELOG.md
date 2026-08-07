@@ -506,8 +506,8 @@ them.
   into a private nested module cannot remove it from the corpus when a public re-export could still expose it.
 - Repository governance reactions now select Rust or shell executed-source regions explicitly, so Rust
   attributes are not discarded as shell comments and shell recognizers do not inherit Rust comment semantics.
-- An empty `SemanticObserver` now returns `Clean` before reading workspace metadata, matching the
-  built-in composition path even when the supplied manifest does not exist.
+- Empty semantic composition now returns `Clean` in `hunyi::check_all` before reading workspace metadata, so
+  `SemanticObserver` and the shell delegate empty and non-empty bundles to the same behavior owner.
 - **The pre-publish gate now verifies the release tag's signature instead of matching its shape.** It grepped the
   whole tag object — message included — so an annotated-but-unsigned tag whose message quoted a
   `-----BEGIN SSH SIGNATURE-----` block, a pasted verification log, satisfied it. `cargo publish` stamps a
