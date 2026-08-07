@@ -218,6 +218,60 @@ fn workspace_root() -> Option<PathBuf> {
     })
 }
 
+/// Authored shell comments may explain the dependency boundary, but the live declaration and its
+/// generated projection own the membership. Keeping the declaration token out of comments prevents
+/// one from becoming a second, unstaleness-checked allowlist without forbidding product code from
+/// legitimately calling the public DSL.
+#[test]
+fn shell_comments_do_not_restate_the_dependency_allowlist() {
+    let Some(root) = workspace_root() else {
+        return; // outside a checkout — the authored repository source is not present
+    };
+    let mut pending = vec![root.join("crates/tianheng/src")];
+    let mut rust_sources = Vec::new();
+
+    while let Some(directory) = pending.pop() {
+        for entry in std::fs::read_dir(&directory)
+            .unwrap_or_else(|error| panic!("cannot read {}: {error}", directory.display()))
+        {
+            let entry = entry.unwrap_or_else(|error| {
+                panic!("cannot enumerate {}: {error}", directory.display())
+            });
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                rust_sources.push(path);
+            }
+        }
+    }
+
+    rust_sources.sort();
+    for source in rust_sources {
+        let text = std::fs::read_to_string(&source)
+            .unwrap_or_else(|error| panic!("cannot read {}: {error}", source.display()));
+        for (index, line) in text.lines().enumerate() {
+            assert!(
+                !line.trim_start().starts_with("//") || !line.contains("restrict_dependencies_to("),
+                "{}:{} restates the shell dependency declaration; refer to AGENTS.self-law.md instead",
+                source.display(),
+                index + 1
+            );
+        }
+    }
+
+    let style_source = root.join("crates/tianheng/src/runner/term_color.rs");
+    let style_text = std::fs::read_to_string(&style_source)
+        .unwrap_or_else(|error| panic!("cannot read {}: {error}", style_source.display()));
+    assert!(
+        style_text.lines().any(|line| {
+            line.trim_start().starts_with("//") && line.contains("AGENTS.self-law.md")
+        }),
+        "{} must direct its dependency rationale to the generated self-law projection",
+        style_source.display()
+    );
+}
+
 /// Contract A — the agent-loaded `AGENTS.self-law.md` must byte-match the live projection of
 /// `tianheng_constitution()`. Stale → fail (with the regenerate command); `BLESS=1` → rewrite
 /// the file instead of asserting (so the artifact changes by regeneration, never by hand).
