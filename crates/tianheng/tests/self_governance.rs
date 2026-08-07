@@ -115,8 +115,9 @@ fn tianheng_constitution() -> Constitution {
             CrateBoundary::crate_("tianheng")
                 .restrict_dependencies_to(["guibiao", "hunyi", "louke", "serde_json"])
                 .because(
-                    "the 天衡 shell's direct normal dependency perimeter is guibiao, hunyi, \
-                     louke, and serde_json only",
+                    "the 天衡 shell remains the outward composition layer: direct normal edges \
+                     end at observation dimensions and projection serialization, never at the \
+                     lower reaction model or metadata substrate",
                 ),
         )
         // The first *semantic* self-boundary: the family dogfoods its own `sans_io_pure` profile on

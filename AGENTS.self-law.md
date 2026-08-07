@@ -54,7 +54,7 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `tianheng`
 
-> the 天衡 shell's direct normal dependency perimeter is guibiao, hunyi, louke, and serde_json only
+> the 天衡 shell remains the outward composition layer: direct normal edges end at observation dimensions and projection serialization, never at the lower reaction model or metadata substrate
 
 - **rule**: restrict dependencies to (only: guibiao, hunyi, louke, serde_json)
 - **kind**: crate · **severity**: enforce
