@@ -5,7 +5,7 @@ The governance-dogfood spec requires the focused example matrices to run in orde
 ## What Changes
 
 - Extend the DoD-coherence reaction to require the focused example matrices and positive driver as one contiguous ordered sequence in both the local Definition of Done and CI.
-- Make the reaction reject direct focused-matrix invocations in the positive driver's executable shell text.
+- Make the reaction reject focused-matrix basenames on the positive driver's non-comment source lines.
 - Add failure-matrix cases for reordered local orchestration, reordered CI orchestration, nested reruns, and an unreadable driver surface.
 - Bound the specification to the authored shell shapes the reaction actually reads.
 

@@ -16,23 +16,34 @@ set -Eeuo pipefail
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 check=$script_dir/check_dod_coherence.sh
 
+dogfood_sequence='bash scripts/test_published_family_coverage.sh
+bash scripts/test_example_quality_gate.sh
+bash scripts/test_example_suite.sh
+bash scripts/test_examples.sh'
+reordered_dogfood_sequence='bash scripts/test_example_quality_gate.sh
+bash scripts/test_published_family_coverage.sh
+bash scripts/test_example_suite.sh
+bash scripts/test_examples.sh'
+
 fixture_root=$(mktemp -d)
 trap 'rm -rf "$fixture_root"' EXIT
 
-# A repository whose Definition of Done block and CI workflow agree. Only the two documents matter, so the
-# fixture carries nothing else — the gate reads text, not a workspace.
+# A repository whose Definition of Done block and CI workflow agree. Only those documents and the positive
+# driver matter, so the fixture carries nothing else — the gate reads text, not a workspace.
 new_repo() {
-    local name=$1 dod=$2 ci_run=$3 repo
+    local name=$1 dod=$2 ci_run=$3
+    local dod_dogfood=${4-$dogfood_sequence} ci_dogfood=${5-$dogfood_sequence} repo
     repo=$fixture_root/$name
-    mkdir -p "$repo/.github/workflows"
+    mkdir -p "$repo/.github/workflows" "$repo/scripts"
     {
         printf '# AGENTS\n\n## Definition of Done\n\n'
-        printf '```bash\n%s\n```\n' "$dod"
+        printf '```bash\n%s\n%s\n```\n' "$dod" "$dod_dogfood"
     } >"$repo/AGENTS.md"
     {
         printf 'name: ci\njobs:\n  dod:\n    steps:\n      - name: gates\n        run: |\n'
-        printf '%s\n' "$ci_run" | sed 's/^/          /'
+        printf '%s\n%s\n' "$ci_run" "$ci_dogfood" | sed 's/^/          /'
     } >"$repo/.github/workflows/ci.yml"
+    printf '#!/usr/bin/env bash\nset -euo pipefail\n' >"$repo/scripts/test_examples.sh"
     printf '%s\n' "$repo"
 }
 
@@ -74,6 +85,31 @@ superset=$(new_repo superset 'cargo fmt --all --check' 'cargo fmt --all --check
 cargo deny check')
 expect_pass "$superset" 'is run by CI'
 
+# The four commands can all remain present while their required source shape drifts. Membership alone cannot
+# distinguish either order failure, so each side is perturbed independently.
+reordered_local=$(new_repo reordered-local 'cargo fmt --all --check' 'cargo fmt --all --check' \
+    "$reordered_dogfood_sequence" "$dogfood_sequence")
+expect_fail "$reordered_local" 1 'local Definition of Done lacks the required contiguous example dogfood sequence'
+
+reordered_ci=$(new_repo reordered-ci 'cargo fmt --all --check' 'cargo fmt --all --check' \
+    "$dogfood_sequence" "$reordered_dogfood_sequence")
+expect_fail "$reordered_ci" 1 'CI lacks the required contiguous example dogfood sequence'
+
+# A full-line comment remains prose and may point a reader at the focused matrix without becoming a nested call.
+comment_only=$(new_repo comment-only 'cargo fmt --all --check' 'cargo fmt --all --check')
+printf '# Kept separate from test_example_suite.sh.\n' >>"$comment_only/scripts/test_examples.sh"
+expect_pass "$comment_only" 'example dogfood orchestration is ordered and non-recursive by authored shape'
+
+# The positive driver's own text is the observable non-recursion perimeter. A direct nested call must fail even
+# though the top-level command streams are still perfectly ordered.
+nested_matrix=$(new_repo nested-matrix 'cargo fmt --all --check' 'cargo fmt --all --check')
+printf 'bash scripts/test_example_suite.sh\n' >>"$nested_matrix/scripts/test_examples.sh"
+expect_fail "$nested_matrix" 1 'scripts/test_examples.sh directly names nested matrix test_example_suite.sh'
+
+missing_driver=$(new_repo missing-driver 'cargo fmt --all --check' 'cargo fmt --all --check')
+rm -f "$missing_driver/scripts/test_examples.sh"
+expect_fail "$missing_driver" 2 'scripts/test_examples.sh is missing or empty'
+
 # --- the violation direction (exit 1) ---
 
 # The class this gate exists for, and the one it was built after: a local command CI does not run.
@@ -108,7 +144,7 @@ expect_fail "$renamed_heading" 2 'Definition of Done'
 
 # A block that exists but holds no command — a comment-only fence — parses to zero commands, which must also
 # refuse rather than report every zero of zero commands present in CI.
-empty_block=$(new_repo empty-block '# just a comment' 'cargo fmt --all --check')
+empty_block=$(new_repo empty-block '# just a comment' 'cargo fmt --all --check' '' "$dogfood_sequence")
 expect_fail "$empty_block" 2 'parsed to zero commands'
 
 # And any unhandled failure at all, which the shared backstop owns: `mktemp` is unwrapped and runs before the

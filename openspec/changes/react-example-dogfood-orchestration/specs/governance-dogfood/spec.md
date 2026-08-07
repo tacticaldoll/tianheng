@@ -15,9 +15,10 @@ local Definition of Done and CI's authored command streams, those three commands
 ordered sequence immediately followed by the positive repository example driver. The DoD-coherence reaction
 SHALL read and enforce that source shape.
 
-The positive driver's executable shell text SHALL NOT directly name any focused matrix basename. The reaction
-SHALL ignore full-line shell comments and reject such a basename on every other line; this is an authored-form
-constraint and does not claim to resolve a command name assembled dynamically at runtime.
+The positive driver's non-comment source lines SHALL NOT name any focused matrix basename. The reaction SHALL
+ignore full-line shell comments and reject such a basename on every other source line; this is an authored-form
+constraint and does not claim every remaining line is executable or resolve a command name assembled dynamically
+at runtime.
 
 #### Scenario: Every live example is exercised
 
@@ -28,7 +29,7 @@ constraint and does not claim to resolve a command name assembled dynamically at
 
 - **WHEN** the repository Definition of Done exercises example dogfood
 - **THEN** the local and CI command streams carry the focused matrices contiguously in their declared order
-  immediately before the positive driver, and the driver's executable lines name none of those matrix basenames
+  immediately before the positive driver, and the driver's non-comment source lines name none of those matrix basenames
 
 #### Scenario: A focused command is reordered
 
@@ -37,7 +38,7 @@ constraint and does not claim to resolve a command name assembled dynamically at
 
 #### Scenario: The positive driver directly reruns a focused matrix
 
-- **WHEN** a non-comment line in the positive driver names a focused matrix basename
+- **WHEN** a non-comment source line in the positive driver names a focused matrix basename
 - **THEN** DoD coherence fails and names both the driver and nested matrix
 
 #### Scenario: An unowned example fails loud
