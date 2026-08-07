@@ -116,6 +116,24 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
+                "observer-protocol/a-reach-that-is-not-a-spelling-in-the-composition-body-is-not-observed-a-stated-bound",
+            ),
+            "the shell deciding semantic emptiness by a means that is not a use of the parameter inside the \
+             inspected body",
+            // Out of reach rather than under-reacting, and read off where the deciding text sits rather than
+            // preferred: a shadowing `use`, the parameter list, a second definition, and the caller frame are
+            // all outside the extent, so the reaction never declines them — they are never presented.
+            Extent::OutOfReach {
+                because: "the reaction reads characters in one function body, while the requirement is about \
+                          what the shell does; name resolution, the parameter's binding site, which definition \
+                          is the subject, and the caller frame each decided a measured escape from outside \
+                          that extent, and holding the property by construction is the closure a wider \
+                          character-level read cannot be".into(),
+            },
+            "a_reach_that_is_not_a_spelling_in_the_body_is_not_observed",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "observer-protocol/the-composition-body-carries-a-delimiter-that-can-move-the-read-extent-a-stated-bound",
             ),
             "the extent read for `evaluate_constitution` carrying `\"`, `'`, or `/*` in executed code",

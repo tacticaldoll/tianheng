@@ -451,7 +451,7 @@ fn judge_delegation(source: &Source) -> Option<Delegation> {
         .lines()
         .map(|line| without_comment_tail(line).to_string())
         .collect();
-    let executed = executed.join("\n");
+    let executed = fold_broken_method_chains(&executed.join("\n"));
     for use_of_parameter in whole_identifier_occurrences(&executed, COMPOSITION_PARAMETER) {
         if !PERMITTED_USES
             .iter()
@@ -510,6 +510,31 @@ const PERMITTED_USES: [&str; 3] = [
     "constitution.semantic_boundaries()",
     "constitution.runtime_boundaries()",
 ];
+
+/// The same text with a method chain that `rustfmt` broke across lines joined back onto one.
+///
+/// Only a newline whose next non-space character is `.` is closed up, so whitespace **between identifiers** is
+/// untouched and the token boundaries the allowlist walk depends on survive. That is the whole difference from
+/// [`compact_executed_rust`], which removes every space and thereby glues a keyword to the parameter.
+///
+/// Without this, `rustfmt` alone turns a conforming body into a reported violation: growing the runtime chain
+/// past the line width makes it emit `constitution\n    .runtime_boundaries()`, which matches no permitted owner
+/// and is reported as an independent shell decision. A gate that fires because the formatter this repository
+/// also gates on reformatted the file is a false accusation, and the diagnostic names the wrong fault.
+fn fold_broken_method_chains(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for (index, line) in text.lines().enumerate() {
+        if line.trim_start().starts_with('.') {
+            out.push_str(line.trim_start());
+            continue;
+        }
+        if index > 0 {
+            out.push('\n');
+        }
+        out.push_str(line);
+    }
+    out
+}
 
 /// Byte offsets where `identifier` occurs in `text` as a whole identifier rather than inside a longer one.
 ///
@@ -1089,6 +1114,138 @@ fn a_callee_path_ending_in_the_entry_point_is_not_the_entry_point() {
              direct call rules out — a bare substring test accepted it"
         );
     }
+}
+
+/// A body `rustfmt` reflowed is the same body, and must not be reported as a violation.
+///
+/// The allowlist matches an owner as written, so a chain the formatter breaks across lines stops matching and
+/// reads as an independent shell decision. That is a false accusation produced by the formatter this repository
+/// *also* gates on — `cargo fmt --check` would demand the very reflow that turns the gate red, with a
+/// diagnostic naming a fault nobody committed.
+///
+/// The control is the same shape with an unpermitted use interposed, so the fold is shown to close up a chain
+/// without closing up the gap between two identifiers — which is what would hide a real reach.
+#[test]
+fn a_body_rustfmt_reflowed_is_still_the_same_body() {
+    let reflowed = composition_source(&[
+        "fn evaluate_constitution(",
+        "    constitution: &Constitution,",
+        ") -> (Outcome, Option<Coverage>) {",
+        "    let mut outcome = check_and_cover(constitution.static_boundaries(), manifest_path);",
+        "    outcome = merge_outcomes(",
+        "        outcome,",
+        "        hunyi::check_all(constitution.semantic_boundaries(), manifest_path),",
+        "    );",
+        "    outcome = merge_outcomes(",
+        "        outcome,",
+        "        RuntimeObserver::new(",
+        "            constitution",
+        "                .runtime_boundaries()",
+        "                .to_vec(),",
+        "        )",
+        "        .observe(manifest_path),",
+        "    );",
+        "    (outcome, None)",
+        "}",
+    ]);
+    assert_eq!(
+        judge_delegation(&reflowed),
+        Some(Delegation::Delegates),
+        "`rustfmt` broke the runtime chain across lines and changed nothing about what the body does; the \
+         reaction must read it as the same delegation"
+    );
+
+    let reflowed_but_divergent = composition_source(&[
+        "fn evaluate_constitution(",
+        "    constitution: &Constitution,",
+        ") -> (Outcome, Option<Coverage>) {",
+        "    let mut outcome = check_and_cover(constitution.static_boundaries(), manifest_path);",
+        "    outcome = merge_outcomes(",
+        "        outcome,",
+        "        hunyi::check_all(constitution.semantic_boundaries(), manifest_path),",
+        "    );",
+        "    outcome = merge_outcomes(",
+        "        outcome,",
+        "        RuntimeObserver::new(",
+        "            constitution",
+        "                .runtime_boundaries()",
+        "                .to_vec(),",
+        "        )",
+        "        .observe(manifest_path),",
+        "    );",
+        "    if constitution.semantic.signature.is_empty() {",
+        "        outcome = early();",
+        "    }",
+        "    (outcome, None)",
+        "}",
+    ]);
+    assert!(
+        matches!(
+            judge_delegation(&reflowed_but_divergent),
+            Some(Delegation::Diverges(_))
+        ),
+        "folding a broken chain must not fold the space between two identifiers: the private-field reach is \
+         still reported in a reflowed body"
+    );
+}
+
+/// What the reaction reads is characters in one function body — a declared bound, and the reason it is one.
+///
+/// The allowlist closed every *spelling* of a reach for the constitution. It cannot close the family beneath
+/// that, because those escapes are not spellings inside the body at all: **name resolution** (a `shim::hunyi`
+/// shadowing the entry point, with the body byte-identical), the **binding site** (the parameter renamed, or a
+/// second parameter carrying the boundaries — the parameter list sits outside the extent), **which definition
+/// is the subject** (a raw identifier, so the only occurrence of the signature is a decoy), and the **caller
+/// frame** (the guard moved up into `check_constitution`). Each was measured end-to-end against the tracked
+/// composition function, with the full suite green and the formatter and linter silent.
+///
+/// This pin exhibits the binding-site member, which is the one a fixture can carry whole: the parameter is
+/// renamed, so no occurrence of `constitution` in executed code belongs to it, while a `stringify!` bait —
+/// text the reaction cannot tell from code — supplies the three owners and the literal delegation.
+///
+/// The control is the same body without the bait, which is reported, so the acceptance is the bait's doing and
+/// not the reaction having stopped reading.
+#[test]
+fn a_reach_that_is_not_a_spelling_in_the_body_is_not_observed() {
+    let baited = composition_source(&[
+        "fn evaluate_constitution(",
+        "    the_constitution: &Constitution,",
+        ") -> (Outcome, Option<Coverage>) {",
+        "    const SHAPE: &str = stringify!(",
+        "        check_and_cover(constitution.static_boundaries(), manifest_path),",
+        "        hunyi::check_all(constitution.semantic_boundaries(), manifest_path),",
+        "        RuntimeObserver::new(constitution.runtime_boundaries().to_vec()),",
+        "    );",
+        "    let _ = SHAPE;",
+        "    if the_constitution.semantic_boundaries().is_empty() {",
+        "        return (Outcome::Clean, None);",
+        "    }",
+        "    (outcome, None)",
+        "}",
+    ]);
+    assert_eq!(
+        judge_delegation(&baited),
+        Some(Delegation::Delegates),
+        "the body decides semantic emptiness for itself and the reaction reports a conforming delegation — a \
+         stated bound. Closing it needs name resolution and the binding site, neither of which is a character \
+         in this extent"
+    );
+
+    let unbaited = composition_source(&[
+        "fn evaluate_constitution(",
+        "    the_constitution: &Constitution,",
+        ") -> (Outcome, Option<Coverage>) {",
+        "    if the_constitution.semantic_boundaries().is_empty() {",
+        "        return (Outcome::Clean, None);",
+        "    }",
+        "    (outcome, None)",
+        "}",
+    ]);
+    assert!(
+        matches!(judge_delegation(&unbaited), Some(Delegation::Diverges(_))),
+        "without the bait the three owners are absent and the body is reported, so the bound above is the \
+         bait's doing rather than the reaction accepting anything"
+    );
 }
 
 /// A delegation written in a comment is prose, and prose does not satisfy the requirement.

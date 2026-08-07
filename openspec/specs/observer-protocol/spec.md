@@ -101,14 +101,23 @@ exactly once. Any other reach for the constitution SHALL fail rather than be tre
 function SHALL be declined rather than failed, together with an ambiguous anchor, because neither is a statement
 about the body.
 
-**The allowlist is what makes the prohibition complete.** Counting reaches for the semantic boundaries was a
+**What the reaction observes is characters in one function body, and the requirement is wider than that.** The
+allowlist below closes every *spelling* of a reach for the constitution, which is a real and complete closure of
+that family. It does not reach the family beneath it — name resolution, the parameter's binding site, which
+definition is the subject, and the caller frame all sit outside the extent, and each was measured to let a
+divergent shell pass. That residual is declared as a bound rather than left implied, because a requirement whose
+reaction cannot deliver it reads as delivered.
+
+**The allowlist is what makes the spelling family's prohibition complete.** Counting reaches for the semantic boundaries was a
 denylist over spellings, and spellings are an open set: a rebinding, an associated-function call, a reborrow, a
 wrapper function, a trait method under another name, a macro, and — naming no accessor at all — a direct read of
 the private `semantic` field, which a descendant module of the crate root may simply do. Each was measured
 accepted, each was closed by its own patch, and the next was always one review away. Permitting three uses and
-refusing the complement closes all of them at once, because an escape must now avoid naming `constitution`, and
-a body that never names it has no constitution to decide with. This is the shape the family's own dependency law
-already takes, and the reason is the same: the forbidden set is not enumerated, it is what is left.
+refusing the complement closes all of them at once: within the body, an escape must avoid naming the parameter,
+and a body that never names it has nothing to decide with. That last clause is true only *within the body* — the
+parameter can be renamed or a second one added, and the binding site is outside the extent, which is the bound
+declared above rather than a hole in the allowlist. This is the shape the family's own dependency law already
+takes, and the reason is the same: the forbidden set is not enumerated, it is what is left.
 
 Its cost SHALL be treated as intended rather than incidental. A fourth dimension, or any other legitimate reach
 for the constitution, fails here until it is admitted — which is the amendment discipline this repository wants
@@ -267,6 +276,19 @@ reaction could observe, and it carries no scenario for that reason.
 - **THEN** the reaction still fails rather than reporting delegation, because the surviving text loses the
   delegation along with everything else — the residual is loud, which is a property held by a reaction rather
   than asserted here
+
+#### Scenario: A reach that is not a spelling in the composition body is not observed — a stated bound
+
+- **WHEN** the shell decides semantic emptiness for itself by a means that is not a use of the parameter inside
+  the inspected body — shadowing the entry point's name, renaming the parameter or adding a second one, writing
+  the definition under a raw identifier so the only signature occurrence is a decoy, or guarding one frame up in
+  the caller
+- **THEN** the reaction reports a conforming delegation — a stated bound. Each was measured end-to-end against
+  the tracked composition function with the suite green and the formatter and linter silent. Closing any of them
+  needs name resolution, the binding site, the identity of the definition, or the caller frame, and none of
+  those is a character in the extent this reaction reads; the honest closure is to hold the property by
+  construction, as the runtime dimension already does, rather than to widen a character-level read again
+- **PINNED-BY** `a_reach_that_is_not_a_spelling_in_the_body_is_not_observed`
 
 #### Scenario: The tracked composition body is still judged
 

@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**16 of 60 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**16 of 61 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound` — owner: engine
@@ -115,7 +115,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: does not react
 - **pinned by**: `a_plain_fn_directly_in_a_const_body_stays_a_stated_bound`
 
-## out of reach (26)
+## out of reach (27)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
@@ -180,6 +180,14 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **because**: the extent is typed and checkable while the rationale is prose the model never reads; requiring the two to agree would trade a fact for a heuristic
 - **its defence must show**: does not react
 - **pinned by**: `a_rationale_that_contradicts_its_extent_is_a_stated_bound`
+
+### `observer-protocol/a-reach-that-is-not-a-spelling-in-the-composition-body-is-not-observed-a-stated-bound`
+
+> the shell deciding semantic emptiness by a means that is not a use of the parameter inside the inspected body
+
+- **because**: the reaction reads characters in one function body, while the requirement is about what the shell does; name resolution, the parameter's binding site, which definition is the subject, and the caller frame each decided a measured escape from outside that extent, and holding the property by construction is the closure a wider character-level read cannot be
+- **its defence must show**: does not react
+- **pinned by**: `a_reach_that_is_not_a_spelling_in_the_body_is_not_observed`
 
 ### `observer-protocol/a-trait-object-on-a-wrapped-signature-s-continuation-line-is-not-seen-a-stated-bound`
 

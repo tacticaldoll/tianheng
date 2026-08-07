@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**0 of 60 declared bounds have no pinning test.** That figure is the register's
+**0 of 61 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -178,6 +178,12 @@ fallback used where no manifest exists, which the register spec describes.
 > the reaction refuses to judge, naming the delimiter — a stated bound.
 
 - **pinned by**: `an_ambiguous_delegation_extent_is_refused_rather_than_judged`
+
+### `observer-protocol/a-reach-that-is-not-a-spelling-in-the-composition-body-is-not-observed-a-stated-bound`
+
+> the reaction reports a conforming delegation — a stated bound. Each was measured end-to-end against
+
+- **pinned by**: `a_reach_that_is_not_a_spelling_in_the_body_is_not_observed`
 
 ### `observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound`
 

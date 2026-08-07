@@ -147,7 +147,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **60 bounds across 21 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **61 bounds across 21 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
@@ -506,7 +506,26 @@ them.
   it read carries `"`, `'`, or `/*` in executed code, and the refusal names the delimiter. Over-refusal
   is the chosen direction: a lifetime shares the character-literal delimiter, so a composition body naming one
   is refused too, loudly and in the commit that causes it.
-- **The shell-delegation reaction is now an allowlist, and that is what makes its prohibition complete.** It
+- **The shell-delegation reaction's claim is narrowed to what it observes, and the rest is a declared bound.**
+  Three rounds of adversarial review closed the *spelling* family completely — seven ways of reaching the
+  constitution, each measured — and then defeated the result five more ways that are not spellings at all:
+  shadowing the entry point's name with the body byte-identical, renaming the parameter or adding a second one
+  (the parameter list is outside the read extent), writing the definition under a raw identifier so the only
+  signature occurrence is a decoy, and moving the guard one frame up into the caller. Each was measured
+  end-to-end against the tracked composition function with the suite green and the formatter and linter silent.
+  What the reaction reads is characters in one function body; what the requirement is about is what the shell
+  *does*, and name resolution, the binding site, the identity of the definition and the caller frame all sit
+  outside that. The residual is now `observer-protocol`'s third bound, `OutOfReach`, pinned by a fixture that
+  exhibits a silent pass rather than asserted in prose. The honest closure is to hold the property by
+  construction, as the runtime dimension already does — that is a separate change, and the bound says so.
+- **`cargo fmt` alone could turn a conforming body into a reported violation.** The allowlist matches an owner
+  as written, so growing the runtime chain past the line width made `rustfmt` emit
+  `constitution\n    .runtime_boundaries()`, which matches no permitted owner and was reported as an independent
+  shell decision — a false accusation produced by the formatter this repository also gates on, naming a fault
+  nobody committed. A broken chain is now folded back before matching, closing up only a newline whose next
+  character is `.`, so the whitespace *between identifiers* stays untouched and the token boundary that catches
+  a private-field read survives. Both directions are pinned.
+- **The shell-delegation reaction is now an allowlist, and that is what makes the spelling family's prohibition complete.** It
   counted reaches for the semantic boundaries, which is a denylist over *spellings* — and spellings are an open
   set. Adversarial review walked past it seven ways across two rounds: a rebinding, an associated-function call,
   a reborrow, a wrapper function, a trait method under another name, a macro, and — naming no accessor at all —
