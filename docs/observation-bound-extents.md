@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**16 of 56 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**16 of 58 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound` — owner: engine
@@ -325,7 +325,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (4)
+## over-reacts (6)
 
 ### `crate-source-boundary/a-git-plus-version-dependency-is-flagged-though-it-would-publish-a-stated-bound`
 
@@ -350,6 +350,22 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **because**: the derived origin is a truncated rendering matching no module name, so the crossing reacts fail-closed rather than being admitted through the wrapper
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `the_derived_origin_honors_its_stated_shape_bounds`
+
+### `self-law-projection/a-comment-naming-every-member-for-another-reason-is-refused-a-stated-bound`
+
+> one contiguous line-comment block naming every current allowlist member for a purpose other than copying the declaration
+
+- **because**: the block check asks whether the members all appear and never why, and teaching it to read intent would be a heuristic over prose
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_comment_naming_every_member_for_another_reason_is_refused`
+
+### `self-law-projection/a-doc-example-of-the-dependency-dsl-is-refused-a-stated-bound`
+
+> a line comment under the shell naming `restrict_dependencies_to(` in order to teach the re-exported DSL
+
+- **because**: the recognizer reads a comment's text and never its purpose, so a doc example of a DSL the shell publishes is refused exactly as a restatement of its own declaration would be
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_doc_example_of_the_dependency_dsl_is_refused`
 
 ### `semantic-visibility-boundary/a-pub-in-narrow-path-item-may-over-react-under-a-tight-ceiling-a-stated-bound`
 

@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**0 of 56 declared bounds have no pinning test.** That figure is the register's
+**0 of 58 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -250,6 +250,20 @@ fallback used where no manifest exists, which the register spec describes.
 > the root-file run reports the seam covered, while the directory run reports it unprobed — the
 
 - **pinned by**: `a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directory`
+
+## self-law-projection
+
+### `self-law-projection/a-doc-example-of-the-dependency-dsl-is-refused-a-stated-bound`
+
+> the reaction refuses it anyway, a stated bound: it reads a comment's text and never its purpose, and
+
+- **pinned by**: `a_doc_example_of_the_dependency_dsl_is_refused`
+
+### `self-law-projection/a-comment-naming-every-member-for-another-reason-is-refused-a-stated-bound`
+
+> the reaction refuses it anyway, a stated bound: it asks whether the members all appear and never why,
+
+- **pinned by**: `a_comment_naming_every_member_for_another_reason_is_refused`
 
 ## semantic-async-exposure-boundary
 
