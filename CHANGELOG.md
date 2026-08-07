@@ -503,7 +503,7 @@ them.
   delegation. Measured on four spellings of the mechanism, every one returning the conforming verdict: a `//`
   inside a string (which blanks a *real* opening brace whose match is on a later line), and a closing brace
   inside a string, a block comment, or a character literal. The reaction now refuses to judge when the extent
-  it read carries `"`, `'`, `/*`, or `*/` on an executed line, and the refusal names the delimiter. Over-refusal
+  it read carries `"`, `'`, or `/*` in executed code, and the refusal names the delimiter. Over-refusal
   is the chosen direction: a lifetime shares the character-literal delimiter, so a composition body naming one
   is refused too, loudly and in the commit that causes it.
 - **Three further ways the same reaction read text that was not the body**, each found by adversarial review of
@@ -551,8 +551,8 @@ them.
   *only* inside one is not a mention — so a path a reader plainly sees was discarded and a conforming document
   refused. The comment **span** is now excised and the visible text kept. Each is pinned by the direction that
   fails without it, and the first two were confirmed against the unrepaired code. Adopter-facing effect: none —
-  all three are this repository's own governance reactions, and `tianheng::observation_bounds()` returns one
-  more entry, an additive read-only surface no baseline or verdict depends on.
+  all three are this repository's own governance reactions, and `tianheng::observation_bounds()` returns an
+  additional entry, an additive read-only surface no baseline or verdict depends on.
 - What the brace count still cannot separate is now a **declared bound** of `observer-protocol` rather than an
   unwritten limit: a `{` or `}` inside a block comment or a string literal still moves the body extent, because
   telling one from the other needs the string-literal lexing this tree defeats, its own lexer suites putting

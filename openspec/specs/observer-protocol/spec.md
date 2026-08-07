@@ -99,15 +99,17 @@ function. That body SHALL access `constitution.semantic_boundaries()` exactly on
 argument to `hunyi::check_all`; a missing function, an additional semantic-boundary inspection, or an indirect
 shell-local decision SHALL fail rather than be treated as delegation.
 
-The reaction SHALL distinguish a body that does not delegate from a body it could not read. Three things can
-make the text it reads not be the body, and each SHALL be refused rather than judged.
+The reaction SHALL distinguish a body that does not delegate from a body it could not read. **Two** conditions
+make the text unsafe to judge and SHALL be refused; the rules after them narrow what the comparison reads, and
+their outcome is a verdict rather than a refusal.
 
 **The anchor SHALL be unique.** The function is located by line position, which rules out a mid-line mention
-and nothing more: a whole-line copy of the signature — inside a block comment, an outer doc comment, a
-multi-line string, or a second module — anchors exactly as well as the definition. Where more than one line
-could anchor the read, the reaction SHALL decline. This is the half no in-body check can cover, because every
-delimiter that made such an extent wrong sits outside it; measured, a commented-out copy above the function let
-a body carrying an independent shell-local guard read as a conforming delegation.
+and nothing more: a whole-line copy of the signature — inside a block comment, a multi-line string, or a second
+module — anchors exactly as well as the definition. A doc comment does not, because `///` becomes the trimmed
+start; that exception is written down because it was asserted the other way before it was checked. Where more
+than one line could anchor the read, the reaction SHALL decline. This is the half no in-body check can cover,
+because every delimiter that made such an extent wrong sits outside it; measured, a commented-out copy above the
+function let a body carrying an independent shell-local guard read as a conforming delegation.
 
 **An extent carrying a literal or comment delimiter SHALL be refused.** The extent is found by counting braces,
 and a string literal, a character literal, or a block comment inside the body moves it; where the extent carries
@@ -183,10 +185,17 @@ reaction could observe, and it carries no scenario for that reason.
 #### Scenario: A second line could anchor the read
 
 - **WHEN** more than one line in the source has the composition function's signature as its trimmed start — a
-  commented-out copy, a doc-comment example, a copy inside a multi-line string, or a second module's definition
+  commented-out copy, a copy inside a multi-line string, or a second module's definition
 - **THEN** the reaction declines rather than reading the first, because it cannot know which body is the
   subject, and the delimiters that made the wrong extent wrong sit outside that extent where no in-body check
   reaches them
+
+#### Scenario: The ambiguity refusal precedes the comparison
+
+- **WHEN** an extent is both moved and divergent within the text that survives the cut
+- **THEN** the reaction refuses rather than reporting the divergence, because a verdict formed on text the
+  reaction cannot vouch for is unsound whichever way that verdict happens to fall — an ordering that only
+  escalated a *passing* verdict would report the divergence and be indistinguishable on every other input
 
 #### Scenario: A delimiter appears only inside a comment
 
@@ -331,6 +340,15 @@ dimensions remain independently implemented on both sides, and for them the reac
 - **WHEN** the method is absent from the source the reaction reads
 - **THEN** the reaction refuses to judge rather than passing, because a reaction that finds nothing to read has
   not observed that the obligation holds
+
+#### Scenario: A second line could anchor the bounds method
+
+- **WHEN** more than one line in the observer's source has the bounds-method signature as its trimmed start —
+  a commented-out copy being the measured case
+- **THEN** the reader declines rather than reading the first. Here the decoy inverts this reader's declared
+  error direction rather than merely moving the extent: a *conforming* copy in the comment makes the exact
+  one-statement equality pass while the real method holds a second, divergent list, so the over-reaction the
+  bound records becomes an acceptance
 
 ### Requirement: Composition SHALL introduce no trait object
 

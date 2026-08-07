@@ -322,13 +322,12 @@ pub enum Reached {
     /// withholds a verdict, the other gives one while stepping over something, and an adopter meets them
     /// differently.
     ///
-    /// The shell-delegation reaction declares this: an extent carrying a string, character, or block-comment
-    /// delimiter may not be the function's body, so it withholds the verdict instead of reading the truncated
-    /// remainder. The value predated that instance and was kept without one, which is worth recording — the
-    /// misclassification this whole model exists to prevent was exactly a confusion between this and
-    /// [`Extent::OutOfReach`]: a backlog entry predicted a silent false negative for a `#[cfg_attr]` path remap
-    /// where the real behaviour was a fail-loud refusal, and it drove urgency the wrong way. A direction that
-    /// cannot be *named* cannot be predicted with.
+    /// Which bounds hold this value is not restated here — that is a census of a set the extent projection
+    /// already renders, and naming either state goes stale the moment membership moves. What earns the value
+    /// its place is the distinction: the misclassification this whole model exists to prevent was exactly a
+    /// confusion between this and [`Extent::OutOfReach`], where a backlog entry predicted a silent false
+    /// negative for a `#[cfg_attr]` path remap whose real behaviour was a fail-loud refusal, and it drove
+    /// urgency the wrong way. A direction that cannot be *named* cannot be predicted with.
     RefusesToJudge {
         /// Why a verdict cannot be given here.
         because: Cow<'static, str>,
