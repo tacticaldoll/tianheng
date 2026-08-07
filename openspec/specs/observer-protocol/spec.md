@@ -99,6 +99,17 @@ function. That body SHALL access `constitution.semantic_boundaries()` exactly on
 argument to `hunyi::check_all`; a missing function, an additional semantic-boundary inspection, or an indirect
 shell-local decision SHALL fail rather than be treated as delegation.
 
+**This does not contradict an empty observer set being a cannot-judge**, and the difference is stated here
+because the two sentences read as a contradiction otherwise. An empty *bundle* means a participant was
+composed and declares nothing for its dimension — a static-only adoption is exactly that, and there is nothing
+to observe, so `Clean` is the honest answer. An empty *observer set* means nothing was composed at all: the
+misconfiguration is in the assembly, not in a dimension's declarations, and there is no participant whose
+silence could be read as cleanliness. Unifying them fails in both directions: making an empty bundle a
+cannot-judge would make every static-only adopter's composed run report exit `2`, a false refusal on the
+primary use case, and reporting an empty observer set as clean is the vacuous pass this repository has
+re-opened most often. The asymmetry is therefore a property of the two constructions rather than a claim a
+reaction could observe, and it carries no scenario for that reason.
+
 #### Scenario: Empty semantic boundaries through the public semantic entry point
 
 - **WHEN** `check_all` receives an empty semantic boundary bundle and a path that cannot be read

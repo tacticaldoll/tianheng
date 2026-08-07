@@ -173,6 +173,12 @@ impl<'a> Run<'a> {
     ///
     /// A run that composed **no** observer cannot judge: reporting it clean would be a vacuous pass, which is
     /// the direction this repository has re-opened most often. It is a misconfiguration, not a clean workspace.
+    ///
+    /// Not the same question as a composed observer that declares **nothing** — [`hunyi::check_all`] answers an
+    /// empty boundary bundle with [`Outcome::Clean`], and a static-only adoption is exactly that shape. There a
+    /// participant was composed and has nothing to observe; here nothing was composed, so no participant's
+    /// silence could be read as cleanliness. `observer-protocol` states why unifying the two fails in both
+    /// directions.
     pub fn verdict(self) -> Outcome {
         self.accumulated.unwrap_or_else(|| {
             Outcome::ConstitutionError(

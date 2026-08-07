@@ -269,6 +269,11 @@ fn eval_all(
 /// boundary supersedes (exit 2). An empty bundle returns [`Outcome::Clean`] before metadata is
 /// read. The per-capability `check`/`check_trait_impl_locality`/`check_visibility` entries remain
 /// for direct use; the shell and [`SemanticObserver`] compose via this.
+///
+/// `Clean` for an empty bundle is not the vacuous pass a composed run of **no** observer would be. Here a
+/// participant was composed and declares nothing for this dimension, which a static-only adoption does
+/// deliberately, so there is nothing to observe; refusing would make that adoption's every run exit 2.
+/// `observer-protocol` states the asymmetry and why unifying it fails in both directions.
 pub fn check_all(boundaries: &SemanticBoundaries, manifest_path: &Path) -> Outcome {
     if boundaries.is_empty() {
         return Outcome::Clean;
