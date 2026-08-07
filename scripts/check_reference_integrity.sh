@@ -59,7 +59,8 @@ set -Eeuo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/exit_contract.sh"
 exit_contract_backstop 'reference integrity'
 
-target_dir="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
+script_root=$(cd "$(dirname "$0")/.." && pwd -P)
+target_dir="${1:-$script_root}"
 cd "$target_dir"
 
 members=""
@@ -102,12 +103,22 @@ LINK_MARK=$(printf '\001')
 # themselves exist turns that silence into a loud failure. A required set is safe to write down where
 # an allowlist is not: this one fails the moment it goes stale, so it cannot quietly excuse anything.
 #
-# Overridable from the environment for ONE caller: the companion failure matrix, whose fixture
-# repositories carry a governance surface that is not this one and would otherwise fail every case on
-# the absence of documents they never had. CI and the Definition of Done never set it, so the set they
-# judge is the literal below — the override widens which repository can be judged, never what this one
-# must carry.
-GOVERNANCE_DOCUMENTS="${GOVERNANCE_DOCUMENTS:-AGENTS.md AGENTS.self-law.md BACKLOG.md CHANGELOG.md COOKBOOK.md PROJECT.md README.md Cargo.toml deny.toml}"
+# The real workspace policy is literal and cannot be changed by ambient process state. The companion failure
+# matrix may explicitly narrow it for a throwaway repository whose purpose is to make the later zero-corpus
+# refusal reachable; that fixture-only argument is rejected against this script's own workspace.
+GOVERNANCE_DOCUMENTS="AGENTS.md AGENTS.self-law.md BACKLOG.md CHANGELOG.md COOKBOOK.md PROJECT.md README.md Cargo.toml deny.toml"
+if [[ ${2:-} == --fixture-governance-documents ]]; then
+  [[ $# -eq 3 ]] \
+    || { echo "cannot judge: --fixture-governance-documents requires exactly one explicit set" >&2; exit 2; }
+  [[ $(pwd -P) != "$script_root" ]] \
+    || { echo "cannot judge: fixture governance documents cannot replace this workspace's required set" >&2; exit 2; }
+  [[ -n ${3:-} ]] \
+    || { echo "cannot judge: --fixture-governance-documents requires a non-empty explicit set" >&2; exit 2; }
+  GOVERNANCE_DOCUMENTS=$3
+elif [[ $# -gt 1 ]]; then
+  echo "cannot judge: unknown reference-integrity argument '$2'" >&2
+  exit 2
+fi
 
 # Every tracked path, plus each of their ancestor directories — a directory is not itself a git object,
 # so `docs/` must be recognized through the files under it.

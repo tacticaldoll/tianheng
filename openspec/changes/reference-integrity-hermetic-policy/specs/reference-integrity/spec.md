@@ -27,7 +27,7 @@ and unknown or incomplete argument shapes SHALL exit 2 cannot-judge.
 - **WHEN** fixture-only policy narrowing is requested for Tianheng's own physical workspace
 - **THEN** the gate exits 2 rather than weakening the required set
 
-#### Scenario: Fixture policy is empty or an argument is unknown
+#### Scenario: Fixture policy is empty, surplus, or an argument is unknown
 
-- **WHEN** the fixture option has no non-empty value, or an unknown additional argument is supplied
+- **WHEN** the fixture option has no non-empty value or has surplus values, or an unknown argument is supplied
 - **THEN** the gate exits 2 naming the invalid invocation
