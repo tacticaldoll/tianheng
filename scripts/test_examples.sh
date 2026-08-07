@@ -270,6 +270,25 @@ grep -q 'every module file opens with a `//!` header' "$EXAMPLE_ARTIFACT_ROOT/pa
 grep -q "house-rules/a-file-nested-below-src-is-out-of-reach" "$EXAMPLE_ARTIFACT_ROOT/participant.txt" \
     || { echo "::error::observer-participant printed no computed bound id — the owned-or-borrowed declaration form has no caller again"; exit 1; }
 echo "ok  observer-participant folds an outside participant with 圭表 and declares computed bounds"
+
+# A computed citation is still a citation. `check_bound_register.sh` decides test-ness for the family from
+# the harness's own enumeration, because three reviews defeated deciding it from source text — and the same
+# question about an EXAMPLE's declarations was asked by nobody, so one of this participant's two pins named a
+# test that did not exist while every assertion above stayed green. The id direction cannot see it: an id is
+# derived from the configuration and always resolves to itself.
+#
+# Resolved leaf-name against leaf-name, the way that gate reads `-- --list`. The vacuity guard is
+# load-bearing: with no pin parsed, the loop below would examine nothing and report clean, which is the
+# shape this whole example exists to argue against.
+mapfile -t participant_pins < <(sed -n 's/^      pinned by: //p' "$EXAMPLE_ARTIFACT_ROOT/participant.txt")
+[ "${#participant_pins[@]}" -gt 0 ] \
+    || { echo "::error::observer-participant printed no pin, so resolving its citations would pass vacuously"; exit 1; }
+registered=$(cargo test "${PATCH[@]}" -- --list 2>/dev/null | sed -n 's/: test$//p' | sed 's/.*:://' | sort -u)
+for pin in "${participant_pins[@]}"; do
+    grep -qxF -- "$pin" <<<"$registered" \
+        || { echo "::error::observer-participant's declared bound cites \`$pin\`, which its own test harness does not register — a computed citation resolving to nothing reads as coverage while defending nothing"; exit 1; }
+done
+echo "ok  observer-participant's ${#participant_pins[@]} computed pins each name a test the harness registers"
 fulfill_example observer-participant
 
 verify_example_coverage
