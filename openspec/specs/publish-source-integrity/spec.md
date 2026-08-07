@@ -53,6 +53,9 @@ non-zero with an identical `allowedSignersFile needs to be configured` message f
 unsigned one alike, so a gate built on it would always report cannot-judge in CI: the check disabled while
 appearing strengthened.
 
+Temporary signature material SHALL be owned by cleanup before its directory is acquired. If acquisition creates
+and reports a directory before failing, the gate SHALL exit cannot-judge and SHALL remove that directory.
+
 The payload SHALL be reconstructed by removing the signature block as a **suffix** of the tag object, never by
 stripping from the first line resembling a signature header. Measured on a genuinely signed tag whose message also
 quotes a verification log, stripping from the first such line truncates the payload and refuses a real signature —
@@ -78,6 +81,11 @@ A failure to read the tag object SHALL likewise be `2`, not `1`.
 - **WHEN** `vX.Y.Z` is signed and no `gpg.ssh.allowedSignersFile` is configured or exists
 - **THEN** the gate accepts the signature, because validity is verifiable without attribution and the verdict
   must not depend on where the gate ran
+
+#### Scenario: Signature workspace acquisition fails after creating a directory
+
+- **WHEN** temporary-workspace acquisition creates and reports its directory but returns failure
+- **THEN** the gate exits `2` cannot-judge and removes the partially acquired directory
 
 #### Scenario: A signed tag whose message also quotes a signature block
 

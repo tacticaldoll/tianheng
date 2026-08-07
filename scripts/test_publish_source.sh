@@ -152,6 +152,27 @@ absent_output=$(PATH="$keygen_stub:$PATH" "$check" "$publishable" 2>&1) || absen
 [[ $absent_status -eq 2 ]] \
     || { printf 'an unverifiable signature must be cannot-judge, got %d: %s\n' "$absent_status" "$absent_output" >&2; exit 1; }
 
+# Cleanup ownership must begin before the signature workspace is acquired. Model a partial acquisition that
+# creates and reports the directory before returning failure: the gate may be unable to judge, but it must not
+# leave the acquired workspace behind.
+partial_mktemp_stub=$fixture_root/partial-mktemp-stub
+partial_signature_dir=$fixture_root/partial-signature-workspace
+mkdir -p "$partial_mktemp_stub"
+real_mkdir_for_partial=$(command -v mkdir)
+cat >"$partial_mktemp_stub/mktemp" <<STUB
+#!/usr/bin/env bash
+"$real_mkdir_for_partial" -p "$partial_signature_dir"
+printf '%s\n' "$partial_signature_dir"
+exit 1
+STUB
+chmod +x "$partial_mktemp_stub/mktemp"
+partial_status=0
+partial_output=$(PATH="$partial_mktemp_stub:$PATH" "$check" "$publishable" 2>&1) || partial_status=$?
+[[ $partial_status -eq 2 ]] \
+    || { printf 'a failed signature workspace acquisition must exit 2, got %d: %s\n' "$partial_status" "$partial_output" >&2; exit 1; }
+[[ ! -e $partial_signature_dir ]] \
+    || { printf 'a partially acquired signature workspace was not cleaned: %s\n' "$partial_signature_dir" >&2; exit 1; }
+
 # If extraction and the object disagree, suffix removal would silently return the whole object and turn a
 # reconstruction failure into a wrong-source verdict. Corrupt only the extracted block so the distinction is
 # exercised after a real signed tag and a working signature mechanism have both been established.

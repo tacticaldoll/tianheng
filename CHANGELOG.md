@@ -491,6 +491,8 @@ them.
   performs.*
 
 ### Fixed
+- The publish-source gate now owns cleanup before acquiring its temporary signature workspace, so a partial
+  acquisition that creates a directory and then fails cannot leave that directory behind.
 - The publish-source gate now reports cannot-judge when Git's extracted signature is not the tag object's exact
   suffix, instead of silently verifying an unreconstructed payload and misreporting the tag as wrong source.
 - The reference-integrity gate's required governance-document set is now immune to ambient environment overrides;

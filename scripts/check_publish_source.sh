@@ -117,8 +117,14 @@ git -C "$repo" rev-parse --verify "refs/tags/$tag" >/dev/null 2>&1 \
 command -v ssh-keygen >/dev/null 2>&1 \
     || cannot_judge "ssh-keygen is unavailable, so $tag's signature cannot be verified"
 
+signature_dir=
+cleanup_signature_dir() {
+    if [[ -n $signature_dir ]]; then
+        rm -rf -- "$signature_dir"
+    fi
+}
+trap cleanup_signature_dir EXIT
 signature_dir=$(mktemp -d)
-trap 'rm -rf "$signature_dir"' EXIT
 
 # The mechanism is exercised on a signature of its own making BEFORE its verdict on the tag is trusted, because
 # `ssh-keygen`'s exit status cannot say whether a check failed or the tool did. Measured: an invalid signature
