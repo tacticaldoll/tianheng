@@ -360,8 +360,9 @@ trait-driven fold and the built-in composition path to one verdict — two paths
 are the drift a seam is supposed to end. And so must `gate_shape_contract.rs`, which enumerates this
 repository's own `check_*` gates and their twins from tracked content, holds each to the structural properties of the
 family's exit contract, and projects [`docs/gate-shape-contract.md`](docs/gate-shape-contract.md) — the table
-saying which gate holds what, and which three of the classes it was built for are declared bounds rather than
-checks. It adds no line above for the same reason. And so must `projection_register.rs`, which is the inventory of
+saying which gate holds what, and which of the classes it was built for are declared bounds rather than
+checks. That list and its figure are read from the specification by the projection, so they are not restated
+here. It adds no line above for the same reason. And so must `projection_register.rs`, which is the inventory of
 every document in this paragraph: it enumerates the generated documents from the marker each carries, holds each
 one against the reaction that blesses it in both directions, requires that this file names each of them, and
 projects [`docs/projection-register.md`](docs/projection-register.md). Adding a projection without mentioning it
