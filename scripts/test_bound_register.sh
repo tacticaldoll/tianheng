@@ -220,7 +220,7 @@ expect_fail "$commented_attribute" 1 'carries no `#[test]` in the attribute run 
 # And the same in a BLOCK comment, which the line-comment rule above does not reach: the walk stops at the
 # delimiter rather than reading commented text as an attribute. It cannot strip or track comments — comment
 # state is a forward property an upward walk cannot know, and stripping needs string-literal lexing, which
-# this tree's 49 in-string `/*` occurrences would defeat.
+# this tree's own lexer suites defeat by nesting `/*` inside string literals.
 block_commented_attribute=$(new_repo block-commented-attribute "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
     '/*
 #[test]
@@ -271,8 +271,8 @@ expect_fail "$nested_qualifier" 1 'which is not a citation this reaction can res
 # A whole definition inside a block comment satisfies a citation on the FALLBACK path, and this fixture pins
 # that: the source-text walk reads the form of a line, not its comment state. It is a property of the declared
 # fallback and not of the register's judgment where a manifest exists — the cargo fixtures below prove the
-# harness refuses the same shape. Closing it in the fallback would need string-literal lexing, which this tree
-# defeats with 49 in-string `/*` occurrences.
+# harness refuses the same shape. Closing it in the fallback would need string-literal lexing, which this
+# tree's own lexer suites defeat by nesting `/*` inside string literals.
 commented_definition=$(new_repo commented-definition "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
     '/*
 #[test]

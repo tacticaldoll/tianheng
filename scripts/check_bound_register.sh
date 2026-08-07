@@ -514,11 +514,16 @@ harness_registers() {
 #     block comment is a property of everything BEFORE it, and this walk moves backwards with no knowledge of
 #     the file above.
 #   * Stripping comments needs to know which `/*` opens one and which is text inside a string literal, and
-#     this tree makes that concrete: 49 `/*` occurrences live INSIDE string literals, several of them nested,
+#     this tree makes that concrete: `/*` occurrences live INSIDE string literals, several of them nested,
 #     because louke's lexer and the lexical-conformance suite test exactly that
 #     (`crates/tianheng/tests/lexical_conformance.rs:72`, `crates/louke/src/audit/tests.rs:673`). A
 #     delimiter-counting stripper would open a phantom comment at the first of them and swallow every
 #     definition until the next `*/`, so the gate would begin refusing real citations here on its first run.
+#     HOW MANY is deliberately not written, and the reason is the paragraph's own: counting them is the
+#     string-literal lexing this tree is said to defeat, so the figure has no enumerator and could only be
+#     typed. It was, and it spread — a review of this window found it copied into three further sites and
+#     into a GENERATED projection, where a literal is compared with itself and can never self-correct. The two
+#     citations above are the evidence in its place, and unlike a count they can be opened and read.
 #
 # Verified before adopting: no `#[test]` run in this tree contains a block comment, so no cited test is
 # affected. The error direction is loud — a run that genuinely contains one is refused, not accepted.
