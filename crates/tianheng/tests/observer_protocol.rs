@@ -297,6 +297,47 @@ fn a_source_with_no_bounds_method_yields_no_body_to_judge() {
     );
 }
 
+/// The shell reads semantic boundaries only to pass them directly into 渾儀's public composed entry point.
+///
+/// A behavioral comparison cannot observe a local empty-bundle guard here: the static dimension has already
+/// read the same manifest, and `hunyi::check_all` would return the same `Clean`. The source shape is therefore
+/// the observation level that moved. Exactly one accessor occurrence rules out a second shell-local decision,
+/// while the required direct call rules out hiding that decision behind an alias or wrapper.
+#[test]
+fn the_shell_delegates_semantic_emptiness_to_the_public_entry_point() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let relative = "crates/tianheng/src/runner.rs";
+    let path = root.join(relative);
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("cannot read {path:?}: {error}"));
+    let source = Source::of(text);
+    let body = function_body(&source, "fn evaluate_constitution(").unwrap_or_else(|| {
+        panic!(
+            "no `fn evaluate_constitution` body in {relative} — the shell delegation reaction cannot judge"
+        )
+    });
+    let compact: String = body
+        .rust()
+        .lines()
+        .flat_map(str::chars)
+        .filter(|character| !character.is_whitespace())
+        .collect();
+    let accessor = "constitution.semantic_boundaries()";
+    assert_eq!(
+        compact.matches(accessor).count(),
+        1,
+        "the shell must access semantic boundaries exactly once, as the direct `hunyi::check_all` argument; \
+         another access is an independent shell decision: {relative}"
+    );
+    assert!(
+        compact.contains("hunyi::check_all(constitution.semantic_boundaries(),manifest_path)"),
+        "the shell must pass semantic boundaries directly to `hunyi::check_all`; an alias or wrapper can \
+         reintroduce a second behavior owner: {relative}"
+    );
+}
+
 /// The one statement a conforming `bounds()` body holds.
 const DELEGATION: &str = "observation_bounds()";
 
@@ -306,36 +347,7 @@ const DELEGATION: &str = "observation_bounds()";
 /// than truncating at the first `}` — the body is required to be one statement, but a *wrong* body must be
 /// reported whole rather than mis-parsed into looking right.
 fn bounds_body(source: &Source) -> Option<Vec<String>> {
-    let text = source.whole();
-    // By line POSITION, never by the bare marker: `text.find("fn bounds(")` would happily brace-match from a
-    // sentence *about* the method inside a doc comment or a string literal. No observer file mentions it that way
-    // today, which is what makes this the latent form of a trap this family has already paid for four times.
-    let signature = text
-        .lines()
-        .scan(0usize, |offset, line| {
-            let at = *offset;
-            *offset += line.len() + 1;
-            Some((at, line))
-        })
-        .find(|(_, line)| line.trim_start().starts_with("fn bounds("))
-        .map(|(at, line)| at + (line.len() - line.trim_start().len()))?;
-    let open = signature + text[signature..].find('{')?;
-    let mut depth = 0usize;
-    let mut close = None;
-    for (offset, character) in text[open..].char_indices() {
-        match character {
-            '{' => depth += 1,
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    close = Some(open + offset);
-                    break;
-                }
-            }
-            _ => {}
-        }
-    }
-    let body = Source::of(&text[open + 1..close?]);
+    let body = function_body(source, "fn bounds(")?;
     Some(
         body.rust()
             .lines()
@@ -359,6 +371,40 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
             })
             .collect(),
     )
+}
+
+/// The brace-delimited body of the first function whose executed signature line begins with `signature`.
+fn function_body(source: &Source, signature: &str) -> Option<Source> {
+    let text = source.whole();
+    // By line POSITION, never by a bare marker anywhere in the blob: a prose sentence mentioning the function
+    // must not become the brace-match origin. The signature must begin the trimmed line; this remains the same
+    // deliberately lightweight recognizer the observer-bounds reaction already exercised, not a second parser.
+    let signature = text
+        .lines()
+        .scan(0usize, |offset, line| {
+            let at = *offset;
+            *offset += line.len() + 1;
+            Some((at, line))
+        })
+        .find(|(_, line)| line.trim_start().starts_with(signature))
+        .map(|(at, line)| at + (line.len() - line.trim_start().len()))?;
+    let open = signature + text[signature..].find('{')?;
+    let mut depth = 0usize;
+    let mut close = None;
+    for (offset, character) in text[open..].char_indices() {
+        match character {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    close = Some(open + offset);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    Some(Source::of(&text[open + 1..close?]))
 }
 
 // --- the fold's ordering directions, on hand-written observers ---
