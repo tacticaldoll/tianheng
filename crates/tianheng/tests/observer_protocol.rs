@@ -320,12 +320,7 @@ fn the_shell_delegates_semantic_emptiness_to_the_public_entry_point() {
             "no `fn evaluate_constitution` body in {relative} — the shell delegation reaction cannot judge"
         )
     });
-    let compact: String = body
-        .rust()
-        .lines()
-        .flat_map(str::chars)
-        .filter(|character| !character.is_whitespace())
-        .collect();
+    let compact = compact_executed_rust(&body);
     let accessor = "constitution.semantic_boundaries()";
     assert_eq!(
         compact.matches(accessor).count(),
@@ -334,9 +329,64 @@ fn the_shell_delegates_semantic_emptiness_to_the_public_entry_point() {
          another access is an independent shell decision: {relative}"
     );
     assert!(
-        compact.contains("hunyi::check_all(constitution.semantic_boundaries(),manifest_path)"),
+        compact.contains(SEMANTIC_DELEGATION),
         "the shell must pass semantic boundaries directly to `hunyi::check_all`; an alias or wrapper can \
          reintroduce a second behavior owner: {relative}"
+    );
+}
+
+/// The delegation this reaction requires, in compacted form.
+const SEMANTIC_DELEGATION: &str =
+    "hunyi::check_all(constitution.semantic_boundaries(),manifest_path)";
+
+/// A body's executed Rust with whitespace removed and a trailing comma before a closing parenthesis dropped.
+///
+/// Both normalizations answer to the same thing: `rustfmt` decides where a call breaks, and a broken argument
+/// list gains a trailing comma. Joining the text without dropping that comma would make this reaction fail the
+/// day the call grows past the line width — a false positive produced by `cargo fmt`, in a repository that gates
+/// `cargo fmt --check`, over a delegation that did not change. `,)` cannot occur in compacted Rust for any other
+/// reason, and nested occurrences collapse too, since the replacement scans the whole string.
+///
+/// Named and taking text so its limit is demonstrated by giving it both spellings — see
+/// [`the_delegation_recognizer_reads_both_spellings_rustfmt_produces`] — rather than by widening this crate's
+/// lines until `rustfmt` breaks them.
+fn compact_executed_rust(source: &Source) -> String {
+    let joined: String = source
+        .rust()
+        .lines()
+        .flat_map(str::chars)
+        .filter(|character| !character.is_whitespace())
+        .collect();
+    joined.replace(",)", ")")
+}
+
+/// The recognizer reads the one-line and the wrapped spelling alike, and still refuses an alias.
+///
+/// The control is the third case: without it, a normalizer that had become permissive enough to accept anything
+/// would satisfy the first two and look like a fix.
+#[test]
+fn the_delegation_recognizer_reads_both_spellings_rustfmt_produces() {
+    let one_line =
+        Source::of("hunyi::check_all(constitution.semantic_boundaries(), manifest_path),\n");
+    let wrapped = Source::of(
+        "hunyi::check_all(\n    constitution.semantic_boundaries(),\n    manifest_path,\n),\n",
+    );
+    let aliased = Source::of(
+        "let boundaries = constitution.semantic_boundaries();\nhunyi::check_all(boundaries, manifest_path)\n",
+    );
+
+    assert!(
+        compact_executed_rust(&one_line).contains(SEMANTIC_DELEGATION),
+        "the spelling in the tree today"
+    );
+    assert!(
+        compact_executed_rust(&wrapped).contains(SEMANTIC_DELEGATION),
+        "and the spelling `rustfmt` produces once the call no longer fits — the same delegation, so the same \
+         verdict"
+    );
+    assert!(
+        !compact_executed_rust(&aliased).contains(SEMANTIC_DELEGATION),
+        "an alias must still be refused: it is how a second behavior owner comes back"
     );
 }
 
