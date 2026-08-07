@@ -1,8 +1,9 @@
 use std::path::Path;
 
 use guibiao::{
-    Constitution, ModuleBoundary, Outcome, RuleKey, ScanDepth, StructuredFactIdentity, Violation,
-    ViolationId, check,
+    BoundDecl, BoundId, Constitution, Defence, Demonstrates, Extent, FactGranularity,
+    ModuleBoundary, Observer, Outcome, Owner, Reached, RuleKey, ScanDepth, StaticObserver,
+    StructuredFactIdentity, Violation, ViolationId, check,
 };
 
 fn inspect(violation: &Violation) {
@@ -16,6 +17,18 @@ fn inspect(violation: &Violation) {
 fn standalone_static_surface_exposes_the_shared_reaction_model() {
     let _: fn(&Constitution, &Path) -> Outcome = check;
     let _: fn(&Violation) = inspect;
+    let _ = std::mem::size_of::<(
+        BoundDecl,
+        BoundId,
+        Defence,
+        Demonstrates,
+        Extent,
+        FactGranularity,
+        Owner,
+        Reached,
+    )>();
+    fn accepts_observer<T: Observer>() {}
+    accepts_observer::<StaticObserver>();
 }
 
 #[test]

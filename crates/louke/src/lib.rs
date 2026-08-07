@@ -17,7 +17,8 @@
 #![deny(missing_docs)]
 
 pub use xuanji::{
-    BoundaryKind, Finding, Outcome, Polarity, Report, RuleKey, ScanDepth, Severity,
+    BoundDecl, BoundId, BoundaryKind, Defence, Demonstrates, Extent, FactGranularity, Finding,
+    Observer, Outcome, Owner, Polarity, Reached, Report, RuleKey, ScanDepth, Severity,
     StructuredFactIdentity, Violation, ViolationId,
 };
 

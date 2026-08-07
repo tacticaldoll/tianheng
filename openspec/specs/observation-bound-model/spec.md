@@ -156,6 +156,19 @@ rule above and exports nothing there.
 - **THEN** the declarations describing that reaction are absent from the export, so no dependent reads a bound for
   a reaction its build does not contain — while any declaration describing an always-present path stays
 
+### Requirement: Each standalone dimension SHALL expose its shared protocol vocabulary
+
+Each dimension root SHALL re-export the shared types an adopter needs to name its public observation-bound and
+observer surface: `BoundDecl`, `BoundId`, `Defence`, `Demonstrates`, `Extent`, `FactGranularity`, `Observer`,
+`Outcome`, `Owner`, and `Reached`. The exports SHALL preserve the original `xuanji` type identities rather than
+introducing dimension-specific wrappers. An adopter depending on one dimension SHALL NOT need a direct `xuanji`
+dependency merely to use that dimension's public protocol.
+
+#### Scenario: An adopter depends on one dimension
+
+- **WHEN** an external integration test imports the complete shared protocol vocabulary from any one dimension root
+- **THEN** every type resolves and can be used with that dimension's declarations and observer implementation
+
 ### Requirement: The specs' declarations and the code's SHALL be held in bijection
 
 A reaction SHALL assert that the set of bound ids declared in `openspec/specs/*/spec.md` **equals** the set
