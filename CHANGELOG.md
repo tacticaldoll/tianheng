@@ -491,6 +491,8 @@ them.
   performs.*
 
 ### Fixed
+- The reference-integrity gate's required governance-document set is now immune to ambient environment overrides;
+  its narrowed zero-corpus policy is an explicit, validated fixture-only argument that cannot target this workspace.
 - The observation-bound register now reports cannot-judge when its target repository becomes unavailable before
   the written-census scan, instead of collapsing `cd` failure into grep's ordinary no-match exit and reporting 1.
 - The observer-protocol trait-object guard now scans Tianheng's Rust sources recursively, so moving a public item
