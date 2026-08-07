@@ -344,6 +344,47 @@ fn fixture_negative_testing_observes_violating_fixture() {
         .test_fixture(fixture);
 }
 
+/// The real shell dependency boundary reacts to a direct edge into the lower metadata substrate.
+///
+/// The boundary is selected from [`tianheng_constitution`] instead of restating its allowlist here. Exactly one
+/// match is required so a duplicate or renamed shell declaration cannot turn this into evidence about an
+/// arbitrary boundary. The isolated fixture carries no other dependency, so its violation cannot be satisfied
+/// by a different forbidden edge.
+#[test]
+fn fixture_negative_testing_observes_shell_metadata_edge() {
+    let Some(manifest) = workspace_manifest() else {
+        return;
+    };
+    let root = manifest.parent().unwrap();
+    let fixture = root.join("crates/tianheng/tests/fixtures/shell_metadata_edge/Cargo.toml");
+    let mut shell_boundaries: Vec<Boundary> = tianheng_constitution()
+        .static_boundaries()
+        .boundaries()
+        .iter()
+        .filter(|boundary| {
+            matches!(
+                boundary,
+                Boundary::Crate(crate_boundary)
+                    if crate_boundary.target().package == "tianheng"
+                        && matches!(crate_boundary.rule(), Rule::RestrictDependenciesTo { .. })
+            )
+        })
+        .cloned()
+        .collect();
+    assert_eq!(
+        shell_boundaries.len(),
+        1,
+        "the self-constitution must declare exactly one tianheng dependency allowlist; the fixture must not \
+         choose an arbitrary duplicate or silently stop exercising a renamed boundary"
+    );
+    let fixture_constitution = Constitution::new("shell-metadata-edge")
+        .boundary(shell_boundaries.pop().expect("the unique shell boundary"));
+
+    GovernanceTest::for_constitution(fixture_constitution)
+        .with_manifest_dir(root)
+        .test_fixture(fixture);
+}
+
 #[test]
 fn fixture_negative_testing_observes_cfg_if_violation() {
     let Some(manifest) = workspace_manifest() else {
