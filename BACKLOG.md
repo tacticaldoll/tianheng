@@ -383,8 +383,11 @@ consumer for an undemonstrated deduplication.
   register would have entrenched a wrong answer twice. The trigger is a rejection demonstrably **re-proposed and
   re-measured** by someone who could not find the record, evidenced by a tree artefact rather than by a report
   from inside the work. *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
-  `observation-bound-register`, whose spec states the purpose ("recorded as rejected rather than left to be
-  re-proposed") that nothing currently carries into an agent's context.
+  `observation-bound-register`, whose spec records two rejections in this shape — "declaring once was rejected"
+  and "keying on statement similarity was rejected rather than overlooked" — so the practice is that
+  capability's, while nothing carries it into an agent's context. The phrasing that names the purpose
+  ("recorded as rejected rather than left to be re-proposed") is in `CHANGELOG.md`, not in a spec, which is part
+  of the observation.
   *Shape, if it fires:* another instance of the enumerate → react → audit cycle beside the five
   `projection-register` already counts, not a new crate and not the separate ADR file class `AGENTS.md` forbids.
   Two constraints the survey already forces on the record type: separate the **load-bearing** reason from the
