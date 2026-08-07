@@ -15,7 +15,7 @@
 # What a bound declaration is. A `#### Scenario:` whose heading marks it a bound, sitting under the
 # requirement it qualifies — nearly every one declared today sits that way, and hoisting them into a common
 # section would separate each bound from the reaction it limits. The `Observation bounds` requirement
-# three specs carry is a place bounds are gathered, never the definition of one.
+# some specs carry is a place bounds are gathered, never the definition of one.
 #
 # Requiring the heading convention is legitimate where requiring a TEST-name convention is not, and the
 # difference is ownership: a scenario heading is authored in the spec, so this gate may require its form,
@@ -49,7 +49,7 @@
 # The third is how a retired `#[path]` bound survived two sweeps inside a sentence listing four inherited
 # bounds behind one reference to a fifth, so it is recorded as a cause rather than a curiosity.
 #
-# The exemption: prose under a requirement whose heading names bounds is not reported, because three such
+# The exemption: prose under a requirement whose heading names bounds is not reported, because several such
 # requirements state their bounds as numbered lists. Its price is charged (the requirement must declare at
 # least one bound scenario), and its cost is that the list's other items are unregistered.
 #
@@ -898,7 +898,7 @@ render_projection() {
         '   paragraphs instead of lines was measured against that defect and would not have caught it, because' \
         '   the paragraph carries the same clearing reference.' \
         '' \
-        'The **exemption**: prose under a requirement whose heading names bounds is not reported, because three' \
+        'The **exemption**: prose under a requirement whose heading names bounds is not reported, because several' \
         'such requirements state their bounds as a numbered list, and requiring each item to become its own' \
         'scenario would restructure them and read worse. Its price' \
         'is charged — such a requirement must declare at least one bound scenario — but the other items of its' \

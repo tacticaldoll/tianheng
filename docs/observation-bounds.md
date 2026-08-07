@@ -27,7 +27,7 @@ reaction's comments, because a residual a reader cannot see is one the register 
    paragraphs instead of lines was measured against that defect and would not have caught it, because
    the paragraph carries the same clearing reference.
 
-The **exemption**: prose under a requirement whose heading names bounds is not reported, because three
+The **exemption**: prose under a requirement whose heading names bounds is not reported, because several
 such requirements state their bounds as a numbered list, and requiring each item to become its own
 scenario would restructure them and read worse. Its price
 is charged — such a requirement must declare at least one bound scenario — but the other items of its
