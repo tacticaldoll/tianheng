@@ -7,7 +7,7 @@
 //! only enforce `engine ⊥ runner` *within* one crate, Tianheng enforces the
 //! functional-core ⊥ imperative-shell split across *crate* boundaries.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tianheng::prelude::*;
 use tianheng::{Boundary, Rule};
@@ -218,15 +218,78 @@ fn workspace_root() -> Option<PathBuf> {
     })
 }
 
+/// The unique live dependency allowlist governing the shell.
+fn shell_dependency_boundary() -> Boundary {
+    let mut shell_boundaries: Vec<Boundary> = tianheng_constitution()
+        .static_boundaries()
+        .boundaries()
+        .iter()
+        .filter(|boundary| {
+            matches!(
+                boundary,
+                Boundary::Crate(crate_boundary)
+                    if crate_boundary.target().package == "tianheng"
+                        && matches!(crate_boundary.rule(), Rule::RestrictDependenciesTo { .. })
+            )
+        })
+        .cloned()
+        .collect();
+    assert_eq!(
+        shell_boundaries.len(),
+        1,
+        "the self-constitution must declare exactly one tianheng dependency allowlist; a repository reaction \
+         must not choose an arbitrary duplicate or silently stop observing a renamed boundary"
+    );
+    shell_boundaries.pop().expect("the unique shell boundary")
+}
+
+fn shell_dependency_allowlist(boundary: &Boundary) -> &[String] {
+    match boundary {
+        Boundary::Crate(crate_boundary) => match crate_boundary.rule() {
+            Rule::RestrictDependenciesTo { allowed, .. } => allowed,
+            _ => unreachable!("the shell boundary selector admits only a dependency allowlist"),
+        },
+        _ => unreachable!("the shell boundary selector admits only a crate boundary"),
+    }
+}
+
+fn comment_block_copies_allowlist(block: &str, allowlist: &[String]) -> bool {
+    !allowlist.is_empty()
+        && allowlist.iter().all(|member| {
+            block
+                .split(|character: char| {
+                    !(character.is_ascii_alphanumeric() || character == '_' || character == '-')
+                })
+                .any(|token| token == member)
+        })
+}
+
+fn assert_comment_block_does_not_copy_allowlist(
+    source: &Path,
+    block_start: usize,
+    block: &str,
+    allowlist: &[String],
+) {
+    assert!(
+        !comment_block_copies_allowlist(block, allowlist),
+        "{}:{} copies every live shell dependency allowlist member ({}) into one line-comment block; \
+         refer to AGENTS.self-law.md instead",
+        source.display(),
+        block_start,
+        allowlist.join(", ")
+    );
+}
+
 /// Authored shell comments may explain the dependency boundary, but the live declaration and its
-/// generated projection own the membership. Keeping the declaration token out of comments prevents
-/// one from becoming a second, unstaleness-checked allowlist without forbidding product code from
-/// legitimately calling the public DSL.
+/// generated projection own the membership. The declaration token and a full member census are distinct
+/// copied forms; both are refused without forbidding product code from legitimately calling the public DSL.
 #[test]
 fn shell_comments_do_not_restate_the_dependency_allowlist() {
     let Some(root) = workspace_root() else {
         return; // outside a checkout — the authored repository source is not present
     };
+    let shell_boundary = shell_dependency_boundary();
+    let allowlist = shell_dependency_allowlist(&shell_boundary);
     let mut pending = vec![root.join("crates/tianheng/src")];
     let mut rust_sources = Vec::new();
 
@@ -250,12 +313,37 @@ fn shell_comments_do_not_restate_the_dependency_allowlist() {
     for source in rust_sources {
         let text = std::fs::read_to_string(&source)
             .unwrap_or_else(|error| panic!("cannot read {}: {error}", source.display()));
+        let mut comment_block = String::new();
+        let mut block_start = 0usize;
         for (index, line) in text.lines().enumerate() {
-            assert!(
-                !line.trim_start().starts_with("//") || !line.contains("restrict_dependencies_to("),
-                "{}:{} restates the shell dependency declaration; refer to AGENTS.self-law.md instead",
-                source.display(),
-                index + 1
+            if line.trim_start().starts_with("//") {
+                if comment_block.is_empty() {
+                    block_start = index + 1;
+                }
+                assert!(
+                    !line.contains("restrict_dependencies_to("),
+                    "{}:{} restates the shell dependency declaration; refer to AGENTS.self-law.md instead",
+                    source.display(),
+                    index + 1
+                );
+                comment_block.push_str(line);
+                comment_block.push('\n');
+            } else if !comment_block.is_empty() {
+                assert_comment_block_does_not_copy_allowlist(
+                    &source,
+                    block_start,
+                    &comment_block,
+                    allowlist,
+                );
+                comment_block.clear();
+            }
+        }
+        if !comment_block.is_empty() {
+            assert_comment_block_does_not_copy_allowlist(
+                &source,
+                block_start,
+                &comment_block,
+                allowlist,
             );
         }
     }
@@ -411,28 +499,8 @@ fn fixture_negative_testing_observes_shell_metadata_edge() {
     };
     let root = manifest.parent().unwrap();
     let fixture = root.join("crates/tianheng/tests/fixtures/shell_metadata_edge/Cargo.toml");
-    let mut shell_boundaries: Vec<Boundary> = tianheng_constitution()
-        .static_boundaries()
-        .boundaries()
-        .iter()
-        .filter(|boundary| {
-            matches!(
-                boundary,
-                Boundary::Crate(crate_boundary)
-                    if crate_boundary.target().package == "tianheng"
-                        && matches!(crate_boundary.rule(), Rule::RestrictDependenciesTo { .. })
-            )
-        })
-        .cloned()
-        .collect();
-    assert_eq!(
-        shell_boundaries.len(),
-        1,
-        "the self-constitution must declare exactly one tianheng dependency allowlist; the fixture must not \
-         choose an arbitrary duplicate or silently stop exercising a renamed boundary"
-    );
-    let fixture_constitution = Constitution::new("shell-metadata-edge")
-        .boundary(shell_boundaries.pop().expect("the unique shell boundary"));
+    let fixture_constitution =
+        Constitution::new("shell-metadata-edge").boundary(shell_dependency_boundary());
 
     GovernanceTest::for_constitution(fixture_constitution)
         .with_manifest_dir(root)
