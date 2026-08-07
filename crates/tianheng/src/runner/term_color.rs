@@ -1,6 +1,6 @@
 //! Zero-dependency ANSI styling for the human `check` render. Hand-rolled on purpose: a colour
-//! crate would trip 天衡's own `restrict_dependencies_to(guibiao, hunyi, louke, serde_json)`
-//! self-law, so the shell carries its own handful of SGR constants instead.
+//! crate would trip 天衡's own dependency allowlist self-law (projected in `AGENTS.self-law.md`),
+//! so the shell carries its own handful of SGR constants instead.
 //!
 //! Colour is **presentation only** — it never changes the verdict, is applied solely to the
 //! default human report (never `--format json` / `sarif`, the machine surfaces), and is gated to

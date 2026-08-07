@@ -9,7 +9,7 @@ retain only the architectural reason and point readers to the generated self-law
 - Remove the copied dependency members from `term_color.rs`.
 - Keep the useful explanation that an added colour crate would violate the shell's dependency self-law.
 - Add a repository-only self-governance reaction that rejects a copied `restrict_dependencies_to(`
-  declaration shape in authored Tianheng shell source.
+  declaration shape in authored Tianheng shell comments.
 
 ## Capabilities
 
@@ -19,7 +19,7 @@ None.
 
 ### Modified Capabilities
 
-- `self-law-projection`: Extend the single-source contract to keep authored shell source from restating
+- `self-law-projection`: Extend the single-source contract to keep authored shell comments from restating
   the dependency declaration owned by the constitution and generated projection.
 
 ## Impact

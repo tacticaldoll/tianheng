@@ -11,7 +11,7 @@ with either and has previously drifted.
 
 - Preserve the architectural explanation for the zero-dependency implementation.
 - Remove the copied enumerable set and direct readers to the generated law projection.
-- Make the exact duplicate declaration shape identified by review fail in authored Tianheng shell source.
+- Make the exact duplicate declaration shape identified by review fail in authored Tianheng shell comments.
 
 **Non-Goals:**
 
@@ -24,11 +24,11 @@ Replace the member list with “dependency allowlist self-law” and a reference
 `AGENTS.self-law.md`. This keeps the stable reason while leaving live membership to its generated source
 of truth.
 
-Add a repository-only test beside Tianheng's self-governance checks. It recursively enumerates tracked
-Rust-shaped source under `crates/tianheng/src` and rejects the exact declaration token
-`restrict_dependencies_to(`. The constitution declaration remains in `tests/self_governance.rs`, outside
-that product-source perimeter. This observes the reported duplication class without attempting to parse
-arbitrary prose or banning legitimate API exercises in other crates' tests.
+Add a repository-only test beside Tianheng's self-governance checks. It recursively enumerates Rust
+source under `crates/tianheng/src` and rejects the exact declaration token `restrict_dependencies_to(`
+only on line-comment forms (`//`, `//!`, and `///`). The constitution declaration remains executable
+Rust in `tests/self_governance.rs`; future product code may also call the public DSL. This observes the
+reported duplication class without attempting to parse arbitrary prose or banning legitimate API use.
 
 ## Risks / Trade-offs
 
