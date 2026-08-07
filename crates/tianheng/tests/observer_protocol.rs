@@ -386,12 +386,32 @@ enum Delegation {
 
 /// Delimiters that can hide a brace from the extent count, so their presence makes the extent unsafe to judge.
 ///
-/// A `"` or a `'` opens a literal whose braces are text; `/*` and `*/` bound a comment whose braces are text
-/// too. `*/` is listed on its own because a block comment opened above the signature and closed inside the body
-/// presents only its closing half to the extent. Both quote forms matter for the same reason and neither is
-/// hypothetical: a `//` inside a string makes [`mask_line_comment_braces`] blank a *real* opening brace, and
-/// `let c = '}';` closes the body at a character literal.
-const EXTENT_AMBIGUITY: [&str; 4] = ["\"", "'", "/*", "*/"];
+/// A `"` or a `'` opens a literal whose braces are text; `/*` opens a comment whose braces are text too. Each
+/// of the three is exercised by a route in
+/// [`an_ambiguous_delegation_extent_is_refused_rather_than_judged`], and each is load-bearing: removing any one
+/// re-opens its route, measured by removing it.
+///
+/// `*/` was listed here and is **not**, because no shape reaches it. A block comment opened above the signature
+/// closes *after* the brace it hides, so the extent is cut before the `*/` and carries no delimiter at all —
+/// see [`a_truncation_carrying_no_delimiter_still_fails_loudly`] for what that leaves. A member no route
+/// exercises is a declared set drifting from its enumerator: it can be deleted with every document still
+/// agreeing and the suite still green, which is the one property a declared set must not have.
+const EXTENT_AMBIGUITY: [&str; 3] = ["\"", "'", "/*"];
+
+/// One executed line with any line-comment tail removed.
+///
+/// The brace count already treats text after `//` as prose — [`mask_line_comment_braces`] blanks braces there —
+/// so the ambiguity scan must agree, or the two disagree about what the body even is. It did disagree:
+/// [`Executed`] filters only lines whose *trimmed start* is `//`, so a tail comment's line survives whole, and
+/// an apostrophe in ordinary English prose (`// the shell's one access`) refused a body whose code carries no
+/// literal at all. That is over-refusal on text that cannot move a brace, one `rustfmt` reflow away from the
+/// tracked file.
+fn without_comment_tail(line: &str) -> &str {
+    match line.find("//") {
+        Some(index) => &line[..index],
+        None => line,
+    }
+}
 
 /// Whether the shell's composition body delegates semantic emptiness, or `None` if the function is absent.
 ///
@@ -402,17 +422,28 @@ const EXTENT_AMBIGUITY: [&str; 4] = ["\"", "'", "/*", "*/"];
 /// **The ambiguity check runs before the comparison, not after.** The comparison is a count and a containment,
 /// and both survive a truncated extent unharmed — a second semantic-boundary access sitting past the cut is
 /// simply absent from what is compared, so the one shape this reaction refuses reads as the delegation it
-/// demands. Checking afterwards would be checking a verdict already formed on the wrong text.
+/// demands. Checking afterwards would be checking a verdict already formed on the wrong text, and the
+/// difference is observable rather than stylistic: a body both truncated *and* divergent within the remainder
+/// answers `Diverges` under an escalate-a-pass ordering and `CannotJudge` under this one. That is the shape
+/// [`an_ambiguous_extent_is_refused_even_when_the_remainder_looks_divergent`] holds, because a bolded claim
+/// with no reaction is the drift this file exists to react to.
 fn judge_delegation(source: &Source) -> Option<Delegation> {
     let body = function_body(source, "fn evaluate_constitution(")?;
-    if let Some(delimiter) = EXTENT_AMBIGUITY
-        .iter()
-        .find(|delimiter| body.rust().contains(delimiter))
-    {
+    if let Some(delimiter) = EXTENT_AMBIGUITY.iter().find(|delimiter| {
+        body.rust()
+            .lines()
+            .any(|line| without_comment_tail(line).contains(*delimiter))
+    }) {
         return Some(Delegation::CannotJudge((*delimiter).to_string()));
     }
     let compact = compact_executed_rust(&body);
-    let accessor = "constitution.semantic_boundaries()";
+    // The bare method name, not `constitution.semantic_boundaries()`. Counting the receiver spelling counted a
+    // *spelling*, and every rebinding walked past it: `let shell = constitution;` then `shell.…`,
+    // `Constitution::semantic_boundaries(constitution)`, `(&*constitution).…` — each a second access, each
+    // invisible, each measured on the tracked file end-to-end. The requirement is about how many times the
+    // shell reaches for its semantic boundaries, which is a property of the method being named at all; the
+    // *direct* spelling is what `SEMANTIC_DELEGATION` below still holds, so nothing is lost by widening here.
+    let accessor = "semantic_boundaries";
     let accesses = compact.matches(accessor).count();
     if accesses != 1 {
         return Some(Delegation::Diverges(format!(
@@ -563,6 +594,275 @@ fn an_ambiguous_delegation_extent_is_refused_rather_than_judged() {
     );
 }
 
+/// A delimiter in prose is not a delimiter in code, and the scan agrees with the brace count about which is
+/// which.
+///
+/// Both directions, because only the pair distinguishes "reads executed code" from "reads whatever it is
+/// given": an apostrophe in a comment — tail or whole line — must not refuse, while the same character in code
+/// must. The tail case is the one that bit: it refused a body whose code holds no literal, and the tracked
+/// `runner.rs` escaped only because each of its apostrophes happens to sit on a full-line comment.
+#[test]
+fn a_delimiter_only_inside_a_comment_does_not_refuse_the_extent() {
+    let tail = composition_body(&["    let n = count();  // the shell's one access"]);
+    assert!(
+        matches!(judge_delegation(&tail), Some(Delegation::Diverges(_))),
+        "an apostrophe in a comment tail cannot move a brace — the brace count already ignores that text, so \
+         the ambiguity scan must ignore it too rather than refuse a readable body"
+    );
+
+    let whole_line = composition_body(&["    // the shell's one access"]);
+    assert!(
+        matches!(judge_delegation(&whole_line), Some(Delegation::Diverges(_))),
+        "and the same in a whole-line comment, which `Executed` already filters"
+    );
+
+    let in_code = composition_body(&["    let closer = '}';"]);
+    assert!(
+        matches!(judge_delegation(&in_code), Some(Delegation::CannotJudge(_))),
+        "the control: the identical character in code still refuses, so the two cases above are the comment's \
+         doing and not the scan having stopped looking"
+    );
+}
+
+/// The refusal precedes the comparison, and this is the input where the order is observable.
+///
+/// The body is truncated *and* divergent within what survives, so an implementation that formed a verdict first
+/// and only escalated a pass would answer `Diverges` — a verdict read off text it cannot vouch for. Two such
+/// orderings were built and both satisfied every other test in this file, which is why this input exists.
+#[test]
+fn an_ambiguous_extent_is_refused_even_when_the_remainder_looks_divergent() {
+    let body = composition_body(&[
+        "    let echo = constitution.semantic_boundaries();",
+        "    let fence = \"}\";",
+    ]);
+    assert!(
+        matches!(judge_delegation(&body), Some(Delegation::CannotJudge(_))),
+        "the remainder holds two accesses and would answer `Diverges` on its own, but the extent is not known \
+         to be the body — a verdict formed on text the reaction cannot vouch for is the thing the ordering \
+         exists to prevent, whichever way that verdict happens to fall"
+    );
+}
+
+/// The residual this reaction does not close: a truncation that leaves no delimiter behind.
+///
+/// A block comment opened *above* the signature closes after the brace it hides, so the extent is cut before
+/// the `*/` and carries none of [`EXTENT_AMBIGUITY`]. The scan cannot see it, and that is why `*/` is not in
+/// the set — it would never fire here. What the shape is held to is the direction: the surviving text loses the
+/// delegation along with everything else, so the count is wrong and the reaction fails loudly. It is recorded
+/// as a test rather than as prose because "the residual is loud" is a claim that can stop being true.
+#[test]
+fn a_truncation_carrying_no_delimiter_still_fails_loudly() {
+    let source = Source::of(
+        [
+            "/* note: the guard } was removed",
+            "fn evaluate_constitution(",
+            "    constitution: &Constitution,",
+            ") -> (Outcome, Option<Coverage>) {",
+            "    still commented } here */",
+            "    let mut outcome = merge_outcomes(",
+            "        outcome,",
+            "        hunyi::check_all(constitution.semantic_boundaries(), manifest_path),",
+            "    );",
+            "    (outcome, None)",
+            "}",
+            "",
+        ]
+        .join("\n"),
+    );
+    assert!(
+        matches!(judge_delegation(&source), Some(Delegation::Diverges(_))),
+        "the extent stops inside the block comment, so no delimiter reaches the scan — the reaction must still \
+         refuse to call this a delegation, which it does by losing the delegation from the extent as well"
+    );
+}
+
+/// A whole composition source, for shapes the interposing builder cannot express.
+fn composition_source(lines: &[&str]) -> Source {
+    Source::of(lines.join("\n") + "\n")
+}
+
+/// The bounds-method reader declines an ambiguous anchor too, and its safe direction depends on that.
+///
+/// Both readers share [`function_body`], so both inherited the decoy hole — and for this one the consequence
+/// was sharper: its bound records the moved extent as *over-reacting*, safe because an exact one-statement
+/// equality refuses a conforming body. A decoy copy inverts that. The extent becomes the decoy's conforming
+/// body while the real method holds a second, divergent list, and the equality then passes on text that is not
+/// the method. Measured end-to-end on 渾儀's observer before the anchor was required to be unique.
+///
+/// Pinned here rather than left to the delegation reader's fixture, because the claim being defended is this
+/// reader's own error direction.
+#[test]
+fn a_decoy_bounds_signature_refuses_rather_than_matching_the_conforming_copy() {
+    let decoyed = Source::of(
+        [
+            "/*",
+            "    fn bounds(&self) -> Vec<BoundDecl> {",
+            "        observation_bounds()",
+            "    }",
+            "*/",
+            "    fn bounds(&self) -> Vec<BoundDecl> {",
+            "        let mut declared = observation_bounds();",
+            "        declared.truncate(1);",
+            "        declared",
+            "    }",
+            "",
+        ]
+        .join("\n"),
+    );
+    assert!(
+        bounds_body(&decoyed).is_none(),
+        "two lines could anchor the read, so the reader declines — matching the commented conforming copy \
+         would let the divergent list beneath it satisfy the obligation"
+    );
+
+    let single = Source::of(
+        [
+            "    fn bounds(&self) -> Vec<BoundDecl> {",
+            "        let mut declared = observation_bounds();",
+            "        declared.truncate(1);",
+            "        declared",
+            "    }",
+            "",
+        ]
+        .join("\n"),
+    );
+    assert_ne!(
+        bounds_body(&single).as_deref(),
+        Some([DELEGATION.to_string()].as_slice()),
+        "the same divergent list with one anchor is read and refused, so the decline above is the decoy's \
+         doing rather than the reader declining everything"
+    );
+}
+
+/// A second line that could anchor the read makes the subject unknown, so the reaction declines.
+///
+/// Line position rules out a *mid-line* mention and nothing more. A whole-line copy of the signature — in a
+/// block comment, an outer doc comment, a multi-line string, or a second module — anchors exactly as well as
+/// the real definition, and the first in the file wins. Every delimiter that made that extent wrong then sits
+/// outside it, so the in-body scan is blind by construction: measured end-to-end, a decoy above the real
+/// function let a body carrying an independent shell-local guard read as a conforming delegation.
+///
+/// The control is the identical divergent body with the decoy removed, so the refusal is the decoy's doing and
+/// not the recognizer having stopped reading.
+#[test]
+fn a_second_line_that_could_anchor_the_read_refuses_the_subject() {
+    let decoyed = composition_source(&[
+        "/*",
+        "Kept for reference while the composition seam settles:",
+        "fn evaluate_constitution(",
+        ") -> (Outcome, Option<Coverage>) {",
+        "    hunyi::check_all(constitution.semantic_boundaries(), manifest_path)",
+        "}",
+        "*/",
+        "fn evaluate_constitution(",
+        "    constitution: &Constitution,",
+        ") -> (Outcome, Option<Coverage>) {",
+        "    let mut outcome = merge_outcomes(",
+        "        outcome,",
+        "        hunyi::check_all(constitution.semantic_boundaries(), manifest_path),",
+        "    );",
+        "    if !constitution.semantic_boundaries().is_empty() {",
+        "        outcome = early();",
+        "    }",
+        "    (outcome, None)",
+        "}",
+    ]);
+    assert!(
+        judge_delegation(&decoyed).is_none(),
+        "two lines could anchor the read, so the reaction cannot know which body is the subject and must \
+         decline — picking the first reads a body that is not the function's and gives a verdict on it"
+    );
+
+    let single = composition_source(&[
+        "fn evaluate_constitution(",
+        "    constitution: &Constitution,",
+        ") -> (Outcome, Option<Coverage>) {",
+        "    let mut outcome = merge_outcomes(",
+        "        outcome,",
+        "        hunyi::check_all(constitution.semantic_boundaries(), manifest_path),",
+        "    );",
+        "    if !constitution.semantic_boundaries().is_empty() {",
+        "        outcome = early();",
+        "    }",
+        "    (outcome, None)",
+        "}",
+    ]);
+    assert!(
+        matches!(judge_delegation(&single), Some(Delegation::Diverges(_))),
+        "the same divergent body with one anchor is read and reported, so the refusal above is the decoy and \
+         not a recognizer that declines everything"
+    );
+}
+
+/// A second access reached through a rebinding is still a second access.
+///
+/// Counting `constitution.semantic_boundaries()` counted one *spelling*. Every rebinding walked past it while
+/// the requirement it implements is about how many times the shell reaches for its boundaries at all, so the
+/// count is over the method name. Three spellings, each measured accepted before the widening.
+#[test]
+fn a_second_access_through_a_rebinding_is_counted() {
+    let spellings: [&[&str]; 3] = [
+        &[
+            "    let shell = constitution;",
+            "    if shell.semantic_boundaries().is_empty() {",
+            "        outcome = early();",
+            "    }",
+        ],
+        &["    let _ = Constitution::semantic_boundaries(constitution);"],
+        &["    let _ = (&*constitution).semantic_boundaries();"],
+    ];
+    for second in spellings {
+        let mut lines = vec![
+            "fn evaluate_constitution(",
+            "    constitution: &Constitution,",
+            ") -> (Outcome, Option<Coverage>) {",
+            "    let mut outcome = merge_outcomes(",
+            "        outcome,",
+            "        hunyi::check_all(constitution.semantic_boundaries(), manifest_path),",
+            "    );",
+        ];
+        lines.extend_from_slice(second);
+        lines.extend_from_slice(&["    (outcome, None)", "}"]);
+        assert!(
+            matches!(
+                judge_delegation(&composition_source(&lines)),
+                Some(Delegation::Diverges(_))
+            ),
+            "a second reach for the semantic boundaries must be reported however the receiver is spelled: \
+             {second:?}"
+        );
+    }
+}
+
+/// A delegation written in a comment is prose, and prose does not satisfy the requirement.
+///
+/// The comparison read comment tails as code, so the required call could be supplied entirely by a comment
+/// while the real body delegated through a rebinding — measured accepted. Comment tails are now removed before
+/// the comparison, which is what the brace count already did.
+#[test]
+fn a_delegation_written_only_in_a_comment_tail_does_not_satisfy_the_requirement() {
+    let prose_delegation = composition_source(&[
+        "fn evaluate_constitution(",
+        "    constitution: &Constitution,",
+        ") -> (Outcome, Option<Coverage>) {",
+        "    let shell = constitution; // hunyi::check_all(constitution.semantic_boundaries(), manifest_path)",
+        "    if shell.semantic_boundaries().is_empty() {",
+        "        return (Outcome::Clean, None);",
+        "    }",
+        "    let outcome = merge_outcomes(outcome, hunyi::check_all(shell.semantic_boundaries(), manifest_path));",
+        "    (outcome, None)",
+        "}",
+    ]);
+    assert!(
+        !matches!(
+            judge_delegation(&prose_delegation),
+            Some(Delegation::Delegates)
+        ),
+        "the only occurrence of the required call is inside a comment, so the body does not delegate — a \
+         requirement satisfied by prose is satisfied in appearance and failed in substance"
+    );
+}
+
 /// The delegation this reaction requires, in compacted form.
 const SEMANTIC_DELEGATION: &str =
     "hunyi::check_all(constitution.semantic_boundaries(),manifest_path)";
@@ -582,6 +882,7 @@ fn compact_executed_rust(source: &Source) -> String {
     let joined: String = source
         .rust()
         .lines()
+        .map(without_comment_tail)
         .flat_map(str::chars)
         .filter(|character| !character.is_whitespace())
         .collect();
@@ -709,15 +1010,27 @@ fn function_body(source: &Source, signature: &str) -> Option<Source> {
     // By line POSITION, never by a bare marker anywhere in the blob: a prose sentence mentioning the function
     // must not become the brace-match origin. The signature must begin the trimmed line; this remains the same
     // deliberately lightweight recognizer the observer-bounds reaction already exercised, not a second parser.
-    let signature = text
-        .lines()
-        .scan(0usize, |offset, line| {
-            let at = *offset;
-            *offset += line.len() + 1;
-            Some((at, line))
-        })
-        .find(|(_, line)| line.trim_start().starts_with(signature))
+    //
+    // And the anchor must be UNIQUE. Line position alone does not make a mention unreachable — it only rules
+    // out a mid-line one. A *whole-line* copy of the signature inside a block comment, an outer doc comment, a
+    // multi-line string, or a second module has a trimmed start that is the signature, so it anchors just as
+    // well as the real thing, and the first one in the file wins. Every delimiter that made such an extent
+    // wrong then sits OUTSIDE the extent, where no in-body scan can see it: a decoy copy above the real
+    // function let a divergent body read as conforming, measured end-to-end on both readers of this recognizer.
+    // Two candidates mean the reaction cannot know which is the subject, and a recognizer that cannot know its
+    // subject has not observed the obligation — so it declines rather than picking the first.
+    let mut anchors = text.lines().scan(0usize, |offset, line| {
+        let at = *offset;
+        *offset += line.len() + 1;
+        Some((at, line))
+    });
+    let matches_signature = |(_, line): &(usize, &str)| line.trim_start().starts_with(signature);
+    let signature = anchors
+        .find(matches_signature)
         .map(|(at, line)| at + (line.len() - line.trim_start().len()))?;
+    if anchors.any(|candidate| matches_signature(&candidate)) {
+        return None;
+    }
     let open = signature + masked[signature..].find('{')?;
     let mut depth = 0usize;
     let mut close = None;

@@ -387,9 +387,9 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 
 ### `observer-protocol/the-composition-body-carries-a-delimiter-that-can-move-the-read-extent-a-stated-bound`
 
-> the extent read for `evaluate_constitution` carrying `"`, `'`, `/*`, or `*/` on an executed line
+> the extent read for `evaluate_constitution` carrying `"`, `'`, or `/*` in executed code
 
-- **because**: a string, character, or block-comment delimiter can hide a brace from the extent count, so the text read may not be the function's body, and separating the two needs the lexing this tree's own lexer suites defeat — a verdict withheld is loud, while the verdict this comparison would give is a silent pass
+- **because**: a string, character, or block-comment delimiter in executed code can hide a brace from the extent count, so the text read may not be the function's body, and separating the two needs the lexing this tree's own lexer suites defeat — a verdict withheld is loud, while the verdict this comparison would give is a silent pass
 - **its defence must show**: refuses to judge
 - **pinned by**: `an_ambiguous_delegation_extent_is_refused_rather_than_judged`
 

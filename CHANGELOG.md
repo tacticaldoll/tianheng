@@ -506,6 +506,25 @@ them.
   it read carries `"`, `'`, `/*`, or `*/` on an executed line, and the refusal names the delimiter. Over-refusal
   is the chosen direction: a lifetime shares the character-literal delimiter, so a composition body naming one
   is refused too, loudly and in the commit that causes it.
+- **Three further ways the same reaction read text that was not the body**, each found by adversarial review of
+  the repair above and each measured end-to-end against the tracked `crates/tianheng/src/runner.rs` before being
+  closed. **The anchor was not unique**: the function is found by line position, which rules out a mid-line
+  mention and nothing more, so a whole-line copy of the signature inside a block comment, a doc comment, a
+  multi-line string, or a second module anchored just as well — and the first won. Every delimiter that made
+  that extent wrong then sat *outside* it, where no in-body check reaches, so a commented-out copy above the
+  function let a body carrying an independent shell-local guard pass. Two candidate anchors are now a refusal.
+  **The access count read one spelling**: `let shell = constitution;` and then `shell.semantic_boundaries()`
+  was a second access the count never saw, as were the associated-function and reborrow spellings; the count is
+  now over the method name, while the direct spelling remains what the delegation containment holds. **A comment
+  could supply the delegation**: comment tails were compared as code, so the required call could sit entirely in
+  prose while the real body delegated through a rebinding. Tails are now removed before the comparison, which is
+  what the brace count already did to them — and by the same token a delimiter in a comment no longer refuses a
+  readable body, an over-refusal that was one reflow away from the tracked file.
+- The same decoy defeated the **bounds-method** reader, whose bound records the moved extent as *over-reacting*
+  and therefore safe. A commented-out conforming copy above a divergent `bounds()` made the exact one-statement
+  equality pass on text that was not the method — the safe direction inverted by the anchor rather than by an
+  in-body brace. Both readers share the recognizer, so both are repaired, and each pins the decoy separately
+  because the claim being defended is each reader's own error direction.
 - **A bound was typed for the harmless one of its two readers.**
   `a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent` recorded the moved extent as
   *over-reacting*, read off the bounds-method comparison, where an exact one-statement equality cannot survive a
@@ -537,11 +556,12 @@ them.
 - What the brace count still cannot separate is now a **declared bound** of `observer-protocol` rather than an
   unwritten limit: a `{` or `}` inside a block comment or a string literal still moves the body extent, because
   telling one from the other needs the string-literal lexing this tree defeats, its own lexer suites putting
-  comment delimiters inside string literals. It is declared with the direction measured rather than assumed: no
-  brace-carrying
-  construct survives the exact one-statement comparison, so a moved extent refuses a **conforming** body instead
-  of accepting a divergent one, which is an over-reaction an author argues with and never a silent pass. Its pin
-  carries that control.
+  comment delimiters inside string literals. It is declared with the direction measured rather than assumed:
+  for the bounds-method reader's exact one-statement comparison, no brace-carrying construct survives, so a
+  moved extent refuses a **conforming** body instead of accepting a divergent one — an over-reaction an author
+  argues with and never a silent pass. Its pin carries that control. (Later in this window that direction was
+  found to belong to the *comparison* rather than to the extent, and the bound split accordingly; see the
+  entries above.)
 - The publish-source gate now owns cleanup before acquiring its temporary signature workspace, so a partial
   acquisition that creates a directory and then fails cannot leave that directory behind.
 - The publish-source gate now reports cannot-judge when Git's extracted signature is not the tag object's exact

@@ -89,7 +89,6 @@ reported when more than one observer cannot judge. Deterministic and stated, nev
 
 ### Requirement: An empty semantic observer SHALL not read workspace metadata
 
-
 The semantic dimension's public composed entry point SHALL return `Clean` for an empty boundary bundle without
 reading the manifest. The shell and `SemanticObserver` SHALL delegate both empty and non-empty semantic bundles
 to that entry point rather than maintaining independent empty-boundary guards, so every semantic composition
@@ -100,14 +99,35 @@ function. That body SHALL access `constitution.semantic_boundaries()` exactly on
 argument to `hunyi::check_all`; a missing function, an additional semantic-boundary inspection, or an indirect
 shell-local decision SHALL fail rather than be treated as delegation.
 
-The reaction SHALL distinguish a body that does not delegate from a body it could not read. The extent it
-inspects is found by counting braces, and a string literal, a character literal, or a block comment inside the
-body moves that extent; where the extent carries `"`, `'`, `/*`, or `*/` on an executed line, the reaction SHALL
-refuse to judge rather than assert over text it cannot be sure is the function's body. Stating the refusal here
-is what closes a false negative rather than describing one: this requirement's comparison is a count and a
-containment, and both survive a truncated extent unharmed — a second semantic-boundary access sitting past the
-cut is simply absent from what is compared, so the one shape the requirement refuses reads as the delegation it
-demands. Measured on the tracked body with a delimiter introduced, not supposed.
+The reaction SHALL distinguish a body that does not delegate from a body it could not read. Three things can
+make the text it reads not be the body, and each SHALL be refused rather than judged.
+
+**The anchor SHALL be unique.** The function is located by line position, which rules out a mid-line mention
+and nothing more: a whole-line copy of the signature — inside a block comment, an outer doc comment, a
+multi-line string, or a second module — anchors exactly as well as the definition. Where more than one line
+could anchor the read, the reaction SHALL decline. This is the half no in-body check can cover, because every
+delimiter that made such an extent wrong sits outside it; measured, a commented-out copy above the function let
+a body carrying an independent shell-local guard read as a conforming delegation.
+
+**An extent carrying a literal or comment delimiter SHALL be refused.** The extent is found by counting braces,
+and a string literal, a character literal, or a block comment inside the body moves it; where the extent carries
+`"`, `'`, or `/*` in executed code, the reaction SHALL refuse. Stating the refusal closes a false negative
+rather than describing one: this requirement's comparison is a count and a containment, and both survive a
+truncated extent unharmed — a second semantic-boundary access past the cut is absent from what is compared, so
+the one shape the requirement refuses reads as the delegation it demands. Measured on synthetic bodies in the
+tracked shape, each returning the conforming verdict before the refusal existed; the tracked body itself carries
+no such delimiter, which is why a fixture rather than the tracked file is the observation source.
+
+**Delimiters SHALL be read in executed code only, on the same terms the brace count uses.** Text after `//`
+cannot move a brace, because the count already treats it as prose, so refusing on a delimiter there would refuse
+on text that cannot cause the fault — and an apostrophe in ordinary English is one reflow away from the tracked
+body. By the same rule the comparison SHALL NOT read a comment as code: the required call appearing only in a
+comment does not satisfy the requirement, which it did while tails were compared.
+
+The count SHALL be over the accessor's **name** rather than a receiver spelling. A rebinding, an associated-
+function call, or a reborrow reaches the semantic boundaries just as a direct receiver does, and counting one
+spelling counted the spelling: measured, each walked past the comparison while an independent shell-local guard
+stood in the body. The *direct* spelling remains what the delegation containment holds.
 
 Over-refusal is the declared direction, and the character literal is why it must be said out loud: a lifetime is
 spelled with the same delimiter, so a composition body that names one is refused too. That cost is accepted
@@ -150,12 +170,49 @@ reaction could observe, and it carries no scenario for that reason.
 
 #### Scenario: The composition body carries a delimiter that can move the read extent — a stated bound
 
-- **WHEN** the extent read for `evaluate_constitution` carries `"`, `'`, `/*`, or `*/` on an executed line
+- **WHEN** the extent read for `evaluate_constitution` carries `"`, `'`, or `/*` in executed code
 - **THEN** the reaction refuses to judge, naming the delimiter — a stated bound. It does not decide whether the
   body delegates, because the extent it would decide over may not be the body; separating a brace in code from
   one inside a string, a character literal, or a block comment needs the lexing this repository measured and
-  rejected, so the reaction declines the verdict instead of guessing at it
+  rejected, so the reaction declines the verdict instead of guessing at it. The set is three delimiters and not
+  four: a block comment opened above the signature closes *after* the brace it hides, so the extent is cut
+  before the `*/` and carries no delimiter at all — a fourth member no shape reaches is a declared set drifting
+  from its enumerator, deletable with every document still agreeing
 - **PINNED-BY** `an_ambiguous_delegation_extent_is_refused_rather_than_judged`
+
+#### Scenario: A second line could anchor the read
+
+- **WHEN** more than one line in the source has the composition function's signature as its trimmed start — a
+  commented-out copy, a doc-comment example, a copy inside a multi-line string, or a second module's definition
+- **THEN** the reaction declines rather than reading the first, because it cannot know which body is the
+  subject, and the delimiters that made the wrong extent wrong sit outside that extent where no in-body check
+  reaches them
+
+#### Scenario: A delimiter appears only inside a comment
+
+- **WHEN** the extent's only `"`, `'`, or `/*` sits after a `//`, whether on its own line or as a tail
+- **THEN** the reaction judges the body normally, because the brace count already treats that text as prose and
+  a delimiter that cannot move a brace is not evidence the extent is wrong
+
+#### Scenario: The required call appears only in a comment
+
+- **WHEN** the body's only occurrence of the direct `hunyi::check_all` delegation is inside a comment
+- **THEN** the reaction does not report delegation, because a requirement satisfied by prose is satisfied in
+  appearance and failed in substance
+
+#### Scenario: A second semantic-boundary access is reached through a rebinding
+
+- **WHEN** the body reaches the semantic boundaries a second time through a local binding, an associated-function
+  call, or a reborrow rather than through the declared receiver spelling
+- **THEN** the reaction reports it, because the requirement admits one access however the receiver is written
+
+#### Scenario: A moved extent leaves no delimiter behind
+
+- **WHEN** a block comment opened above the signature closes after a brace it hides, so the extent is cut before
+  any delimiter reaches it
+- **THEN** the reaction still fails rather than reporting delegation, because the surviving text loses the
+  delegation along with everything else — the residual is loud, which is a property held by a reaction rather
+  than asserted here
 
 #### Scenario: The tracked composition body is still judged
 
@@ -165,7 +222,6 @@ reaction could observe, and it carries no scenario for that reason.
   satisfy the bound above while observing nothing
 
 ### Requirement: The built-in path SHALL keep its behaviour, and the two paths SHALL be held equal
-
 
 `check_constitution` and the CLI SHALL keep their present composition path and observable behaviour, coverage
 included. The protocol SHALL be an additional entry rather than a replacement.
@@ -198,7 +254,12 @@ SHALL NOT be re-asserted here.
 
 Two things follow from *recognized by position*, and both were measured as gaps rather than reasoned about. The
 method SHALL be located by **line position** — a line whose trimmed start is the signature — so a mention of it
-inside a comment or a string cannot be brace-matched from. And a **trailing comment** on the delegation SHALL be
+*within* a line of prose cannot be brace-matched from. That is all line position buys, and the spec claimed more
+than it bought: a **whole-line** copy of the signature inside a block comment has the signature as its trimmed
+start, so it anchors exactly as well as the definition, and a decoy conforming copy above a divergent method let
+the equality pass on text that was not the method — measured. The anchor SHALL therefore also be **unique**: two
+lines that could anchor the read make the subject unknown, and the reader SHALL decline rather than take the
+first. And a **trailing comment** on the delegation SHALL be
 prose, not a second list: the region discipline this family already holds says a comment is never executed text,
 and the reaction that judges a shell gate's own text strips one before comparing for exactly this reason.
 The reaction SHALL apply Rust line-comment semantics to the inspected body: a `//` line is prose, while a Rust
@@ -255,7 +316,7 @@ dimensions remain independently implemented on both sides, and for them the reac
   every definition to the next close. For **this** comparison the error direction is the safe one, and
   it is what the pin shows — no brace-carrying construct survives the exact one-statement comparison, so a moved
   extent refuses a **conforming** body rather than accepting a divergent one. The direction is a property of the
-  comparison rather than of the extent, and SHALL NOT be read as a property of every reader of that extent: the
+  comparison rather than of the extent, and it does not transfer to another reader of that extent: the
   same moved extent meeting a count-and-containment comparison accepts a divergent body instead, which is why
   the shell-delegation reaction refuses an ambiguous extent rather than inheriting this bound
 - **PINNED-BY** `a_brace_in_a_block_comment_moves_the_body_extent`

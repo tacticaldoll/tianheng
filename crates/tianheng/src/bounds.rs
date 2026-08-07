@@ -118,15 +118,16 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             BoundId::new(
                 "observer-protocol/the-composition-body-carries-a-delimiter-that-can-move-the-read-extent-a-stated-bound",
             ),
-            "the extent read for `evaluate_constitution` carrying `\"`, `'`, `/*`, or `*/` on an executed line",
+            "the extent read for `evaluate_constitution` carrying `\"`, `'`, or `/*` in executed code",
             // Refusing rather than over-reacting, because this comparison cannot detect its own truncation: a
             // count of one and a containment are both satisfied by the remainder, so a second semantic-boundary
             // access past the cut reads as the delegation the requirement demands.
             Extent::Reached(Reached::RefusesToJudge {
-                because: "a string, character, or block-comment delimiter can hide a brace from the extent \
-                          count, so the text read may not be the function's body, and separating the two needs \
-                          the lexing this tree's own lexer suites defeat — a verdict withheld is loud, while \
-                          the verdict this comparison would give is a silent pass".into(),
+                because: "a string, character, or block-comment delimiter in executed code can hide a brace \
+                          from the extent count, so the text read may not be the function's body, and \
+                          separating the two needs the lexing this tree's own lexer suites defeat — a verdict \
+                          withheld is loud, while the verdict this comparison would give is a silent pass"
+                    .into(),
             }),
             "an_ambiguous_delegation_extent_is_refused_rather_than_judged",
         ),
