@@ -157,10 +157,10 @@ fn a_header_below_a_leading_comment_over_reacts() {
     );
 }
 
-/// **The published surface is enough**, checked rather than claimed.
+/// **The public surface under test is enough**, checked rather than claimed.
 ///
 /// The example's whole load-bearing result is that joining a run needed no addition to any crate's public API —
-/// and the spec says that if an outside crate *cannot* do it with the published surface alone, that is the finding
+/// and the spec says that if an outside crate *cannot* do it with the public surface alone, that is the finding
 /// rather than a reason to publish whatever the example wanted. An assertion in prose cannot hold that: a future
 /// edit reaching into `guibiao` or `xuanji` directly would keep every other test green while quietly making the
 /// example prove the opposite of what it exists to prove.

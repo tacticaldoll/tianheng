@@ -73,16 +73,16 @@ pub struct BoundDecl {
     id: BoundId,
     shape: Cow<'static, str>,
     extent: Extent,
-    pinned_by: Cow<'static, str>,
+    defence: Defence,
 }
 
 impl BoundDecl {
-    /// Declare a bound.
+    /// Declare a bound defended by a test.
     ///
     /// `shape` names what the bound stops at, in the declaring scenario's terms. `pinned_by` is the test that
     /// defends it — what that test must *demonstrate* is not a parameter, because [`Extent::demonstrates`]
     /// already determines it and a second copy of one fact can disagree with the first.
-    pub fn new(
+    pub fn pinned(
         id: BoundId,
         shape: impl Into<Cow<'static, str>>,
         extent: Extent,
@@ -92,7 +92,53 @@ impl BoundDecl {
             id,
             shape: shape.into(),
             extent,
-            pinned_by: pinned_by.into(),
+            defence: Defence::PinnedBy {
+                first: pinned_by.into(),
+                additional: Vec::new(),
+            },
+        }
+    }
+
+    /// Declare a bound defended by more than one test.
+    ///
+    /// `first` keeps the state non-empty in the type; `additional` carries every other test cited by the same
+    /// spec scenario.
+    pub fn pinned_by_many<I, S>(
+        id: BoundId,
+        shape: impl Into<Cow<'static, str>>,
+        extent: Extent,
+        first: impl Into<Cow<'static, str>>,
+        additional: I,
+    ) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<Cow<'static, str>>,
+    {
+        Self {
+            id,
+            shape: shape.into(),
+            extent,
+            defence: Defence::PinnedBy {
+                first: first.into(),
+                additional: additional.into_iter().map(Into::into).collect(),
+            },
+        }
+    }
+
+    /// Declare a bound whose missing test is tracked explicitly.
+    pub fn unpinned(
+        id: BoundId,
+        shape: impl Into<Cow<'static, str>>,
+        extent: Extent,
+        tracker: impl Into<Cow<'static, str>>,
+    ) -> Self {
+        Self {
+            id,
+            shape: shape.into(),
+            extent,
+            defence: Defence::Unpinned {
+                tracker: tracker.into(),
+            },
         }
     }
 
@@ -111,9 +157,9 @@ impl BoundDecl {
         &self.extent
     }
 
-    /// The name of the test that defends this bound.
-    pub fn pinned_by(&self) -> &str {
-        &self.pinned_by
+    /// How this bound is defended, or where the missing defence is tracked.
+    pub const fn defence(&self) -> &Defence {
+        &self.defence
     }
 
     /// Whether **every** string this declaration carries borrows rather than owning.
@@ -133,7 +179,7 @@ impl BoundDecl {
     /// compile here rather than being silently unmeasured — the one place `#[non_exhaustive]` helps rather than
     /// hinders, since the guard and the enum live in the same crate.
     pub fn borrows_every_string(&self) -> bool {
-        borrowed(&self.id.0) && borrowed(&self.shape) && borrowed(&self.pinned_by) && {
+        borrowed(&self.id.0) && borrowed(&self.shape) && self.defence.borrows() && {
             match &self.extent {
                 Extent::OutOfReach { because } => borrowed(because),
                 Extent::Reached(reached) => match reached {
@@ -151,6 +197,58 @@ impl BoundDecl {
                     }
                 },
             }
+        }
+    }
+}
+
+/// The evidence state of a declared observation bound.
+///
+/// This is a tagged union because a pinning test and tracked missing defence are mutually exclusive states.
+/// A mandatory string previously made `UNPINNED` expressible in the specification and impossible in the typed
+/// register, so the two sources of truth could agree only while every live declaration happened to be pinned.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Defence {
+    /// One or more tests that demonstrate the direction predicted by the bound's extent.
+    PinnedBy {
+        /// The first pin, carried separately so an empty pinned state is unrepresentable.
+        first: Cow<'static, str>,
+        /// Further pins cited by the same bound scenario.
+        additional: Vec<Cow<'static, str>>,
+    },
+    /// No pinning test exists yet; the named tracker owns closing that debt.
+    Unpinned {
+        /// A tracked project reference that owns the missing defence.
+        tracker: Cow<'static, str>,
+    },
+}
+
+impl Defence {
+    /// Every pinning test, in declaration order.
+    pub fn pinning_tests(&self) -> Option<impl Iterator<Item = &str>> {
+        match self {
+            Self::PinnedBy { first, additional } => Some(
+                std::iter::once(first.as_ref())
+                    .chain(additional.iter().map(std::convert::AsRef::as_ref)),
+            ),
+            Self::Unpinned { .. } => None,
+        }
+    }
+
+    /// The tracker, when this bound has no pinning test yet.
+    pub fn tracker(&self) -> Option<&str> {
+        match self {
+            Self::PinnedBy { .. } => None,
+            Self::Unpinned { tracker } => Some(tracker),
+        }
+    }
+
+    fn borrows(&self) -> bool {
+        match self {
+            Self::PinnedBy { first, additional } => {
+                borrowed(first) && additional.iter().all(borrowed)
+            }
+            Self::Unpinned { tracker } => borrowed(tracker),
         }
     }
 }

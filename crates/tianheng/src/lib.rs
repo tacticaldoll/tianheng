@@ -53,7 +53,7 @@ pub use bounds::observation_bounds;
 // direct edge to 璇璣 would breach the law this crate governs itself by.
 pub use guibiao::StaticObserver;
 pub use hunyi::{
-    BoundDecl, BoundId, Demonstrates, Extent, FactGranularity, Observer, Owner, Reached,
+    BoundDecl, BoundId, Defence, Demonstrates, Extent, FactGranularity, Observer, Owner, Reached,
     SemanticObserver,
 };
 pub use louke::RuntimeObserver;
@@ -261,12 +261,12 @@ impl From<GnomonConstitution> for Constitution {
 pub mod prelude {
     pub use super::{
         AsyncExposureBoundary, Baseline, BaselineEntry, BoundDecl, BoundId, Boundary, BoundaryKind,
-        Constitution, CrateBoundary, Demonstrates, DependencyKind, DynTraitBoundary, Extent,
-        FactGranularity, Finding, ForbiddenMarkerBoundary, GovernanceTest, ImplTraitBoundary,
-        ModuleBoundary, ModuleRule, NoExistentialLeak, Observer, Outcome, Owner, Polarity, Reached,
-        Report, Rule, RuleKey, Run, RuntimeBoundary, RuntimeObserver, SansIoPure, ScanDepth,
-        SemanticObserver, Severity, SignatureBoundary, SourceKind, StaticObserver,
-        StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary, Violation, ViolationId,
-        VisibilityBoundary, VisibilityCeiling, check, check_constitution, run,
+        Constitution, CrateBoundary, Defence, Demonstrates, DependencyKind, DynTraitBoundary,
+        Extent, FactGranularity, Finding, ForbiddenMarkerBoundary, GovernanceTest,
+        ImplTraitBoundary, ModuleBoundary, ModuleRule, NoExistentialLeak, Observer, Outcome, Owner,
+        Polarity, Reached, Report, Rule, RuleKey, Run, RuntimeBoundary, RuntimeObserver,
+        SansIoPure, ScanDepth, SemanticObserver, Severity, SignatureBoundary, SourceKind,
+        StaticObserver, StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary, Violation,
+        ViolationId, VisibilityBoundary, VisibilityCeiling, check, check_constitution, run,
     };
 }
