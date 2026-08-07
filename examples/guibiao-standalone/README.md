@@ -4,10 +4,8 @@ Adopt **just the static dimension**: the syn-free import/dependency linter, one 
 no `syn`. This is a tiny hexagonal app whose `domain` must not import `infra` — and
 deliberately does, so you can watch 圭表 react.
 
-```toml
-[dependencies]
-guibiao = "0.4"   # the whole footprint — light by design
-```
+The committed [manifest requirement](Cargo.toml) is the adopter-facing form. 圭表 is the whole
+dependency footprint — light by design.
 
 Declare the law in Rust (`src/governance.rs`), then react:
 
