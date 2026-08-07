@@ -60,59 +60,6 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **A rejected or retired observation point reaches no agent, so it is re-proposed.** *Class:* READY-PATCH for
-  the register-and-projection half; WATCH for the executable-probe half. *Observed pressure:* 24 prose sites
-  matched across 13 files in four non-overlapping phrasings (`measured and rejected` / `was rejected` /
-  `was dropped` / `would false-positive`); two of the 24 were the scan's own false positives, and after
-  de-duplication about 13 distinct rejections remain. Nothing enumerates them. They divide by evidence:
-  a detector rejected for false positives, a design rejected for adding a name without a reaction, an approach
-  rejected for false negatives, and — new in this window — a detector built, hardened three rounds and defeated.
-  *Observation source:* that scan over `AGENTS.md`, `PROJECT.md`, `BACKLOG.md`, `docs/`, `crates/`, `scripts/`,
-  2026-08-07. *Current reaction or bound:* none; `tianheng list`, `AGENTS.self-law.md` and the bound projections
-  carry accepted law and declared limits only, never what was refused. *Risk:* the same rejection is re-proposed,
-  re-measured and re-rejected. This is not hypothetical — `scripts/check_bound_register.sh` records that the
-  harness enumeration "was rejected TWICE in this file's own comments, on an unmeasured premise", then measured
-  at 107ms cold and adopted; and the register's shared-bound rule was deliberately reversed with the reversal
-  recorded. The repository already performs this office by hand, in prose. *Promotion trigger:* **fired** — the
-  2026-08-07 session reached for the rejected prose-number detector on hitting a census drift and was stopped
-  only by having read `AGENTS.md` end to end. *Version class:* patch; repository-internal, shipping in no crate.
-  *Authority:* this entry and the scan above.
-  *Shape, if promoted:* the fifth instance of the enumerate → react → audit cycle, beside
-  `observation-bound-register`, `observation-bound-model`, `gate-shape-contract` and `projection-register` —
-  declarations typed in Rust, a generated staleness-checked projection, `projection-register` then compelling an
-  `AGENTS.md` mention. Not a new crate, not a fourth register, and explicitly not the separate ADR file class
-  `AGENTS.md` forbids: a record is `(what is claimed absent, what was measured, disposition, defence)`, never
-  narrative. Two constraints the evidence forces — a record must separate its **load-bearing** reason from its
-  **incidental** evidence (the prose-detector rejection leads with four closable false positives and buries the
-  one unclosable false negative), and it must show which **closure options** were weighed, because a false
-  positive has closures other than rejection (narrow the region, narrow the shape, baseline the known ones,
-  downgrade to warn, invert to an allowlist) and 11 of 13 records weighed none. A derived prefix, not an authored
-  confidence: strength computed from whether the thing was built, whether its load-bearing reason is falsifiable
-  by a runnable check, whether closures were recorded, and whether a re-proposal event is decidable — the same
-  move as `Extent::demonstrates`, so it cannot be self-assessed. *Its own first bound:* a rejection with no
-  decidable re-proposal event cannot be reacted to; checking that nobody re-added a detector over prose would
-  need a detector over prose, which is the rejected thing.
-
-- **A rule's completeness is carried only in its variant name.** *Class:* READY-PATCH for the projection half;
-  WATCH for the reaction half. *Observed pressure:* `Rule` and `ModuleRule` offer seven enumerated-denylist
-  shapes (`ForbidDependencyOn`, `ForbidFeaturesOf`, `MustNotImport`, `MustNotBeImportedBy`, `must_not_expose`,
-  `must_not_expose_dyn_of`, `must_not_expose_impl_trait_of`) alongside allowlist shapes, and nothing typed,
-  projected or reacted distinguishes the two. Tianheng's own enforced self-law uses **zero** of the enumerated
-  shapes — six `restrict_dependencies_to`, three `must_not_call_inline`, one total async prohibition — while the
-  shipped examples run 17 enumerated-denylist uses to 13 allowlist across seven examples, three of them
-  denylist-only. Examples are the 潛移 imitation surface, so the shipped gravity pulls adopters toward the
-  incomplete shape the project does not itself use. *Observation source:* variant enumeration plus grep counts
-  over `self_governance.rs` and `examples/`, 2026-08-07. *Current reaction or bound:* none; no declared bound
-  anywhere speaks to denylist incompleteness. *Risk:* an adopter writes an enumerated denylist believing it
-  complete, and nothing says otherwise. *Promotion trigger:* fired for the projection half. The reaction half
-  fires on the first adopter rule whose unenumerated remainder produces a false negative, or on the first target
-  carrying both an allowlist and a denylist — the redundancy `AGENTS.md`'s Layer 1 already forbids and nothing
-  checks. *Version class:* patch if projection-only; minor if it adds a reaction that fires by default.
-  *Authority:* this entry, corroborated by the 0.5.0 window's shell-delegation reaction, where the same
-  denylist-over-spellings shape was defeated seven ways across two review rounds before being reversed to an
-  allowlist. *Note:* completeness is derivable from the variant, so it is an additive accessor rather than a new
-  field, and the variants are already `#[non_exhaustive]`.
-
 - **Every normative SHALL either has a reaction or is a declared bound.** *Observed pressure:* **ten** found
   and closed through re-review #3 of the 0.5.0 window. The first seven were the family's declarations staying
   literal, the equality fixture reacting in every dimension, an observer declaring exactly its dimension's bounds
@@ -415,6 +362,50 @@ consumer for an undemonstrated deduplication.
 
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
+
+- **WATCH: a rejected observation point is recorded only in prose, and prose reaches no agent at the moment of
+  temptation.** *Observed pressure:* rejections of whole detectors and approaches are scattered across doc
+  comments, `AGENTS.md`, `BACKLOG.md` and spec prose in several non-overlapping phrasings, with nothing
+  enumerating them. Reproduce rather than trust a figure here:
+  `git ls-files 'AGENTS.md' 'PROJECT.md' 'BACKLOG.md' 'docs/*' 'crates/*' 'scripts/*' | xargs grep -niE 'measured
+  and rejected|was rejected|was dropped|would false-positive'` — 15 hits across 10 files when measured
+  2026-08-07, of which two were the scan's own false positives (`was dropped` describing a defect, not a
+  rejection), which is itself evidence that any enumeration must come from declarations rather than from a grep
+  over prose. *Observation source:* that command. *Current reaction or bound:* none enumerates them, though
+  `docs/observation-bounds.md` shows the practice already reaching a generated projection by hand — it carries
+  one refused approach with its measurement ("scanning paragraphs instead of lines … would not have caught it").
+  One instance in a projection is the pattern existing without being enumerated, not the gap being closed.
+  *Risk:* a rejection is re-proposed, re-measured and re-rejected; the reverse risk is equally real and is why
+  this is WATCH rather than READY — see the trigger. *Promotion trigger:* **not fired.** The candidate evidence
+  points both ways. `scripts/check_bound_register.sh:399` records that the harness enumeration "was rejected
+  TWICE in this file's own comments, on an unmeasured premise", then measured at 107ms cold and adopted — a
+  rejection that a later reader *did* consult and correctly overturn, which argues that a durable, projected
+  register would have entrenched a wrong answer twice. The trigger is a rejection demonstrably **re-proposed and
+  re-measured** by someone who could not find the record, evidenced by a tree artefact rather than by a report
+  from inside the work. *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
+  `observation-bound-register`, whose spec states the purpose ("recorded as rejected rather than left to be
+  re-proposed") that nothing currently carries into an agent's context.
+  *Shape, if it fires:* another instance of the enumerate → react → audit cycle beside the five
+  `projection-register` already counts, not a new crate and not the separate ADR file class `AGENTS.md` forbids.
+  Two constraints the survey already forces on the record type: separate the **load-bearing** reason from the
+  **incidental** evidence — `AGENTS.md`'s prose-detector rejection leads with four closable false positives and
+  buries the one unclosable false negative — and make strength **derived** from structural facts rather than
+  authored, the way `Extent::demonstrates` is, so it cannot be self-assessed.
+
+- **WATCH: the rule shape the self-law relies on most is absent from the teaching surface.**
+  *Observed pressure:* `restrict_dependencies_to` carries six of the eleven boundaries in `AGENTS.self-law.md`
+  and appears **zero** times anywhere under `examples/` (`grep -rc restrict_dependencies_to examples/`). Examples
+  are the 潛移 imitation surface, so the allowlist shape the project governs itself with is the one an adopter
+  never sees demonstrated. *Observation source:* that grep plus `AGENTS.self-law.md`, 2026-08-07.
+  *Current reaction or bound:* none. *Risk:* an adopter imitates what the examples show. *Promotion trigger:* an
+  example is added or revised for another reason, at which point the shape is chosen deliberately rather than by
+  omission. *Version class:* patch; `examples/` ships in no crate. *Authority:* `governance-dogfood`, which owns
+  the examples' reaction. *Explicitly not claimed:* that enumerated denylists are wrong, or that the self-law
+  avoids them. It does not — all four of its inline-symbol-path confinements carry an enumerated verb list, and
+  `inline-symbol-path-confinement` already declares the unlisted remainder as a bound the adopter owns. An
+  earlier draft of this entry claimed the opposite on four counts and was corrected by review; what survives is
+  the absence above and nothing more.
+
 
 - **WATCH:**
   - **A `#[path]`-shared test module's `allow(dead_code)` cannot distinguish "used by no binary" from "used by
