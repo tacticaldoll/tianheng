@@ -355,6 +355,18 @@ them.
   outlived its instance and was left pinned by nothing. It is now pinned **directly**, against a fixture gate that
   carries the shape on purpose — a process substitution whose producer exits non-zero as its ordinary answer —
   independent of whether any real gate still does.
+- **Two helpers nothing called are deleted, and the shared-capture library says what it actually shares.**
+  `capture_nul_or_refuse` was written into `scripts/lib/capture.sh` and never adopted — and deleting it is the
+  answer rather than wiring it up, because it `mktemp`ed and `rm`ed internally, the discipline `513803a` measured
+  and rejected ("a `mktemp` with its own `rm` leaks the file on any abort between the two"), while the one real
+  NUL reader reuses a single file joined to its gate's EXIT trap. Adopting it there would have regressed a closed
+  defect. What its never being called cost is recorded where the library explains itself: it read its producer's
+  status as `local status=$?` inside `if ! "$@" > …; then`, where `$?` is the **negated** status and always `0`, so
+  its diagnostic could only ever have said "exit 0". `Header::comments` in the shared test-support module goes the
+  same way, dead since it was written — invisible to every clippy pass because that module's `#![allow(dead_code)]`
+  is correct for a `#[path]`-shared module and cannot distinguish "used by no binary" from "used by some". That
+  class is filed with its trigger rather than solved.
+
 - **A census is produced, never typed, and `AGENTS.md` now says so.** Hand-written figures drifted in every kind of
   place they can live during this window — a code doc, two backlog entries, a changelog sentence, three files at
   once, the version-horizon paragraph that assigns the release number, and a **generated projection's template**.

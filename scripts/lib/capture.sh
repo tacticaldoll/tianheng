@@ -17,7 +17,17 @@
 #
 # `BACKLOG.md` recorded a swallowed subshell status as the window's most-recurring class — nine mentions — and
 # `check_bound_register.sh` already had the right shape locally in `read_tracked_files`. It was bespoke, which is
-# why that same gate still carried two unchecked producers. This is that shape, shared.
+# why that same gate still carried two unchecked producers. This is that shape, shared — for a producer whose
+# output the caller consumes from a file it owns.
+#
+# **The NUL case is deliberately NOT here.** A `capture_nul_or_refuse` was written and never adopted, and deleting
+# it is the answer rather than wiring it up: it `mktemp`ed and `rm`ed internally, which is the discipline
+# `513803a` measured and rejected — "a `mktemp` with its own `rm` leaks the file on any abort between the two" —
+# whereas the one real NUL reader, `read_tracked_files`, reuses a single file joined to its gate's EXIT trap. So
+# adopting the shared variant there would have regressed a closed defect, and `read_tracked_files` stays local by
+# design. Note what its never being called cost: it read its producer's status as `local status=$?` inside
+# `if ! "$@" > …; then`, where `$?` is the NEGATED status and always 0 — a diagnostic that could only ever have
+# said "exit 0". `capture_or_refuse` below takes the status with `|| status=$?` for exactly that reason.
 
 # Run a producer, capturing its output into the file named by $2 and refusing in the parent shell if it failed.
 #
@@ -50,27 +60,4 @@ capture_or_refuse() {
     "$@" >"$destination" || status=$?
     [[ $status -eq 0 || ( -n $ordinary_empty && $status -eq $ordinary_empty ) ]] \
         || "$refuse" "reading $what failed (exit $status), and a failed read is not an empty result — treating it as one reports a verdict over content that was never read"
-}
-
-# The same, into an array named by $2, for a NUL-separated producer.
-#
-#   capture_nul_or_refuse <what> <array-name> <refusal-function> -- cmd...
-#
-# `-z` rather than newlines wherever git is the producer: `git ls-files` quotes a non-ASCII path by default, so a
-# quoted path names no file on disk.
-capture_nul_or_refuse() {
-    local what=$1 refuse=$3
-    local -n _dest=$2
-    shift 3
-    [[ $1 == -- ]] && shift
-    local scratch
-    scratch=$(mktemp) || "$refuse" "could not create a temporary file to capture $what"
-    _dest=()
-    if ! "$@" >"$scratch"; then
-        local status=$?
-        rm -f "$scratch"
-        "$refuse" "reading $what failed (exit $status), and a failed enumeration is not an empty repository — treating it as one reports a verdict over content that was never read"
-    fi
-    mapfile -d '' -t _dest <"$scratch"
-    rm -f "$scratch"
 }
