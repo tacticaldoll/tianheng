@@ -20,12 +20,9 @@ impl SemanticObserver {
 }
 
 impl Observer for SemanticObserver {
-    /// Reads its own workspace metadata, as this dimension already does — 三儀 ⊥ 三儀: no shared scanner, so
-    /// nothing is threaded in from a sibling.
+    /// Delegates to the dimension's composed entry point, which reads its own workspace metadata
+    /// when boundaries require observation — 三儀 ⊥ 三儀: no scanner is threaded in from a sibling.
     fn observe(&self, manifest_path: &Path) -> Outcome {
-        if self.boundaries.is_empty() {
-            return Outcome::Clean;
-        }
         check_all(&self.boundaries, manifest_path)
     }
 
