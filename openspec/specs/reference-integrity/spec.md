@@ -1,4 +1,11 @@
-## ADDED Requirements
+# reference-integrity Specification
+
+## Purpose
+
+Keep tracked in-repository path references and Tianheng's required governance surface honest under a hermetic
+policy, so a checkout's verdict does not depend on ambient process state.
+
+## Requirements
 
 ### Requirement: The real governance-document policy SHALL be hermetic
 
