@@ -87,6 +87,17 @@ reported when more than one observer cannot judge. Deterministic and stated, nev
 - **THEN** the fold reports one clean outcome, and an empty observer set SHALL NOT be reported as clean —
   composing nothing is a misconfiguration, not a passing run
 
+### Requirement: An empty semantic observer SHALL not read workspace metadata
+
+A semantic observer with no declared boundary SHALL return `Clean` without reading the manifest. This SHALL
+match the built-in composition path's empty-dimension behaviour, including when the supplied manifest does not
+exist.
+
+#### Scenario: Empty semantic boundaries with an unreadable manifest
+
+- **WHEN** a semantic observer has no boundaries and receives a path that cannot be read
+- **THEN** it returns `Clean`, because there is no semantic observation to perform
+
 ### Requirement: The built-in path SHALL keep its behaviour, and the two paths SHALL be held equal
 
 `check_constitution` and the CLI SHALL keep their present composition path and observable behaviour, coverage

@@ -23,10 +23,29 @@ impl Observer for SemanticObserver {
     /// Reads its own workspace metadata, as this dimension already does — 三儀 ⊥ 三儀: no shared scanner, so
     /// nothing is threaded in from a sibling.
     fn observe(&self, manifest_path: &Path) -> Outcome {
+        if self.boundaries.is_empty() {
+            return Outcome::Clean;
+        }
         check_all(&self.boundaries, manifest_path)
     }
 
     fn bounds(&self) -> Vec<BoundDecl> {
         observation_bounds()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_boundaries_are_clean_without_reading_a_manifest() {
+        let observer = SemanticObserver::new(SemanticBoundaries::default());
+        let absent = std::env::temp_dir().join(format!(
+            "tianheng-empty-semantic-observer-{}-does-not-exist/Cargo.toml",
+            std::process::id()
+        ));
+
+        assert!(matches!(observer.observe(&absent), Outcome::Clean));
     }
 }

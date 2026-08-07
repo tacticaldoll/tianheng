@@ -491,6 +491,8 @@ them.
   performs.*
 
 ### Fixed
+- An empty `SemanticObserver` now returns `Clean` before reading workspace metadata, matching the
+  built-in composition path even when the supplied manifest does not exist.
 - **The pre-publish gate now verifies the release tag's signature instead of matching its shape.** It grepped the
   whole tag object — message included — so an annotated-but-unsigned tag whose message quoted a
   `-----BEGIN SSH SIGNATURE-----` block, a pasted verification log, satisfied it. `cargo publish` stamps a
