@@ -205,12 +205,9 @@ Because that same measurement leaves 渾儀 unable to watch this crate, the reac
 - It SHALL over-approximate in the safe direction: it cannot distinguish a `pub` item in a private module from a
   publicly reachable one, and flags both. A false positive here is a sentence to write; a false negative is an
   exposure nobody governs.
-- It reads this crate's **top-level** source files only. That is sound exactly while every subdirectory of `src/`
-  is reached through a non-`pub` `mod` declaration, so nothing beneath one is reachable from outside the crate —
-  and the reaction SHALL **assert that premise** rather than rest on it. Measured, the files under `src/runner/`
-  are never opened, and an injected `pub fn … -> Option<Box<dyn Debug>>` among them leaves the reaction passing:
-  harmless while those modules are private, and invisible the moment one is not. How many files that is is
-  deliberately not written here — a count of an enumerable set, kept by hand, goes stale in silence.
+- It reads every Rust source file recursively below this crate's `src` directory. Directory nesting and module
+  visibility SHALL NOT remove a file from the corpus: a private nested module can still expose an item through a
+  public re-export. An unreadable traversed directory or Rust source SHALL fail loud rather than shorten the corpus.
 - Reading one line at a time leaves a residual the premise check cannot remove, declared as an observation bound
   below.
 
@@ -225,11 +222,10 @@ Because that same measurement leaves 渾儀 unable to watch this crate, the reac
 - **THEN** that observer is not evaluated, because a verdict resting on a boundary that could not be evaluated
   is not a verdict, and evaluating further would spend work on an answer that cannot be reported
 
-#### Scenario: A source subdirectory becomes publicly reachable
+#### Scenario: A trait object appears in a nested source file
 
-- **WHEN** a subdirectory of `src/` is reached through a `pub mod` declaration
-- **THEN** the reaction fails, because the premise justifying its top-level-only reading no longer holds and the
-  files beneath that module would otherwise leave its reach with nothing said
+- **WHEN** a Rust source below a nested `src` directory contains a one-line public trait-object signature
+- **THEN** the reaction reports it exactly as it reports the same signature in a top-level source file
 
 #### Scenario: A trait object on a wrapped signature's continuation line is not seen — a stated bound
 

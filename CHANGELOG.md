@@ -491,6 +491,8 @@ them.
   performs.*
 
 ### Fixed
+- The observer-protocol trait-object guard now scans Tianheng's Rust sources recursively, so moving a public item
+  into a private nested module cannot remove it from the corpus when a public re-export could still expose it.
 - Repository governance reactions now select Rust or shell executed-source regions explicitly, so Rust
   attributes are not discarded as shell comments and shell recognizers do not inherit Rust comment semantics.
 - An empty `SemanticObserver` now returns `Clean` before reading workspace metadata, matching the
