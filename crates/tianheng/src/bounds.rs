@@ -1,5 +1,7 @@
-//! The shell's own declared bounds — `observation-bound-model`'s, `observer-protocol`'s and
-//! `gate-shape-contract`'s, typed in the model they describe.
+//! The shell's own declared bounds: every capability whose reaction lives in this crate, typed in the model
+//! those reactions describe. Which capabilities those are is not listed here — the set is read from the
+//! declarations below by `observation-bound-model`'s bijection, and a second copy in prose would be the
+//! hand-typed census this family refuses.
 //!
 //! The capability that classifies where every other reaction stops must classify where **it** stops, or its
 //! leading figure — the count of declared false negatives — would be a number the counter had exempted itself
@@ -8,7 +10,7 @@
 
 use crate::{BoundDecl, BoundId, Extent, FactGranularity, Owner, Reached};
 
-/// Every observation bound `observation-bound-model` declares.
+/// Every observation bound declared by a capability whose reaction lives in this crate.
 pub fn observation_bounds() -> Vec<BoundDecl> {
     vec![
         BoundDecl::pinned(
