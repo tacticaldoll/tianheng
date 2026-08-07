@@ -27,23 +27,6 @@ The repository SHALL carry an agent-readable Markdown artifact projecting Tianhe
 - **WHEN** the `tianheng` crate declares `xingbiao` as a direct normal dependency
 - **THEN** the self-governance reaction reports an enforced violation against the shell dependency boundary
 
-### Requirement: The shell dependency reason SHALL add bounded architectural direction
-
-The projected `tianheng` dependency reason SHALL describe the layer direction protected by its
-direct normal-dependency boundary without repeating the allowlist membership already rendered by
-the rule. It SHALL speak only about direct edges and SHALL NOT claim exclusive composition or
-transitive runtime/data flow that this boundary does not observe.
-
-#### Scenario: The shell reason is directional rather than duplicative
-
-- **WHEN** the self-law projection renders the `tianheng` dependency boundary
-- **THEN** its reason distinguishes observation dimensions and projection serialization from the lower reaction-model and metadata-substrate edges, while the rule separately renders the exact allowlist
-
-#### Scenario: A reason correction preserves reaction semantics
-
-- **WHEN** the shell reason changes without changing target, rule, parameters, severity, or baseline
-- **THEN** the same allowed and forbidden direct normal dependencies produce the same outcomes and structured identities
-
 ### Requirement: A staleness test reacts when the checked-in projection drifts
 
 A test SHALL fail when the checked-in projection artifact differs, byte for byte, from the live projection generated from `tianheng_constitution()`. The comparison SHALL cover the **entire** artifact — both the generated boundary projection and any fixed preamble (the preamble being a generated constant, never hand-edited prose) — so no part of the artifact can drift unnoticed. The test SHALL follow the repository's existing repo-only discipline: it SHALL skip when run outside a workspace checkout (e.g. a packaged crate tarball), and SHALL fail loudly rather than skip when a workspace is expected but absent (the `TIANHENG_WORKSPACE_TESTS` signal). A one-command regeneration path SHALL overwrite the checked-in artifact from the live projection instead of asserting.
