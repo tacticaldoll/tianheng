@@ -1,7 +1,9 @@
 use std::path::Path;
 
 use hunyi::{
-    Outcome, RuleKey, SemanticBoundaries, StructuredFactIdentity, Violation, ViolationId, check_all,
+    BoundDecl, BoundId, Defence, Demonstrates, Extent, FactGranularity, Observer, Outcome, Owner,
+    Reached, RuleKey, SemanticBoundaries, SemanticObserver, StructuredFactIdentity, Violation,
+    ViolationId, check_all,
 };
 
 fn inspect(violation: &Violation) {
@@ -15,4 +17,16 @@ fn inspect(violation: &Violation) {
 fn standalone_semantic_surface_exposes_the_shared_reaction_model() {
     let _: fn(&SemanticBoundaries, &Path) -> Outcome = check_all;
     let _: fn(&Violation) = inspect;
+    let _ = std::mem::size_of::<(
+        BoundDecl,
+        BoundId,
+        Defence,
+        Demonstrates,
+        Extent,
+        FactGranularity,
+        Owner,
+        Reached,
+    )>();
+    fn accepts_observer<T: Observer>() {}
+    accepts_observer::<SemanticObserver>();
 }

@@ -87,6 +87,10 @@ them.
   dismissing it as governed policy.
 
 ### Added
+- `guibiao`, `hunyi`, and `louke` now expose the same observation-bound and observer vocabulary
+  from each dimension root: `BoundDecl`, `BoundId`, `Defence`, `Demonstrates`, `Extent`,
+  `FactGranularity`, `Observer`, `Outcome`, `Owner`, and `Reached`. A standalone-dimension adopter
+  no longer needs a direct `xuanji` dependency merely to name the protocol its dimension exposes.
 - The crates.io publish now runs through a source gate (`scripts/check_publish_source.sh`, reached via
   `scripts/publish.sh`) that refuses any source other than the signed-and-annotated-tagged
   `release: X.Y.Z` commit at the live tip of `main`. `cargo publish` records the commit it ran on in
