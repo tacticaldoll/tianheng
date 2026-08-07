@@ -59,6 +59,10 @@ quotes a verification log, stripping from the first such line truncates the payl
 a false refusal introduced by the hardening itself. Suffix removal keeps a quoted block inside the payload, where
 it belongs.
 
+The extracted signature SHALL be proven to be the exact suffix of the tag object before payload reconstruction.
+A mismatch SHALL exit `2` cannot-judge; it SHALL NOT reach cryptographic verification as an exit-`1` invalid
+signature.
+
 A signature this gate cannot read SHALL be cannot-judge (`2`), never a violation. A non-SSH signature is the live
 case. Reporting it as a wrong source would be a false refusal before an irreversible act.
 
@@ -81,6 +85,11 @@ A failure to read the tag object SHALL likewise be `2`, not `1`.
   before the real trailer
 - **THEN** the gate accepts it, because the payload is reconstructed by suffix removal and the quote stays inside
   the payload
+
+#### Scenario: Extracted signature and tag object disagree
+
+- **WHEN** Git's extracted non-empty SSH signature is not the exact suffix of the tag object read by the gate
+- **THEN** the gate exits `2` because it cannot reconstruct the signed payload reliably
 
 #### Scenario: A signature the gate cannot read
 
