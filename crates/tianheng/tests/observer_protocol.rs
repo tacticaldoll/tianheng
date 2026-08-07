@@ -337,7 +337,7 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
     }
     let body = Source::of(&text[open + 1..close?]);
     Some(
-        body.executed()
+        body.rust()
             .lines()
             .map(str::trim)
             .filter(|line| !line.is_empty())

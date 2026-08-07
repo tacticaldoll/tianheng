@@ -491,6 +491,8 @@ them.
   performs.*
 
 ### Fixed
+- Repository governance reactions now select Rust or shell executed-source regions explicitly, so Rust
+  attributes are not discarded as shell comments and shell recognizers do not inherit Rust comment semantics.
 - An empty `SemanticObserver` now returns `Clean` before reading workspace metadata, matching the
   built-in composition path even when the supplied manifest does not exist.
 - **The pre-publish gate now verifies the release tag's signature instead of matching its shape.** It grepped the

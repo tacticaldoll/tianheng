@@ -126,7 +126,7 @@ fn paths_named_in_header(header: &Header<'_>, tracked_files: &BTreeSet<&str>) ->
 /// to bless itself twice. The lesson each time is the same — when a reaction's subject is text, the reaction's own
 /// text is part of the corpus, so recognize by position or shape rather than by the bare string.
 fn defines_the_rule(source: &Source) -> bool {
-    source.executed().starts_a_line_with(RULE_DEFINITION)
+    source.rust().starts_a_line_with(RULE_DEFINITION)
 }
 
 /// A holder calls the shared rule in **executed** text. A bare comment mentioning the call used to be enough:
@@ -139,7 +139,7 @@ fn blessing_call_sites(source: &Source) -> usize {
         return 0;
     }
     source
-        .executed()
+        .rust()
         .lines()
         .map(|line| {
             RULE_CALLS
@@ -158,10 +158,7 @@ fn blessing_call_sites(source: &Source) -> usize {
 }
 
 fn holds_a_projection(source: &Source) -> bool {
-    !defines_the_rule(source)
-        && RULE_CALLS
-            .iter()
-            .any(|call| source.executed().contains(call))
+    !defines_the_rule(source) && RULE_CALLS.iter().any(|call| source.rust().contains(call))
 }
 
 /// Whether `needle` appears in `text` outside every fenced block.
@@ -242,7 +239,7 @@ fn holders(root: &Path) -> Vec<String> {
             if is_rust {
                 holds_a_projection(&text)
             } else {
-                text.executed().contains("BLESS")
+                text.shell().contains("BLESS")
             }
         })
         .collect();
@@ -319,7 +316,13 @@ fn every_generated_document_has_a_holder_and_every_holder_is_registered() {
                 // And the pair is tied from both sides: the holder must name the document it blesses, or the two
                 // agree only by a claim made in one direction.
                 let document = registering[0];
-                if !read(&root, holder).executed().contains(document) {
+                let source = read(&root, holder);
+                let names_document = if holder.ends_with(".rs") {
+                    source.rust().contains(document)
+                } else {
+                    source.shell().contains(document)
+                };
+                if !names_document {
                     offences.push(format!(
                         "{holder}: registered as the generator of {document} and does not name it, so the pair \
                          rests on the document's word alone"
