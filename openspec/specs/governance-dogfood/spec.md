@@ -111,10 +111,21 @@ complete successfully. The gate SHALL fail when an inventoried example has no fu
 when the driver claims an example name absent from the live inventory. This example-workspace
 inventory SHALL remain independent of the published boundary-family inventory.
 
+The focused matrices SHALL remain separate top-level Definition of Done gates. These are the matrices for
+published-family coverage, example ownership and artifact cleanup, and isolated-example quality. The top-level
+orchestration SHALL run them before the positive repository example driver, and that driver SHALL NOT recursively
+invoke those matrices.
+
 #### Scenario: Every live example is exercised
 
 - **WHEN** the examples gate completes against the repository's current example directories
 - **THEN** every immediate example workspace has completed its declared quality and reaction path
+
+#### Scenario: Focused refusals precede the positive driver without nested reruns
+
+- **WHEN** the repository Definition of Done exercises example dogfood
+- **THEN** it runs each focused failure matrix directly before the positive example driver, and the driver does
+  not invoke those matrices again
 
 #### Scenario: An unowned example fails loud
 
