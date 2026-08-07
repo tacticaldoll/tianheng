@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use tianheng::prelude::*;
 use tianheng::testing::assert_projection_matches;
-use tianheng::{BoundDecl, Extent, Owner, Reached};
+use tianheng::{BoundDecl, Defence, Extent, Owner, Reached};
 
 /// The projection this reaction holds fresh.
 const EXTENT_PROJECTION: &str = "docs/observation-bound-extents.md";
@@ -75,7 +75,26 @@ fn marks_a_bound(heading: &str) -> bool {
 /// One bound as the specs declare it: where it sits, and the test it cites.
 struct SpecBound {
     file: String,
-    pinned_by: Option<String>,
+    defence: Option<SpecDefence>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum SpecDefence {
+    PinnedBy(Vec<String>),
+    Unpinned { tracker: String },
+}
+
+fn spec_defence(line: &str) -> Option<SpecDefence> {
+    let line = line.trim();
+    if let Some(rest) = line.strip_prefix("- **PINNED-BY** ") {
+        return Some(SpecDefence::PinnedBy(vec![
+            rest.trim().trim_matches('`').to_string(),
+        ]));
+    }
+    line.strip_prefix("- **UNPINNED** ")
+        .map(|tracker| SpecDefence::Unpinned {
+            tracker: tracker.trim().to_string(),
+        })
 }
 
 /// Every declared bound the specs state, keyed by derived id.
@@ -115,7 +134,7 @@ fn spec_bounds(root: &Path) -> BTreeMap<String, SpecBound> {
                         id.clone(),
                         SpecBound {
                             file: format!("openspec/specs/{capability}/spec.md"),
-                            pinned_by: None,
+                            defence: None,
                         },
                     );
                     assert!(
@@ -131,12 +150,17 @@ fn spec_bounds(root: &Path) -> BTreeMap<String, SpecBound> {
                 continue;
             }
             if let Some(id) = &open {
-                if let Some(rest) = line.trim().strip_prefix("- **PINNED-BY** ") {
-                    let name = rest.trim().trim_matches('`').to_string();
-                    bounds
+                if let Some(defence) = spec_defence(line) {
+                    let bound = bounds
                         .get_mut(id)
-                        .expect("the open bound was just inserted")
-                        .pinned_by = Some(name);
+                        .expect("the open bound was just inserted");
+                    match (&mut bound.defence, defence) {
+                        (None, defence) => bound.defence = Some(defence),
+                        (Some(SpecDefence::PinnedBy(tests)), SpecDefence::PinnedBy(mut more)) => {
+                            tests.append(&mut more);
+                        }
+                        _ => panic!("{id} mixes pinned and unpinned defence states"),
+                    }
                 }
             }
         }
@@ -148,6 +172,16 @@ fn spec_bounds(root: &Path) -> BTreeMap<String, SpecBound> {
          over an empty set holds while proving nothing"
     );
     bounds
+}
+
+#[test]
+fn an_unpinned_spec_defence_keeps_its_tracker_and_no_test() {
+    assert_eq!(
+        spec_defence("- **UNPINNED** BACKLOG.md READY-PATCH missing-defence"),
+        Some(SpecDefence::Unpinned {
+            tracker: "BACKLOG.md READY-PATCH missing-defence".to_string(),
+        })
+    );
 }
 
 /// Every typed declaration the dimensions export.
@@ -261,14 +295,23 @@ fn every_classification_cites_the_test_its_spec_cites() {
         let Some(spec) = specs.get(id) else {
             continue; // the bijection test above owns that direction
         };
-        let cited = spec.pinned_by.as_deref();
-        // A spec citation may be crate-qualified (`hunyi::name`); the declaration transcribes it verbatim.
-        if cited != Some(decl.pinned_by()) {
+        let declared = match decl.defence() {
+            Defence::PinnedBy { .. } => SpecDefence::PinnedBy(
+                decl.defence()
+                    .pinning_tests()
+                    .expect("the matched pinned defence carries tests")
+                    .map(str::to_string)
+                    .collect(),
+            ),
+            Defence::Unpinned { tracker } => SpecDefence::Unpinned {
+                tracker: tracker.to_string(),
+            },
+            _ => panic!("{id}: the bound model does not know how to compare this defence variant"),
+        };
+        if spec.defence.as_ref() != Some(&declared) {
             disagreements.push(format!(
-                "{id}: {} cites `{}`, the declaration cites `{}`",
-                spec.file,
-                cited.unwrap_or("<no PINNED-BY>"),
-                decl.pinned_by()
+                "{id}: {} declares {:?}, the typed declaration carries {:?}",
+                spec.file, spec.defence, declared
             ));
         }
     }
@@ -395,7 +438,21 @@ fn render_extents(code: &BTreeMap<String, BoundDecl>) -> String {
                 "- **its defence must show**: {}\n",
                 decl.extent().demonstrates().as_str()
             ));
-            out.push_str(&format!("- **pinned by**: `{}`\n", decl.pinned_by()));
+            match decl.defence() {
+                Defence::PinnedBy { .. } => {
+                    for test in decl
+                        .defence()
+                        .pinning_tests()
+                        .expect("the matched pinned defence carries tests")
+                    {
+                        out.push_str(&format!("- **pinned by**: `{test}`\n"));
+                    }
+                }
+                Defence::Unpinned { tracker } => {
+                    out.push_str(&format!("- **unpinned**, tracked by: {tracker}\n"));
+                }
+                _ => panic!("the extent projection does not know this defence variant"),
+            }
         }
     }
     out
@@ -451,7 +508,7 @@ fn a_rationale_that_contradicts_its_extent_is_a_stated_bound() {
 
 /// A declaration whose rationale claims the opposite of the extent it carries.
 fn xuanji_bound_decl_with_a_lying_rationale() -> BoundDecl {
-    BoundDecl::new(
+    BoundDecl::pinned(
         tianheng::BoundId::new("probe-capability/a-fixture-bound"),
         "a shape used only to demonstrate that the rationale is not read",
         Extent::OutOfReach {

@@ -479,6 +479,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 
 - **because**: only an `impl` directly in such a body is recovered, so a deeper or `static`-wrapped one exposes without being observed
 - **its defence must show**: does not react
+- **pinned by**: `an_impl_nested_one_level_further_stays_a_stated_bound`
 - **pinned by**: `a_static_wrapped_impl_stays_a_stated_bound`
 
 ### `semantic-signature-coupling/an-invocation-inside-an-impl-body-is-a-stated-bound`

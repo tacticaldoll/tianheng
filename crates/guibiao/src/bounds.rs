@@ -14,7 +14,7 @@ use xuanji::{BoundDecl, BoundId, Extent, FactGranularity, Owner, Reached};
 pub fn observation_bounds() -> Vec<BoundDecl> {
     vec![
         // --- crate-source-boundary ---
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "crate-source-boundary/a-git-plus-version-dependency-is-flagged-though-it-would-publish-a-stated-bound",
             ),
@@ -26,7 +26,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "source_rule_flags_every_git_source_outside_a_registry_or_path_allowlist",
         ),
         // --- external-crate-confinement ---
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "external-crate-confinement/cfg-gated-code-is-observed-as-written-a-stated-bound",
             ),
@@ -37,7 +37,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "external-crate-confinement/the-lib-and-bin-conventional-path-conflation-is-a-stated-bound",
             ),
@@ -49,7 +49,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "confine_external_crate_conflates_coincident_lib_and_bin_conventional_paths",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound",
             ),
@@ -59,7 +59,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "confine_ignores_a_use_inside_a_string_literal",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound",
             ),
@@ -72,7 +72,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "confine_ignores_an_extern_crate_declaration",
         ),
         // --- inline-symbol-path-confinement ---
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound",
             ),
@@ -84,7 +84,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "inline_a_verb_outside_the_declared_set_is_a_bound",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "inline-symbol-path-confinement/a-receiver-method-read-is-a-documented-bound",
             ),
@@ -95,7 +95,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "inline_receiver_method_read_is_a_bound",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default",
             ),
@@ -107,7 +107,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "inline_value_capture_is_a_bound_under_the_default",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "inline-symbol-path-confinement/an-external-crate-re-export-is-a-documented-bound",
             ),
@@ -118,7 +118,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "inline_foreign_reexport_of_the_confined_path_is_a_bound",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external",
             ),
@@ -130,7 +130,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "inline_strict_external_extern_crate_rename_is_a_stated_bound",
         ),
-        BoundDecl::new(
+        BoundDecl::pinned(
             BoundId::new(
                 "inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default",
             ),

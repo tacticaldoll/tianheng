@@ -191,6 +191,15 @@ them.
   copy of it.
 
 ### Changed
+- **BREAKING:** `BoundDecl` now carries a typed `Defence`: `PinnedBy { first, additional }`, with at
+  least one pinning-test slot, or `Unpinned { tracker }`. Scenarios with several `PINNED-BY`
+  citations retain every test instead of silently keeping only the last one.
+  `BoundDecl::new` is replaced by `BoundDecl::pinned`, `BoundDecl::pinned_by_many`, and
+  `BoundDecl::unpinned`, making the register's existing `PINNED-BY` / `UNPINNED` states mutually
+  exclusive and both expressible in code. Migrate a former
+  `BoundDecl::new(id, shape, extent, test)` call by renaming it to `BoundDecl::pinned`; use
+  `pinned_by_many` when one bound cites several tests, and `unpinned` only with an explicit tracked
+  owner for missing evidence.
 - **The census direction now judges tracked content and every figure on a line**, closing three ways the
   direction added one change earlier missed or overreached. It walked the filesystem, so an untracked scratch
   note and an ignored vendored tree each failed the reaction — a local file breaking a developer's run while a
