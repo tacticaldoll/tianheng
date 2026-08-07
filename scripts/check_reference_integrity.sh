@@ -63,24 +63,6 @@ script_root=$(cd "$(dirname "$0")/.." && pwd -P)
 target_dir="${1:-$script_root}"
 cd "$target_dir"
 
-members=""
-for dir in crates/*/; do
-  [ -f "${dir}Cargo.toml" ] || continue
-  members="$members $(basename "$dir")"
-done
-if [ -z "$members" ]; then
-  echo "cannot judge: found no workspace member under crates/, so the illustrative-vs-real rule below" >&2
-  echo "would skip every crates/ reference and this gate would report clean without checking any" >&2
-  exit 2
-fi
-
-is_member() {
-  case " $members " in
-  *" $1 "*) return 0 ;;
-  *) return 1 ;;
-  esac
-}
-
 # The reference forms this gate recognizes:
 #   1. a path under one of the repository's own top-level directories;
 #   2. a bare `tests/…rs`, resolved against the members (see the header);
@@ -139,6 +121,35 @@ if [ "$index_status" -ne 0 ]; then
   echo "below reads it, so a gate that could not build it has judged nothing" >&2
   exit 2
 fi
+
+# A member is repository evidence only when its conventional manifest path is tracked. Reading
+# `crates/*/Cargo.toml` from the worktree here used to let an untracked illustrative crate change whether
+# a prose reference was enforced, contradicting the tracked index that owns every existence answer below.
+members=""
+while IFS= read -r path; do
+  case "$path" in
+  crates/*/Cargo.toml)
+    member=${path#crates/}
+    member=${member%/Cargo.toml}
+    case "$member" in
+    */*) continue ;;
+    esac
+    members="$members $member"
+    ;;
+  esac
+done <"$tracked"
+if [ -z "$members" ]; then
+  echo "cannot judge: found no tracked workspace member under crates/, so the illustrative-vs-real rule below" >&2
+  echo "would skip every crates/ reference and this gate would report clean without checking any" >&2
+  exit 2
+fi
+
+is_member() {
+  case " $members " in
+  *" $1 "*) return 0 ;;
+  *) return 1 ;;
+  esac
+}
 
 # Present in the repository as committed. Deliberately NOT a filesystem test: see the header.
 is_tracked() {

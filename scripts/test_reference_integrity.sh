@@ -116,7 +116,7 @@ git -C "$repo_no_members" rm -rf -q crates/
 printf '[workspace]\nmembers = []\n' >"$repo_no_members/Cargo.toml"
 git -C "$repo_no_members" add -A
 git -C "$repo_no_members" commit -qm 'remove member crates'
-expect_fail "$repo_no_members" 2 "cannot judge: found no workspace member under crates/"
+expect_fail "$repo_no_members" 2 "cannot judge: found no tracked workspace member under crates/"
 
 # 4. Zero inspected tracked .md or .rs files (exit 2)
 repo_no_inspected=$(new_valid_repo no_inspected)
@@ -152,6 +152,17 @@ printf '# README\nReferencing ignored_dir/sample.txt here.\n' >"$repo_ignored/RE
 git -C "$repo_ignored" add .gitignore README.md
 git -C "$repo_ignored" commit -qm 'add ignored reference'
 expect_pass "$repo_ignored" "reference integrity ok"
+
+# Member classification is part of the tracked-path verdict too. An untracked manifest must not turn an
+# illustrative crate reference into a real member path whose absence is enforced.
+repo_untracked_member=$(new_valid_repo untracked_member)
+printf '# README\nIllustration: crates/illustrative/src/missing.rs.\n' >"$repo_untracked_member/README.md"
+git -C "$repo_untracked_member" add README.md
+git -C "$repo_untracked_member" commit -qm 'add illustrative crate reference'
+mkdir -p "$repo_untracked_member/crates/illustrative"
+printf '[package]\nname = "illustrative"\nversion = "0.0.0"\n' \
+    >"$repo_untracked_member/crates/illustrative/Cargo.toml"
+expect_pass "$repo_untracked_member" "reference integrity ok"
 
 # 9. OpenSpec change directory exemption (exit 0)
 repo_openspec=$(new_valid_repo openspec_exempt)
