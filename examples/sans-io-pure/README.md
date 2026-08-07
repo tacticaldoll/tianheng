@@ -32,5 +32,4 @@ cargo test              # asserts both axes react (see tests/reaction.rs)
 cargo run --bin check -- check --manifest-path .   # folds both into one exit code (1)
 ```
 
-(CI runs this in isolation via `scripts/test_examples.sh`, patching `tianheng = "0.4"` to local
-source.)
+(CI runs this in isolation via `scripts/test_examples.sh`, patching the manifest requirement to local source.)

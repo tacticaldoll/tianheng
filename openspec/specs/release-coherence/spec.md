@@ -50,13 +50,23 @@ Active development SHALL retain the current released workspace version, at least
 item under `[Unreleased]`, and an `[Unreleased]` comparison link from that version to `HEAD`.
 Workspace crate manifests SHALL inherit the common version and internal workspace dependency pins
 SHALL equal it. Development SHALL NOT require old generated lock entries to be rewritten solely to
-pass this gate.
+pass this gate. `[Unreleased]` may name the intended release in adopter-facing narrative before mechanical
+release preparation advances the workspace version. The reaction SHALL judge the mutable version-bearing
+surfaces it enumerates; it SHALL NOT require a version literal in `[Unreleased]` prose to equal the still-released
+workspace version.
 
 #### Scenario: Development with release notes is coherent
 
 - **WHEN** post-release commits retain the released version and `[Unreleased]` contains an item and
   the matching comparison link
 - **THEN** release coherence passes without requiring a release-prep version or lock rewrite
+
+#### Scenario: Intended release narrative precedes mechanical version preparation
+
+- **WHEN** `[Unreleased]` names the intended release while workspace and example manifests retain the current
+  released version
+- **THEN** development coherence passes until release preparation advances the enumerated version-bearing
+  surfaces together
 
 #### Scenario: Empty development notes fail
 

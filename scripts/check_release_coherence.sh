@@ -115,10 +115,10 @@ require_internal_pins() {
 
 # Every example's committed family-crate requirement must be satisfiable by the workspace version.
 #
-# The examples commit the adopter's real published form (`guibiao = "0.3"`) and the examples gate
+# The examples commit the adopter's real published-version requirement form and the examples gate
 # resolves the family to local source with `--config patch.crates-io.<crate>.path=…`. Cargo *silently
 # drops* a patch whose local version no longer satisfies the requirement, so the moment the workspace
-# bumps to 0.4.0 every example would resolve the last published 0.3.x from crates.io instead. That
+# version advances an example left behind may resolve the last compatible published crate instead. That
 # failure IS caught — `test_examples.sh` asserts the patch took effect — but it is caught by the dogfood
 # job rather than by the gate that claims workspace/dependency version alignment, and it surfaces as a
 # resolution puzzle rather than as "the release bump left the examples behind". Named here, at the
@@ -137,8 +137,8 @@ require_example_pins() {
         for dependency in "${family[@]}"; do
             # Both dependency forms, so one example switching to the table form is not silently
             # skipped while the set-level guard below stays satisfied by its siblings:
-            #   plain  `xuanji = "0.3"`
-            #   table  `xuanji = { version = "0.3", features = [...] }`
+            #   plain  `xuanji = "<requirement>"`
+            #   table  `xuanji = { version = "<requirement>", features = [...] }`
             capture_or_refuse "example $dependency pins" "$release_capture" cannot_judge -- sed -n \
                 -e "s/^[[:space:]]*$dependency[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\\1/p" \
                 -e "s/^[[:space:]]*$dependency[[:space:]]*=[[:space:]]*{.*version[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\\1/p" \
