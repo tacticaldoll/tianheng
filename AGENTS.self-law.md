@@ -54,9 +54,9 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `tianheng`
 
-> the 天衡 shell composes the 三儀 into one reaction, depending on guibiao, hunyi, louke, xingbiao, and serde_json
+> the 天衡 shell's direct normal dependency perimeter is guibiao, hunyi, louke, and serde_json only
 
-- **rule**: restrict dependencies to (only: guibiao, hunyi, louke, serde_json, xingbiao)
+- **rule**: restrict dependencies to (only: guibiao, hunyi, louke, serde_json)
 - **kind**: crate · **severity**: enforce
 
 ### `crate`

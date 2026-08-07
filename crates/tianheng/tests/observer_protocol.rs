@@ -15,7 +15,7 @@
 use std::path::{Path, PathBuf};
 
 // Everything reaches this test through the shell, never through a direct edge to 璇璣: the shell's own
-// dependency boundary allows guibiao, hunyi, louke, xingbiao and serde_json.
+// dependency boundary allows guibiao, hunyi, louke and serde_json.
 use tianheng::check_constitution;
 use tianheng::prelude::*;
 

@@ -120,7 +120,6 @@ dependencies = [
  "hunyi",
  "louke",
  "serde_json",
- "xingbiao",
 ]
 
 [[package]]
