@@ -62,6 +62,14 @@ that proves the blessing behaves mentions it too and writes no projection, so th
 among the units this repository already has. A document naming its generator is a claim by the document; the call site is the fact, and an
 inventory that trusted the claim would be an inventory of claims.
 
+The register SHALL inspect a Rust holder with Rust line-comment semantics and a shell holder with shell
+line-comment semantics. It SHALL NOT use one language-blind executed region for both mechanisms.
+
+#### Scenario: Holder text begins with a language-specific marker
+
+- **WHEN** a potential holder line begins with `//` in Rust or `#` in shell
+- **THEN** the matching language region excludes the comment without excluding the other language's executable text
+
 Both directions are required because each catches a different defect. A document with no holder is a
 hand-maintained file wearing a generated file's warning — worse than plain prose, because a reader trusts it more
 and no reaction defends it. A holder with no document is a projection whose freshness is asserted and whose

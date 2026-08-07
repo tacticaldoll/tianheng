@@ -134,6 +134,8 @@ method SHALL be located by **line position** — a line whose trimmed start is t
 inside a comment or a string cannot be brace-matched from. And a **trailing comment** on the delegation SHALL be
 prose, not a second list: the region discipline this family already holds says a comment is never executed text,
 and the reaction that judges a shell gate's own text strips one before comparing for exactly this reason.
+The reaction SHALL apply Rust line-comment semantics to the inspected body: a `//` line is prose, while a Rust
+attribute beginning with `#` remains executed Rust text.
 
 Where the built-in path obtains a dimension's outcome **by invoking that dimension's observer**, equality for
 that dimension holds **by construction rather than by observation**, and the spec SHALL say which dimensions
@@ -166,6 +168,11 @@ dimensions remain independently implemented on both sides, and for them the reac
 - **WHEN** an observer's bounds method holds the delegation followed by a comment explaining it
 - **THEN** the reaction accepts it, because a comment is prose and not a list — the same region rule every other
   reaction in this repository reads its subject through
+
+#### Scenario: A Rust attribute appears in an inspected body
+
+- **WHEN** an inspected Rust body contains a line whose trimmed start is `#`
+- **THEN** the reaction retains that line as Rust source rather than dropping it as a shell comment
 
 #### Scenario: An observer's bounds method cannot be found where the reaction looks
 
