@@ -138,6 +138,15 @@ write_development_changelog "$development" 0.2.0
 commit_all "$development" 'docs: describe pending work'
 expect_pass "$development" 'development: 0.2.0'
 
+# `[Unreleased]` is adopter narrative, so it may name the planned release before the mechanical preparation
+# advances the mutable surfaces this gate enumerates. Everything but this item's prose remains at 0.2.0.
+intended_narrative=$(new_repo intended-narrative)
+write_development_changelog "$intended_narrative" 0.2.0
+sed -i 's/An adopter-facing change./Planned for 0.3.0: an adopter-facing change./' \
+    "$intended_narrative/CHANGELOG.md"
+commit_all "$intended_narrative" 'docs: describe intended release'
+expect_pass "$intended_narrative" 'development: 0.2.0'
+
 ready=$(new_repo ready)
 write_workspace "$ready" 0.2.1
 write_release_changelog "$ready" 0.2.1 0.2.0
