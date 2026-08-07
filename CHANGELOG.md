@@ -195,6 +195,9 @@ them.
   copy of it.
 
 ### Changed
+- The `tianheng` shell no longer declares an unused direct normal dependency on `xingbiao`;
+  its enforced self-law now limits the shell to the three dimensions it composes plus
+  `serde_json`. Dimension crates continue to use the shared metadata substrate unchanged.
 - **BREAKING:** `BoundDecl` now carries a typed `Defence`: `PinnedBy { first, additional }`, with at
   least one pinning-test slot, or `Unpinned { tracker }`. Scenarios with several `PINNED-BY`
   citations retain every test instead of silently keeping only the last one.

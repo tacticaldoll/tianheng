@@ -49,7 +49,7 @@ mod bounds;
 pub use bounds::observation_bounds;
 
 // The declared-observation-bound model, reached through 渾儀 rather than by depending on 璇璣 directly:
-// the shell's own dependency boundary allows guibiao, hunyi, louke, xingbiao and serde_json, and a new
+// the shell's own dependency boundary allows guibiao, hunyi, louke and serde_json, and a new
 // direct edge to 璇璣 would breach the law this crate governs itself by.
 pub use guibiao::StaticObserver;
 pub use hunyi::{
