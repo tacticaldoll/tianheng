@@ -506,6 +506,27 @@ them.
   it read carries `"`, `'`, or `/*` in executed code, and the refusal names the delimiter. Over-refusal
   is the chosen direction: a lifetime shares the character-literal delimiter, so a composition body naming one
   is refused too, loudly and in the commit that causes it.
+- **The shell-delegation reaction is now an allowlist, and that is what makes its prohibition complete.** It
+  counted reaches for the semantic boundaries, which is a denylist over *spellings* — and spellings are an open
+  set. Adversarial review walked past it seven ways across two rounds: a rebinding, an associated-function call,
+  a reborrow, a wrapper function, a trait method under another name, a macro, and — naming no accessor at all —
+  a direct read of the private `semantic` field, which a descendant module of the crate root may simply do. Each
+  was measured accepted against the tracked `crates/tianheng/src/runner.rs`, each earned its own patch, and the
+  next was always one review away. The rule is now that **every** use of the `constitution` parameter in the
+  composition body must be one of the three declared owners — static, semantic, runtime — each exactly once, and
+  everything else is refused by complement. An escape must now avoid naming the parameter, and a body that never
+  names it has no constitution to decide with. This is the shape `restrict_dependencies_to` already takes; the
+  reaction had been written in the one form the family's own law does not use.
+  Its cost is intended: a fourth dimension fails here until it is admitted, which is the amendment discipline
+  this repository wants for that change rather than an accident of the recognizer.
+- The semantic owner must additionally be the direct argument to 渾儀's entry point, matched with a **left token
+  boundary**: a bare containment accepted `crate::shim::hunyi::check_all(…)`, so a wrapper module could stand
+  between the shell and the dimension while the reaction reported a direct delegation.
+- The anchor is now counted over **occurrences** rather than lines that begin with the signature. Requiring it to
+  begin a line only ruled out a mid-line mention; it never made the definition findable, and the decoy worked
+  from the other side — write the definition as `pub(crate) fn …` and it stops anchoring while a commented copy
+  still does, leaving one candidate that is not the subject. Counting occurrences catches both directions and
+  needs no carve-out for which mentions could have anchored, one of which this window had stated wrongly.
 - **Three further ways the same reaction read text that was not the body**, each found by adversarial review of
   the repair above and each measured end-to-end against the tracked `crates/tianheng/src/runner.rs` before being
   closed. **The anchor was not unique**: the function is found by line position, which rules out a mid-line

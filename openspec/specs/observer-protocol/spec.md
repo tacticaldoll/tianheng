@@ -95,30 +95,47 @@ to that entry point rather than maintaining independent empty-boundary guards, s
 path has one behavior owner.
 
 The repository reaction SHALL inspect the executed body of the shell's `evaluate_constitution` composition
-function. That body SHALL access `constitution.semantic_boundaries()` exactly once, as the direct boundary
-argument to `hunyi::check_all`; a missing function, an additional semantic-boundary inspection, or an indirect
-shell-local decision SHALL fail rather than be treated as delegation.
+function, and SHALL hold it to an **allowlist**: every use of the `constitution` parameter in that body SHALL be
+one of the three declared owners — the static, semantic and runtime boundary accessors — and each SHALL appear
+exactly once. Any other reach for the constitution SHALL fail rather than be treated as delegation, and so SHALL
+a missing function.
+
+**The allowlist is what makes the prohibition complete.** Counting reaches for the semantic boundaries was a
+denylist over spellings, and spellings are an open set: a rebinding, an associated-function call, a reborrow, a
+wrapper function, a trait method under another name, a macro, and — naming no accessor at all — a direct read of
+the private `semantic` field, which a descendant module of the crate root may simply do. Each was measured
+accepted, each was closed by its own patch, and the next was always one review away. Permitting three uses and
+refusing the complement closes all of them at once, because an escape must now avoid naming `constitution`, and
+a body that never names it has no constitution to decide with. This is the shape the family's own dependency law
+already takes, and the reason is the same: the forbidden set is not enumerated, it is what is left.
+
+Its cost SHALL be treated as intended rather than incidental. A fourth dimension, or any other legitimate reach
+for the constitution, fails here until it is admitted — which is the amendment discipline this repository wants
+for exactly that change.
+
+The semantic owner SHALL additionally be the direct argument to 渾儀's own public entry point, matched with a
+left token boundary. A bare containment accepted any path *ending* in that call, so a wrapper module could stand
+between the shell and the dimension while the reaction reported a direct delegation.
 
 The reaction SHALL distinguish a body that does not delegate from a body it could not read. **Two** conditions
-make the text unsafe to judge and SHALL be refused; the rules after them narrow what the comparison reads, and
-their outcome is a verdict rather than a refusal.
+make the text unsafe to judge and SHALL be refused; the rules after them narrow what is read, and their outcome
+is a verdict rather than a refusal.
 
-**The anchor SHALL be unique.** The function is located by line position, which rules out a mid-line mention
-and nothing more: a whole-line copy of the signature — inside a block comment, a multi-line string, or a second
-module — anchors exactly as well as the definition. A doc comment does not, because `///` becomes the trimmed
-start; that exception is written down because it was asserted the other way before it was checked. Where more
-than one line could anchor the read, the reaction SHALL decline. This is the half no in-body check can cover,
-because every delimiter that made such an extent wrong sits outside it; measured, a commented-out copy above the
-function let a body carrying an independent shell-local guard read as a conforming delegation.
+**The anchor SHALL be unique, counted over occurrences.** The signature SHALL appear on exactly one line of the
+source, wherever it sits, and the read SHALL decline otherwise. Requiring the anchor to *begin* a line only ruled
+out a mid-line mention; it never made the definition findable, and a decoy exploits the gap from the other side —
+write the real definition as `pub(crate) fn …` and it stops anchoring while a commented copy still does, leaving
+one candidate that is not the subject. Measured end-to-end on both readers. Counting occurrences catches the
+decoy from either direction and subsumes the mid-line mention, so no carve-out for which mentions could have
+anchored is needed — an earlier attempt stated one and stated it wrongly.
 
 **An extent carrying a literal or comment delimiter SHALL be refused.** The extent is found by counting braces,
 and a string literal, a character literal, or a block comment inside the body moves it; where the extent carries
-`"`, `'`, or `/*` in executed code, the reaction SHALL refuse. Stating the refusal closes a false negative
-rather than describing one: this requirement's comparison is a count and a containment, and both survive a
-truncated extent unharmed — a second semantic-boundary access past the cut is absent from what is compared, so
-the one shape the requirement refuses reads as the delegation it demands. Measured on synthetic bodies in the
-tracked shape, each returning the conforming verdict before the refusal existed; the tracked body itself carries
-no such delimiter, which is why a fixture rather than the tracked file is the observation source.
+`"`, `'`, or `/*` in executed code, the reaction SHALL refuse. A moved extent is not self-detecting: the
+comparison sees only what survives the cut, so a use past it is absent from what is checked. Measured on
+synthetic bodies in the tracked shape, each returning the conforming verdict before the refusal existed; the
+tracked body carries no such delimiter, which is why a fixture rather than the tracked file is the observation
+source.
 
 **Delimiters SHALL be read in executed code only, on the same terms the brace count uses.** Text after `//`
 cannot move a brace, because the count already treats it as prose, so refusing on a delimiter there would refuse
@@ -126,10 +143,9 @@ on text that cannot cause the fault — and an apostrophe in ordinary English is
 body. By the same rule the comparison SHALL NOT read a comment as code: the required call appearing only in a
 comment does not satisfy the requirement, which it did while tails were compared.
 
-The count SHALL be over the accessor's **name** rather than a receiver spelling. A rebinding, an associated-
-function call, or a reborrow reaches the semantic boundaries just as a direct receiver does, and counting one
-spelling counted the spelling: measured, each walked past the comparison while an independent shell-local guard
-stood in the body. The *direct* spelling remains what the delegation containment holds.
+**The allowlist walk SHALL read text whose token boundaries survive.** Whitespace removal is applied only where
+a broken call must still be recognized; applying it before the walk glues a keyword to the parameter, so the use
+reads as the tail of a longer identifier and disappears — measured, it hid the private-field read above.
 
 Over-refusal is the declared direction, and the character literal is why it must be said out loud: a lifetime is
 spelled with the same delimiter, so a composition body that names one is refused too. That cost is accepted
@@ -184,9 +200,11 @@ reaction could observe, and it carries no scenario for that reason.
 
 #### Scenario: A second line could anchor the read
 
-- **WHEN** more than one line in the source has the composition function's signature as its trimmed start — a
-  commented-out copy, a copy inside a multi-line string, or a second module's definition
-- **THEN** the reaction declines rather than reading the first, because it cannot know which body is the
+- **WHEN** the composition function's signature appears on more than one line of the source — a commented-out
+  copy, a doc comment, a copy inside a multi-line string, or a second module's definition — or the only
+  occurrence is not the definition, as when the definition carries a visibility modifier and a commented copy
+  does not
+- **THEN** the reaction declines rather than reading one of them, because it cannot know which body is the
   subject, and the delimiters that made the wrong extent wrong sit outside that extent where no in-body check
   reaches them
 
@@ -209,11 +227,32 @@ reaction could observe, and it carries no scenario for that reason.
 - **THEN** the reaction does not report delegation, because a requirement satisfied by prose is satisfied in
   appearance and failed in substance
 
-#### Scenario: A second semantic-boundary access is reached through a rebinding
+#### Scenario: The constitution is reached outside the permitted owners
 
-- **WHEN** the body reaches the semantic boundaries a second time through a local binding, an associated-function
-  call, or a reborrow rather than through the declared receiver spelling
-- **THEN** the reaction reports it, because the requirement admits one access however the receiver is written
+- **WHEN** the body reaches its constitution by any means other than the three declared accessors — a local
+  binding, an associated-function call, a reborrow, a wrapper function, a macro, or a direct read of a private
+  field that names no accessor at all
+- **THEN** the reaction reports it. None of these is recognized individually: each is a use of the parameter
+  that is not on the allowlist, and the complement is what makes the set complete
+
+#### Scenario: A permitted owner appears more than once
+
+- **WHEN** one of the three accessors appears twice in the body
+- **THEN** the reaction reports it, because the composition admits exactly one owner per dimension, and a
+  second reach is a second decision whatever it is spelled
+
+#### Scenario: The callee path merely ends in the semantic entry point
+
+- **WHEN** the semantic boundaries are passed to a path ending in `hunyi::check_all` rather than to that entry
+  point itself
+- **THEN** the reaction reports it, because a wrapper module standing between the shell and the dimension is
+  the second behavior owner the requirement exists to refuse
+
+#### Scenario: The allowlist walk is given text whose token boundaries were removed
+
+- **WHEN** whitespace is stripped before the walk, gluing a preceding keyword to the parameter
+- **THEN** the use is not recognized and the body reads as conforming, which is why the walk reads text with
+  its whitespace intact and only the delegation containment reads the compacted form
 
 #### Scenario: A moved extent leaves no delimiter behind
 

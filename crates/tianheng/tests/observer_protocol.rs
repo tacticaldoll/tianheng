@@ -440,26 +440,107 @@ fn judge_delegation(source: &Source) -> Option<Delegation> {
     }) {
         return Some(Delegation::CannotJudge((*delimiter).to_string()));
     }
-    let compact = compact_executed_rust(&body);
-    // The bare method name, not `constitution.semantic_boundaries()`. Counting the receiver spelling counted a
-    // *spelling*, and every rebinding walked past it: `let shell = constitution;` then `shell.…`,
-    // `Constitution::semantic_boundaries(constitution)`, `(&*constitution).…` — each a second access, each
-    // invisible, each measured on the tracked file end-to-end. The requirement is about how many times the
-    // shell reaches for its semantic boundaries, which is a property of the method being named at all; the
-    // *direct* spelling is what `SEMANTIC_DELEGATION` below still holds, so nothing is lost by widening here.
-    let accessor = "semantic_boundaries";
-    let accesses = compact.matches(accessor).count();
-    if accesses != 1 {
-        return Some(Delegation::Diverges(format!(
-            "{accesses} semantic-boundary accesses, and the requirement admits exactly one"
-        )));
+    // The allowlist walk reads the executed text with its **whitespace intact**, and the delegation
+    // containment below reads the compacted form. That split is not tidiness: compaction removes the token
+    // boundaries this walk depends on, gluing `if constitution` into `ifconstitution` so the occurrence reads
+    // as the tail of a longer identifier and disappears — measured, it hid a direct read of the private
+    // `semantic` field. Compaction exists only so `rustfmt` may break the delegation call, which is a
+    // different question asked of a different string.
+    let executed: Vec<String> = body
+        .rust()
+        .lines()
+        .map(|line| without_comment_tail(line).to_string())
+        .collect();
+    let executed = executed.join("\n");
+    for use_of_parameter in whole_identifier_occurrences(&executed, COMPOSITION_PARAMETER) {
+        if !PERMITTED_USES
+            .iter()
+            .any(|permitted| executed[use_of_parameter..].starts_with(permitted))
+        {
+            let offending: String = executed[use_of_parameter..]
+                .chars()
+                .take_while(|c| *c != '\n')
+                .take(56)
+                .collect();
+            return Some(Delegation::Diverges(format!(
+                "`{COMPOSITION_PARAMETER}` is used outside the permitted owners, at `{offending}`"
+            )));
+        }
     }
-    if !compact.contains(SEMANTIC_DELEGATION) {
+    for permitted in PERMITTED_USES {
+        let uses = whole_identifier_occurrences(&executed, COMPOSITION_PARAMETER)
+            .filter(|at| executed[*at..].starts_with(permitted))
+            .count();
+        if uses != 1 {
+            return Some(Delegation::Diverges(format!(
+                "`{permitted}` appears {uses} time(s), and the composition admits exactly one owner per \
+                 dimension"
+            )));
+        }
+    }
+    let compact = compact_executed_rust(&body);
+    if !contains_token_bounded(&compact, SEMANTIC_DELEGATION) {
         return Some(Delegation::Diverges(
             "the access is not the direct `hunyi::check_all` argument".to_string(),
         ));
     }
     Some(Delegation::Delegates)
+}
+
+/// The composition function's parameter, whose every use the allowlist below governs.
+const COMPOSITION_PARAMETER: &str = "constitution";
+
+/// The complete set of things the composition body may do with its constitution — one owner per dimension.
+///
+/// **An allowlist, and that is the whole point.** Counting reaches for the semantic boundaries was a denylist
+/// over *spellings*, and spellings are an open set: a rebinding, an associated-function call, a reborrow, a
+/// wrapper function, a trait method with another name, a macro, and — needing no accessor at all — a direct
+/// read of the private `semantic` field, which a descendant module of the crate root may simply do. Each was
+/// measured accepted; each needed its own patch; the next one was always one review away.
+///
+/// Permitting three uses and refusing everything else closes all of them at once, because the escape now
+/// requires the body not to mention `constitution` — and then it has no constitution to decide with. Implicit
+/// deny is what makes the enumeration complete: the forbidden set is not listed, it is the complement.
+///
+/// The cost is deliberate. A fourth dimension, or any other legitimate reach for the constitution, fails here
+/// until it is admitted — which is the amendment discipline this repository wants for exactly that change,
+/// not an accident of the recognizer.
+const PERMITTED_USES: [&str; 3] = [
+    "constitution.static_boundaries()",
+    "constitution.semantic_boundaries()",
+    "constitution.runtime_boundaries()",
+];
+
+/// Byte offsets where `identifier` occurs in `text` as a whole identifier rather than inside a longer one.
+///
+/// `evaluate_constitution` contains `constitution`, and a recursive call would otherwise read as a use of the
+/// parameter.
+fn whole_identifier_occurrences<'a>(
+    text: &'a str,
+    identifier: &'a str,
+) -> impl Iterator<Item = usize> + 'a {
+    text.match_indices(identifier)
+        .filter(|(at, _)| {
+            text[..*at]
+                .chars()
+                .next_back()
+                .is_none_or(|before| !before.is_alphanumeric() && before != '_')
+        })
+        .map(|(at, _)| at)
+}
+
+/// Whether `needle` occurs in `text` with nothing pathlike attached to its left.
+///
+/// `contains` alone accepted `crate::shim::hunyi::check_all(…)`: any path *ending* in the required call
+/// satisfied a bare substring test, so a wrapper module could stand between the shell and 渾儀 while the
+/// reaction reported a direct delegation — which is what the required call exists to rule out.
+fn contains_token_bounded(text: &str, needle: &str) -> bool {
+    text.match_indices(needle).any(|(at, _)| {
+        text[..at]
+            .chars()
+            .next_back()
+            .is_none_or(|before| !before.is_alphanumeric() && before != '_' && before != ':')
+    })
 }
 
 /// The shell reads semantic boundaries only to pass them directly into 渾儀's public composed entry point.
@@ -835,8 +916,9 @@ fn a_second_line_that_could_anchor_the_read_refuses_the_subject() {
         );
     }
 
-    // And the shape that does NOT anchor, so the enumeration is not simply everything: `///` becomes the
-    // trimmed start, displacing the signature. This was asserted the other way before it was checked.
+    // A doc comment counts too. Under an occurrence rule there is no carve-out to get right: whether a
+    // second mention could have been brace-matched from stops mattering, because the read declines either
+    // way. The earlier trimmed-start rule needed that distinction and this file got it backwards once.
     let doc_comment = composition_source(&[
         "/// fn evaluate_constitution(",
         "fn evaluate_constitution(",
@@ -845,10 +927,35 @@ fn a_second_line_that_could_anchor_the_read_refuses_the_subject() {
         "    hunyi::check_all(constitution.semantic_boundaries(), manifest_path)",
         "}",
     ]);
-    assert_eq!(
-        judge_delegation(&doc_comment),
-        Some(Delegation::Delegates),
-        "a doc comment does not anchor, so one candidate remains and the body is judged normally"
+    assert!(
+        judge_delegation(&doc_comment).is_none(),
+        "a doc comment naming the signature is a second occurrence, so the read declines — the rule is \
+         where the name appears, not whether that place could have anchored"
+    );
+
+    // The decoy that motivated the change of rule: the real definition carries a visibility modifier, so it
+    // no longer begins its line, and a trimmed-start rule would have left the commented copy as the single
+    // candidate — unique, and not the subject.
+    let visibility_modified = composition_source(&[
+        "/*",
+        "fn evaluate_constitution(",
+        ") -> (Outcome, Option<Coverage>) {",
+        "    hunyi::check_all(constitution.semantic_boundaries(), manifest_path)",
+        "}",
+        "*/",
+        "pub(crate) fn evaluate_constitution(",
+        "    constitution: &Constitution,",
+        ") -> (Outcome, Option<Coverage>) {",
+        "    if constitution.semantic_boundaries().is_empty() {",
+        "        return (Outcome::Clean, None);",
+        "    }",
+        "    hunyi::check_all(constitution.semantic_boundaries(), manifest_path)",
+        "}",
+    ]);
+    assert!(
+        judge_delegation(&visibility_modified).is_none(),
+        "two occurrences, so the read declines — a trimmed-start rule saw only the commented one and \
+         judged it"
     );
 
     let single = composition_source(&[
@@ -908,6 +1015,109 @@ fn a_second_access_through_a_rebinding_is_counted() {
             ),
             "a second reach for the semantic boundaries must be reported however the receiver is spelled: \
              {second:?}"
+        );
+    }
+}
+
+/// Every way of reaching the constitution that is not one of the three owners is refused, by complement.
+///
+/// These are not new spellings patched one at a time — they are the spellings that defeated the counting
+/// rule, kept as the record of why counting was abandoned. Under an allowlist none of them needed its own
+/// case: each is simply a use of `constitution` that is not on the list. The last is the one that ends the
+/// argument for counting accessor names at all — it names no accessor, reading the private `semantic` field
+/// directly, which a descendant module of the crate root may do.
+#[test]
+fn every_reach_for_the_constitution_outside_the_permitted_owners_is_refused() {
+    let routes: [(&str, &[&str]); 6] = [
+        (
+            "a rebinding",
+            &[
+                "    let shell = constitution;",
+                "    if shell.semantic_boundaries().is_empty() {",
+                "        outcome = early();",
+                "    }",
+            ],
+        ),
+        (
+            "an associated-function call",
+            &["    let _ = Constitution::semantic_boundaries(constitution);"],
+        ),
+        (
+            "a reborrow",
+            &["    let _ = (&*constitution).semantic_boundaries();"],
+        ),
+        (
+            "a wrapper function",
+            &["    if semantic_view(constitution).is_empty() {", "    }"],
+        ),
+        (
+            "a macro",
+            &["    if semantic!(constitution).is_empty() {", "    }"],
+        ),
+        (
+            "a direct read of the private field, naming no accessor at all",
+            &[
+                "    if constitution.semantic.signature.len() > 7 {",
+                "    }",
+            ],
+        ),
+    ];
+    let unreported: Vec<String> = routes
+        .iter()
+        .filter_map(|(label, extra)| {
+            let mut lines = vec![
+                "fn evaluate_constitution(",
+                "    constitution: &Constitution,",
+                ") -> (Outcome, Option<Coverage>) {",
+                "    let mut outcome = check_and_cover(constitution.static_boundaries(), manifest_path);",
+                "    outcome = merge_outcomes(",
+                "        outcome,",
+                "        hunyi::check_all(constitution.semantic_boundaries(), manifest_path),",
+                "    );",
+                "    outcome = merge_outcomes(",
+                "        outcome,",
+                "        RuntimeObserver::new(constitution.runtime_boundaries().to_vec()).observe(manifest_path),",
+                "    );",
+            ];
+            lines.extend_from_slice(extra);
+            lines.extend_from_slice(&["    (outcome, None)", "}"]);
+            match judge_delegation(&composition_source(&lines)) {
+                Some(Delegation::Diverges(_)) => None,
+                other => Some(format!("{label} -> {other:?}")),
+            }
+        })
+        .collect();
+    assert!(
+        unreported.is_empty(),
+        "each of these reaches the constitution outside the three permitted owners and must be reported — \
+         not reported: {unreported:#?}"
+    );
+}
+
+/// The delegation must be 渾儀's own entry point, not any path that happens to end in it.
+#[test]
+fn a_callee_path_ending_in_the_entry_point_is_not_the_entry_point() {
+    for shim in ["crate::shim::hunyi::check_all", "not_hunyi::check_all"] {
+        let body = composition_source(&[
+            "fn evaluate_constitution(",
+            "    constitution: &Constitution,",
+            ") -> (Outcome, Option<Coverage>) {",
+            "    let mut outcome = check_and_cover(constitution.static_boundaries(), manifest_path);",
+            "    outcome = merge_outcomes(",
+            "        outcome,",
+            &format!("        {shim}(constitution.semantic_boundaries(), manifest_path),"),
+            "    );",
+            "    outcome = merge_outcomes(",
+            "        outcome,",
+            "        RuntimeObserver::new(constitution.runtime_boundaries().to_vec()).observe(manifest_path),",
+            "    );",
+            "    (outcome, None)",
+            "}",
+        ]);
+        assert!(
+            matches!(judge_delegation(&body), Some(Delegation::Diverges(_))),
+            "`{shim}` is a wrapper standing between the shell and 渾儀, which is exactly what requiring the \
+             direct call rules out — a bare substring test accepted it"
         );
     }
 }
@@ -1112,18 +1322,19 @@ fn function_body(source: &Source, signature: &str) -> Option<Source> {
     // function let a divergent body read as conforming, measured end-to-end on both readers of this recognizer.
     // Two candidates mean the reaction cannot know which is the subject, and a recognizer that cannot know its
     // subject has not observed the obligation — so it declines rather than picking the first.
-    let mut anchors = text.lines().scan(0usize, |offset, line| {
-        let at = *offset;
-        *offset += line.len() + 1;
-        Some((at, line))
-    });
-    let matches_signature = |(_, line): &(usize, &str)| line.trim_start().starts_with(signature);
-    let signature = anchors
-        .find(matches_signature)
-        .map(|(at, line)| at + (line.len() - line.trim_start().len()))?;
-    if anchors.any(|candidate| matches_signature(&candidate)) {
+    // Uniqueness is over lines that CONTAIN the signature, not lines that begin with it — and once it holds,
+    // the anchor is the occurrence itself and no trimmed-start rule is needed.
+    //
+    // Requiring the anchor to begin a line only ruled out a mid-line mention. It never made the definition
+    // findable, and a decoy exploits the gap from the other side: write the real definition as
+    // `pub(crate) fn …` and it stops anchoring while a commented copy still does, leaving exactly one
+    // candidate that is not the subject. Measured end-to-end on both readers. Counting occurrences instead
+    // catches the decoy from either direction, and subsumes the mid-line mention — a prose sentence naming
+    // the function is a second occurrence, so the read declines rather than being brace-matched from.
+    if text.lines().filter(|line| line.contains(signature)).count() != 1 {
         return None;
     }
+    let signature = text.find(signature)?;
     let open = signature + masked[signature..].find('{')?;
     let mut depth = 0usize;
     let mut close = None;
