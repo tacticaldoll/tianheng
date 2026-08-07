@@ -965,7 +965,7 @@ it before assigning a horizon here; the entries below are horizons, not a second
 
   What earns the minor is one item, and it is named rather than counted: the bare-principal resolver closure in
   `crates/hunyi/src/crate_scope.rs`, the only change in the window that moves behaviour an adopter already had.
-  The window has since added a substantial **additive** published surface — the observation protocol (`Observer`,
+  The window has since added a substantial **additive** public surface — the observation protocol (`Observer`,
   `Run`, the three dimension observers), the typed bound model, and each dimension's `observation_bounds()` — which
   is minor-class on its own terms and does not change the reasoning above: additive API asks nothing of an adopter,
   while a recorded baseline going stale does. Re-derive the range rather than trusting a figure here — the counts

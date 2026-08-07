@@ -161,14 +161,14 @@ fn a_header_below_a_leading_comment_over_reacts() {
 ///
 /// The example's whole load-bearing result is that joining a run needed no addition to any crate's public API —
 /// and the spec says that if an outside crate *cannot* do it with the public surface alone, that is the finding
-/// rather than a reason to publish whatever the example wanted. An assertion in prose cannot hold that: a future
+/// rather than a reason to add whatever export the example wanted. An assertion in prose cannot hold that: a future
 /// edit reaching into `guibiao` or `xuanji` directly would keep every other test green while quietly making the
 /// example prove the opposite of what it exists to prove.
 ///
 /// So the reach is measured from this crate's own sources: exactly one dependency, and no import of a family crate
 /// other than the shell.
 #[test]
-fn the_participant_reaches_only_the_published_shell() {
+fn the_participant_reaches_only_the_public_shell() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let manifest = std::fs::read_to_string(root.join("Cargo.toml")).expect("this crate's manifest");
     let dependencies: Vec<&str> = manifest
@@ -189,9 +189,9 @@ fn the_participant_reaches_only_the_published_shell() {
         "and it is the shell: {dependencies:?}"
     );
 
-    // The dimensions and 璇璣 are published crates an example could reach past the shell into. Naming them
-    // rather than allow-listing the shell keeps the property about what is forbidden — a new family crate would
-    // have to be added here deliberately, which is the visible edit.
+    // The dimensions and 璇璣 are family crates an example could reach past the shell into. Naming them rather
+    // than allow-listing the shell keeps the property about what is forbidden — a new family crate would have
+    // to be added here deliberately, which is the visible edit.
     const PAST_THE_SHELL: [&str; 5] = ["xuanji", "xingbiao", "guibiao", "hunyi", "louke"];
     let mut reaching = Vec::new();
     for directory in ["src", "src/bin", "tests"] {
@@ -220,7 +220,7 @@ fn the_participant_reaches_only_the_published_shell() {
     }
     assert!(
         reaching.is_empty(),
-        "a participant reaching past the shell is the example disproving its own point — if the published \
+        "a participant reaching past the shell is the example disproving its own point — if the public \
          surface is not enough, that is the finding rather than a reason to import around it: {reaching:?}"
     );
 }
