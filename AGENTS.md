@@ -90,6 +90,12 @@ Conventional Commit types:
    Definition of Done below).
 4. **sync** — merge the delta into `openspec/specs/*` (agent-driven).
 
+At sync, every new or materially changed scenario must carry its observation evidence in the same
+change: either name the existing reaction in the change's design/tasks and PR `## Verification`, or
+add a new guard and record the required negative run. If a property cannot fail because the data model
+constructs it, state that construction in requirement prose rather than inventing a scenario. A scenario
+with neither form of evidence does not enter the main specs.
+
 A completed change is **not** retained as a persistent dated copy. The OpenSpec CLI folds sync
 into its `archive` command, whose default *moves* the change under
 `changes/archive/YYYY-MM-DD-<name>/`; once the delta is synced into the specs, Tianheng removes
