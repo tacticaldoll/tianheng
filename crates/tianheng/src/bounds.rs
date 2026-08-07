@@ -239,5 +239,31 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_third_generation_mechanism_is_not_recognized",
         ),
+        // --- self-law-projection ---
+        BoundDecl::pinned(
+            BoundId::new(
+                "self-law-projection/a-doc-example-of-the-dependency-dsl-is-refused-a-stated-bound",
+            ),
+            "a line comment under the shell naming `restrict_dependencies_to(` in order to teach the \
+             re-exported DSL",
+            Extent::Reached(Reached::OverReacts {
+                because: "the recognizer reads a comment's text and never its purpose, so a doc example of a \
+                          DSL the shell publishes is refused exactly as a restatement of its own declaration \
+                          would be".into(),
+            }),
+            "a_doc_example_of_the_dependency_dsl_is_refused",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "self-law-projection/a-comment-naming-every-member-for-another-reason-is-refused-a-stated-bound",
+            ),
+            "one contiguous line-comment block naming every current allowlist member for a purpose other than \
+             copying the declaration",
+            Extent::Reached(Reached::OverReacts {
+                because: "the block check asks whether the members all appear and never why, and teaching it \
+                          to read intent would be a heuristic over prose".into(),
+            }),
+            "a_comment_naming_every_member_for_another_reason_is_refused",
+        ),
     ]
 }

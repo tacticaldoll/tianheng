@@ -40,6 +40,30 @@ The direct shell-to-metadata direction SHALL be defended by an in-repository fix
 - **WHEN** the isolated `tianheng` fixture declares `xingbiao` as its only forbidden direct normal dependency
 - **THEN** the live shell dependency boundary selected from `tianheng_constitution()` reports an enforced violation
 
+### Requirement: Observation bounds
+
+The comment reactions above read **authored text**, so what they cannot read is a limit this capability declares
+rather than leaving for the author who trips it. Both are over-reactions, which is the safe direction here: a
+false positive costs a sentence rewritten, while the false negative would be a restated declaration that no
+reaction governs. Neither SHALL be closed by teaching a recognizer to read intent — that is a heuristic over
+prose, which this repository has measured and rejected.
+
+#### Scenario: A doc example of the dependency DSL is refused — a stated bound
+
+- **WHEN** a line comment under the shell names `restrict_dependencies_to(` in order to teach the re-exported
+  DSL rather than to restate this shell's own declaration
+- **THEN** the reaction refuses it anyway, a stated bound: it reads a comment's text and never its purpose, and
+  the shell publishes that DSL, so the shape is live even with no instance in the tree today
+- **PINNED-BY** `a_doc_example_of_the_dependency_dsl_is_refused`
+
+#### Scenario: A comment naming every member for another reason is refused — a stated bound
+
+- **WHEN** one contiguous line-comment block names every current allowlist member for a purpose other than
+  copying the declaration — a crate-level note on what the shell composes, say
+- **THEN** the reaction refuses it anyway, a stated bound: it asks whether the members all appear and never why,
+  so a block naming them for another reason reads the same as a copied census
+- **PINNED-BY** `a_comment_naming_every_member_for_another_reason_is_refused`
+
 ### Requirement: A staleness test reacts when the checked-in projection drifts
 
 A test SHALL fail when the checked-in projection artifact differs, byte for byte, from the live projection generated from `tianheng_constitution()`. The comparison SHALL cover the **entire** artifact — both the generated boundary projection and any fixed preamble (the preamble being a generated constant, never hand-edited prose) — so no part of the artifact can drift unnoticed. The test SHALL follow the repository's existing repo-only discipline: it SHALL skip when run outside a workspace checkout (e.g. a packaged crate tarball), and SHALL fail loudly rather than skip when a workspace is expected but absent (the `TIANHENG_WORKSPACE_TESTS` signal). A one-command regeneration path SHALL overwrite the checked-in artifact from the live projection instead of asserting.
