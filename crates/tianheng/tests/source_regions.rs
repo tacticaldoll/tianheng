@@ -67,3 +67,50 @@ fn prose_still_excludes_a_fenced_block() {
     assert!(fenced.prose().contains("visible"));
     assert!(!fenced.prose().contains(UNSEEN));
 }
+
+/// Markdown has two fence characters, and prose is what neither of them holds.
+///
+/// The requirement this serves — a generated document's path must appear where a reader is *sent*, and a path
+/// only inside a fence is not that — is written about fenced code, not about one spelling of a fence. Reading
+/// only the backtick form makes a `~~~` block count as prose, so a path nothing points at in prose would
+/// satisfy the reachability rule. Latent rather than live: no tracked Markdown uses `~~~` today, which is
+/// exactly the state in which a hole is cheapest to close and least likely to be noticed.
+#[test]
+fn prose_excludes_a_tilde_fenced_block() {
+    let fenced = Source::of(format!("visible\n~~~bash\n{UNSEEN}\n~~~\n"));
+    assert!(fenced.prose().contains("visible"));
+    assert!(!fenced.prose().contains(UNSEEN));
+}
+
+/// A fence closes on its own character, so one form shown inside the other stays fenced.
+///
+/// The obvious repair — toggle on either marker — reopens the hole from the other side: a `~~~` line displayed
+/// inside a backtick block would close it, and the rest of that block would become prose. Measured against the
+/// naive form before this landed. CommonMark closes a fence only with a run of the character that opened it,
+/// at least as long, which is why the state carries the character rather than a boolean.
+///
+/// This matters here specifically: `AGENTS.md` is documentation about documentation, so a fence displayed
+/// inside a fence is ordinary content rather than a contrivance.
+#[test]
+fn a_fence_of_the_other_form_does_not_close_the_open_one() {
+    let nested = Source::of(format!(
+        "visible\n```markdown\nan example of the other fence:\n~~~\n{UNSEEN}\n~~~\n```\ntail\n"
+    ));
+    assert!(nested.prose().contains("visible"));
+    assert!(nested.prose().contains("tail"), "and the block does close");
+    assert!(
+        !nested.prose().contains(UNSEEN),
+        "the inner `~~~` is content of the backtick block, not a closing delimiter"
+    );
+}
+
+/// A longer run closes a shorter opener; a shorter run inside a longer fence does not.
+#[test]
+fn a_fence_closes_only_on_a_run_at_least_as_long() {
+    let long_opener = Source::of(format!("visible\n````\n```\n{UNSEEN}\n````\ntail\n"));
+    assert!(
+        !long_opener.prose().contains(UNSEEN),
+        "a three-backtick line does not close a four-backtick fence"
+    );
+    assert!(long_opener.prose().contains("tail"), "the longer run does");
+}

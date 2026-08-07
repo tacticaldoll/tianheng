@@ -18,6 +18,17 @@
 //! [`Source::whole`] is the deliberate escape, spelled out so it is greppable. The family already handles `dyn`
 //! this way: not forbidden globally, but every appearance visible where it matters.
 
+/// A fence delimiter's character and run length, for a line already trimmed of leading space.
+///
+/// Markdown fences with either backticks or tildes, three or more. Reading only the backtick form made a `~~~`
+/// block count as prose, so a path appearing nowhere but inside one satisfied "reachable from where a reader is
+/// sent" — the requirement is about fenced code, not about one spelling of a fence.
+fn fence_run(trimmed: &str) -> Option<(char, usize)> {
+    let marker = trimmed.chars().next().filter(|c| *c == '`' || *c == '~')?;
+    let length = trimmed.chars().take_while(|c| *c == marker).count();
+    (length >= 3).then_some((marker, length))
+}
+
 /// A whole tracked text, from which a region is taken.
 pub struct Source(String);
 
@@ -140,15 +151,26 @@ impl<'a> Prose<'a> {
     /// Yields owned text because excision produces a new string; a fully-commented line yields an empty one,
     /// which is what the whole-line drop it replaces already amounted to for every caller.
     pub fn lines(&self) -> impl Iterator<Item = String> + use<'a> {
-        let mut fenced = false;
+        let mut fence: Option<(char, usize)> = None;
         let mut commented = false;
         self.0.lines().filter_map(move |line| {
             let trimmed = line.trim_start();
-            if trimmed.starts_with("```") {
-                fenced = !fenced;
+            if let Some((marker, length)) = fence_run(trimmed) {
+                match fence {
+                    None => fence = Some((marker, length)),
+                    // Closes only on its own character, at least as long. A run of the *other* form, or a
+                    // shorter one, is content of the open block — which is why the state carries the character
+                    // instead of a boolean: toggling on either marker would let a `~~~` shown inside a backtick
+                    // block close it, turning the rest of that block into prose. Measured against that form.
+                    Some((open_marker, open_length)) => {
+                        if marker == open_marker && length >= open_length {
+                            fence = None;
+                        }
+                    }
+                }
                 return None;
             }
-            if fenced {
+            if fence.is_some() {
                 return None;
             }
             // Walk the line, alternating between visible text and comment span. `rest` strictly shrinks on

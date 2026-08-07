@@ -532,6 +532,16 @@ them.
   place a freshness check cannot catch a falsehood — the comparison is the generator's own text against itself.
   The lesson it carried does not need the membership claim, so the claim is gone rather than re-typed — which
   is what kept the document honest when the retirement later removed that value's only instance.
+- **A `~~~` fenced block counted as prose, so a path inside one satisfied "reachable from where a reader is
+  sent".** `Prose` recognized only the backtick fence, and `projection-register` requires every generated
+  document's path to appear in `AGENTS.md` prose — a fence is where a command lives, not where a reader is sent.
+  Markdown fences with either character, so the tilde form was read as ordinary text. A fence now opens on a run
+  of three or more backticks **or** tildes and closes only on a run of the same character, at least as long.
+  The obvious repair — toggle on either marker — reopens the hole from the other side, letting a `~~~` displayed
+  inside a backtick block close it and turning the rest of that block into prose; that is measured and pinned,
+  and it matters here because `AGENTS.md` is documentation about documentation. Latent rather than live: no
+  tracked Markdown uses `~~~`, which is the state in which the hole is cheapest to close and least likely to be
+  noticed.
 - **Three text recognizers read past the region they observe, each in the direction its own comment said it did
   not.** One class, found by a review of this window and repaired together. The bound register's attribute walk
   stops at a blank line so an attribute cannot cover the item beneath it — but it read the preceding lines
