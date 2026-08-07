@@ -16,7 +16,7 @@ jobs:
     name: Release coherence
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # State classification follows the latest exact `release: X.Y.Z` commit. A shallow
           # checkout cannot observe that release spine and must not masquerade as coherent.
@@ -31,7 +31,7 @@ jobs:
     name: Definition of Done
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: the local Definition of Done matches what CI runs
         # AGENTS.md's Definition of Done calls itself "the single source for the local pre-flight gate
         # list ... CI runs a superset of it". That claim drifted once (both `cargo doc` invocations here
@@ -104,7 +104,7 @@ jobs:
     name: MSRV (rust-version)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: build and test on the declared minimum supported Rust version
         run: |
           msrv="$(cargo metadata --no-deps --format-version 1 \
@@ -120,7 +120,7 @@ jobs:
     name: License texts bundled
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: every publishable crate bundles its license texts
         run: |
           # `cargo publish` packages only files inside each crate's own directory, so the
@@ -148,7 +148,7 @@ jobs:
     name: Packaged crate self-test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: every publishable crate's tests pass from its packaged tarball
         run: |
           # `cargo publish` ships only crate-local files, so a data file outside a crate's own
@@ -186,7 +186,7 @@ jobs:
     name: Supply chain (cargo-deny)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: license / advisory / bans / sources policy
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
@@ -196,7 +196,7 @@ jobs:
     name: Tianheng reaction
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: reaction passes on a clean target
         run: cargo run -p tianheng -- check --manifest-path crates/tianheng/tests/fixtures/clean/Cargo.toml
       - name: reaction fails with exit 1 on a violating target (1, not 2 — the contract separates them)
@@ -223,7 +223,7 @@ jobs:
     name: Examples dogfood
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: every example reacts as declared
         # Each example under examples/ is its own workspace carrying a deliberate fault and the
         # adopter's real `= "0.3"` dependency form; the script patches the family to local source
