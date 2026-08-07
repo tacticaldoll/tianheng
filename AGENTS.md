@@ -367,6 +367,12 @@ bundling, the packaged-tarball self-test, and the reaction on the clean/violatin
 
 ## Versioning — SemVer honesty (the modou lesson)
 
+Version literals in prose name only an immutable historical/provenance fact, a migration target, or the active
+release-planning surface. An `[Unreleased]` adopter narrative may therefore name its intended release; long-lived
+comments and live documentation do not restate a "current" or prospective version — say `[Unreleased]`, workspace
+version, manifest requirement, or this checkout instead. The release-coherence reaction owns only the mutable
+version-bearing surfaces it enumerates; do not add a general prose-number detector.
+
 - Pre-1.0 and at `0.0.x`: **no inter-release compatibility is promised**; any release may
   break. Do not vanity-bump the minor for a non-breaking change.
 - Graduate to `0.1.0` only when the public API has settled enough to promise
