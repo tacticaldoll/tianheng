@@ -76,10 +76,7 @@ pub struct Executed<'a> {
 
 impl<'a> Executed<'a> {
     pub fn lines(&self) -> impl Iterator<Item = &'a str> + use<'a> {
-        let comment = self.comment;
-        self.text
-            .lines()
-            .filter(move |line| !line.trim_start().starts_with(comment))
+        self.numbered_lines().map(|(_, line)| line)
     }
 
     /// Executed lines with their one-based position in the original source.
