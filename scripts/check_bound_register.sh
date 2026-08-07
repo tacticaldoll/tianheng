@@ -992,8 +992,10 @@ if [[ ${#census_files[@]} -gt 0 ]]; then
     # document", which was swallowed by `|| true` — so a file the census direction claims to cover went
     # unexamined and the gate reported clean, the one direction this whole capability opposes. Both greps are
     # captured in the parent and the two exits separated, as the sibling gate separates them.
+    cd "$repo" \
+        || cannot_judge "could not enter the repository while scanning tracked Markdown for a written census; grep exit 1 means no match, so a directory failure must be separated before grep runs"
     census_status=0
-    census_sites=$(cd "$repo" && grep -nHE '[0-9]+ bounds across [0-9]+ capabilit' -- "${census_files[@]}") \
+    census_sites=$(grep -nHE '[0-9]+ bounds across [0-9]+ capabilit' -- "${census_files[@]}") \
         || census_status=$?
     ((census_status <= 1)) \
         || cannot_judge "\`grep\` could not read the tracked Markdown while scanning for a written census (exit $census_status); a document this direction claims to cover must not go unexamined behind a clean report"

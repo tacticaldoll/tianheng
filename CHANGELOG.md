@@ -491,6 +491,8 @@ them.
   performs.*
 
 ### Fixed
+- The observation-bound register now reports cannot-judge when its target repository becomes unavailable before
+  the written-census scan, instead of collapsing `cd` failure into grep's ordinary no-match exit and reporting 1.
 - The observer-protocol trait-object guard now scans Tianheng's Rust sources recursively, so moving a public item
   into a private nested module cannot remove it from the corpus when a public re-export could still expose it.
 - Repository governance reactions now select Rust or shell executed-source regions explicitly, so Rust

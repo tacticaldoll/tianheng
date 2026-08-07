@@ -1105,6 +1105,32 @@ bless_output=$(BLESS=1 "$check" "$bless_offense" 2>&1) && bless_status=0 || bles
 grep -Fq 'the register it describes is NOT valid' <<<"$bless_output" \
     || { printf 'blessing an invalid register must say so: %s\n' "$bless_output" >&2; exit 1; }
 
+# The census scan distinguishes an unavailable repository from grep's ordinary no-match status. Move the fixture
+# immediately after the final tracked-Markdown enumeration: every earlier observation succeeds, then the directory
+# transition itself fails at the exact boundary this guard owns.
+census_unreadable=$(new_repo census-unreadable "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+census_git_stub=$fixture_root/census-git-stub
+mkdir -p "$census_git_stub"
+real_git_for_census=$(command -v git)
+cat >"$census_git_stub/git" <<STUB
+#!/usr/bin/env bash
+trigger=0
+for arg in "\$@"; do
+    [[ \$arg == '*.md' ]] && trigger=1
+done
+"$real_git_for_census" "\$@"
+status=\$?
+if [[ \$status -eq 0 && \$trigger -eq 1 ]]; then
+    mv "$census_unreadable" "$census_unreadable-moved"
+fi
+exit \$status
+STUB
+chmod +x "$census_git_stub/git"
+census_status=0
+census_output=$(PATH="$census_git_stub:$PATH" "$check" "$census_unreadable" 2>&1) || census_status=$?
+[[ $census_status -eq 2 && $census_output == *'could not enter the repository while scanning tracked Markdown'* ]] \
+    || { printf 'an unavailable census root must exit 2 distinctly, got %d: %s\n' "$census_status" "$census_output" >&2; exit 1; }
+
 # And cannot-judge precedes the write, so a register whose declarations the gate could not find leaves behind
 # no document that reads as a complete register of a repository holding no bounds.
 bless_vacuous=$(new_repo bless-vacuous "$(printf '%s\n' \

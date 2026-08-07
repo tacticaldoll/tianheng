@@ -614,6 +614,10 @@ while an empty tracker or citation list refuses every bound in the register and 
 the projection is written, since a tree the reaction could only partly read cannot produce a whole
 register.
 
+Before scanning tracked Markdown for a written census, the reaction SHALL enter the judged repository in a
+separately checked step. Failure to enter SHALL exit 2 cannot-judge and SHALL NOT be interpreted as grep's ordinary
+exit 1 no-match result.
+
 #### Scenario: Every failure direction is proven
 
 - **WHEN** the companion test runs
@@ -652,6 +656,11 @@ register.
   reading the empty result as a repository holding nothing: that reading reports clean over a census it
   never examined, and refuses every tracker and citation in the register for a failure that is not the
   register's
+
+#### Scenario: The repository disappears before the written-census scan
+
+- **WHEN** tracked Markdown enumeration succeeds and the judged repository cannot then be entered for the census scan
+- **THEN** the reaction exits 2 naming the directory transition, rather than reporting that no census was written
 
 #### Scenario: A tracked spec absent from the worktree is refused before the projection is written
 
