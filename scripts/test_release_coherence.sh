@@ -186,6 +186,18 @@ sed -i '0,/version = "0.2.1"/s//version = "0.2.0"/' "$stale_lock/Cargo.lock"
 commit_all "$stale_lock" 'chore: leave stale lock'
 expect_fail "$stale_lock" 1 'Cargo.lock package tianheng is 0.2.0; expected 0.2.1'
 
+# The lockfile direction must reach EVERY workspace package, not only the first. The case above stales
+# `tianheng`, which the package enumeration yields first, so it is satisfied on the loop's first iteration and
+# says nothing about the rest — every lockfile assertion this matrix made was about iteration one. This case
+# stales the SECOND package, which is the shape a truncated package list hides: the loop ends early and a real
+# disagreement goes unreported, a false negative rather than a wrong verdict.
+stale_lock_second=$(new_repo stale-lock-second)
+write_workspace "$stale_lock_second" 0.2.1
+write_release_changelog "$stale_lock_second" 0.2.1 0.2.0
+sed -i '/name = "xuanji"/{n;s/version = "0.2.1"/version = "0.2.0"/;}' "$stale_lock_second/Cargo.lock"
+commit_all "$stale_lock_second" 'chore: leave the second package stale'
+expect_fail "$stale_lock_second" 1 'Cargo.lock package xuanji is 0.2.0; expected 0.2.1'
+
 missing_notes=$(new_repo missing-notes)
 write_workspace "$missing_notes" 0.2.1
 write_development_changelog "$missing_notes" 0.2.1 no
