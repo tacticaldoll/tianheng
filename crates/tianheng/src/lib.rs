@@ -45,19 +45,23 @@ pub use guibiao::{
 // The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
 // its instrument name so the bare `Constitution` can be the unified shell-level type below. The
 // pure static core (`guibiao::check`) takes this type; the self-governance gate uses it directly.
+pub use guibiao::Constitution as GnomonConstitution;
+
+// This crate's own declared observation bounds, for the capabilities whose reactions live here.
 mod bounds;
 pub use bounds::observation_bounds;
 
 // The declared-observation-bound model is reached through 渾儀 rather than a direct shell-to-璇璣
 // edge, preserving the dependency direction this crate governs itself by.
-pub use guibiao::StaticObserver;
 pub use hunyi::{
     BoundDecl, BoundId, Defence, Demonstrates, Extent, FactGranularity, Observer, Owner, Reached,
-    SemanticObserver,
 };
+
+// 三儀 as observation participants, so an adopter composes a run from the shell alone.
+pub use guibiao::StaticObserver;
+pub use hunyi::SemanticObserver;
 pub use louke::RuntimeObserver;
 
-pub use guibiao::Constitution as GnomonConstitution;
 // 渾儀 (semantic) dimension: the boundary DSL, re-exported so an adopter declares semantic
 // boundaries the same way as static ones, then folds them into the unified [`Constitution`].
 // `SemanticBoundaries` stays public (the runner reads it) but is off the prelude declaration path.
