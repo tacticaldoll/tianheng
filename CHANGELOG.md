@@ -279,8 +279,8 @@ them.
 - Test recognition stops at a **block-comment delimiter**, so a `#[test]` written inside `/* … */` no longer
   satisfies the attribute run. It deliberately neither strips nor tracks comments: comment state is a
   forward property of a file that an upward walk cannot know, and stripping needs string-literal lexing —
-  this tree carries 49 `/*` occurrences inside string literals, several nested, from its own lexer suites, so
-  a delimiter-counting scan would swallow real definitions. No `#[test]` run in the tree contains a block
+  this tree's own lexer suites nest `/*` inside string literals, so a delimiter-counting scan would swallow
+  real definitions. No `#[test]` run in the tree contains a block
   comment, so nothing existing is refused. The walk also lost its 12-line cap, which had refused a
   legitimate test whose attribute run was longer; the stop conditions were already the boundary the cap
   stood in for.
@@ -360,15 +360,16 @@ them.
   and nothing was keeping that true. All three passed when first run, so the wiring closes a latent gap
   rather than a live defect.
 - `check_dod_coherence.sh` gains the **last missing failure matrix**, so every `check_*` gate now has a
-  `test_*` twin and every one of the five asserts the expected exit **code**. This gate's subject is a claim
+  `test_*` twin and every one of them asserts the expected exit **code**. This gate's subject is a claim
   `AGENTS.md` makes about itself — that its Definition of Done block is the single source for the local gate
   list, and that CI runs a superset — so until now that claim rested on a reaction nobody had watched refuse.
   The direction that matters most is the vacuous one: without its zero-commands guard the gate reports
   `ok: every local Definition of Done command (0 parsed) is run by CI` and exits 0.
 - `check_whitespace_hygiene.sh` gains a **companion failure matrix** and a target-directory argument, which
-  is what made one possible — the same argument the register and reference-integrity gates take. It was the
-  only gate whose refusals were asserted nowhere, and it is where the shared exit-contract backstop first
-  misfired: its clean-run assertion is what catches that, since removing the backstop's subshell guard fails
+  is what made one possible — the same argument the register and reference-integrity gates take. It was one of
+  the two gates whose refusals were asserted nowhere — `check_dod_coherence.sh`, the entry above, was the
+  other — and it is where the shared exit-contract backstop first misfired: its clean-run assertion is what
+  catches that, since removing the backstop's subshell guard fails
   this matrix and no other — **which is no longer true, and the correction is the more useful fact**: the
   `capture_or_refuse` migration in this same window removed every failing-subshell-on-a-clean-run construct from
   every gate, so with the guard deleted no gate prints a spurious cannot-judge and no matrix fails. The protection
