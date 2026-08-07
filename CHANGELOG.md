@@ -491,6 +491,8 @@ them.
   performs.*
 
 ### Fixed
+- The publish-source gate now reports cannot-judge when Git's extracted signature is not the tag object's exact
+  suffix, instead of silently verifying an unreconstructed payload and misreporting the tag as wrong source.
 - The reference-integrity gate's required governance-document set is now immune to ambient environment overrides;
   its narrowed zero-corpus policy is an explicit, validated fixture-only argument that cannot target this workspace.
 - The observation-bound register now reports cannot-judge when its target repository becomes unavailable before
