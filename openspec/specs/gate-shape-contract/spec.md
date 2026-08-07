@@ -134,6 +134,15 @@ what a reader is sent to. Two properties once read the whole file while their ow
 were about executed text, so `expected_status` in a header comment satisfied a property about an assertion — the
 wrong check rather than a loose one.
 
+Executed gate and twin behavior SHALL use shell line-comment semantics: a line whose trimmed start is `#` is prose,
+while Rust's `//` marker SHALL NOT be treated as a shell comment. Header and prose properties continue to use their
+dedicated regions.
+
+#### Scenario: A shell comment claims an executed property
+
+- **WHEN** a required gate or twin form appears only on a line whose trimmed start is `#`
+- **THEN** the reaction does not count it as executed shell text
+
 Requiring the twins' helper form (`expect_pass` / `expect_fail`) is legitimate where requiring a *product*
 test-name convention would not be, and the difference is ownership: these twins are authored in this
 repository for this purpose, so this capability may require their shape, exactly as the bound register may
