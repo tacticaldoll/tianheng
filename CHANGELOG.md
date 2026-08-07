@@ -167,9 +167,10 @@ them.
   was named by no reaction. A reaction now holds it over all of them, and a `xuanji` test shows the answer can
   be `false` for a computed string in **each position independently** — a discriminant returning a constant
   `true` would satisfy every declaration, and one written as a short-circuiting chain can pass while examining
-  only its first field. An adopter auditing what a governance run allocates can ask the same question. The
-  deliberate counter-example lives outside the workspace: `examples/observer-participant`'s declarations are
-  computed on purpose, which is what the owned form is for.
+  only its first field. An adopter auditing whether a declaration owns any string value can ask the same
+  question; it does not claim to measure allocations by non-string storage or the surrounding governance run.
+  The deliberate counter-example lives outside the workspace: `examples/observer-participant`'s declarations
+  are computed on purpose, which is what the owned form is for.
 
   Two scenarios of the protocol's own requirements gained the reactions they were written without, both found by
   the closing review's seventh round. *An observer's bounds method cannot be found where the reaction looks* is now

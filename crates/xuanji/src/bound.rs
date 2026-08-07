@@ -172,7 +172,8 @@ impl BoundDecl {
     ///
     /// Exposed rather than kept private because the declarations live in the dimension crates, which cannot be
     /// read from a unit test here, and because it is an honest question about a declaration in its own right:
-    /// an adopter auditing what a governance run allocates can ask it too.
+    /// an adopter auditing whether a declaration owns any string value can ask it too. It does not report
+    /// allocations by non-string storage or by the surrounding governance run.
     ///
     /// Every string is reached, including those nested in the extent and in an inherited owner's layer name.
     /// The matches below are **exhaustive in-crate**, so a variant added with a new string of its own fails to

@@ -275,7 +275,9 @@ the evidence did not earn, and one on a combination the nesting deliberately for
 
 Every string a bound declaration carries SHALL be owned-or-borrowed (`Cow<'static, str>`) — its id, the shape it
 names, its rationale, and the layer an inherited ownership names — so a declaration whose value is computed is
-expressible while one written as a literal allocates nothing.
+expressible while one written from literals borrows every string value it carries. This contract observes string
+ownership only; it SHALL NOT be presented as measuring allocations by non-string storage or by the surrounding
+governance run.
 
 `Observer::bounds` carries no default body, so declaring bounds is a condition of implementing the protocol. An
 implementor whose bounds are not compile-time literals — an observer over a discovered plugin set, or over roots it
@@ -308,10 +310,11 @@ owned-or-borrowed value can honestly lend.
 - **THEN** the declaration is expressible, and the bound behaves exactly as a literal one — the same extent, the
   same derived evidence, and the same refusal of a duplicate id
 
-#### Scenario: A literal declaration is unchanged and allocates nothing
+#### Scenario: A literal declaration is unchanged and borrows every string
 
 - **WHEN** a bound is declared from string literals, as every one of this family's own is
-- **THEN** the call site is written exactly as it was, and the declaration borrows rather than allocating
+- **THEN** the call site is written exactly as it was, and every string value is borrowed rather than owned,
+  without making a claim about other allocations
 
 #### Scenario: One of the family's own declarations is rewritten as a computed string
 

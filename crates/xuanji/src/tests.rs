@@ -921,10 +921,11 @@ fn a_bound_may_be_declared_from_computed_strings() {
 }
 
 #[test]
-fn a_literal_declaration_borrows_rather_than_allocating() {
-    // The zero-allocation half is asserted rather than intended: every one of this family's declarations is a
+fn a_literal_declaration_borrows_every_string_it_carries() {
+    // The string-borrowing claim is asserted rather than intended: every one of this family's declarations is a
     // literal, and `observation_bounds()` runs on every pass of the reaction that holds them against the specs.
-    // Pointer identity is the observation — a borrowed value still points into the literal, an owned one cannot.
+    // Pointer identity observes the shape directly — a borrowed value still points into the literal, while an
+    // owned one cannot — and `borrows_every_string()` reaches the other string positions.
     //
     // How many there are is deliberately not written here. It was, as "fifty-three", while the register counted
     // fifty-four — a census in prose with no observation source, which `check_bound_register.sh` prints on every
@@ -936,7 +937,7 @@ fn a_literal_declaration_borrows_rather_than_allocating() {
         Extent::OutOfReach {
             because: "a literal rationale".into(),
         },
-        "a_literal_declaration_borrows_rather_than_allocating",
+        "a_literal_declaration_borrows_every_string_it_carries",
     );
     assert!(
         std::ptr::eq(declaration.shape().as_ptr(), SHAPE.as_ptr()),
