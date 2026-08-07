@@ -299,6 +299,70 @@ fn a_source_with_no_bounds_method_yields_no_body_to_judge() {
     );
 }
 
+/// A `}` written in a comment TAIL does not close the body, so a second list behind one is still read.
+///
+/// The truncation this refuses was silent in the one direction that matters: `observation_bounds(); // }`
+/// closed the body at the comment, `bounds_body`'s own `//`-tail stripping turned the remainder into exactly
+/// the delegation, and a `Vec::new()` beneath it — a second list — was never presented to the assertion. The
+/// repair is ordering: the tail is stripped *before* the braces are counted, not after.
+///
+/// The control is the second case. Without it a masker that blanked every brace everywhere would satisfy the
+/// first assertion and look like a fix, while making every body unclosable.
+#[test]
+fn a_brace_in_a_comment_tail_no_longer_closes_the_body() {
+    let hidden_second_list = Source::of(
+        "fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds(); // }\n    Vec::new()\n}\n",
+    );
+    assert_eq!(
+        bounds_body(&hidden_second_list).as_deref(),
+        Some(["observation_bounds()".to_string(), "Vec::new()".to_string()].as_slice()),
+        "the body runs to its real closing brace, so the second list is what the reaction judges"
+    );
+
+    let delegation_with_a_comment =
+        Source::of("fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds() // why\n}\n");
+    assert_eq!(
+        bounds_body(&delegation_with_a_comment).as_deref(),
+        Some(["observation_bounds()".to_string()].as_slice()),
+        "and a conforming body carrying an ordinary comment still resolves — the mask blanks braces inside a \
+         tail, never the tail's own line"
+    );
+}
+
+/// A brace inside a block comment or a string literal still moves the body extent — a declared bound.
+///
+/// Recognizing it would need the string-literal lexing this file deliberately does not carry, and which
+/// `check_bound_register.sh` measured and rejected for the same reason: this tree's own lexer suites put
+/// comment delimiters inside string literals, several of them nested, so a delimiter-counting stripper opens a
+/// phantom comment at the first of them.
+///
+/// It is declared rather than closed because the error direction is the safe one, which this pin is what shows:
+/// a moved extent makes a **conforming** body read as non-conforming, because no brace-carrying construct
+/// survives the exact one-statement comparison. An author meets a refusal to argue with, never a silent pass.
+/// The control is the same body with the comment removed, so the refusal is the brace's doing and not the
+/// recognizer refusing everything.
+#[test]
+fn a_brace_in_a_block_comment_moves_the_body_extent() {
+    let braced_block_comment = Source::of(
+        "fn bounds(&self) -> Vec<BoundDecl> {\n    /* } */\n    observation_bounds()\n}\n",
+    );
+    assert_ne!(
+        bounds_body(&braced_block_comment).as_deref(),
+        Some(["observation_bounds()".to_string()].as_slice()),
+        "the extent stops at the commented brace, so this body — which delegates exactly — is refused; that \
+         over-reaction is the declared bound"
+    );
+
+    let same_body_uncommented =
+        Source::of("fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n");
+    assert_eq!(
+        bounds_body(&same_body_uncommented).as_deref(),
+        Some(["observation_bounds()".to_string()].as_slice()),
+        "the identical body without the comment resolves, so the bound is about the brace and not about the \
+         recognizer refusing whatever it is given"
+    );
+}
+
 /// The shell reads semantic boundaries only to pass them directly into 渾儀's public composed entry point.
 ///
 /// A behavioral comparison cannot observe a local empty-bundle guard here: the static dimension has already
@@ -425,9 +489,52 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
     )
 }
 
+/// The same text with `{` and `}` inside a line-comment tail replaced by a space.
+///
+/// Byte offsets are preserved exactly — only a one-byte ASCII brace is ever swapped for a one-byte ASCII space
+/// — so the mask can be brace-matched while the ORIGINAL text is sliced with the offsets that produces. That
+/// matters concretely: this tree's comments carry 漢字, and a mask that re-encoded anything would shift every
+/// offset after the first multi-byte character.
+///
+/// Why it exists: [`function_body`] counted braces through comments, so `observation_bounds(); // }` closed the
+/// body at the comment and everything after it — a second list — was never read. `bounds_body`'s own `//`-tail
+/// stripping then made the truncated remainder look like the exact delegation, and the reaction passed. The
+/// stripping had to move *before* the brace count, not after it.
+///
+/// [`Executed`] cannot do this job: it filters lines whose trimmed start is `//`, so a comment TAIL — which is
+/// the shape above — survives it whole, brace and all.
+fn mask_line_comment_braces(text: &str) -> String {
+    let mut bytes = text.as_bytes().to_vec();
+    let mut line_start = 0usize;
+    while line_start <= bytes.len() {
+        let line_end = bytes[line_start..]
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(bytes.len(), |at| line_start + at);
+        if let Some(at) = bytes[line_start..line_end]
+            .windows(2)
+            .position(|pair| pair == b"//")
+        {
+            for byte in &mut bytes[line_start + at..line_end] {
+                if *byte == b'{' || *byte == b'}' {
+                    *byte = b' ';
+                }
+            }
+        }
+        if line_end >= bytes.len() {
+            break;
+        }
+        line_start = line_end + 1;
+    }
+    String::from_utf8(bytes).expect("only ASCII braces were replaced, each by one ASCII space")
+}
+
 /// The brace-delimited body of the first function whose executed signature line begins with `signature`.
 fn function_body(source: &Source, signature: &str) -> Option<Source> {
     let text = source.whole();
+    // Braces are counted over the MASK and the body is sliced out of the original, which the mask's
+    // offset-for-offset construction makes the same positions. See [`mask_line_comment_braces`].
+    let masked = mask_line_comment_braces(text);
     // By line POSITION, never by a bare marker anywhere in the blob: a prose sentence mentioning the function
     // must not become the brace-match origin. The signature must begin the trimmed line; this remains the same
     // deliberately lightweight recognizer the observer-bounds reaction already exercised, not a second parser.
@@ -440,10 +547,10 @@ fn function_body(source: &Source, signature: &str) -> Option<Source> {
         })
         .find(|(_, line)| line.trim_start().starts_with(signature))
         .map(|(at, line)| at + (line.len() - line.trim_start().len()))?;
-    let open = signature + text[signature..].find('{')?;
+    let open = signature + masked[signature..].find('{')?;
     let mut depth = 0usize;
     let mut close = None;
-    for (offset, character) in text[open..].char_indices() {
+    for (offset, character) in masked[open..].char_indices() {
         match character {
             '{' => depth += 1,
             '}' => {

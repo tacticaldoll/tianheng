@@ -210,6 +210,27 @@ pub fn a_probe_bound_is_pinned() {}
 ')
 expect_fail "$attribute_leak" 1 'carries no `#[test]` in the attribute run above it'
 
+# A BLANK line separates an attribute run from what sits beneath it, so `#[test]`, blank, `fn` is refused.
+# Legal Rust nobody writes, and refusing it is the loud direction where leaking an attribute across the gap
+# would be silent false coverage. It is asserted because the walk very nearly could not see it: the preceding
+# lines used to arrive through a command substitution, which strips every trailing newline, so the blank
+# DIRECTLY above the definition — the only position that matters here — was deleted before the walk began and
+# this fixture passed. The stop condition was written; the read removed the character it stops on.
+blank_before_definition=$(new_repo blank-before-definition "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
+    '#[test]
+
+pub fn a_probe_bound_is_pinned() {}
+')
+expect_fail "$blank_before_definition" 1 'carries no `#[test]` in the attribute run above it'
+
+# Its control, so the direction above is a blank-line stop rather than a walk that refuses everything: the
+# identical fixture without the blank line resolves.
+adjacent_attribute=$(new_repo adjacent-attribute "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
+    '#[test]
+pub fn a_probe_bound_is_pinned() {}
+')
+expect_pass "$adjacent_attribute" 'bound register ok (1 declared bounds'
+
 # A commented-out attribute is a mention, not a marking — the same rule the definition match already follows.
 commented_attribute=$(new_repo commented-attribute "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
     '// #[test]

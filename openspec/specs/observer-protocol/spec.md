@@ -196,6 +196,27 @@ dimensions remain independently implemented on both sides, and for them the reac
 - **THEN** the reaction accepts it, because a comment is prose and not a list — the same region rule every other
   reaction in this repository reads its subject through
 
+#### Scenario: That trailing comment contains a closing brace
+
+- **WHEN** an observer's bounds method holds the delegation, a trailing comment containing `}`, and a further
+  statement beneath it
+- **THEN** the reaction reads the body to its real closing brace and fails on the further statement, because the
+  comment tail is removed **before** the braces are counted rather than after — counted through, the body closed
+  at the comment and the further statement was never presented to the comparison at all, so the one thing this
+  requirement refuses passed as the delegation
+
+#### Scenario: A brace inside a block comment or a string literal moves the read body extent — a stated bound
+
+- **WHEN** an inspected body carries `{` or `}` inside a block comment or a string literal
+- **THEN** the reaction reads an extent that is not the method's body — a stated bound.
+  It counts braces outside line comments only, and closing the gap needs the string-literal lexing this
+  repository measured and rejected: this tree's own lexer suites put comment delimiters inside string literals,
+  several of them nested, so a delimiter-counting scan opens a phantom comment at the first of them and swallows
+  every definition to the next close. The error direction is the safe one, and
+  it is what the pin shows — no brace-carrying construct survives the exact one-statement comparison, so a moved
+  extent refuses a **conforming** body rather than accepting a divergent one
+- **PINNED-BY** `a_brace_in_a_block_comment_moves_the_body_extent`
+
 #### Scenario: A Rust attribute appears in an inspected body
 
 - **WHEN** an inspected Rust body contains a line whose trimmed start is `#`

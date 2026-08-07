@@ -93,6 +93,22 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "a_trait_object_on_a_continuation_line_is_not_recognized",
         ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound",
+            ),
+            "an inspected body carrying `{` or `}` inside a block comment or a string literal",
+            // Over-reacting rather than under-reacting, and that is read off the comparison rather than
+            // preferred: the body is required to be one exact statement, which no brace-carrying construct
+            // survives, so a moved extent refuses a conforming body instead of admitting a divergent one.
+            Extent::Reached(Reached::OverReacts {
+                because: "the extent is found by counting braces outside line comments only, and separating a \
+                          brace in code from one inside a string literal needs the lexing this tree's own \
+                          lexer suites defeat, their fixtures putting comment delimiters inside string \
+                          literals".into(),
+            }),
+            "a_brace_in_a_block_comment_moves_the_body_extent",
+        ),
         // --- gate-shape-contract ---
         //
         // Its reaction is `tests/gate_shape_contract.rs`, so this crate owns these too. The four are read out
