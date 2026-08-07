@@ -29,7 +29,14 @@ fail() {
 # say "the release surfaces disagree", and reporting them as `1` tells a consumer to go looking for a
 # disagreement that does not exist. Every sibling gate separates these two; this one collapsed them.
 release_capture=$(mktemp)
-trap 'rm -f "$release_capture"' EXIT
+# The lockfile read gets a buffer of its own, and that is load-bearing rather than tidy. The package list is
+# read from `$release_capture` by a `while` loop that asks the lockfile about each package INSIDE it, so a
+# capture into the shared buffer would truncate the list mid-read: the loop would end after the first package
+# and every later disagreement would go unreported — a false negative, the one direction the Core Contract
+# forbids, produced by nothing more than reusing a filename. Every other capture here is sequential and may
+# share; a nested one may not.
+lock_capture=$(mktemp)
+trap 'rm -f "$release_capture" "$lock_capture"' EXIT
 
 cannot_judge() {
     printf 'release coherence: cannot judge: %s\n' "$*" >&2
@@ -208,7 +215,14 @@ require_release_surfaces() {
     fi
     capture_or_refuse 'the workspace package list' "$release_capture" cannot_judge -- workspace_packages
     while IFS= read -r package; do
-        lock_version=$(lock_version_for "$package")
+        # Migrated with the class every sibling producer here was: an `awk` over `Cargo.lock` is a read of an
+        # observation source, and a failed read is not an absent package. Unmigrated it reached the shared
+        # backstop, which can only say which line aborted; named, it says which lockfile entry could not be
+        # read. Into `$lock_capture` and never `$release_capture` — see that buffer's own comment for the false
+        # negative the shared name would produce here.
+        capture_or_refuse "the lockfile entry for $package" "$lock_capture" cannot_judge -- \
+            lock_version_for "$package"
+        lock_version=$(<"$lock_capture")
         [[ -n $lock_version ]] || fail "Cargo.lock is missing workspace package $package"
         [[ $lock_version == "$workspace_version" ]] \
             || fail "Cargo.lock package $package is $lock_version; expected $workspace_version"
