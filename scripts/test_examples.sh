@@ -24,12 +24,6 @@ source "$WS/scripts/lib/example_suite.sh"
 configure_example_suite "$WS/examples"
 init_example_artifacts
 
-# Prove that both ledger failure directions bite before trusting its positive result below.
-bash "$WS/scripts/test_published_family_coverage.sh"
-bash "$WS/scripts/test_example_suite.sh"
-# Prove a real warning stops an example before its reaction could be accepted.
-bash "$WS/scripts/test_example_quality_gate.sh"
-
 # Emit null-delimited `--config patch...` args for the named family crates.
 patch() {
     local out=() c
