@@ -1,0 +1,11 @@
+# In-repo fixture: the 天衡 shell directly depends on the lower 星表 metadata substrate.
+# `[workspace]` keeps this deliberate violation out of Tianheng's production workspace graph.
+[package]
+name = "tianheng"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+xingbiao = { path = "../../../../xingbiao" }
+
+[workspace]
