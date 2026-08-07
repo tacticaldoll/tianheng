@@ -104,6 +104,29 @@ fn a_fence_of_the_other_form_does_not_close_the_open_one() {
     );
 }
 
+/// A closing fence carries no info string, so a run followed by text is content.
+///
+/// This is the third leg of the same problem, and the only one that errs in **both** directions from one
+/// construct: an inner ```` ```rust ```` closed the block, so its contents counted as prose, and the bare run
+/// beneath it then re-opened a fence that never closed, so everything after was excluded forever. Found by
+/// review of the two-character fix, which had closed the cross-character and run-length legs and left this one.
+#[test]
+fn a_run_followed_by_an_info_string_does_not_close_a_fence() {
+    let inner_info_string = Source::of(format!(
+        "visible\n```\nan example markdown file:\n```rust\n{UNSEEN}\n```\nafter\n"
+    ));
+    let prose = inner_info_string.prose();
+    assert!(prose.contains("visible"));
+    assert!(
+        !prose.contains(UNSEEN),
+        "`\u{60}\u{60}\u{60}rust` inside an open fence is content, not a closer, so what follows it is still fenced"
+    );
+    assert!(
+        prose.contains("after"),
+        "and the bare run does close, so the fence does not swallow the rest of the document"
+    );
+}
+
 /// A longer run closes a shorter opener; a shorter run inside a longer fence does not.
 #[test]
 fn a_fence_closes_only_on_a_run_at_least_as_long() {

@@ -537,6 +537,9 @@ them.
   document's path to appear in `AGENTS.md` prose — a fence is where a command lives, not where a reader is sent.
   Markdown fences with either character, so the tilde form was read as ordinary text. A fence now opens on a run
   of three or more backticks **or** tildes and closes only on a run of the same character, at least as long.
+  A closing fence also carries no info string, so a run followed by text is content: without that, an inner
+  `` ```rust `` closed the block — its contents counted as prose — and the bare run beneath re-opened a fence that
+  never closed, excluding everything after it. One construct erring in both directions at once.
   The obvious repair — toggle on either marker — reopens the hole from the other side, letting a `~~~` displayed
   inside a backtick block close it and turning the rest of that block into prose; that is measured and pinned,
   and it matters here because `AGENTS.md` is documentation about documentation. Latent rather than live: no
