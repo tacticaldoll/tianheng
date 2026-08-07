@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**0 of 59 declared bounds have no pinning test.** That figure is the register's
+**0 of 60 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -172,6 +172,12 @@ fallback used where no manifest exists, which the register spec describes.
 - **pinned by**: `granularity_is_carried_only_by_the_as_intended_extent`
 
 ## observer-protocol
+
+### `observer-protocol/the-composition-body-carries-a-delimiter-that-can-move-the-read-extent-a-stated-bound`
+
+> the reaction refuses to judge, naming the delimiter — a stated bound. It does not decide whether the
+
+- **pinned by**: `an_ambiguous_delegation_extent_is_refused_rather_than_judged`
 
 ### `observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound`
 

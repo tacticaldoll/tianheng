@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**16 of 59 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**16 of 60 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound` — owner: engine
@@ -27,7 +27,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 
 **What this document does not claim.** The classification is *authored*: the type refuses a contradiction and derives what each bound's defence must demonstrate, but nothing verifies that a bound recorded as over-reacting really over-reacts rather than under-reacting. Two further limits are declared as bounds of `observation-bound-model` itself: an answer that depends on which corpus entry point observed it has no extent of its own and is recorded as under-reacting with the entry point as its owner, and a bound both out of reach and granularity-limited cannot be expressed at all.
 
-One value carries no bound today and is kept deliberately: **refuses to judge**. The misclassification this model exists to prevent was exactly a confusion between that and *out of reach* — a prediction of a silent false negative where the real behaviour was a fail-loud refusal — and a direction that cannot be named cannot be predicted with.
+**refuses to judge** and *out of reach* are kept distinct deliberately. The misclassification this model exists to prevent was exactly a confusion between them — a prediction of a silent false negative where the real behaviour was a fail-loud refusal — and a direction that cannot be named cannot be predicted with.
 
 ## as intended, granularity bounded (6)
 
@@ -345,7 +345,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 
 ### `observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound`
 
-> an inspected body carrying `{` or `}` inside a block comment or a string literal
+> an inspected bounds-method body carrying `{` or `}` inside a block comment or a string literal
 
 - **because**: the extent is found by counting braces outside line comments only, and separating a brace in code from one inside a string literal needs the lexing this tree's own lexer suites defeat, their fixtures putting comment delimiters inside string literals
 - **its defence must show**: reacts on a harmless shape
@@ -382,6 +382,16 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **because**: the conservative `Crate` rank exceeds the `Module` ceiling, so an effectively private item may react — never a silent pass
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
+
+## refuses to judge (1)
+
+### `observer-protocol/the-composition-body-carries-a-delimiter-that-can-move-the-read-extent-a-stated-bound`
+
+> the extent read for `evaluate_constitution` carrying `"`, `'`, `/*`, or `*/` on an executed line
+
+- **because**: a string, character, or block-comment delimiter can hide a brace from the extent count, so the text read may not be the function's body, and separating the two needs the lexing this tree's own lexer suites defeat — a verdict withheld is loud, while the verdict this comparison would give is a silent pass
+- **its defence must show**: refuses to judge
+- **pinned by**: `an_ambiguous_delegation_extent_is_refused_rather_than_judged`
 
 ## under-reacts (16)
 

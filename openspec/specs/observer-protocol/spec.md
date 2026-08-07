@@ -89,6 +89,7 @@ reported when more than one observer cannot judge. Deterministic and stated, nev
 
 ### Requirement: An empty semantic observer SHALL not read workspace metadata
 
+
 The semantic dimension's public composed entry point SHALL return `Clean` for an empty boundary bundle without
 reading the manifest. The shell and `SemanticObserver` SHALL delegate both empty and non-empty semantic bundles
 to that entry point rather than maintaining independent empty-boundary guards, so every semantic composition
@@ -98,6 +99,21 @@ The repository reaction SHALL inspect the executed body of the shell's `evaluate
 function. That body SHALL access `constitution.semantic_boundaries()` exactly once, as the direct boundary
 argument to `hunyi::check_all`; a missing function, an additional semantic-boundary inspection, or an indirect
 shell-local decision SHALL fail rather than be treated as delegation.
+
+The reaction SHALL distinguish a body that does not delegate from a body it could not read. The extent it
+inspects is found by counting braces, and a string literal, a character literal, or a block comment inside the
+body moves that extent; where the extent carries `"`, `'`, `/*`, or `*/` on an executed line, the reaction SHALL
+refuse to judge rather than assert over text it cannot be sure is the function's body. Stating the refusal here
+is what closes a false negative rather than describing one: this requirement's comparison is a count and a
+containment, and both survive a truncated extent unharmed — a second semantic-boundary access sitting past the
+cut is simply absent from what is compared, so the one shape the requirement refuses reads as the delegation it
+demands. Measured on the tracked body with a delimiter introduced, not supposed.
+
+Over-refusal is the declared direction, and the character literal is why it must be said out loud: a lifetime is
+spelled with the same delimiter, so a composition body that names one is refused too. That cost is accepted
+because a refusal is loud and repairable in the commit that causes it, while the alternative is the silent pass
+above. The reaction SHALL therefore be held to still *judging* the tracked body, so a refusal that swallowed
+every input could not pass for the closure.
 
 **This does not contradict an empty observer set being a cannot-judge**, and the difference is stated here
 because the two sentences read as a contradiction otherwise. An empty *bundle* means a participant was
@@ -125,7 +141,31 @@ reaction could observe, and it carries no scenario for that reason.
 - **WHEN** the shell composes a constitution whose semantic boundary bundle is empty
 - **THEN** the source-shape reaction finds exactly one semantic boundary access, passed directly to the public semantic entry point, and fails if the shell decides emptiness itself
 
+#### Scenario: A second semantic-boundary access sits past a moved extent
+
+- **WHEN** the composition body holds the delegation, a construct whose delimiter moves the read extent, and a
+  further `constitution.semantic_boundaries()` access beyond the resulting cut
+- **THEN** the reaction refuses to judge rather than reporting the delegation as satisfied, because the further
+  access is the one shape this requirement refuses and a moved extent never presents it to the comparison at all
+
+#### Scenario: The composition body carries a delimiter that can move the read extent — a stated bound
+
+- **WHEN** the extent read for `evaluate_constitution` carries `"`, `'`, `/*`, or `*/` on an executed line
+- **THEN** the reaction refuses to judge, naming the delimiter — a stated bound. It does not decide whether the
+  body delegates, because the extent it would decide over may not be the body; separating a brace in code from
+  one inside a string, a character literal, or a block comment needs the lexing this repository measured and
+  rejected, so the reaction declines the verdict instead of guessing at it
+- **PINNED-BY** `an_ambiguous_delegation_extent_is_refused_rather_than_judged`
+
+#### Scenario: The tracked composition body is still judged
+
+- **WHEN** the reaction reads the tracked `evaluate_constitution` body, which carries none of those delimiters
+  on an executed line
+- **THEN** it returns a verdict rather than a refusal, because a refusal that swallowed every input would
+  satisfy the bound above while observing nothing
+
 ### Requirement: The built-in path SHALL keep its behaviour, and the two paths SHALL be held equal
+
 
 `check_constitution` and the CLI SHALL keep their present composition path and observable behaviour, coverage
 included. The protocol SHALL be an additional entry rather than a replacement.
@@ -207,14 +247,17 @@ dimensions remain independently implemented on both sides, and for them the reac
 
 #### Scenario: A brace inside a block comment or a string literal moves the read body extent — a stated bound
 
-- **WHEN** an inspected body carries `{` or `}` inside a block comment or a string literal
+- **WHEN** an inspected bounds-method body carries `{` or `}` inside a block comment or a string literal
 - **THEN** the reaction reads an extent that is not the method's body — a stated bound.
   It counts braces outside line comments only, and closing the gap needs the string-literal lexing this
   repository measured and rejected: this tree's own lexer suites put comment delimiters inside string literals,
   several of them nested, so a delimiter-counting scan opens a phantom comment at the first of them and swallows
-  every definition to the next close. The error direction is the safe one, and
+  every definition to the next close. For **this** comparison the error direction is the safe one, and
   it is what the pin shows — no brace-carrying construct survives the exact one-statement comparison, so a moved
-  extent refuses a **conforming** body rather than accepting a divergent one
+  extent refuses a **conforming** body rather than accepting a divergent one. The direction is a property of the
+  comparison rather than of the extent, and SHALL NOT be read as a property of every reader of that extent: the
+  same moved extent meeting a count-and-containment comparison accepts a divergent body instead, which is why
+  the shell-delegation reaction refuses an ambiguous extent rather than inheriting this bound
 - **PINNED-BY** `a_brace_in_a_block_comment_moves_the_body_extent`
 
 #### Scenario: A Rust attribute appears in an inspected body
