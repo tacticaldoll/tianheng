@@ -96,8 +96,8 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // The moved extent is one mechanism with two readers, and they sit on opposite sides of the
         // false-negative line, so it is two bounds rather than one. Which side a reader lands on is decided by
         // its comparison, not by the extent: an exact one-statement equality cannot survive a moved extent and
-        // therefore over-reacts, while a count-and-containment survives one intact and would accept a divergent
-        // body. The second reader refuses instead, and declares that refusal below.
+        // therefore over-reacts, while an allowlist a truncated remainder can satisfy in full would accept a
+        // divergent body. The second reader refuses instead, and declares that refusal below.
         BoundDecl::pinned(
             BoundId::new(
                 "observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound",
@@ -119,9 +119,9 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 "observer-protocol/the-composition-body-carries-a-delimiter-that-can-move-the-read-extent-a-stated-bound",
             ),
             "the extent read for `evaluate_constitution` carrying `\"`, `'`, or `/*` in executed code",
-            // Refusing rather than over-reacting, because this comparison cannot detect its own truncation: a
-            // count of one and a containment are both satisfied by the remainder, so a second semantic-boundary
-            // access past the cut reads as the delegation the requirement demands.
+            // Refusing rather than over-reacting, because this comparison cannot detect its own truncation: the
+            // remainder can hold every permitted owner exactly once, so a use past the cut reads as the
+            // delegation the requirement demands.
             Extent::Reached(Reached::RefusesToJudge {
                 because: "a string, character, or block-comment delimiter in executed code can hide a brace \
                           from the extent count, so the text read may not be the function's body, and \

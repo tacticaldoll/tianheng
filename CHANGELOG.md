@@ -535,8 +535,9 @@ them.
   that extent wrong then sat *outside* it, where no in-body check reaches, so a commented-out copy above the
   function let a body carrying an independent shell-local guard pass. Two candidate anchors are now a refusal.
   **The access count read one spelling**: `let shell = constitution;` and then `shell.semantic_boundaries()`
-  was a second access the count never saw, as were the associated-function and reborrow spellings; the count is
-  now over the method name, while the direct spelling remains what the delegation containment holds. **A comment
+  was a second access the count never saw, as were the associated-function and reborrow spellings; the count was
+  widened to the method name. (Superseded later in this window — counting names is still a denylist over
+  spellings, and the entry above replaces it with the allowlist that ends the class.) **A comment
   could supply the delegation**: comment tails were compared as code, so the required call could sit entirely in
   prose while the real body delegated through a rebinding. Tails are now removed before the comparison, which is
   what the brace count already did to them — and by the same token a delimiter in a comment no longer refuses a

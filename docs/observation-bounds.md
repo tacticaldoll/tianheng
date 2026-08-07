@@ -175,7 +175,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `observer-protocol/the-composition-body-carries-a-delimiter-that-can-move-the-read-extent-a-stated-bound`
 
-> the reaction refuses to judge, naming the delimiter — a stated bound. It does not decide whether the
+> the reaction refuses to judge, naming the delimiter — a stated bound.
 
 - **pinned by**: `an_ambiguous_delegation_extent_is_refused_rather_than_judged`
 

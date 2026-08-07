@@ -97,8 +97,9 @@ path has one behavior owner.
 The repository reaction SHALL inspect the executed body of the shell's `evaluate_constitution` composition
 function, and SHALL hold it to an **allowlist**: every use of the `constitution` parameter in that body SHALL be
 one of the three declared owners — the static, semantic and runtime boundary accessors — and each SHALL appear
-exactly once. Any other reach for the constitution SHALL fail rather than be treated as delegation, and so SHALL
-a missing function.
+exactly once. Any other reach for the constitution SHALL fail rather than be treated as delegation. A missing
+function SHALL be declined rather than failed, together with an ambiguous anchor, because neither is a statement
+about the body.
 
 **The allowlist is what makes the prohibition complete.** Counting reaches for the semantic boundaries was a
 denylist over spellings, and spellings are an open set: a rebinding, an associated-function call, a reborrow, a
@@ -120,6 +121,10 @@ between the shell and the dimension while the reaction reported a direct delegat
 The reaction SHALL distinguish a body that does not delegate from a body it could not read. **Two** conditions
 make the text unsafe to judge and SHALL be refused; the rules after them narrow what is read, and their outcome
 is a verdict rather than a refusal.
+
+A read that finds no opening brace after the anchor, or braces that never balance, SHALL decline on the same
+terms — the reaction has not seen a body, so it makes no statement about one, and the diagnostic SHALL say which
+of these it met rather than reporting every decline as an anchor problem.
 
 **The anchor SHALL be unique, counted over occurrences.** The signature SHALL appear on exactly one line of the
 source, wherever it sits, and the read SHALL decline otherwise. Requiring the anchor to *begin* a line only ruled
@@ -147,8 +152,9 @@ comment does not satisfy the requirement, which it did while tails were compared
 a broken call must still be recognized; applying it before the walk glues a keyword to the parameter, so the use
 reads as the tail of a longer identifier and disappears — measured, it hid the private-field read above.
 
-Over-refusal is the declared direction, and the character literal is why it must be said out loud: a lifetime is
-spelled with the same delimiter, so a composition body that names one is refused too. That cost is accepted
+Over-refusal is the declared direction, and two costs SHALL be named. A lifetime is spelled with the character
+literal's delimiter, so a composition body naming one is refused. And the allowlist matches an owner as written,
+so a `rustfmt` break inside an accessor call reads as an unpermitted use and is reported. That cost is accepted
 because a refusal is loud and repairable in the commit that causes it, while the alternative is the silent pass
 above. The reaction SHALL therefore be held to still *judging* the tracked body, so a refusal that swallowed
 every input could not pass for the closure.
@@ -189,8 +195,8 @@ reaction could observe, and it carries no scenario for that reason.
 #### Scenario: The composition body carries a delimiter that can move the read extent — a stated bound
 
 - **WHEN** the extent read for `evaluate_constitution` carries `"`, `'`, or `/*` in executed code
-- **THEN** the reaction refuses to judge, naming the delimiter — a stated bound. It does not decide whether the
-  body delegates, because the extent it would decide over may not be the body; separating a brace in code from
+- **THEN** the reaction refuses to judge, naming the delimiter — a stated bound.
+  It does not decide whether the body delegates, because the extent it would decide over may not be the body; separating a brace in code from
   one inside a string, a character literal, or a block comment needs the lexing this repository measured and
   rejected, so the reaction declines the verdict instead of guessing at it. The set is three delimiters and not
   four: a block comment opened above the signature closes *after* the brace it hides, so the extent is cut
@@ -301,13 +307,11 @@ anywhere in the file. The declarations' *content* is held by `observation-bound-
 SHALL NOT be re-asserted here.
 
 Two things follow from *recognized by position*, and both were measured as gaps rather than reasoned about. The
-method SHALL be located by **line position** — a line whose trimmed start is the signature — so a mention of it
-*within* a line of prose cannot be brace-matched from. That is all line position buys, and the spec claimed more
-than it bought: a **whole-line** copy of the signature inside a block comment has the signature as its trimmed
-start, so it anchors exactly as well as the definition, and a decoy conforming copy above a divergent method let
-the equality pass on text that was not the method — measured. The anchor SHALL therefore also be **unique**: two
-lines that could anchor the read make the subject unknown, and the reader SHALL decline rather than take the
-first. And a **trailing comment** on the delegation SHALL be
+method SHALL be located by a **unique occurrence** of its signature in the source, and the reader SHALL decline
+otherwise. An earlier rule required the signature to begin a trimmed line, which bought only the exclusion of a
+mid-line mention: a whole-line copy inside a block comment anchors exactly as well as the definition, and a decoy
+conforming copy above a divergent method let the equality pass on text that was not the method — measured.
+Counting occurrences excludes the mid-line mention too, as a second occurrence. And a **trailing comment** on the delegation SHALL be
 prose, not a second list: the region discipline this family already holds says a comment is never executed text,
 and the reaction that judges a shell gate's own text strips one before comparing for exactly this reason.
 The reaction SHALL apply Rust line-comment semantics to the inspected body: a `//` line is prose, while a Rust
@@ -365,7 +369,7 @@ dimensions remain independently implemented on both sides, and for them the reac
   it is what the pin shows — no brace-carrying construct survives the exact one-statement comparison, so a moved
   extent refuses a **conforming** body rather than accepting a divergent one. The direction is a property of the
   comparison rather than of the extent, and it does not transfer to another reader of that extent: the
-  same moved extent meeting a count-and-containment comparison accepts a divergent body instead, which is why
+  same moved extent meeting an allowlist the remainder can satisfy in full accepts a divergent body, which is why
   the shell-delegation reaction refuses an ambiguous extent rather than inheriting this bound
 - **PINNED-BY** `a_brace_in_a_block_comment_moves_the_body_extent`
 
@@ -382,8 +386,8 @@ dimensions remain independently implemented on both sides, and for them the reac
 
 #### Scenario: A second line could anchor the bounds method
 
-- **WHEN** more than one line in the observer's source has the bounds-method signature as its trimmed start —
-  a commented-out copy being the measured case
+- **WHEN** the bounds-method signature occurs more than once in the observer's source — a commented-out copy
+  being the measured case
 - **THEN** the reader declines rather than reading the first. Here the decoy inverts this reader's declared
   error direction rather than merely moving the extent: a *conforming* copy in the comment makes the exact
   one-statement equality pass while the real method holds a second, divergent list, so the over-reaction the

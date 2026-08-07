@@ -260,12 +260,11 @@ fn every_observer_declares_exactly_its_dimension_s_bounds() {
         let source = Source::of(text);
         let body = bounds_body(&source).unwrap_or_else(|| {
             panic!(
-                "{} yields no `fn bounds` body in {}: {} line(s) have that signature as their trimmed start, \
-                 and the reader judges only when exactly one does — the protocol's obligation is about that \
-                 method, so neither its absence nor an ambiguous anchor is a pass",
+                "{} yields no `fn bounds` body in {}: {} — the protocol's obligation is about that method, so \
+                 neither its absence nor an ambiguous anchor is a pass",
                 dimension.label,
                 dimension.observer_source,
-                anchor_count(&source, "fn bounds(")
+                decline_reason(&source, "fn bounds(")
             )
         });
         assert_eq!(
@@ -347,8 +346,9 @@ fn a_brace_in_a_comment_tail_no_longer_closes_the_body() {
 ///
 /// The direction belongs to the comparison and not to the extent, and reading it as a property of the extent is
 /// how the same moved extent went four windows accepting a divergent body elsewhere: the shell-delegation
-/// reaction compares by count and containment, both of which a truncated remainder satisfies. That reader
-/// refuses rather than inheriting this bound — see
+/// reaction holds its body to an allowlist whose members a truncated remainder can still satisfy in full, so
+/// what falls past the cut is simply not there to refuse. That reader refuses rather than inheriting this
+/// bound — see
 /// [`an_ambiguous_delegation_extent_is_refused_rather_than_judged`].
 #[test]
 fn a_brace_in_a_block_comment_moves_the_body_extent() {
@@ -423,9 +423,9 @@ fn without_comment_tail(line: &str) -> &str {
 /// reaction with no negative run available: every claim about what it refuses was a claim about text that does
 /// not exist, which is how it went four release windows accepting a body it was written to refuse.
 ///
-/// **The ambiguity check runs before the comparison, not after.** The comparison is a count and a containment,
-/// and both survive a truncated extent unharmed — a second semantic-boundary access sitting past the cut is
-/// simply absent from what is compared, so the one shape this reaction refuses reads as the delegation it
+/// **The ambiguity check runs before the comparison, not after.** A truncated extent can satisfy the allowlist
+/// in full — every permitted owner present exactly once — while the use that breaks the requirement sits past
+/// the cut, absent from what is checked, so the one shape this reaction refuses reads as the delegation it
 /// demands. Checking afterwards would be checking a verdict already formed on the wrong text, and the
 /// difference is observable rather than stylistic: a body both truncated *and* divergent within the remainder
 /// answers `Diverges` under an escalate-a-pass ordering and `CannotJudge` under this one. That is the shape
@@ -568,9 +568,8 @@ fn the_shell_delegates_semantic_emptiness_to_the_public_entry_point() {
         // reader told only "cannot judge" would go looking for a function that is in fact sitting right there
         // beside a copy of itself.
         None => panic!(
-            "the shell delegation reaction cannot judge {relative}: {} line(s) have `fn evaluate_constitution(` \
-             as their trimmed start, and it reads the body only when exactly one does",
-            anchor_count(&source, "fn evaluate_constitution(")
+            "the shell delegation reaction cannot judge {relative}: {}",
+            decline_reason(&source, "fn evaluate_constitution(")
         ),
         Some(Delegation::Delegates) => {}
         Some(Delegation::Diverges(why)) => panic!(
@@ -597,9 +596,14 @@ fn composition_body(interposed: &[&str]) -> Source {
         "    constitution: &Constitution,",
         "    manifest_path: &Path,",
         ") -> (Outcome, Option<Coverage>) {",
-        "    let mut outcome = merge_outcomes(",
+        "    let mut outcome = check_and_cover(constitution.static_boundaries(), manifest_path);",
+        "    outcome = merge_outcomes(",
         "        outcome,",
         "        hunyi::check_all(constitution.semantic_boundaries(), manifest_path),",
+        "    );",
+        "    outcome = merge_outcomes(",
+        "        outcome,",
+        "        RuntimeObserver::new(constitution.runtime_boundaries().to_vec()).observe(manifest_path),",
         "    );",
     ];
     lines.extend_from_slice(interposed);
@@ -828,8 +832,9 @@ fn a_decoy_bounds_signature_refuses_rather_than_matching_the_conforming_copy() {
 ///
 /// Line position rules out a *mid-line* mention and nothing more. A whole-line copy of the signature — in a
 /// block comment, a multi-line string, or a second module — anchors exactly as well as the real definition,
-/// and the first in the file wins. A doc comment does not, because `///` becomes the trimmed start; that was
-/// asserted here before it was checked, and checking it is what removed it. Every delimiter that made that extent wrong then sits
+/// and the first in the file wins. A doc comment counts as an occurrence too — under an occurrence rule there
+/// is no carve-out for which mentions could have anchored, which is the point: this file stated one and stated
+/// it backwards. Every delimiter that made that extent wrong then sits
 /// outside it, so the in-body scan is blind by construction: measured end-to-end, a decoy above the real
 /// function let a body carrying an independent shell-local guard read as a conforming delegation.
 ///
@@ -979,46 +984,6 @@ fn a_second_line_that_could_anchor_the_read_refuses_the_subject() {
     );
 }
 
-/// A second access reached through a rebinding is still a second access.
-///
-/// Counting `constitution.semantic_boundaries()` counted one *spelling*. Every rebinding walked past it while
-/// the requirement it implements is about how many times the shell reaches for its boundaries at all, so the
-/// count is over the method name. Three spellings, each measured accepted before the widening.
-#[test]
-fn a_second_access_through_a_rebinding_is_counted() {
-    let spellings: [&[&str]; 3] = [
-        &[
-            "    let shell = constitution;",
-            "    if shell.semantic_boundaries().is_empty() {",
-            "        outcome = early();",
-            "    }",
-        ],
-        &["    let _ = Constitution::semantic_boundaries(constitution);"],
-        &["    let _ = (&*constitution).semantic_boundaries();"],
-    ];
-    for second in spellings {
-        let mut lines = vec![
-            "fn evaluate_constitution(",
-            "    constitution: &Constitution,",
-            ") -> (Outcome, Option<Coverage>) {",
-            "    let mut outcome = merge_outcomes(",
-            "        outcome,",
-            "        hunyi::check_all(constitution.semantic_boundaries(), manifest_path),",
-            "    );",
-        ];
-        lines.extend_from_slice(second);
-        lines.extend_from_slice(&["    (outcome, None)", "}"]);
-        assert!(
-            matches!(
-                judge_delegation(&composition_source(&lines)),
-                Some(Delegation::Diverges(_))
-            ),
-            "a second reach for the semantic boundaries must be reported however the receiver is spelled: \
-             {second:?}"
-        );
-    }
-}
-
 /// Every way of reaching the constitution that is not one of the three owners is refused, by complement.
 ///
 /// These are not new spellings patched one at a time — they are the spellings that defeated the counting
@@ -1028,7 +993,7 @@ fn a_second_access_through_a_rebinding_is_counted() {
 /// directly, which a descendant module of the crate root may do.
 #[test]
 fn every_reach_for_the_constitution_outside_the_permitted_owners_is_refused() {
-    let routes: [(&str, &[&str]); 6] = [
+    let routes: [(&str, &[&str]); 7] = [
         (
             "a rebinding",
             &[
@@ -1053,6 +1018,10 @@ fn every_reach_for_the_constitution_outside_the_permitted_owners_is_refused() {
         (
             "a macro",
             &["    if semantic!(constitution).is_empty() {", "    }"],
+        ),
+        (
+            "a trait method under another name",
+            &["    if constitution.sem_view().is_empty() {", "    }"],
         ),
         (
             "a direct read of the private field, naming no accessor at all",
@@ -1290,19 +1259,32 @@ fn mask_line_comment_braces(text: &str) -> String {
     String::from_utf8(bytes).expect("only ASCII braces were replaced, each by one ASCII space")
 }
 
-/// The brace-delimited body of the function `signature` anchors, or `None` if no line anchors it or more than
-/// one does.
+/// How many times `signature` occurs, so a decline can say whether it found none or too many.
 ///
-/// Not "the first" — taking the first is the defect this declines. And the anchor scan reads the whole source
-/// rather than [`Executed`]: a commented line *does* anchor, which is precisely why uniqueness is required
-/// instead of the comment being filtered out.
-/// How many lines could anchor `signature`, so a decline can say whether it found none or too many.
+/// The same rule [`function_body`] anchors by, deliberately: the two disagreed for one round — this counted
+/// trimmed-start lines while the reader counted occurrences — so a declined read reported "1", sending a reader
+/// to look for a second definition its own count denied.
 fn anchor_count(source: &Source, signature: &str) -> usize {
-    source
-        .whole()
-        .lines()
-        .filter(|line| line.trim_start().starts_with(signature))
-        .count()
+    source.whole().matches(signature).count()
+}
+
+/// Why a read declined, in the reader's own words.
+///
+/// Three inputs decline and they call for different repairs: the signature is absent, it occurs more than once,
+/// or it occurs exactly once and no balanced body follows it. Reporting all three as an anchor count sent a
+/// reader hunting for a second definition that the same message had just counted as absent.
+fn decline_reason(source: &Source, signature: &str) -> String {
+    match anchor_count(source, signature) {
+        0 => format!("`{signature}` does not occur, so there is no body to read"),
+        1 => format!(
+            "`{signature}` occurs once but no balanced brace-delimited body follows it, so the extent could \
+             not be taken"
+        ),
+        many => format!(
+            "`{signature}` occurs {many} times, so the subject is ambiguous and the reader judges only when it \
+             occurs exactly once"
+        ),
+    }
 }
 
 fn function_body(source: &Source, signature: &str) -> Option<Source> {
@@ -1310,28 +1292,19 @@ fn function_body(source: &Source, signature: &str) -> Option<Source> {
     // Braces are counted over the MASK and the body is sliced out of the original, which the mask's
     // offset-for-offset construction makes the same positions. See [`mask_line_comment_braces`].
     let masked = mask_line_comment_braces(text);
-    // By line POSITION, never by a bare marker anywhere in the blob: a prose sentence mentioning the function
-    // must not become the brace-match origin. The signature must begin the trimmed line; this remains the same
-    // deliberately lightweight recognizer the observer-bounds reaction already exercised, not a second parser.
+    // The anchor is an OCCURRENCE of the signature, and there must be exactly one in the whole source.
     //
-    // And the anchor must be UNIQUE. Line position alone does not make a mention unreachable — it only rules
-    // out a mid-line one. A *whole-line* copy of the signature inside a block comment, a multi-line string, or
-    // a second module has a trimmed start that IS the signature, so it anchors just as well as the real thing,
-    // and the first one in the file wins. (A doc comment does not: `///` displaces the signature.) Every delimiter that made such an extent
-    // wrong then sits OUTSIDE the extent, where no in-body scan can see it: a decoy copy above the real
-    // function let a divergent body read as conforming, measured end-to-end on both readers of this recognizer.
-    // Two candidates mean the reaction cannot know which is the subject, and a recognizer that cannot know its
-    // subject has not observed the obligation — so it declines rather than picking the first.
-    // Uniqueness is over lines that CONTAIN the signature, not lines that begin with it — and once it holds,
-    // the anchor is the occurrence itself and no trimmed-start rule is needed.
+    // An earlier rule required the signature to begin a trimmed line. That only ruled out a mid-line mention;
+    // it never made the definition findable, and a decoy exploits the gap from either side — a whole-line copy
+    // inside a block comment anchors just as well as the definition, and writing the definition
+    // `pub(crate) fn …` stops it anchoring while the commented copy still does, leaving one candidate that is
+    // not the subject. Both measured end-to-end, on both readers of this recognizer.
     //
-    // Requiring the anchor to begin a line only ruled out a mid-line mention. It never made the definition
-    // findable, and a decoy exploits the gap from the other side: write the real definition as
-    // `pub(crate) fn …` and it stops anchoring while a commented copy still does, leaving exactly one
-    // candidate that is not the subject. Measured end-to-end on both readers. Counting occurrences instead
-    // catches the decoy from either direction, and subsumes the mid-line mention — a prose sentence naming
-    // the function is a second occurrence, so the read declines rather than being brace-matched from.
-    if text.lines().filter(|line| line.contains(signature)).count() != 1 {
+    // Counting occurrences catches both directions and subsumes the mid-line mention, so no carve-out for
+    // which mentions could have anchored is needed — an earlier attempt stated one and stated it wrongly.
+    // Every delimiter that made a wrong extent wrong sits OUTSIDE that extent, where no in-body scan reaches,
+    // which is why this half cannot be recovered by checking the body once read.
+    if text.matches(signature).count() != 1 {
         return None;
     }
     let signature = text.find(signature)?;
