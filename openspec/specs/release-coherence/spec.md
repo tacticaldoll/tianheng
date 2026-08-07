@@ -61,12 +61,11 @@ workspace version.
   the matching comparison link
 - **THEN** release coherence passes without requiring a release-prep version or lock rewrite
 
-#### Scenario: Intended release narrative precedes mechanical version preparation
+#### Scenario: A different intended release literal precedes mechanical version preparation
 
-- **WHEN** `[Unreleased]` names the intended release while workspace and example manifests retain the current
-  released version
-- **THEN** development coherence passes until release preparation advances the enumerated version-bearing
-  surfaces together
+- **WHEN** `[Unreleased]` prose names a future version different from the current released workspace version,
+  while workspace and example manifests, internal pins, lock entries, and the comparison link retain that current version
+- **THEN** development coherence passes because prose narrative is not one of the enumerated version-bearing surfaces
 
 #### Scenario: Empty development notes fail
 
