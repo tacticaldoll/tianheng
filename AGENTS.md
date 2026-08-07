@@ -282,6 +282,12 @@ cargo clippy -p louke -- -D warnings       # louke's audit-OFF library on its ow
                                            # feature-unifies louke/audit ON (the tianheng shell enables it),
                                            # so only an isolated louke build sees the prod-light config where
                                            # an unused audit-gated item would otherwise hide until publish
+cargo test -p louke                        # louke's audit-OFF library ON ITS OWN, tested and not merely linted:
+                                           # the clippy pass above catches an unused item, never a declaration that
+                                           # should have been compiled out. `observation-bound-model` requires the
+                                           # declarations describing a feature-gated reaction to be gated with it,
+                                           # and every --workspace/--all-features run has `audit` ON, so this is
+                                           # the only place that answer is observed at all
 cargo fmt --all --check
 TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items

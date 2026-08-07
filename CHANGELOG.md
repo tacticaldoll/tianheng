@@ -359,6 +359,15 @@ them.
   outlived its instance and was left pinned by nothing. It is now pinned **directly**, against a fixture gate that
   carries the shape on purpose — a process substitution whose producer exits non-zero as its ordinary answer —
   independent of whether any real gate still does.
+- **The feature-gated export now has a reaction, and `cargo test -p louke` joins the Definition of Done.**
+  `observation-bound-model`'s scenario *A build compiles none of the reaction a declaration describes* was added
+  with none: the gating had been proved once by a throwaway crate reading `observation_bounds().len()`, and that
+  crate was deleted, so the property rested on nobody changing the `cfg`. Each configuration now asserts **its
+  own** answer — verified by removing the gate, which fails the audit-OFF direction naming every bound that leaked
+  — and the audit-OFF library is *tested* rather than only linted, because the clippy pass beside it catches an
+  unused item and never a declaration that should have been compiled out. Every `--workspace` or `--all-features`
+  run has `audit` **on**, so this is the only place that answer is observed at all.
+
 - CI checks out with **`actions/checkout@v5`** in all eight jobs. GitHub reports `@v4` as targeting the deprecated
   Node.js 20 and is already forcing it onto Node 24, so nothing was broken — the bump is ahead of the date that
   forcing stops. Verified as far as it can be locally: the eight occurrences are the only `checkout` references, the
@@ -370,8 +379,8 @@ them.
 - **漏刻's audit-scoped bound declarations are gated with the reaction they describe.** `mod bounds` and its
   `pub use observation_bounds` were unconditional while `mod observer` immediately beneath them is behind the
   non-default `audit` feature, with a comment explaining exactly why — reasoning that applies to `bounds` and had
-  not been applied to it. Five of the six declarations describe `audit_probe_coverage`, the scanner an audit-OFF
-  build compiles none of, including two declared false negatives owned by the engine; only the composite-shape
+  not been applied to it. Every declaration but one describes `audit_probe_coverage`, the scanner an audit-OFF
+  build compiles none of — among them two declared false negatives owned by the engine — while the composite-shape
   bound describes the always-present origin derivation on the hot path. So an audit-OFF dependent read **six**
   declared bounds for a reaction its build did not contain, and the accessor's own doc comment was false in that
   configuration. **Adopter-visible only under a non-default feature**: such a dependent now reads one, and the

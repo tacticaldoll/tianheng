@@ -73,6 +73,7 @@ jobs:
           # louke on its own (outside the workspace, so tianheng's audit edge is absent) so such
           # dead code fails loud here, not only when `cargo publish` later builds the crate isolated.
           cargo clippy -p louke -- -D warnings
+          cargo test -p louke
           # Doc the default (prod-light) config too: a crate-level doc must not intra-doc-link a
           # feature-gated item (it would break docs.rs, which builds default features).
           # --document-private-items because nearly every item in these crates is crate-private, and
