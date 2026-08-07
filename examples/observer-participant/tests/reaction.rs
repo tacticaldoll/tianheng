@@ -122,8 +122,12 @@ fn the_declared_bounds_are_built_from_the_configuration() {
 ///
 /// The **control** is what keeps this from holding for the wrong reason — the same content with its header on line
 /// one does not react, so the fixture proves the *position* of the header decides it and not the file's presence.
+///
+/// The `_in_src` in the name is not decoration: the bound this defends is declared per governed subtree, so its
+/// pin is computed as `a_header_below_a_leading_comment_in_{slug}_over_reacts`. Naming the test anything else
+/// leaves the citation resolving to nothing — which it did, and which the dogfood gate now refuses.
 #[test]
-fn a_header_below_a_leading_comment_over_reacts() {
+fn a_header_below_a_leading_comment_in_src_over_reacts() {
     let fixture = Fixture::new("over-reaction");
     let governed = fixture.root.join("src");
     let manifest = fixture.root.join("Cargo.toml");

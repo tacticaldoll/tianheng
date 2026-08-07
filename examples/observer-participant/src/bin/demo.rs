@@ -32,6 +32,15 @@ fn main() -> ExitCode {
     println!("\nthis participant's declared bounds:");
     for bound in participant().bounds() {
         println!("  · {} — {}", bound.id().as_str(), bound.shape());
+        // The pin is printed too, and not only for a reader: it is what lets the dogfood gate resolve every
+        // citation this participant computes against its own test harness. Left in the source, a computed pin
+        // naming a test that does not exist reads as coverage while defending nothing — which is what the
+        // second of these two was doing.
+        if let Some(tests) = bound.defence().pinning_tests() {
+            for test in tests {
+                println!("      pinned by: {test}");
+            }
+        }
     }
 
     ExitCode::from(outcome.exit_code())
