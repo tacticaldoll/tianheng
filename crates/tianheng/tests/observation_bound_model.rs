@@ -494,7 +494,12 @@ fn render_extents(code: &BTreeMap<String, BoundDecl>) -> String {
                 Defence::Unpinned { tracker } => {
                     out.push_str(&format!("- **unpinned**, tracked by: {tracker}\n"));
                 }
-                _ => panic!("the extent projection does not know this defence variant"),
+                // Refuses rather than rendering a placeholder, for the reason [`because_of`] states once for
+                // every unrendered-variant arm in this file.
+                _ => panic!(
+                    "the extent projection does not know this defence variant; extend this arm rather than \
+                     blessing a document that says it cannot render its own subject"
+                ),
             }
         }
     }
@@ -504,10 +509,20 @@ fn render_extents(code: &BTreeMap<String, BoundDecl>) -> String {
 /// The rationale an extent carries, for the projection. Prose the model does not read — see this capability's
 /// own declared bound on exactly that.
 ///
-/// The wildcard arms are what `#[non_exhaustive]` buys and are not an oversight: adding a *new answer* to an
-/// existing question must not break a reader, where adding a new *question* — a stage every declaration must
-/// answer — is a trait method with no default and breaks every one of them. Only the second kind of addition
-/// should force re-examination, and a projection that refused to render an unknown value would invert that.
+/// # The one policy this file holds for an unrendered variant, stated once
+///
+/// Every wildcard arm here is unreachable in this tree: it exists only because the extent and defence enums are
+/// `#[non_exhaustive]` in another crate, and no value they carry goes unrendered. What the arm decides is which
+/// message the author meets on the day a variant is added — and it decides *only* that, because a new variant
+/// **used by a declaration** makes this projection stale whatever the arm does, so
+/// [`assert_projection_matches`] fails either way.
+///
+/// This arm used to return a placeholder, argued for on the ground that adding a new *answer* to an existing
+/// question must not force re-examination the way adding a new *question* does. That argument does not reach
+/// this file: re-examination arrives regardless, as a stale projection. What the placeholder changes is only
+/// what a `BLESS=1` then writes into the tracked document — the string "a value this projection does not yet
+/// render", a generated document admitting it cannot render its own subject. A test naming the file to extend
+/// is the better first message, so all three arms refuse alike.
 fn because_of(extent: &Extent) -> &str {
     match extent {
         Extent::OutOfReach { because }
@@ -519,7 +534,10 @@ fn because_of(extent: &Extent) -> &str {
             | Reached::NotAViolation { because }
             | Reached::AsIntended { because, .. },
         ) => because,
-        _ => "(a value this projection does not yet render)",
+        _ => panic!(
+            "the extent projection does not know this extent variant; extend `because_of` rather than \
+             blessing a document that says it cannot render its own subject"
+        ),
     }
 }
 
