@@ -112,20 +112,36 @@ when the driver claims an example name absent from the live inventory. This exam
 inventory SHALL remain independent of the published boundary-family inventory.
 
 The focused matrices SHALL remain separate top-level Definition of Done gates. These are the matrices for
-published-family coverage, example ownership and artifact cleanup, and isolated-example quality. The top-level
-orchestration SHALL run them before the positive repository example driver, and that driver SHALL NOT recursively
-invoke those matrices.
+published-family coverage, example ownership and artifact cleanup, and isolated-example quality. In both the
+local Definition of Done and CI's authored command streams, those three commands SHALL form one contiguous
+ordered sequence immediately followed by the positive repository example driver. The DoD-coherence reaction
+SHALL read and enforce that source shape.
+
+The positive driver's non-comment source lines SHALL NOT name any focused matrix basename. The reaction SHALL
+ignore full-line shell comments and reject such a basename on every other source line; this is an authored-form
+constraint and does not claim every remaining line is executable or resolve a command name assembled dynamically
+at runtime.
 
 #### Scenario: Every live example is exercised
 
 - **WHEN** the examples gate completes against the repository's current example directories
 - **THEN** every immediate example workspace has completed its declared quality and reaction path
 
-#### Scenario: Focused refusals precede the positive driver without nested reruns
+#### Scenario: Focused refusals precede the positive driver without direct nested reruns
 
 - **WHEN** the repository Definition of Done exercises example dogfood
-- **THEN** it runs each focused failure matrix directly before the positive example driver, and the driver does
-  not invoke those matrices again
+- **THEN** the local and CI command streams carry the focused matrices contiguously in their declared order
+  immediately before the positive driver, and the driver's non-comment source lines name none of those matrix basenames
+
+#### Scenario: A focused command is reordered
+
+- **WHEN** either authored command stream moves one focused matrix after another matrix or the positive driver
+- **THEN** DoD coherence fails and names the command stream whose required contiguous sequence is absent
+
+#### Scenario: The positive driver directly reruns a focused matrix
+
+- **WHEN** a non-comment source line in the positive driver names a focused matrix basename
+- **THEN** DoD coherence fails and names both the driver and nested matrix
 
 #### Scenario: An unowned example fails loud
 
