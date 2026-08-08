@@ -72,18 +72,43 @@ fn create_coherence_fixture(
     let _ = std::fs::remove_dir_all(&repo);
     std::fs::create_dir_all(&repo).expect("create repo dir");
 
-    must("git init", Command::new("git").args(["init", "-q"]).current_dir(&repo));
-    must("git config user.name", Command::new("git").args(["config", "user.name", "Test"]).current_dir(&repo));
-    must("git config user.email", Command::new("git").args(["config", "user.email", "test@example.invalid"]).current_dir(&repo));
+    must(
+        "git init",
+        Command::new("git").args(["init", "-q"]).current_dir(&repo),
+    );
+    must(
+        "git config user.name",
+        Command::new("git")
+            .args(["config", "user.name", "Test"])
+            .current_dir(&repo),
+    );
+    must(
+        "git config user.email",
+        Command::new("git")
+            .args(["config", "user.email", "test@example.invalid"])
+            .current_dir(&repo),
+    );
 
     std::fs::create_dir_all(repo.join("crates/xuanji")).unwrap();
     std::fs::create_dir_all(repo.join("crates/tianheng")).unwrap();
     std::fs::write(repo.join("Cargo.toml"), "[workspace]\nmembers = [\"crates/xuanji\", \"crates/tianheng\"]\n[workspace.package]\nversion = \"0.2.0\"\n").unwrap();
-    std::fs::write(repo.join("crates/xuanji/Cargo.toml"), "[package]\nname = \"xuanji\"\nversion.workspace = true\nedition = \"2024\"\n").unwrap();
-    std::fs::write(repo.join("crates/tianheng/Cargo.toml"), "[package]\nname = \"tianheng\"\nversion.workspace = true\nedition = \"2024\"\n").unwrap();
+    std::fs::write(
+        repo.join("crates/xuanji/Cargo.toml"),
+        "[package]\nname = \"xuanji\"\nversion.workspace = true\nedition = \"2024\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        repo.join("crates/tianheng/Cargo.toml"),
+        "[package]\nname = \"tianheng\"\nversion.workspace = true\nedition = \"2024\"\n",
+    )
+    .unwrap();
 
     std::fs::create_dir_all(repo.join("scripts")).unwrap();
-    std::fs::write(repo.join("scripts/check_pin_bites.sh"), "#!/usr/bin/env bash\nexit 0\n").unwrap();
+    std::fs::write(
+        repo.join("scripts/check_pin_bites.sh"),
+        "#!/usr/bin/env bash\nexit 0\n",
+    )
+    .unwrap();
 
     let mut changelog = String::from("# Changelog\n\n## [Unreleased]\n\n");
     if let Some(body) = unreleased_body {
@@ -99,13 +124,23 @@ fn create_coherence_fixture(
     } else {
         changelog.push_str("- Release notes.\n\n");
     }
-    changelog.push_str("[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.0...HEAD\n");
-    changelog.push_str("[0.2.0]: https://github.com/tacticaldoll/tianheng/compare/v0.1.0...v0.2.0\n");
+    changelog
+        .push_str("[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.0...HEAD\n");
+    changelog
+        .push_str("[0.2.0]: https://github.com/tacticaldoll/tianheng/compare/v0.1.0...v0.2.0\n");
 
     std::fs::write(repo.join("CHANGELOG.md"), changelog).unwrap();
 
-    must("git add", Command::new("git").args(["add", "."]).current_dir(&repo));
-    must("git commit", Command::new("git").args(["commit", "-qm", "release: 0.2.0"]).current_dir(&repo));
+    must(
+        "git add",
+        Command::new("git").args(["add", "."]).current_dir(&repo),
+    );
+    must(
+        "git commit",
+        Command::new("git")
+            .args(["commit", "-qm", "release: 0.2.0"])
+            .current_dir(&repo),
+    );
 
     repo.to_string_lossy().to_string()
 }
@@ -294,8 +329,18 @@ fn machinery_tracked_by_nothing_is_a_stated_bound() {
         None,
     );
     let repo_path = PathBuf::from(&repo);
-    must("git rm --cached", Command::new("git").args(["rm", "--cached", "-q", "scripts/check_pin_bites.sh"]).current_dir(&repo_path));
-    must("git commit", Command::new("git").args(["commit", "-qm", "untrack machinery"]).current_dir(&repo_path));
+    must(
+        "git rm --cached",
+        Command::new("git")
+            .args(["rm", "--cached", "-q", "scripts/check_pin_bites.sh"])
+            .current_dir(&repo_path),
+    );
+    must(
+        "git commit",
+        Command::new("git")
+            .args(["commit", "-qm", "untrack machinery"])
+            .current_dir(&repo_path),
+    );
 
     let tracked = tracked_machinery(&repo);
     assert!(
@@ -331,9 +376,23 @@ fn a_colliding_basename_is_a_stated_bound() {
         None,
     );
     let repo_path = PathBuf::from(&repo);
-    std::fs::write(repo_path.join("scripts/publish.sh"), "#!/usr/bin/env bash\nexit 0\n").unwrap();
-    must("git add", Command::new("git").args(["add", "scripts/publish.sh"]).current_dir(&repo_path));
-    must("git commit", Command::new("git").args(["commit", "-qm", "add publish.sh"]).current_dir(&repo_path));
+    std::fs::write(
+        repo_path.join("scripts/publish.sh"),
+        "#!/usr/bin/env bash\nexit 0\n",
+    )
+    .unwrap();
+    must(
+        "git add",
+        Command::new("git")
+            .args(["add", "scripts/publish.sh"])
+            .current_dir(&repo_path),
+    );
+    must(
+        "git commit",
+        Command::new("git")
+            .args(["commit", "-qm", "add publish.sh"])
+            .current_dir(&repo_path),
+    );
 
     let (code, output) = gate(&scripts, &repo);
     let _ = std::fs::remove_dir_all(&temp);
@@ -360,7 +419,9 @@ fn a_directory_named_without_its_slash_is_a_stated_bound() {
     let repo = create_coherence_fixture(
         &temp,
         "unslashed",
-        Some("### Fixed\n- A repair to the scripts and to scripts/lib, written without a trailing slash."),
+        Some(
+            "### Fixed\n- A repair to the scripts and to scripts/lib, written without a trailing slash.",
+        ),
         None,
     );
 
@@ -392,7 +453,9 @@ fn a_name_reached_only_through_a_url_is_a_stated_bound() {
     let repo = create_coherence_fixture(
         &temp,
         "url",
-        Some("### Fixed\n- See https://github.com/tacticaldoll/tianheng/blob/main/scripts/check_pin_bites.sh for the gate."),
+        Some(
+            "### Fixed\n- See https://github.com/tacticaldoll/tianheng/blob/main/scripts/check_pin_bites.sh for the gate.",
+        ),
         None,
     );
 
@@ -424,7 +487,9 @@ fn a_heading_inside_a_fenced_block_is_a_stated_bound() {
     let repo = create_coherence_fixture(
         &temp,
         "fenced",
-        Some("### Fixed\n- A repair.\n\n```\n### Self-governance\n```\n\n- A later repair naming `scripts/check_pin_bites.sh`."),
+        Some(
+            "### Fixed\n- A repair.\n\n```\n### Self-governance\n```\n\n- A later repair naming `scripts/check_pin_bites.sh`.",
+        ),
         None,
     );
 
