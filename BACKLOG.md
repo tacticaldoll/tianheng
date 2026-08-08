@@ -207,7 +207,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **67 bounds across 22 capabilities** — a live figure rather than part of the measurement
+  currently holds **71 bounds across 22 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -484,7 +484,7 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
-- **WATCH: four limits of the mutual-independence reaction, each measured, none declared.** *Observed
+- **WATCH: four limits of the mutual-independence reaction, each measured and each declared.** *Observed
   pressure:* closing the membership half of `三儀 ⊥ 三儀` exposed four more, all reproduced by writing them into
   the tree rather than argued about. **Wording, over-reacting:** paraphrasing `guibiao`'s clause makes the
   reaction fire — it refuses a reason that genuinely states the law. **Wording, under-reacting:** a `because`
@@ -500,11 +500,12 @@ consumer for an undemonstrated deduplication.
   the serious one — the agent-facing projection can teach the negation of the law it quotes. *Promotion
   trigger:* fired for the second; the others are recorded with it because they are one reaction's limits and
   closing them separately would re-open the same file four times. *Version class:* patch; a `tests/` reaction of
-  this repository. *Authority:* `self-law-projection`. *Shape:* declaring any of them needs a pin that runs
-  **the reaction over a declaration**, not its predicate over a string — a draft declared the first as a false
-  *negative* and pinned it with the predicate, and one run of the bound's own WHEN falsified both the extent and
-  the pin. That means factoring the assertion loop to take a supplied `Constitution`, which is the actual work
-  here and is why this is a record rather than a fifth attempt inside the change that found them.
+  this repository. *Authority:* `self-law-projection`. *Shape:* **pinning** any of them needs the reaction run over a
+  supplied declaration rather than its predicate over a string, which means factoring the assertion loop to take
+  a `Constitution` — that is what this entry owns. **Declaring** them needed none of that, and an earlier draft
+  of this entry said it did: it read the pin requirement as a declaration requirement and withheld all four,
+  which kept a measured false negative out of the register a reader is told to consult before calling a
+  behaviour a defect. All four are declared unpinned against this entry now.
 
 - **WATCH: a rejected observation point is recorded only in prose, and prose reaches no agent at the moment of
   temptation.** *Observed pressure:* rejections of whole detectors and approaches are scattered across doc

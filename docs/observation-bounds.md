@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**8 of 67 declared bounds have no pinning test.** That figure is the register's
+**12 of 71 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -320,6 +320,30 @@ fallback used where no manifest exists, which the register spec describes.
 > the reaction refuses it anyway, a stated bound: it asks whether the members all appear and never why,
 
 - **pinned by**: `a_comment_naming_every_member_for_another_reason_is_refused`
+
+### `self-law-projection/a-reason-that-paraphrases-the-law-is-refused-a-stated-bound`
+
+> the reaction **fires**, refusing a reason that genuinely states the law. Measured by writing that
+
+- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
+
+### `self-law-projection/a-reason-carrying-the-clause-while-negating-the-law-is-not-observed-a-stated-bound`
+
+> nothing reacts, and `AGENTS.self-law.md` projects the negation to every agent that loads it. This is
+
+- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
+
+### `self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound`
+
+> its allowlist is never examined, and the set-coverage assertion cannot notice, because the set it
+
+- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
+
+### `self-law-projection/a-workspace-dependency-allowlist-is-not-examined-a-stated-bound`
+
+> the reaction never examines it, though that rule governs workspace-member edges specifically and is
+
+- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
 
 ## semantic-async-exposure-boundary
 

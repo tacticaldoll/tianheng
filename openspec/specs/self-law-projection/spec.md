@@ -135,17 +135,56 @@ the dependency reaction cannot fire on a **widened** allowlist, because permitti
 produces no violation. So this assertion is the sole guard, which is why it is a requirement rather than an
 implementation detail.
 
-The clause check SHALL remain. Its limits are **stated and not yet declared as bounds**, and the requirement says
-which is which rather than leaving a reader to assume: paraphrasing the clause makes the reaction **fire**, an
-over-reaction refusing a reason that genuinely states the law; a `because` carrying the literal clause while
-*negating* it passes, and the projection then teaches the negation, which is the under-reaction. Both were
-measured by writing them into the tree. Declaring either SHALL wait for a pin that runs **the reaction over a
-declaration**, not its predicate over a string — a draft of this change declared the first as a false negative
-and pinned it with the predicate, and one run of the bound's own WHEN falsified both the extent and the pin.
-`BACKLOG.md` carries them meanwhile, together with the two enumeration limits of the membership half: a
-hand-kept dimension list nothing holds, and a rule variant the filter does not reach.
+The clause check SHALL remain, and every limit of this reaction SHALL be **declared**, with each extent read off
+a run of that limit's own WHEN rather than off an argument for it. Four are declared below. Two belong to the
+wording half and go in **opposite directions**: paraphrasing the clause makes the reaction *fire*, and a
+`because` carrying the literal clause while *negating* the law passes. Two belong to the membership half's
+enumeration: a hand-kept dimension list, and a rule variant the filter does not reach.
+
+Declaring SHALL NOT be deferred for want of a pin. A bound may be declared **unpinned** against a tracker, and
+that is the right form here: what a pin of these would need — the reaction run over a supplied declaration
+rather than its predicate over a string — is work the tracker owns, and withholding the declaration until then
+keeps a measured false negative out of the register that a reader is told to consult *before* reporting a
+behaviour as a defect. A draft of this change confused the two acts and deferred all four; the same draft had
+declared the first as a false *negative*, which one run of its WHEN falsified.
 
 Membership is the structural half; wording is the half that is not.
+
+#### Scenario: A reason that paraphrases the law is refused — a stated bound
+
+- **WHEN** a dimension's `because` states the mutual-independence law in different words and does not carry the
+  literal clause
+- **THEN** the reaction **fires**, refusing a reason that genuinely states the law. Measured by writing that
+  WHEN into the tree: paraphrasing `guibiao`'s clause produces *"dimension boundary for `guibiao` dropped the
+  `三儀 ⊥ 三儀` clause"*. The direction is the safe one — an author meets a refusal to argue with — and closing
+  it needs the reaction to decide two wordings state one law, a judgement over prose measured and rejected here
+- **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence reaction*
+
+#### Scenario: A reason carrying the clause while negating the law is not observed — a stated bound
+
+- **WHEN** a dimension's `because` quotes `三儀 ⊥ 三儀` and then states that it does not bind that dimension
+- **THEN** nothing reacts, and `AGENTS.self-law.md` projects the negation to every agent that loads it. This is
+  the serious direction of the pair: the teaching surface can carry the law's opposite while satisfying the
+  check that exists to keep the law taught. Measured, with the projection blessed and the whole suite green
+- **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence reaction*
+
+#### Scenario: A dimension absent from the reaction's own list is not examined — a stated bound
+
+- **WHEN** a dimension crate exists and its package name is not in the reaction's hand-kept list
+- **THEN** its allowlist is never examined, and the set-coverage assertion cannot notice, because the set it
+  compares is produced by filtering on that same list. Measured: removing `guibiao` from the literal leaves a
+  `guibiao` allowlist naming `hunyi` green. Closing it needs the dimension set derived from something that
+  enumerates it rather than typed beside it
+- **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence reaction*
+
+#### Scenario: A workspace-dependency allowlist is not examined — a stated bound
+
+- **WHEN** a dimension declares the law through `restrict_workspace_dependencies_to` rather than
+  `restrict_dependencies_to`
+- **THEN** the reaction never examines it, though that rule governs workspace-member edges specifically and is
+  the more natural one for this law. Measured: a second `guibiao` boundary of that variant naming `hunyi` is
+  green, and set coverage still reads the three dimensions
+- **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence reaction*
 
 #### Scenario: A dimension's allowlist names a sibling
 

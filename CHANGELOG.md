@@ -616,13 +616,21 @@ them.
   reaction cannot fire on a *widened* allowlist, because permitting more than the tree uses produces no
   violation. The reaction now asserts membership beside the clause, names the sibling it found, and
   `self-law-projection` states why that assertion is the sole guard. The clause check's own limit is unchanged
-  and still limited, with the limits now **stated rather than assumed**: paraphrasing the clause makes the
-  reaction *fire* (an over-reaction, refusing a reason that states the law), while a `because` carrying the
-  literal clause and *negating* it passes — so the projection can teach the negation. Both were measured by
-  writing them into the tree, neither is a declared bound yet, and `BACKLOG.md` carries them with two
-  enumeration limits of the membership half. Declaring any of them waits for a pin that runs **the reaction
-  over a declaration** rather than its predicate over a string: a draft of this change declared the first as a
-  false *negative* and pinned it with the predicate, and one run of the bound's own WHEN falsified both.
+  and still limited — and every limit of this reaction is now **declared**, four of them, each extent read off a
+  run of that limit's own WHEN. The two wording limits go in **opposite directions**: paraphrasing the clause
+  makes the reaction *fire* (over-reacting, the safe direction), while a `because` carrying the literal clause
+  and then *negating* the law **passes**, so `AGENTS.self-law.md` can project the law's opposite to every agent
+  that loads it — the serious one. The two enumeration limits are the reaction's hand-kept dimension list, which
+  the set-coverage assertion structurally cannot hold because the set it compares is produced by filtering on
+  that same list, and a rule variant the filter never reaches although it governs workspace-member edges
+  specifically.
+
+  All four are unpinned against one `BACKLOG.md` tracker. Two drafts got this wrong in opposite ways: one
+  declared the first as a false *negative*, which a single run of its WHEN falsified, and one then deferred all
+  four on the ground that declaring needed a pin. It does not — a bound may be declared unpinned — and
+  withholding them kept a measured false negative out of the register a reader is told to consult before calling
+  a behaviour a defect. Pinning is what needs the reaction run over a supplied declaration; the tracker owns
+  that.
 
   Found by three withdrawn attempts at one `PROJECT.md` paragraph, the third of which tried to stop restating
   the law and **cite** the generated projection instead. Review showed the citation bought freshness rather than
