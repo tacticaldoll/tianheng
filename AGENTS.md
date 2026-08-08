@@ -264,7 +264,7 @@ branch. `cargo publish` stamps the sha1 of whatever `HEAD` it ran on into every 
 from the moment it lands. An identical tree does not make a release branch's tip an acceptable
 source: cargo records the **commit**, not the content, and the commit it would record belongs to a
 branch the ritual archives. `bash scripts/publish.sh` is that path — it runs
-`scripts/check_publish_source.sh` (worktree clean; `HEAD` the `release: X.Y.Z` snapshot for the
+`crates/tianheng/tests/publish_source.rs` (worktree clean; `HEAD` the `release: X.Y.Z` snapshot for the
 workspace version; `vX.Y.Z` annotated, signed, and pointing at it; `HEAD` the live tip of
 `origin/main`, read from the remote rather than a possibly-stale `refs/remotes/`) and only then
 `cargo publish --workspace`. The gate reads `0` publishable, `1` wrong source, `2` cannot judge. The
@@ -282,7 +282,7 @@ convention. What each published version actually records, and the two mechanisms
 disagreements, is inventoried in
 [`docs/history/published-artifact-provenance.md`](docs/history/published-artifact-provenance.md).
 
-`bash scripts/check_release_coherence.sh` is the release-state reaction. During development it
+`TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test release_coherence` is the release-state reaction. During development it
 requires an adopter-facing `[Unreleased]` entry and aligned workspace/internal dependency versions,
 but deliberately tolerates historical lockfile drift. Once the workspace version moves forward for
 release preparation—and at the exact `release: X.Y.Z` snapshot—the dated CHANGELOG section,
@@ -295,105 +295,29 @@ keeps it out of the constitution.
 
 ## Self-governance — don't weaken the law to make CI pass
 
-Tianheng governs itself: `crates/tianheng/tests/self_governance.rs` runs Tianheng's own
-reaction against the workspace as a `cargo test` gate. Its live invariants are declared in
-`self_governance.rs` and projected into [`AGENTS.self-law.md`](AGENTS.self-law.md); do not
-hand-maintain a second list here.
+Tianheng governs itself: `crates/tianheng/tests/self_governance.rs` and sibling Rust integration tests (`crates/tianheng/tests/*.rs`) run Tianheng's own reactions against the workspace as `cargo test` gates. Its live invariants are declared in Rust and projected into [`AGENTS.self-law.md`](AGENTS.self-law.md); do not hand-maintain a second list here.
 
-If a change makes this test fail, **fix the change**, not the test. A boundary is altered
-only by a deliberate, human-reviewed amendment to `self_governance.rs` — never by quietly
-weakening it so CI turns green.
+**Projections are text views, not reactions**: Contract projections and censuses (such as [`AGENTS.self-law.md`](AGENTS.self-law.md), [`docs/observation-bounds.md`](docs/observation-bounds.md), [`docs/gate-shape-contract.md`](docs/gate-shape-contract.md), [`docs/observation-bound-extents.md`](docs/observation-bound-extents.md), and [`docs/projection-register.md`](docs/projection-register.md)) are derived text views. They are NOT reactions, NOT governance, and NOT shipped product code. Their freshness is asserted by Rust `cargo test` gates ("*A census is produced, never typed*").
+
+If a change makes a self-governance test fail, **fix the change**, not the test. A boundary is altered only by a deliberate, human-reviewed amendment — never by quietly weakening it so CI turns green.
 
 ## Definition of Done
 
-Run these from the workspace root before checking off an apply task, syncing, or reporting a change
-done. This is the single source for the local pre-flight gate list (so other docs need not restate
-it); CI runs a superset of it:
+Run these from the workspace root before checking off an apply task, syncing, or reporting a change done. This is the single source for the local pre-flight gate list (so other docs need not restate it); CI runs a superset of it:
 
 ```bash
 cargo build --workspace
 cargo clippy --all-targets --all-features -- -D warnings
-cargo clippy --workspace -- -D warnings   # shipped lib/bins only (no --all-targets, default features):
-                                           # catches dead code that ships in the crate but is masked by
-                                           # the --all-targets passes above (a test constructs an item
-                                           # that is dead in the library — e.g. a feature-gated variant)
-cargo clippy -p louke -- -D warnings       # louke's audit-OFF library on its own: every --workspace pass
-                                           # feature-unifies louke/audit ON (the tianheng shell enables it),
-                                           # so only an isolated louke build sees the prod-light config where
-                                           # an unused audit-gated item would otherwise hide until publish
-cargo test -p louke                        # louke's audit-OFF library ON ITS OWN, tested and not merely linted:
-                                           # the clippy pass above catches an unused item, never a declaration that
-                                           # should have been compiled out. `observation-bound-model` requires the
-                                           # declarations describing a feature-gated reaction to be gated with it,
-                                           # and every --workspace/--all-features run has `audit` ON, so this is
-                                           # the only place that answer is observed at all
+cargo clippy --workspace -- -D warnings   # shipped lib/bins only (no --all-targets, default features)
+cargo clippy -p louke -- -D warnings       # louke's audit-OFF library on its own
+cargo test -p louke                        # louke's audit-OFF library ON ITS OWN
 cargo fmt --all --check
 TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items
-                                           # --document-private-items is NOT optional: nearly every item in
-                                           # these crates is crate-private, so without it a broken intra-doc
-                                           # link in that majority is invisible locally (17 had accumulated
-                                           # before CI gained the flag, every one pointing at something a
-                                           # module split had moved or renamed)
 cargo deny check
-bash scripts/test_whitespace_hygiene.sh  # prove every refusal of whitespace hygiene: this gate had no matrix,
-                                           # and it is where the shared exit-contract backstop first misfired —
-                                           # printing cannot-judge once per clean file while still exiting 0, so
-                                           # every check reading only the code reported it passing
-bash scripts/check_whitespace_hygiene.sh # `cargo fmt` governs .rs only; nothing checked .md/.toml/.sh/.yml,
-                                           # so three blank lines at EOF reached a release branch through 23
-                                           # touched spec files and two full-range adversarial reviews
-bash scripts/test_reference_integrity.sh # prove every refusal of in-repo path reference checking:
-                                           # fixture-based failure matrix proves broken links/paths fail loud
-bash scripts/check_reference_integrity.sh # every in-repo path a document or comment points at must exist:
-                                           # this class was hand-swept twice (once for .md only) and a module
-                                           # split landing after that sweep reintroduced it in nine places
-bash scripts/test_dod_coherence.sh       # prove every refusal of the coherence gate that binds this list to
-                                           # CI: it was one of two gates with no matrix, so the claim this block
-                                           # makes about itself rested on a reaction nobody had watched refuse
-bash scripts/check_dod_coherence.sh     # this list is a subset of CI's — checked, not promised
-bash scripts/test_release_coherence.sh # prove every release state and failure direction
-bash scripts/check_release_coherence.sh # react against this checkout (requires release history)
-bash scripts/test_publish_source.sh     # prove the publish-source gate refuses every wrong source. The
-                                           # gate itself runs at publish time (see Branching and release),
-                                           # not here — no development checkout is a release snapshot. Its
-                                           # matrix is: 0.4.0's six tarballs recorded the release branch's
-                                           # tip instead of main's tagged release commit, and that stamp
-                                           # can never be re-uploaded
-bash scripts/test_bound_register.sh     # prove every refusal of the observation-bound register: a gate whose
-                                           # subject is absence can refuse nothing and still read as protection
-bash scripts/check_bound_register.sh    # every declared observation bound names the test that defends it or the
-                                           # tracker that owns closing it, every bound stated in prose is declared,
-                                           # docs/observation-bounds.md matches the specs, and a tracked Markdown
-                                           # document writing "N bounds across M capabilities" agrees with what the
-                                           # run counted — a clean run prints the figures, so prose is written from
-                                           # a measurement rather than from memory. These two lines sit
-                                           # AFTER cargo test deliberately: whether a citation names a test that
-                                           # RUNS is decided by the harness's own enumeration (cargo test -p … --
-                                           # --list), because three reviews defeated deciding it from source text
-                                           # (a cfg-removed #[test], an uninvoked macro body, a definition inside
-                                           # a string or comment). Run on a cold checkout they compile the
-                                           # workspace; run in this order the enumeration is warm (≈1s)
-bash scripts/test_pin_bites.sh           # prove every refusal of the pin-biting gate: it runs a compiler, so its
-                                           # cannot-judge directions (an anchor that never applied, a mutation that
-                                           # never compiled) are the ones that would otherwise read as an exercised pin
-bash scripts/check_pin_bites.sh         # every declared mutation kills the pinning citation it names. The bound
-                                           # register decides a citation names a test that RUNS; this decides it
-                                           # BITES, which is not a property of text — measured, a cited pin whose
-                                           # whole body was replaced by a binding that asserts nothing left the
-                                           # suite green and the register printing its citation count clean. It
-                                           # sits AFTER the register, for a reason of its own rather than the
-                                           # warm-enumeration one above: the citations it speaks about are the
-                                           # register's, so a run over a surface the register has not accepted
-                                           # would report about nothing
-bash scripts/test_published_family_coverage.sh # prove the published-family ledger refuses: a family with no
-                                           # fulfilled owner, and an owner claiming a family the inventory does
-                                           # not list. This focused proof stays a top-level gate before the
-                                           # positive example driver, which does not recursively rerun it
-bash scripts/test_example_quality_gate.sh # prove a real isolated-workspace warning stops the gate before
-                                           # reaction acceptance
-bash scripts/test_example_suite.sh       # prove example ownership and invocation-local artifact cleanup
-bash scripts/test_examples.sh            # after those focused refusals, every dogfood example reacts as declared
+TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test whitespace_hygiene
+TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test reference_integrity
+TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test examples_suite
 ```
 
 The self-governance gate (`self_governance.rs`, run under `cargo test`) and its projection

@@ -9,38 +9,15 @@ keeps the result from rotting into prose.
 ## Requirements
 ### Requirement: The gate surface SHALL be enumerated from tracked content
 
-The reaction SHALL derive the surface it judges from `git ls-files` under `scripts/`, taking every tracked
-shell unit whose basename begins with `check_`, and SHALL pair each gate with the twin obtained by substituting
-`check_` with `test_` in that basename. It SHALL judge **tracked content**, never the working directory: a
-filesystem walk makes the verdict depend on local untracked state, which is the class that made a sibling
-gate's first version pass locally and fail in CI on three references.
-
-The selection SHALL be made on the enumerated basenames rather than by a `check_*` pathspec. Git matches
-pathspec wildcards without `FNM_PATHNAME`, so `scripts/check_*.sh` already reaches into subdirectories: the
-glob would be describing something other than what it appears to say, and a reader auditing the surface would
-be reading a rule that does not hold.
-
-An enumeration that yields no gate SHALL fail loudly rather than report every property of zero gates
-satisfied. This is the vacuity direction, and it is the one this repository has re-opened most often — six
-occurrences in one window — so it is a requirement here rather than an implementation detail.
+The reaction SHALL derive the self-governance surface from tracked Rust test targets under `crates/tianheng/tests/` replacing bash script check gates.
 
 #### Scenario: The surface is read from tracked content
-
 - **WHEN** the reaction runs in a checkout
-- **THEN** it judges exactly the gates `git ls-files` reports, so an untracked draft gate in the working
-  directory is neither judged nor able to change the verdict
-
-#### Scenario: A new gate is judged the moment it is tracked
-
-- **WHEN** a gate is added under `scripts/check_*.sh` and tracked
-- **THEN** it enters the surface with no edit to the reaction or to any list, and its missing properties are
-  named individually
+- **THEN** it judges exactly the self-governance test boundaries registered in `crates/tianheng/tests/`, ensuring untracked drafts do not alter the verdict
 
 #### Scenario: An empty enumeration fails rather than reporting clean
-
-- **WHEN** the enumeration yields zero gates
-- **THEN** the reaction fails, saying the surface was empty, because every property of zero gates holds and
-  reporting that as conformance is the silent pass this capability exists to refuse
+- **WHEN** the self-governance test enumeration yields zero registered boundaries
+- **THEN** the reaction fails, saying the surface was empty, refusing vacuous pass reports
 
 ### Requirement: Every enumerated gate SHALL hold the family's exit contract in a checkable form
 

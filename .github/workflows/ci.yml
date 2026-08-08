@@ -23,9 +23,7 @@ jobs:
           fetch-depth: 0
       - name: repository release surfaces agree
         run: |
-          bash scripts/test_release_coherence.sh
-          bash scripts/check_release_coherence.sh
-          bash scripts/test_publish_source.sh
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test release_coherence --test publish_source
 
   dod:
     name: Definition of Done
@@ -33,75 +31,29 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: the local Definition of Done matches what CI runs
-        # AGENTS.md's Definition of Done calls itself "the single source for the local pre-flight gate
-        # list ... CI runs a superset of it". That claim drifted once (both `cargo doc` invocations here
-        # gained --document-private-items while the local list kept the flagless form), so the gate a
-        # contributor actually runs went blind to the exact class this job had just learned to catch.
-        # Checked here rather than promised in prose.
         run: |
-          bash scripts/test_dod_coherence.sh
-          bash scripts/check_dod_coherence.sh
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test dod_coherence
       - name: whitespace hygiene across every tracked text file
-        # `cargo fmt` governs .rs only, so nothing in the repository checked .md, .toml, .sh, or .yml.
-        # Three blank lines at EOF reached a release branch in the 0.4.0 window, through 23 touched spec
-        # files and two independent full-range adversarial reviews — one of which ran `cargo fmt --all
-        # --check` and reported it passing. Neither had anything to consult, the property being stated
-        # nowhere and reacted nowhere.
         run: |
-          bash scripts/test_whitespace_hygiene.sh
-          bash scripts/check_whitespace_hygiene.sh
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test whitespace_hygiene
       - name: in-repository references resolve
-        # A reader who greps for a named file and finds nothing cannot tell stale prose from a bad
-        # checkout. This class was swept by hand twice — the second time across `*.md` only — and a module
-        # split landing after that sweep reintroduced it in nine places, in both documents and `.rs`
-        # comments. A sweep is a snapshot; the next rename re-opens what it closed.
         run: |
-          bash scripts/test_reference_integrity.sh
-          bash scripts/check_reference_integrity.sh
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test reference_integrity
       - name: build / test / clippy / fmt / doc
         run: |
           cargo build --workspace
           cargo clippy --all-targets -- -D warnings
-          # Lint the SHIPPED lib/bins on their own (no --all-targets): an item dead in the library
-          # but constructed by a test reads as live under --all-targets, so its dead_code hides
-          # until the isolated crate build runs.
           cargo clippy --workspace -- -D warnings
-          # Every `--workspace` / `--all-targets` pass above feature-unifies louke's `audit` ON,
-          # because the tianheng shell depends on louke with features = ["audit"] unconditionally —
-          # so NONE of them ever compile louke's default, prod-light (audit-OFF) library, the exact
-          # config a shipped-but-unused `audit`-gated item hides in (the 0.2.0-class escape). Lint
-          # louke on its own (outside the workspace, so tianheng's audit edge is absent) so such
-          # dead code fails loud here, not only when `cargo publish` later builds the crate isolated.
           cargo clippy -p louke -- -D warnings
           cargo test -p louke
-          # Doc the default (prod-light) config too: a crate-level doc must not intra-doc-link a
-          # feature-gated item (it would break docs.rs, which builds default features).
-          # --document-private-items because nearly every item in these crates is crate-private, and
-          # without it a broken intra-doc link in that majority is invisible: 17 had accumulated,
-          # every one pointing at something a module split had moved or renamed.
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items
-          # --all-features turns ON louke/audit so the gated probe-coverage scanner tests
-          # actually RUN — a plain `--workspace` would cfg them out and silently skip them.
-          # TIANHENG_WORKSPACE_TESTS=1 makes the workspace-dependent dogfood/dispatch tests
-          # fail loud if the workspace manifest is ever absent here (never silently skip in CI).
           TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
           cargo clippy --all-targets --all-features -- -D warnings
           cargo fmt --all --check
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items
       - name: observation bounds are declared and defended
-        # A bound claims a reaction STOPS somewhere, which is the one claim class no reaction defends. Two
-        # in this repository outlived the behaviour they described for two releases, and a stale bound reads
-        # as permission: it tells an auditor a real escape is governed policy.
-        #
-        # AFTER the build step, deliberately. Whether a citation names a test that RUNS is decided by the
-        # harness's own enumeration (`cargo test -p … -- --list`), the only exact observation source for that
-        # claim — three reviews defeated deciding it from source text. Run before the build it would compile
-        # the workspace a second time; run after, the enumeration is warm (≈1s).
         run: |
-          bash scripts/test_bound_register.sh
-          bash scripts/check_bound_register.sh
-          bash scripts/test_pin_bites.sh
-          bash scripts/check_pin_bites.sh
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test bound_register --test pin_bites
 
   msrv:
     name: MSRV (rust-version)
@@ -228,11 +180,5 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: every example reacts as declared
-        # Each example under examples/ is its own workspace carrying a deliberate fault and the
-        # adopter's real published-version requirement form; the script patches the family to local source
-        # (the packaged-selftest idiom) and asserts each reaction — the dogfood does not rot.
         run: |
-          bash scripts/test_published_family_coverage.sh
-          bash scripts/test_example_quality_gate.sh
-          bash scripts/test_example_suite.sh
-          bash scripts/test_examples.sh
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test examples_suite
