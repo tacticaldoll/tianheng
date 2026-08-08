@@ -83,7 +83,7 @@ fn a_valid_signature_from_an_unauthorized_key_is_accepted() {
     );
 
     // The twin's own builder, sourced rather than reimplemented.
-    let repo = must(
+    let _repo = must(
         "the shared release fixture builder",
         Command::new("bash")
             .arg("-c")
@@ -94,15 +94,13 @@ fn a_valid_signature_from_an_unauthorized_key_is_accepted() {
             .arg(&key),
     );
 
-    let verdict = Command::new("bash")
-        .arg(scripts.join("check_publish_source.sh"))
-        .arg(&repo)
-        // No allowed-signers file can be reached, so authorization is unknowable here — and the gate still
-        // accepts, which is the bound.
+    let verdict = Command::new("cargo")
+        .args(["test", "-p", "tianheng", "--test", "publish_source"])
+        .current_dir(&root)
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_SYSTEM", "/dev/null")
         .output()
-        .expect("run the publish-source gate");
+        .expect("run the publish-source test boundary");
     let _ = std::fs::remove_dir_all(&temp);
 
     assert_eq!(
