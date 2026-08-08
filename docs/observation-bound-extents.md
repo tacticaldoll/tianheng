@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**23 of 66 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**24 of 67 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound` — owner: engine
@@ -17,6 +17,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound` — owner: engine
+- `observer-protocol/a-whole-line-copy-inside-a-block-comment-anchors-the-read-a-stated-bound` — owner: engine
 - `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound` — owner: adopter
 - `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound` — owner: engine
 - `observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound` — owner: engine
@@ -390,7 +391,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (23)
+## under-reacts (24)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -487,6 +488,14 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **because**: a killed pin does not say what killed it, and refusing a record that edits its pin's own file would refuse this tree's first seeded record, which legitimately perturbs a recognizer sitting beside the pin that defends it
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+### `observer-protocol/a-whole-line-copy-inside-a-block-comment-anchors-the-read-a-stated-bound`
+
+> a whole-line signature copy in a block comment, with the definition moved out of the inspected source
+
+- **because**: both anchor conditions are satisfied — one occurrence, at a line start — so the commented body is read as the method's and a divergent list in the real impl passes; closing it needs comment stripping over text carrying string literals, the lexing this tree's own suites defeat
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *the bounds-method reader anchors in a block comment when the definition moved*
 
 ### `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound`
 

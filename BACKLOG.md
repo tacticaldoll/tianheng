@@ -60,6 +60,23 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
+- **The bounds-method reader anchors in a block comment when the definition moved.** *Class:* READY-PATCH.
+  *Observed pressure:* the reader requires the signature to occur exactly once and at a line start. A
+  **whole-line** copy inside a block comment satisfies both, so if the definition has moved out of the
+  inspected source the commented body is read as the method's. Reproduced end-to-end: `impl Observer for
+  SemanticObserver` moved to a file the dimension table does not name, its `bounds()` rebuilt as a divergent
+  hand-written list, a block-comment copy left behind — `every_observer_declares_exactly_its_dimension_s_bounds`
+  passes and the whole workspace suite is green. *Observation source:* that perturbation, run during the
+  closing review of the 0.5.0 window. *Current reaction or bound:* the declared bound
+  `observer-protocol/a-whole-line-copy-inside-a-block-comment-anchors-the-read-a-stated-bound`. *Risk:* the one
+  the requirement exists to refuse — a second, divergent list passing as a delegation. *Promotion trigger:*
+  fired; the perturbation is a tree artefact rather than a report. *Version class:* patch; a `tests/` reaction
+  of this repository, shipping in no crate. *Authority:* `observer-protocol`.
+  *Shape:* comment stripping over text that carries string literals, which is the lexing this tree's own lexer
+  suites defeat — `check_bound_register.sh` records the same rejection for the same reason. So not a third
+  textual condition. The reachable alternative is to stop reading a *file the dimension table names* and read
+  the definition the compiler resolves, which is a different instrument than any of the four tried here.
+
 - **The construction-held list is hand-maintained prose.** *Class:* READY-PATCH. *Observed pressure:*
   `observer-protocol` requires the spec to say which dimensions' equality holds by construction, and nothing
   observes that the list is correct. The 0.5.0 window is the evidence: the list named runtime alone, the shell's
@@ -178,7 +195,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **66 bounds across 22 capabilities** — a live figure rather than part of the measurement
+  currently holds **67 bounds across 22 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is

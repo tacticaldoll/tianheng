@@ -183,10 +183,11 @@ otherwise. An earlier rule required the signature to begin a trimmed line, which
 mid-line mention: a whole-line copy inside a block comment anchors exactly as well as the definition, and a decoy
 conforming copy above a divergent method let the equality pass on text that was not the method — measured.
 Counting occurrences does **not** subsume the mid-line mention, and the reaction SHALL require both
-conditions rather than either. A source that mentions the signature only in prose and never defines it has
-exactly one occurrence, so a count-only rule admits it, anchors in the prose, and returns the next function's
-body as this method's — measured. Each rule refuses what the other admits, and requiring both only ever
-declines more, which is this reader's declared error direction. And a **trailing comment** on the delegation SHALL be
+conditions rather than either. A source that mentions the signature mid-line and never defines it has exactly
+one occurrence, so a count-only rule admits it, anchors in the prose, and returns the next function's body as
+this method's — measured. Each rule refuses something the other admits, and requiring both only ever declines
+more, which is this reader's declared error direction. What neither refuses is a **whole-line** copy inside a
+block comment, which is declared as a bound below rather than described as closed. And a **trailing comment** on the delegation SHALL be
 prose, not a second list: the region discipline this family already holds says a comment is never executed text,
 and the reaction that judges a shell gate's own text strips one before comparing for exactly this reason.
 The reaction SHALL apply Rust line-comment semantics to the inspected body: a `//` line is prose, while a Rust
@@ -212,6 +213,18 @@ obligation, which is a different property with a bound of its own. The
 Where a dimension's equality is construction-held, the reaction SHALL still observe that the fixture's boundary
 for that dimension **reacts at all**. Otherwise an arm that quietly went vacuous would leave the whole
 comparison resting on the dimensions that did not.
+
+#### Scenario: A whole-line copy inside a block comment anchors the read — a stated bound
+
+- **WHEN** the method's definition is absent from the inspected source — the impl having moved elsewhere — and a
+  whole-line copy of its signature remains inside a block comment
+- **THEN** the reaction reads the commented body and reports it as the method's, so a divergent hand-written
+  list in the real impl passes. Both anchor conditions are satisfied: one occurrence, at a line start. It is a
+  declared false negative this repository owns, and closing it needs comment stripping over text that carries
+  string literals — the lexing this tree's own suites defeat and the register measured and rejected for the
+  same reason. The count condition refuses the *decoy* case, where the definition is present beside the copy;
+  this is the case where it is not
+- **UNPINNED** `BACKLOG.md` — *the bounds-method reader anchors in a block comment when the definition moved*
 
 #### Scenario: Whether the stated construction-held list matches the composition path is not observed — a stated bound
 

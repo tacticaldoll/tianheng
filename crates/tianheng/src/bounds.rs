@@ -135,6 +135,21 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::unpinned(
             BoundId::new(
+                "observer-protocol/a-whole-line-copy-inside-a-block-comment-anchors-the-read-a-stated-bound",
+            ),
+            "a whole-line signature copy in a block comment, with the definition moved out of the inspected source",
+            Extent::Reached(Reached::UnderReacts {
+                because: "both anchor conditions are satisfied — one occurrence, at a line start — so the \
+                          commented body is read as the method's and a divergent list in the real impl \
+                          passes; closing it needs comment stripping over text carrying string literals, the \
+                          lexing this tree's own suites defeat"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *the bounds-method reader anchors in a block comment when the definition moved*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
                 "observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound",
             ),
             "the requirement's list of construction-held dimensions naming a different set than the built-in path invokes",

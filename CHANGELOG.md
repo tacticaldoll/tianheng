@@ -185,9 +185,10 @@ them.
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
   closing the gap. Generated from the specs and staleness-checked, it leads with the count of bounds nothing
-  yet defends rather than burying it — and the count itself is deliberately not repeated here. The register's
-  census reaction greps every tracked Markdown file against what it holds **now**, with no exemption for a
-  released section, so a figure frozen into this entry would fail that gate the first time the register grows. Read it before
+  yet defends rather than burying it. This entry deliberately carries **no** figure of its own: the register's
+  census reaction greps every tracked Markdown file for `N bounds across M capabilities` and compares it with
+  what the register holds **now**, with no exemption for a released section — so that phrasing, frozen into a
+  dated entry, would fail the gate the first time the register grows. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
   had defended. The list is a **floor rather than a proof**, and the projection's own header enumerates every
@@ -562,10 +563,12 @@ them.
   `owner` / `tracker` annotations onto the newly observed facts. Only those two rules are affected —
   signature-coupling, forbidden-marker, trait-impl locality, and unsafe confinement resolve through a different
   entry point and are unchanged.
-- **Nothing else requires action.** Every other entry in this release either adds a surface absent at `v0.4.0`
-  (the observation-bound vocabulary, the three concrete observers, `Run`, each dimension's
-  `observation_bounds()`), corrects a repository-internal reaction that ships in no crate, or is documentation.
-  No manifest, feature, `rust-version`, or dependency requirement moves.
+- **Nothing else requires action**, including the one manifest that did change: `crates/tianheng` dropped its
+  direct `xingbiao` dependency, and `tianheng` re-exported nothing from `xingbiao` at `v0.4.0`, so no path an
+  adopter could name is gone. Every other entry either adds a surface absent at `v0.4.0` (the observation-bound
+  vocabulary, the three concrete observers, `Run`, each dimension's `observation_bounds()`), corrects a
+  repository-internal reaction that ships in no crate, or is documentation. No feature, `rust-version`, or
+  dependency **requirement** moves.
 
 ### Fixed
 - **The source-shape reaction over the shell's composition body is retired, and the obligation it claimed is

@@ -402,18 +402,26 @@ fn a_signature_that_is_only_ever_mentioned_anchors_nothing() {
         "a lone mid-line mention with no definition must decline, not read the next function's body"
     );
 
-    let defined_beside_a_mention =
+    let ordinary_definition =
         Source::of("fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n");
     assert!(
-        function_body(&defined_beside_a_mention, "fn bounds(").is_some(),
+        function_body(&ordinary_definition, "fn bounds(").is_some(),
         "and the ordinary definition still reads, so requiring both conditions declines more rather than \
          declining everything"
+    );
+    assert_eq!(
+        decline_reason(&mention_only, "fn bounds("),
+        "`fn bounds(` occurs once but not at the start of a line, so it is a mention rather than a definition \
+         and anchors nothing",
+        "and the decline names the condition that failed — reporting a missing brace here sent a repairer \
+         looking for one that is present"
     );
 }
 
 /// The bounds-method reader declines an ambiguous anchor too, and its safe direction depends on that.
 ///
-/// The reader that survives and the one this window retired both used [`function_body`], so both inherited the decoy hole — and for this one the consequence
+/// The reader that survives and the one this window retired both used [`function_body`], so both inherited
+/// the decoy hole — and for this one the consequence
 /// was sharper: its bound records the moved extent as *over-reacting*, safe because an exact one-statement
 /// equality refuses a conforming body. A decoy copy inverts that. The extent becomes the decoy's conforming
 /// body while the real method holds a second, divergent list, and the equality then passes on text that is not
@@ -597,9 +605,31 @@ fn mask_line_comment_braces(text: &str) -> String {
 
 /// How many times `signature` occurs, so a decline can say whether it found none or too many.
 ///
-/// The same rule [`function_body`] anchors by, deliberately: the two disagreed for one round — this counted
-/// trimmed-start lines while the reader counted occurrences — so a declined read reported "1", sending a reader
-/// to look for a second definition its own count denied.
+/// Whether the byte offset `at` is preceded on its own line by nothing but whitespace.
+///
+/// One definition, read by both the reader and its diagnostic, because the two drifting apart is exactly the
+/// defect [`decline_reason`] was written after.
+fn begins_a_line(text: &str, at: usize) -> bool {
+    text[..at]
+        .rsplit_once('\n')
+        .map_or(&text[..at], |(_, last)| last)
+        .trim()
+        .is_empty()
+}
+
+/// Whether `signature`'s single occurrence begins a line — the reader's second anchor condition, asked
+/// separately so a decline can say which condition failed.
+fn occurrence_begins_a_line(source: &Source, signature: &str) -> bool {
+    let text = source.whole();
+    text.find(signature)
+        .is_some_and(|at| begins_a_line(text, at))
+}
+
+/// **Half** the rule [`function_body`] anchors by, and the halves must not be confused. The two once disagreed
+/// outright — this counted trimmed-start lines while the reader counted occurrences — and a declined read
+/// reported "1", sending a reader to look for a second definition its own count denied. They agree on counting
+/// occurrences now, and the reader adds a line-start condition this does not, which is why
+/// [`decline_reason`] asks about that condition separately rather than reading it off this number.
 fn anchor_count(source: &Source, signature: &str) -> usize {
     source.whole().matches(signature).count()
 }
@@ -612,9 +642,13 @@ fn anchor_count(source: &Source, signature: &str) -> usize {
 fn decline_reason(source: &Source, signature: &str) -> String {
     match anchor_count(source, signature) {
         0 => format!("`{signature}` does not occur, so there is no body to read"),
+        1 if !occurrence_begins_a_line(source, signature) => format!(
+            "`{signature}` occurs once but not at the start of a line, so it is a mention rather than a \
+             definition and anchors nothing"
+        ),
         1 => format!(
-            "`{signature}` occurs once but no balanced brace-delimited body follows it, so the extent could \
-             not be taken"
+            "`{signature}` occurs once, at a line start, but no balanced brace-delimited body follows it, so \
+             the extent could not be taken"
         ),
         many => format!(
             "`{signature}` occurs {many} times, so the subject is ambiguous and the reader judges only when it \
@@ -650,19 +684,21 @@ fn function_body(source: &Source, signature: &str) -> Option<Source> {
     // `fn other() -> u8 { 0 }`, which the count rule alone reads as ` 0 `.
     //
     // So both conditions are required, not either: exactly one occurrence AND that occurrence beginning a
-    // trimmed line. Each rules out what the other admits — the count refuses a decoy whole-line copy and a
-    // definition spelled `pub(crate) fn …` beside one, the line start refuses an anchor that is only ever a
-    // mention. Requiring both only ever DECLINES more, which is this reader's declared error direction.
+    // trimmed line. The count refuses a decoy whole-line copy and a definition spelled `pub(crate) fn …`
+    // beside one; the line start refuses a MID-LINE mention. Requiring both only ever DECLINES more, which is
+    // this reader's declared error direction.
+    //
+    // What it does NOT refuse, and the claim that it did was wrong: a WHOLE-LINE copy inside a block comment,
+    // with the definition absent because the impl moved elsewhere. That satisfies both conditions — one
+    // occurrence, at a line start — and the reader returns the commented body as the method's, measured
+    // end-to-end with a divergent hand-written list in the real impl and the whole suite green. Closing it
+    // needs comment stripping over text that carries string literals, which this tree's own lexer suites
+    // defeat, so it is a declared bound rather than a third condition.
     if text.matches(signature).count() != 1 {
         return None;
     }
     let signature = text.find(signature)?;
-    if !text[..signature]
-        .rsplit_once('\n')
-        .map_or(&text[..signature], |(_, last)| last)
-        .trim()
-        .is_empty()
-    {
+    if !begins_a_line(text, signature) {
         return None;
     }
     let open = signature + masked[signature..].find('{')?;
