@@ -263,6 +263,19 @@ them.
 
 ### Changed
 
+- **`PROJECT.md` says why a governance surface is not a crate, instead of leaving it open.** The old sentence —
+  the three offices are *"crate-or-convention as their nature dictates"* — is what a reader consulted when
+  asking whether one of them should become one, and it answered nothing. The answer is the drift law two
+  sentences earlier: a crate is born when a **dimension** is built, because a dimension adds a new drift type
+  and needs a boundary the self-law can react to — every dimension's `restrict_dependencies_to` naming no
+  sibling **is** that reaction. A 司 adds no drift type; it surfaces, records or amends what a 儀 already found,
+  so the question does not arise from the architecture. It arose from the sentence.
+
+  The self-law preamble every agent loads said only *"三司 administer"* — three names with no referent, which is
+  what made them read as brandable. It names each by what it does now, and `self-law-projection`'s requirement
+  says so together with the fact that nothing observes it: the preamble is a hand-written constant, so the
+  property can fail, and the construction clause that would excuse a missing reaction does not apply.
+
 - **The bounds-method reader's anchor rule is one typed decision, and its behaviour is a table that runs.**
   Two callers each re-derived the rule and drifted twice — once counting trimmed-start lines against
   occurrences, once when a line-start condition reached the reader and not its diagnostic. They match on one

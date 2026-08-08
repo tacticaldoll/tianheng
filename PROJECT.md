@@ -153,9 +153,18 @@ dimensions — 圭表 (static), 渾儀 (semantic), 漏刻 (runtime) — are the 
 instruments): *what* Tianheng measures; each is a crate born when built, each adds a new
 drift type. The governance & observability layer — 垂象 (the reaction surface), 實錄 (the
 baseline), 校讎 (the amendment flow) — are the **三司** (the three offices): *how* a reaction
-is surfaced, recorded, and amended (see `BACKLOG.md`). 儀 measures, 司 administers — the
-三儀 add what is observed, the 三司 wrap the reaction. Both are crate-or-convention as their
-nature dictates, never named before their reaction exists.
+is surfaced, recorded, and amended. 儀 measures, 司 administers — the 三儀 add what is
+observed, the 三司 wrap the reaction.
+
+**Only a 儀 is a crate, and the reason is the drift law rather than importance or size.** A
+crate here is born when a dimension is built, because that dimension adds a new drift type and
+needs a boundary the self-law can react to — every dimension's `restrict_dependencies_to`
+naming no sibling is that reaction, which is what 三儀 ⊥ 三儀 means in code. A 司 adds no
+drift type: it surfaces, records or amends what a 儀 already found. So the question a reader
+might ask — should this one become a crate? — does not arise from the architecture. It arose
+from a sentence that left the answer open, and that sentence is gone.
+
+Never name one before its reaction exists.
 
 ## Naming — narrative, with meaning in the SSOT
 
