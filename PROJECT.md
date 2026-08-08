@@ -151,11 +151,29 @@ selects governance by depending on the dimensions they want:
 **The observatory vocabulary (manifested in governance).** The three observation
 dimensions — 圭表 (static), 渾儀 (semantic), 漏刻 (runtime) — are the **三儀** (the three
 instruments): *what* Tianheng measures; each is a crate born when built, each adds a new
-drift type. The governance & observability layer — 垂象 (the reaction surface), 實錄 (the
-baseline), 校讎 (the amendment flow) — are the **三司** (the three offices): *how* a reaction
-is surfaced, recorded, and amended (see `BACKLOG.md`). 儀 measures, 司 administers — the
-三儀 add what is observed, the 三司 wrap the reaction. Both are crate-or-convention as their
-nature dictates, never named before their reaction exists.
+drift type. Beside them the governance & observability layer names three surfaces by what
+each does: **垂象** surfaces a reaction — `crates/guibiao/src/projection.rs` assembles the
+report and constitution documents, `crates/tianheng/src/runner/render.rs` renders text and
+SARIF, `crates/xuanji` serializes a `Violation`. **實錄** records one — `crates/xuanji/src/baseline.rs`
+holds the model every crate above it folds its verdicts into. **校讎** amends one —
+`.github/CODEOWNERS` routes a change to the law to the steward, `AGENTS.md` owns the OpenSpec
+lifecycle, and `crates/tianheng/src/constitution.rs` names that routing in shipped source.
+儀 measures; each of these three administers (司) rather than measuring.
+
+**None of them is or becomes a crate**, and the reason is boundaries rather than importance.
+三儀 are orthogonal — a dimension must never learn from a sibling — so each needs a boundary
+the self-law can react to, and every dimension's `restrict_dependencies_to` naming no sibling
+**is** that reaction. A governance surface has no boundary to be: each crosses every crate it
+touches, and one lives outside `crates/` altogether. A crate there would enclose nothing, so
+the name would mark nothing — the drift law's own prohibition rather than a stylistic call.
+This says nothing about `xuanji` or `tianheng`, which are crates and are not instruments; it
+says a surface with no boundary earns no crate.
+
+This paragraph replaced one reading *crate-or-convention as their nature dictates*, which
+answered nothing and was consulted three times. The three answers written for it were all
+withdrawn, each restating a law that was then only half reacted to. None of the three names
+reaches any shipped item, crate name, manifest or adopter-facing document — they are this
+repository's own vocabulary, and were never a product question.
 
 ## Naming — narrative, with meaning in the SSOT
 

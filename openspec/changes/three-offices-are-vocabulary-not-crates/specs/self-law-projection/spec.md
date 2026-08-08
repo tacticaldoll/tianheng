@@ -23,5 +23,7 @@ this property can fail.
 #### Scenario: The preamble names a governance surface
 
 - **WHEN** the universal preamble mentions 垂象, 實錄 or 校讎
-- **THEN** it says what that surface does, and does not present the three as a set with a common shape
-- **UNPINNED** `BACKLOG.md` — *the self-governance residual is a judgement over an entry's subject*
+- **THEN** it says what that surface does, and does not present the three as a set with a common shape.
+  What stands in place of a reaction is the generated projection: `AGENTS.self-law.md` is regenerated and
+  never hand-edited, and `self_law_projection_is_fresh` holds — which pins the projection to the declaration
+  and is **freshness, not truth**, so this scenario is evidenced by review rather than by a guard

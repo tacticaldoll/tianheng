@@ -11,7 +11,7 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 - Observe only what has a real observation source; name nothing that does not react.
 - React with the outcomes: `0` clean, `1` violation, `2` constitution/usage error.
 - On a violation, repair toward the boundary's declared reason — never weaken the law to pass.
-- 三儀 (圭表 static · 渾儀 semantic · 漏刻 runtime) measure; 三司 (垂象 · 實錄 · 校讎) administer.
+- 三儀 (圭表 static · 渾儀 semantic · 漏刻 runtime) measure; 垂象 surfaces a reaction, 實錄 records one, 校讎 amends one.
 
 # Constitution: tianheng
 

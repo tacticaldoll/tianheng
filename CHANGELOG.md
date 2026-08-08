@@ -757,6 +757,22 @@ no adopter runs. They are here rather than under the adopter headings above beca
   register's own diagnostic, and on its matrix's expected-output literals; widening the corpus to `scripts/`
   false-positives on the fixture censuses that matrix writes deliberately; and the one instance that occurred in a
   code doc was spelled in words. Most numbers here describe a *shape*, not a census.
+- **The crate question about the three governance surfaces is closed, and `PROJECT.md` says why.** It had been
+  left open by one sentence — *crate-or-convention as their nature dictates* — which answered nothing and was
+  consulted three times; all three answers were withdrawn, each restating a law that was then only half reacted
+  to. Making `restrict_dependencies_to` naming no sibling an asserted fact rather than a quoted one removed the
+  blocker, so the argument now stands on something: a crate is the boundary the self-law reacts to, and a
+  governance surface has no boundary to be — each crosses every crate it touches and one lives outside
+  `crates/` altogether. That says nothing about `xuanji` or `tianheng`, which are crates and are not
+  instruments.
+
+  The product decision had already been made by measurement rather than by argument: none of 垂象, 實錄 or 校讎
+  appears in any shipped public item, crate name, manifest, `description` or adopter-facing document. They are
+  this repository's own vocabulary and were never a product question. Each is now stated with where it is,
+  which is what the earlier attempts got wrong — one location table was false three times out of three, and one
+  retirement rested on a grep that never swept `.github/`, where `CODEOWNERS`' first line reads *"The amendment
+  reaction"*. The set name 三司 goes with them; 司 keeps a definition in place, because the 潛移 paragraph's
+  contrast against it still needs an antecedent.
 - **This heading exists, and `check_release_coherence.sh` refuses the leak back into the others.** `scripts/`
   ships in zero packages — measured across all six members — yet twenty entries name it, eleven of them in
   `[Unreleased]` and nine in the released `[0.4.0]`, spread across `### Added`, `### Changed`, `### Fixed` and
