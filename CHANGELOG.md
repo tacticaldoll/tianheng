@@ -232,6 +232,26 @@ them.
   copy of it.
 
 ### Changed
+- **The shell's semantic arm now invokes `SemanticObserver` instead of calling 渾儀's composed entry point
+  beside it.** What that buys is stated exactly, because review measured the looser claim false. It makes the
+  two composition paths' **equality** for the semantic dimension construction-held — the built-in path obtains
+  that outcome by invoking the dimension's observer, so there is no second call for a verdict to differ at, and
+  the dimension joins runtime in the construction-held list. It does **not** close the delegation obligation:
+  a guard deciding semantic emptiness above that call compiles, passes the whole suite and passes every gate,
+  so `observer-protocol`'s bound on it stays declared and its `BACKLOG.md` entry stays open. The runtime arm's
+  delegation was a different case and is not a precedent for this one — that arm held a second implementation
+  of the corpus derivation, the audit call and the `cannot read workspace` message, which delegating collapsed
+  into one, whereas the semantic arm always had one implementation with two callers.
+
+  The requirement gains what keeps a construction-held dimension honest: the reaction SHALL still observe that
+  the fixture's boundary for it **reacts at all**, so an arm that quietly went vacuous cannot leave the whole
+  comparison resting on the dimensions that did not. Verified by perturbation — emptying the semantic
+  observer's verdict fails that assertion by name. The **static** dimension is unaffected and its equality is
+  still measured: the built-in path calls `check_and_cover`, whose coverage advisory the protocol cannot carry,
+  while the observer calls `check`, and emptying *its* verdict fails the equality assert itself.
+
+  No adopter action. `check_constitution` and `run` return what they returned; `SemanticObserver::observe` is
+  `check_all` and always was, so the verdict for every declaration is unchanged.
 - The `tianheng` shell no longer declares an unused direct normal dependency on `xingbiao`;
   its enforced self-law now limits the shell to the three dimensions it composes plus
   `serde_json`. Dimension crates continue to use the shared metadata substrate unchanged.
@@ -547,7 +567,10 @@ them.
   conforming body. Retiring it rather than narrowing a fifth time is the honest disposition: what a text reader
   can still say truthfully is that the body reaches its constitution only through the declared accessors, and
   that is not the obligation. `observer-protocol` now declares the gap as a false negative this repository owns,
-  **unpinned**, tracked for closure by construction — the route the runtime dimension's equality already takes.
+  **unpinned**, tracked for closure by construction. Which construction is deliberately not named here: the
+  route this entry first pointed at — the one the runtime dimension's equality takes — was tried later in this
+  same window and measured to close nothing, because that arm had a second implementation to collapse and this
+  one never did. `BACKLOG.md` carries what would actually close it.
   The register leads with the count of bounds nothing yet defends, so the debt is visible rather than implied.
 - The same decoy defeated the **bounds-method** reader, whose bound records the moved extent as *over-reacting*
   and therefore safe. A commented-out conforming copy above a divergent `bounds()` made the exact one-statement

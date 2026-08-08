@@ -122,12 +122,13 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             BoundId::new(
                 "observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound",
             ),
-            "the shell's composition function deciding semantic emptiness itself rather than delegating",
+            "the shell's composition arm deciding semantic emptiness itself instead of leaving it to the observer it invokes",
             Extent::Reached(Reached::UnderReacts {
                 because: "a text reader over the composition body was defeated at every level it could be \
                           narrowed to — name resolution, the parameter's binding site, the identity of the \
                           definition, the caller frame, and execution, which no reading of text reaches — so \
-                          the obligation is carried by construction or not at all".into(),
+                          invoking the observer made the two paths' EQUALITY construction-held and left this untouched, measured: a \
+                          guard above that call compiles and passes every gate".into(),
                 owner: Owner::Engine,
             }),
             "`BACKLOG.md` — *the shell's semantic delegation, held by construction*",
