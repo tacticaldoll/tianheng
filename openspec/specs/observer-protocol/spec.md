@@ -225,7 +225,11 @@ comparison resting on the dimensions that did not.
   What passes is a **second, hand-maintained path that agrees today**: a *divergent* list does not, because
   `observation-bound-model` reads every dimension's declarations through `Observer::bounds` and holds them in a
   bijection with the specs, which fails on any difference of membership or content. Measured both ways. So the
-  residual is narrower than a divergent list slipping through, and wider than a comment
+  residual is narrower than a divergent list slipping through, and wider than a comment.
+  This bound SHALL be **shown rather than described**: the reaction enumerates every shape it decides together
+  with the decision, the reader is run against that table, and the rows where it reads a body that is not the
+  method's are this bound. A sentence here that the table contradicts fails, which is what the three repair
+  rounds preceding this scenario could not do
 - **UNPINNED** `BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*
 
 #### Scenario: Whether the stated construction-held list matches the composition path is not observed — a stated bound

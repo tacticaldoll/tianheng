@@ -247,6 +247,15 @@ them.
   copy of it.
 
 ### Changed
+
+- **The bounds-method reader's anchor rule is one typed decision, and its behaviour is a table that runs.**
+  Two callers each re-derived the rule and drifted twice — once counting trimmed-start lines against
+  occurrences, once when a line-start condition reached the reader and not its diagnostic. They match on one
+  function's return now, so a fifth case forces every consumer to answer it or the build fails, and the doc
+  comment that enumerated the decline classes is gone because the type holds them. Beside it, every shape the
+  reader can meet is a row carrying the decision it makes — **including the shapes it gets wrong**, which is
+  where `observer-protocol`'s declared bound over this reader is now read from. Writing the sentence three
+  repair rounds kept writing ("a whole-line copy in a comment declines") as a row makes the row fail.
 - **The shell's semantic arm now invokes `SemanticObserver` instead of calling 渾儀's composed entry point
   beside it.** What that buys is stated exactly, because review measured the looser claim false. It makes the
   two composition paths' **equality** for the semantic dimension construction-held — the built-in path obtains
