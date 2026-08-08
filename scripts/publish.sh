@@ -46,7 +46,13 @@ for arg in "$@"; do
     esac
 done
 
-bash "$repo/scripts/check_publish_source.sh" "$repo"
+# The source gate. It lives in Rust with every other self-governance reaction and does not run in
+# development — no development checkout is a release snapshot — so it is asked for explicitly here, the one
+# moment it can answer. A failure aborts before `cargo publish`, which is the point: the act below is
+# irreversible.
+TIANHENG_PUBLISH_SOURCE=1 TIANHENG_WORKSPACE_TESTS=1 \
+    cargo test --manifest-path "$repo/Cargo.toml" -p tianheng --test publish_source \
+    -- --exact the_publish_source_is_the_signed_release_snapshot
 
 cd "$repo"
 exec cargo publish --workspace "$@"
