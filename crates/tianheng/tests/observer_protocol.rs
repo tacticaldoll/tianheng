@@ -378,9 +378,98 @@ fn a_brace_in_a_block_comment_moves_the_body_extent() {
     );
 }
 
+/// The reader's behaviour, run rather than described — every row of [`ANCHOR_CASES`].
+///
+/// Three properties are asserted over the table itself, because a table that had gone degenerate would satisfy
+/// every row while proving nothing: some shape is read, some is declined, and at least one is read WRONGLY.
+/// That last is what makes the declared bound visible here instead of only in prose.
+#[test]
+fn the_reader_decides_every_shape_as_the_table_says() {
+    for case in ANCHOR_CASES {
+        let source = Source::of(case.source);
+        let read = function_body(&source, "fn bounds(").map(|body| body.whole().to_string());
+        let expected = match case.verdict {
+            Verdict::Reads(body) | Verdict::ReadsTheWrongBody(body) => Some(body.to_string()),
+            Verdict::Declines => None,
+        };
+        assert_eq!(
+            read, expected,
+            "{}: the reader's decision and this table must be the same statement",
+            case.shape
+        );
+    }
+
+    let read = ANCHOR_CASES
+        .iter()
+        .filter(|case| matches!(case.verdict, Verdict::Reads(_)))
+        .count();
+    let declined = ANCHOR_CASES
+        .iter()
+        .filter(|case| case.verdict == Verdict::Declines)
+        .count();
+    let wrong = ANCHOR_CASES
+        .iter()
+        .filter(|case| matches!(case.verdict, Verdict::ReadsTheWrongBody(_)))
+        .count();
+    assert!(
+        read > 0 && declined > 0,
+        "a table with no reading row or no declining row is satisfied by a reader that does one thing"
+    );
+    assert!(
+        wrong > 0,
+        "the declared bound over this reader is shown by a row, so removing the last such row would leave the \
+         bound asserted only in prose"
+    );
+}
+
+/// A **mid-line** mention anchors nothing, even when it is the signature's only occurrence.
+///
+/// Occurrence counting alone admits this: one occurrence, in a comment, with the definition absent because the
+/// impl moved to another file. The anchor lands in the prose, the next `{` belongs to whatever follows, and its
+/// body is returned as this method's. The line-start rule the count replaced declined it — so the two rules
+/// each admit what the other refuses, and [`function_body`] requires both.
+///
+/// It is **mid-line** and not *mention* that this closes, which an earlier version of this test claimed and got
+/// wrong: a whole-line copy anchors, and that is a declared bound.
+///
+/// The control is an ordinary definition, which must still read — requiring both conditions must decline more,
+/// not decline everything. It cannot be "the same mention beside a definition", because that is two occurrences
+/// and the uniqueness rule refuses it.
+#[test]
+fn a_mid_line_mention_anchors_nothing() {
+    let mention_only = Source::of(
+        "// the array points here, but the impl for `fn bounds(` moved away\nfn other() -> u8 { 0 }\n",
+    );
+    assert_eq!(
+        anchor(mention_only.whole(), "fn bounds("),
+        Anchor::MentionOnly,
+        "the fixture is the hard case precisely because the count alone admits it"
+    );
+    assert!(
+        function_body(&mention_only, "fn bounds(").is_none(),
+        "a lone mid-line mention with no definition must decline, not read the next function's body"
+    );
+
+    let ordinary_definition =
+        Source::of("fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n");
+    assert!(
+        function_body(&ordinary_definition, "fn bounds(").is_some(),
+        "and the ordinary definition still reads, so requiring both conditions declines more rather than \
+         declining everything"
+    );
+    assert_eq!(
+        decline_reason(&mention_only, "fn bounds("),
+        "`fn bounds(` occurs once but not at the start of a line, so it is a mention rather than a definition \
+         and anchors nothing",
+        "and the decline names the condition that failed — reporting a missing brace here sent a repairer \
+         looking for one that is present"
+    );
+}
+
 /// The bounds-method reader declines an ambiguous anchor too, and its safe direction depends on that.
 ///
-/// Both readers share [`function_body`], so both inherited the decoy hole — and for this one the consequence
+/// The reader that survives and the one this window retired both used [`function_body`], so both inherited
+/// the decoy hole — and for this one the consequence
 /// was sharper: its bound records the moved extent as *over-reacting*, safe because an exact one-statement
 /// equality refuses a conforming body. A decoy copy inverts that. The extent becomes the decoy's conforming
 /// body while the real method holds a second, divergent list, and the equality then passes on text that is not
@@ -454,8 +543,8 @@ fn a_decoy_bounds_signature_refuses_rather_than_matching_the_conforming_copy() {
         .join("\n"),
     );
     assert_eq!(
-        anchor_count(&mentioned, "fn bounds("),
-        2,
+        anchor(mentioned.whole(), "fn bounds("),
+        Anchor::Ambiguous(2),
         "a mention inside a comment is a second occurrence; counting only lines that BEGIN with the signature \
          sees one and judges a subject it cannot know"
     );
@@ -464,8 +553,8 @@ fn a_decoy_bounds_signature_refuses_rather_than_matching_the_conforming_copy() {
         "so the read declines, rather than brace-matching from whichever of the two came first"
     );
     assert_eq!(
-        anchor_count(&decoyed, "fn bounds("),
-        2,
+        anchor(decoyed.whole(), "fn bounds("),
+        Anchor::Ambiguous(2),
         "the block-comment decoy is counted too, though it begins its line and either counter would see it"
     );
     assert!(
@@ -562,28 +651,131 @@ fn mask_line_comment_braces(text: &str) -> String {
     String::from_utf8(bytes).expect("only ASCII braces were replaced, each by one ASCII space")
 }
 
-/// How many times `signature` occurs, so a decline can say whether it found none or too many.
+/// What this reader does with every shape it can meet — **including the shapes it gets wrong**.
 ///
-/// The same rule [`function_body`] anchors by, deliberately: the two disagreed for one round — this counted
-/// trimmed-start lines while the reader counted occurrences — so a declined read reported "1", sending a reader
-/// to look for a second definition its own count denied.
-fn anchor_count(source: &Source, signature: &str) -> usize {
-    source.whole().matches(signature).count()
+/// The table is the description. A comment saying which shapes the anchor rule refuses drifted from the code
+/// twice in one window, and each repair corrected the sentence review had named and then wrote the next one; a
+/// row cannot drift, because it runs. `observer-protocol`'s declared bound over this reader is read off the
+/// [`Verdict::ReadsTheWrongBody`] rows rather than typed beside them, and a reviewer's perturbation lands here
+/// as a row instead of as a finding.
+struct AnchorCase {
+    /// The shape, in the words a spec scenario would use for it.
+    shape: &'static str,
+    source: &'static str,
+    verdict: Verdict,
 }
 
-/// Why a read declined, in the reader's own words.
+/// What the reader makes of a shape.
+#[derive(Debug, PartialEq, Eq)]
+enum Verdict {
+    /// It reads the method's own body.
+    Reads(&'static str),
+    /// It declines, which is this reader's declared error direction.
+    Declines,
+    /// It reads a body that is **not** the method's — a declared false negative, shown rather than described.
+    ReadsTheWrongBody(&'static str),
+}
+
+const ANCHOR_CASES: &[AnchorCase] = &[
+    AnchorCase {
+        shape: "an ordinary definition",
+        source: "fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n",
+        verdict: Verdict::Reads("\n    observation_bounds()\n"),
+    },
+    AnchorCase {
+        shape: "a definition whose delegation carries a comment tail",
+        source: "fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds() // why\n}\n",
+        verdict: Verdict::Reads("\n    observation_bounds() // why\n"),
+    },
+    AnchorCase {
+        shape: "no occurrence at all",
+        source: "fn other() -> u8 { 0 }\n",
+        verdict: Verdict::Declines,
+    },
+    AnchorCase {
+        shape: "a mid-line mention, the definition absent",
+        source: "// the impl for `fn bounds(` moved away\nfn other() -> u8 { 0 }\n",
+        verdict: Verdict::Declines,
+    },
+    AnchorCase {
+        shape: "a whole-line copy beside the definition — the decoy",
+        source: "/*\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n*/\nfn bounds(&self) -> Vec<BoundDecl> {\n    divergent()\n}\n",
+        verdict: Verdict::Declines,
+    },
+    AnchorCase {
+        shape: "a whole-line copy in a block comment, the definition moved out of the file",
+        source: "/*\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n*/\nfn other() -> u8 { 0 }\n",
+        verdict: Verdict::ReadsTheWrongBody("\n    observation_bounds()\n"),
+    },
+    AnchorCase {
+        shape: "a whole-line copy in a string literal, the definition moved out of the file",
+        source: "const MOVED: &str = \"\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n\";\nfn other() -> u8 { 0 }\n",
+        verdict: Verdict::ReadsTheWrongBody("\n    observation_bounds()\n"),
+    },
+];
+
+/// What the anchor rule decides about `signature` in a source — **one rule, one return**.
 ///
-/// Three inputs decline and they call for different repairs: the signature is absent, it occurs more than once,
-/// or it occurs exactly once and no balanced body follows it. Reporting all three as an anchor count sent a
-/// reader hunting for a second definition that the same message had just counted as absent.
+/// The reader and its diagnostic both match on this. Two callers each re-deriving the rule agreed by
+/// maintenance and drifted twice: once when a count of trimmed-start lines faced a count of occurrences, once
+/// when a line-start condition was added to the reader and not to the reason. Matching on one function's
+/// return, they agree by construction, and a fifth case forces every consumer to answer it or the build fails.
+///
+/// A doc comment enumerating these is a census of a set this type already holds, so there is none.
+#[derive(Debug, PartialEq, Eq)]
+enum Anchor {
+    /// The signature does not occur, so there is no body to read.
+    Absent,
+    /// It occurs more than once: the subject is a set rather than a site.
+    Ambiguous(usize),
+    /// It occurs once, but mid-line — a mention rather than a definition.
+    MentionOnly,
+    /// It occurs once and begins a line: the offset a body is read from.
+    At(usize),
+}
+
+/// Whether the byte offset `at` is preceded on its own line by nothing but whitespace.
+fn begins_a_line(text: &str, at: usize) -> bool {
+    text[..at]
+        .rsplit_once('\n')
+        .map_or(&text[..at], |(_, last)| last)
+        .trim()
+        .is_empty()
+}
+
+/// The anchor rule. What it does **not** decide is shown, not described, in [`ANCHOR_CASES`].
+fn anchor(text: &str, signature: &str) -> Anchor {
+    match text.matches(signature).count() {
+        0 => Anchor::Absent,
+        1 => {
+            let at = text
+                .find(signature)
+                .expect("one occurrence was just counted, so it is findable");
+            if begins_a_line(text, at) {
+                Anchor::At(at)
+            } else {
+                Anchor::MentionOnly
+            }
+        }
+        many => Anchor::Ambiguous(many),
+    }
+}
+
+/// Why a read declined, in the reader's own words — each decline naming the condition that failed, because
+/// reporting them all as an anchor count sent a reader hunting for a second definition the same message had
+/// just counted as absent.
 fn decline_reason(source: &Source, signature: &str) -> String {
-    match anchor_count(source, signature) {
-        0 => format!("`{signature}` does not occur, so there is no body to read"),
-        1 => format!(
-            "`{signature}` occurs once but no balanced brace-delimited body follows it, so the extent could \
-             not be taken"
+    match anchor(source.whole(), signature) {
+        Anchor::Absent => format!("`{signature}` does not occur, so there is no body to read"),
+        Anchor::MentionOnly => format!(
+            "`{signature}` occurs once but not at the start of a line, so it is a mention rather than a \
+             definition and anchors nothing"
         ),
-        many => format!(
+        Anchor::At(_) => format!(
+            "`{signature}` occurs once, at a line start, but no balanced brace-delimited body follows it, so \
+             the extent could not be taken"
+        ),
+        Anchor::Ambiguous(many) => format!(
             "`{signature}` occurs {many} times, so the subject is ambiguous and the reader judges only when it \
              occurs exactly once"
         ),
@@ -601,22 +793,11 @@ fn function_body(source: &Source, signature: &str) -> Option<Source> {
     // Braces are counted over the MASK and the body is sliced out of the original, which the mask's
     // offset-for-offset construction makes the same positions. See [`mask_line_comment_braces`].
     let masked = mask_line_comment_braces(text);
-    // The anchor is an OCCURRENCE of the signature, and there must be exactly one in the whole source.
-    //
-    // An earlier rule required the signature to begin a trimmed line. That only ruled out a mid-line mention;
-    // it never made the definition findable, and a decoy exploits the gap from either side — a whole-line copy
-    // inside a block comment anchors just as well as the definition, and writing the definition
-    // `pub(crate) fn …` stops it anchoring while the commented copy still does, leaving one candidate that is
-    // not the subject. Both measured end-to-end, on both readers of this recognizer.
-    //
-    // Counting occurrences catches both directions and subsumes the mid-line mention, so no carve-out for
-    // which mentions could have anchored is needed — an earlier attempt stated one and stated it wrongly.
-    // Every delimiter that made a wrong extent wrong sits OUTSIDE that extent, where no in-body scan reaches,
-    // which is why this half cannot be recovered by checking the body once read.
-    if text.matches(signature).count() != 1 {
+    // What this rule decides, and what it decides WRONGLY, is shown in [`ANCHOR_CASES`] rather than described
+    // here — a comment saying which shapes it refuses drifted from it twice in one window.
+    let Anchor::At(signature) = anchor(text, signature) else {
         return None;
-    }
-    let signature = text.find(signature)?;
+    };
     let open = signature + masked[signature..].find('{')?;
     let mut depth = 0usize;
     let mut close = None;

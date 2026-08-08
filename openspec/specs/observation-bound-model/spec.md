@@ -41,7 +41,11 @@ of the family's own declarations:
 Value 2 SHALL be retained whether or not a declared bound uses it, and its membership SHALL NOT be restated in
 prose. Which values carry bounds is what the extent projection renders; a sentence naming that here is a census
 of a set with an enumerator, and every attempt at one has gone stale within the window that wrote it — once when
-an instance arrived, once when the reaction holding the only instance was retired. The misclassification this model exists to prevent was exactly a confusion between it and
+an instance arrived, once when the reaction holding the only instance was retired. **Nothing observes that
+prohibition**, and it is a rule rather than a reaction deliberately: the detector it would need is one over
+prose, which `AGENTS.md` records as designed and measured three times and rejected — widening the recognized
+phrasing false-positives on the generated projections' own headers and on a gate's diagnostic strings. Saying
+which of the two this sentence is, is what keeps it from reading as the other. The misclassification this model exists to prevent was exactly a confusion between it and
 value 1: a backlog entry predicted a silent false negative for a `#[cfg_attr]` path remap where the real
 behaviour was a fail-loud refusal, and the entry's own lesson is that the risk class decides urgency. A
 direction that cannot be *named* cannot be predicted with, which is what earns the value its place — not how

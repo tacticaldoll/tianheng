@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**22 of 65 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**24 of 67 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound` — owner: engine
@@ -17,8 +17,10 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound` — owner: engine
+- `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound` — owner: engine
 - `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound` — owner: adopter
 - `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound` — owner: engine
+- `observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound` — owner: engine
 - `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound` — owner: engine
 - `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound` — owner: inherited from the verification environment
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
@@ -31,7 +33,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests/observation_bound_model.rs`. **Do not edit by hand** — regenerate with
 `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test observation_bound_model`.
 
-**What this document does not claim.** The classification is *authored*: the type refuses a contradiction and derives what each bound's defence must demonstrate, but nothing verifies that a bound recorded as over-reacting really over-reacts rather than under-reacting. Two further limits are declared as bounds of `observation-bound-model` itself: an answer that depends on which corpus entry point observed it has no extent of its own and is recorded as under-reacting with the entry point as its owner, and a bound both out of reach and granularity-limited cannot be expressed at all.
+**What this document does not claim.** The classification is *authored*: the type refuses a contradiction and derives what each bound's defence must demonstrate, but nothing verifies that a bound recorded as over-reacting really over-reacts rather than under-reacting. This capability declares further limits as bounds of its own — among them, an answer that depends on which corpus entry point observed it has no extent of its own and is recorded as under-reacting with the entry point as its owner, and a bound both out of reach and granularity-limited cannot be expressed at all. The sections below list every one of them; this paragraph deliberately does not, because a list typed here is a literal in a template and the freshness check compares that text with itself. The sibling capability gate-shape-contract requires its disclosure to be DERIVED from the specification and held both ways; that requirement has no counterpart here, and the backlog carries it.
 
 **refuses to judge** and *out of reach* are kept distinct deliberately. The misclassification this model exists to prevent was exactly a confusion between them — a prediction of a silent false negative where the real behaviour was a fail-loud refusal — and a direction that cannot be named cannot be predicted with.
 
@@ -389,7 +391,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (22)
+## under-reacts (24)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -487,6 +489,14 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
+### `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`
+
+> a whole-line signature copy — commented, in a string literal, or otherwise — with the definition moved out of the inspected source
+
+- **because**: the reader knows nothing of comments or literals, so one whole-line occurrence anchors whatever follows it; what passes is a second hand-maintained path that agrees today, since a divergent one is caught by observation-bound-model's bijection over Observer::bounds — measured both ways
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*
+
 ### `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound`
 
 > a composed observer returning an outcome that misjudges the workspace it read
@@ -502,6 +512,14 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **because**: a text reader over the composition body was defeated at every level it could be narrowed to — name resolution, the parameter's binding site, the identity of the definition, the caller frame, and execution, which no reading of text reaches — so invoking the observer made the two paths' EQUALITY construction-held and left this untouched, measured: a guard above that call compiles and passes every gate
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *the shell's semantic delegation, held by construction*
+
+### `observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound`
+
+> the requirement's list of construction-held dimensions naming a different set than the built-in path invokes
+
+- **because**: the list is hand-maintained prose about a set the code enumerates, and falsifying it passes the whole suite and every gate; deciding it needs a perturbed build rather than a read, because the discriminator is which assertion fails when a dimension's observer is emptied
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *the construction-held list is hand-maintained prose*
 
 ### `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound`
 

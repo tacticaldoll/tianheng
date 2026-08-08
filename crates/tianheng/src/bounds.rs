@@ -133,9 +133,39 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *the shell's semantic delegation, held by construction*",
         ),
+        BoundDecl::unpinned(
+            BoundId::new(
+                "observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound",
+            ),
+            "a whole-line signature copy — commented, in a string literal, or otherwise — with the definition moved out of the inspected source",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the reader knows nothing of comments or literals, so one whole-line occurrence \
+                          anchors whatever follows it; what passes is a second hand-maintained path that \
+                          agrees today, since a divergent one is caught by observation-bound-model's \
+                          bijection over Observer::bounds — measured both ways"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
+                "observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound",
+            ),
+            "the requirement's list of construction-held dimensions naming a different set than the built-in path invokes",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the list is hand-maintained prose about a set the code enumerates, and falsifying \
+                          it passes the whole suite and every gate; deciding it needs a perturbed build \
+                          rather than a read, because the discriminator is which assertion fails when a \
+                          dimension's observer is emptied"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *the construction-held list is hand-maintained prose*",
+        ),
         // --- observation-bound-register ---
         //
-        // The register's own coverage bound, and the one place this crate declares a bound about the reaction
+        // The register's own bounds — the only ones this crate declares about the reaction
         // that produces the register rather than about a dimension. `check_pin_bites.sh` decides that a
         // citation's pin *bites* only where a mutation is declared for it; where none is, nothing decides.
         BoundDecl::unpinned(

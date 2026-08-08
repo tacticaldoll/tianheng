@@ -451,10 +451,14 @@ fn render_extents(code: &BTreeMap<String, BoundDecl>) -> String {
     out.push_str(
         "**What this document does not claim.** The classification is *authored*: the type refuses a \
          contradiction and derives what each bound's defence must demonstrate, but nothing verifies that a \
-         bound recorded as over-reacting really over-reacts rather than under-reacting. Two further limits are \
-         declared as bounds of `observation-bound-model` itself: an answer that depends on which corpus entry \
-         point observed it has no extent of its own and is recorded as under-reacting with the entry point as \
-         its owner, and a bound both out of reach and granularity-limited cannot be expressed at all.\n\n",
+         bound recorded as over-reacting really over-reacts rather than under-reacting. This capability declares \
+         further limits as bounds of its own — among them, an answer that depends on which corpus entry point \
+         observed it has no extent of its own and is recorded as under-reacting with the entry point as its \
+         owner, and a bound both out of reach and granularity-limited cannot be expressed at all. The \
+         sections below list every one of them; this paragraph deliberately does not, because a list typed \
+         here is a literal in a template and the freshness check compares that text with itself. The sibling \
+         capability gate-shape-contract requires its disclosure to be DERIVED from the specification and held \
+         both ways; that requirement has no counterpart here, and the backlog carries it.\n\n",
     );
     // The membership claim this paragraph used to make — that **refuses to judge** carried no bound — was a
     // literal in this template, which is the one place a freshness check cannot catch a falsehood: the

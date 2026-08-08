@@ -409,7 +409,9 @@ A mutation whose tree does not **compile** SHALL be cannot judge, for the same r
 perturbation was never exercised. `cargo test` exits non-zero for a compile error as well as for a failing
 assertion, so a reaction distinguishing them by status alone would read a broken build as a biting pin.
 
-A run SHALL also be required to have executed **exactly one** test. A filter matching nothing exits 0 having run
+A cited name the harness registers **more than once** in the selected target SHALL be cannot judge before any
+run, for the same reason the definition scan refuses a name found in several files: a filter matching several
+does not name the citation. A run SHALL also be required to have executed **exactly one** test. A filter matching nothing exits 0 having run
 nothing, which by status is indistinguishable from a pin that survived its mutation — measured here, where a lib
 test registers under its module path while the citation is the bare identifier.
 

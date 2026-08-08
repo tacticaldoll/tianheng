@@ -137,6 +137,39 @@ doc** was spelled in words, which no digit-based matcher reads. Most numbers in 
 The census direction in `check_bound_register.sh` stays what it is — a backstop for the one set whose phrasing is
 stable — and the rule above is what keeps a figure honest.
 
+## A repair loop is a diagnosis, not a schedule
+
+**When a round of repairs produces its own findings, count what kind they are before deciding what to do
+next.** Sort the round's findings into three: the code was wrong; *one rule has more than one implementation*;
+or *a claim about the code was wrong while the code was right*. The third dominating is the signal, and the
+signal is not "review harder" — it is that the property is stated where nothing can falsify it. Add a round and
+the next round finds the next sentence; change the shape and the class ends.
+
+Measured, in the window that produced this rule: three consecutive repair rounds on one text reader, and across
+all three **not one finding was a new code defect**. Every one was a sentence describing what the reader does —
+"the line start refuses a mention", "the two cannot diverge", "three inputs decline", a declared bound's WHEN
+and THEN — or a rule implemented twice. Each repair corrected the sentence review had named and wrote the next
+one. The reader's behaviour was fine throughout.
+
+Two moves end those two classes, and neither is a review:
+
+- **A claim about what a reaction does becomes an executable case, never a comment.** Enumerate the shapes the
+  reaction decides and assert the decision for each, so the description *is* the run. A declared bound's WHEN
+  and THEN are then read off that table rather than typed beside it, and a reviewer's perturbation lands as a
+  row instead of a finding.
+- **One rule gets one implementation returning a typed result, and its consumers match exhaustively.** Where
+  two callers each re-derive the rule they agree by maintenance; where they match on one function's return they
+  agree by construction, and a new case forces every consumer to answer it or the build fails. A doc comment
+  enumerating the outcomes is then a census of a set the type already holds — see *A census is produced, never
+  typed*.
+
+**This rule has no reaction, and that is stated rather than left to be discovered.** Deciding that a comment
+describes something a run could falsify is a judgement over prose, which this repository has designed and
+measured three times and rejected. What it is instead is the question to ask when a repair round comes back
+non-empty — and the second move above, once applied, is enforced by the compiler rather than by this paragraph.
+
+Do not read it as licence to skip the round. The round is what tells you which class you are in.
+
 ## Adversarial review stance
 
 Work is gated by adversarial review, not performed agreement. At **propose**, challenge the design

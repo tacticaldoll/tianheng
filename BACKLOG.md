@@ -60,6 +60,72 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
+- **The bounds-method reader anchors on a whole-line occurrence that is not the definition.** *Class:*
+  READY-PATCH. *Observed pressure:* the reader requires the signature to occur exactly once and at a line
+  start, and knows nothing of comments or literals. So where the definition has moved out of the inspected
+  file, any surviving **whole-line** copy anchors — reproduced with a block-comment copy, and again with a
+  copy inside a `&str` constant, both giving
+  `every_observer_declares_exactly_its_dimension_s_bounds ... ok`. *Observation source:* those two
+  perturbations, run during the closing review of the 0.5.0 window.
+  *Current reaction or bound:* the declared bound
+  `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`.
+  *Risk, measured rather than assumed:* **narrower than it first reads.** A *divergent* second list does not
+  pass — `observation-bound-model` reads every dimension through `Observer::bounds` and holds a bijection with
+  the specs, so a difference in membership or content fails `the_extent_projection_is_fresh` and the
+  classification test one capability over. What passes is a second, hand-maintained path that **agrees today**
+  and is maintained by hand from now on: re-run with a list rebuilt element by element from
+  `observation_bounds()`, the whole workspace suite is green. *Promotion trigger:* fired; both perturbations
+  are tree artefacts rather than reports. *Version class:* patch; a `tests/` reaction of this repository,
+  shipping in no crate. *Authority:* `observer-protocol`.
+
+  *Shape, with the corpus measured rather than borrowed:* comment stripping does **not** close this — a string
+  literal is not a comment — so the register's rejection of comment-delimiter lexing is not the reason here,
+  and citing it was wrong. This reader's corpus is the three files `DIMENSIONS` names, 35, 48 and 43 lines,
+  none carrying a string literal with a comment delimiter, so the register's measurement does not transfer in
+  either direction. Two candidate closures, neither adopted: require the anchor to be preceded by an
+  `impl Observer for` line, which refuses both reproduced perturbations, needs no lexing, and declines strictly
+  more — this reader's declared error direction; or stop reading a file the dimension table names and read the
+  definition the compiler resolves, which is a different instrument than any textual condition tried here. The
+  first is a further narrowing, and every textual narrowing of this recognizer's retired sibling was defeated,
+  which is why it is recorded for the next author to weigh rather than applied inside a closing review.
+
+- **The construction-held list is hand-maintained prose.** *Class:* READY-PATCH. *Observed pressure:*
+  `observer-protocol` requires the spec to say which dimensions' equality holds by construction, and nothing
+  observes that the list is correct. The 0.5.0 window is the evidence: the list named runtime alone, the shell's
+  semantic arm changed under it in the same window, and the list was repaired **by hand**. Falsifying it — say,
+  claiming static is construction-held and runtime observed — passes the whole workspace suite and every gate.
+  *Observation source:* the final sweep of that window, which ran exactly that perturbation.
+  *Current reaction or bound:* the declared bound
+  `observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound`.
+  *Risk:* a reader takes a constructed equality for a measured one — the failure the requirement's own sentence
+  exists to prevent, in the sentence that prevents it. *Promotion trigger:* fired; the list went stale inside
+  the window that wrote it. *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
+  `observer-protocol`. *Shape:* not a text reader — that route is retired and its defeat is recorded one
+  requirement over. The discriminator is behavioural and needs a **perturbed build**: empty a dimension's
+  observer and see which assertion fails — the equality assert for an independently-implemented dimension, only
+  the reacts-at-all assert for a construction-held one. `scripts/check_pin_bites.sh` already builds and runs a
+  mutated checkout, so the machinery exists; what it does not yet do is carry a declaration whose subject is a
+  spec sentence rather than a pinning citation.
+
+- **`observation-bound-model`'s projection discloses its own bounds by a typed list; its sibling requires a
+  derived one.** *Class:* READY-PATCH. *Observed pressure:* `gate-shape-contract` hit this and wrote the
+  requirement — *"That disclosure SHALL be **derived from the specification, not typed into the generator**,
+  and held to it in both directions"* — with `the_projection_discloses_every_declared_bound` holding it and a
+  vacuity guard. `observation-bound-model` has the same shape and only the weaker requirement (*"The projection
+  SHALL state what it does not claim, in its own header"*), so its "what this document does not claim"
+  paragraph enumerated members as a literal in the generator's template, where the freshness check compares
+  that text with itself. *Observation source:* the final sweep of the 0.5.0 window, which found the paragraph
+  naming two limits while the capability declared three; the enumeration is removed from the template as an
+  immediate stop, so what remains is the missing requirement rather than a live falsehood. *Current reaction or
+  bound:* none — the projection now points at `docs/observation-bound-extents.md` instead of listing.
+  *Risk:* the same class the sibling already paid for, in the one place a freshness check structurally cannot
+  see. *Promotion trigger:* fired — the sibling's requirement exists and this one's absence was measured.
+  *Version class:* patch; repository-internal, shipping in no crate. *Authority:* `gate-shape-contract`, whose
+  requirement is the shape to copy, and `observation-bound-model`, which would carry it.
+  *Shape:* lift the derived-disclosure requirement into `observation-bound-model`, and give it a holder
+  mirroring `the_projection_discloses_every_declared_bound` — declared headings read from the spec, held
+  set-equal to what the projection discloses, both directions, with the empty-enumeration guard.
+
 - **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
   register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
   in a worktree left the suite green and the register clean. `check_pin_bites.sh` closes that for the citations
@@ -141,7 +207,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **65 bounds across 22 capabilities** — a live figure rather than part of the measurement
+  currently holds **67 bounds across 22 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -542,7 +608,7 @@ consumer for an undemonstrated deduplication.
     observation source has been *measured* and found unaffordable, not estimated from inside the code.
     That qualifier is the entry's real lesson. `gate-shape-contract` did **not** fire it, and the way it
     avoided doing so is worth stating: the same limitation decided its shape — a shell-defended capability
-    could not have pinned its four bounds — and the answer was to write the reaction in Rust, not to declare
+    could not have pinned its own declared bounds — and the answer was to write the reaction in Rust, not to declare
     a residual. An entry recording that shell gates cannot pin bounds is not evidence for itself every time
     a capability chooses Rust because of it.
   - **`BoundaryKind` has no value a third-party participant owns.** *Observed pressure:* an outside
