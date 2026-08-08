@@ -259,7 +259,44 @@ mod tests {
 DECOY
 git -C "$module_of_a_target" add -A
 git -C "$module_of_a_target" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qm module-of-a-target
-expect_fail "$module_of_a_target" 2 'not an integration target root'
+expect_fail "$module_of_a_target" 2 'neither an integration target root nor a library source file'
+
+# The same class through a BIN target, which the first repair's denylist left open: a cited test in
+# `src/bin/`, and a same-named library test the definition scan cannot see. The selector is an allowlist now,
+# so anything it cannot map to the target that registers it refuses instead of running another.
+bin_of_a_package=$(new_repo bin-of-a-package "$KILLS")
+mkdir -p "$bin_of_a_package/crates/fixt/src/bin"
+cat >"$bin_of_a_package/crates/fixt/src/bin/tool.rs" <<'BIN'
+fn main() {}
+
+#[cfg(test)]
+mod t {
+    #[test]
+    fn a_continuation_line_is_not_recognized() {
+        assert!(fixt::exposes("pub fn f() -> Box<dyn T> {"));
+    }
+}
+BIN
+rm "$bin_of_a_package/crates/fixt/tests/pin.rs"
+cat >>"$bin_of_a_package/crates/fixt/src/lib.rs" <<'DECOY'
+
+macro_rules! decoy {
+    ($name:ident) => {
+        #[test]
+        fn $name() {
+            assert!(!crate::exposes(") -> Box<dyn T> {"));
+        }
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    decoy!(a_continuation_line_is_not_recognized);
+}
+DECOY
+git -C "$bin_of_a_package" add -A
+git -C "$bin_of_a_package" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qm bin-of-a-package
+expect_fail "$bin_of_a_package" 2 'neither an integration target root nor a library source file'
 
 # --- a run that executed no test (the scenario three refusal sites implement) ---
 #

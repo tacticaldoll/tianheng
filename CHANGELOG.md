@@ -101,13 +101,14 @@ them.
   The arrangement's properties are stated rather than left to the implementation, each measured. The tree
   is a detached **worktree** at HEAD, so an interrupted run has edited nothing of the author's — and, unlike an
   export of tracked content, it carries a working repository, without which a pin that reads the repository
-  through git fails its own control run and no record can ever exercise it. The control runs **twice** — once
-  before the mutation and once after the restore — because one control rules out a test that fails on its own
-  but not one whose failure it caused: a pin writing a marker and asserting its absence passes exactly once, so
+  through git fails its own control run and no record can ever exercise it. Where the mutated run fails, the control runs **again after the
+  restore**, because one control rules out a test that fails on its own but not one whose failure it caused: a pin writing a marker and asserting its absence passes exactly once, so
   the mutated run fails for a reason the mutation had no part in and the citation reads as exercised by a
   perturbation that did nothing. Every run is held to having executed exactly one test, the restored-tree run
   included — a pin that rewrites its own source on a later run otherwise left the filter matching nothing and
-  exiting 0 over zero tests. What a fixed number of runs cannot reach — an outcome depending on the run count
+  exiting 0 over zero tests. The definition-path-to-target mapping is an allowlist rather than a fallthrough,
+  because assuming a library test for whatever did not match ran a *different* test of the same name and
+  reported that one's death as the citation's. What a fixed number of runs cannot reach — an outcome depending on the run count
   with a period that sequence does not break — is declared as a bound rather than implied. A record's path is held to being
   both **tracked** and **contained**, separately: a tracked symlink is tracked, and following one rewrites a
   file outside the tree — destructively, if the run is killed between the write and the restore. The checkout's

@@ -387,10 +387,12 @@ test whose outcome depends on its run count with any period the sequence does no
 from one the mutation killed.
 
 The package and target the cited test runs in SHALL be **derived from where that test is defined**, not from the
-file the mutation edits and not declared beside the mutation. A definition under a package's integration-test
-directory that is not a target root — a module of one — SHALL be cannot judge rather than assumed to be a
-library test: assuming it ran a *different* test of the same name in the library and reported that one's death
-as the citation's, while the cited pin never ran at all. A record routinely perturbs a reaction in one file
+file the mutation edits and not declared beside the mutation. The mappings from a definition path to a target SHALL be an
+**allowlist**, and a path matching none of them SHALL be cannot judge. Assuming a library test for whatever did
+not match ran a *different* test of the same name and reported that one's death as the citation's, while the
+cited pin never ran at all — measured twice, first for a module of an integration target and then, after a
+denylist closed that instance, for a binary target the denylist did not name. Refusing what cannot be mapped is
+what closes the class rather than its instances. A record routinely perturbs a reaction in one file
 while the pin defending it sits in another, and deriving from the edited file then runs a target the citation is
 not registered in — measured here, where a recognizer in a crate's library and its pin in an integration target
 selected the library. A fifth field would be a second spelling of a fact the tree already carries, and would rot.

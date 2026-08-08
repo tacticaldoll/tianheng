@@ -72,7 +72,10 @@ consumer for an undemonstrated deduplication.
   coverage, which grows one considered record at a time. That last claim was false while the tree under test
   was an export of tracked content: a pin reading the repository through git failed its own control run, so no
   record could ever exercise it — `units_outside_the_gate_pairing_are_outside_the_surface` was one. The tree is
-  a detached worktree now and the claim holds; the episode is kept because the entry's economics rest on it. *What closing it costs, measured while seeding:* a
+  a detached worktree now and the claim holds. One citation is still outside it for a different reason:
+  `a_cfg_gated_module_with_no_file_is_skipped_not_errored` is defined in two files under `crates/`, so the
+  target to run it in cannot be derived from a set and any record naming it refuses. Both episodes are kept
+  because the entry's economics rest on the claim. *What closing it costs, measured while seeding:* a
   mutation must genuinely perturb the pinned point, and authoring one is per-bound expert work. One attempt
   during this change did not — masking a brace inside a block comment left the exact one-statement comparison
   refusing the body anyway, so the pin held and the record reported a biting pin as a dead one. That direction

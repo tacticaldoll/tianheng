@@ -201,14 +201,17 @@ derive_selector() {
     pkg=${BASH_REMATCH[1]}
     if [[ ${defined[0]} =~ ^crates/[^/]+/tests/([^/]+)\.rs$ ]]; then
         selector=(-p "$pkg" --test "${BASH_REMATCH[1]}")
-    elif [[ ${defined[0]} =~ ^crates/[^/]+/tests/ ]]; then
-        # A file under `tests/` that is not a target root — `tests/<dir>/mod.rs`, which this tree already has
-        # under `tests/support/` and `tests/fixtures/`. Falling through to `--lib` was measured to run a
-        # DIFFERENT test of the same name in the library and report its death as the citation's, while the
-        # cited pin never ran at all.
-        cannot_judge "\`$name\` is defined in ${defined[0]}, which is not an integration target root; the target to run it in cannot be derived from a module of one"
-    else
+    elif [[ ${defined[0]} =~ ^crates/[^/]+/src/ && ! ${defined[0]} =~ ^crates/[^/]+/src/bin/ ]]; then
         selector=(-p "$pkg" --lib)
+    else
+        # An ALLOWLIST, not a fallthrough, and the difference was measured twice. Anything the selector cannot
+        # map to the target that registers it runs the wrong target: with a same-named test the definition scan
+        # cannot see, the reaction ran THAT one, watched the mutation kill it, and reported the death as the
+        # citation's while the cited pin never ran. Reproduced first for `tests/<dir>/mod.rs` — a shape this
+        # tree has under `tests/support/` and `tests/fixtures/` — and then again for `src/bin/`, which the
+        # first repair's denylist left open. Naming the two mappings and refusing the rest is what closes the
+        # class rather than its instances.
+        cannot_judge "\`$name\` is defined in ${defined[0]}, which is neither an integration target root nor a library source file; the target that registers it cannot be derived, and running another is how a different test of the same name gets reported as this citation's defence"
     fi
 }
 
