@@ -30,7 +30,7 @@ use guibiao::{
     Baseline, BaselineEntry, Coverage, Outcome, Report, apply_baseline, check_and_cover,
     constitution_text, report_json, report_json_with_stale_policy, stale_policy,
 };
-use hunyi::Observer;
+use hunyi::{Observer, SemanticObserver};
 use louke::RuntimeObserver;
 
 use crate::Constitution;
@@ -203,9 +203,16 @@ fn evaluate_constitution(
         check_and_cover(constitution.static_boundaries(), manifest_path);
     let mut outcome = static_outcome;
     if !matches!(outcome, Outcome::ConstitutionError(_)) {
+        // **Delegated, not restated**, the route the runtime arm below already takes. This arm called 渾儀's
+        // composed entry point directly, which is what `SemanticObserver::observe` does — so the two paths
+        // agreed only while nobody put a decision in between them, and `observer-protocol` declared that gap
+        // as a bound after a text reader over this body was defeated at every level it could be narrowed to.
+        // This path now IS the observer for this dimension, so there is no second site to disagree with; the
+        // cost is one clone of the declared bundle per run, paid deliberately.
         outcome = merge_outcomes(
             outcome,
-            hunyi::check_all(constitution.semantic_boundaries(), manifest_path),
+            SemanticObserver::new(constitution.semantic_boundaries().clone())
+                .observe(manifest_path),
         );
     }
 

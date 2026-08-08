@@ -85,7 +85,15 @@ consumer for an undemonstrated deduplication.
   repository gate over this repository's own governance tests. *Authority:* `observation-bound-register`, whose
   added requirement states the obligation and the arrangements that make it observable.
 
-- **The shell's semantic delegation, held by construction.** *Class:* READY-PATCH. *Observed pressure:* the
+- ~~**The shell's semantic delegation, held by construction.**~~ **CLOSED** in the open window, by the route
+  this entry named: the shell's semantic arm invokes `SemanticObserver` rather than calling 渾儀's composed
+  entry point beside it, so the two are one call rather than two agreeing ones and there is no second site in
+  which a shell-local decision could sit. `observer-protocol` states it as a construction in requirement prose
+  and its unpinned bound is retired; the equality reaction's semantic arm joins the runtime arm as
+  construction-held, and what it still observes for both is that the fixture's boundary reacts at all. The
+  static dimension keeps two implementations — the built-in path calls `check_and_cover`, the observer calls
+  `check` — so for it the equality is still measured. The record that made the entry, kept because the
+  disposition rests on it: *Class:* READY-PATCH. *Observed pressure:* the
   source-shape reaction that claimed to observe it is retired in this window after four review rounds each
   defeated the narrowing before it — by name resolution, by the parameter's binding site, by which definition is
   the subject, by the caller frame, and by execution, which no reading of text reaches. `observer-protocol`
@@ -127,7 +135,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **65 bounds across 22 capabilities** — a live figure rather than part of the measurement
+  currently holds **64 bounds across 22 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is

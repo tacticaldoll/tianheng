@@ -118,20 +118,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // unobserved rather than one family of escapes from a reader that no longer exists. Under-reacting with
         // the engine as owner, not out of reach: the deciding text was inside the file the reader loaded, so the
         // measure stopped where this repository chose to stop it, and closing it is ordinary work here.
-        BoundDecl::unpinned(
-            BoundId::new(
-                "observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound",
-            ),
-            "the shell's composition function deciding semantic emptiness itself rather than delegating",
-            Extent::Reached(Reached::UnderReacts {
-                because: "a text reader over the composition body was defeated at every level it could be \
-                          narrowed to — name resolution, the parameter's binding site, the identity of the \
-                          definition, the caller frame, and execution, which no reading of text reaches — so \
-                          the obligation is carried by construction or not at all".into(),
-                owner: Owner::Engine,
-            }),
-            "`BACKLOG.md` — *the shell's semantic delegation, held by construction*",
-        ),
         // --- observation-bound-register ---
         //
         // The register's own coverage bound, and the one place this crate declares a bound about the reaction

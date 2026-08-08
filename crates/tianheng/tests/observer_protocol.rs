@@ -1,14 +1,17 @@
 //! `observer-protocol`'s reaction: the trait-driven fold and the built-in path are one verdict, each observer
 //! declares exactly its dimension's bounds, and the fold's ordering directions hold.
 //!
-//! Two composition paths exist deliberately for the static and semantic dimensions — the built-in one carries a
-//! coverage advisory the protocol cannot, and splitting its single `cargo metadata` read would double it — so
-//! the cost is paid here rather than accepted: paths that could disagree silently are the drift a seam is
-//! supposed to end. For the **runtime** dimension there is no second path left to compare: the built-in one
-//! delegates to `RuntimeObserver`, so equality there holds by construction, and what this file still observes
-//! is that the fixture's runtime boundary reacts at all.
+//! Two composition paths exist deliberately for the **static** dimension alone — the built-in one calls
+//! `check_and_cover`, whose coverage advisory the protocol cannot carry and whose second call would read
+//! `cargo metadata` twice, while the observer calls `check`. Two implementations that could disagree silently
+//! are the drift a seam is supposed to end, so the cost of comparing them is paid here.
 //!
-//! Two of the properties below hold **by construction**, and each says which reaction stands in for the
+//! For the **semantic** and **runtime** dimensions there is no second path left to compare: the built-in one
+//! invokes `SemanticObserver` and `RuntimeObserver`, so equality for those holds by construction. What this
+//! file still observes for them is that the fixture's boundary in each reacts at all — an arm that went vacuous
+//! would otherwise leave the whole comparison resting on one dimension.
+//!
+//! Some of the properties below hold **by construction**, and each says which reaction stands in for the
 //! comparison that would be inert. That is deliberate, and the alternative was worse: an assertion that cannot
 //! fail reads exactly like a guarantee.
 
