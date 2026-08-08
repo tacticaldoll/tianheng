@@ -317,7 +317,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --docu
 cargo deny check
 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test whitespace_hygiene
 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test reference_integrity
-TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test examples_suite
+TIANHENG_EXAMPLES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test examples_suite
 TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test pin_bites   # a line of its own because it is env-gated: it checks out a
                                            # worktree and builds it, so the ordinary suite must not pay
                                            # for it — and leaving it to run only when someone remembers
