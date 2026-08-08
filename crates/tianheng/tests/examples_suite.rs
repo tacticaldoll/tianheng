@@ -88,7 +88,7 @@ const EXAMPLES: [Example; 7] = [
 fn locate_layout(root: PathBuf, marker_set: bool) -> Option<PathBuf> {
     if root.join("examples").is_dir() {
         // Canonicalised, because this reaction COMPARES paths: `cargo metadata` prints a resolved manifest
-        // path, and `crates/tianheng/../..` is the same directory written differently. Measured — without it
+        // path, and the manifest directory's grandparent is the same directory written differently. Measured — without it
         // every example read as unpatched.
         return Some(std::fs::canonicalize(&root).unwrap_or(root));
     }

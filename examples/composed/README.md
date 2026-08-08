@@ -43,7 +43,7 @@ cargo run --bin check -- check --manifest-path Cargo.toml \
 ```
 
 Commit the generated baseline. When a violation is fixed, gate mode reports its entry as stale;
-review the fix and regenerate to ratchet the snapshot down. `scripts/test_examples.sh` executes
+review the fix and regenerate to ratchet the snapshot down. `cargo test -p tianheng --test examples_suite` executes
 this write/gate path against the example rather than merely documenting it.
 
 **run-mode** (runtime, in the binary) — the concrete type behind a `dyn Adapter` crossing the

@@ -62,5 +62,5 @@ with its trigger instead of being worked around here.
 Run through the repository's gate, which patches the family crates to local source:
 
 ```bash
-bash scripts/test_examples.sh
+bash the examples suite
 ```

@@ -71,7 +71,7 @@ fn unreleased_body(repo: &Path, body: &str) {
 fn with_machinery(repo: &Path) {
     std::fs::create_dir_all(repo.join("scripts")).expect("create scripts/");
     std::fs::write(
-        repo.join("scripts/check_pin_bites.sh"),
+        repo.join("scripts/check_fixture_gate.sh"),
         "#!/usr/bin/env bash\nexit 0\n",
     )
     .expect("write");
@@ -326,7 +326,7 @@ fn an_adopter_heading_naming_a_gate_is_a_violation() {
     with_machinery(&fixture.repo);
     unreleased_body(
         &fixture.repo,
-        "### Fixed\n- A repair naming `scripts/check_pin_bites.sh`.",
+        "### Fixed\n- A repair naming `scripts/check_fixture_gate.sh`.",
     );
     commit(&fixture.repo, "docs: name a gate under an adopter heading");
     refuse(
@@ -346,7 +346,7 @@ fn the_same_entry_under_the_self_governance_heading_is_coherent() {
     with_machinery(&fixture.repo);
     unreleased_body(
         &fixture.repo,
-        "### Self-governance\n- A repair naming `scripts/check_pin_bites.sh`.",
+        "### Self-governance\n- A repair naming `scripts/check_fixture_gate.sh`.",
     );
     commit(&fixture.repo, "docs: name a gate where it belongs");
     let verdict = judge(&fixture.repo);
@@ -362,31 +362,31 @@ fn a_gate_named_in_any_word_form_is_a_violation() {
     for (name, body) in [
         (
             "bare-basename",
-            "### Fixed\n- A repair naming `check_pin_bites.sh`.",
+            "### Fixed\n- A repair naming `check_fixture_gate.sh`.",
         ),
         (
             "inside-a-command",
-            "### Fixed\n- Run `bash scripts/check_pin_bites.sh --fix` to repair.",
+            "### Fixed\n- Run `bash scripts/check_fixture_gate.sh --fix` to repair.",
         ),
         (
             "nested-span",
-            "### Fixed\n- A repair naming `` `scripts/check_pin_bites.sh` `` in a nested span.",
+            "### Fixed\n- A repair naming `` `scripts/check_fixture_gate.sh` `` in a nested span.",
         ),
         (
             "wrapped-span",
-            "### Fixed\n- A repair naming `scripts/check_pin_bites.sh\n  ` across a wrap.",
+            "### Fixed\n- A repair naming `scripts/check_fixture_gate.sh\n  ` across a wrap.",
         ),
         (
             "link-target",
-            "### Fixed\n- A repair naming [the gate](scripts/check_pin_bites.sh).",
+            "### Fixed\n- A repair naming [the gate](scripts/check_fixture_gate.sh).",
         ),
         (
             "unquoted-prose",
-            "### Fixed\n- A repair to the check_pin_bites.sh gate, written as prose.",
+            "### Fixed\n- A repair to the check_fixture_gate.sh gate, written as prose.",
         ),
         (
             "sentence-end",
-            "### Fixed\n- A repair to scripts/check_pin_bites.sh.",
+            "### Fixed\n- A repair to scripts/check_fixture_gate.sh.",
         ),
         (
             "the-directory",
@@ -441,7 +441,7 @@ fn assert_reaction_is_live(root: &Path) {
     with_machinery(&fixture.repo);
     unreleased_body(
         &fixture.repo,
-        "### Fixed\n- A repair naming `scripts/check_pin_bites.sh`.",
+        "### Fixed\n- A repair naming `scripts/check_fixture_gate.sh`.",
     );
     commit(&fixture.repo, "docs: the live control");
     let verdict = judge(&fixture.repo);
@@ -473,7 +473,7 @@ fn a_dated_section_naming_a_gate_is_a_stated_bound() {
         )
         .replace(
             "- Release notes.\n",
-            "### Fixed\n- A repair naming `scripts/check_pin_bites.sh`.\n",
+            "### Fixed\n- A repair naming `scripts/check_fixture_gate.sh`.\n",
         ),
     )
     .expect("write");
@@ -501,7 +501,7 @@ fn machinery_tracked_by_nothing_is_a_stated_bound() {
     development_changelog(&fixture.repo, "0.2.0", true);
     unreleased_body(
         &fixture.repo,
-        "### Fixed\n- A repair naming `scripts/check_pin_bites.sh`.",
+        "### Fixed\n- A repair naming `scripts/check_fixture_gate.sh`.",
     );
     commit(&fixture.repo, "docs: name a gate before it is tracked");
     with_machinery(&fixture.repo); // written, never added
@@ -562,7 +562,7 @@ fn a_directory_named_without_its_slash_is_a_stated_bound() {
     with_machinery(&fixture.repo);
     unreleased_body(
         &fixture.repo,
-        "### Fixed\n- A repair to the scripts and to scripts/lib, written without a trailing slash.",
+        "### Fixed\n- A repair to the scripts and to a shared library, written without a trailing slash.",
     );
     commit(&fixture.repo, "docs: name a directory without its slash");
     let verdict = judge(&fixture.repo);
@@ -588,7 +588,7 @@ fn a_name_reached_only_through_a_url_is_a_stated_bound() {
     with_machinery(&fixture.repo);
     unreleased_body(
         &fixture.repo,
-        "### Fixed\n- See https://github.com/tacticaldoll/tianheng/blob/main/scripts/check_pin_bites.sh for it.",
+        "### Fixed\n- See https://github.com/tacticaldoll/tianheng/blob/main/scripts/check_fixture_gate.sh for it.",
     );
     commit(&fixture.repo, "docs: reach a gate only through a URL");
     let verdict = judge(&fixture.repo);
@@ -614,7 +614,7 @@ fn a_heading_inside_a_fenced_block_is_a_stated_bound() {
     with_machinery(&fixture.repo);
     unreleased_body(
         &fixture.repo,
-        "### Fixed\n- A repair.\n\n```\n### Self-governance\n```\n\n- A later repair naming `scripts/check_pin_bites.sh`.",
+        "### Fixed\n- A repair.\n\n```\n### Self-governance\n```\n\n- A later repair naming `scripts/check_fixture_gate.sh`.",
     );
     commit(&fixture.repo, "docs: put a heading inside a fence");
     let verdict = judge(&fixture.repo);

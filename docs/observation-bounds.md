@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**13 of 78 declared bounds have no pinning test.** That figure is the register's
+**13 of 73 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -80,38 +80,6 @@ fallback used where no manifest exists, which the register spec describes.
 > the system reports no violation, because the rule is use-only and observes `use` imports rather than `extern crate` declarations
 
 - **pinned by**: `confine_ignores_an_extern_crate_declaration`
-
-## gate-shape-contract
-
-### `gate-shape-contract/whether-an-enumeration-carries-a-vacuity-guard-is-not-observed-a-stated-bound`
-
-> the reaction does not claim to observe it, a stated bound, rather than reporting the gate conformant on a property it never examined
-
-- **pinned by**: `a_missing_vacuity_guard_is_a_stated_semantic_bound`
-
-### `gate-shape-contract/whether-a-read-s-status-is-checked-in-the-parent-shell-is-not-observed-a-stated-bound`
-
-> the reaction does not claim to observe it, a stated bound. This is what remains after the process-substitution property above: that construct **is** now observed, so the bound is narrowed to the shapes whose detection would need control flow rather than text — whether a caller inspects `$?` after a `$(…)` is not a property of the source. The backstop the reaction also checks narrows the damage without detecting either shape
-
-- **pinned by**: `an_unchecked_read_status_is_a_stated_semantic_bound`
-
-### `gate-shape-contract/whether-a-gate-s-1-versus-2-assignment-is-correct-is-not-observed-a-stated-bound`
-
-> the reaction does not claim to observe it, a stated bound: it checks that the twin asserts codes, never that the codes the gate chose are the right ones, which needs each gate's meaning rather than its text. **Narrowed** from a wider claim that named this as what let a `return`-instead-of-`exit` inversion ride green. That was wrong about its own history: the inversion produced both directions above in one gate, and what let it pass CI was the matrix asserting a non-zero status rather than a code — which the `exit codes` property now refuses, and whose remedy cites this instance. What remains is only the semantic judgment
-
-- **pinned by**: `a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound`
-
-### `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound`
-
-> the reaction permits it, a stated bound: the recognizer reads the producer's first word, so the permission's stated reason — a builtin has no I/O to fail at — is applied to a producer that does. The obvious repair, refusing a producer that contains a pipe, was measured against this tree and **false-positives on both live sites**, which carry a `|` inside a parameter expansion (`${b//|/$'\n'}`); telling a pipe operator from a pipe inside `${…}` needs shell parsing rather than text, so it is declared rather than closed. No producer in the gate surface exhibits the shape today
-
-- **pinned by**: `a_builtin_piped_into_an_external_command_is_a_stated_bound`
-
-### `gate-shape-contract/shell-units-that-are-not-a-gate-or-its-twin-are-outside-the-surface-a-stated-bound`
-
-> it is outside this capability's surface, a stated bound, so the projection's conformance covers the gate surface and not everything under `scripts/`
-
-- **pinned by**: `units_outside_the_gate_pairing_are_outside_the_surface`
 
 ## inline-symbol-path-confinement
 

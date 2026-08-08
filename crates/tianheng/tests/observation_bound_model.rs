@@ -7,7 +7,7 @@
 //! shell-defended capability could not pin the bounds this one declares — they would land `UNPINNED` and turn
 //! the register projection's leading figure from zero into three.
 //!
-//! What it does **not** take over: `scripts/check_bound_register.sh` still owns the citation, tracker, prose and
+//! What it does **not** take over: `crates/tianheng/tests/bound_register.rs` still owns the citation, tracker, prose and
 //! projection directions. This reaction owns one obligation — that every declared bound is classified, and every
 //! classification names a declared bound.
 
@@ -392,9 +392,9 @@ fn derived_ids_agree_with_the_register_projection() {
     let derived: BTreeSet<String> = spec_bounds(&root).into_keys().collect();
     assert_eq!(
         derived, projected,
-        "the ids this reaction derives differ from the ids `scripts/check_bound_register.sh` wrote into \
+        "the ids this reaction derives differ from the ids `crates/tianheng/tests/bound_register.rs` wrote into \
          {projection:?} — either the slug rule has drifted between the two implementations, or the projection \
-         is stale. Regenerate with `BLESS=1 bash scripts/check_bound_register.sh` and, if the difference \
+         is stale. Regenerate with `BLESS=1 bash crates/tianheng/tests/bound_register.rs` and, if the difference \
          survives, the two derivations disagree."
     );
 }

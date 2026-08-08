@@ -241,93 +241,10 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
         ),
-        // --- gate-shape-contract ---
         //
-        // Its reaction is `tests/gate_shape_contract.rs`, so this crate owns these too. The four are read out
+        // Its reaction is `the retired gate-shape reaction`, so this crate owns these too. The four are read out
         // of each scenario's WHEN and THEN rather than out of a shared adjective: three name shapes the
         // reaction never looks at, and one names a shape it looks straight at and declines to judge.
-        BoundDecl::pinned(
-            BoundId::new(
-                "gate-shape-contract/whether-an-enumeration-carries-a-vacuity-guard-is-not-observed-a-stated-bound",
-            ),
-            "a gate iterating an enumeration with no guard against zero iterations",
-            Extent::OutOfReach {
-                because: "the reaction reads a gate's text for the properties it requires and models none of \
-                          its control flow, so a loop that iterates nothing and reports clean is not a shape \
-                          it examines".into(),
-            },
-            "a_missing_vacuity_guard_is_a_stated_semantic_bound",
-        ),
-        BoundDecl::pinned(
-            BoundId::new(
-                "gate-shape-contract/whether-a-read-s-status-is-checked-in-the-parent-shell-is-not-observed-a-stated-bound",
-            ),
-            "a gate reading a command's output through a command substitution whose status nobody inspects, \
-             or through a pipeline whose non-final stage fails",
-            Extent::OutOfReach {
-                // NARROWED, not rewritten: the process-substitution shape IS now observed, by the
-                // one-checked-capture property. What remains needs control flow rather than text — whether a
-                // caller inspects `$?` after a `$(…)` is not a property of the source. The heading and therefore
-                // the id are untouched, because renaming would break this declaration and the citation in one
-                // edit for a reason unrelated to the bound's content.
-                because: "the process-substitution construct is now refused by its own property, so what is left \
-                          is a status swallowed where detecting it would mean modelling whether the caller reads \
-                          `$?` afterwards; the backstop the reaction also requires narrows the damage without \
-                          detecting either shape".into(),
-            },
-            "an_unchecked_read_status_is_a_stated_semantic_bound",
-        ),
-        BoundDecl::pinned(
-            BoundId::new(
-                "gate-shape-contract/whether-a-gate-s-1-versus-2-assignment-is-correct-is-not-observed-a-stated-bound",
-            ),
-            "a gate reporting a genuine violation as cannot-judge, or a misconfiguration as a violation",
-            Extent::Reached(Reached::UnderReacts {
-                // Narrowed with the scenario, and this is the third site the same claim was written at — the
-                // spec's THEN, the projection derived from it, and here. It used to say this judgment is what
-                // let a `fail` returning instead of exiting ride green; what let that ride green was the
-                // matrix asserting a non-zero status rather than a code, which the `exit codes` property now
-                // refuses.
-                because: "the reaction requires the twin to assert an expected code and declines to judge \
-                          whether the code the gate assigned is the right one, which needs each gate's meaning \
-                          rather than its text".into(),
-                // The engine's own, not an adopter's: this reaction sees the codes and stops there, and no
-                // declaration by an adopter would change what it does with them.
-                owner: Owner::Engine,
-            }),
-            "a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound",
-        ),
-        BoundDecl::pinned(
-            BoundId::new(
-                "gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound",
-            ),
-            "a gate's process substitution beginning with `printf` or `echo` and piped into an external command",
-            Extent::Reached(Reached::UnderReacts {
-                // The producer's text IS handed to the recognizer, which stops at its first word — so this is an
-                // under-reaction rather than a shape out of reach. Owned by the engine because closing it is this
-                // reaction's own to do; what makes it not ordinary work is that refusing a producer containing a
-                // pipe was measured and false-positives on both live sites, whose pipe sits inside a parameter
-                // expansion. Separating the two needs shell parsing rather than text.
-                because: "the permission is granted on the producer's first word, so a builtin's exemption — \
-                          having no I/O to fail at — reaches a pipeline stage that does; refusing a producer \
-                          containing a pipe was measured and refuses the tree's own legitimate sites too".into(),
-                owner: Owner::Engine,
-            }),
-            "a_builtin_piped_into_an_external_command_is_a_stated_bound",
-        ),
-        BoundDecl::pinned(
-            BoundId::new(
-                "gate-shape-contract/shell-units-that-are-not-a-gate-or-its-twin-are-outside-the-surface-a-stated-bound",
-            ),
-            "a sourced function library, a matrix over one, the example runner, or the publish tool",
-            Extent::OutOfReach {
-                because: "the enumeration is the `check_*` gate and the twin its basename names, so no other \
-                          shell unit is judged on any of the properties it holds them to; the one thing asserted about \
-                          them is that none carries the shared exit contract, which keeps the exclusion from \
-                          being a hiding place rather than making it coverage".into(),
-            },
-            "units_outside_the_gate_pairing_are_outside_the_surface",
-        ),
         // --- publish-source-integrity ---
         //
         // Its reaction is a shell gate, and `PINNED-BY` resolves only a harness-registered Rust function — so

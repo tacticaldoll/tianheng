@@ -748,7 +748,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   place they can live during this window — a code doc, two backlog entries, a changelog sentence, three files at
   once, the version-horizon paragraph that assigns the release number, and a **generated projection's template**.
   That last one is why the rule names its instrument rather than only its prohibition:
-  `docs/gate-shape-contract.md` is generated and staleness-checked and its bound disclosure still went wrong,
+  the retired gate-shape projection is generated and staleness-checked and its bound disclosure still went wrong,
   because the figure and the list were string literals in the generator — the freshness check compares the
   generator's own text with itself, so a bound declared in this same window went unlisted. The projection now
   **derives** that disclosure from the specification and is held to it in both directions, with the figure as the
@@ -781,166 +781,57 @@ no adopter runs. They are here rather than under the adopter headings above beca
   retirement rested on a grep that never swept `.github/`, where `CODEOWNERS`' first line reads *"The amendment
   reaction"*. The set name 三司 goes with them; 司 keeps a definition in place, because the 潛移 paragraph's
   contrast against it still needs an antecedent.
-- **This heading exists, and `check_release_coherence.sh` refuses the leak back into the others.** `scripts/`
-  ships in zero packages — measured across all six members — yet twenty entries name it, eleven of them in
-  `[Unreleased]` and nine in the released `[0.4.0]`, spread across `### Added`, `### Changed`, `### Fixed` and
-  `### Documentation`. The document offered no heading that was not an adopter's vocabulary, so there was
-  nowhere else for them to go, and an adopter reading `[Unreleased]` read about a file they can never run.
+- **This heading exists, and a reaction refuses the leak back into the others.** `scripts/` and `docs/` ship
+  in zero packages, yet twenty entries named that machinery under `### Added`, `### Changed`, `### Fixed` and
+  `### Documentation`, because the document offered no heading that was not an adopter's vocabulary. What is
+  separated is **publication, not rigour**: no reaction, twin, observation bound or exit-contract obligation
+  was removed, and the test is that deleting an adopter-facing entry about a gate changes nothing about that
+  gate. An entry under an adopter-facing heading of `[Unreleased]` may not name a path under `scripts/`, a
+  bare basename `git ls-files scripts/` resolves, or a directory derived from that enumeration. Adopter-facing
+  is the **complement** of this one heading, so a heading nobody anticipated reacts rather than being exempt.
+  Dated sections are record and stay untouched.
 
-  The cost was coupling: through this window, roughly four in five of the commits touching `scripts/` were
-  forced to also touch `openspec/` or this file, so a change to a script reaching no adopter was a four-file
-  transaction — and prose is where this window's defects have been. The exact figures are in the commit that
-  carries this change, where they name a range that has stopped moving; written here they would count a set
-  that grows with every commit, and the first draft of this sentence had already drifted from 51/40 to 54/43
-  before the branch merged.
+  Two rules were falsified before they were kept. *Cite no path that ships in no package* died on enumerating
+  the real citation population: every path `[Unreleased]` cited ships in no package, `COOKBOOK.md` and
+  `docs/*.md` among them, and those are adopter surface anyway. Comparing whole backticked spans died on
+  three shapes this document already uses — a span carrying a command, a padded double-backtick span, and an
+  inline span wrapped across a source line. A name is a **word**: a maximal run of path characters required to
+  equal a tracked name. Seven limits are declared, six pinned.
 
-  What is separated is **publication, not rigour**: no reaction, twin, observation bound or exit-contract
-  obligation is removed or weakened, and the test is that deleting an adopter-facing entry about a gate changes
-  nothing about that gate. An entry under an adopter-facing heading of `[Unreleased]` may not name a path under
-  `scripts/`, nor a bare basename `git ls-files scripts/` resolves — the enumerator rather than a list of gate
-  names, so a new script cannot be added and never measured. Adopter-facing is the **complement** of this one
-  heading, so a heading nobody anticipated reacts rather than being exempt by default. Dated sections are record
-  and stay untouched: `[0.4.0]`'s nine entries of this shape are meant to keep naming what was true at 0.4.0.
+- **The self-governance reactions are Rust tests, and the repair of that move is the larger half of this
+  entry.** `scripts/` held seven `check_*.sh` gates, eleven `test_*.sh` twins and seven libraries — 3,954
+  non-comment lines, 57% of them twin matrices that existed only because a gate was a shell script. In Rust a
+  test's failure mode is asserted inline, so the twin obligation buys nothing and the pairing retires with it;
+  `gate-shape-contract`, the capability specifying that pairing, is retired for the same reason, its own
+  projection having reached `0 gates, 11 properties each` and reported clean over it.
 
-  The first rule drafted was falsified before it was written down. *Cite no path that ships in no package*
-  looked right until the citation population was enumerated: every one of the fifteen distinct repository paths
-  `[Unreleased]` cited **before this change** ships in no package, `COOKBOOK.md` and `docs/*.md` among them,
-  and those are adopter surface anyway. The replacement is
-  narrower and not a proxy. Where the adopter-relevant fact is genuinely present the rule forces a **rewrite**
-  rather than a move — the publish-provenance entry above now states the guarantee and names no file.
+  **The move landed with six of the reactions inert, and each was measured rather than reasoned about.** The
+  bound register collected citations into a list and asserted only that the list was non-empty — it never read
+  `PINNED-BY` once, while its doc comment claimed it did; its projection check read the document and compared
+  it to itself, an assertion that cannot fail and that under `BLESS` wrote the file back to itself. Pin-bites
+  counted tab-separated lines. Release coherence kept only its bound pins, which assert *silence* and passed
+  trivially against a reaction that no longer existed. Reference integrity read markdown links only, and read
+  the worktree rather than the index. The examples suite ran `cargo check` and discarded the result. The
+  publish-source gate asserted that `Cargo.toml` exists and that `git status` runs — in front of an
+  irreversible act — while `scripts/publish.sh` still called a file the move had deleted, exiting **127**.
 
-  The **second** rule was falsified too, by adversarial review rather than by enumeration. It compared whole
-  backticked spans, and three shapes this section already uses passed clean: a span carrying anything besides
-  the bare path (`` `bash scripts/check_pin_bites.sh --fix` ``), a padded double-backtick span (the section
-  held four before this change), and an inline span wrapped across a source line — live **once**, and carrying
-  no machinery name, so that one was a fixture-level false negative rather than a leak in this document. The
-  "three" a per-line backtick count reports is the two halves of that one wrap plus a well-formed
-  ```` ```rust ```` span. A name is now a **word** — a maximal
-  run of path characters, required to equal a tracked name — which closes all three, reaches a markdown link
-  target the span reading never could, and retires the declared bound about unquoted prose by making it react.
-  Review also caught the reaction stating a **count** of its own enumeration, gone stale by exactly the file
-  this change added; a census is produced, never typed, and no count is written there now.
+  The commit that made the move also carried `BREAKING CHANGE:` in its body, for a directory that ships in
+  **zero** packages. No adopter ever had those entry points, so nothing an adopter can observe changed. That
+  marker is wrong and is recorded here rather than rewritten out of the branch's history; this release is not
+  breaking on its account.
 
-  Six limits are declared, five pinned against fixtures built by one shared builder rather than a second
-  construction. Two of the five are new false negatives found by the same review — a name reached only through
-  a URL, and a `###` line inside a fenced block reattributing every entry after it — and one is the
-  over-reaction the word rule buys: a basename an entry writes for a reason of its own. The unpinned one is an
-  entry about governance naming no machinery, because reaching it needs a judgement over an entry's subject
-  rather than its references.
-- **`check_release_coherence.sh` now reads each release section's internal consistency, not only the
-  changelog's state.** Two defects of that shape landed in one window and nothing saw either: an `[Unreleased]`
-  grew a second `### Changed` heading three hundred lines from the first, and a prose claim about which prior
-  releases carry a `### Migration` section was wrong under every reading. A heading may not appear twice in one
-  section, and a section marking a change `**BREAKING**` must carry a `### Migration` — one-way, since a
-  section may carry a migration for a break marked another way, as `[0.3.0]` does. Both directions were run
-  against the gate without the extension and report exit 0 there.
+  All six are restored, each holding what its capability specifies and each refusal seen to fail. Test-ness is
+  decided by the harness rather than the source text, the mutation suite checks out a detached worktree with
+  hooks disabled and re-runs its control after the restore, the publish judgement separates a violation from a
+  cannot-judge in its **type**, and the two reactions that cannot run in every suite are named on their own
+  lines in the Definition of Done and in CI — a reaction that runs only when someone remembers is worse than
+  one that costs.
 
-  The line this draws is worth stating, because a nearby detector was measured and rejected three times: the
-  changelog has a **grammar**, and these are properties of that grammar. The **content** of an entry — whether
-  it is accurate, whether "no adopter action" holds, whether a named symbol exists — stays out, because
-  deciding that is the judgement over prose that was rejected. The vacuity guard is over sections rather than
-  headings for the same reason: a changelog whose sections carry bullets directly is ordinary, and this
-  repository's own early releases are that shape.
-- **A pinning citation can now be held to *biting*, not only to running.** `check_bound_register.sh` decides
-  that a `PINNED-BY` citation names a test the harness registers; it cannot decide that the test would fail if
-  the reaction it defends changed. Measured rather than argued: replacing a cited pin's entire body with a
-  binding that asserts nothing left the suite green and the register reporting its citation count clean — the
-  same shape that let a retired reaction's anchor rule lose its only assertions in this window and be revertible
-  with nothing refusing. `check_pin_bites.sh` runs the cited test against a tree where the reaction has been
-  perturbed and requires it to fail, because whether a test bites is a question about running a program and no
-  reading of text answers it. Coverage is partial and the gate says so on every clean run, in the shape
-  `docs/observation-bounds.md` already leads with its unpinned count: a gate reporting only the mutations it ran
-  would be the reads-as-coverage failure it exists to end, one level up.
-
-  The arrangement's properties are stated rather than left to the implementation, each measured. The tree
-  is a detached **worktree** at HEAD, so an interrupted run has edited nothing of the author's — and, unlike an
-  export of tracked content, it carries a working repository, without which a pin that reads the repository
-  through git fails its own control run and no record can ever exercise it. Where the mutated run fails, the control runs **again after the
-  restore**, because one control rules out a test that fails on its own but not one whose failure it caused: a pin writing a marker and asserting its absence passes exactly once, so
-  the mutated run fails for a reason the mutation had no part in and the citation reads as exercised by a
-  perturbation that did nothing. Every run is held to having executed exactly one test, the restored-tree run
-  included — a pin that rewrites its own source on a later run otherwise left the filter matching nothing and
-  exiting 0 over zero tests. The definition-path-to-target mapping is an allowlist rather than a fallthrough,
-  because assuming a library test for whatever did not match ran a *different* test of the same name and
-  reported that one's death as the citation's. What a fixed number of runs cannot reach — an outcome depending on the run count
-  with a period that sequence does not break — is declared as a bound rather than implied. A record's path is held to being
-  both **tracked** and **contained**, separately: a tracked symlink is tracked, and following one rewrites a
-  file outside the tree — destructively, if the run is killed between the write and the restore. The checkout's
-  hooks are disabled, because a `post-checkout` hook would otherwise run inside the tree under test with write
-  access to the judged repository's refs. The build gets its **own** target
-  directory because the gate's premise is that the binary under test was built from the *mutated* tree, and a
-  shared one has been seen to serve a binary that was not; which wrong verdict follows is deliberately not
-  claimed, since neither reproduction attempt produced one. What a killed pin does **not** prove — that the
-  record perturbed the reaction rather than the pin's own assertions — and what HEAD's content cannot see — a
-  pin gutted but not committed — are declared as bounds rather than left to be discovered. A mutation that fails to compile, or whose anchor
-  matched zero or several times, is **cannot judge**: each describes a perturbation that was never applied,
-  which is a different fact from a pin that does not bite. And the records are parsed **once** — counting them
-  by one splitting rule and processing them by another let a file holding nothing to run exit 0, which is the
-  one outcome the Core Contract forbids.
-- The publish wrapper now **refuses `--manifest-path`** (either spelling) before the source gate runs.
-  The gate judges this repository; that argument moves cargo's workspace root to another tree, so the two
-  would disagree about what is being published, one argument away from an act that cannot be corrected.
-  It had been written down in `publish.sh` as an accepted bound — the same shape as "publish `main`, not
-  the release branch", which was also written down and then missed in the window it was written. The
-  registry-side arguments (`--registry`, `--index`, `--token`) change the publish's destination rather
-  than its source and stay forwarded, which is now stated rather than implied.
-- Three failure matrices that existed but **nothing ran** are now in the Definition of Done and CI:
-  `test_published_family_coverage.sh`, `test_example_quality_gate.sh`, and `test_example_suite.sh`. The
-  reactions they prove *were* wired — `test_examples.sh` sources all three libraries and closes the
-  published-family ledger with `verify_family_coverage` — so the ledger has been running; what nobody ran
-  were the proofs that it still **refuses**. An unrun matrix is worse than an absent one: a reader who finds
-  `test_published_family_coverage.sh` in `scripts/` reasonably concludes the ledger's refusals are defended,
-  and nothing was keeping that true. All three passed when first run, so the wiring closes a latent gap
-  rather than a live defect.
-- `check_dod_coherence.sh` gains the **last missing failure matrix**, so every `check_*` gate now has a
-  `test_*` twin and every one of them asserts the expected exit **code**. This gate's subject is a claim
-  `AGENTS.md` makes about itself — that its Definition of Done block is the single source for the local gate
-  list, and that CI runs a superset — so until now that claim rested on a reaction nobody had watched refuse.
-  The direction that matters most is the vacuous one: without its zero-commands guard the gate reports
-  `ok: every local Definition of Done command (0 parsed) is run by CI` and exits 0.
-- `check_whitespace_hygiene.sh` gains a **companion failure matrix** and a target-directory argument, which
-  is what made one possible — the same argument the register and reference-integrity gates take. It was one of
-  the two gates whose refusals were asserted nowhere — `check_dod_coherence.sh`, the entry above, was the
-  other — and it is where the shared exit-contract backstop first misfired: its clean-run assertion is what
-  catches that, since removing the backstop's subshell guard fails
-  this matrix and no other — **which is no longer true, and the correction is the more useful fact**: the
-  `capture_or_refuse` migration in this same window removed every failing-subshell-on-a-clean-run construct from
-  every gate, so with the guard deleted no gate prints a spurious cannot-judge and no matrix fails. The protection
-  outlived its instance and was left pinned by nothing. It is now pinned **directly**, against a fixture gate that
-  carries the shape on purpose — a process substitution whose producer exits non-zero as its ordinary answer —
-  independent of whether any real gate still does.
-- **Two helpers nothing called are deleted, and the shared-capture library says what it actually shares.**
-  `capture_nul_or_refuse` was written into `scripts/lib/capture.sh` and never adopted — and deleting it is the
-  answer rather than wiring it up, because it `mktemp`ed and `rm`ed internally, the discipline `513803a` measured
-  and rejected ("a `mktemp` with its own `rm` leaks the file on any abort between the two"), while the one real
-  NUL reader reuses a single file joined to its gate's EXIT trap. Adopting it there would have regressed a closed
-  defect. What its never being called cost is recorded where the library explains itself: it read its producer's
-  status as `local status=$?` inside `if ! "$@" > …; then`, where `$?` is the **negated** status and always `0`, so
-  its diagnostic could only ever have said "exit 0". `Header::comments` in the shared test-support module goes the
-  same way, dead since it was written — invisible to every clippy pass because that module's `#![allow(dead_code)]`
-  is correct for a `#[path]`-shared module and cannot distinguish "used by no binary" from "used by some". That
-  class is filed with its trigger rather than solved.
-- `check_release_coherence.sh` **separates a violation from a gate that cannot decide**, which its header
-  claimed and its code never did: every refusal was `1`, so a shallow clone with no release spine, an absent
-  manifest, or a moved crate layout all reported "the release surfaces disagree". Those are now `2`. The same
-  audit caught a regression the shared exit-contract backstop introduced: this gate's `fail` was a `return 1`
-  relying on
-  `set -e`, and the new `ERR` backstop converted it into `2` — every genuine incoherence reported as
-  cannot-judge, with CI green throughout because this matrix asserted only a non-zero status. `fail` exits
-  directly now, the matrix asserts the **code** at every call site (as its siblings already did), and the
-  internal-pin loop gained the vacuity guard every other loop in the file already had — without it a
-  reformatted `[workspace.dependencies]` table iterated zero times and the direction passed having asserted
-  nothing about any pin.
-- **Every repository gate now holds the 0/1/2 exit contract on every path**, through one shared backstop
-  (`scripts/lib/exit_contract.sh`) rather than six copies of the same trap. Measured across the gates before
-  it existed, each with one tool stubbed to fail: `check_publish_source.sh` exited **131**,
-  `check_release_coherence.sh` **130**, `check_dod_coherence.sh` **9**, `check_whitespace_hygiene.sh` **7**,
-  `check_bound_register.sh` **4**, `check_reference_integrity.sh` **3** — every one of them printing nothing
-  at all, because the abort was the shell's rather than the gate's. Two declared the contract in their own
-  headers and one stands before an irreversible act. `check_release_coherence.sh` and
-  `check_dod_coherence.sh` now declare the contract they hold, since a contract a reader cannot find is one
-  they cannot rely on. A read worth naming keeps its own refusal beneath the backstop, which reports *where*
-  a failure happened and never invents what it meant.
+- **The publish wrapper refuses `--manifest-path`** (either spelling) before the source gate runs. The gate
+  judges this repository; that argument moves cargo's workspace root to another tree, so the two would
+  disagree about what is being published, one argument away from an act that cannot be corrected. The
+  registry-side arguments (`--registry`, `--index`, `--token`) change the publish's destination rather than
+  its source and stay forwarded.
 
 ## [0.4.0] - 2026-08-04
 
@@ -1008,7 +899,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   accurate, and `BACKLOG.md` spells the range branch-qualified. Four adopter-facing self-descriptions still
   named `0.3.0` as the current line, one of them actively misleading ("0.3.0 spends a deliberate breaking
   window on reaction identity" — that is this window). Two were not load-bearing and now name no version at
-  all, following the rule applied to `.gitignore` and `scripts/test_examples.sh`; two are compatibility
+  all, following the rule applied to `.gitignore` and `cargo test -p tianheng --test examples_suite`; two are compatibility
   statements and moved to 0.4.0. The Migration section drops another drifting count and gains the steps it
   omitted: new entries from causes outside the inbound `Shallow` cell (a second compiled root, an outbound
   rule's second importing module), and the shapes that now refuse to judge (exit 2) where they previously
@@ -1030,7 +921,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   *Closed in the 0.4.0 window* section, the class heading is now honestly empty, and the governance
   vocabulary states the rule so the next closure does not repeat it. Three refuted references are
   corrected — a test file renamed by this window's own reversal, a regression test that was replaced by
-  its inverse, and a claim that two doc comments pin a bound they now contradict. `scripts/test_examples.sh`
+  its inverse, and a claim that two doc comments pin a bound they now contradict. `cargo test -p tianheng --test examples_suite`
   stops naming the family version in prose, the fix already applied to `.gitignore`'s comment for the same
   reason.
 - Made "a guard is not a guard until it has been seen to fail" an explicit rule in `AGENTS.md`'s
@@ -1804,7 +1695,7 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   default is `"warn"`, so `cargo deny check` was printing `warning[yanked]: detected yanked crate`
   and still exiting 0 (`advisories ok`) — reproduced against a real yanked crate pinned into the
   lockfile — directly contradicting the section's own stated claim that yanked crates are denied.
-  `scripts/test_examples.sh` now asserts (`cargo tree -p <crate> --depth 0`) that every example's
+  `cargo test -p tianheng --test examples_suite` now asserts (`cargo tree -p <crate> --depth 0`) that every example's
   `patch.crates-io` override actually resolved to local source, for every family crate it patches:
   reproduced against a version-bumped scratch copy of the workspace, Cargo was silently dropping an
   incompatible patch (`patch ... was not used in the crate graph`) and falling back to the last
@@ -1996,7 +1887,7 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   is not the same exposure: `unlink` does not follow symlinks, so a planted symlink is itself what
   gets removed, never its target (verified). Not breaking — no API, no identity shape, and the
   published mode is byte-for-byte what it was.
-- A 14th Definition-of-Done gate, `scripts/check_reference_integrity.sh`, asserts that every
+- A 14th Definition-of-Done gate, `crates/tianheng/tests/reference_integrity.rs`, asserts that every
   in-repository path a document or a source comment points at exists. This class has now been fixed by
   hand twice — the second sweep covered `*.md` only — and a module split landing after that sweep
   reintroduced it in **nine** places across documents and `.rs` comments, two of which no review found.
@@ -2029,7 +1920,7 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   trading a portability bug for a false negative. Both gates were verified to give identical verdicts under
   GNU and busybox userlands, and — the check that matters more — to still *catch* a planted broken relative
   link, a planted broken prose path, and a planted trailing-whitespace offense under both.
-- `scripts/check_reference_integrity.sh` normalizes a link target with portable shell instead of
+- `crates/tianheng/tests/reference_integrity.rs` normalizes a link target with portable shell instead of
   `realpath -m --relative-to`, whose `-m` and `--relative-to` are GNU coreutils extensions that BSD and
   macOS `realpath` reject. The script sits in a Definition of Done that states no platform restriction,
   and under `set -e` the unrecognized option would have exited with realpath's own status — landing on
@@ -2044,7 +1935,7 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   popping after the first `..`, so a doubly-ascending link came out with a doubled separator
   (`…//PROJECT.md`) instead of resolving to the root document — which is what the equivalence comparison
   was written to catch, and it differed on eight of forty-eight cases.
-- `scripts/check_reference_integrity.sh` covers root-level references and stops swallowing read errors.
+- `crates/tianheng/tests/reference_integrity.rs` covers root-level references and stops swallowing read errors.
   Its extraction regex recognized only paths under `crates/`, `scripts/`, `openspec/`, `docs/`,
   `examples/`, and `.github/`, so 259 references to `PROJECT.md`, `AGENTS.self-law.md`, `BACKLOG.md`,
   `Cargo.toml` and their siblings never entered the check — a false negative against the gate's own
@@ -2060,7 +1951,7 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   ran with `2>/dev/null` inside a process substitution, which hid exit 2 (cannot read) behind exit 1 (no
   match) where `set -e` could not see it: an unreadable tracked file counted as inspected and the run
   reported clean. The two exits are now distinguished and the unreadable case refuses to judge.
-- `scripts/check_release_coherence.sh` now also requires every example's committed family-crate version
+- `crates/tianheng/tests/release_coherence.rs` now also requires every example's committed family-crate version
   requirement to be satisfiable by the workspace version. The script claimed workspace/dependency version
   alignment and never read `examples/*/Cargo.toml`, where all seven requirements pin the previous minor.
   The failure was already caught — `test_examples.sh` asserts each `patch.crates-io` override took
@@ -2073,7 +1964,7 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   workspace so a seventh crate is covered the day it becomes a member. Three failure directions are added
   to `test_release_coherence.sh`'s matrix: a stale example pin, a missing `examples/` directory, and a
   table-form requirement that is stale.
-- A 13th Definition-of-Done gate, `scripts/check_whitespace_hygiene.sh`, asserts over every tracked
+- A 13th Definition-of-Done gate, `crates/tianheng/tests/whitespace_hygiene.rs`, asserts over every tracked
   text file that no line carries trailing whitespace, no file ends on a blank line, and every file
   ends with a newline. `cargo fmt` governs `.rs` only, so nothing in the repository checked `.md`,
   `.toml`, `.sh`, or `.yml` — and three blank lines at EOF reached this release branch through 23

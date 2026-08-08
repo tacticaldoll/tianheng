@@ -234,6 +234,7 @@ fn in_repository_references_resolve() {
             );
         };
         inspected += 1;
+        let is_test_source = rel_path.contains("/tests/");
 
         for line in content.lines() {
             for reference in extract(line) {
@@ -250,6 +251,13 @@ fn in_repository_references_resolve() {
                 }
 
                 if reference.from_link {
+                    // The same illustrative rule the qualified branch carries: a fixture's markdown link
+                    // names a path in the repository that fixture builds.
+                    if is_test_source
+                        && (raw.starts_with("scripts/") || raw.starts_with("examples/"))
+                    {
+                        continue;
+                    }
                     // A link may name a bare word, which is a rustdoc symbol rather than a path.
                     if !raw.contains('/') && !raw.contains('.') {
                         continue;
@@ -294,6 +302,14 @@ fn in_repository_references_resolve() {
                 }
 
                 if raw.starts_with("tests/") {
+                    // A package-RELATIVE path names nothing when the naming file belongs to no package: a
+                    // root-level governance document saying `tests/…` is describing some package's layout in
+                    // general, or quoting a path precisely because it exists nowhere — `[0.4.0]` records
+                    // correcting one and names it in the sentence that says so. Resolving it against every
+                    // member instead would make that record an offence for being a record.
+                    if package_of(&files, rel_path).is_none() {
+                        continue;
+                    }
                     // A package-relative path. It resolves against the referencing file's OWN package first —
                     // an example's README naming `tests/reaction.rs` means that example's — and against every
                     // workspace member after, which is how a governance document names one without repeating
@@ -319,13 +335,25 @@ fn in_repository_references_resolve() {
                     if holds(&files, raw) || ignored(&root, raw) {
                         continue;
                     }
-                    // Illustrative rather than real. A `crates/<name>/…` path whose `<name>` is no tracked
-                    // workspace member is a fixture in a doc comment or a test — `crates/foo/src/lib.rs` —
-                    // and reading it as a dangling reference would make every example of the shape an
-                    // offence. The rule needs the member set, which is why an empty one refuses above.
+                    // Illustrative rather than real, in two decidable forms.
+                    //
+                    // A `crates/<name>/…` path whose `<name>` is no tracked workspace member is a fixture in
+                    // a doc comment or a test — `crates/foo/src/lib.rs` — and reading it as a dangling
+                    // reference would make every example of the shape an offence. The rule needs the member
+                    // set, which is why an empty one refuses above.
                     if let Some(rest) = raw.strip_prefix("crates/")
                         && let Some(name) = rest.split('/').next()
                         && !members.iter().any(|m| m == name)
+                    {
+                        continue;
+                    }
+                    // And a repository path named INSIDE test code, which builds the shapes it judges: a
+                    // fixture repository's `scripts/…` or `examples/…` exists in that fixture and nowhere
+                    // here. What this costs is declared — a genuinely stale reference written into a test
+                    // goes unseen — and the alternative costs more: without it, every reaction that
+                    // constructs a fixture is an offence for constructing one.
+                    if is_test_source
+                        && (raw.starts_with("scripts/") || raw.starts_with("examples/"))
                     {
                         continue;
                     }

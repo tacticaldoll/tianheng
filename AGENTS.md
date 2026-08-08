@@ -297,7 +297,7 @@ keeps it out of the constitution.
 
 Tianheng governs itself: `crates/tianheng/tests/self_governance.rs` and sibling Rust integration tests (`crates/tianheng/tests/*.rs`) run Tianheng's own reactions against the workspace as `cargo test` gates. Its live invariants are declared in Rust and projected into [`AGENTS.self-law.md`](AGENTS.self-law.md); do not hand-maintain a second list here.
 
-**Projections are text views, not reactions**: Contract projections and censuses (such as [`AGENTS.self-law.md`](AGENTS.self-law.md), [`docs/observation-bounds.md`](docs/observation-bounds.md), [`docs/gate-shape-contract.md`](docs/gate-shape-contract.md), [`docs/observation-bound-extents.md`](docs/observation-bound-extents.md), and [`docs/projection-register.md`](docs/projection-register.md)) are derived text views. They are NOT reactions, NOT governance, and NOT shipped product code. Their freshness is asserted by Rust `cargo test` gates ("*A census is produced, never typed*").
+**Projections are text views, not reactions**: Contract projections and censuses (such as [`AGENTS.self-law.md`](AGENTS.self-law.md), [`docs/observation-bounds.md`](docs/observation-bounds.md), the retired gate-shape projection, [`docs/observation-bound-extents.md`](docs/observation-bound-extents.md), and [`docs/projection-register.md`](docs/projection-register.md)) are derived text views. They are NOT reactions, NOT governance, and NOT shipped product code. Their freshness is asserted by Rust `cargo test` gates ("*A census is produced, never typed*").
 
 If a change makes a self-governance test fail, **fix the change**, not the test. A boundary is altered only by a deliberate, human-reviewed amendment — never by quietly weakening it so CI turns green.
 
@@ -332,7 +332,7 @@ above because it runs under that same `cargo test`. And so must `observer_protoc
 trait-driven fold and the built-in composition path to one verdict — two paths that could disagree silently
 are the drift a seam is supposed to end. And so must `gate_shape_contract.rs`, which enumerates this
 repository's own `check_*` gates and their twins from tracked content, holds each to the structural properties of the
-family's exit contract, and projects [`docs/gate-shape-contract.md`](docs/gate-shape-contract.md) — the table
+family's exit contract, and projects the retired gate-shape projection — the table
 saying which gate holds what, and which of the classes it was built for are declared bounds rather than
 checks. That list and its figure are read from the specification by the projection, so they are not restated
 here. It adds no line above for the same reason. And so must `projection_register.rs`, which is the inventory of
