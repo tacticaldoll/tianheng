@@ -104,6 +104,48 @@ fn a_fence_of_the_other_form_does_not_close_the_open_one() {
     );
 }
 
+/// Two delimiters are not a fence, so a line opening with them is prose.
+///
+/// Three is CommonMark's minimum and also the pre-change threshold, so nothing observed it until now — a
+/// two-character run opening a fence would silently hide the rest of a document from the reader it serves.
+#[test]
+fn a_run_shorter_than_three_does_not_open_a_fence() {
+    let inline = Source::of(format!("``{SEEN}`` and ~~{UNSEEN}~~\n"));
+    let prose = inline.prose();
+    assert!(
+        prose.contains(SEEN) && prose.contains(UNSEEN),
+        "a two-character run is inline markup, not a fence, so the line stays prose"
+    );
+}
+
+/// Whitespace after a closing run is still a closing run.
+///
+/// CommonMark allows spaces and tabs there, and losing that means a closer with a trailing space stops closing
+/// and silently swallows the remainder of the document — the direction this whole reader exists to avoid. It is
+/// also what makes a CRLF closer work, and this repository strips CR explicitly elsewhere, so it is not
+/// hypothetical.
+#[test]
+fn a_closing_run_may_be_followed_by_whitespace() {
+    let padded = Source::of(format!("visible\n```\n{UNSEEN}\n```  \t\ntail\n"));
+    assert!(!padded.prose().contains(UNSEEN));
+    assert!(
+        padded.prose().contains("tail"),
+        "trailing whitespace does not stop a run from closing"
+    );
+}
+
+/// A fence inside a blockquote is a fence.
+///
+/// The only unmodelled shape that erred **unsafely**: unrecognized, so the block's contents counted as prose and
+/// a path appearing nowhere else would have satisfied the reachability requirement. Every other unmodelled shape
+/// over-excludes, which refuses a conforming document rather than accepting a non-conforming one.
+#[test]
+fn a_blockquoted_fence_is_recognised() {
+    let quoted = Source::of(format!("visible\n> ```\n> {UNSEEN}\n> ```\ntail\n"));
+    assert!(!quoted.prose().contains(UNSEEN));
+    assert!(quoted.prose().contains("tail"));
+}
+
 /// A closing fence carries no info string, so a run followed by text is content.
 ///
 /// This is the third leg of the same problem, and the only one that errs in **both** directions from one
@@ -128,8 +170,21 @@ fn a_run_followed_by_an_info_string_does_not_close_a_fence() {
 }
 
 /// A longer run closes a shorter opener; a shorter run inside a longer fence does not.
+///
+/// Both halves, because only the second was observed: an equal-length closer satisfies `>=` and `==` alike, so
+/// the fixture asserting the first half rested on nothing until the longer-closes-shorter case was added.
 #[test]
 fn a_fence_closes_only_on_a_run_at_least_as_long() {
+    let longer_closes_shorter = Source::of(format!("visible\n```\n{UNSEEN}\n````\ntail\n"));
+    assert!(
+        !longer_closes_shorter.prose().contains(UNSEEN),
+        "the fenced content is still fenced"
+    );
+    assert!(
+        longer_closes_shorter.prose().contains("tail"),
+        "a four-backtick run closes a three-backtick fence, which `>=` allows and `==` would not"
+    );
+
     let long_opener = Source::of(format!("visible\n````\n```\n{UNSEEN}\n````\ntail\n"));
     assert!(
         !long_opener.prose().contains(UNSEEN),

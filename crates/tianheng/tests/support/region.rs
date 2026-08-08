@@ -18,19 +18,26 @@
 //! [`Source::whole`] is the deliberate escape, spelled out so it is greppable. The family already handles `dyn`
 //! this way: not forbidden globally, but every appearance visible where it matters.
 
-/// A fence delimiter's character and run length, for a line already trimmed of leading space.
+/// A fence delimiter line's character, run length, and whether anything follows the run.
 ///
 /// Markdown fences with either backticks or tildes, three or more. Reading only the backtick form made a `~~~`
 /// block count as prose, so a path appearing nowhere but inside one satisfied "reachable from where a reader is
 /// sent" — the requirement is about fenced code, not about one spelling of a fence.
 ///
-/// Not modelled, and none of it reachable in this repository's tracked Markdown: a fence indented four or more
-/// columns (an indented code block, not a fence), one inside a blockquote or on a list-marker line, a line
-/// opening with an inline code span of three or more backticks, and a fence line inside an open HTML comment
-/// span — the fence check runs first, so such a line is read as a delimiter. Stated here rather than in a spec
-/// deliberately: the register's undeclared-prose direction reads only `openspec/specs/*`, so this is a note to a
-/// reader and not a bound claimed and unpinned.
-fn fence_run(trimmed: &str) -> Option<Fence> {
+/// Not modelled, and none of it reachable in this repository's tracked Markdown. Each **over**-excludes — it
+/// hides text a reader can see, refusing a conforming document rather than accepting a non-conforming one:
+/// a fence indented four or more columns (an indented code block, not a fence), one on a list-marker line, a
+/// line opening with an inline code span of three or more backticks, and a fence line inside an open HTML
+/// comment span — the fence check runs first, so such a line is read as a delimiter, the comment's `-->` is then
+/// inside the fence, and the rest of the document is dropped.
+///
+/// A blockquoted fence is handled rather than listed, because it was the one that went the **other** way.
+fn fence_run(line: &str) -> Option<Fence> {
+    // A blockquote prefix is stripped first. Every other unmodelled shape below over-excludes — it hides text a
+    // reader can see, which refuses a conforming document — but a fence inside a blockquote went the other way:
+    // unrecognized, so its contents counted as prose and a path only inside one satisfied the reachability
+    // requirement. That is a false clean against the same SHALL this reader exists to serve.
+    let trimmed = line.trim_start().trim_start_matches(['>', ' ', '\t']);
     let marker = trimmed.chars().next().filter(|c| *c == '`' || *c == '~')?;
     let length = trimmed.chars().take_while(|c| *c == marker).count();
     // `marker` is one of two ASCII characters, so the char count is also the byte offset past the run.
