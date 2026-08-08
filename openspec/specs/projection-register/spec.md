@@ -40,57 +40,11 @@ satisfied.
 
 ### Requirement: Every generated document and the reaction holding it fresh SHALL correspond, in both directions
 
-Each enumerated document SHALL name the unit that generates it, and that unit SHALL be tracked. **The number of
-projections a unit blesses SHALL equal the number of enumerated documents naming it** — the correspondence is
-counted per blessing call site, never per file.
-
-Per file was a measured defect: a second `assert_projection_matches` added to an existing holder, blessing a tracked
-document that carries no marker, was accepted in silence. The file was already paired with its first document and
-nothing asked about the second. A holder blessing two documents and registering one is exactly the state the register
-exists to make impossible.
-
-The correspondence is by **count**, and what that does not reach is stated rather than implied: *which* call blesses
-*which* document is not resolved, because the path is a constant in the source and reading it would mean evaluating
-Rust rather than reading it. Two holders that each bless one document and swapped which one they name would satisfy
-this count. The measured defect — a blessing nothing registers — is caught; a permutation is not, and calling the
-count a per-pair correspondence would have been the overclaim this capability exists to refuse.
-
-The reaction SHALL enumerate the holders **independently of the documents' own claims**, and SHALL recognize both
-mechanisms this repository uses: a Rust call to the shared blessing rule, and a `check_*` gate writing its
-projection under `BLESS`. The shell holder SHALL be recognized as a **gate**, not by mentioning `BLESS`: a twin
-that proves the blessing behaves mentions it too and writes no projection, so the looser rule has a false positive
-among the units this repository already has. A document naming its generator is a claim by the document; the call site is the fact, and an
-inventory that trusted the claim would be an inventory of claims.
-
-The register SHALL inspect a Rust holder with Rust line-comment semantics and a shell holder with shell
-line-comment semantics. It SHALL NOT use one language-blind executed region for both mechanisms.
-
-#### Scenario: Holder text begins with a language-specific marker
-
-- **WHEN** a potential holder line begins with `//` in Rust or `#` in shell
-- **THEN** the matching language region excludes the comment without excluding the other language's executable text
-
-Both directions are required because each catches a different defect. A document with no holder is a
-hand-maintained file wearing a generated file's warning — worse than plain prose, because a reader trusts it more
-and no reaction defends it. A holder with no document is a projection whose freshness is asserted and whose
-existence no reader has been told.
-
-#### Scenario: A document claims generation that nothing asserts
-
-- **WHEN** an enumerated document names a generator that holds no projection, or names none at all
-- **THEN** the reaction fails, naming the document, because its warning not to edit rests on nothing
+Each enumerated document SHALL name the Rust self-governance unit that generates it. The correspondence is counted per blessing call site in Rust tests under `crates/tianheng/tests/`.
 
 #### Scenario: A reaction holds a projection no document registers
-
-- **WHEN** a unit holds a projection fresh and no enumerated document names it
-- **THEN** the reaction fails, naming the unit and the path it blesses, because the document exists and the
-  register does not know it
-
-#### Scenario: The shell-generated projection is registered like any other
-
-- **WHEN** the holder is a shell gate writing its projection under `BLESS` rather than a Rust call
-- **THEN** it is enumerated and paired identically, because a reaction that recognized only the Rust mechanism
-  would report a perfect correspondence over three quarters of the surface
+- **WHEN** a Rust test unit holds a projection fresh and no enumerated document names it
+- **THEN** the reaction fails, naming the unit and the path it blesses
 
 ### Requirement: Every generated document SHALL be reachable from where a reader is sent
 
@@ -164,3 +118,4 @@ id, per `observation-bound-model`.
   which then holds over a surface missing a member. This is a false negative rather than a limit of the corpus —
   the third mechanism's source sits in the tree the reaction already reads — so it is owned by the engine
 - **PINNED-BY** `a_third_generation_mechanism_is_not_recognized`
+

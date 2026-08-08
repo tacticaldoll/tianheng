@@ -1,5 +1,8 @@
-## ADDED Requirements
+# rust-self-governance-gates Specification
 
+## Purpose
+TBD - created by archiving change retire-shell-gates. Update Purpose after archive.
+## Requirements
 ### Requirement: Rust-native self-governance test suite
 The repository self-governance reactions SHALL be executed as Rust integration tests under `crates/tianheng/tests/` rather than bash shell check scripts.
 
@@ -13,3 +16,4 @@ Contract projections and censuses SHALL be formally classified as derived text v
 #### Scenario: Freshness check of projected documents
 - **WHEN** developer or CI runs `BLESS=1 cargo test -p tianheng`
 - **THEN** projected document contents are generated from Rust sources of truth and verified without adding runtime code to shipped crates
+
