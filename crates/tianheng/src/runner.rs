@@ -205,9 +205,9 @@ fn evaluate_constitution(
     if !matches!(outcome, Outcome::ConstitutionError(_)) {
         // The built-in path obtains this dimension's outcome BY INVOKING its observer, which is what makes the
         // two composition paths' equality construction-held here rather than measured. Note what it is not:
-        // unlike the runtime arm below — which held its own copy of 漏刻's corpus derivation, audit call and
-        // `cannot read workspace` message until delegation collapsed the three — this arm always called the
-        // one implementation `SemanticObserver::observe` calls. Nothing was deduplicated, and a guard deciding
+        // unlike the runtime arm below — which held a second copy of 漏刻's three statements, the corpus and
+        // anchor derivation, the audit call and the `cannot read workspace` message, until delegation left one
+        // copy — this arm always called the one implementation `SemanticObserver::observe` calls. Nothing was deduplicated, and a guard deciding
         // emptiness above this line still compiles and passes every gate. `observer-protocol` keeps its bound
         // on that. The cost is one clone of the declared bundle per run, paid deliberately.
         outcome = merge_outcomes(

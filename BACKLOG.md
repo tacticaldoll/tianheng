@@ -103,7 +103,8 @@ consumer for an undemonstrated deduplication.
   *Observation source:* that bound and the retired reaction's history on `change/refuse-ambiguous-delegation-extent`.
   *Current reaction or bound:* the declared bound; no reaction. *Risk:* the shell grows a second semantic
   behaviour owner and nothing says so — the drift a seam exists to end. The dimension's *equality* is
-  construction-held since this window; its *delegation* is the seam that is not, and the two are one word apart. *Promotion trigger:* fired; the bound is declared unpinned, which the register leads with.
+  construction-held since this window; its *delegation* is the seam that is not, and the two are one word
+  apart. *Promotion trigger:* fired; the bound is declared unpinned, which the register leads with.
   *Version class:* patch if the composition is restructured without moving a public signature; minor if the
   shell's entry point changes shape. *Authority:* `observer-protocol`, whose spec states both the obligation and
   the retirement. *Shape:* **not** the runtime route, which this window

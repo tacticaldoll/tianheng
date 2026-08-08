@@ -567,7 +567,10 @@ them.
   conforming body. Retiring it rather than narrowing a fifth time is the honest disposition: what a text reader
   can still say truthfully is that the body reaches its constitution only through the declared accessors, and
   that is not the obligation. `observer-protocol` now declares the gap as a false negative this repository owns,
-  **unpinned**, tracked for closure by construction — the route the runtime dimension's equality already takes.
+  **unpinned**, tracked for closure by construction. Which construction is deliberately not named here: the
+  route this entry first pointed at — the one the runtime dimension's equality takes — was tried later in this
+  same window and measured to close nothing, because that arm had a second implementation to collapse and this
+  one never did. `BACKLOG.md` carries what would actually close it.
   The register leads with the count of bounds nothing yet defends, so the debt is visible rather than implied.
 - The same decoy defeated the **bounds-method** reader, whose bound records the moved extent as *over-reacting*
   and therefore safe. A commented-out conforming copy above a divergent `bounds()` made the exact one-statement

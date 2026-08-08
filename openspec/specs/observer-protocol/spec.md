@@ -109,17 +109,17 @@ Retiring it was the honest disposition rather than a fifth narrowing. What remai
 narrow — that the body reaches its constitution only through the declared accessors — and that is not the
 obligation.
 
-The shell's semantic arm now **invokes `SemanticObserver`** rather than calling the composed entry point beside
-it, and what that buys is narrower than the words invite, because the same words used loosely turn a
-constructed property into a claimed one. It makes the two paths' **equality** for this dimension construction-held: the built-in
-path obtains the semantic outcome by invoking that dimension's observer, so there is no second call for a
-verdict to differ at. It does **not** make an independent shell decision unwritable — a guard above that call
-compiles, passes the whole suite, and passes every gate, measured — so the delegation obligation itself remains
-unobserved and stays declared below. The runtime arm's delegation is *not* the same case, and reading it as one is
-how this was got wrong once already: that arm held a second implementation of three statements — the corpus
-derivation, the audit call and the `cannot read workspace` message — and delegation collapsed the two copies
-into one. Here there was one
-implementation with two callers, and there is now one caller.
+The shell's semantic arm now **invokes `SemanticObserver`** rather than calling the composed entry point
+beside it, and what that buys is narrower than the words invite, because the same words used loosely turn a
+constructed property into a claimed one. It makes the two paths' **equality** for this dimension construction-
+held: the built-in path obtains the semantic outcome by invoking that dimension's observer, so there is no
+second call for a verdict to differ at. It does **not** make an independent shell decision unwritable — a
+guard above that call compiles, passes the whole suite, and passes every gate, measured — so the delegation
+obligation itself remains unobserved and stays declared below. The runtime arm's delegation is *not* the same
+case, and reading it as one is how this was got wrong once already: that arm held a second implementation of
+three statements — the corpus derivation, the audit call and the `cannot read workspace` message — and
+delegation collapsed the two copies into one. Here there was one implementation with two callers, and there is
+now one caller.
 
 The cost is one clone of the declared bundle per run, the same price the runtime arm pays for its `to_vec`.
 
