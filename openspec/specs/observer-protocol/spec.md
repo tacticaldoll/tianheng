@@ -105,11 +105,16 @@ never-invoked `macro_rules!`, or placed in a conditionally-called closure satisf
 shell decides for itself. It also cost two false-positive classes, one of them fired by `rustfmt` reformatting a
 conforming body.
 
-Retiring it is the honest disposition rather than a fifth narrowing. What remains true of a text reader is
-narrow — that the body reaches its constitution only through the declared accessors — and that is not the
-obligation. The closure is to make the property hold **by construction**, as the runtime dimension's equality
-already does; until then the gap is declared below rather than implied by a reaction that reported clean while
-accepting the shape it existed to refuse.
+Retiring it was the honest disposition rather than a fifth narrowing, and the gap it left is **closed by
+construction** rather than by a sixth reader. The shell's semantic arm invokes `SemanticObserver` instead of
+calling the composed entry point beside it, so the two are one call rather than two agreeing ones and there is
+no second site in which a shell-local decision could sit — the route the runtime arm already took. What a text
+reader could still have said truthfully is narrow — that the body reaches its constitution only through the
+declared accessors — and that was never the obligation.
+
+The property therefore stands where the equality does: stated as a construction in this requirement rather
+than as a scenario, because a scenario asserting it could not fail. The cost is one clone of the declared
+bundle per run, the same price the runtime arm pays for its `to_vec`.
 
 #### Scenario: Empty semantic boundaries through the public semantic entry point
 
@@ -120,16 +125,6 @@ accepting the shape it existed to refuse.
 
 - **WHEN** a semantic observer has no boundaries and receives a path that cannot be read
 - **THEN** it returns `Clean` by delegating to the public semantic entry point
-
-#### Scenario: Whether the shell makes an independent semantic decision is not observed — a stated bound
-
-- **WHEN** the shell's composition function decides semantic emptiness itself rather than delegating
-- **THEN** nothing reacts — a stated bound, and a declared false negative this repository owns. A text reader
-  over the composition body was built, hardened across four review rounds and defeated at every level: name
-  resolution, the parameter's binding site, the identity of the definition, the caller frame, and execution,
-  which no reading of text reaches at all. The bound carries no pinning test because there is no reaction left
-  to demonstrate a gap in; it is tracked instead, and closing it means holding the property by construction
-- **UNPINNED** `BACKLOG.md` — *the shell's semantic delegation, held by construction*
 
 ### Requirement: The built-in path SHALL keep its behaviour, and the two paths SHALL be held equal
 
@@ -175,10 +170,16 @@ attribute beginning with `#` remains executed Rust text.
 
 Where the built-in path obtains a dimension's outcome **by invoking that dimension's observer**, equality for
 that dimension holds **by construction rather than by observation**, and the spec SHALL say which dimensions
-those are — otherwise a reader takes a constructed equality for a measured one. The runtime dimension is
-currently such a case: the built-in path delegates to `RuntimeObserver`, so its two copies of the corpus
-derivation, the audit call and the `cannot read workspace` message become one. The static and semantic
-dimensions remain independently implemented on both sides, and for them the reaction's equality is observed.
+those are — otherwise a reader takes a constructed equality for a measured one. The **runtime** and
+**semantic** dimensions are such cases: the built-in path invokes `RuntimeObserver` and `SemanticObserver`, so
+for runtime its two copies of the corpus derivation, the audit call and the `cannot read workspace` message
+become one, and for semantic there is no second call site in which a shell-local decision could sit. The
+**static** dimension remains independently implemented on both sides — the built-in path calls
+`check_and_cover`, the observer calls `check` — and for it the reaction's equality is observed.
+
+Where a dimension's equality is construction-held, the reaction SHALL still observe that the fixture's boundary
+for that dimension **reacts at all**. Otherwise an arm that quietly went vacuous would leave the whole
+comparison resting on the dimensions that did not.
 
 #### Scenario: The trait-driven fold disagrees with the existing path
 
