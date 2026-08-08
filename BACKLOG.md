@@ -379,6 +379,62 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **WATCH: a rejected observation point is recorded only in prose, and prose reaches no agent at the moment of
+  temptation.** *Observed pressure:* rejections of whole detectors and approaches are scattered across doc
+  comments, `AGENTS.md`, `BACKLOG.md` and spec prose in several non-overlapping phrasings, with nothing
+  enumerating them. **No count is given, and one should not be.** Three were attempted and each was wrong within
+  hours: the first stated a figure from a wider pattern set than the method it published, the second was
+  falsified by this entry's own correction commit — which added two `was rejected` quotes to `BACKLOG.md`, one of
+  the files any such scan reads — and every version miscounted in both directions, matching defects that merely
+  describe something being dropped while missing rejections phrased another way. A grep over prose cannot census
+  rejections, which is the entry's own point turned on itself. To look at the population rather than count it:
+  `git grep -niE 'measured and rejected|was rejected|was dropped|would false-positive'` — one line, because a
+  wrapped command's first half ran on its own and returned a silent zero. It is a starting point, not a census:
+  its output includes this entry's own text and misses whatever is phrased differently. *Observation source:* reading that output, 2026-08-07, not a figure from it.
+  *Current reaction or bound:* none enumerates them, though
+  `docs/observation-bounds.md` shows the practice already reaching a generated projection by hand — it carries
+  one refused approach with its measurement ("scanning paragraphs instead of lines … would not have caught it").
+  One instance in a projection is the pattern existing without being enumerated, not the gap being closed.
+  *Risk:* a rejection is re-proposed, re-measured and re-rejected; the reverse risk is equally real and is why
+  this is WATCH rather than READY — see the trigger. *Promotion trigger:* **not fired.** The candidate evidence
+  points both ways. `scripts/check_bound_register.sh:399` records that the harness enumeration "was rejected
+  TWICE in this file's own comments, on an unmeasured premise", then measured at 107ms cold and adopted — a
+  rejection that a later reader *did* consult and correctly overturn, which argues that a durable, projected
+  register would have entrenched a wrong answer twice. The trigger is a rejection demonstrably **re-proposed and
+  re-measured** by someone who could not find the record, evidenced by a tree artefact rather than by a report
+  from inside the work. *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
+  `observation-bound-register`, whose spec records two rejections in this shape — "declaring once was rejected"
+  and "Keying on statement similarity was rejected rather than overlooked" — so the practice is that
+  capability's, while nothing carries it into an agent's context. The phrasing that names the purpose
+  ("recorded as rejected rather than left to be re-proposed") is in `CHANGELOG.md`, not in a spec, which is part
+  of the observation.
+  *Shape, if it fires:* another instance of the enumerate → react → audit cycle beside those
+  `projection-register` enumerates, not a new crate and not the separate ADR file class `AGENTS.md` forbids.
+  Two constraints the survey already forces on the record type: separate the **load-bearing** reason from the
+  **incidental** evidence — `AGENTS.md`'s prose-detector rejection leads with four closable false positives and
+  buries the one unclosable false negative — and make strength **derived** from structural facts rather than
+  authored, the way `Extent::demonstrates` is, so it cannot be self-assessed.
+
+- **WATCH: the rule shape the self-law relies on most is absent from `examples/`.**
+  *Observed pressure:* `restrict_dependencies_to` carries six of the eleven boundaries in `AGENTS.self-law.md`
+  and appears **zero** times anywhere under `examples/` (`grep -rc restrict_dependencies_to examples/`). Examples are the 潛移 imitation surface, so the allowlist shape the project
+  governs itself with is one an adopter running the dogfood never meets. Narrow deliberately: `COOKBOOK.md` is
+  also an imitation surface and *does* carry copyable recipes using it, so the pressure is the executable
+  examples specifically, not the teaching surface as a whole — an earlier draft claimed the wider thing and was
+  wrong. *Observation source:* `grep -rc restrict_dependencies_to examples/` against
+  `grep -c 'restrict dependencies to' AGENTS.self-law.md` — note the two spellings, the DSL method and the
+  projection's rendering; a grep for the method name against the projection returns zero and means nothing.
+  Read 2026-08-07.
+  *Current reaction or bound:* none. *Risk:* an adopter imitates what the examples show. *Promotion trigger:* an
+  example is added or revised for another reason, at which point the shape is chosen deliberately rather than by
+  omission. *Version class:* patch; `examples/` ships in no crate. *Authority:* `governance-dogfood`, which owns
+  the examples' reaction. *Explicitly not claimed:* that enumerated denylists are wrong, or that the self-law
+  avoids them. It does not — its inline-symbol-path confinements each carry an enumerated verb list, and
+  `inline-symbol-path-confinement` already declares the unlisted remainder as a bound the adopter owns. An
+  earlier draft of this entry claimed the opposite on four counts and was corrected by review; what survives is
+  the absence above and nothing more.
+
+
 - **WATCH:**
   - **A `#[path]`-shared test module's `allow(dead_code)` cannot distinguish "used by no binary" from "used by
     some".** *Observed pressure:* `crates/tianheng/tests/support/` is compiled fresh into each `*_conformance.rs`
