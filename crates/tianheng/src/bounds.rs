@@ -477,8 +477,15 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // three of these cite `tests/release_coherence.rs`, a file that exists for them. The twin defends each
         // of the three too, through the same fixture builder, and cannot be cited.
         //
-        // Every extent below is read off a run of that limit's own WHEN. The fourth has no mechanical WHEN to
-        // run, and is unpinned for that reason rather than deferred.
+        // Every extent below is read off a run of that limit's own WHEN. One has no mechanical WHEN to run and
+        // is unpinned for that reason rather than deferred.
+        //
+        // A sixth was declared here and RETIRED in the same window: while the scan compared whole backticked
+        // spans, a gate named as unquoted prose passed, and that was declared. Adversarial review reproduced
+        // three false negatives against the span reading — a span carrying a command, a double-backtick span,
+        // an inline span wrapped across a line — and the word-run scan that closes all three reaches unquoted
+        // prose too. Its WHEN was rerun against the new tree and the reaction fires, which is what retires a
+        // bound rather than an argument that it should have closed.
         BoundDecl::pinned(
             BoundId::new(
                 "release-coherence/a-dated-release-section-names-a-gate-a-stated-bound",
@@ -492,20 +499,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                     .into(),
             }),
             "a_dated_section_naming_a_gate_is_a_stated_bound",
-        ),
-        BoundDecl::pinned(
-            BoundId::new(
-                "release-coherence/a-gate-named-as-bare-prose-a-stated-bound",
-            ),
-            "an adopter-facing entry naming a gate as ordinary prose rather than as a backticked token",
-            Extent::Reached(Reached::UnderReacts {
-                because: "recognition is by token, so the leak the rule exists to stop passes unseen when the \
-                          name is unquoted; widening to a bare substring would fire on any sentence carrying \
-                          the characters, trading a declared blindness for an undeclared false-positive surface"
-                    .into(),
-                owner: Owner::Engine,
-            }),
-            "a_gate_named_as_bare_prose_is_a_stated_bound",
         ),
         BoundDecl::pinned(
             BoundId::new(
@@ -536,6 +529,50 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 owner: Owner::Engine,
             }),
             "`BACKLOG.md` — *the self-governance residual is a judgement over an entry's subject*",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "release-coherence/a-basename-an-entry-writes-for-another-reason-a-stated-bound",
+            ),
+            "an adopter-facing entry naming a file of its own whose basename the judged repository also tracks \
+             under `scripts/`",
+            Extent::Reached(Reached::OverReacts {
+                because: "a word is matched against basenames as well as paths, because the document cites \
+                          both forms; narrowing it to full paths would lose every bare citation, and deciding \
+                          which of two files a bare name means is a judgement about the sentence rather than \
+                          about the reference"
+                    .into(),
+            }),
+            "a_colliding_basename_is_a_stated_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "release-coherence/a-name-reached-only-through-a-url-a-stated-bound",
+            ),
+            "an adopter-facing entry naming machinery only inside a URL",
+            Extent::Reached(Reached::UnderReacts {
+                because: "a word is a maximal run of path characters, so a scheme and host fuse with the path \
+                          into one run that equals no tracked name; splitting a URL into its path would make \
+                          the reaction judge a foreign host's layout as though it were this repository's"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_name_reached_only_through_a_url_is_a_stated_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound",
+            ),
+            "a `### ` line inside a fenced code block, followed by entries that name machinery",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the reaction walks the document's line grammar and does not track fences, so such a \
+                          line sets the heading in force and can name the one exempt heading; it is latent \
+                          rather than live — this repository's changelog carries no fenced block — and closing \
+                          it means a second, stateful reading of a document this gate reads once"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_heading_inside_a_fenced_block_is_a_stated_bound",
         ),
     ]
 }

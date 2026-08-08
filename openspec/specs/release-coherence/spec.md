@@ -157,8 +157,9 @@ to a tracked file there.
 
 `CHANGELOG.md` is the adopter's document, and every heading it offers — `### Added`, `### Changed`,
 `### Fixed`, `### Migration` — is an adopter's vocabulary. It offers no heading that is not, so every
-change to this repository's own governance machinery has been written into one of them. Measured: eleven
-entries whose subject is a gate, in a directory that ships in **zero** packages.
+change to this repository's own governance machinery has been written into one of them. Measured: nineteen
+entries name it — ten in `[Unreleased]` and nine in the released `[0.4.0]` — for a directory that ships in
+**zero** packages.
 
 The `[Unreleased]` section SHALL be permitted a `### Self-governance` heading,
 under which naming that machinery is what belongs; a heading is adopter-facing when it is any `### `
@@ -166,7 +167,18 @@ heading **other than** that one, so a heading nobody anticipated is adopter-faci
 
 The basename form SHALL be decided against the enumerator and never against a list of gate names written
 beside it. A hand-kept list lets a new script be added and never measured, which is the register's own
-prohibition rather than a stylistic call.
+prohibition rather than a stylistic call. For the same reason no count of that enumeration SHALL be written
+into the reaction: a census is produced, never typed, and the first draft of this reaction carried one that
+the commit adding it made stale.
+
+A name SHALL be recognised as a **word** — a maximal run of path characters, required to equal a tracked
+path or basename. That is exact matching of a lexical token rather than substring matching: a sentence
+merely containing the characters cannot match, because the run is delimited by the first character a path
+cannot hold. The rule was first written to compare whole **backticked spans**, and adversarial review
+reproduced three false negatives against that reading, every one a shape this repository's own changelog
+already uses — a span carrying anything besides the bare path, a double-backtick span, and an inline span
+wrapped across a source line. Reading words closes all three and reaches a markdown link target the span
+reading never could.
 
 This sits on the **decidable** side of the line this capability already draws for itself: a path citation
 is a reference, and reference resolution over `CHANGELOG.md` is already mechanical. Whether an entry's
@@ -193,6 +205,13 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
 - **WHEN** an entry under an adopter-facing heading names `check_pin_bites.sh` with no directory
 - **THEN** the reaction fails, because `git ls-files scripts/` resolves that basename to a tracked file
 
+#### Scenario: A gate named inside a longer span, or as unquoted prose
+
+- **WHEN** an entry under an adopter-facing heading writes `` `bash scripts/check_pin_bites.sh --fix` ``, or
+  `` `` `scripts/check_pin_bites.sh` `` ``, or a span wrapped across a source line, or a markdown link whose
+  target is the gate, or the bare name with no backticks at all
+- **THEN** the reaction fails in every one of those, because the word is the unit rather than the span
+
 #### Scenario: A bare basename the enumerator does not resolve
 
 - **WHEN** an entry under an adopter-facing heading names `check_something_that_does_not_exist.sh`
@@ -206,15 +225,6 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
   satisfy a rule written afterwards would falsify the record — the same reason `docs/history/` is left
   alone. The blindness is the scope, deliberately chosen and pinned rather than inferred
 - **PINNED-BY** `a_dated_section_naming_a_gate_is_a_stated_bound`
-
-#### Scenario: A gate named as bare prose — a stated bound
-
-- **WHEN** an entry under an adopter-facing heading names a gate as ordinary prose rather than as a
-  backticked token
-- **THEN** nothing reacts, and the leak the rule exists to stop passes unseen. Widening to a bare
-  substring would fire on any sentence carrying the characters, trading a declared blindness for an
-  undeclared false-positive surface
-- **PINNED-BY** `a_gate_named_as_bare_prose_is_a_stated_bound`
 
 #### Scenario: Machinery the judged repository tracks by nothing — a stated bound
 
@@ -249,3 +259,28 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
   leak — and it SHALL reach that verdict by having nothing to match. Keying the parser on the record
   number rather than on the input file makes an empty enumeration consume the changelog itself, after
   which the section vacuity guard refuses a document the reaction never read
+
+#### Scenario: A basename an entry writes for another reason — a stated bound
+
+- **WHEN** an adopter-facing entry names a file of its own whose basename the judged repository also tracks
+  under `scripts/`
+- **THEN** the reaction **fails**, refusing an innocent entry. The direction is the safe one — an author
+  meets a refusal to argue with — and narrowing it means deciding which of two files a bare name meant,
+  a judgement about the sentence rather than about the reference
+- **PINNED-BY** `a_colliding_basename_is_a_stated_bound`
+
+#### Scenario: A name reached only through a URL — a stated bound
+
+- **WHEN** an adopter-facing entry names machinery only inside a URL
+- **THEN** nothing reacts. A word is a maximal run of path characters, so a scheme and host fuse with the
+  path into one run that equals no tracked name; splitting a URL into its path would make the reaction judge
+  a foreign host's layout as though it were this repository's
+- **PINNED-BY** `a_name_reached_only_through_a_url_is_a_stated_bound`
+
+#### Scenario: A heading inside a fenced code block — a stated bound
+
+- **WHEN** a `### ` line sits inside a fenced code block, followed by entries that name machinery
+- **THEN** nothing reacts for those entries, because that line set the heading in force and may name the one
+  exempt heading. The reaction walks the document's line grammar and does not track fences; it is latent
+  rather than live, this repository's changelog carrying no fenced block at all
+- **PINNED-BY** `a_heading_inside_a_fenced_block_is_a_stated_bound`

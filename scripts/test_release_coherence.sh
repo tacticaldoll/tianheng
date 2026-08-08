@@ -230,15 +230,95 @@ EDIT
 coherence_fixture_commit "$dated_names_path" 'docs: a dated section names a gate'
 expect_pass "$dated_names_path" 'development: 0.2.0'
 
-# Recognition is by token. A bare substring matcher would fire on any sentence containing the characters,
-# trading a declared blindness for an undeclared false-positive surface.
+# Recognition is by WORD — a maximal run of path characters, required to EQUAL a tracked name. An unquoted
+# name is still a word, so it reacts; this direction was `expect_pass` while the rule read whole backticked
+# spans, and adversarial review retired that reading along with the bound it carried.
 unquoted_prose=$(coherence_fixture_repo "$fixture_root" unquoted-prose)
 coherence_fixture_development_changelog "$unquoted_prose" 0.2.0
 coherence_fixture_machinery "$unquoted_prose"
 coherence_fixture_unreleased_body "$unquoted_prose" '### Fixed
 - A repair to the check_pin_bites.sh gate, written as prose rather than as a token.'
 coherence_fixture_commit "$unquoted_prose" 'docs: name a gate as bare prose'
-expect_pass "$unquoted_prose" 'development: 0.2.0'
+expect_fail "$unquoted_prose" 1 "names this repository's own machinery"
+
+# The three false negatives adversarial review reproduced against the whole-span reading, each a shape this
+# repository's own changelog already uses. Every one passed clean before the scan read words.
+span_carries_a_command=$(coherence_fixture_repo "$fixture_root" span-carries-a-command)
+coherence_fixture_development_changelog "$span_carries_a_command" 0.2.0
+coherence_fixture_machinery "$span_carries_a_command"
+coherence_fixture_unreleased_body "$span_carries_a_command" '### Fixed
+- Run `bash scripts/check_pin_bites.sh --fix` and `./scripts/check_pin_bites.sh` to repair.'
+coherence_fixture_commit "$span_carries_a_command" 'docs: name a gate inside a longer span'
+expect_fail "$span_carries_a_command" 1 "names this repository's own machinery"
+
+# A double-backtick span, which is how this section already writes a span containing backticks. The old regex
+# mispaired on it and swallowed the path.
+nested_span=$(coherence_fixture_repo "$fixture_root" nested-span)
+coherence_fixture_development_changelog "$nested_span" 0.2.0
+coherence_fixture_machinery "$nested_span"
+coherence_fixture_unreleased_body "$nested_span" '### Fixed
+- A repair naming `` `scripts/check_pin_bites.sh` `` in a nested span.'
+coherence_fixture_commit "$nested_span" 'docs: name a gate in a nested span'
+expect_fail "$nested_span" 1 "names this repository's own machinery"
+
+# An inline span wrapped across a source line: the continuation line went unscanned, a shape live on three
+# lines of the governed section.
+wrapped_span=$(coherence_fixture_repo "$fixture_root" wrapped-span)
+coherence_fixture_development_changelog "$wrapped_span" 0.2.0
+coherence_fixture_machinery "$wrapped_span"
+coherence_fixture_unreleased_body "$wrapped_span" '### Fixed
+- A repair naming `scripts/check_pin_bites.sh
+  ` across a wrapped span.'
+coherence_fixture_commit "$wrapped_span" 'docs: wrap a span across a line'
+expect_fail "$wrapped_span" 1 "names this repository's own machinery"
+
+# A markdown link target, which the span reading could never reach and this one does.
+link_target=$(coherence_fixture_repo "$fixture_root" link-target)
+coherence_fixture_development_changelog "$link_target" 0.2.0
+coherence_fixture_machinery "$link_target"
+coherence_fixture_unreleased_body "$link_target" '### Fixed
+- A repair naming [the gate](scripts/check_pin_bites.sh).'
+coherence_fixture_commit "$link_target" 'docs: name a gate as a link target'
+expect_fail "$link_target" 1 "names this repository's own machinery"
+
+# A basename the judged repository tracks and an entry writes for another reason. The refusal is real and the
+# entry is innocent — an over-reaction, declared rather than narrowed, because narrowing it needs a judgement
+# about which of two files a name means.
+colliding_basename=$(coherence_fixture_repo "$fixture_root" colliding-basename)
+coherence_fixture_development_changelog "$colliding_basename" 0.2.0
+mkdir -p "$colliding_basename/scripts"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$colliding_basename/scripts/publish.sh"
+coherence_fixture_unreleased_body "$colliding_basename" '### Fixed
+- Adopters run their own `publish.sh` after upgrading.'
+coherence_fixture_commit "$colliding_basename" 'docs: write a name the repository also tracks'
+expect_fail "$colliding_basename" 1 "names this repository's own machinery"
+
+# Reached only through a URL: the run is delimited by the first character a path cannot hold, so a scheme and
+# host fuse into one word that equals nothing. A declared bound.
+url_only=$(coherence_fixture_repo "$fixture_root" url-only)
+coherence_fixture_development_changelog "$url_only" 0.2.0
+coherence_fixture_machinery "$url_only"
+coherence_fixture_unreleased_body "$url_only" '### Fixed
+- See https://github.com/tacticaldoll/tianheng/blob/main/scripts/check_pin_bites.sh for the gate.'
+coherence_fixture_commit "$url_only" 'docs: reach a gate only through a URL'
+expect_pass "$url_only" 'development: 0.2.0'
+
+# A `###` line inside a fenced code block is read as a heading, so it reattributes every entry after it. The
+# gate walks the document's line grammar and does not track fences. Latent rather than live — this
+# repository's changelog carries no fenced block — and declared for that reason rather than fixed.
+fenced_heading=$(coherence_fixture_repo "$fixture_root" fenced-heading)
+coherence_fixture_development_changelog "$fenced_heading" 0.2.0
+coherence_fixture_machinery "$fenced_heading"
+coherence_fixture_unreleased_body "$fenced_heading" '### Fixed
+- A repair.
+
+```
+### Self-governance
+```
+
+- A later repair naming `scripts/check_pin_bites.sh`.'
+coherence_fixture_commit "$fenced_heading" 'docs: put a heading inside a fence'
+expect_pass "$fenced_heading" 'development: 0.2.0'
 
 # A repository tracking NO machinery has nothing an entry could leak, so it is clean — and it must reach that
 # verdict by having nothing to match. Keyed on `NR == FNR`, an empty enumeration makes awk consume the

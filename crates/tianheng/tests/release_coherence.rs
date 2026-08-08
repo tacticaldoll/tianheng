@@ -144,49 +144,6 @@ EDIT
     );
 }
 
-/// `release-coherence/a-gate-named-as-bare-prose-a-stated-bound`
-///
-/// `UnderReacts`, owned by the engine. Recognition is by token — a backticked span — so an entry naming a gate
-/// as ordinary prose leaks exactly what the rule exists to stop and nothing reacts. Widening to a bare substring
-/// would fire on any sentence containing the characters, trading a declared blindness for an undeclared
-/// false-positive surface, which is the wrong direction under the Core Contract.
-#[test]
-fn a_gate_named_as_bare_prose_is_a_stated_bound() {
-    let Some(root) = workspace_root() else {
-        return;
-    };
-    let scripts = root.join("scripts");
-    let temp = scratch("prose");
-
-    let repo = fixture(
-        &scripts,
-        &temp,
-        r#"repo=$(coherence_fixture_repo "$2" prose)
-           coherence_fixture_development_changelog "$repo" 0.2.0
-           coherence_fixture_machinery "$repo"
-           coherence_fixture_unreleased_body "$repo" '### Fixed
-- A repair to the check_pin_bites.sh gate, written as prose rather than as a token.'
-           coherence_fixture_commit "$repo" 'docs: name a gate as bare prose' >/dev/null
-           printf '%s\n' "$repo""#,
-    );
-
-    let changelog = std::fs::read_to_string(PathBuf::from(&repo).join("CHANGELOG.md"))
-        .expect("the fixture's changelog is readable");
-    assert!(
-        changelog.contains(" check_pin_bites.sh gate")
-            && !changelog.contains("`check_pin_bites.sh`"),
-        "the fixture must name the gate WITHOUT backticks, or it demonstrates the reaction rather than the bound"
-    );
-
-    let (code, output) = gate(&scripts, &repo);
-    let _ = std::fs::remove_dir_all(&temp);
-    assert_eq!(
-        code,
-        Some(0),
-        "the gate must stay silent about a gate named as bare prose — that is the declared bound. Got: {output}"
-    );
-}
-
 /// `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound`
 ///
 /// `UnderReacts`, owned by the engine. The enumeration is `git ls-files scripts/`, so an untracked `scripts/`
@@ -230,6 +187,124 @@ fn machinery_tracked_by_nothing_is_a_stated_bound() {
         code,
         Some(0),
         "the gate must stay silent about machinery no commit tracks — that is the declared bound. Got: {output}"
+    );
+}
+
+/// `release-coherence/a-basename-an-entry-writes-for-another-reason-a-stated-bound`
+///
+/// `OverReacts`. A word is matched against basenames as well as paths, because the document cites both forms.
+/// An entry naming a file of its own whose basename this repository also tracks under `scripts/` is refused,
+/// and the entry is innocent. The direction is the safe one — an author meets a refusal to argue with — and
+/// narrowing it means deciding which of two files a bare name meant, a judgement about the sentence.
+#[test]
+fn a_colliding_basename_is_a_stated_bound() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let scripts = root.join("scripts");
+    let temp = scratch("collide");
+
+    let repo = fixture(
+        &scripts,
+        &temp,
+        r#"repo=$(coherence_fixture_repo "$2" collide)
+           coherence_fixture_development_changelog "$repo" 0.2.0
+           mkdir -p "$repo/scripts"
+           printf '#!/usr/bin/env bash\nexit 0\n' >"$repo/scripts/publish.sh"
+           coherence_fixture_unreleased_body "$repo" '### Fixed
+- Adopters run their own `publish.sh` after upgrading.'
+           coherence_fixture_commit "$repo" 'docs: write a name the repository also tracks' >/dev/null
+           printf '%s\n' "$repo""#,
+    );
+
+    let (code, output) = gate(&scripts, &repo);
+    let _ = std::fs::remove_dir_all(&temp);
+    assert_eq!(
+        code,
+        Some(1),
+        "the gate must refuse an innocent entry whose word collides with a tracked basename — that is the \
+         declared over-reaction, and silence here would mean the bound had closed. Got: {output}"
+    );
+    assert!(
+        output.contains("publish.sh"),
+        "the refusal must name the colliding word, or it demonstrates some other refusal: {output}"
+    );
+}
+
+/// `release-coherence/a-name-reached-only-through-a-url-a-stated-bound`
+///
+/// `UnderReacts`, owned by the engine. A word is a maximal run of path characters, so a scheme and host fuse
+/// with the path into one run that equals no tracked name. Splitting a URL into its path would make the
+/// reaction judge a foreign host's layout as though it were this repository's.
+#[test]
+fn a_name_reached_only_through_a_url_is_a_stated_bound() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let scripts = root.join("scripts");
+    let temp = scratch("url");
+
+    let repo = fixture(
+        &scripts,
+        &temp,
+        r#"repo=$(coherence_fixture_repo "$2" url)
+           coherence_fixture_development_changelog "$repo" 0.2.0
+           coherence_fixture_machinery "$repo"
+           coherence_fixture_unreleased_body "$repo" '### Fixed
+- See https://github.com/tacticaldoll/tianheng/blob/main/scripts/check_pin_bites.sh for the gate.'
+           coherence_fixture_commit "$repo" 'docs: reach a gate only through a URL' >/dev/null
+           printf '%s\n' "$repo""#,
+    );
+
+    let (code, output) = gate(&scripts, &repo);
+    let _ = std::fs::remove_dir_all(&temp);
+    assert_eq!(
+        code,
+        Some(0),
+        "the gate must stay silent about a name reached only through a URL — that is the declared bound. \
+         Got: {output}"
+    );
+}
+
+/// `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound`
+///
+/// `UnderReacts`, owned by the engine. The reaction walks the document's line grammar and does not track
+/// fences, so a `### ` line inside a fenced block sets the heading in force — and can name the one exempt
+/// heading, hiding every entry after it. Latent rather than live: this repository's changelog carries no
+/// fenced block at all.
+#[test]
+fn a_heading_inside_a_fenced_block_is_a_stated_bound() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let scripts = root.join("scripts");
+    let temp = scratch("fenced");
+
+    let repo = fixture(
+        &scripts,
+        &temp,
+        r####"repo=$(coherence_fixture_repo "$2" fenced)
+           coherence_fixture_development_changelog "$repo" 0.2.0
+           coherence_fixture_machinery "$repo"
+           coherence_fixture_unreleased_body "$repo" '### Fixed
+- A repair.
+
+```
+### Self-governance
+```
+
+- A later repair naming `scripts/check_pin_bites.sh`.'
+           coherence_fixture_commit "$repo" 'docs: put a heading inside a fence' >/dev/null
+           printf '%s\n' "$repo""####,
+    );
+
+    let (code, output) = gate(&scripts, &repo);
+    let _ = std::fs::remove_dir_all(&temp);
+    assert_eq!(
+        code,
+        Some(0),
+        "the gate must stay silent when a fenced heading reattributes a later entry — that is the declared \
+         bound. Got: {output}"
     );
 }
 

@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**13 of 75 declared bounds have no pinning test.** That figure is the register's
+**13 of 77 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -277,12 +277,6 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
 
-### `release-coherence/a-gate-named-as-bare-prose-a-stated-bound`
-
-> nothing reacts, and the leak the rule exists to stop passes unseen. Widening to a bare
-
-- **pinned by**: `a_gate_named_as_bare_prose_is_a_stated_bound`
-
 ### `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound`
 
 > nothing reacts. The enumeration is `git ls-files scripts/`, so an untracked `scripts/` reads
@@ -294,6 +288,24 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing reacts. Reaching it needs a judgement over the entry's subject rather than over its
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the self-governance residual is a judgement over an entry's subject*
+
+### `release-coherence/a-basename-an-entry-writes-for-another-reason-a-stated-bound`
+
+> the reaction **fails**, refusing an innocent entry. The direction is the safe one — an author
+
+- **pinned by**: `a_colliding_basename_is_a_stated_bound`
+
+### `release-coherence/a-name-reached-only-through-a-url-a-stated-bound`
+
+> nothing reacts. A word is a maximal run of path characters, so a scheme and host fuse with the
+
+- **pinned by**: `a_name_reached_only_through_a_url_is_a_stated_bound`
+
+### `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound`
+
+> nothing reacts for those entries, because that line set the heading in force and may name the one
+
+- **pinned by**: `a_heading_inside_a_fenced_block_is_a_stated_bound`
 
 ## runtime-origin-assertion
 

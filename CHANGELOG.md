@@ -778,10 +778,23 @@ no adopter runs. They are here rather than under the adopter headings above beca
   looked right until the citation population was enumerated: all fifteen paths this section cites ship in no
   package, `COOKBOOK.md` and `docs/*.md` among them, and those are adopter surface anyway. The replacement is
   narrower and not a proxy. Where the adopter-relevant fact is genuinely present the rule forces a **rewrite**
-  rather than a move — the publish-provenance entry above now states the guarantee and names no file. Four
-  limits are declared, three pinned against a fixture built by one shared builder rather than a second
-  construction, and one — an entry about governance naming no machinery — unpinned, because reaching it needs a
-  judgement over an entry's subject rather than its references.
+  rather than a move — the publish-provenance entry above now states the guarantee and names no file.
+
+  The **second** rule was falsified too, by adversarial review rather than by enumeration. It compared whole
+  backticked spans, and three shapes this section already uses passed clean: a span carrying anything besides
+  the bare path (`` `bash scripts/check_pin_bites.sh --fix` ``), a double-backtick span (four live in this
+  section), and an inline span wrapped across a source line (three live). A name is now a **word** — a maximal
+  run of path characters, required to equal a tracked name — which closes all three, reaches a markdown link
+  target the span reading never could, and retires the declared bound about unquoted prose by making it react.
+  Review also caught the reaction stating a **count** of its own enumeration, gone stale by exactly the file
+  this change added; a census is produced, never typed, and no count is written there now.
+
+  Six limits are declared, five pinned against fixtures built by one shared builder rather than a second
+  construction. Two of the five are new false negatives found by the same review — a name reached only through
+  a URL, and a `###` line inside a fenced block reattributing every entry after it — and one is the
+  over-reaction the word rule buys: a basename an entry writes for a reason of its own. The unpinned one is an
+  entry about governance naming no machinery, because reaching it needs a judgement over an entry's subject
+  rather than its references.
 - **`check_release_coherence.sh` now reads each release section's internal consistency, not only the
   changelog's state.** Two defects of that shape landed in one window and nothing saw either: an `[Unreleased]`
   grew a second `### Changed` heading three hundred lines from the first, and a prose claim about which prior

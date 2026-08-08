@@ -329,10 +329,11 @@ changelog_sections() {
     awk '
         # First input: the machinery enumeration. Both the full path and the bare basename are recognised,
         # because the document cites both forms — `scripts/check_publish_source.sh` and `check_pin_bites.sh`.
-        # Measured at the time this was written: none of the 26 basenames under `scripts/` collides with a
-        # filename anywhere else in the tree, so the bare form names machinery unambiguously. A future
-        # collision would make this fire on a citation of the colliding file — a false positive, which is the
-        # safe direction and the one an author meets as a refusal rather than as silence.
+        # No count of that enumeration is written here: a census is produced, never typed, and the first draft
+        # of this comment stated one that the very commit adding it made stale.
+        #
+        # A basename colliding with a file an entry names for another reason would make this fire on that
+        # citation — a false positive, the safe direction, and declared as a bound rather than left implicit.
         # Keyed on FILENAME rather than on `NR == FNR`, and that is load-bearing. With an EMPTY enumeration
         # file, `NR == FNR` holds for every line of the *changelog* — awk consumes the document as its own
         # enumerator and emits no record at all. Measured against that keying rather than argued: the gate then
@@ -350,16 +351,31 @@ changelog_sections() {
         section == "" { next }
         /^### / { heading = substr($0, 5); printf "HEADING\t%s\t%s\n", section, heading }
         /\*\*BREAKING\*\*/ { printf "BREAKING\t%s\n", section }
-        # Recognition is by TOKEN — a backticked span — never by a bare substring. A substring match would fire
-        # on any sentence that happens to contain the characters, trading a declared blindness for an
-        # undeclared false-positive surface. Attribution is line -> heading in force -> section, which is the
-        # document grammar this gate already walks: every line of a list item sits under the same heading as
-        # its first, so item boundaries buy nothing the heading does not already give.
+        # Recognition is by WORD — a maximal run of path characters — and each run must EQUAL a tracked path or
+        # basename. That is exact matching of a lexical token, not substring matching: no sentence merely
+        # containing the characters can match, because the run is delimited by the first character a path
+        # cannot hold.
+        #
+        # It reads a run rather than a whole backticked span, and that was measured rather than preferred. The
+        # span rule was written first and adversarial review reproduced three false negatives against it, every
+        # one of them a shape this document already uses: a span carrying anything besides the bare path
+        # (`bash scripts/check_pin_bites.sh`, `scripts/check_pin_bites.sh --fix`, `./scripts/…`) compared
+        # unequal and passed; a double-backtick span — the section already holds four — mispaired the regex and
+        # swallowed the path; and an inline span wrapped across a source line left its continuation unscanned,
+        # a shape live on three lines of the governed section. Reading runs closes all three at once and
+        # reaches a markdown link target as well, which the span rule never could.
+        #
+        # Attribution is line -> heading in force -> section, which is the document grammar this gate already
+        # walks: every line of a list item sits under the same heading as its first, so item boundaries buy
+        # nothing the heading does not already give.
         {
             rest = $0
-            while (match(rest, /`[^`]+`/)) {
-                token = substr(rest, RSTART + 1, RLENGTH - 2)
+            while (match(rest, /[A-Za-z0-9_.\/-]+/)) {
+                token = substr(rest, RSTART, RLENGTH)
                 rest = substr(rest, RSTART + RLENGTH)
+                # A leading `./` and trailing sentence punctuation belong to the prose, not to the name.
+                sub(/^\.\//, "", token)
+                sub(/\.+$/, "", token)
                 if (token in paths || token in bases)
                     printf "CITATION\t%s\t%s\t%s\n", section, heading, token
             }
