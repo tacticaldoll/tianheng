@@ -139,6 +139,34 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // citation's pin *bites* only where a mutation is declared for it; where none is, nothing decides.
         BoundDecl::unpinned(
             BoundId::new(
+                "observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound",
+            ),
+            "a cited pin whose assertions are removed in the working directory and not committed",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the checkout under test is HEAD's content, because mutating the author's own \
+                          checkout is what a separate checkout exists to avoid; the two properties are in \
+                          tension and this one is given up deliberately"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
+                "observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound",
+            ),
+            "a record naming the file its pin lives in and neutralising one of that pin's assertions",
+            Extent::Reached(Reached::UnderReacts {
+                because: "a killed pin does not say what killed it, and refusing a record that edits its \
+                          pin's own file would refuse this tree's first seeded record, which legitimately \
+                          perturbs a recognizer sitting beside the pin that defends it"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
                 "observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound",
             ),
             "a pinning citation for which no mutation is declared",

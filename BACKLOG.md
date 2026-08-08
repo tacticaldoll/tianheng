@@ -69,7 +69,10 @@ consumer for an undemonstrated deduplication.
   *Current reaction or bound:* `check_pin_bites.sh` over the declared mutations; nothing over the rest.
   *Risk:* a defence that has stopped defending is indistinguishable from one that has not, which is the failure
   the register was built to end one level down. *Promotion trigger:* fired — the gate exists; what remains is
-  coverage, which grows one considered record at a time. *What closing it costs, measured while seeding:* a
+  coverage, which grows one considered record at a time. That last claim was false while the tree under test
+  was an export of tracked content: a pin reading the repository through git failed its own control run, so no
+  record could ever exercise it — `units_outside_the_gate_pairing_are_outside_the_surface` was one. The tree is
+  a detached worktree now and the claim holds; the episode is kept because the entry's economics rest on it. *What closing it costs, measured while seeding:* a
   mutation must genuinely perturb the pinned point, and authoring one is per-bound expert work. One attempt
   during this change did not — masking a brace inside a block comment left the exact one-statement comparison
   refusing the body anyway, so the pin held and the record reported a biting pin as a dead one. That direction
@@ -121,7 +124,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **61 bounds across 22 capabilities** — a live figure rather than part of the measurement
+  currently holds **63 bounds across 22 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is

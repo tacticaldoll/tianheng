@@ -99,12 +99,14 @@ them.
   would be the reads-as-coverage failure it exists to end, one level up.
 
   Four properties of the arrangement are stated rather than left to the implementation, each measured. The tree
-  is built from tracked content, so an interrupted run has edited nothing. The build gets its **own** target
-  directory, because sharing a warm one was observed twice to run the cited test against a binary built from
-  other sources, after which *every* pin reports as **surviving** its mutation. That is the loud direction, so
-  the isolation is what makes the gate usable rather than what closes a hole — and the entry says what is not
-  claimed: a fixture-scale reproduction of the reuse did not occur, so nothing pins that requirement and its
-  cause is unsettled. A mutation that fails to compile, or whose anchor
+  is a detached **worktree** at HEAD, so an interrupted run has edited nothing of the author's — and, unlike an
+  export of tracked content, it carries a working repository, without which a pin that reads the repository
+  through git fails its own control run and no record can ever exercise it. The build gets its **own** target
+  directory because the gate's premise is that the binary under test was built from the *mutated* tree, and a
+  shared one has been seen to serve a binary that was not; which wrong verdict follows is deliberately not
+  claimed, since neither reproduction attempt produced one. What a killed pin does **not** prove — that the
+  record perturbed the reaction rather than the pin's own assertions — and what HEAD's content cannot see — a
+  pin gutted but not committed — are declared as bounds rather than left to be discovered. A mutation that fails to compile, or whose anchor
   matched zero or several times, is **cannot judge**: each describes a perturbation that was never applied,
   which is a different fact from a pin that does not bite. And the records are parsed **once** — counting them
   by one splitting rule and processing them by another let a file holding nothing to run exit 0, which is the
@@ -169,7 +171,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **61 bounds across 22 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **63 bounds across 22 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing

@@ -8,10 +8,12 @@
 # directory — made cargo rebuild and passed, so nothing here proves it. Naming that here beats an
 # `every` this file would not hold — the absolute-claim class this repository keeps closing.
 #
-# The fixtures are minimal cargo workspaces rather than worktrees of this one, and that is the point of the
+# The fixtures are minimal cargo workspaces rather than checkouts of this one, and that is the point of the
 # shape: the gate under test builds what it judges, so a fixture carrying this repository's dependency graph
 # would make each direction pay a cold workspace build. A single crate with one test and one recognizer holds
-# every property this gate has, and each direction runs in about a second.
+# every property exercised BELOW, and each direction runs in about a second — not every property the gate has:
+# the target-directory isolation has no direction here, and the two properties about what a killed pin does not
+# prove are declared bounds rather than behaviours to exhibit.
 #
 # Every assertion names the expected exit CODE rather than merely non-zero: this family separates a violation
 # (1) from a gate that cannot decide (2), and a matrix blind to that difference cannot defend it — measured in

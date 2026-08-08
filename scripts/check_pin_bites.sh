@@ -15,15 +15,18 @@
 #
 # Four properties of the arrangement are load-bearing, each measured:
 #
-#   * The tree is built from `git archive HEAD` — TRACKED content, the rule the register and the whitespace
-#     gate hold (the coherence gates read the worktree, so this is not a family-wide rule), and here it also
-#     keeps an interrupted run from having edited the author's files.
-#   * The build gets its OWN target directory. Sharing a warm one was observed twice to run the cited test
-#     against a binary built from other sources — never recompiled, `Finished` back in 0.01s — and the pin then
-#     reads as SURVIVING, a violation reported over every record. Loud rather than silent, so the isolation is
-#     what makes this gate usable; it costs one warm build. What is NOT claimed: a fixture-scale reproduction.
-#     Removing this export and pointing the gate at a directory pre-warmed from the same fixture made cargo
-#     rebuild, so the matrix has no direction for it and the cause of the two observations is unsettled.
+#   * The tree is a detached WORKTREE at HEAD, so the author's files are untouched whatever happens mid-run.
+#     Note what that is NOT: the sibling gates enumerate tracked PATHS with `git ls-files` and then read the
+#     worktree's content, deliberately — `check_whitespace_hygiene.sh`'s header calls reading anything else a
+#     false negative. This gate is the only one judging HEAD's content, and it inherits the matching blind
+#     spot: a pin gutted but not yet committed is invisible to it. Declared as a bound rather than left to be
+#     discovered.
+#   * The build gets its OWN target directory, because the gate's premise is that the binary under test was
+#     built from the mutated tree — a shared directory has been seen to serve one that was not, and a verdict
+#     over the wrong binary is not a verdict. That is the whole justification: attempts to reproduce a
+#     PARTICULAR wrong verdict from sharing landed on cannot-judge (the previous run's mutated binary fails the
+#     control) or on a correct clean run (cargo rebuilds), so no false-clean direction was found and none is
+#     claimed. The matrix has no direction for this requirement.
 #   * A mutation that breaks the BUILD is cannot-judge. `cargo test` exits non-zero for a compile error as
 #     well as for a failing assertion, so the two are separated by building first. Note what this buys: the
 #     exit CLASS is already 2 without it, because `ran_exactly_one` refuses a run that executed no test — the
@@ -34,6 +37,11 @@
 #
 # Each record is also run UNMUTATED first. Without that control a test that fails for its own reasons reads as
 # a pin that bites, which is the `f() == f()` shape this repository refuses elsewhere.
+#
+# What a killed pin does NOT prove: that the record perturbed the REACTION rather than the pin's own
+# assertions. A record naming the pin's file and neutralising one of its asserts kills it and counts as
+# coverage, and no reaction here can tell the two apart — the first seeded record edits the very file its pin
+# lives in, so a rule separating them would refuse the tree's own legitimate shape. Declared as a bound.
 #
 # Coverage is partial by construction and says so: a clean run prints how many distinct cited tests carry no
 # mutation. Authoring a mutation that genuinely perturbs the pinned point is expert work per bound, and a
@@ -137,11 +145,19 @@ cited_total=$(wc -l <"$citations.names")
 ((cited_total > 0)) \
     || cannot_judge "no PINNED-BY citation was read from the specs; a gate about citations that found none would report every mutation valid against an empty set"
 
-# The tree under test: tracked content at HEAD, with a target directory this gate owns.
+# The tree under test: tracked content at HEAD, as a **worktree** rather than an archive.
+#
+# `git archive | tar -x` was the first shape and it carries no `.git`, which makes some citations structurally
+# unreachable rather than merely uncovered: a pin that reads the repository through git fails its own CONTROL
+# run, so no record can ever exercise it. Measured — `units_outside_the_gate_pairing_are_outside_the_surface`
+# is one such citation, and the BACKLOG entry claiming coverage "grows one considered record at a time" was
+# false for it. A detached worktree is the same tracked content at HEAD with a working `.git`, and mutating it
+# still touches none of the author's files.
 tree=$work/tree
-mkdir -p "$tree"
-git archive HEAD | tar -x -C "$tree" \
-    || cannot_judge "could not materialize HEAD into a scratch tree; nothing was observed"
+git worktree add --quiet --detach "$tree" HEAD \
+    || cannot_judge "could not check out HEAD into a scratch worktree; nothing was observed"
+# The worktree is registered in the judged repository's `.git`, so it is pruned even on an abort.
+trap 'git worktree remove --force "$tree" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
 export CARGO_TARGET_DIR=$work/target
 export TIANHENG_WORKSPACE_TESTS=1
 
@@ -230,8 +246,12 @@ for index in "${!names[@]}"; do
     grep -Fxq "$name" "$citations.names" \
         || fail "the record for \`$name\` names a test no declared bound cites; a mutation is an assertion about a defence, and there is no defence here to assert about"
 
-    [[ -f $tree/$file ]] \
-        || cannot_judge "the record for \`$name\` names $file, which HEAD does not track; the perturbation it describes was never applied"
+    # Tracked-ness, not reachability. `[[ -f $tree/$file ]]` accepts a `../` path that resolves OUTSIDE the
+    # tree, and the mutation then rewrites a file this gate has no business touching — measured, and it
+    # falsifies the interrupted-run property stated in this file's header. Asking git makes the check the one
+    # the message already claimed.
+    git ls-files --error-unmatch "$file" >/dev/null 2>&1 \
+        || cannot_judge "the record for \`$name\` names $file, which HEAD does not track; a mutation edits tracked content of the tree under test and nothing else"
 
     derive_selector "$name"
 

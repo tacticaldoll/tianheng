@@ -303,21 +303,31 @@ therefore **run the cited test against a mutated tree** and read its status, nev
 of either the test or the reaction.
 
 A **mutation** SHALL be declared as four fields: the cited test name, a tracked path, a `from` substring, and a
-`to` substring. It SHALL be applied to a tree built from **tracked content**, never to the working directory,
-which is the rule the register and the whitespace gate already hold — not a family-wide one, since the
-coherence gates read the worktree — and which here also keeps an interrupted run from having edited the
-author's files.
+`to` substring. It SHALL be applied to a **separate checkout of HEAD**, never to the working directory, so that
+whatever happens mid-run the author's files are untouched. The path a record names SHALL be **tracked**, tested
+by asking git rather than by whether the file is reachable under the tree: a `../` path resolves outside it, and
+a mutation that rewrites a file outside the tree under test falsifies the very property this arrangement exists
+for.
 
-The reaction SHALL build that tree with its **own target directory**. Sharing a warm one was observed twice to
-run the cited test against a binary built from other sources — the mutated file never recompiled, `Finished`
-back in hundredths of a second — and the pin then reads as **surviving** its mutation, so the reaction reports a
-violation over every record. That is the loud direction rather than a false clean, and the isolation is required
-for the gate to be usable at all; it costs one warm build.
+That checkout SHALL carry a working repository. An export of tracked content alone makes some citations
+structurally **unreachable** rather than merely uncovered — a pin that reads the repository through git fails
+its own control run, so no record can ever exercise it, which the coverage story would otherwise misdescribe as
+work not yet done.
 
-What is *not* claimed: a fixture-scale reproduction of the reuse. Removing the isolation and pointing the gate at
-a pre-warmed directory built from the same fixture made cargo rebuild, so the matrix has no direction for this
-requirement and the mechanism behind the two observations is not settled. It is stated as a requirement because
-the failure was seen, not because its cause is understood — and saying which of the two this is, is the point.
+Judging HEAD is **not** the rule this family holds, and the difference is stated so neither is read as the
+other: the sibling gates enumerate tracked *paths* and read the *worktree's* content, deliberately — the
+whitespace gate's own header calls reading anything else a false negative. This reaction is the one that judges
+HEAD's content, and the blind spot that follows is declared below rather than left to be discovered.
+
+The reaction SHALL build that checkout with its **own target directory**, because its premise is that the
+binary under test was built from the *mutated* tree. A shared directory has been seen to serve one that was
+not, and a verdict over the wrong binary is not a verdict.
+
+What is *not* claimed is which wrong verdict follows. Two reproduction attempts each landed somewhere else — a
+directory holding the previous run's mutated binary fails the **control** run, and one pre-warmed from an
+unmutated build simply rebuilds and reports correctly — so no false-clean direction was found, none is claimed,
+and the matrix has no direction for this requirement. Requiring it on the premise rather than on an observed
+outcome is the honest form: the guarantee claimed is exactly the one held.
 
 A `from` that occurs zero times or more than once in the named file SHALL be **cannot judge**, not a violation.
 The mutation could not be applied, which is a different fact from the pin not biting, and reporting the second
@@ -423,6 +433,22 @@ is coverage, which grows one authored record at a time.
 
 - **WHEN** the cited test's filter matches nothing and the harness exits 0 having run nothing
 - **THEN** the reaction refuses to judge rather than reading the exit status as a pin that survived
+
+#### Scenario: Whether a pin gutted but not committed still bites is not observed — a stated bound
+
+- **WHEN** a cited pin's assertions are removed in the working directory and not committed
+- **THEN** nothing reacts, because the checkout under test is HEAD's content. The sibling gates read the
+  worktree for exactly this reason, and this reaction cannot: mutating the author's checkout is what a separate
+  checkout exists to avoid, so the two properties are in tension and this one is given up deliberately
+- **UNPINNED** `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+#### Scenario: Whether a record perturbs the reaction or the pin's own assertions is not observed — a stated bound
+
+- **WHEN** a record names the file its pin lives in and neutralises one of that pin's assertions
+- **THEN** the pin fails and the citation is counted as exercised, because a killed pin does not say what killed
+  it. Separating the two by refusing a record that edits its pin's file was measured against this tree's own
+  first record, which legitimately edits the file its pin lives in, so the rule would refuse a conforming shape
+- **UNPINNED** `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
 #### Scenario: Whether a citation carrying no declared mutation is defended is not observed — a stated bound
 
