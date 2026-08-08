@@ -6,103 +6,10 @@ check=$script_dir/check_release_coherence.sh
 fixture_root=$(mktemp -d)
 trap 'rm -rf "$fixture_root"' EXIT
 
-write_workspace() {
-    local repo=$1 version=$2
-    mkdir -p "$repo/crates/xuanji" "$repo/crates/tianheng"
-    printf '%s\n' \
-        '[workspace]' \
-        'members = ["crates/xuanji", "crates/tianheng"]' \
-        '' \
-        '[workspace.package]' \
-        "version = \"$version\"" \
-        '' \
-        '[workspace.dependencies]' \
-        "xuanji = { path = \"crates/xuanji\", version = \"$version\" }" \
-        >"$repo/Cargo.toml"
-    for package in xuanji tianheng; do
-        printf '%s\n' \
-            '[package]' \
-            "name = \"$package\"" \
-            'version.workspace = true' \
-            'edition = "2024"' \
-            >"$repo/crates/$package/Cargo.toml"
-    done
-    # An example carrying the adopter's published requirement, so the fixture has the shape
-    # `require_example_pins` reads. Without one, that check's own vacuity guard fires here and every
-    # state case in this matrix reports the missing-examples failure instead of what it is testing.
-    mkdir -p "$repo/examples/adopter"
-    printf '%s\n' \
-        '[package]' \
-        'name = "adopter"' \
-        'version = "0.0.0"' \
-        'edition = "2024"' \
-        '' \
-        '[dependencies]' \
-        "xuanji = \"${version%.*}\"" \
-        >"$repo/examples/adopter/Cargo.toml"
-    printf '%s\n' \
-        'version = 4' \
-        '' \
-        '[[package]]' \
-        'name = "tianheng"' \
-        "version = \"$version\"" \
-        '' \
-        '[[package]]' \
-        'name = "xuanji"' \
-        "version = \"$version\"" \
-        >"$repo/Cargo.lock"
-}
+# One construction of this capability's fixture, shared with the Rust file that cites its declared bounds.
+# shellcheck source=lib/coherence_fixture.sh
+source "$script_dir/lib/coherence_fixture.sh"
 
-write_release_changelog() {
-    local repo=$1 version=$2 previous=${3:-0.1.0}
-    printf '%s\n' \
-        '# Changelog' \
-        '' \
-        '## [Unreleased]' \
-        '' \
-        "## [$version] - 2026-07-20" \
-        '' \
-        '- Release notes.' \
-        '' \
-        "[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v$version...HEAD" \
-        "[$version]: https://github.com/tacticaldoll/tianheng/compare/v$previous...v$version" \
-        >"$repo/CHANGELOG.md"
-}
-
-write_development_changelog() {
-    local repo=$1 version=$2 with_item=${3:-yes}
-    {
-        printf '%s\n' '# Changelog' '' '## [Unreleased]' ''
-        if [[ $with_item == yes ]]; then
-            printf '%s\n' '- An adopter-facing change.' ''
-        fi
-        printf '%s\n' "[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v$version...HEAD"
-    } >"$repo/CHANGELOG.md"
-}
-
-new_repo() {
-    local name=$1 version=${2:-0.2.0} repo
-    repo=$fixture_root/$name
-    mkdir -p "$repo"
-    git -C "$repo" init -q
-    git -C "$repo" config user.name 'Release Coherence Test'
-    git -C "$repo" config user.email 'release-coherence@example.invalid'
-    write_workspace "$repo" 0.1.0
-    write_release_changelog "$repo" 0.1.0 0.0.0
-    git -C "$repo" add .
-    git -C "$repo" commit -qm 'release: 0.1.0'
-    write_workspace "$repo" "$version"
-    write_release_changelog "$repo" "$version" 0.1.0
-    git -C "$repo" add .
-    git -C "$repo" commit -qm "release: $version"
-    printf '%s\n' "$repo"
-}
-
-commit_all() {
-    local repo=$1 subject=$2
-    git -C "$repo" add .
-    git -C "$repo" commit -qm "$subject"
-}
 
 expect_pass() {
     local repo=$1 expected=$2 output status=0
@@ -127,30 +34,30 @@ expect_fail() {
         || { printf 'expected exit %d containing %q, got: %s\n' "$expected_status" "$expected" "$output" >&2; exit 1; }
 }
 
-snapshot=$(new_repo snapshot)
+snapshot=$(coherence_fixture_repo "$fixture_root" snapshot)
 expect_pass "$snapshot" 'snapshot: 0.2.0'
 
 git -C "$snapshot" worktree add -q -b snapshot-worktree "$fixture_root/snapshot-worktree"
 expect_pass "$fixture_root/snapshot-worktree" 'snapshot: 0.2.0'
 
-development=$(new_repo development)
-write_development_changelog "$development" 0.2.0
-commit_all "$development" 'docs: describe pending work'
+development=$(coherence_fixture_repo "$fixture_root" development)
+coherence_fixture_development_changelog "$development" 0.2.0
+coherence_fixture_commit "$development" 'docs: describe pending work'
 expect_pass "$development" 'development: 0.2.0'
 
 # `[Unreleased]` is adopter narrative, so it may name the planned release before the mechanical preparation
 # advances the mutable surfaces this gate enumerates. Everything but this item's prose remains at 0.2.0.
-intended_narrative=$(new_repo intended-narrative)
-write_development_changelog "$intended_narrative" 0.2.0
+intended_narrative=$(coherence_fixture_repo "$fixture_root" intended-narrative)
+coherence_fixture_development_changelog "$intended_narrative" 0.2.0
 sed -i 's/An adopter-facing change./Planned for 0.3.0: an adopter-facing change./' \
     "$intended_narrative/CHANGELOG.md"
-commit_all "$intended_narrative" 'docs: describe intended release'
+coherence_fixture_commit "$intended_narrative" 'docs: describe intended release'
 expect_pass "$intended_narrative" 'development: 0.2.0'
 
-ready=$(new_repo ready)
-write_workspace "$ready" 0.2.1
-write_release_changelog "$ready" 0.2.1 0.2.0
-commit_all "$ready" 'chore: prepare release'
+ready=$(coherence_fixture_repo "$fixture_root" ready)
+coherence_fixture_workspace "$ready" 0.2.1
+coherence_fixture_release_changelog "$ready" 0.2.1 0.2.0
+coherence_fixture_commit "$ready" 'chore: prepare release'
 expect_pass "$ready" 'release-ready: 0.2.1'
 
 missing_history=$fixture_root/missing-history
@@ -158,32 +65,32 @@ mkdir -p "$missing_history"
 git -C "$missing_history" init -q
 git -C "$missing_history" config user.name 'Release Coherence Test'
 git -C "$missing_history" config user.email 'release-coherence@example.invalid'
-write_workspace "$missing_history" 0.2.0
-write_development_changelog "$missing_history" 0.2.0
-commit_all "$missing_history" 'chore: initial import'
+coherence_fixture_workspace "$missing_history" 0.2.0
+coherence_fixture_development_changelog "$missing_history" 0.2.0
+coherence_fixture_commit "$missing_history" 'chore: initial import'
 expect_fail "$missing_history" 2 'release history is unavailable'
 
-malformed_history=$(new_repo malformed-history)
-write_development_changelog "$malformed_history" 0.2.0
-commit_all "$malformed_history" 'release: next'
+malformed_history=$(coherence_fixture_repo "$fixture_root" malformed-history)
+coherence_fixture_development_changelog "$malformed_history" 0.2.0
+coherence_fixture_commit "$malformed_history" 'release: next'
 expect_fail "$malformed_history" 1 'malformed release history subject: release: next'
 
-regression=$(new_repo regression)
-write_workspace "$regression" 0.1.9
-write_development_changelog "$regression" 0.1.9
-commit_all "$regression" 'chore: regress version'
+regression=$(coherence_fixture_repo "$fixture_root" regression)
+coherence_fixture_workspace "$regression" 0.1.9
+coherence_fixture_development_changelog "$regression" 0.1.9
+coherence_fixture_commit "$regression" 'chore: regress version'
 expect_fail "$regression" 1 '0.1.9 is older than latest release 0.2.0'
 
-empty_development=$(new_repo empty-development)
-write_development_changelog "$empty_development" 0.2.0 no
-commit_all "$empty_development" 'chore: omit release note'
+empty_development=$(coherence_fixture_repo "$fixture_root" empty-development)
+coherence_fixture_development_changelog "$empty_development" 0.2.0 no
+coherence_fixture_commit "$empty_development" 'chore: omit release note'
 expect_fail "$empty_development" 1 'requires adopter-facing release narrative'
 
-stale_lock=$(new_repo stale-lock)
-write_workspace "$stale_lock" 0.2.1
-write_release_changelog "$stale_lock" 0.2.1 0.2.0
+stale_lock=$(coherence_fixture_repo "$fixture_root" stale-lock)
+coherence_fixture_workspace "$stale_lock" 0.2.1
+coherence_fixture_release_changelog "$stale_lock" 0.2.1 0.2.0
 sed -i '0,/version = "0.2.1"/s//version = "0.2.0"/' "$stale_lock/Cargo.lock"
-commit_all "$stale_lock" 'chore: leave stale lock'
+coherence_fixture_commit "$stale_lock" 'chore: leave stale lock'
 expect_fail "$stale_lock" 1 'Cargo.lock package tianheng is 0.2.0; expected 0.2.1'
 
 # The lockfile direction must reach EVERY workspace package, not only the first. The case above stales
@@ -191,24 +98,24 @@ expect_fail "$stale_lock" 1 'Cargo.lock package tianheng is 0.2.0; expected 0.2.
 # says nothing about the rest — every lockfile assertion this matrix made was about iteration one. This case
 # stales the SECOND package, which is the shape a truncated package list hides: the loop ends early and a real
 # disagreement goes unreported, a false negative rather than a wrong verdict.
-stale_lock_second=$(new_repo stale-lock-second)
-write_workspace "$stale_lock_second" 0.2.1
-write_release_changelog "$stale_lock_second" 0.2.1 0.2.0
+stale_lock_second=$(coherence_fixture_repo "$fixture_root" stale-lock-second)
+coherence_fixture_workspace "$stale_lock_second" 0.2.1
+coherence_fixture_release_changelog "$stale_lock_second" 0.2.1 0.2.0
 sed -i '/name = "xuanji"/{n;s/version = "0.2.1"/version = "0.2.0"/;}' "$stale_lock_second/Cargo.lock"
-commit_all "$stale_lock_second" 'chore: leave the second package stale'
+coherence_fixture_commit "$stale_lock_second" 'chore: leave the second package stale'
 expect_fail "$stale_lock_second" 1 'Cargo.lock package xuanji is 0.2.0; expected 0.2.1'
 
-missing_notes=$(new_repo missing-notes)
-write_workspace "$missing_notes" 0.2.1
-write_development_changelog "$missing_notes" 0.2.1 no
-commit_all "$missing_notes" 'chore: omit release section'
+missing_notes=$(coherence_fixture_repo "$fixture_root" missing-notes)
+coherence_fixture_workspace "$missing_notes" 0.2.1
+coherence_fixture_development_changelog "$missing_notes" 0.2.1 no
+coherence_fixture_commit "$missing_notes" 'chore: omit release section'
 expect_fail "$missing_notes" 1 'missing dated release notes for 0.2.1'
 
-missing_unreleased=$(new_repo missing-unreleased)
-write_workspace "$missing_unreleased" 0.2.1
-write_release_changelog "$missing_unreleased" 0.2.1 0.2.0
+missing_unreleased=$(coherence_fixture_repo "$fixture_root" missing-unreleased)
+coherence_fixture_workspace "$missing_unreleased" 0.2.1
+coherence_fixture_release_changelog "$missing_unreleased" 0.2.1 0.2.0
 sed -i '/^## \[Unreleased\]$/d' "$missing_unreleased/CHANGELOG.md"
-commit_all "$missing_unreleased" 'chore: omit unreleased section'
+coherence_fixture_commit "$missing_unreleased" 'chore: omit unreleased section'
 expect_fail "$missing_unreleased" 1 'exactly one [Unreleased] section'
 
 # --- the changelog's internal consistency ---
@@ -218,9 +125,9 @@ expect_fail "$missing_unreleased" 1 'exactly one [Unreleased] section'
 # `### Migration` section was wrong under every reading. Neither was visible to anything until a mechanical
 # sweep read the document's structure.
 
-duplicate_heading=$(new_repo duplicate-heading)
-write_workspace "$duplicate_heading" 0.2.0
-write_development_changelog "$duplicate_heading" 0.2.0
+duplicate_heading=$(coherence_fixture_repo "$fixture_root" duplicate-heading)
+coherence_fixture_workspace "$duplicate_heading" 0.2.0
+coherence_fixture_development_changelog "$duplicate_heading" 0.2.0
 python3 - "$duplicate_heading/CHANGELOG.md" <<'EDIT'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1])
@@ -228,12 +135,12 @@ p.write_text(p.read_text().replace(
     "- An adopter-facing change.\n",
     "### Changed\n- An adopter-facing change.\n\n### Changed\n- A second block of the same name.\n"))
 EDIT
-commit_all "$duplicate_heading" 'chore: split one section in two'
+coherence_fixture_commit "$duplicate_heading" 'chore: split one section in two'
 expect_fail "$duplicate_heading" 1 'repeats a heading'
 
-breaking_without_migration=$(new_repo breaking-without-migration)
-write_workspace "$breaking_without_migration" 0.2.0
-write_development_changelog "$breaking_without_migration" 0.2.0
+breaking_without_migration=$(coherence_fixture_repo "$fixture_root" breaking-without-migration)
+coherence_fixture_workspace "$breaking_without_migration" 0.2.0
+coherence_fixture_development_changelog "$breaking_without_migration" 0.2.0
 python3 - "$breaking_without_migration/CHANGELOG.md" <<'EDIT'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1])
@@ -241,14 +148,14 @@ p.write_text(p.read_text().replace(
     "- An adopter-facing change.\n",
     "### Changed\n- **BREAKING** an adopter-facing change with nowhere to read what to do.\n"))
 EDIT
-commit_all "$breaking_without_migration" 'chore: mark a break with no migration'
+coherence_fixture_commit "$breaking_without_migration" 'chore: mark a break with no migration'
 expect_fail "$breaking_without_migration" 1 'carries no `### Migration` section'
 
 # The control for the direction above: the same break WITH the section is coherent, so the refusal is about the
 # missing migration rather than about the marker.
-breaking_with_migration=$(new_repo breaking-with-migration)
-write_workspace "$breaking_with_migration" 0.2.0
-write_development_changelog "$breaking_with_migration" 0.2.0
+breaking_with_migration=$(coherence_fixture_repo "$fixture_root" breaking-with-migration)
+coherence_fixture_workspace "$breaking_with_migration" 0.2.0
+coherence_fixture_development_changelog "$breaking_with_migration" 0.2.0
 python3 - "$breaking_with_migration/CHANGELOG.md" <<'EDIT'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1])
@@ -256,14 +163,278 @@ p.write_text(p.read_text().replace(
     "- An adopter-facing change.\n",
     "### Changed\n- **BREAKING** an adopter-facing change.\n\n### Migration\n- Regenerate the baseline.\n"))
 EDIT
-commit_all "$breaking_with_migration" 'chore: mark a break and say what to do'
+coherence_fixture_commit "$breaking_with_migration" 'chore: mark a break and say what to do'
 expect_pass "$breaking_with_migration" 'development: 0.2.0'
 
-invalid_link=$(new_repo invalid-link)
-write_workspace "$invalid_link" 0.2.1
-write_release_changelog "$invalid_link" 0.2.1 0.2.0
+# --- adopter narrative names no self-governance machinery ---
+#
+# `CHANGELOG.md` is the adopter's document and offered no heading that was not an adopter's vocabulary, so
+# twenty entries name that machinery — eleven in `[Unreleased]` and nine in the released `[0.4.0]` — spread
+# across `### Added`, `### Changed`, `### Fixed` and `### Documentation`.
+# Every direction below asserts the exit CODE, and the pair 3/4 is what holds the rule to the enumerator
+# rather than to the `check_` prefix.
+
+adopter_names_path=$(coherence_fixture_repo "$fixture_root" adopter-names-path)
+coherence_fixture_development_changelog "$adopter_names_path" 0.2.0
+coherence_fixture_machinery "$adopter_names_path"
+coherence_fixture_unreleased_body "$adopter_names_path" '### Fixed
+- A repair, described by naming `scripts/check_pin_bites.sh`.'
+coherence_fixture_commit "$adopter_names_path" 'docs: name a gate under an adopter heading'
+expect_fail "$adopter_names_path" 1 "names this repository's own machinery"
+
+# The control: the SAME entry under the self-governance heading is coherent, so the refusal above is about the
+# heading it sat under rather than about the path being named at all.
+self_governance_heading=$(coherence_fixture_repo "$fixture_root" self-governance-heading)
+coherence_fixture_development_changelog "$self_governance_heading" 0.2.0
+coherence_fixture_machinery "$self_governance_heading"
+coherence_fixture_unreleased_body "$self_governance_heading" '### Self-governance
+- A repair, described by naming `scripts/check_pin_bites.sh`.'
+coherence_fixture_commit "$self_governance_heading" 'docs: name a gate where it belongs'
+expect_pass "$self_governance_heading" 'development: 0.2.0'
+
+# The document cites both forms, so both are recognised.
+adopter_names_basename=$(coherence_fixture_repo "$fixture_root" adopter-names-basename)
+coherence_fixture_development_changelog "$adopter_names_basename" 0.2.0
+coherence_fixture_machinery "$adopter_names_basename"
+coherence_fixture_unreleased_body "$adopter_names_basename" '### Fixed
+- A repair, described by naming `check_pin_bites.sh` with no directory.'
+coherence_fixture_commit "$adopter_names_basename" 'docs: name a gate by basename'
+expect_fail "$adopter_names_basename" 1 "names this repository's own machinery"
+
+# Its control, and the direction that keeps the rule honest: a basename the enumerator does NOT resolve is not
+# machinery, however much it looks like a gate. Without this, a matcher on the `check_`/`test_` prefix would
+# pass the matrix while judging by a pattern rather than by what the repository tracks.
+unresolved_basename=$(coherence_fixture_repo "$fixture_root" unresolved-basename)
+coherence_fixture_development_changelog "$unresolved_basename" 0.2.0
+coherence_fixture_machinery "$unresolved_basename"
+coherence_fixture_unreleased_body "$unresolved_basename" '### Fixed
+- A repair in an adopter tool named `check_something_the_repository_does_not_track.sh`.'
+coherence_fixture_commit "$unresolved_basename" 'docs: name a file no scripts/ entry resolves'
+expect_pass "$unresolved_basename" 'development: 0.2.0'
+
+# The scope, pinned rather than inferred: a dated section records what was true at that release, and rewriting
+# it to satisfy a rule written afterwards would falsify the record.
+dated_names_path=$(coherence_fixture_repo "$fixture_root" dated-names-path)
+coherence_fixture_machinery "$dated_names_path"
+python3 - "$dated_names_path/CHANGELOG.md" <<'EDIT'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+text = p.read_text()
+# The dated section names the gate; `[Unreleased]` carries an ordinary item, so the commit that follows the
+# release leaves this in development state without itself citing anything.
+text = text.replace("## [Unreleased]\n\n", "## [Unreleased]\n\n- An adopter-facing change.\n\n")
+text = text.replace("- Release notes.\n",
+                    "### Fixed\n- A repair, described by naming `scripts/check_pin_bites.sh`.\n")
+p.write_text(text)
+EDIT
+coherence_fixture_commit "$dated_names_path" 'docs: a dated section names a gate'
+expect_pass "$dated_names_path" 'development: 0.2.0'
+
+# Recognition is by WORD — a maximal run of path characters, required to EQUAL a tracked name. An unquoted
+# name is still a word, so it reacts; this direction was `expect_pass` while the rule read whole backticked
+# spans, and adversarial review retired that reading along with the bound it carried.
+unquoted_prose=$(coherence_fixture_repo "$fixture_root" unquoted-prose)
+coherence_fixture_development_changelog "$unquoted_prose" 0.2.0
+coherence_fixture_machinery "$unquoted_prose"
+coherence_fixture_unreleased_body "$unquoted_prose" '### Fixed
+- A repair to the check_pin_bites.sh gate, written as prose rather than as a token.'
+coherence_fixture_commit "$unquoted_prose" 'docs: name a gate as bare prose'
+expect_fail "$unquoted_prose" 1 "names this repository's own machinery"
+
+# The three false negatives adversarial review reproduced against the whole-span reading, each a shape this
+# repository's own changelog already uses. Every one passed clean before the scan read words.
+span_carries_a_command=$(coherence_fixture_repo "$fixture_root" span-carries-a-command)
+coherence_fixture_development_changelog "$span_carries_a_command" 0.2.0
+coherence_fixture_machinery "$span_carries_a_command"
+coherence_fixture_unreleased_body "$span_carries_a_command" '### Fixed
+- Run `bash scripts/check_pin_bites.sh --fix` and `./scripts/check_pin_bites.sh` to repair.'
+coherence_fixture_commit "$span_carries_a_command" 'docs: name a gate inside a longer span'
+expect_fail "$span_carries_a_command" 1 "names this repository's own machinery"
+
+# A double-backtick span, which is how this section already writes a span containing backticks. The old regex
+# mispaired on it and swallowed the path.
+nested_span=$(coherence_fixture_repo "$fixture_root" nested-span)
+coherence_fixture_development_changelog "$nested_span" 0.2.0
+coherence_fixture_machinery "$nested_span"
+coherence_fixture_unreleased_body "$nested_span" '### Fixed
+- A repair naming `` `scripts/check_pin_bites.sh` `` in a nested span.'
+coherence_fixture_commit "$nested_span" 'docs: name a gate in a nested span'
+expect_fail "$nested_span" 1 "names this repository's own machinery"
+
+# An inline span wrapped across a source line: the continuation line went unscanned, a shape live on three
+# lines of the governed section.
+wrapped_span=$(coherence_fixture_repo "$fixture_root" wrapped-span)
+coherence_fixture_development_changelog "$wrapped_span" 0.2.0
+coherence_fixture_machinery "$wrapped_span"
+coherence_fixture_unreleased_body "$wrapped_span" '### Fixed
+- A repair naming `scripts/check_pin_bites.sh
+  ` across a wrapped span.'
+coherence_fixture_commit "$wrapped_span" 'docs: wrap a span across a line'
+expect_fail "$wrapped_span" 1 "names this repository's own machinery"
+
+# A markdown link target, which the span reading could never reach and this one does.
+link_target=$(coherence_fixture_repo "$fixture_root" link-target)
+coherence_fixture_development_changelog "$link_target" 0.2.0
+coherence_fixture_machinery "$link_target"
+coherence_fixture_unreleased_body "$link_target" '### Fixed
+- A repair naming [the gate](scripts/check_pin_bites.sh).'
+coherence_fixture_commit "$link_target" 'docs: name a gate as a link target'
+expect_fail "$link_target" 1 "names this repository's own machinery"
+
+# A basename the judged repository tracks and an entry writes for another reason. The refusal is real and the
+# entry is innocent — an over-reaction, declared rather than narrowed, because narrowing it needs a judgement
+# about which of two files a name means.
+colliding_basename=$(coherence_fixture_repo "$fixture_root" colliding-basename)
+coherence_fixture_development_changelog "$colliding_basename" 0.2.0
+mkdir -p "$colliding_basename/scripts"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$colliding_basename/scripts/publish.sh"
+coherence_fixture_unreleased_body "$colliding_basename" '### Fixed
+- Adopters run their own `publish.sh` after upgrading.'
+coherence_fixture_commit "$colliding_basename" 'docs: write a name the repository also tracks'
+expect_fail "$colliding_basename" 1 "names this repository's own machinery"
+
+# The DIRECTORY is machinery too, and review found this branch defended by nothing: deleting it left the whole
+# matrix green. Both derived forms get a direction, because the derivation strips one component at a time and a
+# loop that stopped after the first would pass a test written only for `scripts/`.
+names_the_directory=$(coherence_fixture_repo "$fixture_root" names-the-directory)
+coherence_fixture_development_changelog "$names_the_directory" 0.2.0
+coherence_fixture_machinery "$names_the_directory"
+mkdir -p "$names_the_directory/scripts/lib"
+printf '# shellcheck shell=bash\n' >"$names_the_directory/scripts/lib/fixture_helper.sh"
+coherence_fixture_unreleased_body "$names_the_directory" '### Fixed
+- A repair described by naming `scripts/` and nothing in it.'
+coherence_fixture_commit "$names_the_directory" 'docs: name the directory itself'
+expect_fail "$names_the_directory" 1 "names this repository's own machinery"
+
+# An ANCESTOR two levels up, which is what makes the derivation a loop rather than one strip. A fixture whose
+# directory is the immediate parent of a tracked file cannot tell the two apart — measured: with the loop cut to
+# a single `if`, a `scripts/lib/` direction stayed green because `scripts/lib/` is a first strip of
+# `scripts/lib/<file>`. Only a grandparent needs the second iteration.
+names_an_ancestor=$(coherence_fixture_repo "$fixture_root" names-an-ancestor)
+coherence_fixture_development_changelog "$names_an_ancestor" 0.2.0
+mkdir -p "$names_an_ancestor/scripts/lib/nested"
+printf '# shellcheck shell=bash\n' >"$names_an_ancestor/scripts/lib/nested/fixture_helper.sh"
+coherence_fixture_unreleased_body "$names_an_ancestor" '### Fixed
+- A repair described by naming `scripts/lib/` and nothing in it.'
+coherence_fixture_commit "$names_an_ancestor" 'docs: name a derived ancestor two levels up'
+expect_fail "$names_an_ancestor" 1 "names this repository's own machinery"
+
+# A directory without its trailing slash is an ordinary word — `scripts` is an English plural, and this
+# document uses it as one. The declared bound, pinned here so the exclusion is deliberate rather than an
+# artifact of how the derivation happens to build its keys.
+names_the_directory_unslashed=$(coherence_fixture_repo "$fixture_root" names-the-directory-unslashed)
+coherence_fixture_development_changelog "$names_the_directory_unslashed" 0.2.0
+coherence_fixture_machinery "$names_the_directory_unslashed"
+coherence_fixture_unreleased_body "$names_the_directory_unslashed" '### Fixed
+- A repair to the scripts and to scripts/lib, written without a trailing slash.'
+coherence_fixture_commit "$names_the_directory_unslashed" 'docs: name a directory without its slash'
+expect_pass "$names_the_directory_unslashed" 'development: 0.2.0'
+
+# The two normalisation branches, each ALONE. Review found both undefended: `span_carries_a_command` carried a
+# bare path beside the `./` form, so the bare one satisfied it and the strip was never the reason it fired;
+# and no fixture anywhere ended a name at a sentence period.
+names_a_relative_path=$(coherence_fixture_repo "$fixture_root" names-a-relative-path)
+coherence_fixture_development_changelog "$names_a_relative_path" 0.2.0
+coherence_fixture_machinery "$names_a_relative_path"
+coherence_fixture_unreleased_body "$names_a_relative_path" '### Fixed
+- Run `./scripts/check_pin_bites.sh` to repair.'
+coherence_fixture_commit "$names_a_relative_path" 'docs: name a gate relative to the root'
+expect_fail "$names_a_relative_path" 1 "names this repository's own machinery"
+
+names_at_a_sentence_end=$(coherence_fixture_repo "$fixture_root" names-at-a-sentence-end)
+coherence_fixture_development_changelog "$names_at_a_sentence_end" 0.2.0
+coherence_fixture_machinery "$names_at_a_sentence_end"
+coherence_fixture_unreleased_body "$names_at_a_sentence_end" '### Fixed
+- A repair to scripts/check_pin_bites.sh.'
+coherence_fixture_commit "$names_at_a_sentence_end" 'docs: end a sentence on a gate'
+expect_fail "$names_at_a_sentence_end" 1 "names this repository's own machinery"
+
+# A FAILED enumeration must refuse, and this is the direction whose absence review measured as a false
+# NEGATIVE rather than a downgrade: with the refusal replaced by a plain redirect, the parser reads an empty
+# enumeration cleanly and the gate reports a real violation as coherent — exit 0 over a document naming a gate.
+enumeration_stub=$fixture_root/enumeration-stub
+mkdir -p "$enumeration_stub"
+enumeration_real_git=$(command -v git)
+cat >"$enumeration_stub/git" <<STUB
+#!/usr/bin/env bash
+previous=
+for arg in "\$@"; do
+    [[ \$previous == ls-files && \$arg == scripts/ ]] && exit 9
+    previous=\$arg
+done
+exec "$enumeration_real_git" "\$@"
+STUB
+chmod +x "$enumeration_stub/git"
+
+unreadable_enumeration=$(coherence_fixture_repo "$fixture_root" unreadable-enumeration)
+coherence_fixture_development_changelog "$unreadable_enumeration" 0.2.0
+coherence_fixture_machinery "$unreadable_enumeration"
+coherence_fixture_unreleased_body "$unreadable_enumeration" '### Fixed
+- A repair naming `scripts/check_pin_bites.sh`.'
+coherence_fixture_commit "$unreadable_enumeration" 'docs: name a gate the enumeration cannot see'
+enumeration_status=0
+enumeration_output=$(PATH="$enumeration_stub:$PATH" "$check" "$unreadable_enumeration" 2>&1) || enumeration_status=$?
+[[ $enumeration_status -eq 2 ]] \
+    || { printf 'a failed enumeration must exit 2, got %d: %s\n' "$enumeration_status" "$enumeration_output" >&2; exit 1; }
+grep -Fq 'a failed read is not an empty result' <<<"$enumeration_output" \
+    || { printf 'the refusal must say a failed read is not an empty result, got: %s\n' "$enumeration_output" >&2; exit 1; }
+
+# Reached only through a URL: the run is delimited by the first character a path cannot hold, so a scheme and
+# host fuse into one word that equals nothing. A declared bound.
+url_only=$(coherence_fixture_repo "$fixture_root" url-only)
+coherence_fixture_development_changelog "$url_only" 0.2.0
+coherence_fixture_machinery "$url_only"
+coherence_fixture_unreleased_body "$url_only" '### Fixed
+- See https://github.com/tacticaldoll/tianheng/blob/main/scripts/check_pin_bites.sh for the gate.'
+coherence_fixture_commit "$url_only" 'docs: reach a gate only through a URL'
+expect_pass "$url_only" 'development: 0.2.0'
+
+# A `###` line inside a fenced code block is read as a heading, so it reattributes every entry after it. The
+# gate walks the document's line grammar and does not track fences. Latent rather than live — this
+# repository's changelog carries no fenced block — and declared for that reason rather than fixed.
+fenced_heading=$(coherence_fixture_repo "$fixture_root" fenced-heading)
+coherence_fixture_development_changelog "$fenced_heading" 0.2.0
+coherence_fixture_machinery "$fenced_heading"
+coherence_fixture_unreleased_body "$fenced_heading" '### Fixed
+- A repair.
+
+```
+### Self-governance
+```
+
+- A later repair naming `scripts/check_pin_bites.sh`.'
+coherence_fixture_commit "$fenced_heading" 'docs: put a heading inside a fence'
+expect_pass "$fenced_heading" 'development: 0.2.0'
+
+# A repository tracking NO machinery has nothing an entry could leak, so it is clean — and it must reach that
+# verdict by having nothing to match. Keyed on `NR == FNR`, an empty enumeration makes awk consume the
+# changelog as its own enumerator, no section is ever emitted, and the gate refuses on the section vacuity
+# guard. Run against that keying, this direction reports `expected success (exit 0), got exit 2` — measured,
+# which is also how the first draft of that comment was corrected: the failure is a false refusal, not the
+# silent pass it was written to claim.
+no_tracked_machinery=$(coherence_fixture_repo "$fixture_root" no-tracked-machinery)
+coherence_fixture_development_changelog "$no_tracked_machinery" 0.2.0
+coherence_fixture_unreleased_body "$no_tracked_machinery" '### Fixed
+- A repair, described by naming `scripts/check_pin_bites.sh`, in a repository tracking no such file.'
+coherence_fixture_commit "$no_tracked_machinery" 'docs: name a gate the repository does not track'
+expect_pass "$no_tracked_machinery" 'development: 0.2.0'
+
+# The enumeration is the INDEX, not the worktree, which this repository's gates are held to generally. An
+# untracked `scripts/` therefore reads as absent and the citation goes unseen — a declared bound rather than a
+# defect, because reading worktree content here would break the rule the gate exists under.
+untracked_machinery=$(coherence_fixture_repo "$fixture_root" untracked-machinery)
+coherence_fixture_development_changelog "$untracked_machinery" 0.2.0
+coherence_fixture_unreleased_body "$untracked_machinery" '### Fixed
+- A repair, described by naming `scripts/check_pin_bites.sh`.'
+coherence_fixture_commit "$untracked_machinery" 'docs: name a gate before it is tracked'
+coherence_fixture_machinery "$untracked_machinery" # written, never added
+expect_pass "$untracked_machinery" 'development: 0.2.0'
+
+invalid_link=$(coherence_fixture_repo "$fixture_root" invalid-link)
+coherence_fixture_workspace "$invalid_link" 0.2.1
+coherence_fixture_release_changelog "$invalid_link" 0.2.1 0.2.0
 sed -i 's#compare/v0.2.0...v0.2.1#garbage#' "$invalid_link/CHANGELOG.md"
-commit_all "$invalid_link" 'chore: break release comparison'
+coherence_fixture_commit "$invalid_link" 'chore: break release comparison'
 expect_fail "$invalid_link" 1 'comparison link for 0.2.1 must start at v0.2.0'
 
 mismatched_snapshot=$fixture_root/mismatched-snapshot
@@ -271,8 +442,8 @@ mkdir -p "$mismatched_snapshot"
 git -C "$mismatched_snapshot" init -q
 git -C "$mismatched_snapshot" config user.name 'Release Coherence Test'
 git -C "$mismatched_snapshot" config user.email 'release-coherence@example.invalid'
-write_workspace "$mismatched_snapshot" 0.2.1
-write_release_changelog "$mismatched_snapshot" 0.2.1 0.2.0
+coherence_fixture_workspace "$mismatched_snapshot" 0.2.1
+coherence_fixture_release_changelog "$mismatched_snapshot" 0.2.1 0.2.0
 git -C "$mismatched_snapshot" add .
 git -C "$mismatched_snapshot" commit -qm 'release: 0.2.0'
 expect_fail "$mismatched_snapshot" 1 'subject is 0.2.0 but workspace version is 0.2.1'
@@ -280,52 +451,52 @@ expect_fail "$mismatched_snapshot" 1 'subject is 0.2.0 but workspace version is 
 # Failure branches of the manifest-and-pin checks — without these, a `require_workspace_manifests`
 # or `require_internal_pins` that degraded to zero assertions (e.g. the crate glob silently emptied)
 # would still pass the whole matrix. Each case makes exactly one of those checks the one that must fire.
-missing_inheritance=$(new_repo missing-inheritance)
+missing_inheritance=$(coherence_fixture_repo "$fixture_root" missing-inheritance)
 sed -i 's/^version\.workspace = true$/version = "0.2.0"/' "$missing_inheritance/crates/xuanji/Cargo.toml"
-commit_all "$missing_inheritance" 'chore: pin a crate version literally'
+coherence_fixture_commit "$missing_inheritance" 'chore: pin a crate version literally'
 expect_fail "$missing_inheritance" 1 'must inherit version.workspace = true'
 
-mismatched_pin=$(new_repo mismatched-pin)
+mismatched_pin=$(coherence_fixture_repo "$fixture_root" mismatched-pin)
 sed -i 's#version = "0.2.0" }#version = "0.1.0" }#' "$mismatched_pin/Cargo.toml"
-commit_all "$mismatched_pin" 'chore: drift an internal pin'
+coherence_fixture_commit "$mismatched_pin" 'chore: drift an internal pin'
 expect_fail "$mismatched_pin" 1 'internal dependency xuanji is pinned to 0.1.0; expected 0.2.0'
 
 # An example left behind by a release bump. This is the realistic release-prep slip: the workspace and
 # the internal pins move together, and the examples' committed published requirement does not — after
 # which Cargo silently drops their `patch.crates-io` override and they resolve the LAST PUBLISHED family
 # from crates.io instead of the tree under development.
-stale_example_pin=$(new_repo stale-example-pin)
+stale_example_pin=$(coherence_fixture_repo "$fixture_root" stale-example-pin)
 sed -i 's/^xuanji = "0.2"$/xuanji = "0.1"/' "$stale_example_pin/examples/adopter/Cargo.toml"
-commit_all "$stale_example_pin" 'chore: leave an example on the previous minor'
+coherence_fixture_commit "$stale_example_pin" 'chore: leave an example on the previous minor'
 expect_fail "$stale_example_pin" 1 'example adopter requires xuanji = "0.1"'
 
 # And that check's own vacuity guards, so a renamed examples/ or a changed dependency form cannot make
 # it pass with zero assertions.
-missing_examples=$(new_repo missing-examples)
+missing_examples=$(coherence_fixture_repo "$fixture_root" missing-examples)
 rm -rf "$missing_examples/examples"
-commit_all "$missing_examples" 'chore: remove the examples directory'
+coherence_fixture_commit "$missing_examples" 'chore: remove the examples directory'
 expect_fail "$missing_examples" 2 'found no example manifests'
 
 # The TABLE dependency form is read too, so an example using it is checked rather than skipped. Without
 # this, one example moving to `{ version = "…" }` would go unverified while the set-level guard below
 # stayed satisfied by its siblings — a silent hole exactly where this gate is supposed to be looking.
-table_form_example_pin=$(new_repo table-form-example-pin)
+table_form_example_pin=$(coherence_fixture_repo "$fixture_root" table-form-example-pin)
 sed -i 's/^xuanji = "0.2"$/xuanji = { version = "0.1", features = ["audit"] }/' "$table_form_example_pin/examples/adopter/Cargo.toml"
-commit_all "$table_form_example_pin" 'chore: stale table-form requirement in an example'
+coherence_fixture_commit "$table_form_example_pin" 'chore: stale table-form requirement in an example'
 expect_fail "$table_form_example_pin" 1 'example adopter requires xuanji = "0.1"'
 
 # The vacuity guard itself: an empty crate set (layout change / crates removed) must fail loud,
 # not iterate the manifest and lock loops zero times and report coherent.
-empty_crate_set=$(new_repo empty-crate-set)
+empty_crate_set=$(coherence_fixture_repo "$fixture_root" empty-crate-set)
 find "$empty_crate_set/crates" -name Cargo.toml -delete
-commit_all "$empty_crate_set" 'chore: remove crate manifests'
+coherence_fixture_commit "$empty_crate_set" 'chore: remove crate manifests'
 expect_fail "$empty_crate_set" 2 'found no workspace crate manifests'
 
 # Read-only, on a fixture this gate has NOT already judged. Capturing `before` from a repository the gate had
 # run over several times was blind by construction: a gate that writes the same file on every run leaves that
 # file in `before` too, so the comparison held. Measured, not reasoned — a stray write injected into a sibling
 # gate passed its read-only direction unnoticed until the fixture was made fresh.
-untouched=$(new_repo untouched)
+untouched=$(coherence_fixture_repo "$fixture_root" untouched)
 before_tree=$(git -C "$untouched" status --porcelain=v1 --untracked-files=all)
 before_head=$(git -C "$untouched" rev-parse HEAD)
 before_tags=$(git -C "$untouched" tag --list)
@@ -398,7 +569,7 @@ grep -Fq 'a failed read is not an empty result' <<<"$partial_output" \
 # The internal-pin loop's vacuity guard: it was the only loop in the gate without one, so a reformatted
 # `[workspace.dependencies]` table iterated zero times and the direction passed having asserted nothing about
 # any pin. The fixture keeps a real path dependency but in a form this line-oriented scan does not read.
-vacuous_pins=$(new_repo vacuous-pins)
+vacuous_pins=$(coherence_fixture_repo "$fixture_root" vacuous-pins)
 python3 - "$vacuous_pins" <<'PYEOF'
 import pathlib, re, sys
 p = pathlib.Path(sys.argv[1]) / "Cargo.toml"

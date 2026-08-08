@@ -148,3 +148,168 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 
 - **WHEN** release coherence is evaluated in any phase
 - **THEN** repository files, commits, tags, packages, and external release state remain unchanged
+
+### Requirement: Adopter narrative SHALL NOT name this repository's own machinery
+
+An entry under an adopter-facing heading of the `[Unreleased]` section SHALL NOT name this repository's
+own machinery in any of three forms: a path under `scripts/`, a bare basename that `git ls-files scripts/`
+resolves to a tracked file there, or a **directory** under `scripts/` written with its trailing slash. All
+three are derived from the one enumeration — the directories by stripping components from each enumerated
+path — so none is a list written beside it.
+
+`CHANGELOG.md` is the adopter's document. It carries eight kinds of heading — `### Added`, `### Changed`,
+`### Fixed`, `### Migration`, `### Documentation`, `### Removed`, `### Compatibility` and
+`### Compatibility evidence` — and every one of them is an adopter's vocabulary. It offered none that was
+not, so every
+change to this repository's own governance machinery has been written into one of them. Measured: twenty
+entries name it — eleven in `[Unreleased]` and nine in the released `[0.4.0]`, across four different
+headings — for a directory that ships in **zero** packages.
+
+The `[Unreleased]` section SHALL be permitted a `### Self-governance` heading,
+under which naming that machinery is what belongs; a heading is adopter-facing when it is any `### `
+heading **other than** that one, so a heading nobody anticipated is adopter-facing rather than exempt.
+
+The basename form SHALL be decided against the enumerator and never against a list of gate names written
+beside it. A hand-kept list lets a new script be added and never measured, which is the register's own
+prohibition rather than a stylistic call. For the same reason no count of that enumeration SHALL be written
+into the reaction: a census is produced, never typed, and the first draft of this reaction carried one that
+the commit adding it made stale.
+
+A name SHALL be recognised as a **word** — a maximal run of path characters, required to equal a tracked
+path, basename or derived directory. That is exact matching of a lexical token rather than substring
+matching: a sentence
+merely containing the characters cannot match, because the run is delimited by the first character a path
+cannot hold. The rule was first written to compare whole **backticked spans**, and adversarial review
+reproduced three false negatives against that reading, every one a shape this repository's own changelog
+already uses — a span carrying anything besides the bare path, a double-backtick span, and an inline span
+wrapped across a source line. Reading words closes all three and reaches a markdown link target the span
+reading never could.
+
+This sits on the **decidable** side of the line this capability already draws for itself: a path citation
+is a reference, and reference resolution over `CHANGELOG.md` is already mechanical. Whether an entry's
+*subject* is adopter-facing is a judgement over prose — the instrument `AGENTS.md` records as designed,
+measured three times and rejected — and is declared as a bound below rather than approximated.
+
+What the rule forces is a **rewrite**, not a move, wherever the adopter-relevant fact is genuinely
+present. A publish-provenance entry states the guarantee an adopter gets; naming the gate file that
+enforces it is the leak. If a fact matters to an adopter, state the fact.
+
+#### Scenario: An adopter heading names a gate
+
+- **WHEN** an entry under `### Fixed` in `[Unreleased]` names a path under `scripts/`
+- **THEN** the reaction fails, naming the section, the heading and the path
+
+#### Scenario: The same entry under the self-governance heading
+
+- **WHEN** that entry moves under `### Self-governance` in the same section
+- **THEN** the reaction is clean, so the refusal above is about the heading it sat under rather than
+  about the path being named at all
+
+#### Scenario: A bare basename the enumerator resolves
+
+- **WHEN** an entry under an adopter-facing heading names `check_pin_bites.sh` with no directory
+- **THEN** the reaction fails, because `git ls-files scripts/` resolves that basename to a tracked file
+
+#### Scenario: A gate named inside a longer span, or as unquoted prose
+
+- **WHEN** an entry under an adopter-facing heading writes `` `bash scripts/check_pin_bites.sh --fix` ``, or
+  `` `` `scripts/check_pin_bites.sh` `` ``, or a span wrapped across a source line, or a markdown link whose
+  target is the gate, or the bare name with no backticks at all
+- **THEN** the reaction fails in every one of those, because the word is the unit rather than the span
+
+#### Scenario: A bare basename the enumerator does not resolve
+
+- **WHEN** an entry under an adopter-facing heading names `check_something_that_does_not_exist.sh`
+- **THEN** the reaction is clean, so the rule is held to the enumerator rather than to the `check_`
+  prefix
+
+#### Scenario: A dated release section names a gate — a stated bound
+
+- **WHEN** a dated `## [X.Y.Z] - DATE` section carries an entry naming a path under `scripts/`
+- **THEN** nothing reacts, and the leak is real: an adopter reading `[0.4.0]` meets nine entries naming
+  files they can never run. What is refused is the **repair**, not the diagnosis — rewriting a dated section
+  to satisfy a rule written afterwards would falsify the record, the same reason `docs/history/` is left
+  alone — so this is a declared false negative with an owner rather than a shape that is harmless. Closing it
+  needs a repair that adds to the record instead of editing it
+- **PINNED-BY** `a_dated_section_naming_a_gate_is_a_stated_bound`
+
+#### Scenario: Machinery the judged repository tracks by nothing — a stated bound
+
+- **WHEN** an entry under an adopter-facing heading names a file under `scripts/` that exists in the
+  worktree and in no commit
+- **THEN** nothing reacts. The enumeration is `git ls-files scripts/`, so an untracked `scripts/` reads
+  as absent; closing this means judging worktree content, which this repository's gates are held not to
+  do — the larger error, so the blindness is declared instead
+- **PINNED-BY** `machinery_tracked_by_nothing_is_a_stated_bound`
+
+#### Scenario: An entry about self-governance that names no machinery — a stated bound
+
+- **WHEN** an entry under an adopter-facing heading describes this repository's own governance without
+  naming any path under `scripts/`
+- **THEN** nothing reacts. Reaching it needs a judgement over the entry's subject rather than over its
+  references, and that instrument is the one this repository measured three times and rejected;
+  widening the matcher toward it — heading keywords, phrase lists — would trade a declared, bounded
+  blindness for an undeclared false-positive surface
+- **UNPINNED** `BACKLOG.md` — *the self-governance residual is a judgement over an entry's subject*
+
+#### Scenario: The enumeration cannot be read
+
+- **WHEN** `git ls-files scripts/` fails rather than returning nothing
+- **THEN** the reaction refuses to judge, because a failed read is not an empty result and treating it
+  as one reports a verdict over content that was never read
+
+#### Scenario: A repository tracking no machinery at all
+
+- **WHEN** the enumeration succeeds and names no file, and an entry under an adopter-facing heading
+  names a path under `scripts/`
+- **THEN** the reaction is clean, because a repository tracking no machinery has nothing an entry could
+  leak — and it SHALL reach that verdict by having nothing to match. Keying the parser on the record
+  number rather than on the input file makes an empty enumeration consume the changelog itself, after
+  which the section vacuity guard refuses a document the reaction never read
+
+#### Scenario: A basename an entry writes for another reason — a stated bound
+
+- **WHEN** an adopter-facing entry names a file of its own whose basename the judged repository also tracks
+  under `scripts/`
+- **THEN** the reaction **fails**, refusing an innocent entry. The direction is the safe one — an author
+  meets a refusal to argue with — and narrowing it means deciding which of two files a bare name meant,
+  a judgement about the sentence rather than about the reference
+- **PINNED-BY** `a_colliding_basename_is_a_stated_bound`
+
+#### Scenario: A name reached only through a URL — a stated bound
+
+- **WHEN** an adopter-facing entry names machinery only inside a URL
+- **THEN** nothing reacts. A word is a maximal run of path characters, so a scheme and host fuse with the
+  path into one run that equals no tracked name; splitting a URL into its path would make the reaction judge
+  a foreign host's layout as though it were this repository's
+- **PINNED-BY** `a_name_reached_only_through_a_url_is_a_stated_bound`
+
+#### Scenario: A heading inside a fenced code block — a stated bound
+
+- **WHEN** a `### ` line sits inside a fenced code block, followed by entries that name machinery
+- **THEN** nothing reacts for those entries, because that line set the heading in force and may name the one
+  exempt heading. The reaction walks the document's line grammar and does not track fences; it is latent
+  rather than live, this repository's changelog carrying no fenced block at all
+- **PINNED-BY** `a_heading_inside_a_fenced_block_is_a_stated_bound`
+
+#### Scenario: The directory itself, and a derived ancestor
+
+- **WHEN** an entry under an adopter-facing heading names `` `scripts/` ``, or `` `scripts/lib/` `` where the
+  judged repository tracks a file two levels below it
+- **THEN** the reaction fails in both, because every ancestor directory is derived from the enumeration by
+  stripping one component at a time
+
+#### Scenario: A directory named without its trailing slash — a stated bound
+
+- **WHEN** an adopter-facing entry names `scripts` or `scripts/lib` with no trailing slash
+- **THEN** nothing reacts. Directories are derived slash-terminated, and the unslashed form is a word
+  indistinguishable from ordinary prose — `scripts` is an English plural this document already uses as one.
+  Admitting it for deeper names only would make the reaction judge which of its own keys read as English
+- **PINNED-BY** `a_directory_named_without_its_slash_is_a_stated_bound`
+
+#### Scenario: The enumeration fails rather than returning nothing
+
+- **WHEN** `git ls-files scripts/` exits non-zero while an adopter-facing entry names a gate
+- **THEN** the reaction refuses to judge. This is the direction whose absence is a false **negative** rather
+  than a downgrade: with the refusal replaced by a plain redirect, the parser reads the empty capture cleanly
+  and reports a document naming a gate as coherent

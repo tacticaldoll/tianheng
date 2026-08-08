@@ -99,70 +99,20 @@ them.
 
 ### Added
 
-- **`check_release_coherence.sh` now reads each release section's internal consistency, not only the
-  changelog's state.** Two defects of that shape landed in one window and nothing saw either: an `[Unreleased]`
-  grew a second `### Changed` heading three hundred lines from the first, and a prose claim about which prior
-  releases carry a `### Migration` section was wrong under every reading. A heading may not appear twice in one
-  section, and a section marking a change `**BREAKING**` must carry a `### Migration` — one-way, since a
-  section may carry a migration for a break marked another way, as `[0.3.0]` does. Both directions were run
-  against the gate without the extension and report exit 0 there.
-
-  The line this draws is worth stating, because a nearby detector was measured and rejected three times: the
-  changelog has a **grammar**, and these are properties of that grammar. The **content** of an entry — whether
-  it is accurate, whether "no adopter action" holds, whether a named symbol exists — stays out, because
-  deciding that is the judgement over prose that was rejected. The vacuity guard is over sections rather than
-  headings for the same reason: a changelog whose sections carry bullets directly is ordinary, and this
-  repository's own early releases are that shape.
-- **A pinning citation can now be held to *biting*, not only to running.** `check_bound_register.sh` decides
-  that a `PINNED-BY` citation names a test the harness registers; it cannot decide that the test would fail if
-  the reaction it defends changed. Measured rather than argued: replacing a cited pin's entire body with a
-  binding that asserts nothing left the suite green and the register reporting its citation count clean — the
-  same shape that let a retired reaction's anchor rule lose its only assertions in this window and be revertible
-  with nothing refusing. `check_pin_bites.sh` runs the cited test against a tree where the reaction has been
-  perturbed and requires it to fail, because whether a test bites is a question about running a program and no
-  reading of text answers it. Coverage is partial and the gate says so on every clean run, in the shape
-  `docs/observation-bounds.md` already leads with its unpinned count: a gate reporting only the mutations it ran
-  would be the reads-as-coverage failure it exists to end, one level up.
-
-  The arrangement's properties are stated rather than left to the implementation, each measured. The tree
-  is a detached **worktree** at HEAD, so an interrupted run has edited nothing of the author's — and, unlike an
-  export of tracked content, it carries a working repository, without which a pin that reads the repository
-  through git fails its own control run and no record can ever exercise it. Where the mutated run fails, the control runs **again after the
-  restore**, because one control rules out a test that fails on its own but not one whose failure it caused: a pin writing a marker and asserting its absence passes exactly once, so
-  the mutated run fails for a reason the mutation had no part in and the citation reads as exercised by a
-  perturbation that did nothing. Every run is held to having executed exactly one test, the restored-tree run
-  included — a pin that rewrites its own source on a later run otherwise left the filter matching nothing and
-  exiting 0 over zero tests. The definition-path-to-target mapping is an allowlist rather than a fallthrough,
-  because assuming a library test for whatever did not match ran a *different* test of the same name and
-  reported that one's death as the citation's. What a fixed number of runs cannot reach — an outcome depending on the run count
-  with a period that sequence does not break — is declared as a bound rather than implied. A record's path is held to being
-  both **tracked** and **contained**, separately: a tracked symlink is tracked, and following one rewrites a
-  file outside the tree — destructively, if the run is killed between the write and the restore. The checkout's
-  hooks are disabled, because a `post-checkout` hook would otherwise run inside the tree under test with write
-  access to the judged repository's refs. The build gets its **own** target
-  directory because the gate's premise is that the binary under test was built from the *mutated* tree, and a
-  shared one has been seen to serve a binary that was not; which wrong verdict follows is deliberately not
-  claimed, since neither reproduction attempt produced one. What a killed pin does **not** prove — that the
-  record perturbed the reaction rather than the pin's own assertions — and what HEAD's content cannot see — a
-  pin gutted but not committed — are declared as bounds rather than left to be discovered. A mutation that fails to compile, or whose anchor
-  matched zero or several times, is **cannot judge**: each describes a perturbation that was never applied,
-  which is a different fact from a pin that does not bite. And the records are parsed **once** — counting them
-  by one splitting rule and processing them by another let a file holding nothing to run exit 0, which is the
-  one outcome the Core Contract forbids.
 - `guibiao`, `hunyi`, and `louke` now expose the same observation-bound and observer vocabulary
   from each dimension root: `BoundDecl`, `BoundId`, `Defence`, `Demonstrates`, `Extent`,
   `FactGranularity`, `Observer`, `Owner`, and `Reached` — beside `Outcome`, which each root already
   re-exported. A standalone-dimension adopter
   no longer needs a direct `xuanji` dependency merely to name the protocol its dimension exposes.
-- The crates.io publish now runs through a source gate (`scripts/check_publish_source.sh`, reached via
-  `scripts/publish.sh`) that refuses any source other than the signed-and-annotated-tagged
-  `release: X.Y.Z` commit at the live tip of `main`. `cargo publish` records the commit it ran on in
-  each tarball's `.cargo_vcs_info.json`, a version can never be re-uploaded, and the `0.4.0` family
-  recorded `f1dba52` — the tip of the since-archived `release/0.4.0` branch — rather than `e645a549`,
-  the `release: 0.4.0` commit that `v0.4.0` tags. **The published content is unaffected**: the two
-  trees are byte-identical, every shipped file in all six `0.4.0` tarballs matches `main`, and nothing
-  needs re-fetching or re-resolving. Adopters verifying a `0.4.0` tarball against this repository
-  should expect its recorded commit to name that release branch's tip rather than the tag.
+- **Every crates.io publish is now made only from the signed, annotated-tagged `release: X.Y.Z`
+  commit at the live tip of `main`**, refused at the source rather than audited afterwards.
+  `cargo publish` records the commit it ran on in each tarball's `.cargo_vcs_info.json`, a version can
+  never be re-uploaded, and the `0.4.0` family recorded `f1dba52` — the tip of the since-archived
+  `release/0.4.0` branch — rather than `e645a549`, the `release: 0.4.0` commit that `v0.4.0` tags.
+  **The published content is unaffected**: the two trees are byte-identical, every shipped file in all
+  six `0.4.0` tarballs matches `main`, and nothing needs re-fetching or re-resolving. Adopters
+  verifying a `0.4.0` tarball against this repository should expect its recorded commit to name that
+  release branch's tip rather than the tag.
 - `docs/history/published-artifact-provenance.md` inventories what commit **every** published version
   records, audited across all 96 published tarballs. Two versions disagree with their tag for two
   different reasons — `0.4.0` was published from the release branch, and `0.2.2` was published from
@@ -411,13 +361,6 @@ them.
   release commit, so the whole `v0.1.0`–`v0.4.0` range is uniform and GitHub-verified. A clone that
   already fetched the old refs needs `git fetch --tags --force` to see the new tag objects; no commit
   moved and no history was rewritten.
-- The publish wrapper now **refuses `--manifest-path`** (either spelling) before the source gate runs.
-  The gate judges this repository; that argument moves cargo's workspace root to another tree, so the two
-  would disagree about what is being published, one argument away from an act that cannot be corrected.
-  It had been written down in `publish.sh` as an accepted bound — the same shape as "publish `main`, not
-  the release branch", which was also written down and then missed in the window it was written. The
-  registry-side arguments (`--registry`, `--index`, `--token`) change the publish's destination rather
-  than its source and stay forwarded, which is now stated rather than implied.
 - The bound register resolves a `PINNED-BY` citation against **tracked** `.rs` files, not a filesystem
   walk. An untracked or ignored file decided a citation, so a scratch copy of a test file — the likeliest
   such artifact, tests being what citations name — resolved a name twice and the gate refused with
@@ -446,31 +389,6 @@ them.
   `|| true`, so a tracked document the census direction claims to cover went unexamined behind a clean
   report. What is left in a process substitution is computation over data this run already materialized, and
   the reaction says which rather than leaving the scope to be inferred.
-- Three failure matrices that existed but **nothing ran** are now in the Definition of Done and CI:
-  `test_published_family_coverage.sh`, `test_example_quality_gate.sh`, and `test_example_suite.sh`. The
-  reactions they prove *were* wired — `test_examples.sh` sources all three libraries and closes the
-  published-family ledger with `verify_family_coverage` — so the ledger has been running; what nobody ran
-  were the proofs that it still **refuses**. An unrun matrix is worse than an absent one: a reader who finds
-  `test_published_family_coverage.sh` in `scripts/` reasonably concludes the ledger's refusals are defended,
-  and nothing was keeping that true. All three passed when first run, so the wiring closes a latent gap
-  rather than a live defect.
-- `check_dod_coherence.sh` gains the **last missing failure matrix**, so every `check_*` gate now has a
-  `test_*` twin and every one of them asserts the expected exit **code**. This gate's subject is a claim
-  `AGENTS.md` makes about itself — that its Definition of Done block is the single source for the local gate
-  list, and that CI runs a superset — so until now that claim rested on a reaction nobody had watched refuse.
-  The direction that matters most is the vacuous one: without its zero-commands guard the gate reports
-  `ok: every local Definition of Done command (0 parsed) is run by CI` and exits 0.
-- `check_whitespace_hygiene.sh` gains a **companion failure matrix** and a target-directory argument, which
-  is what made one possible — the same argument the register and reference-integrity gates take. It was one of
-  the two gates whose refusals were asserted nowhere — `check_dod_coherence.sh`, the entry above, was the
-  other — and it is where the shared exit-contract backstop first misfired: its clean-run assertion is what
-  catches that, since removing the backstop's subshell guard fails
-  this matrix and no other — **which is no longer true, and the correction is the more useful fact**: the
-  `capture_or_refuse` migration in this same window removed every failing-subshell-on-a-clean-run construct from
-  every gate, so with the guard deleted no gate prints a spurious cannot-judge and no matrix fails. The protection
-  outlived its instance and was left pinned by nothing. It is now pinned **directly**, against a fixture gate that
-  carries the shape on purpose — a process substitution whose producer exits non-zero as its ordinary answer —
-  independent of whether any real gate still does.
 - **The feature-gated export now has a reaction, and `cargo test -p louke` joins the Definition of Done.**
   `observation-bound-model`'s scenario *A build compiles none of the reaction a declaration describes* was added
   with none: the gating had been proved once by a throwaway crate reading `observation_bounds().len()`, and that
@@ -503,52 +421,6 @@ them.
   `--all-features` — and `observation-bound-model` now carries the rule: where a reaction is behind a Cargo
   feature, the declarations describing it are gated with it.
 
-- **Two helpers nothing called are deleted, and the shared-capture library says what it actually shares.**
-  `capture_nul_or_refuse` was written into `scripts/lib/capture.sh` and never adopted — and deleting it is the
-  answer rather than wiring it up, because it `mktemp`ed and `rm`ed internally, the discipline `513803a` measured
-  and rejected ("a `mktemp` with its own `rm` leaks the file on any abort between the two"), while the one real
-  NUL reader reuses a single file joined to its gate's EXIT trap. Adopting it there would have regressed a closed
-  defect. What its never being called cost is recorded where the library explains itself: it read its producer's
-  status as `local status=$?` inside `if ! "$@" > …; then`, where `$?` is the **negated** status and always `0`, so
-  its diagnostic could only ever have said "exit 0". `Header::comments` in the shared test-support module goes the
-  same way, dead since it was written — invisible to every clippy pass because that module's `#![allow(dead_code)]`
-  is correct for a `#[path]`-shared module and cannot distinguish "used by no binary" from "used by some". That
-  class is filed with its trigger rather than solved.
-
-- **A census is produced, never typed, and `AGENTS.md` now says so.** Hand-written figures drifted in every kind of
-  place they can live during this window — a code doc, two backlog entries, a changelog sentence, three files at
-  once, the version-horizon paragraph that assigns the release number, and a **generated projection's template**.
-  That last one is why the rule names its instrument rather than only its prohibition:
-  `docs/gate-shape-contract.md` is generated and staleness-checked and its bound disclosure still went wrong,
-  because the figure and the list were string literals in the generator — the freshness check compares the
-  generator's own text with itself, so a bound declared in this same window went unlisted. The projection now
-  **derives** that disclosure from the specification and is held to it in both directions, with the figure as the
-  list's length; a single array carries only the explanations. The rule also records why a detector over prose was
-  measured three times and rejected: widening the phrasing false-positives on both projections' headers, on the
-  register's own diagnostic, and on its matrix's expected-output literals; widening the corpus to `scripts/`
-  false-positives on the fixture censuses that matrix writes deliberately; and the one instance that occurred in a
-  code doc was spelled in words. Most numbers here describe a *shape*, not a census.
-- `check_release_coherence.sh` **separates a violation from a gate that cannot decide**, which its header
-  claimed and its code never did: every refusal was `1`, so a shallow clone with no release spine, an absent
-  manifest, or a moved crate layout all reported "the release surfaces disagree". Those are now `2`. The same
-  audit caught a regression the shared exit-contract backstop introduced: this gate's `fail` was a `return 1`
-  relying on
-  `set -e`, and the new `ERR` backstop converted it into `2` — every genuine incoherence reported as
-  cannot-judge, with CI green throughout because this matrix asserted only a non-zero status. `fail` exits
-  directly now, the matrix asserts the **code** at every call site (as its siblings already did), and the
-  internal-pin loop gained the vacuity guard every other loop in the file already had — without it a
-  reformatted `[workspace.dependencies]` table iterated zero times and the direction passed having asserted
-  nothing about any pin.
-- **Every repository gate now holds the 0/1/2 exit contract on every path**, through one shared backstop
-  (`scripts/lib/exit_contract.sh`) rather than six copies of the same trap. Measured across the gates before
-  it existed, each with one tool stubbed to fail: `check_publish_source.sh` exited **131**,
-  `check_release_coherence.sh` **130**, `check_dod_coherence.sh` **9**, `check_whitespace_hygiene.sh` **7**,
-  `check_bound_register.sh` **4**, `check_reference_integrity.sh` **3** — every one of them printing nothing
-  at all, because the abort was the shell's rather than the gate's. Two declared the contract in their own
-  headers and one stands before an irreversible act. `check_release_coherence.sh` and
-  `check_dod_coherence.sh` now declare the contract they hold, since a contract a reader cannot find is one
-  they cannot rely on. A read worth naming keeps its own refusal beneath the backstop, which reports *where*
-  a failure happened and never invents what it meant.
 - The bound register's **exit contract now binds every path**, not the ones a wrapper remembered. `set -e`
   with `pipefail` carries a failing utility's own status out of the process, so a stubbed `sed` made the gate
   exit **4** printing nothing at all — a status the contract does not define, which no consumer can act on
@@ -865,6 +737,186 @@ them.
   (`${b//|/$'\n'}`), and separating a pipe operator from a pipe inside `${…}` needs shell parsing rather than
   text. Its pin asserts that false positive alongside the bound, so the reason for declaring rather than fixing is
   executable: if a future parameter expansion loses its pipe, that leg fails and the bound is worth re-examining.
+
+### Self-governance
+
+Changes to this repository's own governance machinery, which ships in no package and which
+no adopter runs. They are here rather than under the adopter headings above because
+`CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
+
+- **A census is produced, never typed, and `AGENTS.md` now says so.** Hand-written figures drifted in every kind of
+  place they can live during this window — a code doc, two backlog entries, a changelog sentence, three files at
+  once, the version-horizon paragraph that assigns the release number, and a **generated projection's template**.
+  That last one is why the rule names its instrument rather than only its prohibition:
+  `docs/gate-shape-contract.md` is generated and staleness-checked and its bound disclosure still went wrong,
+  because the figure and the list were string literals in the generator — the freshness check compares the
+  generator's own text with itself, so a bound declared in this same window went unlisted. The projection now
+  **derives** that disclosure from the specification and is held to it in both directions, with the figure as the
+  list's length; a single array carries only the explanations. The rule also records why a detector over prose was
+  measured three times and rejected: widening the phrasing false-positives on both projections' headers, on the
+  register's own diagnostic, and on its matrix's expected-output literals; widening the corpus to `scripts/`
+  false-positives on the fixture censuses that matrix writes deliberately; and the one instance that occurred in a
+  code doc was spelled in words. Most numbers here describe a *shape*, not a census.
+- **This heading exists, and `check_release_coherence.sh` refuses the leak back into the others.** `scripts/`
+  ships in zero packages — measured across all six members — yet twenty entries name it, eleven of them in
+  `[Unreleased]` and nine in the released `[0.4.0]`, spread across `### Added`, `### Changed`, `### Fixed` and
+  `### Documentation`. The document offered no heading that was not an adopter's vocabulary, so there was
+  nowhere else for them to go, and an adopter reading `[Unreleased]` read about a file they can never run.
+
+  The cost was coupling: through this window, roughly four in five of the commits touching `scripts/` were
+  forced to also touch `openspec/` or this file, so a change to a script reaching no adopter was a four-file
+  transaction — and prose is where this window's defects have been. The exact figures are in the commit that
+  carries this change, where they name a range that has stopped moving; written here they would count a set
+  that grows with every commit, and the first draft of this sentence had already drifted from 51/40 to 54/43
+  before the branch merged.
+
+  What is separated is **publication, not rigour**: no reaction, twin, observation bound or exit-contract
+  obligation is removed or weakened, and the test is that deleting an adopter-facing entry about a gate changes
+  nothing about that gate. An entry under an adopter-facing heading of `[Unreleased]` may not name a path under
+  `scripts/`, nor a bare basename `git ls-files scripts/` resolves — the enumerator rather than a list of gate
+  names, so a new script cannot be added and never measured. Adopter-facing is the **complement** of this one
+  heading, so a heading nobody anticipated reacts rather than being exempt by default. Dated sections are record
+  and stay untouched: `[0.4.0]`'s nine entries of this shape are meant to keep naming what was true at 0.4.0.
+
+  The first rule drafted was falsified before it was written down. *Cite no path that ships in no package*
+  looked right until the citation population was enumerated: every one of the fifteen distinct repository paths
+  `[Unreleased]` cited **before this change** ships in no package, `COOKBOOK.md` and `docs/*.md` among them,
+  and those are adopter surface anyway. The replacement is
+  narrower and not a proxy. Where the adopter-relevant fact is genuinely present the rule forces a **rewrite**
+  rather than a move — the publish-provenance entry above now states the guarantee and names no file.
+
+  The **second** rule was falsified too, by adversarial review rather than by enumeration. It compared whole
+  backticked spans, and three shapes this section already uses passed clean: a span carrying anything besides
+  the bare path (`` `bash scripts/check_pin_bites.sh --fix` ``), a padded double-backtick span (the section
+  held four before this change), and an inline span wrapped across a source line — live **once**, and carrying
+  no machinery name, so that one was a fixture-level false negative rather than a leak in this document. The
+  "three" a per-line backtick count reports is the two halves of that one wrap plus a well-formed
+  ```` ```rust ```` span. A name is now a **word** — a maximal
+  run of path characters, required to equal a tracked name — which closes all three, reaches a markdown link
+  target the span reading never could, and retires the declared bound about unquoted prose by making it react.
+  Review also caught the reaction stating a **count** of its own enumeration, gone stale by exactly the file
+  this change added; a census is produced, never typed, and no count is written there now.
+
+  Six limits are declared, five pinned against fixtures built by one shared builder rather than a second
+  construction. Two of the five are new false negatives found by the same review — a name reached only through
+  a URL, and a `###` line inside a fenced block reattributing every entry after it — and one is the
+  over-reaction the word rule buys: a basename an entry writes for a reason of its own. The unpinned one is an
+  entry about governance naming no machinery, because reaching it needs a judgement over an entry's subject
+  rather than its references.
+- **`check_release_coherence.sh` now reads each release section's internal consistency, not only the
+  changelog's state.** Two defects of that shape landed in one window and nothing saw either: an `[Unreleased]`
+  grew a second `### Changed` heading three hundred lines from the first, and a prose claim about which prior
+  releases carry a `### Migration` section was wrong under every reading. A heading may not appear twice in one
+  section, and a section marking a change `**BREAKING**` must carry a `### Migration` — one-way, since a
+  section may carry a migration for a break marked another way, as `[0.3.0]` does. Both directions were run
+  against the gate without the extension and report exit 0 there.
+
+  The line this draws is worth stating, because a nearby detector was measured and rejected three times: the
+  changelog has a **grammar**, and these are properties of that grammar. The **content** of an entry — whether
+  it is accurate, whether "no adopter action" holds, whether a named symbol exists — stays out, because
+  deciding that is the judgement over prose that was rejected. The vacuity guard is over sections rather than
+  headings for the same reason: a changelog whose sections carry bullets directly is ordinary, and this
+  repository's own early releases are that shape.
+- **A pinning citation can now be held to *biting*, not only to running.** `check_bound_register.sh` decides
+  that a `PINNED-BY` citation names a test the harness registers; it cannot decide that the test would fail if
+  the reaction it defends changed. Measured rather than argued: replacing a cited pin's entire body with a
+  binding that asserts nothing left the suite green and the register reporting its citation count clean — the
+  same shape that let a retired reaction's anchor rule lose its only assertions in this window and be revertible
+  with nothing refusing. `check_pin_bites.sh` runs the cited test against a tree where the reaction has been
+  perturbed and requires it to fail, because whether a test bites is a question about running a program and no
+  reading of text answers it. Coverage is partial and the gate says so on every clean run, in the shape
+  `docs/observation-bounds.md` already leads with its unpinned count: a gate reporting only the mutations it ran
+  would be the reads-as-coverage failure it exists to end, one level up.
+
+  The arrangement's properties are stated rather than left to the implementation, each measured. The tree
+  is a detached **worktree** at HEAD, so an interrupted run has edited nothing of the author's — and, unlike an
+  export of tracked content, it carries a working repository, without which a pin that reads the repository
+  through git fails its own control run and no record can ever exercise it. Where the mutated run fails, the control runs **again after the
+  restore**, because one control rules out a test that fails on its own but not one whose failure it caused: a pin writing a marker and asserting its absence passes exactly once, so
+  the mutated run fails for a reason the mutation had no part in and the citation reads as exercised by a
+  perturbation that did nothing. Every run is held to having executed exactly one test, the restored-tree run
+  included — a pin that rewrites its own source on a later run otherwise left the filter matching nothing and
+  exiting 0 over zero tests. The definition-path-to-target mapping is an allowlist rather than a fallthrough,
+  because assuming a library test for whatever did not match ran a *different* test of the same name and
+  reported that one's death as the citation's. What a fixed number of runs cannot reach — an outcome depending on the run count
+  with a period that sequence does not break — is declared as a bound rather than implied. A record's path is held to being
+  both **tracked** and **contained**, separately: a tracked symlink is tracked, and following one rewrites a
+  file outside the tree — destructively, if the run is killed between the write and the restore. The checkout's
+  hooks are disabled, because a `post-checkout` hook would otherwise run inside the tree under test with write
+  access to the judged repository's refs. The build gets its **own** target
+  directory because the gate's premise is that the binary under test was built from the *mutated* tree, and a
+  shared one has been seen to serve a binary that was not; which wrong verdict follows is deliberately not
+  claimed, since neither reproduction attempt produced one. What a killed pin does **not** prove — that the
+  record perturbed the reaction rather than the pin's own assertions — and what HEAD's content cannot see — a
+  pin gutted but not committed — are declared as bounds rather than left to be discovered. A mutation that fails to compile, or whose anchor
+  matched zero or several times, is **cannot judge**: each describes a perturbation that was never applied,
+  which is a different fact from a pin that does not bite. And the records are parsed **once** — counting them
+  by one splitting rule and processing them by another let a file holding nothing to run exit 0, which is the
+  one outcome the Core Contract forbids.
+- The publish wrapper now **refuses `--manifest-path`** (either spelling) before the source gate runs.
+  The gate judges this repository; that argument moves cargo's workspace root to another tree, so the two
+  would disagree about what is being published, one argument away from an act that cannot be corrected.
+  It had been written down in `publish.sh` as an accepted bound — the same shape as "publish `main`, not
+  the release branch", which was also written down and then missed in the window it was written. The
+  registry-side arguments (`--registry`, `--index`, `--token`) change the publish's destination rather
+  than its source and stay forwarded, which is now stated rather than implied.
+- Three failure matrices that existed but **nothing ran** are now in the Definition of Done and CI:
+  `test_published_family_coverage.sh`, `test_example_quality_gate.sh`, and `test_example_suite.sh`. The
+  reactions they prove *were* wired — `test_examples.sh` sources all three libraries and closes the
+  published-family ledger with `verify_family_coverage` — so the ledger has been running; what nobody ran
+  were the proofs that it still **refuses**. An unrun matrix is worse than an absent one: a reader who finds
+  `test_published_family_coverage.sh` in `scripts/` reasonably concludes the ledger's refusals are defended,
+  and nothing was keeping that true. All three passed when first run, so the wiring closes a latent gap
+  rather than a live defect.
+- `check_dod_coherence.sh` gains the **last missing failure matrix**, so every `check_*` gate now has a
+  `test_*` twin and every one of them asserts the expected exit **code**. This gate's subject is a claim
+  `AGENTS.md` makes about itself — that its Definition of Done block is the single source for the local gate
+  list, and that CI runs a superset — so until now that claim rested on a reaction nobody had watched refuse.
+  The direction that matters most is the vacuous one: without its zero-commands guard the gate reports
+  `ok: every local Definition of Done command (0 parsed) is run by CI` and exits 0.
+- `check_whitespace_hygiene.sh` gains a **companion failure matrix** and a target-directory argument, which
+  is what made one possible — the same argument the register and reference-integrity gates take. It was one of
+  the two gates whose refusals were asserted nowhere — `check_dod_coherence.sh`, the entry above, was the
+  other — and it is where the shared exit-contract backstop first misfired: its clean-run assertion is what
+  catches that, since removing the backstop's subshell guard fails
+  this matrix and no other — **which is no longer true, and the correction is the more useful fact**: the
+  `capture_or_refuse` migration in this same window removed every failing-subshell-on-a-clean-run construct from
+  every gate, so with the guard deleted no gate prints a spurious cannot-judge and no matrix fails. The protection
+  outlived its instance and was left pinned by nothing. It is now pinned **directly**, against a fixture gate that
+  carries the shape on purpose — a process substitution whose producer exits non-zero as its ordinary answer —
+  independent of whether any real gate still does.
+- **Two helpers nothing called are deleted, and the shared-capture library says what it actually shares.**
+  `capture_nul_or_refuse` was written into `scripts/lib/capture.sh` and never adopted — and deleting it is the
+  answer rather than wiring it up, because it `mktemp`ed and `rm`ed internally, the discipline `513803a` measured
+  and rejected ("a `mktemp` with its own `rm` leaks the file on any abort between the two"), while the one real
+  NUL reader reuses a single file joined to its gate's EXIT trap. Adopting it there would have regressed a closed
+  defect. What its never being called cost is recorded where the library explains itself: it read its producer's
+  status as `local status=$?` inside `if ! "$@" > …; then`, where `$?` is the **negated** status and always `0`, so
+  its diagnostic could only ever have said "exit 0". `Header::comments` in the shared test-support module goes the
+  same way, dead since it was written — invisible to every clippy pass because that module's `#![allow(dead_code)]`
+  is correct for a `#[path]`-shared module and cannot distinguish "used by no binary" from "used by some". That
+  class is filed with its trigger rather than solved.
+- `check_release_coherence.sh` **separates a violation from a gate that cannot decide**, which its header
+  claimed and its code never did: every refusal was `1`, so a shallow clone with no release spine, an absent
+  manifest, or a moved crate layout all reported "the release surfaces disagree". Those are now `2`. The same
+  audit caught a regression the shared exit-contract backstop introduced: this gate's `fail` was a `return 1`
+  relying on
+  `set -e`, and the new `ERR` backstop converted it into `2` — every genuine incoherence reported as
+  cannot-judge, with CI green throughout because this matrix asserted only a non-zero status. `fail` exits
+  directly now, the matrix asserts the **code** at every call site (as its siblings already did), and the
+  internal-pin loop gained the vacuity guard every other loop in the file already had — without it a
+  reformatted `[workspace.dependencies]` table iterated zero times and the direction passed having asserted
+  nothing about any pin.
+- **Every repository gate now holds the 0/1/2 exit contract on every path**, through one shared backstop
+  (`scripts/lib/exit_contract.sh`) rather than six copies of the same trap. Measured across the gates before
+  it existed, each with one tool stubbed to fail: `check_publish_source.sh` exited **131**,
+  `check_release_coherence.sh` **130**, `check_dod_coherence.sh` **9**, `check_whitespace_hygiene.sh` **7**,
+  `check_bound_register.sh` **4**, `check_reference_integrity.sh` **3** — every one of them printing nothing
+  at all, because the abort was the shell's rather than the gate's. Two declared the contract in their own
+  headers and one stands before an irreversible act. `check_release_coherence.sh` and
+  `check_dod_coherence.sh` now declare the contract they hold, since a contract a reader cannot find is one
+  they cannot rely on. A read worth naming keeps its own refusal beneath the backstop, which reports *where*
+  a failure happened and never invents what it meant.
 
 ## [0.4.0] - 2026-08-04
 

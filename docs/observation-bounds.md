@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**12 of 71 declared bounds have no pinning test.** That figure is the register's
+**13 of 78 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -268,6 +268,50 @@ fallback used where no manifest exists, which the register spec describes.
 > the gate accepts it, a stated bound: validity is verifiable without configuration and **attribution is
 
 - **pinned by**: `a_valid_signature_from_an_unauthorized_key_is_accepted`
+
+## release-coherence
+
+### `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
+
+> nothing reacts, and the leak is real: an adopter reading `[0.4.0]` meets nine entries naming
+
+- **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
+
+### `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound`
+
+> nothing reacts. The enumeration is `git ls-files scripts/`, so an untracked `scripts/` reads
+
+- **pinned by**: `machinery_tracked_by_nothing_is_a_stated_bound`
+
+### `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound`
+
+> nothing reacts. Reaching it needs a judgement over the entry's subject rather than over its
+
+- **unpinned**, tracked by: `BACKLOG.md` — *the self-governance residual is a judgement over an entry's subject*
+
+### `release-coherence/a-basename-an-entry-writes-for-another-reason-a-stated-bound`
+
+> the reaction **fails**, refusing an innocent entry. The direction is the safe one — an author
+
+- **pinned by**: `a_colliding_basename_is_a_stated_bound`
+
+### `release-coherence/a-name-reached-only-through-a-url-a-stated-bound`
+
+> nothing reacts. A word is a maximal run of path characters, so a scheme and host fuse with the
+
+- **pinned by**: `a_name_reached_only_through_a_url_is_a_stated_bound`
+
+### `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound`
+
+> nothing reacts for those entries, because that line set the heading in force and may name the one
+
+- **pinned by**: `a_heading_inside_a_fenced_block_is_a_stated_bound`
+
+### `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound`
+
+> nothing reacts. Directories are derived slash-terminated, and the unslashed form is a word
+
+- **pinned by**: `a_directory_named_without_its_slash_is_a_stated_bound`
 
 ## runtime-origin-assertion
 

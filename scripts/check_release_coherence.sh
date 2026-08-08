@@ -39,7 +39,11 @@ lock_capture=$(mktemp)
 # The changelog's own structure, read once and asked several questions. Sequential like `$release_capture`,
 # so it may share nothing with the nested lockfile read above.
 changelog_capture=$(mktemp)
-trap 'rm -f "$release_capture" "$lock_capture" "$changelog_capture"' EXIT
+# The enumeration of this repository's own machinery, read from `git ls-files` rather than written beside the
+# rule. A list of gate names kept next to its enumerator lets a new script be added and never measured, which
+# is the register's own prohibition; the enumerator is the only authority.
+machinery_capture=$(mktemp)
+trap 'rm -f "$release_capture" "$lock_capture" "$changelog_capture" "$machinery_capture"' EXIT
 
 cannot_judge() {
     printf 'release coherence: cannot judge: %s\n' "$*" >&2
@@ -323,12 +327,82 @@ esac
 # wording is right. The line is between the document's structure and its content, and only the first is here.
 changelog_sections() {
     awk '
-        /^## \[/ { section = $0; sub(/ - .*/, "", section); printf "SECTION\t%s\n", section; next }
+        # First input: the machinery enumeration. Both the full path and the bare basename are recognised,
+        # because the document cites both forms — `scripts/check_publish_source.sh` and `check_pin_bites.sh`.
+        # No count of that enumeration is written here: a census is produced, never typed, and the first draft
+        # of this comment stated one that the very commit adding it made stale.
+        #
+        # A basename colliding with a file an entry names for another reason would make this fire on that
+        # citation — a false positive, the safe direction, and declared as a bound rather than left implicit.
+        # Keyed on FILENAME rather than on `NR == FNR`, and that is load-bearing. With an EMPTY enumeration
+        # file, `NR == FNR` holds for every line of the *changelog* — awk consumes the document as its own
+        # enumerator and emits no record at all. Measured against that keying rather than argued: the gate then
+        # exits **2** on the section vacuity guard, so a repository that tracks no machinery is refused instead
+        # of judged. A repository with none has nothing an entry could leak and is legitimately clean; it must
+        # reach that verdict by having nothing to match, never by the parser losing its second input.
+        FILENAME == ARGV[1] {
+            paths[$0] = 1
+            base = $0
+            sub(/.*\//, "", base)
+            bases[base] = 1
+            # Every ancestor directory of an enumerated file, DERIVED from the enumeration rather than written
+            # down. The directory `scripts/` names this machinery as surely as any file in it, and review found
+            # a live entry citing exactly that — under an adopter heading, on a wholly internal subject, in the
+            # gap between "names a path under scripts/" and "names no such path".
+            dir = $0
+            while (sub(/[^\/]*$/, "", dir) && dir != "") {
+                dirs[dir] = 1
+                sub(/\/$/, "", dir)
+            }
+            next
+        }
+        /^## \[/ { section = $0; sub(/ - .*/, "", section); heading = ""; printf "SECTION\t%s\n", section; next }
         section == "" { next }
-        /^### / { printf "HEADING\t%s\t%s\n", section, substr($0, 5) }
+        /^### / { heading = substr($0, 5); printf "HEADING\t%s\t%s\n", section, heading }
         /\*\*BREAKING\*\*/ { printf "BREAKING\t%s\n", section }
-    ' "$repo/CHANGELOG.md"
+        # Recognition is by WORD — a maximal run of path characters — and each run must EQUAL a tracked path or
+        # basename. That is exact matching of a lexical token, not substring matching: no sentence merely
+        # containing the characters can match, because the run is delimited by the first character a path
+        # cannot hold.
+        #
+        # It reads a run rather than a whole backticked span, and that was measured rather than preferred. The
+        # span rule was written first and adversarial review reproduced three false negatives against it, every
+        # one of them a shape this document already uses: a span carrying anything besides the bare path
+        # (`bash scripts/check_pin_bites.sh`, `scripts/check_pin_bites.sh --fix`, `./scripts/…`) compared
+        # unequal and passed; a padded double-backtick span — the governed section held four before this
+        # change and holds five after, one of them the sentence describing this — mispaired the regex and
+        # swallowed the path; and an inline span wrapped across a source line left its continuation unscanned.
+        # That last one is live ONCE in the section, not three times: a per-line odd-backtick count reports
+        # three, which is the two halves of the one wrap plus a well-formed ```` ```rust ```` span. It carries no
+        # machinery name either, so the wrap was a fixture-level false negative rather than a live leak — the
+        # weaker claim, and the true one. Reading runs closes all three and reaches a markdown link target as
+        # well, which the span rule never could.
+        #
+        # Attribution is line -> heading in force -> section, which is the document grammar this gate already
+        # walks: every line of a list item sits under the same heading as its first, so item boundaries buy
+        # nothing the heading does not already give.
+        {
+            rest = $0
+            while (match(rest, /[A-Za-z0-9_.\/-]+/)) {
+                token = substr(rest, RSTART, RLENGTH)
+                rest = substr(rest, RSTART + RLENGTH)
+                # A leading `./` and trailing sentence punctuation belong to the prose, not to the name.
+                sub(/^\.\//, "", token)
+                sub(/\.+$/, "", token)
+                if (token in paths || token in bases || token in dirs)
+                    printf "CITATION\t%s\t%s\t%s\n", section, heading, token
+            }
+        }
+    ' "$machinery_capture" "$repo/CHANGELOG.md"
 }
+
+# A failed read refuses; an EMPTY successful read does not. Those are different facts: `git ls-files` exiting
+# non-zero says the enumeration was never obtained, while an empty result says the judged repository tracks no
+# machinery — and a repository with none has nothing an entry could leak. What stays outside is an UNTRACKED
+# `scripts/`, which this reads as absent; judging worktree content a gate's own law says to read from the index
+# would be the larger error, so that blindness is declared as a bound.
+capture_or_refuse "the tracked files under scripts/" "$machinery_capture" cannot_judge \
+    -- git -C "$repo" ls-files scripts/
 
 changelog_shape=$changelog_capture
 capture_or_refuse "the CHANGELOG's section structure" "$changelog_shape" cannot_judge \
@@ -359,5 +433,29 @@ missing_migration=$(awk -F'\t' '
 [[ -z $missing_migration ]] \
     || fail "a CHANGELOG section marks a change **BREAKING** and carries no \`### Migration\` section, so what an adopter must do is scattered through the entries or absent:
 $missing_migration"
+
+# `CHANGELOG.md` is the adopter's document. It carries eight kinds of heading — Added, Changed, Fixed,
+# Migration, Documentation, Removed, Compatibility, Compatibility evidence — and every one of them is an
+# adopter's vocabulary. It offered none that was not, so every change to this repository's own
+# machinery was written into whichever fitted least badly: twenty entries name it — eleven in `[Unreleased]`
+# and nine in the released `[0.4.0]`, across four different headings — for a directory that ships in zero
+# packages. `### Self-governance` is that missing
+# heading, and this refuses the leak back into the others.
+#
+# Adopter-facing is defined as the COMPLEMENT of that one heading rather than as a list of the four. A heading
+# nobody anticipated is then adopter-facing, which is the direction that reacts; enumerating the adopter set
+# would make every future heading exempt by default.
+#
+# Scope is `[Unreleased]`. A dated section records what was true at that release, and rewriting it to satisfy a
+# rule written afterwards would falsify the record — the same reason `docs/history/` is left alone. That
+# blindness is declared as an observation bound rather than left to be inferred from this condition.
+adopter_cited_machinery=$(awk -F'\t' '
+    $1 == "CITATION" && $2 == "## [Unreleased]" && $3 != "Self-governance" {
+        printf "  %s under `### %s` names %s\n", $2, ($3 == "" ? "(no heading)" : $3), $4
+    }
+' "$changelog_shape" | sort -u)
+[[ -z $adopter_cited_machinery ]] \
+    || fail "an adopter-facing CHANGELOG entry names this repository's own machinery, which ships in no package and which an adopter can never run — move it under \`### Self-governance\`, or, where the adopter-relevant fact is genuinely there, state the guarantee and drop the filename:
+$adopter_cited_machinery"
 
 printf 'ok release coherence (%s: %s)\n' "$state" "$workspace_version"
