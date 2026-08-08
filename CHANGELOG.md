@@ -23,6 +23,17 @@ them.
 ## [Unreleased]
 
 ### Documentation
+
+- **`AGENTS.md` gains *A repair loop is a diagnosis, not a schedule*.** Three consecutive repair rounds on one
+  text reader produced findings every time, and across all three **not one was a new code defect** — every
+  finding was a sentence describing what the reader does, or a rule implemented twice. Each repair corrected
+  the sentence review had named and wrote the next one. The rule says to sort a round's findings by kind before
+  deciding what to do next: claims dominating means the property is stated where nothing can falsify it, and
+  the answer is to change the shape rather than to add a round. It names the two moves that end those classes —
+  a claim about a reaction becomes an executable case table, and one rule gets one implementation with
+  exhaustive consumers — and it states outright that it has no reaction of its own, because deciding that a
+  comment describes something a run could falsify is the prose judgement this repository measured and rejected
+  three times.
 - Giving each bound in `external-crate-confinement`'s overview its own `(bound: …)` reference created a hole,
   and a review proved it with a fixture. A `(bound: …)` reference was only ever resolved through a bound-prose
   record, and rewording that sentence dropped its line
