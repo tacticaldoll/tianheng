@@ -366,12 +366,16 @@ consumer for an undemonstrated deduplication.
 - **WATCH: a rejected observation point is recorded only in prose, and prose reaches no agent at the moment of
   temptation.** *Observed pressure:* rejections of whole detectors and approaches are scattered across doc
   comments, `AGENTS.md`, `BACKLOG.md` and spec prose in several non-overlapping phrasings, with nothing
-  enumerating them. Reproduce rather than trust a figure here:
-  `git ls-files 'AGENTS.md' 'PROJECT.md' 'BACKLOG.md' 'docs/*' 'crates/*' 'scripts/*' | xargs grep -niE 'measured
-  and rejected|was rejected|was dropped|would false-positive'` — 15 hits across 10 files when measured
-  2026-08-07, of which two were the scan's own false positives (`was dropped` describing a defect, not a
-  rejection), which is itself evidence that any enumeration must come from declarations rather than from a grep
-  over prose. *Observation source:* that command. *Current reaction or bound:* none enumerates them, though
+  enumerating them. **No count is given, and one should not be.** Three were attempted and each was wrong within
+  hours: the first stated a figure from a wider pattern set than the method it published, the second was
+  falsified by this entry's own correction commit — which added two `was rejected` quotes to `BACKLOG.md`, one of
+  the files any such scan reads — and every version miscounted in both directions, matching defects that merely
+  describe something being dropped while missing rejections phrased another way. A grep over prose cannot census
+  rejections, which is the entry's own point turned on itself. To look at the population rather than count it:
+  `grep -rniE 'measured and rejected|was rejected|was dropped|would false-positive' AGENTS.md PROJECT.md
+  BACKLOG.md docs crates scripts openspec` — a starting point that includes this entry's own text and misses
+  whatever is phrased differently. *Observation source:* reading that output, 2026-08-07, not a figure from it.
+   *Current reaction or bound:* none enumerates them, though
   `docs/observation-bounds.md` shows the practice already reaching a generated projection by hand — it carries
   one refused approach with its measurement ("scanning paragraphs instead of lines … would not have caught it").
   One instance in a projection is the pattern existing without being enumerated, not the gap being closed.
@@ -384,7 +388,7 @@ consumer for an undemonstrated deduplication.
   re-measured** by someone who could not find the record, evidenced by a tree artefact rather than by a report
   from inside the work. *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
   `observation-bound-register`, whose spec records two rejections in this shape — "declaring once was rejected"
-  and "keying on statement similarity was rejected rather than overlooked" — so the practice is that
+  and "Keying on statement similarity was rejected rather than overlooked" — so the practice is that
   capability's, while nothing carries it into an agent's context. The phrasing that names the purpose
   ("recorded as rejected rather than left to be re-proposed") is in `CHANGELOG.md`, not in a spec, which is part
   of the observation.
@@ -399,7 +403,10 @@ consumer for an undemonstrated deduplication.
   *Observed pressure:* `restrict_dependencies_to` carries six of the eleven boundaries in `AGENTS.self-law.md`
   and appears **zero** times anywhere under `examples/` (`grep -rc restrict_dependencies_to examples/`). Examples
   are the 潛移 imitation surface, so the allowlist shape the project governs itself with is the one an adopter
-  never sees demonstrated. *Observation source:* that grep plus `AGENTS.self-law.md`, 2026-08-07.
+  never sees demonstrated. *Observation source:* `grep -rc restrict_dependencies_to examples/` against
+  `grep -c 'restrict dependencies to' AGENTS.self-law.md` — note the two spellings, the DSL method and the
+  projection's rendering; a grep for the method name against the projection returns zero and means nothing.
+  Read 2026-08-07.
   *Current reaction or bound:* none. *Risk:* an adopter imitates what the examples show. *Promotion trigger:* an
   example is added or revised for another reason, at which point the shape is chosen deliberately rather than by
   omission. *Version class:* patch; `examples/` ships in no crate. *Authority:* `governance-dogfood`, which owns
