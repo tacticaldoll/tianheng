@@ -308,13 +308,16 @@ which is the rule the register and the whitespace gate already hold — not a fa
 coherence gates read the worktree — and which here also keeps an interrupted run from having edited the
 author's files.
 
-The reaction SHALL build that tree with its **own target directory**. Cargo decides freshness by timestamp,
-and `git archive` stamps extracted files with the commit's time, so a tree sharing a warm target directory can
-have artifacts *newer* than the sources they were not built from: the mutated file is never recompiled, the run
-reports `Finished` in hundredths of a second, and the cited test passes because the binary is the unmutated one.
-Measured, twice, and both times the pin then reads as **surviving** its mutation — the reaction reports a
-violation over every record. That is the loud direction rather than a false clean, so the isolation is required
-for the gate to be usable rather than to close a hole; it costs one warm build.
+The reaction SHALL build that tree with its **own target directory**. Sharing a warm one was observed twice to
+run the cited test against a binary built from other sources — the mutated file never recompiled, `Finished`
+back in hundredths of a second — and the pin then reads as **surviving** its mutation, so the reaction reports a
+violation over every record. That is the loud direction rather than a false clean, and the isolation is required
+for the gate to be usable at all; it costs one warm build.
+
+What is *not* claimed: a fixture-scale reproduction of the reuse. Removing the isolation and pointing the gate at
+a pre-warmed directory built from the same fixture made cargo rebuild, so the matrix has no direction for this
+requirement and the mechanism behind the two observations is not settled. It is stated as a requirement because
+the failure was seen, not because its cause is understood — and saying which of the two this is, is the point.
 
 A `from` that occurs zero times or more than once in the named file SHALL be **cannot judge**, not a violation.
 The mutation could not be applied, which is a different fact from the pin not biting, and reporting the second
@@ -327,6 +330,22 @@ difference is stated here so neither is read as the other. A mutation naming a t
 SHALL fail: it perturbs something this register makes no claim about, and its passing would read as coverage of
 a citation that does not exist. A citation carrying no mutation SHALL NOT fail — that is the coverage this
 requirement admits is partial, below.
+
+Each record SHALL first be run **unmutated**, and the reaction SHALL refuse to judge unless that run passes.
+Without the control, a cited test failing for its own reasons reads as a pin that bites the moment anything is
+applied to the tree — the same `f() == f()` shape reached from the other side, where the comparison is with a
+run whose outcome was never in doubt.
+
+The package and target the cited test runs in SHALL be **derived from where that test is defined**, not from the
+file the mutation edits and not declared beside the mutation. A record routinely perturbs a reaction in one file
+while the pin defending it sits in another, and deriving from the edited file then runs a target the citation is
+not registered in — measured here, where a recognizer in a crate's library and its pin in an integration target
+selected the library. A fifth field would be a second spelling of a fact the tree already carries, and would rot.
+A name whose definition the scan finds zero or several times SHALL be cannot judge, because a target cannot be
+derived from a set.
+
+An enumeration of citations that yields none SHALL fail loudly rather than report every mutation valid against
+an empty set — the vacuity direction, in the second of this capability's two enumerations.
 
 A mutation whose tree does not **compile** SHALL be cannot judge, for the same reason as a rotted anchor: the
 perturbation was never exercised. `cargo test` exits non-zero for a compile error as well as for a failing

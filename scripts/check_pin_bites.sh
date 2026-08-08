@@ -18,12 +18,12 @@
 #   * The tree is built from `git archive HEAD` — TRACKED content, the rule the register and the whitespace
 #     gate hold (the coherence gates read the worktree, so this is not a family-wide rule), and here it also
 #     keeps an interrupted run from having edited the author's files.
-#   * The build gets its OWN target directory. Cargo decides freshness by timestamp and `git archive` stamps
-#     extracted files with the commit's time, so a tree sharing a warm target directory can hold artifacts
-#     NEWER than the sources they were not built from: the mutated file is never recompiled, `Finished` comes
-#     back in 0.01s, and the cited test passes because the binary is the unmutated one. The pin then reads as
-#     SURVIVING — a violation reported over every record. That is loud rather than silent, so the isolation is
-#     what makes this gate usable; it costs one warm build.
+#   * The build gets its OWN target directory. Sharing a warm one was observed twice to run the cited test
+#     against a binary built from other sources — never recompiled, `Finished` back in 0.01s — and the pin then
+#     reads as SURVIVING, a violation reported over every record. Loud rather than silent, so the isolation is
+#     what makes this gate usable; it costs one warm build. What is NOT claimed: a fixture-scale reproduction.
+#     Removing this export and pointing the gate at a directory pre-warmed from the same fixture made cargo
+#     rebuild, so the matrix has no direction for it and the cause of the two observations is unsettled.
 #   * A mutation that breaks the BUILD is cannot-judge. `cargo test` exits non-zero for a compile error as
 #     well as for a failing assertion, so the two are separated by building first. Note what this buys: the
 #     exit CLASS is already 2 without it, because `ran_exactly_one` refuses a run that executed no test — the

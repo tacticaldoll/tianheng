@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 #
-# Every state and failure direction of `check_pin_bites.sh`, each on a throwaway repository.
+# The state and failure directions of `check_pin_bites.sh` that this matrix proves, each on a throwaway
+# repository. Not all of them: the gate carries refusal paths for a producer that fails mid-read, an absent
+# `cargo`, an untracked records file, and a definition scan finding zero or several files, and those are the
+# shared family shapes or diagnostics rather than this gate's own subject. One is neither: the target-directory
+# isolation is a requirement, and the attempt to pin it — remove the export, point the gate at a pre-warmed
+# directory — made cargo rebuild and passed, so nothing here proves it. Naming that here beats an
+# `every` this file would not hold — the absolute-claim class this repository keeps closing.
 #
 # The fixtures are minimal cargo workspaces rather than worktrees of this one, and that is the point of the
 # shape: the gate under test builds what it judges, so a fixture carrying this repository's dependency graph
@@ -131,6 +137,37 @@ printf '\npub fn twin(line: &str) -> bool {\n    let trimmed = line.trim_start()
     >>"$ambiguous/crates/fixt/src/lib.rs"
 git -C "$ambiguous" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qam ambiguous
 expect_fail "$ambiguous" 2 'occurs 2 times'
+
+# The control run. A cited test that fails for its own reasons would otherwise read as a pin that bites the
+# moment a mutation is applied — the `f() == f()` shape, arrived at from the other side.
+already_failing=$(new_repo already-failing "$KILLS")
+sed -i 's/assert!(fixt::exposes("pub fn f() -> Box<dyn T> {"));/assert!(!fixt::exposes("pub fn f() -> Box<dyn T> {"));/' \
+    "$already_failing/crates/fixt/tests/pin.rs"
+git -C "$already_failing" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qam already-failing
+expect_fail "$already_failing" 2 'does not pass on the unmutated tree'
+
+# --- a run that executed no test (the scenario three refusal sites implement) ---
+#
+# A filter matching nothing exits 0 having run nothing, which by status alone is a pin that survived. Both
+# halves are exercised: the harness registering the name but running it zero times, and the harness not
+# registering it at all.
+
+ignored=$(new_repo ignored "$KILLS")
+sed -i 's/^#\[test\]$/#[test]\n#[ignore]/' "$ignored/crates/fixt/tests/pin.rs"
+git -C "$ignored" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qam ignored
+expect_fail "$ignored" 2 'did not run exactly one test'
+
+unregistered=$(new_repo unregistered "$KILLS")
+sed -i 's/^#\[test\]$/#[cfg(feature = "absent")]\n#[test]/' "$unregistered/crates/fixt/tests/pin.rs"
+git -C "$unregistered" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qam unregistered
+expect_fail "$unregistered" 2 'resolves to 0 registered tests'
+
+# A cited name the harness registers twice does not name the citation either.
+ambiguous_name=$(new_repo ambiguous-name "$KILLS")
+printf '\nmod twin {\n    #[test]\n    fn a_continuation_line_is_not_recognized() {\n        assert!(fixt::exposes("pub fn f() -> Box<dyn T> {"));\n    }\n}\n' \
+    >>"$ambiguous_name/crates/fixt/tests/pin.rs"
+git -C "$ambiguous_name" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qam ambiguous-name
+expect_fail "$ambiguous_name" 2 'resolves to 2 registered tests'
 
 # A mutation that breaks the build observed nothing. `cargo test` exits non-zero for a compile error too, and
 # reading that as a failing-and-therefore-biting pin is the false clean this gate exists to refuse.

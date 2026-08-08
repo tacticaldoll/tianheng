@@ -100,10 +100,11 @@ them.
 
   Four properties of the arrangement are stated rather than left to the implementation, each measured. The tree
   is built from tracked content, so an interrupted run has edited nothing. The build gets its **own** target
-  directory: cargo decides freshness by timestamp and `git archive` stamps the commit's time, so a tree sharing
-  a warm target directory runs a binary built from other sources — the mutated file is never recompiled and
-  *every* pin then reports as **surviving** its mutation. That is the loud direction, so the isolation is what
-  makes the gate usable rather than what closes a hole. A mutation that fails to compile, or whose anchor
+  directory, because sharing a warm one was observed twice to run the cited test against a binary built from
+  other sources, after which *every* pin reports as **surviving** its mutation. That is the loud direction, so
+  the isolation is what makes the gate usable rather than what closes a hole — and the entry says what is not
+  claimed: a fixture-scale reproduction of the reuse did not occur, so nothing pins that requirement and its
+  cause is unsettled. A mutation that fails to compile, or whose anchor
   matched zero or several times, is **cannot judge**: each describes a perturbation that was never applied,
   which is a different fact from a pin that does not bite. And the records are parsed **once** — counting them
   by one splitting rule and processing them by another let a file holding nothing to run exit 0, which is the
