@@ -39,6 +39,9 @@ jobs:
       - name: in-repository references resolve
         run: |
           TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test reference_integrity
+      - name: every declared mutation kills the pin it names
+        run: |
+          TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test pin_bites
       - name: build / test / clippy / fmt / doc
         run: |
           cargo build --workspace

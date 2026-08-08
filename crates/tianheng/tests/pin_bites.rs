@@ -1,17 +1,39 @@
-//! Self-governance reaction: verification of pinned observation bounds.
+//! Self-governance reaction: a pinning citation is held to **biting**, not only to running.
 //!
-//! Asserts that every declared bound citation names a test that is registered and callable
-//! within the test harness.
+//! `bound_register.rs` decides that a `PINNED-BY` citation names a test the harness registers. It cannot
+//! decide that the test would fail if the reaction it defends changed — measured rather than argued: replacing
+//! a cited pin's entire body with a binding that asserts nothing left the suite green and the register
+//! reporting its citation count clean. This reaction runs each cited test against a tree where the reaction
+//! has been perturbed and requires it to fail, because whether a test bites is a question about running a
+//! program and no reading of text answers it.
+//!
+//! Coverage is partial and this says so on every clean run, in the shape `docs/observation-bounds.md` already
+//! leads with its unpinned count: reporting only the mutations it ran would be the reads-as-coverage failure
+//! it exists to end, one level up.
+//!
+//! **It is gated behind `TIANHENG_PIN_BITES`** and named in the Definition of Done and in CI on its own line.
+//! It checks out a worktree and builds it, so running it inside every `cargo test --workspace` would make the
+//! ordinary suite pay for it; leaving it to run only when something remembers to would be worse, which is why
+//! it is a line of its own rather than a default-ignored test.
+//!
+//! **The three-way exit contract does not survive the move to Rust.** A shell gate separated a violation (1)
+//! from a gate that cannot decide (2); a test passes or fails. Every cannot-judge condition here therefore
+//! **fails**, loudly and saying so — the safe direction, because the alternative is a reaction that reports
+//! clean over a perturbation it never applied.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+const RECORDS: &str = "crates/tianheng/tests/fixtures/pin_mutations.tsv";
 
 fn locate_layout(root: PathBuf, marker_set: bool) -> Option<PathBuf> {
-    if root.join("Cargo.toml").is_file() {
+    if root.join(RECORDS).is_file() {
         return Some(root);
     }
     assert!(
         !marker_set,
-        "Cargo.toml expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is set"
+        "{RECORDS} expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is set — a governance \
+         reaction that quietly does nothing in CI is the shape this family argues against"
     );
     None
 }
@@ -23,34 +45,428 @@ fn workspace_root() -> Option<PathBuf> {
     )
 }
 
+fn run(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
+    let out = Command::new(args[0])
+        .args(&args[1..])
+        .current_dir(dir)
+        .env("CARGO_TERM_COLOR", "never")
+        .output()
+        .unwrap_or_else(|err| panic!("cannot run {args:?}: {err}"));
+    (
+        out.status.code(),
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
+    )
+}
+
+fn must(dir: &Path, what: &str, args: &[&str]) -> String {
+    let (code, output) = run(dir, args);
+    assert_eq!(
+        code,
+        Some(0),
+        "{what} failed; a failed read is not an empty result: {output}"
+    );
+    output
+}
+
+/// One declared mutation: the perturbation a pinning citation must die under.
+struct Record {
+    name: String,
+    file: String,
+    from: String,
+    to: String,
+}
+
+/// `\n` and `\t` are unescaped in the two substrings, so a perturbation spanning lines is still one record.
+fn unescape(s: &str) -> String {
+    s.replace("\\n", "\n").replace("\\t", "\t")
+}
+
+/// Parse the records **once**, by one rule.
+///
+/// Counting them by one splitting rule and processing them by another is how a file holding nothing to run
+/// once exited 0: TAB is IFS whitespace, so a TAB-indented comment was a record to one reader and prose to the
+/// other. One parser, exact tab-count splitting.
+fn parse_records(root: &Path) -> Vec<Record> {
+    let text = must(
+        root,
+        &format!("`git show HEAD:{RECORDS}`"),
+        &["git", "show", &format!("HEAD:{RECORDS}")],
+    );
+    let mut records = Vec::new();
+    for line in text.lines() {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fields: Vec<&str> = line.split('\t').collect();
+        assert_eq!(
+            fields.len(),
+            4,
+            "a record in {RECORDS} carries {} TAB(s) where a record is four TAB-separated fields:\n{line}",
+            fields.len() - 1
+        );
+        assert!(
+            !fields[0].is_empty() && !fields[1].is_empty() && !fields[2].is_empty(),
+            "a record carries an empty test name, path, or anchor:\n{line}"
+        );
+        records.push(Record {
+            name: fields[0].to_string(),
+            file: fields[1].to_string(),
+            from: unescape(fields[2]),
+            to: unescape(fields[3]),
+        });
+    }
+    assert!(
+        !records.is_empty(),
+        "{RECORDS} declares no mutation; every property of zero mutations holds, and reporting that as a \
+         clean run is the vacuity direction"
+    );
+    records
+}
+
+/// Every test name a declared bound cites, read from HEAD rather than the worktree.
+fn cited_names(root: &Path) -> Vec<String> {
+    let out = Command::new("git")
+        .args([
+            "grep",
+            "-h",
+            "-E",
+            "^- \\*\\*PINNED-BY\\*\\* `[^`]+`",
+            "HEAD",
+            "--",
+            "openspec/specs/*/spec.md",
+        ])
+        .current_dir(root)
+        .output()
+        .expect("run git grep for citations");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "could not read the register's citations from HEAD; a failed read is not an empty result"
+    );
+    let mut names: Vec<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|line| line.split('`').nth(1))
+        .map(|cite| cite.rsplit("::").next().unwrap_or(cite).to_string())
+        .collect();
+    names.sort();
+    names.dedup();
+    assert!(
+        !names.is_empty(),
+        "HEAD's specs carry no PINNED-BY citation; a record naming a cited test cannot be judged against an \
+         empty set"
+    );
+    names
+}
+
+/// A detached worktree at HEAD, removed when this is dropped.
+///
+/// Detached and at HEAD, so an interrupted run has edited nothing of the author's — and, unlike an export of
+/// tracked content, it carries a working repository, without which a pin that reads the repository through
+/// git fails its own control run. Hooks are disabled: a `post-checkout` hook would otherwise run inside the
+/// tree under test with write access to the judged repository's refs.
+struct Scratch {
+    root: PathBuf,
+    tree: PathBuf,
+    work: PathBuf,
+}
+
+impl Scratch {
+    fn new(root: &Path) -> Self {
+        let work = std::env::temp_dir().join(format!("tianheng-pin-bites-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&work);
+        std::fs::create_dir_all(work.join("no-hooks")).expect("the scratch root is writable");
+        let tree = work.join("tree");
+        must(
+            root,
+            "checking HEAD out into a scratch worktree",
+            &[
+                "git",
+                "-c",
+                &format!("core.hooksPath={}", work.join("no-hooks").display()),
+                "worktree",
+                "add",
+                "--quiet",
+                "--detach",
+                &tree.display().to_string(),
+                "HEAD",
+            ],
+        );
+        Self {
+            root: root.to_path_buf(),
+            tree,
+            work,
+        }
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = Command::new("git")
+            .args(["worktree", "remove", "--force"])
+            .arg(&self.tree)
+            .current_dir(&self.root)
+            .output();
+        let _ = std::fs::remove_dir_all(&self.work);
+    }
+}
+
+/// Which cargo target runs the cited test, as an **allowlist** rather than a fallthrough.
+///
+/// Assuming a library test for whatever did not match ran a *different* test of the same name and reported
+/// that one's death as the citation's.
+fn selector(tree: &Path, name: &str) -> Vec<String> {
+    let hits = must(
+        tree,
+        &format!("locating where `{name}` is defined"),
+        &[
+            "git",
+            "grep",
+            "-l",
+            "-E",
+            &format!("fn {name}[[:space:]]*[(<]"),
+            "--",
+            "crates/",
+        ],
+    );
+    let defined: Vec<&str> = hits.lines().collect();
+    assert_eq!(
+        defined.len(),
+        1,
+        "`{name}` is defined in {} files under crates/; the target to run it in cannot be derived from a set",
+        defined.len()
+    );
+    let path = defined[0];
+    let package = path
+        .strip_prefix("crates/")
+        .and_then(|rest| rest.split('/').next())
+        .unwrap_or_else(|| {
+            panic!("{path} is not under crates/<package>/, so the package to run `{name}` in is underivable")
+        });
+
+    if let Some(rest) = path.strip_prefix(&format!("crates/{package}/tests/"))
+        && let Some(stem) = rest.strip_suffix(".rs")
+        && !stem.contains('/')
+    {
+        return vec![
+            "-p".into(),
+            package.into(),
+            "--test".into(),
+            stem.to_string(),
+        ];
+    }
+    if path.starts_with(&format!("crates/{package}/src/"))
+        && !path.starts_with(&format!("crates/{package}/src/bin/"))
+    {
+        return vec!["-p".into(), package.into(), "--lib".into()];
+    }
+    panic!(
+        "`{name}` is defined in {path}, which is neither an integration target root nor a library source \
+         file; the target to run it in is not derivable, and guessing one would run a different test"
+    );
+}
+
+/// `passed + failed == 1` on the one `test result:` line — a filter matching nothing exits 0 over zero tests.
+fn ran_exactly_one(log: &str) -> bool {
+    log.lines()
+        .filter_map(|line| line.strip_prefix("test result: "))
+        .filter_map(|rest| {
+            let (passed, tail) = rest.split_once(" passed; ")?;
+            let passed: usize = passed.rsplit(' ').next()?.parse().ok()?;
+            let failed: usize = tail.split(' ').next()?.parse().ok()?;
+            Some(passed + failed)
+        })
+        .next()
+        == Some(1)
+}
+
+fn cargo_args<'a>(selector: &'a [String], tail: &[&'a str]) -> Vec<&'a str> {
+    let mut args = vec!["cargo", "test", "--all-features"];
+    args.extend(selector.iter().map(String::as_str));
+    args.extend_from_slice(tail);
+    args
+}
+
+/// The name `--exact` needs, which is the registered path rather than the bare identifier.
+///
+/// A cited test may live inside a module, so its registered name is `dsl::tests::<name>`; filtering on the
+/// bare identifier matches nothing and exits 0 over zero tests. The harness is asked which registered name
+/// the citation means, and exactly one must answer — a filter matching several does not name the citation.
+fn resolve_test_name(tree: &Path, selector: &[String], name: &str) -> String {
+    let log = must(
+        tree,
+        &format!("enumerating the tests of the target defining `{name}`"),
+        &cargo_args(selector, &["--", "--list"]),
+    );
+    let listed: Vec<&str> = log
+        .lines()
+        .filter_map(|line| line.strip_suffix(": test"))
+        .filter(|registered| *registered == name || registered.ends_with(&format!("::{name}")))
+        .collect();
+    assert_eq!(
+        listed.len(),
+        1,
+        "`{name}` resolves to {} registered tests in that target; a filter matching none runs nothing and \
+         exits 0, and one matching several does not name the citation",
+        listed.len()
+    );
+    listed[0].to_string()
+}
+
 #[test]
-fn pin_mutation_records_exist_or_are_valid() {
+fn every_declared_mutation_kills_the_pin_it_names() {
     let Some(root) = workspace_root() else {
         return;
     };
-
-    let records_path = root.join("crates/tianheng/tests/fixtures/pin_mutations.tsv");
-    if !records_path.is_file() {
+    if std::env::var_os("TIANHENG_PIN_BITES").is_none() {
+        eprintln!(
+            "pin bites: skipped — set TIANHENG_PIN_BITES=1 to run it. It is named on its own line in the \
+             Definition of Done and in CI, so skipping here is a cost decision rather than a hole."
+        );
         return;
     }
 
-    let content = std::fs::read_to_string(&records_path).expect("read pin_mutations.tsv");
-    let mut valid_records = 0;
+    let records = parse_records(&root);
+    let cited = cited_names(&root);
+    let scratch = Scratch::new(&root);
+    let tree = scratch.tree.clone();
+    let target_dir = scratch.work.join("target");
 
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        let parts: Vec<&str> = trimmed.split('\t').collect();
-        if parts.len() >= 2 {
-            valid_records += 1;
-        }
+    for record in &records {
+        let name = &record.name;
+        assert!(
+            cited.contains(name),
+            "the record for `{name}` names a test no declared bound cites; a mutation is an assertion about \
+             a citation, and one without a citation asserts nothing"
+        );
+
+        // Tracked AND contained, separately. A tracked symlink is tracked, and following one rewrites a file
+        // outside the tree — destructively, if the run is killed between the write and the restore.
+        let (code, _) = run(
+            &root,
+            &["git", "ls-files", "--error-unmatch", record.file.as_str()],
+        );
+        assert_eq!(
+            code,
+            Some(0),
+            "the record for `{name}` names {}, which HEAD does not track; a mutation edits tracked content",
+            record.file
+        );
+        let target = tree.join(&record.file);
+        let resolved = std::fs::canonicalize(&target).unwrap_or_else(|err| {
+            panic!(
+                "the record for `{name}` names {}, which cannot be resolved under the tree under test: {err}",
+                record.file
+            )
+        });
+        let tree_real = std::fs::canonicalize(&tree).expect("the scratch tree resolves");
+        assert!(
+            resolved.starts_with(&tree_real),
+            "the record for `{name}` names {}, which resolves to {resolved:?} and so is not a file under \
+             the tree under test",
+            record.file
+        );
+
+        let selector = selector(&tree, name);
+
+        // The control: the unmutated tree must build, and the cited test must pass on it, or its failure
+        // under a mutation would say nothing.
+        let (code, log) = run(&tree, &cargo_args(&selector, &["--no-run"]));
+        assert_eq!(
+            code,
+            Some(0),
+            "the unmutated tree does not build for `{name}`:\n{log}"
+        );
+        let resolved_name = resolve_test_name(&tree, &selector, name);
+        let (code, log) = run(
+            &tree,
+            &cargo_args(&selector, &["--", "--exact", &resolved_name]),
+        );
+        assert_eq!(
+            code,
+            Some(0),
+            "`{name}` does not pass on the unmutated tree, so its failure under a mutation would say nothing:\n{log}"
+        );
+        assert!(
+            ran_exactly_one(&log),
+            "the control run for `{name}` did not run exactly one test; a filter matching nothing exits 0 \
+             over nothing:\n{log}"
+        );
+
+        // Apply the mutation. The anchor must match EXACTLY once: an anchor matching twice names a set rather
+        // than a site, and substituting the first occurrence would perturb somewhere nobody declared.
+        let original = std::fs::read_to_string(&resolved).expect("the record's file is readable");
+        let occurrences = original.matches(record.from.as_str()).count();
+        assert_eq!(
+            occurrences, 1,
+            "the record for `{name}` has an anchor matching {occurrences} times in {}; a perturbation that \
+             was never applied is a different fact from a pin that does not bite",
+            record.file
+        );
+        std::fs::write(&resolved, original.replace(&record.from, &record.to))
+            .expect("the mutation is writable");
+
+        let (build, build_log) = run(&tree, &cargo_args(&selector, &["--no-run"]));
+        let survived = if build != Some(0) {
+            std::fs::write(&resolved, &original).expect("the restore is writable");
+            panic!(
+                "the mutation for `{name}` does not compile, so the perturbation was never applied — a \
+                 different fact from a pin that does not bite:\n{build_log}"
+            );
+        } else {
+            let (code, log) = run(
+                &tree,
+                &cargo_args(&selector, &["--", "--exact", &resolved_name]),
+            );
+            let one = ran_exactly_one(&log);
+            std::fs::write(&resolved, &original).expect("the restore is writable");
+            assert!(
+                one,
+                "the mutated run for `{name}` did not run exactly one test:\n{log}"
+            );
+            code == Some(0)
+        };
+
+        assert!(
+            !survived,
+            "`{name}` passes against the mutation declared for it, so the citation defends nothing: the \
+             reaction can change at that point and the pin will not notice"
+        );
+
+        // Where the mutated run failed, the control runs AGAIN after the restore. One control rules out a
+        // test that fails on its own; it does not rule out one whose failure the control itself caused — a
+        // pin writing a marker and asserting its absence passes exactly once.
+        let (code, log) = run(
+            &tree,
+            &cargo_args(&selector, &["--", "--exact", &resolved_name]),
+        );
+        assert_eq!(
+            code,
+            Some(0),
+            "`{name}` fails on the restored tree, so the mutated run's failure may have had nothing to do \
+             with the mutation:\n{log}"
+        );
+        assert!(
+            ran_exactly_one(&log),
+            "the restored-tree run for `{name}` did not run exactly one test:\n{log}"
+        );
     }
 
-    assert!(
-        valid_records > 0,
-        "crates/tianheng/tests/fixtures/pin_mutations.tsv parsed to zero valid mutation records"
+    let _ = &target_dir;
+    eprintln!(
+        "pin bites ok ({} declared mutation(s) covering {} of {} cited test(s)) — the uncovered remainder is \
+         the point: a gate reporting only the mutations it ran would be the reads-as-coverage failure it \
+         exists to end, one level up",
+        records.len(),
+        records
+            .iter()
+            .map(|r| r.name.as_str())
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        cited.len()
     );
 }
 
