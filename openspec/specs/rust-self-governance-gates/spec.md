@@ -16,4 +16,3 @@ Contract projections and censuses SHALL be formally classified as derived text v
 #### Scenario: Freshness check of projected documents
 - **WHEN** developer or CI runs `BLESS=1 cargo test -p tianheng`
 - **THEN** projected document contents are generated from Rust sources of truth and verified without adding runtime code to shipped crates
-

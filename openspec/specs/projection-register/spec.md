@@ -118,4 +118,3 @@ id, per `observation-bound-model`.
   which then holds over a surface missing a member. This is a false negative rather than a limit of the corpus —
   the third mechanism's source sits in the tree the reaction already reads — so it is owned by the engine
 - **PINNED-BY** `a_third_generation_mechanism_is_not_recognized`
-

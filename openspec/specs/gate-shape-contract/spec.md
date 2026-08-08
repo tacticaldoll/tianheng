@@ -362,4 +362,3 @@ is rather than what it does.
 - **WHEN** the producer is `printf` or `echo` over a variable already in memory
 - **THEN** the reaction accepts it, because there is no I/O to fail at and requiring a temporary file would make the
   gate longer without making it safer
-
