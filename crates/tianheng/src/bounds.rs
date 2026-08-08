@@ -135,18 +135,18 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::unpinned(
             BoundId::new(
-                "observer-protocol/a-whole-line-copy-inside-a-block-comment-anchors-the-read-a-stated-bound",
+                "observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound",
             ),
-            "a whole-line signature copy in a block comment, with the definition moved out of the inspected source",
+            "a whole-line signature copy — commented, in a string literal, or otherwise — with the definition moved out of the inspected source",
             Extent::Reached(Reached::UnderReacts {
-                because: "both anchor conditions are satisfied — one occurrence, at a line start — so the \
-                          commented body is read as the method's and a divergent list in the real impl \
-                          passes; closing it needs comment stripping over text carrying string literals, the \
-                          lexing this tree's own suites defeat"
+                because: "the reader knows nothing of comments or literals, so one whole-line occurrence \
+                          anchors whatever follows it; what passes is a second hand-maintained path that \
+                          agrees today, since a divergent one is caught by observation-bound-model's \
+                          bijection over Observer::bounds — measured both ways"
                     .into(),
                 owner: Owner::Engine,
             }),
-            "`BACKLOG.md` — *the bounds-method reader anchors in a block comment when the definition moved*",
+            "`BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*",
         ),
         BoundDecl::unpinned(
             BoundId::new(

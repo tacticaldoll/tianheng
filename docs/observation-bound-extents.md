@@ -17,7 +17,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound` — owner: engine
-- `observer-protocol/a-whole-line-copy-inside-a-block-comment-anchors-the-read-a-stated-bound` — owner: engine
+- `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound` — owner: engine
 - `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound` — owner: adopter
 - `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound` — owner: engine
 - `observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound` — owner: engine
@@ -489,13 +489,13 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
-### `observer-protocol/a-whole-line-copy-inside-a-block-comment-anchors-the-read-a-stated-bound`
+### `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`
 
-> a whole-line signature copy in a block comment, with the definition moved out of the inspected source
+> a whole-line signature copy — commented, in a string literal, or otherwise — with the definition moved out of the inspected source
 
-- **because**: both anchor conditions are satisfied — one occurrence, at a line start — so the commented body is read as the method's and a divergent list in the real impl passes; closing it needs comment stripping over text carrying string literals, the lexing this tree's own suites defeat
+- **because**: the reader knows nothing of comments or literals, so one whole-line occurrence anchors whatever follows it; what passes is a second hand-maintained path that agrees today, since a divergent one is caught by observation-bound-model's bijection over Observer::bounds — measured both ways
 - **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *the bounds-method reader anchors in a block comment when the definition moved*
+- **unpinned**, tracked by: `BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*
 
 ### `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound`
 

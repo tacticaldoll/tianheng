@@ -211,11 +211,11 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the shell's semantic delegation, held by construction*
 
-### `observer-protocol/a-whole-line-copy-inside-a-block-comment-anchors-the-read-a-stated-bound`
+### `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`
 
-> the reaction reads the commented body and reports it as the method's, so a divergent hand-written
+> the reaction reads that copy's body and reports it as the method's. Both anchor conditions are
 
-- **unpinned**, tracked by: `BACKLOG.md` — *the bounds-method reader anchors in a block comment when the definition moved*
+- **unpinned**, tracked by: `BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*
 
 ### `observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound`
 

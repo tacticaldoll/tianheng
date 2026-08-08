@@ -563,7 +563,7 @@ them.
   `owner` / `tracker` annotations onto the newly observed facts. Only those two rules are affected —
   signature-coupling, forbidden-marker, trait-impl locality, and unsafe confinement resolve through a different
   entry point and are unchanged.
-- **Nothing else requires action**, including the one manifest that did change: `crates/tianheng` dropped its
+- **Nothing else requires action**, including the one *published crate's* manifest that changed: `crates/tianheng` dropped its
   direct `xingbiao` dependency, and `tianheng` re-exported nothing from `xingbiao` at `v0.4.0`, so no path an
   adopter could name is gone. Every other entry either adds a surface absent at `v0.4.0` (the observation-bound
   vocabulary, the three concrete observers, `Run`, each dimension's `observation_bounds()`), corrects a

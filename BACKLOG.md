@@ -60,22 +60,34 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **The bounds-method reader anchors in a block comment when the definition moved.** *Class:* READY-PATCH.
-  *Observed pressure:* the reader requires the signature to occur exactly once and at a line start. A
-  **whole-line** copy inside a block comment satisfies both, so if the definition has moved out of the
-  inspected source the commented body is read as the method's. Reproduced end-to-end: `impl Observer for
-  SemanticObserver` moved to a file the dimension table does not name, its `bounds()` rebuilt as a divergent
-  hand-written list, a block-comment copy left behind — `every_observer_declares_exactly_its_dimension_s_bounds`
-  passes and the whole workspace suite is green. *Observation source:* that perturbation, run during the
-  closing review of the 0.5.0 window. *Current reaction or bound:* the declared bound
-  `observer-protocol/a-whole-line-copy-inside-a-block-comment-anchors-the-read-a-stated-bound`. *Risk:* the one
-  the requirement exists to refuse — a second, divergent list passing as a delegation. *Promotion trigger:*
-  fired; the perturbation is a tree artefact rather than a report. *Version class:* patch; a `tests/` reaction
-  of this repository, shipping in no crate. *Authority:* `observer-protocol`.
-  *Shape:* comment stripping over text that carries string literals, which is the lexing this tree's own lexer
-  suites defeat — `check_bound_register.sh` records the same rejection for the same reason. So not a third
-  textual condition. The reachable alternative is to stop reading a *file the dimension table names* and read
-  the definition the compiler resolves, which is a different instrument than any of the four tried here.
+- **The bounds-method reader anchors on a whole-line occurrence that is not the definition.** *Class:*
+  READY-PATCH. *Observed pressure:* the reader requires the signature to occur exactly once and at a line
+  start, and knows nothing of comments or literals. So where the definition has moved out of the inspected
+  file, any surviving **whole-line** copy anchors — reproduced with a block-comment copy, and again with a
+  copy inside a `&str` constant, both giving
+  `every_observer_declares_exactly_its_dimension_s_bounds ... ok`. *Observation source:* those two
+  perturbations, run during the closing review of the 0.5.0 window.
+  *Current reaction or bound:* the declared bound
+  `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`.
+  *Risk, measured rather than assumed:* **narrower than it first reads.** A *divergent* second list does not
+  pass — `observation-bound-model` reads every dimension through `Observer::bounds` and holds a bijection with
+  the specs, so a difference in membership or content fails `the_extent_projection_is_fresh` and the
+  classification test one capability over. What passes is a second, hand-maintained path that **agrees today**
+  and is maintained by hand from now on: re-run with a list rebuilt element by element from
+  `observation_bounds()`, the whole workspace suite is green. *Promotion trigger:* fired; both perturbations
+  are tree artefacts rather than reports. *Version class:* patch; a `tests/` reaction of this repository,
+  shipping in no crate. *Authority:* `observer-protocol`.
+
+  *Shape, with the corpus measured rather than borrowed:* comment stripping does **not** close this — a string
+  literal is not a comment — so the register's rejection of comment-delimiter lexing is not the reason here,
+  and citing it was wrong. This reader's corpus is the three files `DIMENSIONS` names, 35, 48 and 43 lines,
+  none carrying a string literal with a comment delimiter, so the register's measurement does not transfer in
+  either direction. Two candidate closures, neither adopted: require the anchor to be preceded by an
+  `impl Observer for` line, which refuses both reproduced perturbations, needs no lexing, and declines strictly
+  more — this reader's declared error direction; or stop reading a file the dimension table names and read the
+  definition the compiler resolves, which is a different instrument than any textual condition tried here. The
+  first is a further narrowing, and every textual narrowing of this recognizer's retired sibling was defeated,
+  which is why it is recorded for the next author to weigh rather than applied inside a closing review.
 
 - **The construction-held list is hand-maintained prose.** *Class:* READY-PATCH. *Observed pressure:*
   `observer-protocol` requires the spec to say which dimensions' equality holds by construction, and nothing

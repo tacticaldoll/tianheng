@@ -378,17 +378,21 @@ fn a_brace_in_a_block_comment_moves_the_body_extent() {
     );
 }
 
-/// A signature that only ever appears as a **mention** anchors nothing, even when it appears exactly once.
+/// A **mid-line** mention anchors nothing, even when it is the signature's only occurrence.
 ///
 /// Occurrence counting alone admits this: one occurrence, in a comment, with the definition absent because the
 /// impl moved to another file. The anchor lands in the prose, the next `{` belongs to whatever follows, and its
 /// body is returned as this method's. The line-start rule the count replaced declined it — so the two rules
 /// each admit what the other refuses, and [`function_body`] requires both.
 ///
-/// The control is the same mention beside a real definition, which must still read: requiring both conditions
-/// must decline more, not decline everything.
+/// It is **mid-line** and not *mention* that this closes, which an earlier version of this test claimed and got
+/// wrong: a whole-line copy anchors, and that is a declared bound.
+///
+/// The control is an ordinary definition, which must still read — requiring both conditions must decline more,
+/// not decline everything. It cannot be "the same mention beside a definition", because that is two occurrences
+/// and the uniqueness rule refuses it.
 #[test]
-fn a_signature_that_is_only_ever_mentioned_anchors_nothing() {
+fn a_mid_line_mention_anchors_nothing() {
     let mention_only = Source::of(
         "// the array points here, but the impl for `fn bounds(` moved away\nfn other() -> u8 { 0 }\n",
     );
@@ -603,8 +607,6 @@ fn mask_line_comment_braces(text: &str) -> String {
     String::from_utf8(bytes).expect("only ASCII braces were replaced, each by one ASCII space")
 }
 
-/// How many times `signature` occurs, so a decline can say whether it found none or too many.
-///
 /// Whether the byte offset `at` is preceded on its own line by nothing but whitespace.
 ///
 /// One definition, read by both the reader and its diagnostic, because the two drifting apart is exactly the
@@ -631,14 +633,25 @@ fn occurrence_begins_a_line(source: &Source, signature: &str) -> bool {
 /// occurrences now, and the reader adds a line-start condition this does not, which is why
 /// [`decline_reason`] asks about that condition separately rather than reading it off this number.
 fn anchor_count(source: &Source, signature: &str) -> usize {
-    source.whole().matches(signature).count()
+    occurrences(source.whole(), signature)
+}
+
+/// How many times `signature` occurs in `text`.
+///
+/// The other half of the anchor rule, factored for the same reason as [`begins_a_line`]: this is the half whose
+/// divergence is the recorded defect — [`anchor_count`] once counted trimmed-start lines while the reader
+/// counted occurrences, and a declined read reported "1" while denying a second definition. One definition
+/// means the agreement is structural rather than maintained.
+fn occurrences(text: &str, signature: &str) -> usize {
+    text.matches(signature).count()
 }
 
 /// Why a read declined, in the reader's own words.
 ///
-/// Three inputs decline and they call for different repairs: the signature is absent, it occurs more than once,
-/// or it occurs exactly once and no balanced body follows it. Reporting all three as an anchor count sent a
-/// reader hunting for a second definition that the same message had just counted as absent.
+/// Each way of declining calls for a different repair — the signature is absent, it occurs more than once, it
+/// occurs once but mid-line, or it occurs once at a line start with no balanced body after it — so the reason
+/// names which. Reporting them all as an anchor count sent a reader hunting for a second definition that the
+/// same message had just counted as absent.
 fn decline_reason(source: &Source, signature: &str) -> String {
     match anchor_count(source, signature) {
         0 => format!("`{signature}` does not occur, so there is no body to read"),
@@ -688,13 +701,12 @@ fn function_body(source: &Source, signature: &str) -> Option<Source> {
     // beside one; the line start refuses a MID-LINE mention. Requiring both only ever DECLINES more, which is
     // this reader's declared error direction.
     //
-    // What it does NOT refuse, and the claim that it did was wrong: a WHOLE-LINE copy inside a block comment,
-    // with the definition absent because the impl moved elsewhere. That satisfies both conditions — one
-    // occurrence, at a line start — and the reader returns the commented body as the method's, measured
-    // end-to-end with a divergent hand-written list in the real impl and the whole suite green. Closing it
-    // needs comment stripping over text that carries string literals, which this tree's own lexer suites
-    // defeat, so it is a declared bound rather than a third condition.
-    if text.matches(signature).count() != 1 {
+    // What it does NOT refuse: a WHOLE-LINE copy, wherever it sits, with the definition absent because the
+    // impl moved elsewhere. This reader knows nothing of comments or literals, so a commented copy and one
+    // inside a `&str` constant anchor identically — both measured. A declared bound, and the risk is narrower
+    // than it reads: a DIVERGENT second list is caught by `observation-bound-model`'s bijection over
+    // `Observer::bounds`, so what survives is a second hand-maintained path that agrees today.
+    if occurrences(text, signature) != 1 {
         return None;
     }
     let signature = text.find(signature)?;

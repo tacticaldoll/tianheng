@@ -214,17 +214,19 @@ Where a dimension's equality is construction-held, the reaction SHALL still obse
 for that dimension **reacts at all**. Otherwise an arm that quietly went vacuous would leave the whole
 comparison resting on the dimensions that did not.
 
-#### Scenario: A whole-line copy inside a block comment anchors the read — a stated bound
+#### Scenario: A whole-line occurrence that is not the definition anchors the read — a stated bound
 
 - **WHEN** the method's definition is absent from the inspected source — the impl having moved elsewhere — and a
-  whole-line copy of its signature remains inside a block comment
-- **THEN** the reaction reads the commented body and reports it as the method's, so a divergent hand-written
-  list in the real impl passes. Both anchor conditions are satisfied: one occurrence, at a line start. It is a
-  declared false negative this repository owns, and closing it needs comment stripping over text that carries
-  string literals — the lexing this tree's own suites defeat and the register measured and rejected for the
-  same reason. The count condition refuses the *decoy* case, where the definition is present beside the copy;
-  this is the case where it is not
-- **UNPINNED** `BACKLOG.md` — *the bounds-method reader anchors in a block comment when the definition moved*
+  whole-line copy of its signature remains anywhere in that file: inside a block comment, inside a string
+  literal, or in any other position the reader does not distinguish from executed text
+- **THEN** the reaction reads that copy's body and reports it as the method's. Both anchor conditions are
+  satisfied — one occurrence, at a line start — and the reader knows nothing of comments or literals, so the
+  class is "the unique whole-line occurrence is not the definition" rather than any one syntactic position.
+  What passes is a **second, hand-maintained path that agrees today**: a *divergent* list does not, because
+  `observation-bound-model` reads every dimension's declarations through `Observer::bounds` and holds them in a
+  bijection with the specs, which fails on any difference of membership or content. Measured both ways. So the
+  residual is narrower than a divergent list slipping through, and wider than a comment
+- **UNPINNED** `BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*
 
 #### Scenario: Whether the stated construction-held list matches the composition path is not observed — a stated bound
 
