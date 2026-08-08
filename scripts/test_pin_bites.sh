@@ -6,9 +6,11 @@
 # shared family shapes or diagnostics rather than this gate's own subject. One is neither: the target-directory
 # isolation is a requirement, and the attempt to pin it — remove the export, point the gate at a pre-warmed
 # directory — made cargo rebuild and passed, so nothing here proves it. Naming that here beats an
-# `every` this file would not hold — the absolute-claim class this repository keeps closing. Everything else
-# the requirement states does have a direction, including the two this file gained after a review found them
-# stated and unwatched.
+# `every` this file would not hold — the absolute-claim class this repository keeps closing. Two further
+# requirements are unwatched here and were found by removing their guards and watching this matrix stay green:
+# that a record's path be TRACKED (only the containment half is pinned, by `escaping`), and that the checkout
+# carry a working repository (swapping it for an export of tracked content changes nothing below). Both
+# refusals work — each was driven from a fixture by hand — but neither is defended here.
 #
 # The fixtures are minimal cargo workspaces rather than checkouts of this one, and that is the point of the
 # shape: the gate under test builds what it judges, so a fixture carrying this repository's dependency graph
@@ -186,6 +188,23 @@ sed -i 's/assert!(fixt::exposes("pub fn f() -> Box<dyn T> {"));/assert!(!fixt::e
     "$already_failing/crates/fixt/tests/pin.rs"
 git -C "$already_failing" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qam already-failing
 expect_fail "$already_failing" 2 'does not pass on the unmutated tree'
+
+# An order-dependent pin: it writes a marker and asserts the marker's absence, so it passes once and fails
+# ever after. The first control cannot see this — the failure it would need to observe is the one it causes —
+# so the mutated run fails for a reason the mutation had no part in and the citation reads as exercised. A
+# constructed false clean, closed by running the control again after the restore.
+order_dependent=$(new_repo order-dependent "$KILLS")
+cat >"$order_dependent/crates/fixt/tests/pin.rs" <<'PIN'
+#[test]
+fn a_continuation_line_is_not_recognized() {
+    let marker = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ran-once.marker");
+    assert!(!marker.exists(), "this pin passes only on its first run");
+    std::fs::write(&marker, "ran").expect("the manifest directory is writable");
+    assert!(fixt::exposes("pub fn f() -> Box<dyn T> {"));
+}
+PIN
+git -C "$order_dependent" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qam order-dependent
+expect_fail "$order_dependent" 2 'fails on the restored tree'
 
 # --- a run that executed no test (the scenario three refusal sites implement) ---
 #

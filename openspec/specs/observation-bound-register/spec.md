@@ -369,6 +369,13 @@ Without the control, a cited test failing for its own reasons reads as a pin tha
 applied to the tree — the same `f() == f()` shape reached from the other side, where the comparison is with a
 run whose outcome was never in doubt.
 
+The control SHALL also be run **again after the restore**, and the reaction SHALL refuse to judge unless it
+passes then too. One control rules out a test that fails deterministically on its own; it cannot rule out one
+whose failure it *caused*. A pin writing a marker and asserting the marker's absence passes exactly once, so
+the mutated run fails for a reason the mutation had no part in and the citation is reported as exercised by a
+perturbation that did nothing — a false clean, constructed and measured. Where the second control fails, the
+outcome is order-dependent and no failure under the mutation can be attributed to the mutation.
+
 The package and target the cited test runs in SHALL be **derived from where that test is defined**, not from the
 file the mutation edits and not declared beside the mutation. A record routinely perturbs a reaction in one file
 while the pin defending it sits in another, and deriving from the edited file then runs a target the citation is
@@ -378,7 +385,10 @@ A name whose definition the scan finds zero or several times SHALL be cannot jud
 derived from a set.
 
 An enumeration of citations that yields none SHALL fail loudly rather than report every mutation valid against
-an empty set — the vacuity direction, in the second of this capability's two enumerations.
+an empty set — the vacuity direction, in the second of this capability's two enumerations. It SHALL be carried
+by the **read**, which refuses a match of nothing as a failed read, rather than by a comparison against zero
+afterwards: with the read refusing first, such a comparison can never fire, and a guard that cannot fire reads
+as protection while being none.
 
 A mutation whose tree does not **compile** SHALL be cannot judge, for the same reason as a rotted anchor: the
 perturbation was never exercised. `cargo test` exits non-zero for a compile error as well as for a failing

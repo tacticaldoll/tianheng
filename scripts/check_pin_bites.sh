@@ -13,7 +13,7 @@
 # a comment. Whether a test WOULD fail under a different reaction is a question about running a program. So
 # this gate runs the cited test against a mutated tree and reads its status.
 #
-# Four properties of the arrangement are load-bearing, each measured:
+# The arrangement's load-bearing properties, each measured — and the list grew as review found more:
 #
 #   * The tree is a detached WORKTREE at HEAD, so an interrupted run has edited nothing of the author's.
 #     Note what that is NOT: the sibling gates enumerate tracked PATHS with `git ls-files` and then read the
@@ -141,9 +141,10 @@ capture_or_refuse 'the register PINNED-BY citations' "$citations" cannot_judge \
     -- git grep -h -E '^- \*\*PINNED-BY\*\* `[^`]+`' HEAD -- 'openspec/specs/*/spec.md'
 cited_names() { sed -E 's/^- \*\*PINNED-BY\*\* `([^`]+)`.*/\1/; s/^.*:://' "$citations" | sort -u; }
 capture_or_refuse 'the citation names' "$citations.names" cannot_judge -- cited_names
+# No vacuity guard here, deliberately: `capture_or_refuse` is called without `--ordinary-empty`, so a `git grep`
+# matching nothing already refuses as a failed read, and every line it does match yields exactly one name. A
+# comparison against zero could never fire, and an inert guard reads as protection.
 cited_total=$(wc -l <"$citations.names")
-((cited_total > 0)) \
-    || cannot_judge "no PINNED-BY citation was read from the specs; a gate about citations that found none would report every mutation valid against an empty set"
 
 # The tree under test: tracked content at HEAD, as a **worktree** rather than an archive.
 #
@@ -168,7 +169,8 @@ tree_real=$(readlink -f "$tree") \
 # already clean up and already leave the shell's own 130/143. TRAPPING them additionally was measured to be a
 # regression: a signal handler does not end the script, so the loop continued with `$work` deleted and the
 # next record's citation lookup failed — the gate exited **1**, accusing the judged repository of a violation
-# it had not observed. A cannot-judge collapsed into a violation, which is the sibling gate's recorded defect
+# it had not observed. Produced by signalling at the loop boundary; a coarse sweep of 25 interrupts landed
+# inside records instead and refused with 2 every time, so the window is narrow and the outcome is wrong. A cannot-judge collapsed into a violation, which is the sibling gate's recorded defect
 # running backwards. SIGKILL reaches nothing either way: the registration then survives, and
 # `git worktree prune` will not clear it while the directory it names still exists.
 trap 'git worktree remove --force "$tree" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
@@ -332,6 +334,18 @@ $(tail -20 "$work/build.log")"
     run_cited "$resolved" "${selector[@]}" && survived=1
     ran_exactly_one || { cp "$work/original" "$tree/$file"; cannot_judge "the mutated run for \`$name\` did not run exactly one test, so nothing was observed either way"; }
     cp "$work/original" "$tree/$file"
+
+    # The control AGAIN, after the restore. The first control rules out a test that fails deterministically on
+    # its own; it cannot rule out one whose failure the first run CAUSED. A pin that writes a marker and
+    # asserts its absence passes once and fails ever after, so the mutated run fails for a reason the mutation
+    # had no part in — and the reaction reports a citation exercised by a perturbation that did nothing. That
+    # is a false clean, constructed and measured. A second control separates the two: if the test no longer
+    # passes on the restored tree, its outcome is order-dependent and nothing here can attribute the failure.
+    if ((survived == 0)); then
+        run_cited "$resolved" "${selector[@]}" \
+            || cannot_judge "\`$name\` fails on the restored tree, so its failure under the mutation cannot be attributed to the mutation — the outcome depends on having been run before:
+$(tail -20 "$work/run.log")"
+    fi
 
     ((survived == 0)) \
         || fail "\`$name\` passes with its declared mutation applied to $file — a test that cannot tell the reaction from a perturbation of it defends nothing while occupying the place of a defence:
