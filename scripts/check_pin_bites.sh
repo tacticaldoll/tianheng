@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+#
+# Every declared mutation kills the pinning test it names: a citation defends a bound only if it can tell the
+# reaction from a perturbation of it.
+#
+# `check_bound_register.sh` decides that a `PINNED-BY` citation names a test that RUNS — resolved to one
+# definition under `crates/`, carrying `#[test]`, registered by the harness. It does not decide that the test
+# BITES. Measured in the 0.5.0 window rather than supposed: replacing a cited pin's entire body with a binding
+# that asserts nothing left the suite at 16 passed and the register printing "60 pinning citations" clean.
+#
+# Biting is not decidable from text, and the register already records why for the easier question one level
+# down — a `cfg`-removed attribute, a definition trapped in an uninvoked macro, a definition inside a string or
+# a comment. Whether a test WOULD fail under a different reaction is a question about running a program. So
+# this gate runs the cited test against a mutated tree and reads its status.
+#
+# Three properties of the arrangement are load-bearing, each measured:
+#
+#   * The tree is built from `git archive HEAD` — TRACKED content, the same rule every gate in this family
+#     holds, and here it also keeps an interrupted run from having edited the author's files.
+#   * The build gets its OWN target directory. Reusing the repository's reports every pin as biting: cargo
+#     resolves the fingerprint against the sources the artifacts were first built from, so the mutated tree
+#     runs a binary compiled from unmutated code and reports `Finished` in 0.01s. A gate whose subject is a
+#     defence that is not defending would have been exactly that.
+#   * A mutation that breaks the BUILD is cannot-judge, never a dead pin. `cargo test` exits non-zero for a
+#     compile error too, and reading that as "the test failed, so the pin bites" is a false clean reached
+#     through the very reading this gate exists to replace. The build is therefore a separate step.
+#
+# Each record is also run UNMUTATED first. Without that control a test that fails for its own reasons reads as
+# a pin that bites, which is the `f() == f()` shape this repository refuses elsewhere.
+#
+# Coverage is partial by construction and says so: a clean run prints how many citations carry no mutation.
+# Authoring a mutation that genuinely perturbs the pinned point is expert work per bound, and a mutation that
+# misses reports a biting pin as a dead one — the safe direction, an author answers it with a better mutation.
+# A gate that reported only the mutations it ran, and stayed silent about the rest, would be the reads-as-
+# coverage failure this gate exists to end, one level up.
+#
+# Exit 0 every declared mutation killed its pin, 1 a pin survived it, 2 cannot judge — the Core Contract.
+set -Eeuo pipefail
+# The family's exit contract as a backstop — see `scripts/lib/exit_contract.sh` for what it catches, why it
+# is a trap rather than per-command handling, and the measurements behind both.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/exit_contract.sh"
+# One way to read an observation source — see `scripts/lib/capture.sh` for the two measured failures that shape it.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/capture.sh"
+exit_contract_backstop 'pin bites'
+
+# The repository to judge, so the failure matrix can build throwaway fixtures rather than being able to test
+# only this checkout — the same argument every sibling gate takes, for the same reason.
+repo=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
+cd "$repo"
+
+RECORDS=scripts/lib/pin_mutations.tsv
+
+fail() {
+    printf 'pin bites: %s\n' "$1" >&2
+    exit 1
+}
+
+cannot_judge() {
+    printf 'pin bites: cannot judge: %s\n' "$1" >&2
+    exit 2
+}
+
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+    || cannot_judge "repository root $repo is not a git worktree; this gate judges tracked content"
+
+command -v cargo >/dev/null 2>&1 \
+    || cannot_judge "cargo is not on PATH; whether a pin bites is decided by running it, and nothing here can stand in for that"
+
+git ls-files --error-unmatch "$RECORDS" >/dev/null 2>&1 \
+    || cannot_judge "$RECORDS is not tracked; the declared mutations are the surface this gate judges"
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+# Records first, so an empty or unreadable set refuses before the expensive build.
+#
+# Fields are TAB-separated: test name, tracked path, `from`, `to`. `\n` and `\t` in the two substrings are
+# unescaped after the split, so a perturbation spanning lines is still one record. Blank lines and `#` lines
+# are prose.
+records=$work/records
+capture_or_refuse "the declared mutations in $RECORDS" "$records" cannot_judge \
+    -- git show "HEAD:$RECORDS"
+
+declared=0
+# `|| [[ -n $line ]]` keeps a final record that carries no trailing newline. Dropping it silently would be a
+# coverage loss reported as a clean run, which is this gate's own subject.
+while IFS= read -r line || [[ -n $line ]]; do
+    [[ -n $line && ${line:0:1} != '#' ]] || continue
+    declared=$((declared + 1))
+done <"$records"
+
+((declared > 0)) \
+    || cannot_judge "$RECORDS declares no mutation; every property of zero mutations holds, and reporting that as conformance is the vacuity direction this repository has re-opened most often"
+
+# The citations this gate is allowed to speak about. `check_bound_register.sh` owns the authoritative parse and
+# every other property of them; what is needed here is only the NAME SET, so that a mutation naming a test no
+# bound cites is refused rather than passing as coverage of a citation that does not exist.
+citations=$work/citations
+capture_or_refuse 'the register PINNED-BY citations' "$citations" cannot_judge \
+    -- git grep -h -E '^- \*\*PINNED-BY\*\* `[^`]+`' HEAD -- 'openspec/specs/*/spec.md'
+cited_names() { sed -E 's/^- \*\*PINNED-BY\*\* `([^`]+)`.*/\1/; s/^.*:://' "$citations" | sort -u; }
+capture_or_refuse 'the citation names' "$citations.names" cannot_judge -- cited_names
+cited_total=$(wc -l <"$citations.names")
+((cited_total > 0)) \
+    || cannot_judge "no PINNED-BY citation was read from the specs; a gate about citations that found none would report every mutation valid against an empty set"
+
+# The tree under test: tracked content at HEAD, with a target directory this gate owns.
+tree=$work/tree
+mkdir -p "$tree"
+git archive HEAD | tar -x -C "$tree" \
+    || cannot_judge "could not materialize HEAD into a scratch tree; nothing was observed"
+export CARGO_TARGET_DIR=$work/target
+export TIANHENG_WORKSPACE_TESTS=1
+
+# Which package and target a citation runs in is DERIVED from where THE CITED TEST is defined — never from the
+# file the mutation edits, and never declared beside the mutation. A record routinely perturbs a reaction in one
+# file while the pin defending it lives in another, and deriving from the edited file then runs the wrong target:
+# the fixture whose recognizer sits in `src/lib.rs` and whose pin sits in `tests/pin.rs` selected `--lib`, where
+# the citation is not registered at all. A second spelling of the same fact would rot instead, which is why this
+# is derived rather than a fifth field.
+#
+# It materializes the search and assigns to a caller-visible array, rather than refusing inside a process
+# substitution: a refusal there exits that subshell and the parent reads nothing — the swallowed-status class
+# `scripts/lib/capture.sh` was written for, and one this gate must not reintroduce in the helper that decides
+# WHAT gets run.
+selector=()
+derive_selector() {
+    local name=$1 pkg defined
+    defining_files() { (cd "$tree" && grep -rlE "fn $name\\(" crates --include='*.rs' | sort); }
+    capture_or_refuse "where \`$name\` is defined" "$work/defined" cannot_judge --ordinary-empty 1 -- defining_files
+    mapfile -t defined <"$work/defined"
+    ((${#defined[@]} == 1)) \
+        || cannot_judge "\`$name\` is defined in ${#defined[@]} files under crates/; the target to run it in cannot be derived from a set"
+    [[ ${defined[0]} =~ ^crates/([^/]+)/ ]] \
+        || cannot_judge "${defined[0]} is not under crates/<package>/, so the package to run \`$name\` in cannot be derived"
+    pkg=${BASH_REMATCH[1]}
+    if [[ ${defined[0]} =~ ^crates/[^/]+/tests/([^/]+)\.rs$ ]]; then
+        selector=(-p "$pkg" --test "${BASH_REMATCH[1]}")
+    else
+        selector=(-p "$pkg" --lib)
+    fi
+}
+
+# The harness name, not the cited one. A lib test registers as `tests::<name>` while the citation is the bare
+# identifier, and `--exact <bare>` then matches NOTHING — the harness runs zero tests and exits 0, which this
+# gate would read as a pin surviving its mutation. Found by this gate's own first lib-target record, which is
+# why the resolution is here rather than a `--exact` on the citation: the filter that silently matches nothing
+# is the vacuity direction, and it arrived through the run that decides everything else.
+resolve_test_name() {
+    local name=$1 listed
+    shift
+    (cd "$tree" && cargo test --all-features "$@" -- --list) >"$work/list.log" 2>&1 \
+        || cannot_judge "could not enumerate the tests of the target defining \`$name\`:
+$(tail -20 "$work/list.log")"
+    capture_or_refuse "the registered tests matching \`$name\`" "$work/listed" cannot_judge \
+        -- awk -v n="$name" '/: test$/ { t = $0; sub(/: test$/, "", t); if (t == n || t ~ ("::" n "$")) print t }' "$work/list.log"
+    mapfile -t listed <"$work/listed"
+    ((${#listed[@]} == 1)) \
+        || cannot_judge "\`$name\` resolves to ${#listed[@]} registered tests in that target; a filter matching none runs nothing and exits 0, and one matching several does not name the citation"
+    resolved=${listed[0]}
+}
+
+# Was a test actually run? A filter matching nothing exits 0 with `0 passed`, which is indistinguishable from a
+# passing pin by status alone. The count is read from the harness's own summary rather than assumed from the
+# filter having been exact.
+ran_exactly_one() {
+    local passed failed
+    passed=$(sed -n 's/^test result: [^.]*\. \([0-9]\+\) passed;.*/\1/p' "$work/run.log" | head -1)
+    failed=$(sed -n 's/^test result: [^.]*\. [0-9]\+ passed; \([0-9]\+\) failed;.*/\1/p' "$work/run.log" | head -1)
+    [[ -n $passed && -n $failed ]] && (( passed + failed == 1 ))
+}
+
+run_cited() {
+    local name=$1 outcome=0
+    shift
+    (cd "$tree" && cargo test --all-features "$@" -- --exact "$name") >"$work/run.log" 2>&1 || outcome=$?
+    return "$outcome"
+}
+
+build_cited() {
+    local outcome=0
+    (cd "$tree" && cargo test --no-run --all-features "$@") >"$work/build.log" 2>&1 || outcome=$?
+    return "$outcome"
+}
+
+exercised=0
+while IFS=$'\t' read -r name file from to || [[ -n $name ]]; do
+    [[ -n $name && ${name:0:1} != '#' ]] || continue
+    [[ -n $file && -n $from && -n $to ]] \
+        || cannot_judge "the record for \`$name\` does not carry four TAB-separated fields (test, file, from, to)"
+
+    grep -Fxq "$name" "$citations.names" \
+        || fail "the record for \`$name\` names a test no declared bound cites; a mutation is an assertion about a defence, and there is no defence here to assert about"
+
+    [[ -f $tree/$file ]] \
+        || cannot_judge "the record for \`$name\` names $file, which HEAD does not track; the perturbation it describes was never applied"
+
+    derive_selector "$name"
+
+    # The control. A test that fails for its own reasons would otherwise read as a pin that bites.
+    build_cited "${selector[@]}" \
+        || cannot_judge "the unmutated tree does not build for \`$name\`:
+$(tail -20 "$work/build.log")"
+    resolve_test_name "$name" "${selector[@]}"
+    run_cited "$resolved" "${selector[@]}" \
+        || cannot_judge "\`$name\` does not pass on the unmutated tree, so its failure under a mutation would say nothing:
+$(tail -20 "$work/run.log")"
+    ran_exactly_one \
+        || cannot_judge "the control run for \`$name\` did not run exactly one test; a filter matching nothing exits 0 and would read as a pin surviving its mutation"
+
+    cp "$tree/$file" "$work/original"
+    # `from` must occur EXACTLY once. An anchor matching twice names a set rather than a site, and substituting
+    # the first occurrence silently perturbs something other than what the record describes — the rule the
+    # observer protocol's body reader reached the expensive way in the same window.
+    applied=$(FROM=$from TO=$to python3 - "$tree/$file" <<'PY'
+import os, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+text = path.read_text()
+frm = os.environ["FROM"].replace("\\n", "\n").replace("\\t", "\t")
+to = os.environ["TO"].replace("\\n", "\n").replace("\\t", "\t")
+count = text.count(frm)
+if count != 1:
+    print(count)
+else:
+    path.write_text(text.replace(frm, to))
+    print(1)
+PY
+    ) || cannot_judge "could not apply the mutation for \`$name\` to $file"
+    if [[ $applied != 1 ]]; then
+        cp "$work/original" "$tree/$file"
+        cannot_judge "the anchor for \`$name\` occurs $applied times in $file; zero and many are both a perturbation that was never applied, which is a different fact from the pin not biting"
+    fi
+
+    # A mutation that breaks the build observed nothing. `cargo test` exits non-zero for a compile error too,
+    # and reading that as a dead-and-therefore-biting pin is the false clean this gate exists to refuse.
+    if ! build_cited "${selector[@]}"; then
+        cp "$work/original" "$tree/$file"
+        cannot_judge "the mutation for \`$name\` does not compile, so the pin was never exercised:
+$(tail -20 "$work/build.log")"
+    fi
+
+    survived=0
+    run_cited "$resolved" "${selector[@]}" && survived=1
+    ran_exactly_one || { cp "$work/original" "$tree/$file"; cannot_judge "the mutated run for \`$name\` did not run exactly one test, so nothing was observed either way"; }
+    cp "$work/original" "$tree/$file"
+
+    ((survived == 0)) \
+        || fail "\`$name\` passes with its declared mutation applied to $file — a test that cannot tell the reaction from a perturbation of it defends nothing while occupying the place of a defence:
+    $from
+ -> $to"
+
+    exercised=$((exercised + 1))
+done <"$records"
+
+printf 'pin bites ok (%d declared mutations, each killing the citation it names)\n' "$exercised"
+printf '  %d of %d pinning citations carry no mutation — a clean run here is not every pin having been exercised\n' \
+    "$((cited_total - exercised))" "$cited_total"

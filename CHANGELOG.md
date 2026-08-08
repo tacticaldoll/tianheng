@@ -22,6 +22,26 @@ them.
 
 ## [Unreleased]
 
+### Added
+- **A pinning citation can now be held to *biting*, not only to running.** `check_bound_register.sh` decides
+  that a `PINNED-BY` citation names a test the harness registers; it cannot decide that the test would fail if
+  the reaction it defends changed. Measured rather than argued: replacing a cited pin's entire body with a
+  binding that asserts nothing left the suite green and the register reporting its citation count clean — the
+  same shape that let a retired reaction's anchor rule lose its only assertions in this window and be revertible
+  with nothing refusing. `check_pin_bites.sh` runs the cited test against a tree where the reaction has been
+  perturbed and requires it to fail, because whether a test bites is a question about running a program and no
+  reading of text answers it. Coverage is partial and the gate says so on every clean run, in the shape
+  `docs/observation-bounds.md` already leads with its unpinned count: a gate reporting only the mutations it ran
+  would be the reads-as-coverage failure it exists to end, one level up.
+
+  Three properties of the arrangement are stated rather than left to the implementation, each measured. The tree
+  is built from tracked content, so an interrupted run has edited nothing. The build gets its **own** target
+  directory — reusing the repository's reports *every* pin as biting, because cargo resolves the fingerprint
+  against the sources the artifacts were first built from and the mutated tree then runs a binary compiled from
+  unmutated code. And a mutation that fails to compile, or whose anchor matched zero or several times, is
+  **cannot judge**: each describes a perturbation that was never applied, which is a different fact from a pin
+  that does not bite, and collapsing them is how a rotted record reads as an exercised defence.
+
 ### Documentation
 - Giving each bound in `external-crate-confinement`'s overview its own `(bound: …)` reference created a hole,
   and a review proved it with a fixture. A `(bound: …)` reference was only ever resolved through a bound-prose

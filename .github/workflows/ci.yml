@@ -100,6 +100,8 @@ jobs:
         run: |
           bash scripts/test_bound_register.sh
           bash scripts/check_bound_register.sh
+          bash scripts/test_pin_bites.sh
+          bash scripts/check_pin_bites.sh
 
   msrv:
     name: MSRV (rust-version)

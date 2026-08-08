@@ -341,6 +341,17 @@ bash scripts/check_bound_register.sh    # every declared observation bound names
                                            # (a cfg-removed #[test], an uninvoked macro body, a definition inside
                                            # a string or comment). Run on a cold checkout they compile the
                                            # workspace; run in this order the enumeration is warm (≈1s)
+bash scripts/test_pin_bites.sh           # prove every refusal of the pin-biting gate: it runs a compiler, so its
+                                           # cannot-judge directions (an anchor that never applied, a mutation that
+                                           # never compiled) are the ones that would otherwise read as an exercised pin
+bash scripts/check_pin_bites.sh         # every declared mutation kills the pinning citation it names. The bound
+                                           # register decides a citation names a test that RUNS; this decides it
+                                           # BITES, which is not a property of text — measured, a cited pin whose
+                                           # whole body was replaced by a binding that asserts nothing left the
+                                           # suite green and the register printing its citation count clean. It
+                                           # sits AFTER the register for the same reason those two do: the
+                                           # citations it speaks about are the register's, and a run here over a
+                                           # surface the register has not accepted would report about nothing
 bash scripts/test_published_family_coverage.sh # prove the published-family ledger refuses: a family with no
                                            # fulfilled owner, and an owner claiming a family the inventory does
                                            # not list. This focused proof stays a top-level gate before the

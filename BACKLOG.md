@@ -60,6 +60,23 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
+- **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
+  register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
+  in a worktree left the suite green and the register clean. `check_pin_bites.sh` closes that for the citations
+  that declare a mutation, and it prints how many do not on every clean run — the figure is produced there, not
+  typed here. *Observation source:* that gutting, and the anchor-counting rule in `observer_protocol.rs` losing
+  its only assertions during the composition-body retirement, found by a reviewer reading the diff.
+  *Current reaction or bound:* `check_pin_bites.sh` over the declared mutations; nothing over the rest.
+  *Risk:* a defence that has stopped defending is indistinguishable from one that has not, which is the failure
+  the register was built to end one level down. *Promotion trigger:* fired — the gate exists; what remains is
+  coverage, which grows one considered record at a time. *What closing it costs, measured while seeding:* a
+  mutation must genuinely perturb the pinned point, and authoring one is per-bound expert work. Two attempts
+  during this change did not perturb it — one masked a brace without changing the comparison's verdict, one
+  selected a cargo target the citation is not registered in — and each reported a biting pin as a dead one.
+  That direction is safe, and it is why coverage cannot be swept. *Version class:* not release-affecting; a
+  repository gate over this repository's own governance tests. *Authority:* `observation-bound-register`, whose
+  added requirement states the obligation and the three arrangements that make it observable.
+
 - **The shell's semantic delegation, held by construction.** *Class:* READY-PATCH. *Observed pressure:* the
   source-shape reaction that claimed to observe it is retired in this window after four review rounds each
   defeated the narrowing before it — by name resolution, by the parameter's binding site, by which definition is
