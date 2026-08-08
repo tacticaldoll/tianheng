@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**1 of 60 declared bounds have no pinning test.** That figure is the register's
+**6 of 65 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -170,6 +170,38 @@ fallback used where no manifest exists, which the register spec describes.
 > the model cannot express it, a stated bound: no declared bound exhibits the pair, and offering
 
 - **pinned by**: `granularity_is_carried_only_by_the_as_intended_extent`
+
+## observation-bound-register
+
+### `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound`
+
+> nothing reacts. Running the cited test is the reaction's whole method, so code execution inside the
+
+- **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+### `observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound`
+
+> the citation is reported as exercised by a perturbation that did nothing. The reaction runs the test
+
+- **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+### `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound`
+
+> nothing reacts, because the checkout under test is HEAD's content. The sibling gates read the
+
+- **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+### `observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound`
+
+> the pin fails and the citation is counted as exercised, because a killed pin does not say what killed
+
+- **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+### `observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound`
+
+> the reaction does not decide whether that pin bites, and says how many such citations there are on
+
+- **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
 ## observer-protocol
 

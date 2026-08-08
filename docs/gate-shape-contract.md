@@ -32,12 +32,13 @@ which is what every recurrence in the window that motivated it was.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `scripts/check_bound_register.sh` | `scripts/test_bound_register.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 | `scripts/check_dod_coherence.sh` | `scripts/test_dod_coherence.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| `scripts/check_pin_bites.sh` | `scripts/test_pin_bites.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 | `scripts/check_publish_source.sh` | `scripts/test_publish_source.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | twin only (exempt) |
 | `scripts/check_reference_integrity.sh` | `scripts/test_reference_integrity.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 | `scripts/check_release_coherence.sh` | `scripts/test_release_coherence.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 | `scripts/check_whitespace_hygiene.sh` | `scripts/test_whitespace_hygiene.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 
-6 gates, 11 properties each.
+7 gates, 11 properties each.
 
 ## Declared policy exemptions
 

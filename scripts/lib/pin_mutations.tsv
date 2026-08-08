@@ -1,0 +1,14 @@
+# Declared mutations: the perturbation each pinning citation must die under.
+#
+# Four TAB-separated fields — cited test name, tracked path, `from`, `to`. `\n` and `\t` are unescaped in the
+# two substrings, so a perturbation spanning lines is still one record. Blank lines and lines opening with `#`
+# are prose.
+#
+# `from` must occur EXACTLY once in the file it names. An anchor matching twice names a set rather than a site,
+# and `scripts/check_pin_bites.sh` refuses to judge rather than substituting the first occurrence.
+#
+# A record is added only after it has been RUN and seen to kill the pin it names. A mutation that fails to
+# perturb the pinned point reports a biting pin as a dead one — the safe direction, but it is noise, and the
+# gate's own matrix is what proves the refusal rather than a record standing in for it.
+a_trait_object_on_a_continuation_line_is_not_recognized	crates/tianheng/tests/observer_protocol.rs	trimmed.starts_with("pub ") && trimmed.contains("dyn ")	trimmed.contains("dyn ")
+the_derived_origin_honors_its_stated_shape_bounds	crates/louke/src/dsl.rs	    let head = match type_path.find('<') {\n        Some(open) => &type_path[..open],\n        None => type_path,\n    };	    let head = type_path;

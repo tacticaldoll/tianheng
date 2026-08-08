@@ -60,6 +60,31 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
+- **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
+  register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
+  in a worktree left the suite green and the register clean. `check_pin_bites.sh` closes that for the citations
+  that declare a mutation, and it prints how many do not on every clean run — the figure is produced there, not
+  typed here. *Observation source:* that gutting, and the anchor-counting rule in `observer_protocol.rs` losing
+  its only assertions during the composition-body retirement, found by a reviewer reading the diff.
+  *Current reaction or bound:* `check_pin_bites.sh` over the declared mutations; nothing over the rest.
+  *Risk:* a defence that has stopped defending is indistinguishable from one that has not, which is the failure
+  the register was built to end one level down. *Promotion trigger:* fired — the gate exists; what remains is
+  coverage, which grows one considered record at a time. That last claim was false while the tree under test
+  was an export of tracked content: a pin reading the repository through git failed its own control run, so no
+  record could ever exercise it — `units_outside_the_gate_pairing_are_outside_the_surface` was one. The tree is
+  a detached worktree now and the claim holds. One citation is still outside it for a different reason:
+  `a_cfg_gated_module_with_no_file_is_skipped_not_errored` is defined in two files under `crates/`, so the
+  target to run it in cannot be derived from a set and any record naming it refuses. Both episodes are kept
+  because the entry's economics rest on the claim. *What closing it costs, measured while seeding:* a
+  mutation must genuinely perturb the pinned point, and authoring one is per-bound expert work. One attempt
+  during this change did not — masking a brace inside a block comment left the exact one-statement comparison
+  refusing the body anyway, so the pin held and the record reported a biting pin as a dead one. That direction
+  is safe, and it is why coverage cannot be swept. (Two further failures that looked the same were gate defects,
+  not authoring cost: a lib test registering under its module path, and the cargo target derived from the
+  mutated file rather than from the test's definition. Both are fixed and neither recurs.) *Version class:* not release-affecting; a
+  repository gate over this repository's own governance tests. *Authority:* `observation-bound-register`, whose
+  added requirement states the obligation and the arrangements that make it observable.
+
 - **The shell's semantic delegation, held by construction.** *Class:* READY-PATCH. *Observed pressure:* the
   source-shape reaction that claimed to observe it is retired in this window after four review rounds each
   defeated the narrowing before it — by name resolution, by the parameter's binding site, by which definition is
@@ -102,7 +127,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **60 bounds across 21 capabilities** — a live figure rather than part of the measurement
+  currently holds **65 bounds across 22 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is

@@ -132,6 +132,84 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *the shell's semantic delegation, held by construction*",
         ),
+        // --- observation-bound-register ---
+        //
+        // The register's own coverage bound, and the one place this crate declares a bound about the reaction
+        // that produces the register rather than about a dimension. `check_pin_bites.sh` decides that a
+        // citation's pin *bites* only where a mutation is declared for it; where none is, nothing decides.
+        BoundDecl::unpinned(
+            BoundId::new(
+                "observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound",
+            ),
+            "code run inside the checkout writing outside it, or replacing a checked path so the reaction's own write lands elsewhere",
+            Extent::Reached(Reached::UnderReacts {
+                because: "running the cited test is the whole method, so code execution inside the checkout \
+                          is granted unconditionally; the shared common directory is what makes a \
+                          git-reading citation reachable at all, and re-checking a resolved path after the \
+                          build would re-check the window that defeated it"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
+                "observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound",
+            ),
+            "a cited test passing and failing by a period the fixed run sequence does not break",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the reaction runs the test a fixed number of times and the number is readable in \
+                          its own source, so a matching period escapes; closing it needs each run unable to \
+                          observe how many times the test has run, whose cost grows with the coverage this \
+                          capability exists to grow"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
+                "observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound",
+            ),
+            "a cited pin whose assertions are removed in the working directory and not committed",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the checkout under test is HEAD's content, because mutating the author's own \
+                          checkout is what a separate checkout exists to avoid; the two properties are in \
+                          tension and this one is given up deliberately"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
+                "observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound",
+            ),
+            "a record naming the file its pin lives in and neutralising one of that pin's assertions",
+            Extent::Reached(Reached::UnderReacts {
+                because: "a killed pin does not say what killed it, and refusing a record that edits its \
+                          pin's own file would refuse this tree's first seeded record, which legitimately \
+                          perturbs a recognizer sitting beside the pin that defends it"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
+                "observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound",
+            ),
+            "a pinning citation for which no mutation is declared",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the gate runs the mutations it is given and nothing else, so a citation with no \
+                          record is neither exercised nor refused; authoring a record that genuinely perturbs \
+                          the pinned point is per-bound work, which is why coverage is disclosed on every \
+                          clean run rather than implied"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
+        ),
         // --- gate-shape-contract ---
         //
         // Its reaction is `tests/gate_shape_contract.rs`, so this crate owns these too. The four are read out

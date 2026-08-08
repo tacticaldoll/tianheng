@@ -584,11 +584,11 @@ fn the_projection_discloses_every_declared_bound() {
 
 /// Property 2 — the header declares the three-way contract, recognized by **shape, not by wording**.
 ///
-/// The six gates word the verdicts six ways — clean/violation, coherent/incoherent, publishable/wrong source
-/// — and each names its own subject better than a shared sentence would. Measured: a probe requiring one
-/// literal sentence reads 3 of 6 and would report three gates violating a requirement every one of them
-/// meets. So the words for 0 and 1 are free and only the third term is fixed, because *cannot judge* is the
-/// term the family's contract is about.
+/// Each gate words the verdicts its own way — clean/violation, coherent/incoherent, publishable/wrong source
+/// — and each names its own subject better than a shared sentence would. Measured when six gates existed: a
+/// probe requiring one literal sentence read 3 of them and would have reported three gates violating a
+/// requirement every one of them meets. So the words for 0 and 1 are free and only the third term is fixed,
+/// because *cannot judge* is the term the family's contract is about.
 fn declares_the_three_way_contract(gate: &Source) -> bool {
     gate_header(gate)
         .lines()

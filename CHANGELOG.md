@@ -87,6 +87,42 @@ them.
   dismissing it as governed policy.
 
 ### Added
+- **A pinning citation can now be held to *biting*, not only to running.** `check_bound_register.sh` decides
+  that a `PINNED-BY` citation names a test the harness registers; it cannot decide that the test would fail if
+  the reaction it defends changed. Measured rather than argued: replacing a cited pin's entire body with a
+  binding that asserts nothing left the suite green and the register reporting its citation count clean — the
+  same shape that let a retired reaction's anchor rule lose its only assertions in this window and be revertible
+  with nothing refusing. `check_pin_bites.sh` runs the cited test against a tree where the reaction has been
+  perturbed and requires it to fail, because whether a test bites is a question about running a program and no
+  reading of text answers it. Coverage is partial and the gate says so on every clean run, in the shape
+  `docs/observation-bounds.md` already leads with its unpinned count: a gate reporting only the mutations it ran
+  would be the reads-as-coverage failure it exists to end, one level up.
+
+  The arrangement's properties are stated rather than left to the implementation, each measured. The tree
+  is a detached **worktree** at HEAD, so an interrupted run has edited nothing of the author's — and, unlike an
+  export of tracked content, it carries a working repository, without which a pin that reads the repository
+  through git fails its own control run and no record can ever exercise it. Where the mutated run fails, the control runs **again after the
+  restore**, because one control rules out a test that fails on its own but not one whose failure it caused: a pin writing a marker and asserting its absence passes exactly once, so
+  the mutated run fails for a reason the mutation had no part in and the citation reads as exercised by a
+  perturbation that did nothing. Every run is held to having executed exactly one test, the restored-tree run
+  included — a pin that rewrites its own source on a later run otherwise left the filter matching nothing and
+  exiting 0 over zero tests. The definition-path-to-target mapping is an allowlist rather than a fallthrough,
+  because assuming a library test for whatever did not match ran a *different* test of the same name and
+  reported that one's death as the citation's. What a fixed number of runs cannot reach — an outcome depending on the run count
+  with a period that sequence does not break — is declared as a bound rather than implied. A record's path is held to being
+  both **tracked** and **contained**, separately: a tracked symlink is tracked, and following one rewrites a
+  file outside the tree — destructively, if the run is killed between the write and the restore. The checkout's
+  hooks are disabled, because a `post-checkout` hook would otherwise run inside the tree under test with write
+  access to the judged repository's refs. The build gets its **own** target
+  directory because the gate's premise is that the binary under test was built from the *mutated* tree, and a
+  shared one has been seen to serve a binary that was not; which wrong verdict follows is deliberately not
+  claimed, since neither reproduction attempt produced one. What a killed pin does **not** prove — that the
+  record perturbed the reaction rather than the pin's own assertions — and what HEAD's content cannot see — a
+  pin gutted but not committed — are declared as bounds rather than left to be discovered. A mutation that fails to compile, or whose anchor
+  matched zero or several times, is **cannot judge**: each describes a perturbation that was never applied,
+  which is a different fact from a pin that does not bite. And the records are parsed **once** — counting them
+  by one splitting rule and processing them by another let a file holding nothing to run exit 0, which is the
+  one outcome the Core Contract forbids.
 - `guibiao`, `hunyi`, and `louke` now expose the same observation-bound and observer vocabulary
   from each dimension root: `BoundDecl`, `BoundId`, `Defence`, `Demonstrates`, `Extent`,
   `FactGranularity`, `Observer`, `Outcome`, `Owner`, and `Reached`. A standalone-dimension adopter
@@ -147,7 +183,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **60 bounds across 21 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **65 bounds across 22 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing

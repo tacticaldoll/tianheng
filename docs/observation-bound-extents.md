@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**17 of 60 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**22 of 65 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound` — owner: engine
@@ -12,6 +12,11 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default` — owner: adopter
 - `inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external` — owner: engine
 - `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default` — owner: adopter
+- `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound` — owner: engine
+- `observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound` — owner: engine
+- `observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound` — owner: engine
+- `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound` — owner: engine
+- `observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound` — owner: engine
 - `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound` — owner: adopter
 - `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound` — owner: engine
 - `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound` — owner: engine
@@ -384,7 +389,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (17)
+## under-reacts (22)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -441,6 +446,46 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **because**: the default observes `use`-rooted paths, leaving the un-`use`d fully-qualified spelling to the adopter's stricter opt-in
 - **its defence must show**: does not react
 - **pinned by**: `inline_strict_external_absent_fully_qualified_call_is_a_bound`
+
+### `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound`
+
+> code run inside the checkout writing outside it, or replacing a checked path so the reaction's own write lands elsewhere
+
+- **because**: running the cited test is the whole method, so code execution inside the checkout is granted unconditionally; the shared common directory is what makes a git-reading citation reachable at all, and re-checking a resolved path after the build would re-check the window that defeated it
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+### `observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound`
+
+> a pinning citation for which no mutation is declared
+
+- **because**: the gate runs the mutations it is given and nothing else, so a citation with no record is neither exercised nor refused; authoring a record that genuinely perturbs the pinned point is per-bound work, which is why coverage is disclosed on every clean run rather than implied
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+### `observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound`
+
+> a cited test passing and failing by a period the fixed run sequence does not break
+
+- **because**: the reaction runs the test a fixed number of times and the number is readable in its own source, so a matching period escapes; closing it needs each run unable to observe how many times the test has run, whose cost grows with the coverage this capability exists to grow
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+### `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound`
+
+> a cited pin whose assertions are removed in the working directory and not committed
+
+- **because**: the checkout under test is HEAD's content, because mutating the author's own checkout is what a separate checkout exists to avoid; the two properties are in tension and this one is given up deliberately
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+### `observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound`
+
+> a record naming the file its pin lives in and neutralising one of that pin's assertions
+
+- **because**: a killed pin does not say what killed it, and refusing a record that edits its pin's own file would refuse this tree's first seeded record, which legitimately perturbs a recognizer sitting beside the pin that defends it
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
 ### `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound`
 

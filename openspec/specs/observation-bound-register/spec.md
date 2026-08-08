@@ -287,6 +287,246 @@ its being an identifier.
 - **THEN** the reaction passes: the restatement this direction exists for is one defence claimed by two
   capabilities, never repetition inside one
 
+### Requirement: A pinning citation MAY declare the mutation it dies under, and every declared mutation SHALL kill it
+
+*A cited pinning test SHALL resolve to exactly one definition in the tree* decides that a citation names a test
+that **runs**. It does not decide that the test **bites**. A pin whose assertions are deleted, or whose subject
+is loosened back toward the rule it was written to refuse, keeps resolving, keeps carrying `#[test]`, keeps
+being registered by the harness, and keeps occupying the place of a defence. Measured in this repository, not
+supposed: retiring the composition-body reaction deleted the only assertions over the anchor-counting rule, the
+suite stayed green, and the rejected alternative could be restored with nothing refusing.
+
+The question is not decidable from text, and the register already says why for the easier question one level
+down — a `cfg`-removed attribute, an uninvoked macro body, a definition inside a string or a comment. Whether a
+test *would fail* under a different reaction is a question about running a program. The reaction SHALL
+therefore **run the cited test against a mutated tree** and read its status, never infer biting from the shape
+of either the test or the reaction.
+
+A **mutation** SHALL be declared as four fields: the cited test name, a tracked path, a `from` substring, and a
+`to` substring. It SHALL be applied to a **separate checkout of HEAD**, never to the working directory, so that
+an interrupted run has edited nothing of the author's.
+
+The path a record names SHALL be both **tracked** and **contained**, and the two SHALL be tested separately
+because neither implies the other. `[[ -f $tree/$file ]]` asks neither: a `../` path resolves outside the tree
+and the mutation rewrites a file the reaction has no business touching. Asking git asks only tracked-ness: a
+tracked **symlink** is tracked, a checkout materializes it as a symlink, and both the backup copy and the write
+follow it — so the outside file is rewritten, and a run killed between write and restore leaves it destroyed.
+Both were measured. Containment SHALL therefore be decided on the **resolved** path, which is the form that
+answers the question the refusal's message claims to ask.
+
+What that holds is that a **record** cannot name a path outside the checkout. It is not a boundary on where the
+reaction can write, and the requirement SHALL NOT be read as one: the check precedes the build, and the build
+runs the checkout's own code — a build script replacing the checked path with a symlink afterwards redirects
+the write, reproduced. Re-checking would re-check the same window. That is the code-execution the reaction
+grants unconditionally by testing there at all, and it is declared as a bound rather than guarded.
+
+That checkout SHALL carry a working repository. An export of tracked content alone makes some citations
+structurally **unreachable** rather than merely uncovered — a pin that reads the repository through git fails
+its own control run, so no record can ever exercise it, which the coverage story would otherwise misdescribe as
+work not yet done.
+
+Carrying one has a cost that SHALL be paid rather than assumed away: the checkout shares the judged
+repository's common directory. Its **hooks SHALL be disabled** for the checkout, because a `post-checkout` hook
+would otherwise run inside the tree under test with write access to the judged repository's refs — measured, a
+planted tag survived the reaction's own cleanup, and the same hook could have rewritten the tree so that what
+ran was no longer HEAD's content. The shared common directory itself is inherent to a checkout of this kind and
+is declared as a bound below.
+
+Cleanup SHALL be claimed only where it happens. A checkout registered in the judged repository is removed on an
+ordinary exit and on interrupt and terminate signals; a killed process reaches no handler, and the registration
+then survives — `git worktree prune` will not clear it while the directory it names still exists. Stating that
+beats asserting an automatic cleanup the reaction does not perform.
+
+Judging HEAD is **not** the rule this family holds, and the difference is stated so neither is read as the
+other: the sibling gates enumerate tracked *paths* and read the *worktree's* content, deliberately — the
+whitespace gate's own header calls reading anything else a false negative. This reaction is the one that judges
+HEAD's content, and the blind spot that follows is declared below rather than left to be discovered.
+
+The reaction SHALL build that checkout with its **own target directory**, because its premise is that the
+binary under test was built from the *mutated* tree. A shared directory has been seen to serve one that was
+not, and a verdict over the wrong binary is not a verdict.
+
+What is *not* claimed is which wrong verdict follows. Two reproduction attempts each landed somewhere else — a
+directory holding the previous run's mutated binary fails the **control** run, and one pre-warmed from an
+unmutated build simply rebuilds and reports correctly — so no false-clean direction was found, none is claimed,
+and the matrix has no direction for this requirement. Requiring it on the premise rather than on an observed
+outcome is the honest form: the guarantee claimed is exactly the one held.
+
+A `from` that occurs zero times or more than once in the named file SHALL be **cannot judge**, not a violation.
+The mutation could not be applied, which is a different fact from the pin not biting, and reporting the second
+for the first lets a mutation whose anchor has rotted read as a pin that has been exercised. Requiring the
+anchor to be unique is the rule the observer protocol's body reader reached by the expensive route in the same
+window: an anchor matching twice names a set rather than a site.
+
+One direction of the record-to-citation relation SHALL react and the other SHALL be disclosed, and the
+difference is stated here so neither is read as the other. A mutation naming a test no declared bound cites
+SHALL fail: it perturbs something this register makes no claim about, and its passing would read as coverage of
+a citation that does not exist. A citation carrying no mutation SHALL NOT fail — that is the coverage this
+requirement admits is partial, below.
+
+Each record SHALL first be run **unmutated**, and the reaction SHALL refuse to judge unless that run passes.
+Without the control, a cited test failing for its own reasons reads as a pin that bites the moment anything is
+applied to the tree — the same `f() == f()` shape reached from the other side, where the comparison is with a
+run whose outcome was never in doubt.
+
+Where the mutated run **fails**, the control SHALL be run again after the restore, and the reaction SHALL
+refuse to judge unless it passes then too. One control rules out a test that fails deterministically on its
+own; it cannot rule out one whose failure it *caused*. A pin writing a marker and asserting the marker's
+absence passes exactly once, so the mutated run fails for a reason the mutation had no part in and the citation
+is reported as exercised by a perturbation that did nothing — a false clean, constructed and measured. Where
+the restored-tree run fails, the outcome is order-dependent and no failure under the mutation can be attributed
+to it. It is run only on that branch because a *surviving* pin is a violation whatever the second run says.
+
+**Every** run of the cited test SHALL be held to having executed exactly one test, the restored-tree run
+included. It was added without that rule, and a pin that rewrites its own source on a later run then left the
+filter matching nothing: exit 0 over zero tests, read as the restored tree still passing. Measured. The restore
+puts back the mutated file alone, so whatever the test itself wrote survives into that run.
+
+What none of this reaches is declared below rather than implied: the number of runs is **fixed**, so a cited
+test whose outcome depends on its run count with any period the sequence does not break is indistinguishable
+from one the mutation killed.
+
+The package and target the cited test runs in SHALL be **derived from where that test is defined**, not from the
+file the mutation edits and not declared beside the mutation. The mappings from a definition path to a target SHALL be an
+**allowlist**, and a path matching none of them SHALL be cannot judge. Assuming a library test for whatever did
+not match ran a *different* test of the same name and reported that one's death as the citation's, while the
+cited pin never ran at all — measured twice, first for a module of an integration target and then, after a
+denylist closed that instance, for a binary target the denylist did not name. Refusing what cannot be mapped is
+what closes the class rather than its instances. A record routinely perturbs a reaction in one file
+while the pin defending it sits in another, and deriving from the edited file then runs a target the citation is
+not registered in — measured here, where a recognizer in a crate's library and its pin in an integration target
+selected the library. A fifth field would be a second spelling of a fact the tree already carries, and would rot.
+A name whose definition the scan finds zero or several times SHALL be cannot judge, because a target cannot be
+derived from a set.
+
+An enumeration of citations that yields none SHALL fail loudly rather than report every mutation valid against
+an empty set — the vacuity direction, in the second of this capability's two enumerations. It SHALL be carried
+by the **read**, which refuses a match of nothing as a failed read, rather than by a comparison against zero
+afterwards: with the read refusing first, such a comparison can never fire, and a guard that cannot fire reads
+as protection while being none.
+
+A mutation whose tree does not **compile** SHALL be cannot judge, for the same reason as a rotted anchor: the
+perturbation was never exercised. `cargo test` exits non-zero for a compile error as well as for a failing
+assertion, so a reaction distinguishing them by status alone would read a broken build as a biting pin.
+
+A run SHALL also be required to have executed **exactly one** test. A filter matching nothing exits 0 having run
+nothing, which by status is indistinguishable from a pin that survived its mutation — measured here, where a lib
+test registers under its module path while the citation is the bare identifier.
+
+Coverage SHALL be partial and SHALL say so. A clean run SHALL print how many **distinct cited tests** carry no
+declared mutation. The population SHALL be named, because it is not the register's: the register counts
+*citations*, one per declaration, and blesses one test cited by two bounds in one capability, so an unqualified
+figure here would become the fifth answer that *A declared bound SHALL carry exactly one citation naming its
+defence* makes the register the arbiter of. Both sides of the remainder SHALL be counted over that same
+population; subtracting a record count from a name count made the disclosure read `-1`, measured. A gate that
+reported only the mutations it ran would be a reaction reading as coverage, which is this requirement's own
+subject one level up.
+
+What that leaves unobserved is declared as a bound below and tracked rather than pinned
+(bound: observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound): closing it
+is coverage, which grows one authored record at a time.
+
+#### Scenario: A pin that survives its declared mutation
+
+- **WHEN** a declared mutation is applied and the cited test passes
+- **THEN** the reaction fails, naming the citation, the mutation, and the bound whose defence it is, because a
+  test that cannot tell the reaction from its perturbation defends nothing while occupying the place of a
+  defence
+
+#### Scenario: A pin that dies as declared
+
+- **WHEN** a declared mutation is applied and the cited test fails
+- **THEN** that citation is reported as exercised, and the failure output is not treated as the gate's own
+  failure
+
+#### Scenario: A mutation whose anchor is absent or ambiguous
+
+- **WHEN** a mutation's `from` occurs zero times, or more than once, in the file it names
+- **THEN** the reaction refuses to judge rather than reporting either a biting or a dead pin, because the
+  perturbation it describes was never applied
+
+#### Scenario: A mutation naming a test no bound cites
+
+- **WHEN** a mutation record names a test that appears in no declared bound's citation
+- **THEN** the reaction fails, because a mutation is an assertion about a defence and there is no defence here
+  to assert about
+
+#### Scenario: The uncovered remainder is disclosed on a clean run
+
+- **WHEN** every declared mutation kills its citation
+- **THEN** the reaction still prints how many citations carry no mutation, so a clean result cannot be read as
+  every pin having been exercised
+
+#### Scenario: The mutation set is empty
+
+- **WHEN** no mutation is declared at all
+- **THEN** the reaction refuses to judge, saying the set was empty, because every property of zero mutations
+  holds and reporting that as conformance is the vacuity direction this repository has re-opened most often
+
+#### Scenario: One records file read by two parsers
+
+- **WHEN** the set is counted by one splitting rule and processed by another
+- **THEN** the reaction reports clean over a file holding nothing to run — a records file whose only remaining
+  line was a TAB-indented comment counted as a declared mutation and was skipped as prose, exiting 0. The
+  records SHALL therefore be parsed **once**, and a line that is neither prose nor four TAB-separated fields
+  SHALL be cannot judge rather than skipped
+
+#### Scenario: A mutation that does not compile
+
+- **WHEN** the mutated tree fails to build
+- **THEN** the reaction refuses to judge, because `cargo test`'s non-zero status there reports a broken build
+  and not a test that failed
+
+#### Scenario: A filter that runs no test
+
+- **WHEN** the cited test's filter matches nothing and the harness exits 0 having run nothing
+- **THEN** the reaction refuses to judge rather than reading the exit status as a pin that survived
+
+#### Scenario: What code executed inside the checkout does outside it is not observed — a stated bound
+
+- **WHEN** code the reaction runs inside the checkout — a cited test, or a build script the build invokes —
+  writes outside that checkout, whether to the repository it was taken from or by replacing a checked path so
+  the reaction's own write lands elsewhere
+- **THEN** nothing reacts. Running the cited test is the reaction's whole method, so code execution inside the
+  checkout is granted unconditionally, and neither consequence is separable from it: the shared common
+  directory is what makes a git-reading citation reachable at all, and re-checking a resolved path after the
+  build would re-check the same window that defeated it. Hooks are the one case that IS closed, because those
+  run without any citation asking for them
+- **UNPINNED** `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+#### Scenario: Whether a cited test's outcome depends on its run count is not observed beyond one period — a stated bound
+
+- **WHEN** a cited test passes and fails by a period the reaction's fixed run sequence does not break — passing
+  the control, failing the mutated run, and passing the restored-tree run, for reasons of run count alone
+- **THEN** the citation is reported as exercised by a perturbation that did nothing. The reaction runs the test
+  a fixed number of times, so any period matching that sequence escapes it, and the number is readable in the
+  reaction's own source. Closing it needs each run to be unable to observe how many times the test has run —
+  a separate checkout per run — whose cost grows with the coverage this capability exists to grow
+- **UNPINNED** `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+#### Scenario: Whether a pin gutted but not committed still bites is not observed — a stated bound
+
+- **WHEN** a cited pin's assertions are removed in the working directory and not committed
+- **THEN** nothing reacts, because the checkout under test is HEAD's content. The sibling gates read the
+  worktree for exactly this reason, and this reaction cannot: mutating the author's checkout is what a separate
+  checkout exists to avoid, so the two properties are in tension and this one is given up deliberately
+- **UNPINNED** `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+#### Scenario: Whether a record perturbs the reaction or the pin's own assertions is not observed — a stated bound
+
+- **WHEN** a record names the file its pin lives in and neutralises one of that pin's assertions
+- **THEN** the pin fails and the citation is counted as exercised, because a killed pin does not say what killed
+  it. Separating the two by refusing a record that edits its pin's file was measured against this tree's own
+  first record, which legitimately edits the file its pin lives in, so the rule would refuse a conforming shape
+- **UNPINNED** `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+#### Scenario: Whether a citation carrying no declared mutation is defended is not observed — a stated bound
+
+- **WHEN** a pinning citation declares no mutation
+- **THEN** the reaction does not decide whether that pin bites, and says how many such citations there are on
+  every clean run rather than leaving the gap to be inferred
+- **UNPINNED** `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
 ### Requirement: A bound stated in prose but not declared as a scenario SHALL fail
 
 The reaction SHALL scan `openspec/specs/*` for bound-declaring prose and SHALL fail on any occurrence
