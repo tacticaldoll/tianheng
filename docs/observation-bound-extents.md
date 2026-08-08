@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**31 of 77 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**32 of 77 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound` — owner: engine
@@ -23,6 +23,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound` — owner: engine
 - `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound` — owner: engine
 - `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound` — owner: inherited from the verification environment
+- `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound` — owner: engine
 - `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound` — owner: engine
 - `release-coherence/a-name-reached-only-through-a-url-a-stated-bound` — owner: engine
 - `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound` — owner: engine
@@ -104,15 +105,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: does not refuse
 - **pinned by**: `hunyi::a_cfg_gated_module_with_no_file_is_skipped_not_errored`
 
-## not a violation (4)
-
-### `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
-
-> an entry in a dated `## [X.Y.Z] - DATE` section naming a path under `scripts/`
-
-- **because**: a dated section records what was true at that release, so rewriting it to satisfy a rule written afterwards would falsify the record rather than repair it — the reason `docs/history/` is left alone; nine entries in the released `[0.4.0]` name a gate and are meant to keep doing so
-- **its defence must show**: does not react
-- **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
+## not a violation (3)
 
 ### `semantic-async-exposure-boundary/a-body-nested-module-is-a-stated-bound`
 
@@ -422,7 +415,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (31)
+## under-reacts (32)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -567,6 +560,14 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **because**: validity is verifiable with no configuration and attribution is not — it needs an allowed-signers file that exists on a maintainer's machine and not in CI, so requiring it would make the same tag judged differently by where the gate ran
 - **its defence must show**: does not react
 - **pinned by**: `a_valid_signature_from_an_unauthorized_key_is_accepted`
+
+### `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
+
+> an entry in a dated `## [X.Y.Z] - DATE` section naming a path under `scripts/`
+
+- **because**: a dated section records what was true at that release, so rewriting it to satisfy a rule written afterwards would falsify the record rather than repair it — the reason `docs/history/` is left alone. The leak is real and stays: an adopter reading `[0.4.0]` meets nine entries naming files they can never run, and closing it needs a form of repair that adds to the record instead of editing it
+- **its defence must show**: does not react
+- **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
 
 ### `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound`
 

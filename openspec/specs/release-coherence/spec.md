@@ -155,11 +155,13 @@ An entry under an adopter-facing heading of the `[Unreleased]` section SHALL NOT
 own machinery: a path token under `scripts/`, or a bare basename that `git ls-files scripts/` resolves
 to a tracked file there.
 
-`CHANGELOG.md` is the adopter's document, and every heading it offers — `### Added`, `### Changed`,
-`### Fixed`, `### Migration` — is an adopter's vocabulary. It offers no heading that is not, so every
+`CHANGELOG.md` is the adopter's document. It carries eight kinds of heading — `### Added`, `### Changed`,
+`### Fixed`, `### Migration`, `### Documentation`, `### Removed`, `### Compatibility` and
+`### Compatibility evidence` — and every one of them is an adopter's vocabulary. It offered none that was
+not, so every
 change to this repository's own governance machinery has been written into one of them. Measured: nineteen
-entries name it — ten in `[Unreleased]` and nine in the released `[0.4.0]` — for a directory that ships in
-**zero** packages.
+entries name it — ten in `[Unreleased]` and nine in the released `[0.4.0]`, across four different headings —
+for a directory that ships in **zero** packages.
 
 The `[Unreleased]` section SHALL be permitted a `### Self-governance` heading,
 under which naming that machinery is what belongs; a heading is adopter-facing when it is any `### `
@@ -221,9 +223,11 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
 #### Scenario: A dated release section names a gate — a stated bound
 
 - **WHEN** a dated `## [X.Y.Z] - DATE` section carries an entry naming a path under `scripts/`
-- **THEN** nothing reacts. A dated section records what was true at that release, and rewriting it to
-  satisfy a rule written afterwards would falsify the record — the same reason `docs/history/` is left
-  alone. The blindness is the scope, deliberately chosen and pinned rather than inferred
+- **THEN** nothing reacts, and the leak is real: an adopter reading `[0.4.0]` meets nine entries naming
+  files they can never run. What is refused is the **repair**, not the diagnosis — rewriting a dated section
+  to satisfy a rule written afterwards would falsify the record, the same reason `docs/history/` is left
+  alone — so this is a declared false negative with an owner rather than a shape that is harmless. Closing it
+  needs a repair that adds to the record instead of editing it
 - **PINNED-BY** `a_dated_section_naming_a_gate_is_a_stated_bound`
 
 #### Scenario: Machinery the judged repository tracks by nothing — a stated bound

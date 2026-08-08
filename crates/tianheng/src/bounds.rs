@@ -491,12 +491,21 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 "release-coherence/a-dated-release-section-names-a-gate-a-stated-bound",
             ),
             "an entry in a dated `## [X.Y.Z] - DATE` section naming a path under `scripts/`",
-            Extent::Reached(Reached::NotAViolation {
+            // Under-reacting rather than not-a-violation, and the distinction was argued in review rather than
+            // assumed. Both values derive the same defence — does not react — so no run can separate them, and
+            // the first draft picked the wrong one. `NotAViolation` says the reaction is RIGHT because nothing
+            // is wrong. Something is: nine entries in the released `[0.4.0]` name machinery an adopter reading
+            // that section still meets, which is exactly the harm this rule exists to stop. What is refused is
+            // the REPAIR, not the diagnosis — and a limit accepted for a policy reason is a declared false
+            // negative with an owner, which is the value that carries one.
+            Extent::Reached(Reached::UnderReacts {
                 because: "a dated section records what was true at that release, so rewriting it to satisfy a \
                           rule written afterwards would falsify the record rather than repair it — the reason \
-                          `docs/history/` is left alone; nine entries in the released `[0.4.0]` name a gate and \
-                          are meant to keep doing so"
+                          `docs/history/` is left alone. The leak is real and stays: an adopter reading \
+                          `[0.4.0]` meets nine entries naming files they can never run, and closing it needs a \
+                          form of repair that adds to the record instead of editing it"
                     .into(),
+                owner: Owner::Engine,
             }),
             "a_dated_section_naming_a_gate_is_a_stated_bound",
         ),

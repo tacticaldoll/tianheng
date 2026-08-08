@@ -95,12 +95,53 @@ fn gate(scripts: &Path, repo: &str) -> (Option<i32>, String) {
     )
 }
 
+/// The tracked machinery of a fixture, as the gate itself enumerates it.
+fn tracked_machinery(repo: &str) -> String {
+    must(
+        "the fixture's tracked scripts/ enumeration",
+        Command::new("git").args(["-C", repo, "ls-files", "scripts/"]),
+    )
+}
+
+/// Refuse to accept silence from a reaction that is not reacting at all.
+///
+/// Every bound below asserts SILENCE, and silence has more than one cause. Adversarial review found the sharp
+/// case by widening the scope to every section AND blinding the enumerator at once: the dated-section bound was
+/// then plainly FALSE — the reaction does react to dated sections — and its pin stayed green, because a dead
+/// reaction is silent about everything. Asserting the fixture tracks its machinery does not reach that; the
+/// fixture was never what broke. Only a live control does: the same gate, a shape it must refuse, exit 1.
+///
+/// So each silence pin runs this first. A pin that cannot tell "bounded here" from "not reacting anywhere" is
+/// defending nothing, which is the reads-as-coverage failure this repository keeps closing one level up.
+fn assert_reaction_is_live(scripts: &Path, temp: &Path) {
+    let control = fixture(
+        scripts,
+        temp,
+        r#"repo=$(coherence_fixture_repo "$2" live-control)
+           coherence_fixture_development_changelog "$repo" 0.2.0
+           coherence_fixture_machinery "$repo"
+           coherence_fixture_unreleased_body "$repo" '### Fixed
+- A repair naming `scripts/check_pin_bites.sh`.'
+           coherence_fixture_commit "$repo" 'docs: the live control' >/dev/null
+           printf '%s\n' "$repo""#,
+    );
+    let (code, output) = gate(scripts, &control);
+    assert_eq!(
+        code,
+        Some(1),
+        "the control must be refused, or the silence this pin is about to assert says nothing — a reaction \
+         that refuses nothing is silent about every bound at once. Got: {output}"
+    );
+}
+
 /// `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
 ///
-/// `NotAViolation`. A dated section records what was true at that release; rewriting it to satisfy a rule
-/// written afterwards would falsify the record, which is why `docs/history/` is left alone too. The bound exists
-/// so a reader does not misread the silence as an escape — nine entries in the released `[0.4.0]` name a gate
-/// and are meant to keep doing so.
+/// `UnderReacts`, owned by the engine. The leak is real — an adopter reading `[0.4.0]` meets nine entries
+/// naming files they can never run — and what is refused is the *repair*: rewriting a dated section to satisfy a
+/// rule written afterwards would falsify the record, the reason `docs/history/` is left alone too. A limit
+/// accepted for a policy reason is a declared false negative with an owner, not a shape that is harmless. Review
+/// caught the first draft classifying it `NotAViolation`, which no run could have separated: both values derive
+/// the same defence.
 #[test]
 fn a_dated_section_naming_a_gate_is_a_stated_bound() {
     let Some(root) = workspace_root() else {
@@ -133,6 +174,12 @@ EDIT
         changelog.contains("## [0.2.0] - ") && changelog.contains("`scripts/check_pin_bites.sh`"),
         "the fixture must actually carry the shape this bound is about — a DATED section naming machinery"
     );
+    assert!(
+        !tracked_machinery(&repo).is_empty(),
+        "the fixture must TRACK the machinery it names, or the silence below is the empty-enumeration bound \
+         rather than this one"
+    );
+    assert_reaction_is_live(&scripts, &temp);
 
     let (code, output) = gate(&scripts, &repo);
     let _ = std::fs::remove_dir_all(&temp);
@@ -169,10 +216,7 @@ fn machinery_tracked_by_nothing_is_a_stated_bound() {
            printf '%s\n' "$repo""#,
     );
 
-    let tracked = must(
-        "the fixture's tracked scripts/ enumeration",
-        Command::new("git").args(["-C", &repo, "ls-files", "scripts/"]),
-    );
+    let tracked = tracked_machinery(&repo);
     assert!(
         tracked.is_empty()
             && PathBuf::from(&repo)
@@ -180,6 +224,7 @@ fn machinery_tracked_by_nothing_is_a_stated_bound() {
                 .is_file(),
         "the fixture must hold the machinery in the WORKTREE and not in the index, or it demonstrates nothing"
     );
+    assert_reaction_is_live(&scripts, &temp);
 
     let (code, output) = gate(&scripts, &repo);
     let _ = std::fs::remove_dir_all(&temp);
@@ -256,6 +301,13 @@ fn a_name_reached_only_through_a_url_is_a_stated_bound() {
            printf '%s\n' "$repo""#,
     );
 
+    assert!(
+        !tracked_machinery(&repo).is_empty(),
+        "the fixture must TRACK the machinery it names, or the silence below is the empty-enumeration bound \
+         rather than this one"
+    );
+    assert_reaction_is_live(&scripts, &temp);
+
     let (code, output) = gate(&scripts, &repo);
     let _ = std::fs::remove_dir_all(&temp);
     assert_eq!(
@@ -297,6 +349,13 @@ fn a_heading_inside_a_fenced_block_is_a_stated_bound() {
            coherence_fixture_commit "$repo" 'docs: put a heading inside a fence' >/dev/null
            printf '%s\n' "$repo""####,
     );
+
+    assert!(
+        !tracked_machinery(&repo).is_empty(),
+        "the fixture must TRACK the machinery it names, or the silence below is the empty-enumeration bound \
+         rather than this one"
+    );
+    assert_reaction_is_live(&scripts, &temp);
 
     let (code, output) = gate(&scripts, &repo);
     let _ = std::fs::remove_dir_all(&temp);

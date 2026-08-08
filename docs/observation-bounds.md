@@ -273,7 +273,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
 
-> nothing reacts. A dated section records what was true at that release, and rewriting it to
+> nothing reacts, and the leak is real: an adopter reading `[0.4.0]` meets nine entries naming
 
 - **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
 

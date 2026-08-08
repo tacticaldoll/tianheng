@@ -345,6 +345,15 @@ changelog_sections() {
             base = $0
             sub(/.*\//, "", base)
             bases[base] = 1
+            # Every ancestor directory of an enumerated file, DERIVED from the enumeration rather than written
+            # down. The directory `scripts/` names this machinery as surely as any file in it, and review found
+            # a live entry citing exactly that — under an adopter heading, on a wholly internal subject, in the
+            # gap between "names a path under scripts/" and "names no such path".
+            dir = $0
+            while (sub(/[^\/]*$/, "", dir) && dir != "") {
+                dirs[dir] = 1
+                sub(/\/$/, "", dir)
+            }
             next
         }
         /^## \[/ { section = $0; sub(/ - .*/, "", section); heading = ""; printf "SECTION\t%s\n", section; next }
@@ -376,7 +385,7 @@ changelog_sections() {
                 # A leading `./` and trailing sentence punctuation belong to the prose, not to the name.
                 sub(/^\.\//, "", token)
                 sub(/\.+$/, "", token)
-                if (token in paths || token in bases)
+                if (token in paths || token in bases || token in dirs)
                     printf "CITATION\t%s\t%s\t%s\n", section, heading, token
             }
         }
@@ -421,10 +430,12 @@ missing_migration=$(awk -F'\t' '
     || fail "a CHANGELOG section marks a change **BREAKING** and carries no \`### Migration\` section, so what an adopter must do is scattered through the entries or absent:
 $missing_migration"
 
-# `CHANGELOG.md` is the adopter's document, and every heading it offered — Added, Changed, Fixed, Migration —
-# is an adopter's vocabulary. It offered no heading that was not, so every change to this repository's own
-# machinery was written into one of them: nineteen entries name it — ten in `[Unreleased]` and nine in the
-# released `[0.4.0]` — for a directory that ships in zero packages. `### Self-governance` is that missing
+# `CHANGELOG.md` is the adopter's document. It carries eight kinds of heading — Added, Changed, Fixed,
+# Migration, Documentation, Removed, Compatibility, Compatibility evidence — and every one of them is an
+# adopter's vocabulary. It offered none that was not, so every change to this repository's own
+# machinery was written into whichever fitted least badly: nineteen entries name it — ten in `[Unreleased]`
+# and nine in the released `[0.4.0]`, across four different headings — for a directory that ships in zero
+# packages. `### Self-governance` is that missing
 # heading, and this refuses the leak back into the others.
 #
 # Adopter-facing is defined as the COMPLEMENT of that one heading rather than as a list of the four. A heading

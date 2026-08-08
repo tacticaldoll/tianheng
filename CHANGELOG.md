@@ -421,19 +421,6 @@ them.
   `--all-features` — and `observation-bound-model` now carries the rule: where a reaction is behind a Cargo
   feature, the declarations describing it are gated with it.
 
-- **A census is produced, never typed, and `AGENTS.md` now says so.** Hand-written figures drifted in every kind of
-  place they can live during this window — a code doc, two backlog entries, a changelog sentence, three files at
-  once, the version-horizon paragraph that assigns the release number, and a **generated projection's template**.
-  That last one is why the rule names its instrument rather than only its prohibition:
-  `docs/gate-shape-contract.md` is generated and staleness-checked and its bound disclosure still went wrong,
-  because the figure and the list were string literals in the generator — the freshness check compares the
-  generator's own text with itself, so a bound declared in this same window went unlisted. The projection now
-  **derives** that disclosure from the specification and is held to it in both directions, with the figure as the
-  list's length; a single array carries only the explanations. The rule also records why a detector over prose was
-  measured three times and rejected: widening the phrasing false-positives on both projections' headers, on the
-  register's own diagnostic, and on its matrix's expected-output literals; widening the corpus to `scripts/`
-  false-positives on the fixture censuses that matrix writes deliberately; and the one instance that occurred in a
-  code doc was spelled in words. Most numbers here describe a *shape*, not a census.
 - The bound register's **exit contract now binds every path**, not the ones a wrapper remembered. `set -e`
   with `pipefail` carries a failing utility's own status out of the process, so a stubbed `sed` made the gate
   exit **4** printing nothing at all — a status the contract does not define, which no consumer can act on
@@ -757,14 +744,31 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **A census is produced, never typed, and `AGENTS.md` now says so.** Hand-written figures drifted in every kind of
+  place they can live during this window — a code doc, two backlog entries, a changelog sentence, three files at
+  once, the version-horizon paragraph that assigns the release number, and a **generated projection's template**.
+  That last one is why the rule names its instrument rather than only its prohibition:
+  `docs/gate-shape-contract.md` is generated and staleness-checked and its bound disclosure still went wrong,
+  because the figure and the list were string literals in the generator — the freshness check compares the
+  generator's own text with itself, so a bound declared in this same window went unlisted. The projection now
+  **derives** that disclosure from the specification and is held to it in both directions, with the figure as the
+  list's length; a single array carries only the explanations. The rule also records why a detector over prose was
+  measured three times and rejected: widening the phrasing false-positives on both projections' headers, on the
+  register's own diagnostic, and on its matrix's expected-output literals; widening the corpus to `scripts/`
+  false-positives on the fixture censuses that matrix writes deliberately; and the one instance that occurred in a
+  code doc was spelled in words. Most numbers here describe a *shape*, not a census.
 - **This heading exists, and `check_release_coherence.sh` refuses the leak back into the others.** `scripts/`
   ships in zero packages — measured across all six members — yet nineteen entries name it, ten of them in
-  `[Unreleased]` and nine in the released `[0.4.0]`, every one under `### Added` / `### Changed` / `### Fixed`.
-  The document offered no heading that was not an adopter's vocabulary, so there was nowhere else for them to
-  go, and an adopter reading `[Unreleased]` read about a file they can never run. The cost was
-  coupling: of the 51 commits in this window that touched `scripts/`, 40 were forced to also touch `openspec/`
-  or this file, so a change to a script reaching no adopter was a four-file transaction — and prose is where
-  this window's defects have been.
+  `[Unreleased]` and nine in the released `[0.4.0]`, spread across `### Added`, `### Changed`, `### Fixed` and
+  `### Documentation`. The document offered no heading that was not an adopter's vocabulary, so there was
+  nowhere else for them to go, and an adopter reading `[Unreleased]` read about a file they can never run.
+
+  The cost was coupling: through this window, roughly four in five of the commits touching `scripts/` were
+  forced to also touch `openspec/` or this file, so a change to a script reaching no adopter was a four-file
+  transaction — and prose is where this window's defects have been. The exact figures are in the commit that
+  carries this change, where they name a range that has stopped moving; written here they would count a set
+  that grows with every commit, and the first draft of this sentence had already drifted from 51/40 to 54/43
+  before the branch merged.
 
   What is separated is **publication, not rigour**: no reaction, twin, observation bound or exit-contract
   obligation is removed or weakened, and the test is that deleting an adopter-facing entry about a gate changes
@@ -775,8 +779,9 @@ no adopter runs. They are here rather than under the adopter headings above beca
   and stay untouched: `[0.4.0]`'s nine entries of this shape are meant to keep naming what was true at 0.4.0.
 
   The first rule drafted was falsified before it was written down. *Cite no path that ships in no package*
-  looked right until the citation population was enumerated: all fifteen paths this section cites ship in no
-  package, `COOKBOOK.md` and `docs/*.md` among them, and those are adopter surface anyway. The replacement is
+  looked right until the citation population was enumerated: every one of the fifteen distinct repository paths
+  `[Unreleased]` cited **before this change** ships in no package, `COOKBOOK.md` and `docs/*.md` among them,
+  and those are adopter surface anyway. The replacement is
   narrower and not a proxy. Where the adopter-relevant fact is genuinely present the rule forces a **rewrite**
   rather than a move — the publish-provenance entry above now states the guarantee and names no file.
 

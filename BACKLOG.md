@@ -507,10 +507,30 @@ consumer for an undemonstrated deduplication.
   which kept a measured false negative out of the register a reader is told to consult before calling a
   behaviour a defect. All four are declared unpinned against this entry now.
 
+- **WATCH: four capabilities have their subject inside this repository and are indistinguishable from the
+  thirty-two that describe what adopters get.** *Observed pressure:* the census that motivated
+  `### Self-governance` found the same mispricing at a second surface. `gate-shape-contract`,
+  `observation-bound-register`, `projection-register` and `self-law-projection` sit in the same directory,
+  under the same lifecycle and the same review bar as capabilities describing the product. Measured once, at
+  `change/adopter-narrative-names-no-self-machinery`: 1,291 of the 8,027 non-blank lines under
+  `openspec/specs`, about a sixth — recorded as an observation of that moment rather than a live figure,
+  since every one of those files changes. *Observation source:* classified by
+  counting, per capability, mentions of this repository's own artifacts against mentions of adopters; those
+  four are the only ones where the first exceeds the second. *Current reaction or bound:* none. Nothing
+  distinguishes a capability whose subject is this repository from one whose subject is what ships, so
+  nothing can. *Risk:* low and slow — it costs review attention and makes `openspec/specs` read as a larger
+  product surface than it is; it cannot mislead an adopter, who never reads it. *Promotion trigger:* a fifth
+  capability of this kind, or a reader treating one of the four as adopter surface during review. **Not
+  fired.** *Version class:* patch; specification layout of this repository. *Authority:* undecided — marking
+  them is itself a governance decision about `openspec/specs`, and the change that found this deliberately
+  left it alone so that change could close. *Shape:* the cheap form is a marker the register can read, so the
+  distinction is enumerable rather than a convention; the expensive form is a second directory, which would
+  move files every gate resolves by path.
+
 - **WATCH: the self-governance residual is a judgement over an entry's subject.** *Observed pressure:*
   `CHANGELOG.md` is the adopter's document and offered no heading that was not an adopter's vocabulary, so
-  nineteen entries name that machinery — ten in `[Unreleased]` and nine in the released `[0.4.0]` — every one
-  of them under `### Added` / `### Changed` / `### Fixed`. The rule that now refuses them reads an entry's
+  nineteen entries name that machinery — ten in `[Unreleased]` and nine in the released `[0.4.0]` — spread
+  across `### Added`, `### Changed`, `### Fixed` and `### Documentation`. The rule that now refuses them reads an entry's
   **references** — a word equal to a path under `scripts/`, or to a basename `git ls-files scripts/` resolves
   — and an entry describing this repository's own governance while naming no such word stays invisible to it. *Observation source:* two live instances, not a hypothetical: after this
   window's move, `CHANGELOG.md:173` and `:337` both sit under adopter headings, both describe the bound
@@ -519,8 +539,10 @@ consumer for an undemonstrated deduplication.
   `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound`; the five limits
   that *do* have a mechanical WHEN are pinned in `tests/release_coherence.rs`. *Risk:* low and
   one-directional — the adopter reads a paragraph about housekeeping, never a wrong claim about what they get.
-  *Promotion trigger:* an entry of this shape carrying a claim an adopter could act on, or a count of them
-  passing what a reader will skim. **Not fired**: two, both plainly about internals. *Version class:* patch; a
+  *Promotion trigger:* an entry of this shape carrying a claim an adopter could **act on** — a version, a
+  migration step, a behaviour change — rather than a description of internals. That is a property of one
+  entry and decidable by reading it, unlike a threshold on a population nothing counts. **Not fired**: every
+  instance found so far describes this repository's own machinery and asks nothing of a reader. *Version class:* patch; a
   document and a `scripts/` reaction of this repository. *Authority:* `release-coherence`. *Shape:* closing it
   needs a judgement over the entry's **subject** rather than its references, which is the prose detector
   `AGENTS.md` records as designed, measured three times and rejected — so the honest shape of this entry is a
