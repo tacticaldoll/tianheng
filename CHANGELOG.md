@@ -105,7 +105,10 @@ them.
   before the mutation and once after the restore — because one control rules out a test that fails on its own
   but not one whose failure it caused: a pin writing a marker and asserting its absence passes exactly once, so
   the mutated run fails for a reason the mutation had no part in and the citation reads as exercised by a
-  perturbation that did nothing. A record's path is held to being
+  perturbation that did nothing. Every run is held to having executed exactly one test, the restored-tree run
+  included — a pin that rewrites its own source on a later run otherwise left the filter matching nothing and
+  exiting 0 over zero tests. What a fixed number of runs cannot reach — an outcome depending on the run count
+  with a period that sequence does not break — is declared as a bound rather than implied. A record's path is held to being
   both **tracked** and **contained**, separately: a tracked symlink is tracked, and following one rewrites a
   file outside the tree — destructively, if the run is killed between the write and the restore. The checkout's
   hooks are disabled, because a `post-checkout` hook would otherwise run inside the tree under test with write
@@ -179,7 +182,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **64 bounds across 22 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **65 bounds across 22 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing

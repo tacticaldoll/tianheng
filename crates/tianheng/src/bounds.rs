@@ -154,6 +154,21 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::unpinned(
             BoundId::new(
+                "observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound",
+            ),
+            "a cited test passing and failing by a period the fixed run sequence does not break",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the reaction runs the test a fixed number of times and the number is readable in \
+                          its own source, so a matching period escapes; closing it needs each run unable to \
+                          observe how many times the test has run, whose cost grows with the coverage this \
+                          capability exists to grow"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
                 "observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound",
             ),
             "a cited pin whose assertions are removed in the working directory and not committed",

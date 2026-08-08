@@ -369,15 +369,28 @@ Without the control, a cited test failing for its own reasons reads as a pin tha
 applied to the tree — the same `f() == f()` shape reached from the other side, where the comparison is with a
 run whose outcome was never in doubt.
 
-The control SHALL also be run **again after the restore**, and the reaction SHALL refuse to judge unless it
-passes then too. One control rules out a test that fails deterministically on its own; it cannot rule out one
-whose failure it *caused*. A pin writing a marker and asserting the marker's absence passes exactly once, so
-the mutated run fails for a reason the mutation had no part in and the citation is reported as exercised by a
-perturbation that did nothing — a false clean, constructed and measured. Where the second control fails, the
-outcome is order-dependent and no failure under the mutation can be attributed to the mutation.
+Where the mutated run **fails**, the control SHALL be run again after the restore, and the reaction SHALL
+refuse to judge unless it passes then too. One control rules out a test that fails deterministically on its
+own; it cannot rule out one whose failure it *caused*. A pin writing a marker and asserting the marker's
+absence passes exactly once, so the mutated run fails for a reason the mutation had no part in and the citation
+is reported as exercised by a perturbation that did nothing — a false clean, constructed and measured. Where
+the restored-tree run fails, the outcome is order-dependent and no failure under the mutation can be attributed
+to it. It is run only on that branch because a *surviving* pin is a violation whatever the second run says.
+
+**Every** run of the cited test SHALL be held to having executed exactly one test, the restored-tree run
+included. It was added without that rule, and a pin that rewrites its own source on a later run then left the
+filter matching nothing: exit 0 over zero tests, read as the restored tree still passing. Measured. The restore
+puts back the mutated file alone, so whatever the test itself wrote survives into that run.
+
+What none of this reaches is declared below rather than implied: the number of runs is **fixed**, so a cited
+test whose outcome depends on its run count with any period the sequence does not break is indistinguishable
+from one the mutation killed.
 
 The package and target the cited test runs in SHALL be **derived from where that test is defined**, not from the
-file the mutation edits and not declared beside the mutation. A record routinely perturbs a reaction in one file
+file the mutation edits and not declared beside the mutation. A definition under a package's integration-test
+directory that is not a target root — a module of one — SHALL be cannot judge rather than assumed to be a
+library test: assuming it ran a *different* test of the same name in the library and reported that one's death
+as the citation's, while the cited pin never ran at all. A record routinely perturbs a reaction in one file
 while the pin defending it sits in another, and deriving from the edited file then runs a target the citation is
 not registered in — measured here, where a recognizer in a crate's library and its pin in an integration target
 selected the library. A fifth field would be a second spelling of a fact the tree already carries, and would rot.
@@ -477,6 +490,16 @@ is coverage, which grows one authored record at a time.
   directory is what makes a git-reading citation reachable at all, and re-checking a resolved path after the
   build would re-check the same window that defeated it. Hooks are the one case that IS closed, because those
   run without any citation asking for them
+- **UNPINNED** `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+#### Scenario: Whether a cited test's outcome depends on its run count is not observed beyond one period — a stated bound
+
+- **WHEN** a cited test passes and fails by a period the reaction's fixed run sequence does not break — passing
+  the control, failing the mutated run, and passing the restored-tree run, for reasons of run count alone
+- **THEN** the citation is reported as exercised by a perturbation that did nothing. The reaction runs the test
+  a fixed number of times, so any period matching that sequence escapes it, and the number is readable in the
+  reaction's own source. Closing it needs each run to be unable to observe how many times the test has run —
+  a separate checkout per run — whose cost grows with the coverage this capability exists to grow
 - **UNPINNED** `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
 #### Scenario: Whether a pin gutted but not committed still bites is not observed — a stated bound

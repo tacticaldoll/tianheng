@@ -201,6 +201,12 @@ derive_selector() {
     pkg=${BASH_REMATCH[1]}
     if [[ ${defined[0]} =~ ^crates/[^/]+/tests/([^/]+)\.rs$ ]]; then
         selector=(-p "$pkg" --test "${BASH_REMATCH[1]}")
+    elif [[ ${defined[0]} =~ ^crates/[^/]+/tests/ ]]; then
+        # A file under `tests/` that is not a target root — `tests/<dir>/mod.rs`, which this tree already has
+        # under `tests/support/` and `tests/fixtures/`. Falling through to `--lib` was measured to run a
+        # DIFFERENT test of the same name in the library and report its death as the citation's, while the
+        # cited pin never ran at all.
+        cannot_judge "\`$name\` is defined in ${defined[0]}, which is not an integration target root; the target to run it in cannot be derived from a module of one"
     else
         selector=(-p "$pkg" --lib)
     fi
@@ -345,6 +351,12 @@ $(tail -20 "$work/build.log")"
         run_cited "$resolved" "${selector[@]}" \
             || cannot_judge "\`$name\` fails on the restored tree, so its failure under the mutation cannot be attributed to the mutation — the outcome depends on having been run before:
 $(tail -20 "$work/run.log")"
+        # Held to the same vacuity rule as the other two run sites. It was added without one, and a pin that
+        # rewrites its own source on a later run then leaves the filter matching NOTHING — exit 0 over zero
+        # tests, read as the restored tree still passing. Measured. The restore puts back the mutated file
+        # only, so anything the test itself wrote survives into this run.
+        ran_exactly_one \
+            || cannot_judge "the restored-tree run for \`$name\` did not run exactly one test, so whether its outcome depends on having been run before was never observed"
     fi
 
     ((survived == 0)) \

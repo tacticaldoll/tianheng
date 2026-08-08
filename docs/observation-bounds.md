@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**5 of 64 declared bounds have no pinning test.** That figure is the register's
+**6 of 65 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -176,6 +176,12 @@ fallback used where no manifest exists, which the register spec describes.
 ### `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound`
 
 > nothing reacts. Running the cited test is the reaction's whole method, so code execution inside the
+
+- **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+### `observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound`
+
+> the citation is reported as exercised by a perturbation that did nothing. The reaction runs the test
 
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 

@@ -206,6 +206,61 @@ PIN
 git -C "$order_dependent" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qam order-dependent
 expect_fail "$order_dependent" 2 'fails on the restored tree'
 
+# A pin that rewrites its own source on a later run: the mutated run fails for a reason the mutation had no
+# part in, and the restored-tree run then matches NOTHING and exits 0 over zero tests. Without the vacuity
+# rule on that third run site, the gate read it as the restored tree still passing and reported the citation
+# exercised.
+self_erasing=$(new_repo self-erasing "$KILLS")
+cat >"$self_erasing/crates/fixt/tests/pin.rs" <<'PIN'
+#[test]
+fn a_continuation_line_is_not_recognized() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let marker = dir.join("ran-once.marker");
+    if marker.exists() {
+        std::fs::write(dir.join("tests/pin.rs"), "// erased
+").expect("the target is writable");
+        panic!("a later run, failing for a reason no mutation caused");
+    }
+    std::fs::write(&marker, "ran").expect("the target is writable");
+    assert!(fixt::exposes("pub fn f() -> Box<dyn T> {"));
+}
+PIN
+git -C "$self_erasing" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qam self-erasing
+expect_fail "$self_erasing" 2 'did not run exactly one test'
+
+# A cited test defined in a MODULE of an integration target rather than at its root. Falling through to `--lib`
+# ran a different test of the same name and reported its death as the citation's — so the fixture carries that
+# decoy, generated through a macro so the definition scan cannot see it while the harness still registers it.
+# The cited pin is left inert under the mutation, so a gate running the right test reports it surviving.
+module_of_a_target=$(new_repo module-of-a-target "$KILLS")
+mkdir -p "$module_of_a_target/crates/fixt/tests/suite"
+cat >"$module_of_a_target/crates/fixt/tests/suite/mod.rs" <<'PIN'
+#[test]
+fn a_continuation_line_is_not_recognized() {
+    assert!(fixt::exposes("pub fn f() -> Box<dyn T> {"));
+}
+PIN
+printf 'mod suite;\n' >"$module_of_a_target/crates/fixt/tests/pin.rs"
+cat >>"$module_of_a_target/crates/fixt/src/lib.rs" <<'DECOY'
+
+macro_rules! decoy {
+    ($name:ident) => {
+        #[test]
+        fn $name() {
+            assert!(!crate::exposes(") -> Box<dyn T> {"));
+        }
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    decoy!(a_continuation_line_is_not_recognized);
+}
+DECOY
+git -C "$module_of_a_target" add -A
+git -C "$module_of_a_target" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qm module-of-a-target
+expect_fail "$module_of_a_target" 2 'not an integration target root'
+
 # --- a run that executed no test (the scenario three refusal sites implement) ---
 #
 # A filter matching nothing exits 0 having run nothing, which by status alone is a pin that survived. Both
