@@ -401,6 +401,64 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_doc_example_of_the_dependency_dsl_is_refused",
         ),
+        // --- self-law-projection: the mutual-independence reaction's four limits ---
+        //
+        // Each extent is read off a run of that limit's own WHEN, never off the argument for it: a draft
+        // declared the first as a false NEGATIVE and one run showed the reaction fires there.
+        BoundDecl::unpinned(
+            BoundId::new(
+                "self-law-projection/a-reason-that-paraphrases-the-law-is-refused-a-stated-bound",
+            ),
+            "a dimension's `because` stating the mutual-independence law in different words, without the literal clause",
+            Extent::Reached(Reached::OverReacts {
+                because: "the check reads the `because` for the literal clause, so a reason that genuinely \
+                          states the law in other words is refused; the direction is the safe one and closing \
+                          it needs the reaction to decide two wordings state one law"
+                    .into(),
+            }),
+            "`BACKLOG.md` — *four limits of the mutual-independence reaction*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
+                "self-law-projection/a-reason-carrying-the-clause-while-negating-the-law-is-not-observed-a-stated-bound",
+            ),
+            "a `because` quoting 三儀 ⊥ 三儀 and then stating that it does not bind that dimension",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the check looks for the clause and not for what the sentence does with it, so the \
+                          agent-loaded projection can carry the law's opposite while satisfying the check that \
+                          exists to keep the law taught"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *four limits of the mutual-independence reaction*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
+                "self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound",
+            ),
+            "a dimension crate whose package name is not in the reaction's hand-kept list",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the list is typed beside a set that enumerates itself, and the set-coverage \
+                          assertion compares a set produced by filtering on that same list, so an omission \
+                          is invisible to both halves"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *four limits of the mutual-independence reaction*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
+                "self-law-projection/a-workspace-dependency-allowlist-is-not-examined-a-stated-bound",
+            ),
+            "a dimension declaring the law through `restrict_workspace_dependencies_to` instead",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the filter admits one rule variant, while the variant it omits governs \
+                          workspace-member edges specifically and is the more natural one for this law"
+                    .into(),
+            owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *four limits of the mutual-independence reaction*",
+        ),
         BoundDecl::pinned(
             BoundId::new(
                 "self-law-projection/a-comment-naming-every-member-for-another-reason-is-refused-a-stated-bound",

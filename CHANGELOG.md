@@ -606,6 +606,35 @@ them.
   dependency **requirement** moves.
 
 ### Fixed
+
+- **A dimension's dependency allowlist could name a sibling and nothing reacted** — 三儀 ⊥ 三儀 quoted in the
+  `because` while the allowlist beneath it permitted the opposite. Reproduced: widening `guibiao`'s allowlist to
+  name `hunyi` left **every** test binary in this workspace green, and `AGENTS.self-law.md` regenerated to print
+  `only: serde_json, xuanji, xingbiao, hunyi` directly beneath the reason that forbids it. Neither reaction a
+  reader would expect to catch it can: the staleness check pins the projection against the *declaration*, so a
+  blessed projection of a widened allowlist is **fresh** — and freshness is not truth — while the dependency
+  reaction cannot fire on a *widened* allowlist, because permitting more than the tree uses produces no
+  violation. The reaction now asserts membership beside the clause, names the sibling it found, and
+  `self-law-projection` states why that assertion is the sole guard. The clause check's own limit is unchanged
+  and still limited — and every limit of this reaction is now **declared**, four of them, each extent read off a
+  run of that limit's own WHEN. The two wording limits go in **opposite directions**: paraphrasing the clause
+  makes the reaction *fire* (over-reacting, the safe direction), while a `because` carrying the literal clause
+  and then *negating* the law **passes**, so `AGENTS.self-law.md` can project the law's opposite to every agent
+  that loads it — the serious one. The two enumeration limits are the reaction's hand-kept dimension list, which
+  the set-coverage assertion structurally cannot hold because the set it compares is produced by filtering on
+  that same list, and a rule variant the filter never reaches although it governs workspace-member edges
+  specifically.
+
+  All four are unpinned against one `BACKLOG.md` tracker. Two drafts got this wrong in opposite ways: one
+  declared the first as a false *negative*, which a single run of its WHEN falsified, and one then deferred all
+  four on the ground that declaring needed a pin. It does not — a bound may be declared unpinned — and
+  withholding them kept a measured false negative out of the register a reader is told to consult before calling
+  a behaviour a defect. Pinning is what needs the reaction run over a supplied declaration; the tracker owns
+  that.
+
+  Found by three withdrawn attempts at one `PROJECT.md` paragraph, the third of which tried to stop restating
+  the law and **cite** the generated projection instead. Review showed the citation bought freshness rather than
+  truth. The paragraph kept coming out wrong because the law it described was only half reacted to.
 - **The source-shape reaction over the shell's composition body is retired, and the obligation it claimed is
   now a declared, unpinned bound.** It read the characters of one function body while the requirement is about
   what the shell *does*. Four review rounds narrowed it and each narrowing was defeated: by name resolution (a
