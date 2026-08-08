@@ -372,10 +372,10 @@ consumer for an undemonstrated deduplication.
   the files any such scan reads — and every version miscounted in both directions, matching defects that merely
   describe something being dropped while missing rejections phrased another way. A grep over prose cannot census
   rejections, which is the entry's own point turned on itself. To look at the population rather than count it:
-  `grep -rniE 'measured and rejected|was rejected|was dropped|would false-positive' AGENTS.md PROJECT.md
-  BACKLOG.md docs crates scripts openspec` — a starting point that includes this entry's own text and misses
-  whatever is phrased differently. *Observation source:* reading that output, 2026-08-07, not a figure from it.
-   *Current reaction or bound:* none enumerates them, though
+  `git grep -niE 'measured and rejected|was rejected|was dropped|would false-positive'` — one line, because a
+  wrapped command's first half ran on its own and returned a silent zero. It is a starting point, not a census:
+  its output includes this entry's own text and misses whatever is phrased differently. *Observation source:* reading that output, 2026-08-07, not a figure from it.
+  *Current reaction or bound:* none enumerates them, though
   `docs/observation-bounds.md` shows the practice already reaching a generated projection by hand — it carries
   one refused approach with its measurement ("scanning paragraphs instead of lines … would not have caught it").
   One instance in a projection is the pattern existing without being enumerated, not the gap being closed.
@@ -392,18 +392,20 @@ consumer for an undemonstrated deduplication.
   capability's, while nothing carries it into an agent's context. The phrasing that names the purpose
   ("recorded as rejected rather than left to be re-proposed") is in `CHANGELOG.md`, not in a spec, which is part
   of the observation.
-  *Shape, if it fires:* another instance of the enumerate → react → audit cycle beside the five
-  `projection-register` already counts, not a new crate and not the separate ADR file class `AGENTS.md` forbids.
+  *Shape, if it fires:* another instance of the enumerate → react → audit cycle beside those
+  `projection-register` enumerates, not a new crate and not the separate ADR file class `AGENTS.md` forbids.
   Two constraints the survey already forces on the record type: separate the **load-bearing** reason from the
   **incidental** evidence — `AGENTS.md`'s prose-detector rejection leads with four closable false positives and
   buries the one unclosable false negative — and make strength **derived** from structural facts rather than
   authored, the way `Extent::demonstrates` is, so it cannot be self-assessed.
 
-- **WATCH: the rule shape the self-law relies on most is absent from the teaching surface.**
+- **WATCH: the rule shape the self-law relies on most is absent from `examples/`.**
   *Observed pressure:* `restrict_dependencies_to` carries six of the eleven boundaries in `AGENTS.self-law.md`
-  and appears **zero** times anywhere under `examples/` (`grep -rc restrict_dependencies_to examples/`). Examples
-  are the 潛移 imitation surface, so the allowlist shape the project governs itself with is the one an adopter
-  never sees demonstrated. *Observation source:* `grep -rc restrict_dependencies_to examples/` against
+  and appears **zero** times anywhere under `examples/` (`grep -rc restrict_dependencies_to examples/`). Examples are the 潛移 imitation surface, so the allowlist shape the project
+  governs itself with is one an adopter running the dogfood never meets. Narrow deliberately: `COOKBOOK.md` is
+  also an imitation surface and *does* carry copyable recipes using it, so the pressure is the executable
+  examples specifically, not the teaching surface as a whole — an earlier draft claimed the wider thing and was
+  wrong. *Observation source:* `grep -rc restrict_dependencies_to examples/` against
   `grep -c 'restrict dependencies to' AGENTS.self-law.md` — note the two spellings, the DSL method and the
   projection's rendering; a grep for the method name against the projection returns zero and means nothing.
   Read 2026-08-07.
@@ -411,7 +413,7 @@ consumer for an undemonstrated deduplication.
   example is added or revised for another reason, at which point the shape is chosen deliberately rather than by
   omission. *Version class:* patch; `examples/` ships in no crate. *Authority:* `governance-dogfood`, which owns
   the examples' reaction. *Explicitly not claimed:* that enumerated denylists are wrong, or that the self-law
-  avoids them. It does not — all four of its inline-symbol-path confinements carry an enumerated verb list, and
+  avoids them. It does not — its inline-symbol-path confinements each carry an enumerated verb list, and
   `inline-symbol-path-confinement` already declares the unlisted remainder as a bound the adopter owns. An
   earlier draft of this entry claimed the opposite on four counts and was corrected by review; what survives is
   the absence above and nothing more.
