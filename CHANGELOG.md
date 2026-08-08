@@ -147,7 +147,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **59 bounds across 21 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **60 bounds across 21 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
@@ -495,6 +495,43 @@ them.
   performs.*
 
 ### Fixed
+- **The source-shape reaction over the shell's composition body is retired, and the obligation it claimed is
+  now a declared, unpinned bound.** It read the characters of one function body while the requirement is about
+  what the shell *does*. Four review rounds narrowed it and each narrowing was defeated: by name resolution (a
+  `use` shadowing 渾儀's entry point, the body byte-identical), by the binding site (the parameter renamed, or a
+  second one added — the parameter list sits outside the read extent), by which definition is the subject (a raw
+  identifier, leaving a commented copy as the only signature occurrence), by the caller frame (the guard moved
+  into `check_constitution`), and by **execution** — a delegation bound to `let _`, written inside a
+  never-invoked `macro_rules!`, or placed in a conditionally-called closure satisfies every textual rule while
+  the shell decides for itself. That last group is the one no widening reaches, because it is not a property of
+  text. Every defeat was measured end-to-end against the tracked composition function with the suite green and
+  the formatter and linter silent.
+  Along the way it closed real things — seven spellings of a reach for the constitution, a decoy anchor, a
+  comment read as code — and cost two false-positive classes, one of them fired by `rustfmt` reformatting a
+  conforming body. Retiring it rather than narrowing a fifth time is the honest disposition: what a text reader
+  can still say truthfully is that the body reaches its constitution only through the declared accessors, and
+  that is not the obligation. `observer-protocol` now declares the gap as a false negative this repository owns,
+  **unpinned**, tracked for closure by construction — the route the runtime dimension's equality already takes.
+  The register leads with the count of bounds nothing yet defends, so the debt is visible rather than implied.
+- The same decoy defeated the **bounds-method** reader, whose bound records the moved extent as *over-reacting*
+  and therefore safe. A commented-out conforming copy above a divergent `bounds()` made the exact one-statement
+  equality pass on text that was not the method — the safe direction inverted by the anchor rather than by an
+  in-body brace. Both readers share the recognizer, so both are repaired, and each pins the decoy separately
+  because the claim being defended is each reader's own error direction.
+- **A bound was typed for the harmless one of its two readers.**
+  `a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent` recorded the moved extent as
+  *over-reacting*, read off the bounds-method comparison, where an exact one-statement equality cannot survive a
+  moved extent and so refuses a conforming body. The shell-delegation reaction arrived later with a comparison
+  that survives one intact, and the rationale was never re-derived against it — leaving a bound on the safe side
+  of the false-negative line describing a reader on the unsafe side, which reads as permission. The
+  over-reaction survives on the bounds-method comparison, which is the reader it was read off; the second reader
+  was retired rather than given a bound of its own (see the entry above). No adopter action:
+  `tianheng::observation_bounds()` is absent at `v0.4.0`, so no identity here has ever shipped.
+- `docs/observation-bound-extents.md` asserted that **refuses to judge** carried no bound while rendering one
+  under that heading two sections below. The claim was a literal in the generator's template, which is the one
+  place a freshness check cannot catch a falsehood — the comparison is the generator's own text against itself.
+  The lesson it carried does not need the membership claim, so the claim is gone rather than re-typed — which
+  is what kept the document honest when the retirement later removed that value's only instance.
 - **Three text recognizers read past the region they observe, each in the direction its own comment said it did
   not.** One class, found by a review of this window and repaired together. The bound register's attribute walk
   stops at a blank line so an attribute cannot cover the item beneath it — but it read the preceding lines
@@ -508,16 +545,17 @@ them.
   *only* inside one is not a mention — so a path a reader plainly sees was discarded and a conforming document
   refused. The comment **span** is now excised and the visible text kept. Each is pinned by the direction that
   fails without it, and the first two were confirmed against the unrepaired code. Adopter-facing effect: none —
-  all three are this repository's own governance reactions, and `tianheng::observation_bounds()` returns one
-  more entry, an additive read-only surface no baseline or verdict depends on.
+  all three are this repository's own governance reactions, and `tianheng::observation_bounds()` returns an
+  additional entry, an additive read-only surface no baseline or verdict depends on.
 - What the brace count still cannot separate is now a **declared bound** of `observer-protocol` rather than an
   unwritten limit: a `{` or `}` inside a block comment or a string literal still moves the body extent, because
   telling one from the other needs the string-literal lexing this tree defeats, its own lexer suites putting
-  comment delimiters inside string literals. It is declared with the direction measured rather than assumed: no
-  brace-carrying
-  construct survives the exact one-statement comparison, so a moved extent refuses a **conforming** body instead
-  of accepting a divergent one, which is an over-reaction an author argues with and never a silent pass. Its pin
-  carries that control.
+  comment delimiters inside string literals. It is declared with the direction measured rather than assumed:
+  for the bounds-method reader's exact one-statement comparison, no brace-carrying construct survives, so a
+  moved extent refuses a **conforming** body instead of accepting a divergent one — an over-reaction an author
+  argues with and never a silent pass. Its pin carries that control. (Later in this window that direction was
+  found to belong to the *comparison* rather than to the extent, and the bound split accordingly; see the
+  entries above.)
 - The publish-source gate now owns cleanup before acquiring its temporary signature workspace, so a partial
   acquisition that creates a directory and then fails cannot leave that directory behind.
 - The publish-source gate now reports cannot-judge when Git's extracted signature is not the tag object's exact

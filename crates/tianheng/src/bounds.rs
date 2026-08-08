@@ -93,12 +93,17 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "a_trait_object_on_a_continuation_line_is_not_recognized",
         ),
+        // Which side of the false-negative line a moved extent falls on is decided by the comparison reading
+        // it, not by the extent. An exact one-statement equality cannot survive one and therefore over-reacts,
+        // which is this bound. A second reader over the shell's composition body compared by count and
+        // containment, which a truncated remainder satisfies, and was retired rather than narrowed a fifth
+        // time; the distinction is kept here so the direction is not read as a property of the extent itself.
         BoundDecl::pinned(
             BoundId::new(
                 "observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound",
             ),
-            "an inspected body carrying `{` or `}` inside a block comment or a string literal",
-            // Over-reacting rather than under-reacting, and that is read off the comparison rather than
+            "an inspected bounds-method body carrying `{` or `}` inside a block comment or a string literal",
+            // Over-reacting rather than under-reacting, and that is read off this comparison rather than
             // preferred: the body is required to be one exact statement, which no brace-carrying construct
             // survives, so a moved extent refuses a conforming body instead of admitting a divergent one.
             Extent::Reached(Reached::OverReacts {
@@ -108,6 +113,24 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                           literals".into(),
             }),
             "a_brace_in_a_block_comment_moves_the_body_extent",
+        ),
+        // The reaction that read the composition body is retired, so what is declared is the obligation being
+        // unobserved rather than one family of escapes from a reader that no longer exists. Under-reacting with
+        // the engine as owner, not out of reach: the deciding text was inside the file the reader loaded, so the
+        // measure stopped where this repository chose to stop it, and closing it is ordinary work here.
+        BoundDecl::unpinned(
+            BoundId::new(
+                "observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound",
+            ),
+            "the shell's composition function deciding semantic emptiness itself rather than delegating",
+            Extent::Reached(Reached::UnderReacts {
+                because: "a text reader over the composition body was defeated at every level it could be \
+                          narrowed to — name resolution, the parameter's binding site, the identity of the \
+                          definition, the caller frame, and execution, which no reading of text reaches — so \
+                          the obligation is carried by construction or not at all".into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *the shell's semantic delegation, held by construction*",
         ),
         // --- gate-shape-contract ---
         //

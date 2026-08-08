@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**16 of 59 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**17 of 60 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound` — owner: engine
@@ -13,6 +13,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external` — owner: engine
 - `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default` — owner: adopter
 - `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound` — owner: adopter
+- `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound` — owner: engine
 - `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound` — owner: engine
 - `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound` — owner: inherited from the verification environment
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
@@ -27,7 +28,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 
 **What this document does not claim.** The classification is *authored*: the type refuses a contradiction and derives what each bound's defence must demonstrate, but nothing verifies that a bound recorded as over-reacting really over-reacts rather than under-reacting. Two further limits are declared as bounds of `observation-bound-model` itself: an answer that depends on which corpus entry point observed it has no extent of its own and is recorded as under-reacting with the entry point as its owner, and a bound both out of reach and granularity-limited cannot be expressed at all.
 
-One value carries no bound today and is kept deliberately: **refuses to judge**. The misclassification this model exists to prevent was exactly a confusion between that and *out of reach* — a prediction of a silent false negative where the real behaviour was a fail-loud refusal — and a direction that cannot be named cannot be predicted with.
+**refuses to judge** and *out of reach* are kept distinct deliberately. The misclassification this model exists to prevent was exactly a confusion between them — a prediction of a silent false negative where the real behaviour was a fail-loud refusal — and a direction that cannot be named cannot be predicted with.
 
 ## as intended, granularity bounded (6)
 
@@ -345,7 +346,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 
 ### `observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound`
 
-> an inspected body carrying `{` or `}` inside a block comment or a string literal
+> an inspected bounds-method body carrying `{` or `}` inside a block comment or a string literal
 
 - **because**: the extent is found by counting braces outside line comments only, and separating a brace in code from one inside a string literal needs the lexing this tree's own lexer suites defeat, their fixtures putting comment delimiters inside string literals
 - **its defence must show**: reacts on a harmless shape
@@ -383,7 +384,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (16)
+## under-reacts (17)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -448,6 +449,14 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **because**: the fold composes verdicts and does not adjudicate them; second-guessing each participant would need a second implementation of every dimension
 - **its defence must show**: does not react
 - **pinned by**: `the_fold_does_not_adjudicate_a_participant_s_verdict`
+
+### `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound`
+
+> the shell's composition function deciding semantic emptiness itself rather than delegating
+
+- **because**: a text reader over the composition body was defeated at every level it could be narrowed to — name resolution, the parameter's binding site, the identity of the definition, the caller frame, and execution, which no reading of text reaches — so the obligation is carried by construction or not at all
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *the shell's semantic delegation, held by construction*
 
 ### `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound`
 

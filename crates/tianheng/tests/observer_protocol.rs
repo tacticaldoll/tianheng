@@ -260,9 +260,11 @@ fn every_observer_declares_exactly_its_dimension_s_bounds() {
         let source = Source::of(text);
         let body = bounds_body(&source).unwrap_or_else(|| {
             panic!(
-                "{} has no `fn bounds` body in {} — the protocol's obligation is about that method, so its \
-                 absence is a cannot-judge, not a pass",
-                dimension.label, dimension.observer_source
+                "{} yields no `fn bounds` body in {}: {} — the protocol's obligation is about that method, so \
+                 neither its absence nor an ambiguous anchor is a pass",
+                dimension.label,
+                dimension.observer_source,
+                decline_reason(&source, "fn bounds(")
             )
         });
         assert_eq!(
@@ -336,11 +338,17 @@ fn a_brace_in_a_comment_tail_no_longer_closes_the_body() {
 /// comment delimiters inside string literals, several of them nested, so a delimiter-counting stripper opens a
 /// phantom comment at the first of them.
 ///
-/// It is declared rather than closed because the error direction is the safe one, which this pin is what shows:
-/// a moved extent makes a **conforming** body read as non-conforming, because no brace-carrying construct
-/// survives the exact one-statement comparison. An author meets a refusal to argue with, never a silent pass.
-/// The control is the same body with the comment removed, so the refusal is the brace's doing and not the
-/// recognizer refusing everything.
+/// It is declared rather than closed because **for this comparison** the error direction is the safe one, which
+/// this pin is what shows: a moved extent makes a **conforming** body read as non-conforming, because no
+/// brace-carrying construct survives the exact one-statement comparison. An author meets a refusal to argue
+/// with, never a silent pass. The control is the same body with the comment removed, so the refusal is the
+/// brace's doing and not the recognizer refusing everything.
+///
+/// The direction belongs to the comparison and not to the extent, and reading it as a property of the extent is
+/// how the same moved extent went four windows accepting a divergent body elsewhere. That second reader compared
+/// by count and containment, which a truncated remainder satisfies in full, so what fell past the cut was not
+/// there to refuse; it was retired rather than narrowed again, and the distinction is kept here so this bound's
+/// safety is not read as transferring to the next reader written over the same recognizer.
 #[test]
 fn a_brace_in_a_block_comment_moves_the_body_extent() {
     let braced_block_comment = Source::of(
@@ -363,101 +371,112 @@ fn a_brace_in_a_block_comment_moves_the_body_extent() {
     );
 }
 
-/// The shell reads semantic boundaries only to pass them directly into 渾儀's public composed entry point.
+/// The bounds-method reader declines an ambiguous anchor too, and its safe direction depends on that.
 ///
-/// A behavioral comparison cannot observe a local empty-bundle guard here: the static dimension has already
-/// read the same manifest, and `hunyi::check_all` would return the same `Clean`. The source shape is therefore
-/// the observation level that moved. Exactly one accessor occurrence rules out a second shell-local decision,
-/// while the required direct call rules out hiding that decision behind an alias or wrapper.
+/// Both readers share [`function_body`], so both inherited the decoy hole — and for this one the consequence
+/// was sharper: its bound records the moved extent as *over-reacting*, safe because an exact one-statement
+/// equality refuses a conforming body. A decoy copy inverts that. The extent becomes the decoy's conforming
+/// body while the real method holds a second, divergent list, and the equality then passes on text that is not
+/// the method. Measured end-to-end on 渾儀's observer before the anchor was required to be unique.
+///
+/// Pinned here rather than left to the delegation reader's fixture, because the claim being defended is this
+/// reader's own error direction.
 #[test]
-fn the_shell_delegates_semantic_emptiness_to_the_public_entry_point() {
-    let Some(root) = workspace_root() else {
-        return;
-    };
-    let relative = "crates/tianheng/src/runner.rs";
-    let path = root.join(relative);
-    let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|error| panic!("cannot read {path:?}: {error}"));
-    let source = Source::of(text);
-    let body = function_body(&source, "fn evaluate_constitution(").unwrap_or_else(|| {
-        panic!(
-            "no `fn evaluate_constitution` body in {relative} — the shell delegation reaction cannot judge"
-        )
-    });
-    let compact = compact_executed_rust(&body);
-    let accessor = "constitution.semantic_boundaries()";
+fn a_decoy_bounds_signature_refuses_rather_than_matching_the_conforming_copy() {
+    let decoyed = Source::of(
+        [
+            "/*",
+            "    fn bounds(&self) -> Vec<BoundDecl> {",
+            "        observation_bounds()",
+            "    }",
+            "*/",
+            "    fn bounds(&self) -> Vec<BoundDecl> {",
+            "        let mut declared = observation_bounds();",
+            "        declared.truncate(1);",
+            "        declared",
+            "    }",
+            "",
+        ]
+        .join("\n"),
+    );
+    assert!(
+        bounds_body(&decoyed).is_none(),
+        "two lines could anchor the read, so the reader declines — matching the commented conforming copy \
+         would let the divergent list beneath it satisfy the obligation"
+    );
+
+    let single = Source::of(
+        [
+            "    fn bounds(&self) -> Vec<BoundDecl> {",
+            "        let mut declared = observation_bounds();",
+            "        declared.truncate(1);",
+            "        declared",
+            "    }",
+            "",
+        ]
+        .join("\n"),
+    );
+    let single_body = bounds_body(&single);
+    assert!(
+        single_body.is_some(),
+        "the same divergent list with one anchor is READ — asserting only that it differs from the delegation \
+         is satisfied by a reader that declines everything, which is what this control exists to rule out"
+    );
+    assert_ne!(
+        single_body.as_deref(),
+        Some([DELEGATION.to_string()].as_slice()),
+        "and refused, so the decline above is the decoy's doing rather than the reader declining everything"
+    );
+
+    // The decline says WHICH condition it met. Absent and ambiguous call for different repairs, and the two
+    // counters disagreed for one round — the reader counting occurrences while the reporter counted
+    // trimmed-start lines — so a declined read reported "1" and sent a reader after a definition its own count
+    // denied. The retirement deleted the only assertion over that, and this is its replacement.
+    // A MID-LINE mention, which is what separates counting occurrences from counting lines that begin with the
+    // signature. The decoy above begins its line, so both counters agree on it and it discriminates nothing;
+    // this one is invisible to a trimmed-start count and is exactly the regression the two counters' one-round
+    // disagreement produced.
+    let mentioned = Source::of(
+        [
+            "// the obligation is about `fn bounds(` and nothing else",
+            "    fn bounds(&self) -> Vec<BoundDecl> {",
+            "        observation_bounds()",
+            "    }",
+            "",
+        ]
+        .join("\n"),
+    );
     assert_eq!(
-        compact.matches(accessor).count(),
-        1,
-        "the shell must access semantic boundaries exactly once, as the direct `hunyi::check_all` argument; \
-         another access is an independent shell decision: {relative}"
+        anchor_count(&mentioned, "fn bounds("),
+        2,
+        "a mention inside a comment is a second occurrence; counting only lines that BEGIN with the signature \
+         sees one and judges a subject it cannot know"
     );
     assert!(
-        compact.contains(SEMANTIC_DELEGATION),
-        "the shell must pass semantic boundaries directly to `hunyi::check_all`; an alias or wrapper can \
-         reintroduce a second behavior owner: {relative}"
+        bounds_body(&mentioned).is_none(),
+        "so the read declines, rather than brace-matching from whichever of the two came first"
     );
-}
-
-/// The delegation this reaction requires, in compacted form.
-const SEMANTIC_DELEGATION: &str =
-    "hunyi::check_all(constitution.semantic_boundaries(),manifest_path)";
-
-/// A body's executed Rust with whitespace removed and a trailing comma before a closing parenthesis dropped.
-///
-/// Both normalizations answer to the same thing: `rustfmt` decides where a call breaks, and a broken argument
-/// list gains a trailing comma. Joining the text without dropping that comma would make this reaction fail the
-/// day the call grows past the line width — a false positive produced by `cargo fmt`, in a repository that gates
-/// `cargo fmt --check`, over a delegation that did not change. `,)` cannot occur in compacted Rust for any other
-/// reason, and nested occurrences collapse too, since the replacement scans the whole string.
-///
-/// Named and taking text so its limit is demonstrated by giving it both spellings — see
-/// [`the_delegation_recognizer_reads_both_spellings_rustfmt_produces`] — rather than by widening this crate's
-/// lines until `rustfmt` breaks them.
-fn compact_executed_rust(source: &Source) -> String {
-    let joined: String = source
-        .rust()
-        .lines()
-        .flat_map(str::chars)
-        .filter(|character| !character.is_whitespace())
-        .collect();
-    joined.replace(",)", ")")
-}
-
-/// The recognizer reads the one-line and the wrapped spelling alike, and still refuses an alias.
-///
-/// The control is the third case: without it, a normalizer that had become permissive enough to accept anything
-/// would satisfy the first two and look like a fix.
-#[test]
-fn the_delegation_recognizer_reads_both_spellings_rustfmt_produces() {
-    let one_line =
-        Source::of("hunyi::check_all(constitution.semantic_boundaries(), manifest_path),\n");
-    let wrapped = Source::of(
-        "hunyi::check_all(\n    constitution.semantic_boundaries(),\n    manifest_path,\n),\n",
-    );
-    let aliased = Source::of(
-        "let boundaries = constitution.semantic_boundaries();\nhunyi::check_all(boundaries, manifest_path)\n",
-    );
-
-    assert!(
-        compact_executed_rust(&one_line).contains(SEMANTIC_DELEGATION),
-        "the spelling in the tree today"
+    assert_eq!(
+        anchor_count(&decoyed, "fn bounds("),
+        2,
+        "the block-comment decoy is counted too, though it begins its line and either counter would see it"
     );
     assert!(
-        compact_executed_rust(&wrapped).contains(SEMANTIC_DELEGATION),
-        "and the spelling `rustfmt` produces once the call no longer fits — the same delegation, so the same \
-         verdict"
+        decline_reason(&decoyed, "fn bounds(").contains("ambiguous"),
+        "an ambiguous anchor is reported as ambiguous: {}",
+        decline_reason(&decoyed, "fn bounds(")
     );
     assert!(
-        !compact_executed_rust(&aliased).contains(SEMANTIC_DELEGATION),
-        "an alias must still be refused: it is how a second behavior owner comes back"
+        decline_reason(&single, "fn missing_signature(").contains("does not occur"),
+        "and an absent one as absent, which is the distinction the message exists to draw"
     );
 }
 
 /// The one statement a conforming `bounds()` body holds.
 const DELEGATION: &str = "observation_bounds()";
 
-/// The executed statements inside `fn bounds`'s body, or `None` if the method is absent.
+/// The executed statements inside `fn bounds`'s body, or `None` if no line anchors the method or more than
+/// one does.
 ///
 /// Brace-counted from the signature's opening brace, so a nested block inside the body would be included rather
 /// than truncating at the first `}` — the body is required to be one statement, but a *wrong* body must be
@@ -503,6 +522,13 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
 ///
 /// [`Executed`] cannot do this job: it filters lines whose trimmed start is `//`, so a comment TAIL — which is
 /// the shape above — survives it whole, brace and all.
+///
+/// What it does **not** do is understand literals: a `//` inside a string blanks a real opening brace whose
+/// match is on a later line, and a brace inside a string, a character literal, or a block comment is counted as
+/// code. The extent then moves, and what that costs depends entirely on the comparison reading it — refusal for
+/// the exact one-statement equality below, a silent pass for a count-and-containment. A reader of that second
+/// kind existed and was retired; this function does not guard against the move on a caller's behalf, because
+/// the safe answer is not the same for every reader.
 fn mask_line_comment_braces(text: &str) -> String {
     let mut bytes = text.as_bytes().to_vec();
     let mut line_start = 0usize;
@@ -529,24 +555,61 @@ fn mask_line_comment_braces(text: &str) -> String {
     String::from_utf8(bytes).expect("only ASCII braces were replaced, each by one ASCII space")
 }
 
-/// The brace-delimited body of the first function whose executed signature line begins with `signature`.
+/// How many times `signature` occurs, so a decline can say whether it found none or too many.
+///
+/// The same rule [`function_body`] anchors by, deliberately: the two disagreed for one round — this counted
+/// trimmed-start lines while the reader counted occurrences — so a declined read reported "1", sending a reader
+/// to look for a second definition its own count denied.
+fn anchor_count(source: &Source, signature: &str) -> usize {
+    source.whole().matches(signature).count()
+}
+
+/// Why a read declined, in the reader's own words.
+///
+/// Three inputs decline and they call for different repairs: the signature is absent, it occurs more than once,
+/// or it occurs exactly once and no balanced body follows it. Reporting all three as an anchor count sent a
+/// reader hunting for a second definition that the same message had just counted as absent.
+fn decline_reason(source: &Source, signature: &str) -> String {
+    match anchor_count(source, signature) {
+        0 => format!("`{signature}` does not occur, so there is no body to read"),
+        1 => format!(
+            "`{signature}` occurs once but no balanced brace-delimited body follows it, so the extent could \
+             not be taken"
+        ),
+        many => format!(
+            "`{signature}` occurs {many} times, so the subject is ambiguous and the reader judges only when it \
+             occurs exactly once"
+        ),
+    }
+}
+
+/// The brace-delimited body the unique occurrence of `signature` anchors, or `None` if none anchors it or more
+/// than one does.
+///
+/// Declining rather than taking the first is the point: an occurrence in a comment anchors exactly as well as a
+/// definition, so uniqueness is what makes the subject knowable, and the anchor scan therefore reads the whole
+/// source rather than [`Executed`].
 fn function_body(source: &Source, signature: &str) -> Option<Source> {
     let text = source.whole();
     // Braces are counted over the MASK and the body is sliced out of the original, which the mask's
     // offset-for-offset construction makes the same positions. See [`mask_line_comment_braces`].
     let masked = mask_line_comment_braces(text);
-    // By line POSITION, never by a bare marker anywhere in the blob: a prose sentence mentioning the function
-    // must not become the brace-match origin. The signature must begin the trimmed line; this remains the same
-    // deliberately lightweight recognizer the observer-bounds reaction already exercised, not a second parser.
-    let signature = text
-        .lines()
-        .scan(0usize, |offset, line| {
-            let at = *offset;
-            *offset += line.len() + 1;
-            Some((at, line))
-        })
-        .find(|(_, line)| line.trim_start().starts_with(signature))
-        .map(|(at, line)| at + (line.len() - line.trim_start().len()))?;
+    // The anchor is an OCCURRENCE of the signature, and there must be exactly one in the whole source.
+    //
+    // An earlier rule required the signature to begin a trimmed line. That only ruled out a mid-line mention;
+    // it never made the definition findable, and a decoy exploits the gap from either side — a whole-line copy
+    // inside a block comment anchors just as well as the definition, and writing the definition
+    // `pub(crate) fn …` stops it anchoring while the commented copy still does, leaving one candidate that is
+    // not the subject. Both measured end-to-end, on both readers of this recognizer.
+    //
+    // Counting occurrences catches both directions and subsumes the mid-line mention, so no carve-out for
+    // which mentions could have anchored is needed — an earlier attempt stated one and stated it wrongly.
+    // Every delimiter that made a wrong extent wrong sits OUTSIDE that extent, where no in-body scan reaches,
+    // which is why this half cannot be recovered by checking the body once read.
+    if text.matches(signature).count() != 1 {
+        return None;
+    }
+    let signature = text.find(signature)?;
     let open = signature + masked[signature..].find('{')?;
     let mut depth = 0usize;
     let mut close = None;

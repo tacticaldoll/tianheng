@@ -94,21 +94,22 @@ reading the manifest. The shell and `SemanticObserver` SHALL delegate both empty
 to that entry point rather than maintaining independent empty-boundary guards, so every semantic composition
 path has one behavior owner.
 
-The repository reaction SHALL inspect the executed body of the shell's `evaluate_constitution` composition
-function. That body SHALL access `constitution.semantic_boundaries()` exactly once, as the direct boundary
-argument to `hunyi::check_all`; a missing function, an additional semantic-boundary inspection, or an indirect
-shell-local decision SHALL fail rather than be treated as delegation.
+**Whether the shell honours that is not observed, and the source-shape reaction that claimed to observe it is
+retired.** It read the characters of one function body; the obligation is about what the shell *does*. Four
+review rounds narrowed it and each narrowing was defeated: by resolution (a `use` shadowing the entry point's
+name, with the body byte-identical), by the binding site (the parameter renamed, or a second one added — the
+parameter list is outside the read extent), by which definition is the subject (a raw identifier, leaving a
+commented copy as the only signature occurrence), by the caller frame (the guard moved into `check_constitution`),
+and — the group no widening reaches — by **execution**: a delegation bound to `let _`, written inside a
+never-invoked `macro_rules!`, or placed in a conditionally-called closure satisfies every textual rule while the
+shell decides for itself. It also cost two false-positive classes, one of them fired by `rustfmt` reformatting a
+conforming body.
 
-**This does not contradict an empty observer set being a cannot-judge**, and the difference is stated here
-because the two sentences read as a contradiction otherwise. An empty *bundle* means a participant was
-composed and declares nothing for its dimension — a static-only adoption is exactly that, and there is nothing
-to observe, so `Clean` is the honest answer. An empty *observer set* means nothing was composed at all: the
-misconfiguration is in the assembly, not in a dimension's declarations, and there is no participant whose
-silence could be read as cleanliness. Unifying them fails in both directions: making an empty bundle a
-cannot-judge would make every static-only adopter's composed run report exit `2`, a false refusal on the
-primary use case, and reporting an empty observer set as clean is the vacuous pass this repository has
-re-opened most often. The asymmetry is therefore a property of the two constructions rather than a claim a
-reaction could observe, and it carries no scenario for that reason.
+Retiring it is the honest disposition rather than a fifth narrowing. What remains true of a text reader is
+narrow — that the body reaches its constitution only through the declared accessors — and that is not the
+obligation. The closure is to make the property hold **by construction**, as the runtime dimension's equality
+already does; until then the gap is declared below rather than implied by a reaction that reported clean while
+accepting the shape it existed to refuse.
 
 #### Scenario: Empty semantic boundaries through the public semantic entry point
 
@@ -120,10 +121,15 @@ reaction could observe, and it carries no scenario for that reason.
 - **WHEN** a semantic observer has no boundaries and receives a path that cannot be read
 - **THEN** it returns `Clean` by delegating to the public semantic entry point
 
-#### Scenario: Empty semantic boundaries through the shell
+#### Scenario: Whether the shell makes an independent semantic decision is not observed — a stated bound
 
-- **WHEN** the shell composes a constitution whose semantic boundary bundle is empty
-- **THEN** the source-shape reaction finds exactly one semantic boundary access, passed directly to the public semantic entry point, and fails if the shell decides emptiness itself
+- **WHEN** the shell's composition function decides semantic emptiness itself rather than delegating
+- **THEN** nothing reacts — a stated bound, and a declared false negative this repository owns. A text reader
+  over the composition body was built, hardened across four review rounds and defeated at every level: name
+  resolution, the parameter's binding site, the identity of the definition, the caller frame, and execution,
+  which no reading of text reaches at all. The bound carries no pinning test because there is no reaction left
+  to demonstrate a gap in; it is tracked instead, and closing it means holding the property by construction
+- **UNPINNED** `BACKLOG.md` — *the shell's semantic delegation, held by construction*
 
 ### Requirement: The built-in path SHALL keep its behaviour, and the two paths SHALL be held equal
 
@@ -157,8 +163,11 @@ anywhere in the file. The declarations' *content* is held by `observation-bound-
 SHALL NOT be re-asserted here.
 
 Two things follow from *recognized by position*, and both were measured as gaps rather than reasoned about. The
-method SHALL be located by **line position** — a line whose trimmed start is the signature — so a mention of it
-inside a comment or a string cannot be brace-matched from. And a **trailing comment** on the delegation SHALL be
+method SHALL be located by a **unique occurrence** of its signature in the source, and the reader SHALL decline
+otherwise. An earlier rule required the signature to begin a trimmed line, which bought only the exclusion of a
+mid-line mention: a whole-line copy inside a block comment anchors exactly as well as the definition, and a decoy
+conforming copy above a divergent method let the equality pass on text that was not the method — measured.
+Counting occurrences excludes the mid-line mention too, as a second occurrence. And a **trailing comment** on the delegation SHALL be
 prose, not a second list: the region discipline this family already holds says a comment is never executed text,
 and the reaction that judges a shell gate's own text strips one before comparing for exactly this reason.
 The reaction SHALL apply Rust line-comment semantics to the inspected body: a `//` line is prose, while a Rust
@@ -207,14 +216,18 @@ dimensions remain independently implemented on both sides, and for them the reac
 
 #### Scenario: A brace inside a block comment or a string literal moves the read body extent — a stated bound
 
-- **WHEN** an inspected body carries `{` or `}` inside a block comment or a string literal
+- **WHEN** an inspected bounds-method body carries `{` or `}` inside a block comment or a string literal
 - **THEN** the reaction reads an extent that is not the method's body — a stated bound.
   It counts braces outside line comments only, and closing the gap needs the string-literal lexing this
   repository measured and rejected: this tree's own lexer suites put comment delimiters inside string literals,
   several of them nested, so a delimiter-counting scan opens a phantom comment at the first of them and swallows
-  every definition to the next close. The error direction is the safe one, and
+  every definition to the next close. For **this** comparison the error direction is the safe one, and
   it is what the pin shows — no brace-carrying construct survives the exact one-statement comparison, so a moved
-  extent refuses a **conforming** body rather than accepting a divergent one
+  extent refuses a **conforming** body rather than accepting a divergent one. The direction is a property of the
+  comparison rather than of the extent, and it does not transfer to another reader of that extent: the
+  same moved extent meeting a count-and-containment comparison would accept a divergent body instead. A reader of
+  that second kind existed over the shell's composition body and is retired; the direction is recorded here so
+  the next one is not written on the assumption that this bound's safety transfers to it
 - **PINNED-BY** `a_brace_in_a_block_comment_moves_the_body_extent`
 
 #### Scenario: A Rust attribute appears in an inspected body
@@ -227,6 +240,15 @@ dimensions remain independently implemented on both sides, and for them the reac
 - **WHEN** the method is absent from the source the reaction reads
 - **THEN** the reaction refuses to judge rather than passing, because a reaction that finds nothing to read has
   not observed that the obligation holds
+
+#### Scenario: A second line could anchor the bounds method
+
+- **WHEN** the bounds-method signature occurs more than once in the observer's source — a commented-out copy
+  being the measured case
+- **THEN** the reader declines rather than reading the first. Here the decoy inverts this reader's declared
+  error direction rather than merely moving the extent: a *conforming* copy in the comment makes the exact
+  one-statement equality pass while the real method holds a second, divergent list, so the over-reaction the
+  bound records becomes an acceptance
 
 ### Requirement: Composition SHALL introduce no trait object
 

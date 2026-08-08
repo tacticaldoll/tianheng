@@ -60,6 +60,21 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
+- **The shell's semantic delegation, held by construction.** *Class:* READY-PATCH. *Observed pressure:* the
+  source-shape reaction that claimed to observe it is retired in this window after four review rounds each
+  defeated the narrowing before it — by name resolution, by the parameter's binding site, by which definition is
+  the subject, by the caller frame, and by execution, which no reading of text reaches. `observer-protocol`
+  declares the resulting gap as an unpinned bound owned by the engine, and it is the tracker for this entry.
+  *Observation source:* that bound and the retired reaction's history on `change/refuse-ambiguous-delegation-extent`.
+  *Current reaction or bound:* the declared bound; no reaction. *Risk:* the shell grows a second semantic
+  behaviour owner and nothing says so — the drift a seam exists to end, in the one dimension whose seam is not
+  construction-held. *Promotion trigger:* fired; the bound is declared unpinned, which the register leads with.
+  *Version class:* patch if the composition is restructured without moving a public signature; minor if the
+  shell's entry point changes shape. *Authority:* `observer-protocol`, whose spec states both the obligation and
+  the retirement. *Shape:* the runtime dimension already holds its equality by construction — the built-in path
+  invokes `RuntimeObserver`, so its two copies became one. The semantic dimension can take the same route, and
+  the spec already has the sentence for saying which dimensions are construction-held.
+
 - **Every normative SHALL either has a reaction or is a declared bound.** *Observed pressure:* **ten** found
   and closed through re-review #3 of the 0.5.0 window. The first seven were the family's declarations staying
   literal, the equality fixture reacting in every dimension, an observer declaring exactly its dimension's bounds
@@ -86,8 +101,9 @@ consumer for an undemonstrated deduplication.
   by hand or not at all — a normative rule nothing enforces is indistinguishable from one that is enforced, which is
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
-  **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios, against the register's
-  **59 bounds across 21 capabilities** — written in that exact form because it is the one phrasing
+  **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
+  currently holds **60 bounds across 21 capabilities** — a live figure rather than part of the measurement
+  above, written in that exact form because it is the one phrasing
   `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
   the drift class this family already refuses. *First step, and why it is not simply "add a gate":* the binding must
