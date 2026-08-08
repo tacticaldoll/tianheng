@@ -21,7 +21,7 @@ impl RuntimeObserver {
 }
 
 impl Observer for RuntimeObserver {
-    /// Derives its own corpus and label anchor, as the composed shell does today.
+    /// Derives its own corpus and label anchor, as the composed shell did before it delegated here.
     ///
     /// The anchor must be Cargo's resolved `workspace_root`, because the audit labels every observed file
     /// relative to it and that label is **baseline identity**: it is the one directory that moves neither with

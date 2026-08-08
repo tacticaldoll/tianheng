@@ -110,14 +110,15 @@ narrow — that the body reaches its constitution only through the declared acce
 obligation.
 
 The shell's semantic arm now **invokes `SemanticObserver`** rather than calling the composed entry point beside
-it, and what that buys SHALL be stated exactly, because the same words used loosely turn a constructed property
-into a claimed one. It makes the two paths' **equality** for this dimension construction-held: the built-in
+it, and what that buys is narrower than the words invite, because the same words used loosely turn a
+constructed property into a claimed one. It makes the two paths' **equality** for this dimension construction-held: the built-in
 path obtains the semantic outcome by invoking that dimension's observer, so there is no second call for a
 verdict to differ at. It does **not** make an independent shell decision unwritable — a guard above that call
 compiles, passes the whole suite, and passes every gate, measured — so the delegation obligation itself remains
-unobserved and stays declared below. The runtime arm's delegation is *not* the same case and this SHALL not be
-read as it: that arm held a second implementation of the corpus derivation, the audit call and the
-`cannot read workspace` message, and delegation collapsed three copies into one. Here there was one
+unobserved and stays declared below. The runtime arm's delegation is *not* the same case, and reading it as one is
+how this was got wrong once already: that arm held a second implementation of three statements — the corpus
+derivation, the audit call and the `cannot read workspace` message — and delegation collapsed the two copies
+into one. Here there was one
 implementation with two callers, and there is now one caller.
 
 The cost is one clone of the declared bundle per run, the same price the runtime arm pays for its `to_vec`.
@@ -191,8 +192,10 @@ Where the built-in path obtains a dimension's outcome **by invoking that dimensi
 that dimension holds **by construction rather than by observation**, and the spec SHALL say which dimensions
 those are — otherwise a reader takes a constructed equality for a measured one. The **runtime** and
 **semantic** dimensions are such cases: the built-in path invokes `RuntimeObserver` and `SemanticObserver`, so
-for runtime its two copies of the corpus derivation, the audit call and the `cannot read workspace` message
-become one, and for semantic there is no second call site in which a shell-local decision could sit. The
+for runtime its two copies of those three statements — the corpus derivation, the audit call and the
+`cannot read workspace` message — become one, and for semantic there is no second call at which the two
+verdicts could differ. What that does *not* settle for either is whether the shell honours its delegation
+obligation, which is a different property with a bound of its own. The
 **static** dimension remains independently implemented on both sides — the built-in path calls
 `check_and_cover`, the observer calls `check` — and for it the reaction's equality is observed.
 

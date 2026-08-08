@@ -92,7 +92,7 @@ consumer for an undemonstrated deduplication.
   emptiness itself before delegating, leaves the whole suite and every gate green. What it *did* close is the
   two paths' **equality** for this dimension, which is a different property and is now construction-held. The
   runtime precedent does not transfer: that arm held a second implementation of the corpus derivation, the
-  audit call and the `cannot read workspace` message, and delegating collapsed three copies into one, whereas
+  audit call and the `cannot read workspace` message, and delegating collapsed its two copies into one, whereas
   the semantic arm always had one implementation with two callers. Closing this one needs the shell's semantic
   outcome to be *unreachable* except through the observer — a shape where the guard stops compiling — which is
   a design step, not a call-site swap. *Class:* READY-PATCH. *Observed pressure:* the
@@ -102,13 +102,16 @@ consumer for an undemonstrated deduplication.
   declares the resulting gap as an unpinned bound owned by the engine, and it is the tracker for this entry.
   *Observation source:* that bound and the retired reaction's history on `change/refuse-ambiguous-delegation-extent`.
   *Current reaction or bound:* the declared bound; no reaction. *Risk:* the shell grows a second semantic
-  behaviour owner and nothing says so — the drift a seam exists to end, in the one dimension whose seam is not
-  construction-held. *Promotion trigger:* fired; the bound is declared unpinned, which the register leads with.
+  behaviour owner and nothing says so — the drift a seam exists to end. The dimension's *equality* is
+  construction-held since this window; its *delegation* is the seam that is not, and the two are one word apart. *Promotion trigger:* fired; the bound is declared unpinned, which the register leads with.
   *Version class:* patch if the composition is restructured without moving a public signature; minor if the
   shell's entry point changes shape. *Authority:* `observer-protocol`, whose spec states both the obligation and
-  the retirement. *Shape:* the runtime dimension already holds its equality by construction — the built-in path
-  invokes `RuntimeObserver`, so its two copies became one. The semantic dimension can take the same route, and
-  the spec already has the sentence for saying which dimensions are construction-held.
+  the retirement. *Shape:* **not** the runtime route, which this window
+  tried and measured wrong: invoking the observer makes the *equality* construction-held and leaves an
+  independent shell decision as writable as before, because the runtime arm had a second implementation to
+  collapse and this one never did. What would close it is the shell's semantic outcome being unreachable except
+  through the observer — a shape in which the guard stops compiling rather than one in which it merely has
+  nowhere tidy to sit.
 
 - **Every normative SHALL either has a reaction or is a declared bound.** *Observed pressure:* **ten** found
   and closed through re-review #3 of the 0.5.0 window. The first seven were the family's declarations staying
