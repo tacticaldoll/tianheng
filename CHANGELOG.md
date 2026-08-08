@@ -263,6 +263,22 @@ them.
 
 ### Changed
 
+- **The three governance surfaces are located instead of left an open question.** `PROJECT.md` named 垂象,
+  實錄 and 校讎 and then said they are *"crate-or-convention as their nature dictates"* — which is why a reader
+  asks whether one should become a crate, and which gives no referent for any of them. The self-law preamble
+  every agent loads carried the same absence: *"三司 administer"*. Each is now named with where it already is —
+  the report and constitution assembly in `guibiao` with rendering in `tianheng` and violation serialization in
+  `xuanji`; the baseline model in `xuanji` consumed by every crate above it; `.github/CODEOWNERS`, the OpenSpec
+  lifecycle, and the routing named in shipped source — and the preamble names each by **what it does** rather
+  than as a set.
+
+  **None is a crate, and the reason is boundaries rather than importance.** 三儀 are orthogonal, so each needs a
+  boundary the self-law reacts to and a crate is that boundary — every dimension's `restrict_dependencies_to`
+  names no sibling, which is the reaction. A governance surface has none to be: each crosses every crate it
+  touches and one lives outside `crates/` altogether, so a crate there would enclose nothing and the name would
+  mark nothing. `self-law-projection` gains the rule that the preamble introduces no governance name without
+  saying what it does, stated together with the fact that nothing observes it.
+
 - **The bounds-method reader's anchor rule is one typed decision, and its behaviour is a table that runs.**
   Two callers each re-derived the rule and drifted twice — once counting trimmed-start lines against
   occurrences, once when a line-start condition reached the reader and not its diagnostic. They match on one

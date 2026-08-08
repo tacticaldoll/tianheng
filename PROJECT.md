@@ -151,11 +151,33 @@ selects governance by depending on the dimensions they want:
 **The observatory vocabulary (manifested in governance).** The three observation
 dimensions — 圭表 (static), 渾儀 (semantic), 漏刻 (runtime) — are the **三儀** (the three
 instruments): *what* Tianheng measures; each is a crate born when built, each adds a new
-drift type. The governance & observability layer — 垂象 (the reaction surface), 實錄 (the
-baseline), 校讎 (the amendment flow) — are the **三司** (the three offices): *how* a reaction
-is surfaced, recorded, and amended (see `BACKLOG.md`). 儀 measures, 司 administers — the
-三儀 add what is observed, the 三司 wrap the reaction. Both are crate-or-convention as their
-nature dictates, never named before their reaction exists.
+drift type. Three governance surfaces wrap a reaction rather than adding one, and each is
+named here with where it already is, because a name whose referent is absent reads as
+something still to be built:
+
+Each is a 司 by the character's sense — an office that administers rather than measures — and the
+three together are what earlier revisions called the 三司; the set name is dropped here because
+it invited a question about their shape that the locations answer.
+
+- **垂象** — the reaction surface. `crates/guibiao/src/projection.rs` assembles the report and
+  constitution documents, `crates/tianheng/src/runner/render.rs` renders text and SARIF, and
+  `crates/xuanji` serializes a `Violation`.
+- **實錄** — the record. `crates/xuanji/src/baseline.rs` holds the model, and every crate above
+  it consumes the baseline its own verdicts fold into.
+- **校讎** — the amendment flow. `.github/CODEOWNERS` routes a change to the law to the steward,
+  `AGENTS.md` owns the OpenSpec lifecycle, and `crates/tianheng/src/constitution.rs` names the
+  routing in shipped source. Designation there is advisory without branch protection, which
+  `BACKLOG.md` records; describe it accordingly rather than as an enforced gate.
+
+**None of the three is a crate, and the reason is boundaries rather than importance.** 三儀 are
+orthogonal — a dimension must never learn from a sibling — so each needs a boundary the self-law
+can react to, and a crate is that boundary; every dimension's `restrict_dependencies_to` names
+no sibling, which is the reaction. A governance surface has no boundary to be: each of the three
+crosses every crate it touches, and one of them lives outside `crates/` altogether. A crate
+there would enclose nothing, so the name would mark nothing — and a name that marks nothing is
+the drift law's own prohibition, not a stylistic choice.
+
+Never named before their reaction exists.
 
 ## Naming — narrative, with meaning in the SSOT
 
@@ -169,7 +191,7 @@ against observed. The brand is a star (玉衡, in the Dipper's handle), not an i
 it sits cleanly above the 三儀 it wields, sharing no name with any of them.
 
 潛移 (the gravity thesis above) deliberately breaks the celestial pattern: it names neither
-an instrument (儀) nor an office (司) but a **mode of governance** — compliance by imitation —
+an instrument (儀) nor a governance surface (司) but a **mode of governance** — compliance by imitation —
 so it is drawn from the idiom 潛移默化 (change that assimilates without the subject's
 awareness), not from 璿璣玉衡. It is a handle for *how* the declared law spreads, parallel to
 govern-by-reaction, never a thing the tool wields.
