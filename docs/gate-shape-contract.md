@@ -50,17 +50,6 @@ is a second instance.
 Shell units under `scripts/` that are neither a gate nor a twin. None may carry the shared exit
 contract — a unit that does is a gate wearing another name, and the reaction refuses it:
 
-- `scripts/lib/capture.sh`
-- `scripts/lib/coherence_fixture.sh`
-- `scripts/lib/example_quality.sh`
-- `scripts/lib/example_suite.sh`
-- `scripts/lib/exit_contract.sh`
-- `scripts/lib/published_family_coverage.sh`
-- `scripts/lib/release_fixture.sh`
 - `scripts/publish.sh`
-- `scripts/test_example_quality_gate.sh`
-- `scripts/test_example_suite.sh`
-- `scripts/test_examples.sh`
-- `scripts/test_published_family_coverage.sh`
 
-12 units.
+1 units.

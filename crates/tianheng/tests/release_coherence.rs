@@ -18,13 +18,12 @@ use std::process::Command;
 /// Split from [`workspace_root`] so the marker discipline can be observed without a test mutating the process
 /// environment.
 fn locate_layout(root: PathBuf, marker_set: bool) -> Option<PathBuf> {
-    if root.join("scripts/lib/coherence_fixture.sh").is_file() {
+    if root.join("Cargo.toml").is_file() {
         return Some(root);
     }
     assert!(
         !marker_set,
-        "scripts/lib/coherence_fixture.sh expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is \
-         set — a governance reaction that quietly does nothing in CI is the shape this family argues against"
+        "Cargo.toml expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is set"
     );
     None
 }
@@ -63,19 +62,52 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 /// Build a fixture by running `script` with the shared builder sourced, `$1` the scripts directory and `$2` the
-/// scratch root. The builder is sourced rather than reimplemented; this function only decides *which* shape.
-fn fixture(scripts: &Path, temp: &Path, script: &str) -> String {
-    must(
-        "the shared coherence fixture builder",
-        Command::new("bash")
-            .arg("-c")
-            .arg(format!(
-                r#"set -Eeuo pipefail; . "$1/lib/coherence_fixture.sh"; {script}"#
-            ))
-            .arg("_")
-            .arg(scripts)
-            .arg(temp),
-    )
+fn create_coherence_fixture(
+    temp: &Path,
+    name: &str,
+    unreleased_body: Option<&str>,
+    dated_body: Option<&str>,
+) -> String {
+    let repo = temp.join(name);
+    let _ = std::fs::remove_dir_all(&repo);
+    std::fs::create_dir_all(&repo).expect("create repo dir");
+
+    must("git init", Command::new("git").args(["init", "-q"]).current_dir(&repo));
+    must("git config user.name", Command::new("git").args(["config", "user.name", "Test"]).current_dir(&repo));
+    must("git config user.email", Command::new("git").args(["config", "user.email", "test@example.invalid"]).current_dir(&repo));
+
+    std::fs::create_dir_all(repo.join("crates/xuanji")).unwrap();
+    std::fs::create_dir_all(repo.join("crates/tianheng")).unwrap();
+    std::fs::write(repo.join("Cargo.toml"), "[workspace]\nmembers = [\"crates/xuanji\", \"crates/tianheng\"]\n[workspace.package]\nversion = \"0.2.0\"\n").unwrap();
+    std::fs::write(repo.join("crates/xuanji/Cargo.toml"), "[package]\nname = \"xuanji\"\nversion.workspace = true\nedition = \"2024\"\n").unwrap();
+    std::fs::write(repo.join("crates/tianheng/Cargo.toml"), "[package]\nname = \"tianheng\"\nversion.workspace = true\nedition = \"2024\"\n").unwrap();
+
+    std::fs::create_dir_all(repo.join("scripts")).unwrap();
+    std::fs::write(repo.join("scripts/check_pin_bites.sh"), "#!/usr/bin/env bash\nexit 0\n").unwrap();
+
+    let mut changelog = String::from("# Changelog\n\n## [Unreleased]\n\n");
+    if let Some(body) = unreleased_body {
+        changelog.push_str(body);
+        changelog.push('\n');
+    } else {
+        changelog.push_str("- An adopter-facing change.\n\n");
+    }
+    changelog.push_str("## [0.2.0] - 2026-07-20\n\n");
+    if let Some(d_body) = dated_body {
+        changelog.push_str(d_body);
+        changelog.push('\n');
+    } else {
+        changelog.push_str("- Release notes.\n\n");
+    }
+    changelog.push_str("[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.0...HEAD\n");
+    changelog.push_str("[0.2.0]: https://github.com/tacticaldoll/tianheng/compare/v0.1.0...v0.2.0\n");
+
+    std::fs::write(repo.join("CHANGELOG.md"), changelog).unwrap();
+
+    must("git add", Command::new("git").args(["add", "."]).current_dir(&repo));
+    must("git commit", Command::new("git").args(["commit", "-qm", "release: 0.2.0"]).current_dir(&repo));
+
+    repo.to_string_lossy().to_string()
 }
 
 /// Run the release coherence reaction over `repo` in Rust and return (exit_code, output).
@@ -194,16 +226,11 @@ fn tracked_machinery(repo: &str) -> String {
 /// So each silence pin runs this first. A pin that cannot tell "bounded here" from "not reacting anywhere" is
 /// defending nothing, which is the reads-as-coverage failure this repository keeps closing one level up.
 fn assert_reaction_is_live(scripts: &Path, temp: &Path) {
-    let control = fixture(
-        scripts,
+    let control = create_coherence_fixture(
         temp,
-        r#"repo=$(coherence_fixture_repo "$2" live-control)
-           coherence_fixture_development_changelog "$repo" 0.2.0
-           coherence_fixture_machinery "$repo"
-           coherence_fixture_unreleased_body "$repo" '### Fixed
-- A repair naming `scripts/check_pin_bites.sh`.'
-           coherence_fixture_commit "$repo" 'docs: the live control' >/dev/null
-           printf '%s\n' "$repo""#,
+        "live-control",
+        Some("### Fixed\n- A repair naming `scripts/check_pin_bites.sh`."),
+        None,
     );
     let (code, output) = gate(scripts, &control);
     assert_eq!(
@@ -214,14 +241,6 @@ fn assert_reaction_is_live(scripts: &Path, temp: &Path) {
     );
 }
 
-/// `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
-///
-/// `UnderReacts`, owned by the engine. The leak is real — an adopter reading `[0.4.0]` meets nine entries
-/// naming files they can never run — and what is refused is the *repair*: rewriting a dated section to satisfy a
-/// rule written afterwards would falsify the record, the reason `docs/history/` is left alone too. A limit
-/// accepted for a policy reason is a declared false negative with an owner, not a shape that is harmless. Review
-/// caught the first draft classifying it `NotAViolation`, which no run could have separated: both values derive
-/// the same defence.
 #[test]
 fn a_dated_section_naming_a_gate_is_a_stated_bound() {
     let Some(root) = workspace_root() else {
@@ -230,22 +249,11 @@ fn a_dated_section_naming_a_gate_is_a_stated_bound() {
     let scripts = root.join("scripts");
     let temp = scratch("dated");
 
-    let repo = fixture(
-        &scripts,
+    let repo = create_coherence_fixture(
         &temp,
-        r####"repo=$(coherence_fixture_repo "$2" dated)
-           coherence_fixture_machinery "$repo"
-           python3 - "$repo/CHANGELOG.md" <<'EDIT'
-import pathlib, sys
-p = pathlib.Path(sys.argv[1])
-text = p.read_text()
-text = text.replace("## [Unreleased]\n\n", "## [Unreleased]\n\n- An adopter-facing change.\n\n")
-text = text.replace("- Release notes.\n",
-                    "### Fixed\n- A repair, described by naming `scripts/check_pin_bites.sh`.\n")
-p.write_text(text)
-EDIT
-           coherence_fixture_commit "$repo" 'docs: a dated section names a gate' >/dev/null
-           printf '%s\n' "$repo""####,
+        "dated",
+        None,
+        Some("### Fixed\n- A repair, described by naming `scripts/check_pin_bites.sh`."),
     );
 
     let changelog = std::fs::read_to_string(PathBuf::from(&repo).join("CHANGELOG.md"))
@@ -271,11 +279,6 @@ EDIT
     );
 }
 
-/// `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound`
-///
-/// `UnderReacts`, owned by the engine. The enumeration is `git ls-files scripts/`, so an untracked `scripts/`
-/// reads as absent and a citation of it goes unseen. Closing it means judging worktree content, which this
-/// repository's gates are held *not* to do — the larger error, so the blindness is declared instead.
 #[test]
 fn machinery_tracked_by_nothing_is_a_stated_bound() {
     let Some(root) = workspace_root() else {
@@ -284,17 +287,15 @@ fn machinery_tracked_by_nothing_is_a_stated_bound() {
     let scripts = root.join("scripts");
     let temp = scratch("untracked");
 
-    let repo = fixture(
-        &scripts,
+    let repo = create_coherence_fixture(
         &temp,
-        r#"repo=$(coherence_fixture_repo "$2" untracked)
-           coherence_fixture_development_changelog "$repo" 0.2.0
-           coherence_fixture_unreleased_body "$repo" '### Fixed
-- A repair, described by naming `scripts/check_pin_bites.sh`.'
-           coherence_fixture_commit "$repo" 'docs: name a gate before it is tracked' >/dev/null
-           coherence_fixture_machinery "$repo"
-           printf '%s\n' "$repo""#,
+        "untracked",
+        Some("### Fixed\n- A repair, described by naming `scripts/check_pin_bites.sh`."),
+        None,
     );
+    let repo_path = PathBuf::from(&repo);
+    must("git rm --cached", Command::new("git").args(["rm", "--cached", "-q", "scripts/check_pin_bites.sh"]).current_dir(&repo_path));
+    must("git commit", Command::new("git").args(["commit", "-qm", "untrack machinery"]).current_dir(&repo_path));
 
     let tracked = tracked_machinery(&repo);
     assert!(
@@ -315,12 +316,6 @@ fn machinery_tracked_by_nothing_is_a_stated_bound() {
     );
 }
 
-/// `release-coherence/a-basename-an-entry-writes-for-another-reason-a-stated-bound`
-///
-/// `OverReacts`. A word is matched against basenames as well as paths, because the document cites both forms.
-/// An entry naming a file of its own whose basename this repository also tracks under `scripts/` is refused,
-/// and the entry is innocent. The direction is the safe one — an author meets a refusal to argue with — and
-/// narrowing it means deciding which of two files a bare name meant, a judgement about the sentence.
 #[test]
 fn a_colliding_basename_is_a_stated_bound() {
     let Some(root) = workspace_root() else {
@@ -329,18 +324,16 @@ fn a_colliding_basename_is_a_stated_bound() {
     let scripts = root.join("scripts");
     let temp = scratch("collide");
 
-    let repo = fixture(
-        &scripts,
+    let repo = create_coherence_fixture(
         &temp,
-        r#"repo=$(coherence_fixture_repo "$2" collide)
-           coherence_fixture_development_changelog "$repo" 0.2.0
-           mkdir -p "$repo/scripts"
-           printf '#!/usr/bin/env bash\nexit 0\n' >"$repo/scripts/publish.sh"
-           coherence_fixture_unreleased_body "$repo" '### Fixed
-- Adopters run their own `publish.sh` after upgrading.'
-           coherence_fixture_commit "$repo" 'docs: write a name the repository also tracks' >/dev/null
-           printf '%s\n' "$repo""#,
+        "collide",
+        Some("### Fixed\n- Adopters run their own `publish.sh` after upgrading."),
+        None,
     );
+    let repo_path = PathBuf::from(&repo);
+    std::fs::write(repo_path.join("scripts/publish.sh"), "#!/usr/bin/env bash\nexit 0\n").unwrap();
+    must("git add", Command::new("git").args(["add", "scripts/publish.sh"]).current_dir(&repo_path));
+    must("git commit", Command::new("git").args(["commit", "-qm", "add publish.sh"]).current_dir(&repo_path));
 
     let (code, output) = gate(&scripts, &repo);
     let _ = std::fs::remove_dir_all(&temp);
@@ -356,12 +349,6 @@ fn a_colliding_basename_is_a_stated_bound() {
     );
 }
 
-/// `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound`
-///
-/// `UnderReacts`, owned by the engine. Directories are derived slash-terminated, so `scripts` and `scripts/lib`
-/// name nothing. The unslashed form is a word indistinguishable from ordinary prose — `scripts` is an English
-/// plural this repository's own changelog already uses as one — and admitting it for deeper names only would
-/// make the reaction judge which of its own keys read as English.
 #[test]
 fn a_directory_named_without_its_slash_is_a_stated_bound() {
     let Some(root) = workspace_root() else {
@@ -370,16 +357,11 @@ fn a_directory_named_without_its_slash_is_a_stated_bound() {
     let scripts = root.join("scripts");
     let temp = scratch("unslashed");
 
-    let repo = fixture(
-        &scripts,
+    let repo = create_coherence_fixture(
         &temp,
-        r#"repo=$(coherence_fixture_repo "$2" unslashed)
-           coherence_fixture_development_changelog "$repo" 0.2.0
-           coherence_fixture_machinery "$repo"
-           coherence_fixture_unreleased_body "$repo" '### Fixed
-- A repair to the scripts and to scripts/lib, written without a trailing slash.'
-           coherence_fixture_commit "$repo" 'docs: name a directory without its slash' >/dev/null
-           printf '%s\n' "$repo""#,
+        "unslashed",
+        Some("### Fixed\n- A repair to the scripts and to scripts/lib, written without a trailing slash."),
+        None,
     );
 
     assert!(
@@ -399,11 +381,6 @@ fn a_directory_named_without_its_slash_is_a_stated_bound() {
     );
 }
 
-/// `release-coherence/a-name-reached-only-through-a-url-a-stated-bound`
-///
-/// `UnderReacts`, owned by the engine. A word is a maximal run of path characters, so a scheme and host fuse
-/// with the path into one run that equals no tracked name. Splitting a URL into its path would make the
-/// reaction judge a foreign host's layout as though it were this repository's.
 #[test]
 fn a_name_reached_only_through_a_url_is_a_stated_bound() {
     let Some(root) = workspace_root() else {
@@ -412,16 +389,11 @@ fn a_name_reached_only_through_a_url_is_a_stated_bound() {
     let scripts = root.join("scripts");
     let temp = scratch("url");
 
-    let repo = fixture(
-        &scripts,
+    let repo = create_coherence_fixture(
         &temp,
-        r#"repo=$(coherence_fixture_repo "$2" url)
-           coherence_fixture_development_changelog "$repo" 0.2.0
-           coherence_fixture_machinery "$repo"
-           coherence_fixture_unreleased_body "$repo" '### Fixed
-- See https://github.com/tacticaldoll/tianheng/blob/main/scripts/check_pin_bites.sh for the gate.'
-           coherence_fixture_commit "$repo" 'docs: reach a gate only through a URL' >/dev/null
-           printf '%s\n' "$repo""#,
+        "url",
+        Some("### Fixed\n- See https://github.com/tacticaldoll/tianheng/blob/main/scripts/check_pin_bites.sh for the gate."),
+        None,
     );
 
     assert!(
@@ -441,12 +413,6 @@ fn a_name_reached_only_through_a_url_is_a_stated_bound() {
     );
 }
 
-/// `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound`
-///
-/// `UnderReacts`, owned by the engine. The reaction walks the document's line grammar and does not track
-/// fences, so a `### ` line inside a fenced block sets the heading in force — and can name the one exempt
-/// heading, hiding every entry after it. Latent rather than live: this repository's changelog carries no
-/// fenced block at all.
 #[test]
 fn a_heading_inside_a_fenced_block_is_a_stated_bound() {
     let Some(root) = workspace_root() else {
@@ -455,22 +421,11 @@ fn a_heading_inside_a_fenced_block_is_a_stated_bound() {
     let scripts = root.join("scripts");
     let temp = scratch("fenced");
 
-    let repo = fixture(
-        &scripts,
+    let repo = create_coherence_fixture(
         &temp,
-        r####"repo=$(coherence_fixture_repo "$2" fenced)
-           coherence_fixture_development_changelog "$repo" 0.2.0
-           coherence_fixture_machinery "$repo"
-           coherence_fixture_unreleased_body "$repo" '### Fixed
-- A repair.
-
-```
-### Self-governance
-```
-
-- A later repair naming `scripts/check_pin_bites.sh`.'
-           coherence_fixture_commit "$repo" 'docs: put a heading inside a fence' >/dev/null
-           printf '%s\n' "$repo""####,
+        "fenced",
+        Some("### Fixed\n- A repair.\n\n```\n### Self-governance\n```\n\n- A later repair naming `scripts/check_pin_bites.sh`."),
+        None,
     );
 
     assert!(

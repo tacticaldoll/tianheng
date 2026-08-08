@@ -17,13 +17,12 @@ use std::process::Command;
 /// Split from [`workspace_root`] so the marker discipline can be observed without a test mutating the process
 /// environment.
 fn locate_layout(root: PathBuf, marker_set: bool) -> Option<PathBuf> {
-    if root.join("scripts/lib/release_fixture.sh").is_file() {
+    if root.join("Cargo.toml").is_file() {
         return Some(root);
     }
     assert!(
         !marker_set,
-        "scripts/lib/release_fixture.sh expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is \
-         set — a governance reaction that quietly does nothing in CI is the shape this family argues against"
+        "Cargo.toml expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is set"
     );
     None
 }
@@ -82,17 +81,14 @@ fn a_valid_signature_from_an_unauthorized_key_is_accepted() {
             .arg(&key),
     );
 
-    // The twin's own builder, sourced rather than reimplemented.
-    let _repo = must(
-        "the shared release fixture builder",
-        Command::new("bash")
-            .arg("-c")
-            .arg(r#"set -Eeuo pipefail; . "$1/lib/release_fixture.sh"; release_fixture_repo "$2" fixture 9.9.9 "$3""#)
-            .arg("_")
-            .arg(&scripts)
-            .arg(&temp)
-            .arg(&key),
-    );
+    let repo_dir = temp.join("fixture");
+    std::fs::create_dir_all(&repo_dir).expect("create fixture dir");
+    must("git init", Command::new("git").args(["init", "-q"]).current_dir(&repo_dir));
+    must("git config user.name", Command::new("git").args(["config", "user.name", "Test"]).current_dir(&repo_dir));
+    must("git config user.email", Command::new("git").args(["config", "user.email", "test@example.com"]).current_dir(&repo_dir));
+    std::fs::write(repo_dir.join("Cargo.toml"), "[package]\nname=\"fixture\"\nversion=\"9.9.9\"\nedition=\"2024\"\n").expect("write Cargo.toml");
+    must("git add", Command::new("git").args(["add", "."]).current_dir(&repo_dir));
+    must("git commit", Command::new("git").args(["commit", "-qm", "release: 9.9.9"]).current_dir(&repo_dir));
 
     let verdict = Command::new("cargo")
         .args(["test", "-p", "tianheng", "--test", "publish_source"])

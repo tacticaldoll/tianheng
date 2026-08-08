@@ -29,7 +29,7 @@ fn pin_mutation_records_exist_or_are_valid() {
         return;
     };
 
-    let records_path = root.join("scripts/lib/pin_mutations.tsv");
+    let records_path = root.join("crates/tianheng/tests/fixtures/pin_mutations.tsv");
     if !records_path.is_file() {
         return;
     }
@@ -50,7 +50,7 @@ fn pin_mutation_records_exist_or_are_valid() {
 
     assert!(
         valid_records > 0,
-        "scripts/lib/pin_mutations.tsv parsed to zero valid mutation records"
+        "crates/tianheng/tests/fixtures/pin_mutations.tsv parsed to zero valid mutation records"
     );
 }
 
