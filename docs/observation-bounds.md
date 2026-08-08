@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**4 of 63 declared bounds have no pinning test.** That figure is the register's
+**5 of 64 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -172,6 +172,12 @@ fallback used where no manifest exists, which the register spec describes.
 - **pinned by**: `granularity_is_carried_only_by_the_as_intended_extent`
 
 ## observation-bound-register
+
+### `observation-bound-register/what-a-test-run-inside-the-checkout-does-to-the-judged-repository-is-not-observed-a-stated-bound`
+
+> nothing reacts. A checkout that carries a working repository shares that repository's common
+
+- **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
 ### `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound`
 

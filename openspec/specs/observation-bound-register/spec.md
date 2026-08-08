@@ -304,15 +304,32 @@ of either the test or the reaction.
 
 A **mutation** SHALL be declared as four fields: the cited test name, a tracked path, a `from` substring, and a
 `to` substring. It SHALL be applied to a **separate checkout of HEAD**, never to the working directory, so that
-whatever happens mid-run the author's files are untouched. The path a record names SHALL be **tracked**, tested
-by asking git rather than by whether the file is reachable under the tree: a `../` path resolves outside it, and
-a mutation that rewrites a file outside the tree under test falsifies the very property this arrangement exists
-for.
+an interrupted run has edited nothing of the author's.
+
+The path a record names SHALL be both **tracked** and **contained**, and the two SHALL be tested separately
+because neither implies the other. `[[ -f $tree/$file ]]` asks neither: a `../` path resolves outside the tree
+and the mutation rewrites a file the reaction has no business touching. Asking git asks only tracked-ness: a
+tracked **symlink** is tracked, a checkout materializes it as a symlink, and both the backup copy and the write
+follow it — so the outside file is rewritten, and a run killed between write and restore leaves it destroyed.
+Both were measured. Containment SHALL therefore be decided on the **resolved** path, which is the only form
+that answers the question the refusal's message claims to ask.
 
 That checkout SHALL carry a working repository. An export of tracked content alone makes some citations
 structurally **unreachable** rather than merely uncovered — a pin that reads the repository through git fails
 its own control run, so no record can ever exercise it, which the coverage story would otherwise misdescribe as
 work not yet done.
+
+Carrying one has a cost that SHALL be paid rather than assumed away: the checkout shares the judged
+repository's common directory. Its **hooks SHALL be disabled** for the checkout, because a `post-checkout` hook
+would otherwise run inside the tree under test with write access to the judged repository's refs — measured, a
+planted tag survived the reaction's own cleanup, and the same hook could have rewritten the tree so that what
+ran was no longer HEAD's content. The shared common directory itself is inherent to a checkout of this kind and
+is declared as a bound below.
+
+Cleanup SHALL be claimed only where it happens. A checkout registered in the judged repository is removed on an
+ordinary exit and on interrupt and terminate signals; a killed process reaches no handler, and the registration
+then survives — `git worktree prune` will not clear it while the directory it names still exists. Stating that
+beats asserting an automatic cleanup the reaction does not perform.
 
 Judging HEAD is **not** the rule this family holds, and the difference is stated so neither is read as the
 other: the sibling gates enumerate tracked *paths* and read the *worktree's* content, deliberately — the
@@ -433,6 +450,15 @@ is coverage, which grows one authored record at a time.
 
 - **WHEN** the cited test's filter matches nothing and the harness exits 0 having run nothing
 - **THEN** the reaction refuses to judge rather than reading the exit status as a pin that survived
+
+#### Scenario: What a test run inside the checkout does to the judged repository is not observed — a stated bound
+
+- **WHEN** a cited test, run inside the checkout under test, writes to the repository it is a checkout of
+- **THEN** nothing reacts. A checkout that carries a working repository shares that repository's common
+  directory, and the same property that makes a git-reading citation reachable at all makes the judged
+  repository writable from inside the tree. Hooks are disabled because those run without any citation asking
+  for them; a test's own writes are not separable from the reachability this arrangement exists to provide
+- **UNPINNED** `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
 #### Scenario: Whether a pin gutted but not committed still bites is not observed — a stated bound
 

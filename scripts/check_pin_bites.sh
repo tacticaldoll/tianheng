@@ -153,11 +153,21 @@ cited_total=$(wc -l <"$citations.names")
 # is one such citation, and the BACKLOG entry claiming coverage "grows one considered record at a time" was
 # false for it. A detached worktree is the same tracked content at HEAD with a working `.git`, and mutating it
 # still touches none of the author's files.
+#
+# Hooks are disabled for the checkout. A worktree shares the judged repository's common `.git`, so its
+# `post-checkout` hook would run — inside the tree under test, with write access to the judged repository's
+# refs. Measured: a hook planted a tag that survived the gate's own cleanup, and could equally have rewritten
+# the tree so that what ran was no longer HEAD's content. The shared common directory itself is inherent to a
+# worktree and is declared as a bound.
 tree=$work/tree
-git worktree add --quiet --detach "$tree" HEAD \
+git -c core.hooksPath="$work/no-hooks" worktree add --quiet --detach "$tree" HEAD \
     || cannot_judge "could not check out HEAD into a scratch worktree; nothing was observed"
-# The worktree is registered in the judged repository's `.git`, so it is pruned even on an abort.
-trap 'git worktree remove --force "$tree" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
+tree_real=$(readlink -f "$tree") \
+    || cannot_judge "could not resolve the scratch worktree's own path, so containment of a mutation cannot be decided"
+# INT and TERM reach this trap, and a leaked `$work` is removed with it. SIGKILL reaches nothing: the
+# registration then survives in the judged repository, and `git worktree prune` will not clear it while the
+# temp directory it points at still exists. Saying so beats claiming a cleanup that does not happen.
+trap 'git worktree remove --force "$tree" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT INT TERM
 export CARGO_TARGET_DIR=$work/target
 export TIANHENG_WORKSPACE_TESTS=1
 
@@ -246,12 +256,20 @@ for index in "${!names[@]}"; do
     grep -Fxq "$name" "$citations.names" \
         || fail "the record for \`$name\` names a test no declared bound cites; a mutation is an assertion about a defence, and there is no defence here to assert about"
 
-    # Tracked-ness, not reachability. `[[ -f $tree/$file ]]` accepts a `../` path that resolves OUTSIDE the
-    # tree, and the mutation then rewrites a file this gate has no business touching — measured, and it
-    # falsifies the interrupted-run property stated in this file's header. Asking git makes the check the one
-    # the message already claimed.
+    # Tracked AND contained, which are two different questions and both are needed.
+    #
+    # `[[ -f $tree/$file ]]` asked neither: a `../` path resolved outside the tree and the mutation rewrote a
+    # file this gate has no business touching. Asking git alone asks only the first — a TRACKED SYMLINK is
+    # tracked, `git worktree add` checks it out as a symlink, and both the backup copy and the write follow it,
+    # so the outside file is rewritten and a run killed between write and restore leaves it destroyed. Measured,
+    # both times. The containment half is therefore resolved rather than reasoned about: whatever the path
+    # resolves to must sit under the tree.
     git ls-files --error-unmatch "$file" >/dev/null 2>&1 \
         || cannot_judge "the record for \`$name\` names $file, which HEAD does not track; a mutation edits tracked content of the tree under test and nothing else"
+    resolved=$(readlink -f "$tree/$file" 2>/dev/null) \
+        || cannot_judge "the record for \`$name\` names $file, which cannot be resolved under the tree under test"
+    [[ -n $resolved && $resolved == "$tree_real"/* ]] \
+        || cannot_judge "the record for \`$name\` names $file, which resolves to $resolved — outside the tree under test. A tracked path may still be a symlink, and following one would edit a file this gate has no business touching"
 
     derive_selector "$name"
 

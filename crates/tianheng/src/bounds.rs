@@ -139,6 +139,20 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // citation's pin *bites* only where a mutation is declared for it; where none is, nothing decides.
         BoundDecl::unpinned(
             BoundId::new(
+                "observation-bound-register/what-a-test-run-inside-the-checkout-does-to-the-judged-repository-is-not-observed-a-stated-bound",
+            ),
+            "a cited test writing to the repository its checkout was taken from",
+            Extent::Reached(Reached::UnderReacts {
+                because: "a checkout carrying a working repository shares that repository's common \
+                          directory, and the property making a git-reading citation reachable at all is the \
+                          same one making the judged repository writable from inside the tree"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
                 "observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound",
             ),
             "a cited pin whose assertions are removed in the working directory and not committed",

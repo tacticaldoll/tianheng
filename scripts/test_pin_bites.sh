@@ -103,14 +103,41 @@ clean_stderr=$("$check" "$kills" 2>&1 >/dev/null || true)
 [[ -z $clean_stderr ]] \
     || { printf 'a clean run must print nothing on stderr, got: %s\n' "$clean_stderr" >&2; exit 1; }
 
-# The gate mutates a tree it builds from `git archive HEAD`, never the repository it was pointed at. A gate
-# that edited tracked files and was interrupted between edit and restore would have destroyed work.
+# The gate mutates a separate checkout, never the repository it was pointed at. A gate that edited tracked
+# files and was interrupted between edit and restore would have destroyed work.
+#
+# The reading is wider than `git status` because the checkout is a WORKTREE of the judged repository and shares
+# its common `.git`: a registration left behind, or a ref written from inside the tree under test, is invisible
+# to porcelain and to HEAD. Both were produced while this change was under review, so the instrument is widened
+# rather than trusted.
 untouched=$(new_repo untouched "$KILLS")
-before=$(git -C "$untouched" status --porcelain; git -C "$untouched" rev-parse HEAD)
+judged_state() {
+    git -C "$1" status --porcelain
+    git -C "$1" rev-parse HEAD
+    git -C "$1" show-ref || true
+    git -C "$1" worktree list
+}
+before=$(judged_state "$untouched")
 "$check" "$untouched" >/dev/null 2>&1
-after=$(git -C "$untouched" status --porcelain; git -C "$untouched" rev-parse HEAD)
+after=$(judged_state "$untouched")
 [[ $before == "$after" ]] \
     || { printf 'the gate mutated the repository it judged:\nbefore: %s\nafter: %s\n' "$before" "$after" >&2; exit 1; }
+
+# A tracked path may still be a SYMLINK out of the tree, and following it edits a file the gate has no business
+# touching — destructively, if the run is killed between the write and the restore. Tracked-ness alone accepted
+# this; containment is resolved.
+escaping=$(new_repo escaping "$KILLS")
+outside=$fixture_root/outside.txt
+# It carries the anchor, so a gate that follows the link actually WRITES here rather than declining for an
+# unrelated reason. Without that the direction passes against the unfixed gate and proves nothing.
+printf 'AUTHOR CONTENT\ntrimmed.starts_with("pub ") && trimmed.contains("dyn ")\n' >"$outside"
+ln -s "$outside" "$escaping/crates/fixt/src/victim_link"
+sed -i 's|crates/fixt/src/lib.rs|crates/fixt/src/victim_link|' "$escaping/scripts/lib/pin_mutations.tsv"
+git -C "$escaping" add -A
+git -C "$escaping" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qm escaping
+expect_fail "$escaping" 2 'outside the tree under test'
+[[ $(head -1 "$outside") == 'AUTHOR CONTENT' && $(grep -c 'starts_with' "$outside") == 1 ]] \
+    || { printf 'the gate rewrote a file outside the tree under test\n' >&2; exit 1; }
 
 # --- the violation direction (exit 1) ---
 
