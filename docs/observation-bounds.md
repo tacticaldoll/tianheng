@@ -77,7 +77,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
-> the system reports no violation, because the rule is use-only and observes `use` imports rather
+> the system reports no violation, because the rule is use-only and observes `use` imports rather than `extern crate` declarations
 
 - **pinned by**: `confine_ignores_an_extern_crate_declaration`
 
@@ -85,31 +85,31 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `gate-shape-contract/whether-an-enumeration-carries-a-vacuity-guard-is-not-observed-a-stated-bound`
 
-> the reaction does not claim to observe it, a stated bound, rather than reporting the gate
+> the reaction does not claim to observe it, a stated bound, rather than reporting the gate conformant on a property it never examined
 
 - **pinned by**: `a_missing_vacuity_guard_is_a_stated_semantic_bound`
 
 ### `gate-shape-contract/whether-a-read-s-status-is-checked-in-the-parent-shell-is-not-observed-a-stated-bound`
 
-> the reaction does not claim to observe it, a stated bound. This is what remains after the
+> the reaction does not claim to observe it, a stated bound. This is what remains after the process-substitution property above: that construct **is** now observed, so the bound is narrowed to the shapes whose detection would need control flow rather than text — whether a caller inspects `$?` after a `$(…)` is not a property of the source. The backstop the reaction also checks narrows the damage without detecting either shape
 
 - **pinned by**: `an_unchecked_read_status_is_a_stated_semantic_bound`
 
 ### `gate-shape-contract/whether-a-gate-s-1-versus-2-assignment-is-correct-is-not-observed-a-stated-bound`
 
-> the reaction does not claim to observe it, a stated bound: it checks that the twin asserts codes,
+> the reaction does not claim to observe it, a stated bound: it checks that the twin asserts codes, never that the codes the gate chose are the right ones, which needs each gate's meaning rather than its text. **Narrowed** from a wider claim that named this as what let a `return`-instead-of-`exit` inversion ride green. That was wrong about its own history: the inversion produced both directions above in one gate, and what let it pass CI was the matrix asserting a non-zero status rather than a code — which the `exit codes` property now refuses, and whose remedy cites this instance. What remains is only the semantic judgment
 
 - **pinned by**: `a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound`
 
 ### `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound`
 
-> the reaction permits it, a stated bound: the recognizer reads the producer's first word, so the
+> the reaction permits it, a stated bound: the recognizer reads the producer's first word, so the permission's stated reason — a builtin has no I/O to fail at — is applied to a producer that does. The obvious repair, refusing a producer that contains a pipe, was measured against this tree and **false-positives on both live sites**, which carry a `|` inside a parameter expansion (`${b//|/$'\n'}`); telling a pipe operator from a pipe inside `${…}` needs shell parsing rather than text, so it is declared rather than closed. No producer in the gate surface exhibits the shape today
 
 - **pinned by**: `a_builtin_piped_into_an_external_command_is_a_stated_bound`
 
 ### `gate-shape-contract/shell-units-that-are-not-a-gate-or-its-twin-are-outside-the-surface-a-stated-bound`
 
-> it is outside this capability's surface, a stated bound, so the projection's conformance
+> it is outside this capability's surface, a stated bound, so the projection's conformance covers the gate surface and not everything under `scripts/`
 
 - **pinned by**: `units_outside_the_gate_pairing_are_outside_the_surface`
 
@@ -155,19 +155,19 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `observation-bound-model/whether-a-declaration-s-stated-cause-is-the-real-cause-is-not-observed-a-stated-bound`
 
-> the model does not claim to observe it, a stated bound: the extent is typed and checkable, the
+> the model does not claim to observe it, a stated bound: the extent is typed and checkable, the rationale is prose, and requiring the prose to match would trade a fact for a heuristic
 
 - **pinned by**: `a_rationale_that_contradicts_its_extent_is_a_stated_bound`
 
 ### `observation-bound-model/an-answer-that-depends-on-the-corpus-entry-point-has-no-extent-of-its-own-a-stated-bound`
 
-> it is declared as under-reacting with the entry point as the inherited owner rather than carrying an
+> it is declared as under-reacting with the entry point as the inherited owner rather than carrying an extent of its own, a stated bound: one live instance does not earn a value in a set every other member has several of, and the direction that matters (a seam reported covered when it is not) is recorded either way
 
 - **pinned by**: `an_entry_dependent_bound_is_declared_as_under_reacting`
 
 ### `observation-bound-model/a-bound-both-out-of-reach-and-granularity-limited-cannot-be-expressed-a-stated-bound`
 
-> the model cannot express it, a stated bound: no declared bound exhibits the pair, and offering
+> the model cannot express it, a stated bound: no declared bound exhibits the pair, and offering granularity on every extent would invite a combination nothing shows while weakening the nesting that makes the contradiction above impossible
 
 - **pinned by**: `granularity_is_carried_only_by_the_as_intended_extent`
 
@@ -175,31 +175,31 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound`
 
-> nothing reacts. Running the cited test is the reaction's whole method, so code execution inside the
+> nothing reacts. Running the cited test is the reaction's whole method, so code execution inside the checkout is granted unconditionally, and neither consequence is separable from it: the shared common directory is what makes a git-reading citation reachable at all, and re-checking a resolved path after the build would re-check the same window that defeated it. Hooks are the one case that IS closed, because those run without any citation asking for them
 
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
 ### `observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound`
 
-> the citation is reported as exercised by a perturbation that did nothing. The reaction runs the test
+> the citation is reported as exercised by a perturbation that did nothing. The reaction runs the test a fixed number of times, so any period matching that sequence escapes it, and the number is readable in the reaction's own source. Closing it needs each run to be unable to observe how many times the test has run — a separate checkout per run — whose cost grows with the coverage this capability exists to grow
 
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
 ### `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound`
 
-> nothing reacts, because the checkout under test is HEAD's content. The sibling gates read the
+> nothing reacts, because the checkout under test is HEAD's content. The sibling gates read the worktree for exactly this reason, and this reaction cannot: mutating the author's checkout is what a separate checkout exists to avoid, so the two properties are in tension and this one is given up deliberately
 
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
 ### `observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound`
 
-> the pin fails and the citation is counted as exercised, because a killed pin does not say what killed
+> the pin fails and the citation is counted as exercised, because a killed pin does not say what killed it. Separating the two by refusing a record that edits its pin's file was measured against this tree's own first record, which legitimately edits the file its pin lives in, so the rule would refuse a conforming shape
 
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
 ### `observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound`
 
-> the reaction does not decide whether that pin bites, and says how many such citations there are on
+> the reaction does not decide whether that pin bites, and says how many such citations there are on every clean run rather than leaving the gap to be inferred
 
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
@@ -207,43 +207,43 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound`
 
-> nothing reacts — a stated bound, and a declared false negative this repository owns. A text reader
+> nothing reacts — a stated bound, and a declared false negative this repository owns. A text reader over the composition body was built, hardened across four review rounds and defeated at every level: name resolution, the parameter's binding site, the identity of the definition, the caller frame, and execution, which no reading of text reaches at all. Invoking the observer made the two paths' *equality* construction-held and left this untouched: a guard written above that call compiles, passes the whole suite, and passes every gate — measured on the tree that invokes the observer, not on the one that did not. The bound carries no pinning test because there is no reaction left to demonstrate a gap in; it is tracked instead
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the shell's semantic delegation, held by construction*
 
 ### `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`
 
-> the reaction reads that copy's body and reports it as the method's. Both anchor conditions are
+> the reaction reads that copy's body and reports it as the method's. Both anchor conditions are satisfied — one occurrence, at a line start — and the reader knows nothing of comments or literals, so the class is "the unique whole-line occurrence is not the definition" rather than any one syntactic position. What passes is a **second, hand-maintained path that agrees today**: a *divergent* list does not, because `observation-bound-model` reads every dimension's declarations through `Observer::bounds` and holds them in a bijection with the specs, which fails on any difference of membership or content. Measured both ways. So the residual is narrower than a divergent list slipping through, and wider than a comment. This bound SHALL be **shown rather than described**: the reaction enumerates every shape it decides together with the decision, the reader is run against that table, and the rows where it reads a body that is not the method's are this bound. A sentence here that the table contradicts fails, which is what the three repair rounds preceding this scenario could not do
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*
 
 ### `observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound`
 
-> nothing reacts. The list is hand-maintained prose about a set the code enumerates, and falsifying it
+> nothing reacts. The list is hand-maintained prose about a set the code enumerates, and falsifying it passes the whole suite and every gate — measured. Deciding it needs a perturbed build, not a read: an independently-implemented dimension fails the equality assert when its observer is emptied, a construction-held one fails only the reacts-at-all assert, and no in-process reaction can apply that perturbation to itself
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the construction-held list is hand-maintained prose*
 
 ### `observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound`
 
-> the reaction reads an extent that is not the method's body — a stated bound.
+> the reaction reads an extent that is not the method's body — a stated bound. It counts braces outside line comments only, and closing the gap needs the string-literal lexing this repository measured and rejected: this tree's own lexer suites put comment delimiters inside string literals, several of them nested, so a delimiter-counting scan opens a phantom comment at the first of them and swallows every definition to the next close. For **this** comparison the error direction is the safe one, and it is what the pin shows — no brace-carrying construct survives the exact one-statement comparison, so a moved extent refuses a **conforming** body rather than accepting a divergent one. The direction is a property of the comparison rather than of the extent, and it does not transfer to another reader of that extent: the same moved extent meeting a count-and-containment comparison would accept a divergent body instead. A reader of that second kind existed over the shell's composition body and is retired; the direction is recorded here so the next one is not written on the assumption that this bound's safety transfers to it
 
 - **pinned by**: `a_brace_in_a_block_comment_moves_the_body_extent`
 
 ### `observer-protocol/a-trait-object-on-a-wrapped-signature-s-continuation-line-is-not-seen-a-stated-bound`
 
-> the reaction does not see it, a stated bound: the recognizer is handed one line at a time, so the
+> the reaction does not see it, a stated bound: the recognizer is handed one line at a time, so the continuation is never a candidate it declined — it is text the observation never presents. Closing it needs 渾儀 watching this crate, which the same measurement above found unavailable. Multi-line public signatures exist here, so the shape is live even where no instance names a trait object
 
 - **pinned by**: `a_trait_object_on_a_continuation_line_is_not_recognized`
 
 ### `observer-protocol/whether-an-observer-s-declared-bounds-are-complete-is-not-observed-a-stated-bound`
 
-> the protocol does not claim to observe the omission, a stated bound: the trait compels a
+> the protocol does not claim to observe the omission, a stated bound: the trait compels a declaration, never a complete one, and no reaction can enumerate the limits of a reaction it did not write
 
 - **pinned by**: `an_observer_may_under_declare_its_bounds`
 
 ### `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound`
 
-> the fold merges it as given, a stated bound: it composes verdicts and does not adjudicate them, and
+> the fold merges it as given, a stated bound: it composes verdicts and does not adjudicate them, and a protocol that second-guessed each participant would need a second implementation of every dimension
 
 - **pinned by**: `the_fold_does_not_adjudicate_a_participant_s_verdict`
 
@@ -251,13 +251,13 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `projection-register/whether-a-stated-regeneration-command-regenerates-its-document-is-not-observed-a-stated-bound`
 
-> the reaction does not observe it, a stated bound: verifying the claim means running the command, and
+> the reaction does not observe it, a stated bound: verifying the claim means running the command, and both mechanisms refuse — a Rust `BLESS=1 cargo test` re-enters the harness already running, and the shell one **writes** the projection, which would make the reaction mutate the tree it judges
 
 - **pinned by**: `a_regeneration_command_is_registered_and_never_run`
 
 ### `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound`
 
-> the reaction does not observe it, a stated bound: it is absent from both sides of the correspondence,
+> the reaction does not observe it, a stated bound: it is absent from both sides of the correspondence, which then holds over a surface missing a member. This is a false negative rather than a limit of the corpus — the third mechanism's source sits in the tree the reaction already reads — so it is owned by the engine
 
 - **pinned by**: `a_third_generation_mechanism_is_not_recognized`
 
@@ -265,7 +265,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound`
 
-> the gate accepts it, a stated bound: validity is verifiable without configuration and **attribution is
+> the gate accepts it, a stated bound: validity is verifiable without configuration and **attribution is not**, needing an allowed-signers file that exists on a maintainer's machine and not in CI. The ownership is inherited from the verification environment rather than held by this engine, because no change to this gate closes it — giving CI an allowed-signers file is what would
 
 - **pinned by**: `a_valid_signature_from_an_unauthorized_key_is_accepted`
 
@@ -273,43 +273,43 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
 
-> nothing reacts, and the leak is real: an adopter reading `[0.4.0]` meets nine entries naming
+> nothing reacts, and the leak is real: an adopter reading `[0.4.0]` meets nine entries naming files they can never run. What is refused is the **repair**, not the diagnosis — rewriting a dated section to satisfy a rule written afterwards would falsify the record, the same reason `docs/history/` is left alone — so this is a declared false negative with an owner rather than a shape that is harmless. Closing it needs a repair that adds to the record instead of editing it
 
 - **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
 
 ### `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound`
 
-> nothing reacts. The enumeration is `git ls-files scripts/`, so an untracked `scripts/` reads
+> nothing reacts. The enumeration is `git ls-files scripts/`, so an untracked `scripts/` reads as absent; closing this means judging worktree content, which this repository's gates are held not to do — the larger error, so the blindness is declared instead
 
 - **pinned by**: `machinery_tracked_by_nothing_is_a_stated_bound`
 
 ### `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound`
 
-> nothing reacts. Reaching it needs a judgement over the entry's subject rather than over its
+> nothing reacts. Reaching it needs a judgement over the entry's subject rather than over its references, and that instrument is the one this repository measured three times and rejected; widening the matcher toward it — heading keywords, phrase lists — would trade a declared, bounded blindness for an undeclared false-positive surface
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the self-governance residual is a judgement over an entry's subject*
 
 ### `release-coherence/a-basename-an-entry-writes-for-another-reason-a-stated-bound`
 
-> the reaction **fails**, refusing an innocent entry. The direction is the safe one — an author
+> the reaction **fails**, refusing an innocent entry. The direction is the safe one — an author meets a refusal to argue with — and narrowing it means deciding which of two files a bare name meant, a judgement about the sentence rather than about the reference
 
 - **pinned by**: `a_colliding_basename_is_a_stated_bound`
 
 ### `release-coherence/a-name-reached-only-through-a-url-a-stated-bound`
 
-> nothing reacts. A word is a maximal run of path characters, so a scheme and host fuse with the
+> nothing reacts. A word is a maximal run of path characters, so a scheme and host fuse with the path into one run that equals no tracked name; splitting a URL into its path would make the reaction judge a foreign host's layout as though it were this repository's
 
 - **pinned by**: `a_name_reached_only_through_a_url_is_a_stated_bound`
 
 ### `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound`
 
-> nothing reacts for those entries, because that line set the heading in force and may name the one
+> nothing reacts for those entries, because that line set the heading in force and may name the one exempt heading. The reaction walks the document's line grammar and does not track fences; it is latent rather than live, this repository's changelog carrying no fenced block at all
 
 - **pinned by**: `a_heading_inside_a_fenced_block_is_a_stated_bound`
 
 ### `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound`
 
-> nothing reacts. Directories are derived slash-terminated, and the unslashed form is a word
+> nothing reacts. Directories are derived slash-terminated, and the unslashed form is a word indistinguishable from ordinary prose — `scripts` is an English plural this document already uses as one. Admitting it for deeper names only would make the reaction judge which of its own keys read as English
 
 - **pinned by**: `a_directory_named_without_its_slash_is_a_stated_bound`
 
@@ -347,7 +347,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound`
 
-> the root-file run reports the seam covered, while the directory run reports it unprobed — the
+> the root-file run reports the seam covered, while the directory run reports it unprobed — the stated bound of the legacy corpus, recorded rather than presented as equivalent coverage
 
 - **pinned by**: `a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directory`
 
@@ -355,37 +355,37 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `self-law-projection/a-doc-example-of-the-dependency-dsl-is-refused-a-stated-bound`
 
-> the reaction refuses it anyway, a stated bound: it reads a comment's text and never its purpose, and
+> the reaction refuses it anyway, a stated bound: it reads a comment's text and never its purpose, and the shell publishes that DSL, so the shape is live even with no instance in the tree today
 
 - **pinned by**: `a_doc_example_of_the_dependency_dsl_is_refused`
 
 ### `self-law-projection/a-comment-naming-every-member-for-another-reason-is-refused-a-stated-bound`
 
-> the reaction refuses it anyway, a stated bound: it asks whether the members all appear and never why,
+> the reaction refuses it anyway, a stated bound: it asks whether the members all appear and never why, so a block naming them for another reason reads the same as a copied census
 
 - **pinned by**: `a_comment_naming_every_member_for_another_reason_is_refused`
 
 ### `self-law-projection/a-reason-that-paraphrases-the-law-is-refused-a-stated-bound`
 
-> the reaction **fires**, refusing a reason that genuinely states the law. Measured by writing that
+> the reaction **fires**, refusing a reason that genuinely states the law. Measured by writing that WHEN into the tree: paraphrasing `guibiao`'s clause produces *"dimension boundary for `guibiao` dropped the `三儀 ⊥ 三儀` clause"*. The direction is the safe one — an author meets a refusal to argue with — and closing it needs the reaction to decide two wordings state one law, a judgement over prose measured and rejected here
 
 - **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
 
 ### `self-law-projection/a-reason-carrying-the-clause-while-negating-the-law-is-not-observed-a-stated-bound`
 
-> nothing reacts, and `AGENTS.self-law.md` projects the negation to every agent that loads it. This is
+> nothing reacts, and `AGENTS.self-law.md` projects the negation to every agent that loads it. This is the serious direction of the pair: the teaching surface can carry the law's opposite while satisfying the check that exists to keep the law taught. Measured, with the projection blessed and the whole suite green
 
 - **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
 
 ### `self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound`
 
-> its allowlist is never examined, and the set-coverage assertion cannot notice, because the set it
+> its allowlist is never examined, and the set-coverage assertion cannot notice, because the set it compares is produced by filtering on that same list. Measured: removing `guibiao` from the literal leaves a `guibiao` allowlist naming `hunyi` green. Closing it needs the dimension set derived from something that enumerates it rather than typed beside it
 
 - **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
 
 ### `self-law-projection/a-workspace-dependency-allowlist-is-not-examined-a-stated-bound`
 
-> the reaction never examines it, though that rule governs workspace-member edges specifically and is
+> the reaction never examines it, though that rule governs workspace-member edges specifically and is the more natural one for this law. Measured: a second `guibiao` boundary of that variant naming `hunyi` is green, and set coverage still reads the three dimensions
 
 - **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
 
