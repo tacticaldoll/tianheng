@@ -12,7 +12,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default` — owner: adopter
 - `inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external` — owner: engine
 - `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default` — owner: adopter
-- `observation-bound-register/what-a-test-run-inside-the-checkout-does-to-the-judged-repository-is-not-observed-a-stated-bound` — owner: engine
+- `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound` — owner: engine
@@ -446,11 +446,11 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: does not react
 - **pinned by**: `inline_strict_external_absent_fully_qualified_call_is_a_bound`
 
-### `observation-bound-register/what-a-test-run-inside-the-checkout-does-to-the-judged-repository-is-not-observed-a-stated-bound`
+### `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound`
 
-> a cited test writing to the repository its checkout was taken from
+> code run inside the checkout writing outside it, or replacing a checked path so the reaction's own write lands elsewhere
 
-- **because**: a checkout carrying a working repository shares that repository's common directory, and the property making a git-reading citation reachable at all is the same one making the judged repository writable from inside the tree
+- **because**: running the cited test is the whole method, so code execution inside the checkout is granted unconditionally; the shared common directory is what makes a git-reading citation reachable at all, and re-checking a resolved path after the build would re-check the window that defeated it
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 

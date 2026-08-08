@@ -6,7 +6,9 @@
 # shared family shapes or diagnostics rather than this gate's own subject. One is neither: the target-directory
 # isolation is a requirement, and the attempt to pin it — remove the export, point the gate at a pre-warmed
 # directory — made cargo rebuild and passed, so nothing here proves it. Naming that here beats an
-# `every` this file would not hold — the absolute-claim class this repository keeps closing.
+# `every` this file would not hold — the absolute-claim class this repository keeps closing. Everything else
+# the requirement states does have a direction, including the two this file gained after a review found them
+# stated and unwatched.
 #
 # The fixtures are minimal cargo workspaces rather than checkouts of this one, and that is the point of the
 # shape: the gate under test builds what it judges, so a fixture carrying this repository's dependency graph
@@ -111,6 +113,16 @@ clean_stderr=$("$check" "$kills" 2>&1 >/dev/null || true)
 # to porcelain and to HEAD. Both were produced while this change was under review, so the instrument is widened
 # rather than trusted.
 untouched=$(new_repo untouched "$KILLS")
+# A `post-checkout` hook in the judged repository. The checkout under test shares that repository's common
+# directory, so without `core.hooksPath` this fires INSIDE the tree under test with write access to the judged
+# repository's refs — measured, it plants a tag that survives the gate's own cleanup. The assertion below sees
+# it only because this fixture produces it; a widened instrument observing nothing is not a guard.
+mkdir -p "$untouched/.git/hooks"
+cat >"$untouched/.git/hooks/post-checkout" <<'HOOK'
+#!/bin/sh
+git update-ref refs/tags/planted-by-hook HEAD
+HOOK
+chmod +x "$untouched/.git/hooks/post-checkout"
 judged_state() {
     git -C "$1" status --porcelain
     git -C "$1" rev-parse HEAD
@@ -135,7 +147,7 @@ ln -s "$outside" "$escaping/crates/fixt/src/victim_link"
 sed -i 's|crates/fixt/src/lib.rs|crates/fixt/src/victim_link|' "$escaping/scripts/lib/pin_mutations.tsv"
 git -C "$escaping" add -A
 git -C "$escaping" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qm escaping
-expect_fail "$escaping" 2 'outside the tree under test'
+expect_fail "$escaping" 2 'not a file under the tree under test'
 [[ $(head -1 "$outside") == 'AUTHOR CONTENT' && $(grep -c 'starts_with' "$outside") == 1 ]] \
     || { printf 'the gate rewrote a file outside the tree under test\n' >&2; exit 1; }
 

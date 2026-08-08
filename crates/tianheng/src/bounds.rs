@@ -139,13 +139,14 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // citation's pin *bites* only where a mutation is declared for it; where none is, nothing decides.
         BoundDecl::unpinned(
             BoundId::new(
-                "observation-bound-register/what-a-test-run-inside-the-checkout-does-to-the-judged-repository-is-not-observed-a-stated-bound",
+                "observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound",
             ),
-            "a cited test writing to the repository its checkout was taken from",
+            "code run inside the checkout writing outside it, or replacing a checked path so the reaction's own write lands elsewhere",
             Extent::Reached(Reached::UnderReacts {
-                because: "a checkout carrying a working repository shares that repository's common \
-                          directory, and the property making a git-reading citation reachable at all is the \
-                          same one making the judged repository writable from inside the tree"
+                because: "running the cited test is the whole method, so code execution inside the checkout \
+                          is granted unconditionally; the shared common directory is what makes a \
+                          git-reading citation reachable at all, and re-checking a resolved path after the \
+                          build would re-check the window that defeated it"
                     .into(),
                 owner: Owner::Engine,
             }),

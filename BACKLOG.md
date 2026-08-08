@@ -80,7 +80,7 @@ consumer for an undemonstrated deduplication.
   not authoring cost: a lib test registering under its module path, and the cargo target derived from the
   mutated file rather than from the test's definition. Both are fixed and neither recurs.) *Version class:* not release-affecting; a
   repository gate over this repository's own governance tests. *Authority:* `observation-bound-register`, whose
-  added requirement states the obligation and the three arrangements that make it observable.
+  added requirement states the obligation and the arrangements that make it observable.
 
 - **The shell's semantic delegation, held by construction.** *Class:* READY-PATCH. *Observed pressure:* the
   source-shape reaction that claimed to observe it is retired in this window after four review rounds each

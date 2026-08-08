@@ -173,9 +173,9 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## observation-bound-register
 
-### `observation-bound-register/what-a-test-run-inside-the-checkout-does-to-the-judged-repository-is-not-observed-a-stated-bound`
+### `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound`
 
-> nothing reacts. A checkout that carries a working repository shares that repository's common
+> nothing reacts. Running the cited test is the reaction's whole method, so code execution inside the
 
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 

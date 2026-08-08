@@ -15,7 +15,7 @@
 #
 # Four properties of the arrangement are load-bearing, each measured:
 #
-#   * The tree is a detached WORKTREE at HEAD, so the author's files are untouched whatever happens mid-run.
+#   * The tree is a detached WORKTREE at HEAD, so an interrupted run has edited nothing of the author's.
 #     Note what that is NOT: the sibling gates enumerate tracked PATHS with `git ls-files` and then read the
 #     worktree's content, deliberately — `check_whitespace_hygiene.sh`'s header calls reading anything else a
 #     false negative. This gate is the only one judging HEAD's content, and it inherits the matching blind
@@ -164,10 +164,14 @@ git -c core.hooksPath="$work/no-hooks" worktree add --quiet --detach "$tree" HEA
     || cannot_judge "could not check out HEAD into a scratch worktree; nothing was observed"
 tree_real=$(readlink -f "$tree") \
     || cannot_judge "could not resolve the scratch worktree's own path, so containment of a mutation cannot be decided"
-# INT and TERM reach this trap, and a leaked `$work` is removed with it. SIGKILL reaches nothing: the
-# registration then survives in the judged repository, and `git worktree prune` will not clear it while the
-# temp directory it points at still exists. Saying so beats claiming a cleanup that does not happen.
-trap 'git worktree remove --force "$tree" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT INT TERM
+# EXIT alone, deliberately. Bash already runs an EXIT trap on an untrapped fatal signal, so INT and TERM
+# already clean up and already leave the shell's own 130/143. TRAPPING them additionally was measured to be a
+# regression: a signal handler does not end the script, so the loop continued with `$work` deleted and the
+# next record's citation lookup failed — the gate exited **1**, accusing the judged repository of a violation
+# it had not observed. A cannot-judge collapsed into a violation, which is the sibling gate's recorded defect
+# running backwards. SIGKILL reaches nothing either way: the registration then survives, and
+# `git worktree prune` will not clear it while the directory it names still exists.
+trap 'git worktree remove --force "$tree" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
 export CARGO_TARGET_DIR=$work/target
 export TIANHENG_WORKSPACE_TESTS=1
 
@@ -258,6 +262,12 @@ for index in "${!names[@]}"; do
 
     # Tracked AND contained, which are two different questions and both are needed.
     #
+    # What this holds is that a RECORD cannot name a path outside the tree. It is not a boundary on where the
+    # gate can write: the check runs before `cargo`, and `cargo` runs the checkout's own code — a `build.rs`
+    # replacing the checked path with a symlink afterwards redirects the write, reproduced. That is the
+    # code-execution the gate grants unconditionally by testing there at all, and it is declared as a bound
+    # rather than guarded here, because a guard that re-checked would be re-checking the same TOCTOU.
+    #
     # `[[ -f $tree/$file ]]` asked neither: a `../` path resolved outside the tree and the mutation rewrote a
     # file this gate has no business touching. Asking git alone asks only the first — a TRACKED SYMLINK is
     # tracked, `git worktree add` checks it out as a symlink, and both the backup copy and the write follow it,
@@ -266,10 +276,12 @@ for index in "${!names[@]}"; do
     # resolves to must sit under the tree.
     git ls-files --error-unmatch "$file" >/dev/null 2>&1 \
         || cannot_judge "the record for \`$name\` names $file, which HEAD does not track; a mutation edits tracked content of the tree under test and nothing else"
-    resolved=$(readlink -f "$tree/$file" 2>/dev/null) \
+    # A distinct name from `resolve_test_name`'s `resolved`, which is a harness test name: one global holding
+    # two unrelated values is safe only while the assignments happen to be ordered.
+    resolved_path=$(readlink -f "$tree/$file" 2>/dev/null) \
         || cannot_judge "the record for \`$name\` names $file, which cannot be resolved under the tree under test"
-    [[ -n $resolved && $resolved == "$tree_real"/* ]] \
-        || cannot_judge "the record for \`$name\` names $file, which resolves to $resolved — outside the tree under test. A tracked path may still be a symlink, and following one would edit a file this gate has no business touching"
+    [[ -n $resolved_path && $resolved_path == "$tree_real"/* ]] \
+        || cannot_judge "the record for \`$name\` names $file, which resolves to $resolved_path and so is not a file under the tree under test. A tracked path may still be a symlink, and following one would edit a file this gate has no business touching"
 
     derive_selector "$name"
 

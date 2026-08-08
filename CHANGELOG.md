@@ -98,7 +98,7 @@ them.
   `docs/observation-bounds.md` already leads with its unpinned count: a gate reporting only the mutations it ran
   would be the reads-as-coverage failure it exists to end, one level up.
 
-  Four properties of the arrangement are stated rather than left to the implementation, each measured. The tree
+  The arrangement's properties are stated rather than left to the implementation, each measured. The tree
   is a detached **worktree** at HEAD, so an interrupted run has edited nothing of the author's — and, unlike an
   export of tracked content, it carries a working repository, without which a pin that reads the repository
   through git fails its own control run and no record can ever exercise it. A record's path is held to being

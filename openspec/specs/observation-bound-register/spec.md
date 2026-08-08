@@ -311,8 +311,14 @@ because neither implies the other. `[[ -f $tree/$file ]]` asks neither: a `../` 
 and the mutation rewrites a file the reaction has no business touching. Asking git asks only tracked-ness: a
 tracked **symlink** is tracked, a checkout materializes it as a symlink, and both the backup copy and the write
 follow it — so the outside file is rewritten, and a run killed between write and restore leaves it destroyed.
-Both were measured. Containment SHALL therefore be decided on the **resolved** path, which is the only form
-that answers the question the refusal's message claims to ask.
+Both were measured. Containment SHALL therefore be decided on the **resolved** path, which is the form that
+answers the question the refusal's message claims to ask.
+
+What that holds is that a **record** cannot name a path outside the checkout. It is not a boundary on where the
+reaction can write, and the requirement SHALL NOT be read as one: the check precedes the build, and the build
+runs the checkout's own code — a build script replacing the checked path with a symlink afterwards redirects
+the write, reproduced. Re-checking would re-check the same window. That is the code-execution the reaction
+grants unconditionally by testing there at all, and it is declared as a bound rather than guarded.
 
 That checkout SHALL carry a working repository. An export of tracked content alone makes some citations
 structurally **unreachable** rather than merely uncovered — a pin that reads the repository through git fails
@@ -451,13 +457,16 @@ is coverage, which grows one authored record at a time.
 - **WHEN** the cited test's filter matches nothing and the harness exits 0 having run nothing
 - **THEN** the reaction refuses to judge rather than reading the exit status as a pin that survived
 
-#### Scenario: What a test run inside the checkout does to the judged repository is not observed — a stated bound
+#### Scenario: What code executed inside the checkout does outside it is not observed — a stated bound
 
-- **WHEN** a cited test, run inside the checkout under test, writes to the repository it is a checkout of
-- **THEN** nothing reacts. A checkout that carries a working repository shares that repository's common
-  directory, and the same property that makes a git-reading citation reachable at all makes the judged
-  repository writable from inside the tree. Hooks are disabled because those run without any citation asking
-  for them; a test's own writes are not separable from the reachability this arrangement exists to provide
+- **WHEN** code the reaction runs inside the checkout — a cited test, or a build script the build invokes —
+  writes outside that checkout, whether to the repository it was taken from or by replacing a checked path so
+  the reaction's own write lands elsewhere
+- **THEN** nothing reacts. Running the cited test is the reaction's whole method, so code execution inside the
+  checkout is granted unconditionally, and neither consequence is separable from it: the shared common
+  directory is what makes a git-reading citation reachable at all, and re-checking a resolved path after the
+  build would re-check the same window that defeated it. Hooks are the one case that IS closed, because those
+  run without any citation asking for them
 - **UNPINNED** `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
 #### Scenario: Whether a pin gutted but not committed still bites is not observed — a stated bound
