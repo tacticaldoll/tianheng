@@ -225,8 +225,9 @@ dimensions remain independently implemented on both sides, and for them the reac
   it is what the pin shows — no brace-carrying construct survives the exact one-statement comparison, so a moved
   extent refuses a **conforming** body rather than accepting a divergent one. The direction is a property of the
   comparison rather than of the extent, and it does not transfer to another reader of that extent: the
-  same moved extent meeting an allowlist the remainder can satisfy in full accepts a divergent body, which is why
-  the shell-delegation reaction refuses an ambiguous extent rather than inheriting this bound
+  same moved extent meeting a count-and-containment comparison would accept a divergent body instead. A reader of
+  that second kind existed over the shell's composition body and is retired; the direction is recorded here so
+  the next one is not written on the assumption that this bound's safety transfers to it
 - **PINNED-BY** `a_brace_in_a_block_comment_moves_the_body_extent`
 
 #### Scenario: A Rust attribute appears in an inspected body

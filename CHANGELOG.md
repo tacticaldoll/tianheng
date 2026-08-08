@@ -523,14 +523,15 @@ them.
   *over-reacting*, read off the bounds-method comparison, where an exact one-statement equality cannot survive a
   moved extent and so refuses a conforming body. The shell-delegation reaction arrived later with a comparison
   that survives one intact, and the rationale was never re-derived against it — leaving a bound on the safe side
-  of the false-negative line describing a reader on the unsafe side, which reads as permission. It is now two
-  bounds: the surviving over-reaction on the bounds-method comparison, and a *refuses to judge* on the
-  delegation reaction, each with its own pin. No adopter action: `tianheng::observation_bounds()` is absent at
-  `v0.4.0`, so neither identity has ever shipped.
+  of the false-negative line describing a reader on the unsafe side, which reads as permission. The
+  over-reaction survives on the bounds-method comparison, which is the reader it was read off; the second reader
+  was retired rather than given a bound of its own (see the entry above). No adopter action:
+  `tianheng::observation_bounds()` is absent at `v0.4.0`, so no identity here has ever shipped.
 - `docs/observation-bound-extents.md` asserted that **refuses to judge** carried no bound while rendering one
   under that heading two sections below. The claim was a literal in the generator's template, which is the one
   place a freshness check cannot catch a falsehood — the comparison is the generator's own text against itself.
-  The lesson it carried does not need the membership claim, so the claim is gone rather than re-typed.
+  The lesson it carried does not need the membership claim, so the claim is gone rather than re-typed — which
+  is what kept the document honest when the retirement later removed that value's only instance.
 - **Three text recognizers read past the region they observe, each in the direction its own comment said it did
   not.** One class, found by a review of this window and repaired together. The bound register's attribute walk
   stops at a blank line so an attribute cannot cover the item beneath it — but it read the preceding lines

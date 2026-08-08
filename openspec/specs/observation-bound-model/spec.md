@@ -39,9 +39,9 @@ of the family's own declarations:
    bounded". The reaction is not bounded at all here, so an extent that implied otherwise would misreport it.
 
 Value 2 SHALL be retained whether or not a declared bound uses it, and its membership SHALL NOT be restated in
-prose. It was carried for two releases with no instance, on the reasoning below, and now has one; a sentence
-naming either state is a census of a set the projection already renders, and it went stale the release an
-instance arrived. The misclassification this model exists to prevent was exactly a confusion between it and
+prose. Which values carry bounds is what the extent projection renders; a sentence naming that here is a census
+of a set with an enumerator, and every attempt at one has gone stale within the window that wrote it — once when
+an instance arrived, once when the reaction holding the only instance was retired. The misclassification this model exists to prevent was exactly a confusion between it and
 value 1: a backlog entry predicted a silent false negative for a `#[cfg_attr]` path remap where the real
 behaviour was a fail-loud refusal, and the entry's own lesson is that the risk class decides urgency. A
 direction that cannot be *named* cannot be predicted with, which is what earns the value its place — not how

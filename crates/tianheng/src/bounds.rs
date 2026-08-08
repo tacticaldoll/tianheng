@@ -93,11 +93,11 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "a_trait_object_on_a_continuation_line_is_not_recognized",
         ),
-        // The moved extent is one mechanism with two readers, and they sit on opposite sides of the
-        // false-negative line, so it is two bounds rather than one. Which side a reader lands on is decided by
-        // its comparison, not by the extent: an exact one-statement equality cannot survive a moved extent and
-        // therefore over-reacts, while an allowlist a truncated remainder can satisfy in full would accept a
-        // divergent body. The second reader refuses instead, and declares that refusal below.
+        // Which side of the false-negative line a moved extent falls on is decided by the comparison reading
+        // it, not by the extent. An exact one-statement equality cannot survive one and therefore over-reacts,
+        // which is this bound. A second reader over the shell's composition body compared by count and
+        // containment, which a truncated remainder satisfies, and was retired rather than narrowed a fifth
+        // time; the distinction is kept here so the direction is not read as a property of the extent itself.
         BoundDecl::pinned(
             BoundId::new(
                 "observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound",

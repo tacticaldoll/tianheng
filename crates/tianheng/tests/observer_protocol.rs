@@ -345,11 +345,10 @@ fn a_brace_in_a_comment_tail_no_longer_closes_the_body() {
 /// brace's doing and not the recognizer refusing everything.
 ///
 /// The direction belongs to the comparison and not to the extent, and reading it as a property of the extent is
-/// how the same moved extent went four windows accepting a divergent body elsewhere: the shell-delegation
-/// reaction holds its body to an allowlist whose members a truncated remainder can still satisfy in full, so
-/// what falls past the cut is simply not there to refuse. That reader refuses rather than inheriting this
-/// bound — see
-/// [`an_ambiguous_delegation_extent_is_refused_rather_than_judged`].
+/// how the same moved extent went four windows accepting a divergent body elsewhere. That second reader compared
+/// by count and containment, which a truncated remainder satisfies in full, so what fell past the cut was not
+/// there to refuse; it was retired rather than narrowed again, and the distinction is kept here so this bound's
+/// safety is not read as transferring to the next reader written over the same recognizer.
 #[test]
 fn a_brace_in_a_block_comment_moves_the_body_extent() {
     let braced_block_comment = Source::of(
@@ -417,13 +416,62 @@ fn a_decoy_bounds_signature_refuses_rather_than_matching_the_conforming_copy() {
         ]
         .join("\n"),
     );
+    let single_body = bounds_body(&single);
+    assert!(
+        single_body.is_some(),
+        "the same divergent list with one anchor is READ — asserting only that it differs from the delegation \
+         is satisfied by a reader that declines everything, which is what this control exists to rule out"
+    );
     assert_ne!(
-        bounds_body(&single).as_deref(),
+        single_body.as_deref(),
         Some([DELEGATION.to_string()].as_slice()),
-        "the same divergent list with one anchor is read and refused, so the decline above is the decoy's \
-         doing rather than the reader declining everything"
+        "and refused, so the decline above is the decoy's doing rather than the reader declining everything"
+    );
+
+    // The decline says WHICH condition it met. Absent and ambiguous call for different repairs, and the two
+    // counters disagreed for one round — the reader counting occurrences while the reporter counted
+    // trimmed-start lines — so a declined read reported "1" and sent a reader after a definition its own count
+    // denied. The retirement deleted the only assertion over that, and this is its replacement.
+    // A MID-LINE mention, which is what separates counting occurrences from counting lines that begin with the
+    // signature. The decoy above begins its line, so both counters agree on it and it discriminates nothing;
+    // this one is invisible to a trimmed-start count and is exactly the regression the two counters' one-round
+    // disagreement produced.
+    let mentioned = Source::of(
+        [
+            "// the obligation is about `fn bounds(` and nothing else",
+            "    fn bounds(&self) -> Vec<BoundDecl> {",
+            "        observation_bounds()",
+            "    }",
+            "",
+        ]
+        .join("\n"),
+    );
+    assert_eq!(
+        anchor_count(&mentioned, "fn bounds("),
+        2,
+        "a mention inside a comment is a second occurrence; counting only lines that BEGIN with the signature \
+         sees one and judges a subject it cannot know"
+    );
+    assert!(
+        bounds_body(&mentioned).is_none(),
+        "so the read declines, rather than brace-matching from whichever of the two came first"
+    );
+    assert_eq!(
+        anchor_count(&decoyed, "fn bounds("),
+        2,
+        "the block-comment decoy is counted too, though it begins its line and either counter would see it"
+    );
+    assert!(
+        decline_reason(&decoyed, "fn bounds(").contains("ambiguous"),
+        "an ambiguous anchor is reported as ambiguous: {}",
+        decline_reason(&decoyed, "fn bounds(")
+    );
+    assert!(
+        decline_reason(&single, "fn missing_signature(").contains("does not occur"),
+        "and an absent one as absent, which is the distinction the message exists to draw"
     );
 }
+
 /// The one statement a conforming `bounds()` body holds.
 const DELEGATION: &str = "observation_bounds()";
 
@@ -478,9 +526,9 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
 /// What it does **not** do is understand literals: a `//` inside a string blanks a real opening brace whose
 /// match is on a later line, and a brace inside a string, a character literal, or a block comment is counted as
 /// code. The extent then moves, and what that costs depends entirely on the comparison reading it — refusal for
-/// an exact equality, a silent pass for a count. Consumers that cannot detect their own truncation check
-/// [`EXTENT_AMBIGUITY`] before comparing; this function does not do it for them, because the safe answer is not
-/// the same for every reader.
+/// the exact one-statement equality below, a silent pass for a count-and-containment. A reader of that second
+/// kind existed and was retired; this function does not guard against the move on a caller's behalf, because
+/// the safe answer is not the same for every reader.
 fn mask_line_comment_braces(text: &str) -> String {
     let mut bytes = text.as_bytes().to_vec();
     let mut line_start = 0usize;
@@ -535,6 +583,12 @@ fn decline_reason(source: &Source, signature: &str) -> String {
     }
 }
 
+/// The brace-delimited body the unique occurrence of `signature` anchors, or `None` if none anchors it or more
+/// than one does.
+///
+/// Declining rather than taking the first is the point: an occurrence in a comment anchors exactly as well as a
+/// definition, so uniqueness is what makes the subject knowable, and the anchor scan therefore reads the whole
+/// source rather than [`Executed`].
 fn function_body(source: &Source, signature: &str) -> Option<Source> {
     let text = source.whole();
     // Braces are counted over the MASK and the body is sliced out of the original, which the mask's
