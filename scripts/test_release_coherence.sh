@@ -169,7 +169,8 @@ expect_pass "$breaking_with_migration" 'development: 0.2.0'
 # --- adopter narrative names no self-governance machinery ---
 #
 # `CHANGELOG.md` is the adopter's document and offered no heading that was not an adopter's vocabulary, so
-# eleven entries whose subject is a gate had been written under `### Added` / `### Changed` / `### Fixed`.
+# nineteen entries name that machinery — ten in `[Unreleased]` and nine in the released `[0.4.0]` — every one
+# of them under `### Added` / `### Changed` / `### Fixed`.
 # Every direction below asserts the exit CODE, and the pair 3/4 is what holds the rule to the enumerator
 # rather than to the `check_` prefix.
 

@@ -207,7 +207,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **71 bounds across 22 capabilities** — a live figure rather than part of the measurement
+  currently holds **75 bounds across 23 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -509,8 +509,9 @@ consumer for an undemonstrated deduplication.
 
 - **WATCH: the self-governance residual is a judgement over an entry's subject.** *Observed pressure:*
   `CHANGELOG.md` is the adopter's document and offered no heading that was not an adopter's vocabulary, so
-  eleven entries whose subject is a gate had been written under `### Added` / `### Changed` / `### Fixed`. The
-  rule that now refuses them reads an entry's **references** — a path under `scripts/`, or a basename
+  nineteen entries name that machinery — ten in `[Unreleased]` and nine in the released `[0.4.0]` — every one
+  of them under `### Added` / `### Changed` / `### Fixed`. The rule that now refuses them reads an entry's
+  **references** — a path under `scripts/`, or a basename
   `git ls-files scripts/` resolves — and an entry describing this repository's own governance while naming no
   such path stays invisible to it. *Observation source:* two live instances, not a hypothetical: after this
   window's move, `CHANGELOG.md:173` and `:337` both sit under adopter headings, both describe the bound

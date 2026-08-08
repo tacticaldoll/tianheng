@@ -407,8 +407,9 @@ $missing_migration"
 
 # `CHANGELOG.md` is the adopter's document, and every heading it offered — Added, Changed, Fixed, Migration —
 # is an adopter's vocabulary. It offered no heading that was not, so every change to this repository's own
-# machinery was written into one of them: eleven entries whose subject is a gate, in a directory that ships in
-# zero packages. `### Self-governance` is that missing heading, and this refuses the leak back into the others.
+# machinery was written into one of them: nineteen entries name it — ten in `[Unreleased]` and nine in the
+# released `[0.4.0]` — for a directory that ships in zero packages. `### Self-governance` is that missing
+# heading, and this refuses the leak back into the others.
 #
 # Adopter-facing is defined as the COMPLEMENT of that one heading rather than as a list of the four. A heading
 # nobody anticipated is then adopter-facing, which is the direction that reacts; enumerating the adopter set

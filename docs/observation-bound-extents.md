@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**27 of 71 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**30 of 75 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound` — owner: engine
@@ -23,6 +23,9 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound` — owner: engine
 - `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound` — owner: engine
 - `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound` — owner: inherited from the verification environment
+- `release-coherence/a-gate-named-as-bare-prose-a-stated-bound` — owner: engine
+- `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound` — owner: engine
+- `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound` — owner: engine
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
 - `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound` — owner: engine
 - `self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound` — owner: engine
@@ -100,7 +103,15 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: does not refuse
 - **pinned by**: `hunyi::a_cfg_gated_module_with_no_file_is_skipped_not_errored`
 
-## not a violation (3)
+## not a violation (4)
+
+### `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
+
+> an entry in a dated `## [X.Y.Z] - DATE` section naming a path under `scripts/`
+
+- **because**: a dated section records what was true at that release, so rewriting it to satisfy a rule written afterwards would falsify the record rather than repair it — the reason `docs/history/` is left alone; nine entries in the released `[0.4.0]` name a gate and are meant to keep doing so
+- **its defence must show**: does not react
+- **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
 
 ### `semantic-async-exposure-boundary/a-body-nested-module-is-a-stated-bound`
 
@@ -402,7 +413,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (27)
+## under-reacts (30)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -547,6 +558,30 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **because**: validity is verifiable with no configuration and attribution is not — it needs an allowed-signers file that exists on a maintainer's machine and not in CI, so requiring it would make the same tag judged differently by where the gate ran
 - **its defence must show**: does not react
 - **pinned by**: `a_valid_signature_from_an_unauthorized_key_is_accepted`
+
+### `release-coherence/a-gate-named-as-bare-prose-a-stated-bound`
+
+> an adopter-facing entry naming a gate as ordinary prose rather than as a backticked token
+
+- **because**: recognition is by token, so the leak the rule exists to stop passes unseen when the name is unquoted; widening to a bare substring would fire on any sentence carrying the characters, trading a declared blindness for an undeclared false-positive surface
+- **its defence must show**: does not react
+- **pinned by**: `a_gate_named_as_bare_prose_is_a_stated_bound`
+
+### `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound`
+
+> an adopter-facing entry whose subject is this repository's own governance and which names no path under `scripts/`
+
+- **because**: the rule reads an entry's REFERENCES, and this residual needs a judgement over its SUBJECT — the prose instrument this repository designed, measured three times and rejected. It is live rather than hypothetical: two entries of exactly this shape sit under adopter headings in the section this change edited
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *the self-governance residual is a judgement over an entry's subject*
+
+### `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound`
+
+> an adopter-facing entry naming a file under `scripts/` that the judged repository does not track
+
+- **because**: the enumeration is `git ls-files scripts/`, so an untracked `scripts/` reads as absent and a citation of it goes unseen; closing this means judging worktree content, which this repository's gates are held not to do — the larger error
+- **its defence must show**: does not react
+- **pinned by**: `machinery_tracked_by_nothing_is_a_stated_bound`
 
 ### `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound`
 

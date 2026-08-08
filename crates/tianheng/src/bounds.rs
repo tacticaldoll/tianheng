@@ -481,13 +481,13 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // run, and is unpinned for that reason rather than deferred.
         BoundDecl::pinned(
             BoundId::new(
-                "release-coherence/a-dated-release-section-naming-machinery-is-not-observed-a-stated-bound",
+                "release-coherence/a-dated-release-section-names-a-gate-a-stated-bound",
             ),
             "an entry in a dated `## [X.Y.Z] - DATE` section naming a path under `scripts/`",
             Extent::Reached(Reached::NotAViolation {
                 because: "a dated section records what was true at that release, so rewriting it to satisfy a \
                           rule written afterwards would falsify the record rather than repair it — the reason \
-                          `docs/history/` is left alone; five entries in the released `[0.4.0]` name a gate and \
+                          `docs/history/` is left alone; nine entries in the released `[0.4.0]` name a gate and \
                           are meant to keep doing so"
                     .into(),
             }),
@@ -495,7 +495,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "release-coherence/a-gate-named-as-bare-prose-is-not-observed-a-stated-bound",
+                "release-coherence/a-gate-named-as-bare-prose-a-stated-bound",
             ),
             "an adopter-facing entry naming a gate as ordinary prose rather than as a backticked token",
             Extent::Reached(Reached::UnderReacts {
@@ -509,7 +509,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "release-coherence/machinery-tracked-by-nothing-is-not-observed-a-stated-bound",
+                "release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound",
             ),
             "an adopter-facing entry naming a file under `scripts/` that the judged repository does not track",
             Extent::Reached(Reached::UnderReacts {
@@ -523,7 +523,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::unpinned(
             BoundId::new(
-                "release-coherence/an-adopter-entry-about-self-governance-naming-no-machinery-is-not-observed-a-stated-bound",
+                "release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound",
             ),
             "an adopter-facing entry whose subject is this repository's own governance and which names no path \
              under `scripts/`",

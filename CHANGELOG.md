@@ -758,9 +758,10 @@ no adopter runs. They are here rather than under the adopter headings above beca
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
 - **This heading exists, and `check_release_coherence.sh` refuses the leak back into the others.** `scripts/`
-  ships in zero packages — measured across all six members — yet eleven entries whose subject is a gate had been
-  written under `### Added` / `### Changed` / `### Fixed`, because the document offered no heading that was not
-  an adopter's vocabulary. An adopter reading `[Unreleased]` read about a file they can never run. The cost was
+  ships in zero packages — measured across all six members — yet nineteen entries name it, ten of them in
+  `[Unreleased]` and nine in the released `[0.4.0]`, every one under `### Added` / `### Changed` / `### Fixed`.
+  The document offered no heading that was not an adopter's vocabulary, so there was nowhere else for them to
+  go, and an adopter reading `[Unreleased]` read about a file they can never run. The cost was
   coupling: of the 51 commits in this window that touched `scripts/`, 40 were forced to also touch `openspec/`
   or this file, so a change to a script reaching no adopter was a four-file transaction — and prose is where
   this window's defects have been.
@@ -771,7 +772,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   `scripts/`, nor a bare basename `git ls-files scripts/` resolves — the enumerator rather than a list of gate
   names, so a new script cannot be added and never measured. Adopter-facing is the **complement** of this one
   heading, so a heading nobody anticipated reacts rather than being exempt by default. Dated sections are record
-  and stay untouched: `[0.4.0]`'s five entries of this shape are meant to keep naming what was true at 0.4.0.
+  and stay untouched: `[0.4.0]`'s nine entries of this shape are meant to keep naming what was true at 0.4.0.
 
   The first rule drafted was falsified before it was written down. *Cite no path that ships in no package*
   looked right until the citation population was enumerated: all fifteen paths this section cites ship in no

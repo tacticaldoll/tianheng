@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**12 of 71 declared bounds have no pinning test.** That figure is the register's
+**13 of 75 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -268,6 +268,32 @@ fallback used where no manifest exists, which the register spec describes.
 > the gate accepts it, a stated bound: validity is verifiable without configuration and **attribution is
 
 - **pinned by**: `a_valid_signature_from_an_unauthorized_key_is_accepted`
+
+## release-coherence
+
+### `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
+
+> nothing reacts. A dated section records what was true at that release, and rewriting it to
+
+- **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
+
+### `release-coherence/a-gate-named-as-bare-prose-a-stated-bound`
+
+> nothing reacts, and the leak the rule exists to stop passes unseen. Widening to a bare
+
+- **pinned by**: `a_gate_named_as_bare_prose_is_a_stated_bound`
+
+### `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound`
+
+> nothing reacts. The enumeration is `git ls-files scripts/`, so an untracked `scripts/` reads
+
+- **pinned by**: `machinery_tracked_by_nothing_is_a_stated_bound`
+
+### `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound`
+
+> nothing reacts. Reaching it needs a judgement over the entry's subject rather than over its
+
+- **unpinned**, tracked by: `BACKLOG.md` — *the self-governance residual is a judgement over an entry's subject*
 
 ## runtime-origin-assertion
 

@@ -95,11 +95,11 @@ fn gate(scripts: &Path, repo: &str) -> (Option<i32>, String) {
     )
 }
 
-/// `release-coherence/a-dated-release-section-naming-machinery-is-not-observed-a-stated-bound`
+/// `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
 ///
 /// `NotAViolation`. A dated section records what was true at that release; rewriting it to satisfy a rule
 /// written afterwards would falsify the record, which is why `docs/history/` is left alone too. The bound exists
-/// so a reader does not misread the silence as an escape — five entries in the released `[0.4.0]` name a gate
+/// so a reader does not misread the silence as an escape — nine entries in the released `[0.4.0]` name a gate
 /// and are meant to keep doing so.
 #[test]
 fn a_dated_section_naming_a_gate_is_a_stated_bound() {
@@ -144,7 +144,7 @@ EDIT
     );
 }
 
-/// `release-coherence/a-gate-named-as-bare-prose-is-not-observed-a-stated-bound`
+/// `release-coherence/a-gate-named-as-bare-prose-a-stated-bound`
 ///
 /// `UnderReacts`, owned by the engine. Recognition is by token — a backticked span — so an entry naming a gate
 /// as ordinary prose leaks exactly what the rule exists to stop and nothing reacts. Widening to a bare substring
@@ -187,7 +187,7 @@ fn a_gate_named_as_bare_prose_is_a_stated_bound() {
     );
 }
 
-/// `release-coherence/machinery-tracked-by-nothing-is-not-observed-a-stated-bound`
+/// `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound`
 ///
 /// `UnderReacts`, owned by the engine. The enumeration is `git ls-files scripts/`, so an untracked `scripts/`
 /// reads as absent and a citation of it goes unseen. Closing it means judging worktree content, which this
