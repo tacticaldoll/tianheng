@@ -180,11 +180,5 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: every example reacts as declared
-        # Each example under examples/ is its own workspace carrying a deliberate fault and the
-        # adopter's real published-version requirement form; the script patches the family to local source
-        # (the packaged-selftest idiom) and asserts each reaction — the dogfood does not rot.
         run: |
-          bash scripts/test_published_family_coverage.sh
-          bash scripts/test_example_quality_gate.sh
-          bash scripts/test_example_suite.sh
-          bash scripts/test_examples.sh
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test examples_suite

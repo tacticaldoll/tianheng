@@ -264,7 +264,7 @@ branch. `cargo publish` stamps the sha1 of whatever `HEAD` it ran on into every 
 from the moment it lands. An identical tree does not make a release branch's tip an acceptable
 source: cargo records the **commit**, not the content, and the commit it would record belongs to a
 branch the ritual archives. `bash scripts/publish.sh` is that path — it runs
-`scripts/check_publish_source.sh` (worktree clean; `HEAD` the `release: X.Y.Z` snapshot for the
+`crates/tianheng/tests/publish_source.rs` (worktree clean; `HEAD` the `release: X.Y.Z` snapshot for the
 workspace version; `vX.Y.Z` annotated, signed, and pointing at it; `HEAD` the live tip of
 `origin/main`, read from the remote rather than a possibly-stale `refs/remotes/`) and only then
 `cargo publish --workspace`. The gate reads `0` publishable, `1` wrong source, `2` cannot judge. The
@@ -282,7 +282,7 @@ convention. What each published version actually records, and the two mechanisms
 disagreements, is inventoried in
 [`docs/history/published-artifact-provenance.md`](docs/history/published-artifact-provenance.md).
 
-`bash scripts/check_release_coherence.sh` is the release-state reaction. During development it
+`TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test release_coherence` is the release-state reaction. During development it
 requires an adopter-facing `[Unreleased]` entry and aligned workspace/internal dependency versions,
 but deliberately tolerates historical lockfile drift. Once the workspace version moves forward for
 release preparation—and at the exact `release: X.Y.Z` snapshot—the dated CHANGELOG section,
@@ -317,21 +317,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --docu
 cargo deny check
 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test whitespace_hygiene
 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test reference_integrity
-TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test dod_coherence
-TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test release_coherence --test publish_source
-TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test bound_register --test pin_bites
-```
-                                           # warm-enumeration one above: the citations it speaks about are the
-                                           # register's, so a run over a surface the register has not accepted
-                                           # would report about nothing
-bash scripts/test_published_family_coverage.sh # prove the published-family ledger refuses: a family with no
-                                           # fulfilled owner, and an owner claiming a family the inventory does
-                                           # not list. This focused proof stays a top-level gate before the
-                                           # positive example driver, which does not recursively rerun it
-bash scripts/test_example_quality_gate.sh # prove a real isolated-workspace warning stops the gate before
-                                           # reaction acceptance
-bash scripts/test_example_suite.sh       # prove example ownership and invocation-local artifact cleanup
-bash scripts/test_examples.sh            # after those focused refusals, every dogfood example reacts as declared
+TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test examples_suite
 ```
 
 The self-governance gate (`self_governance.rs`, run under `cargo test`) and its projection
