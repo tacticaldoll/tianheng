@@ -304,14 +304,17 @@ of either the test or the reaction.
 
 A **mutation** SHALL be declared as four fields: the cited test name, a tracked path, a `from` substring, and a
 `to` substring. It SHALL be applied to a tree built from **tracked content**, never to the working directory,
-which is the same rule every gate in this family holds and here also keeps an interrupted run from having
-edited the author's files.
+which is the rule the register and the whitespace gate already hold — not a family-wide one, since the
+coherence gates read the worktree — and which here also keeps an interrupted run from having edited the
+author's files.
 
-The reaction SHALL build that tree with its **own target directory**. Reusing the repository's reports every
-pin as biting: cargo resolves the fingerprint against the sources the artifacts were first built from, so a
-mutated scratch tree runs a binary compiled from unmutated code and reports `Finished` in hundredths of a
-second. That is stated as a requirement rather than left to the implementation because it is the exact failure
-this requirement exists to end, arriving through the reaction meant to end it.
+The reaction SHALL build that tree with its **own target directory**. Cargo decides freshness by timestamp,
+and `git archive` stamps extracted files with the commit's time, so a tree sharing a warm target directory can
+have artifacts *newer* than the sources they were not built from: the mutated file is never recompiled, the run
+reports `Finished` in hundredths of a second, and the cited test passes because the binary is the unmutated one.
+Measured, twice, and both times the pin then reads as **surviving** its mutation — the reaction reports a
+violation over every record. That is the loud direction rather than a false clean, so the isolation is required
+for the gate to be usable rather than to close a hole; it costs one warm build.
 
 A `from` that occurs zero times or more than once in the named file SHALL be **cannot judge**, not a violation.
 The mutation could not be applied, which is a different fact from the pin not biting, and reporting the second
@@ -319,14 +322,32 @@ for the first lets a mutation whose anchor has rotted read as a pin that has bee
 anchor to be unique is the rule the observer protocol's body reader reached by the expensive route in the same
 window: an anchor matching twice names a set rather than a site.
 
-Mutation records and pinning citations SHALL be held against each other in **both** directions. A mutation
-naming a test no declared bound cites SHALL fail: it perturbs something this register makes no claim about, and
-its passing would read as coverage of a citation that does not exist.
+One direction of the record-to-citation relation SHALL react and the other SHALL be disclosed, and the
+difference is stated here so neither is read as the other. A mutation naming a test no declared bound cites
+SHALL fail: it perturbs something this register makes no claim about, and its passing would read as coverage of
+a citation that does not exist. A citation carrying no mutation SHALL NOT fail — that is the coverage this
+requirement admits is partial, below.
 
-Coverage SHALL be partial and SHALL say so. A clean run SHALL print how many citations carry no declared
-mutation, in the same shape the register already prints its figures and its projection already leads with the
-unpinned count. A gate that reported only the mutations it ran would be a reaction reading as coverage, which
-is this requirement's own subject one level up.
+A mutation whose tree does not **compile** SHALL be cannot judge, for the same reason as a rotted anchor: the
+perturbation was never exercised. `cargo test` exits non-zero for a compile error as well as for a failing
+assertion, so a reaction distinguishing them by status alone would read a broken build as a biting pin.
+
+A run SHALL also be required to have executed **exactly one** test. A filter matching nothing exits 0 having run
+nothing, which by status is indistinguishable from a pin that survived its mutation — measured here, where a lib
+test registers under its module path while the citation is the bare identifier.
+
+Coverage SHALL be partial and SHALL say so. A clean run SHALL print how many **distinct cited tests** carry no
+declared mutation. The population SHALL be named, because it is not the register's: the register counts
+*citations*, one per declaration, and blesses one test cited by two bounds in one capability, so an unqualified
+figure here would become the fifth answer that *A declared bound SHALL carry exactly one citation naming its
+defence* makes the register the arbiter of. Both sides of the remainder SHALL be counted over that same
+population; subtracting a record count from a name count made the disclosure read `-1`, measured. A gate that
+reported only the mutations it ran would be a reaction reading as coverage, which is this requirement's own
+subject one level up.
+
+What that leaves unobserved is declared as a bound below and tracked rather than pinned
+(bound: observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound): closing it
+is coverage, which grows one authored record at a time.
 
 #### Scenario: A pin that survives its declared mutation
 
@@ -353,14 +374,6 @@ is this requirement's own subject one level up.
 - **THEN** the reaction fails, because a mutation is an assertion about a defence and there is no defence here
   to assert about
 
-#### Scenario: The artifacts are reused from the unmutated tree
-
-- **WHEN** the mutated tree is built against a target directory whose artifacts were produced from other
-  sources
-- **THEN** the reaction fails to judge rather than reading the resulting pass as a biting pin — the arrangement
-  is measured to report every pin as biting, so the isolation is a stated property and not an implementation
-  preference
-
 #### Scenario: The uncovered remainder is disclosed on a clean run
 
 - **WHEN** every declared mutation kills its citation
@@ -370,8 +383,34 @@ is this requirement's own subject one level up.
 #### Scenario: The mutation set is empty
 
 - **WHEN** no mutation is declared at all
-- **THEN** the reaction fails, saying the set was empty, because every property of zero mutations holds and
-  reporting that as conformance is the vacuity direction this repository has re-opened most often
+- **THEN** the reaction refuses to judge, saying the set was empty, because every property of zero mutations
+  holds and reporting that as conformance is the vacuity direction this repository has re-opened most often
+
+#### Scenario: One records file read by two parsers
+
+- **WHEN** the set is counted by one splitting rule and processed by another
+- **THEN** the reaction reports clean over a file holding nothing to run — a records file whose only remaining
+  line was a TAB-indented comment counted as a declared mutation and was skipped as prose, exiting 0. The
+  records SHALL therefore be parsed **once**, and a line that is neither prose nor four TAB-separated fields
+  SHALL be cannot judge rather than skipped
+
+#### Scenario: A mutation that does not compile
+
+- **WHEN** the mutated tree fails to build
+- **THEN** the reaction refuses to judge, because `cargo test`'s non-zero status there reports a broken build
+  and not a test that failed
+
+#### Scenario: A filter that runs no test
+
+- **WHEN** the cited test's filter matches nothing and the harness exits 0 having run nothing
+- **THEN** the reaction refuses to judge rather than reading the exit status as a pin that survived
+
+#### Scenario: Whether a citation carrying no declared mutation is defended is not observed — a stated bound
+
+- **WHEN** a pinning citation declares no mutation
+- **THEN** the reaction does not decide whether that pin bites, and says how many such citations there are on
+  every clean run rather than leaving the gap to be inferred
+- **UNPINNED** `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
 ### Requirement: A bound stated in prose but not declared as a scenario SHALL fail
 

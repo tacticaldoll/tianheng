@@ -5,36 +5,43 @@
 #
 # `check_bound_register.sh` decides that a `PINNED-BY` citation names a test that RUNS — resolved to one
 # definition under `crates/`, carrying `#[test]`, registered by the harness. It does not decide that the test
-# BITES. Measured in the 0.5.0 window rather than supposed: replacing a cited pin's entire body with a binding
-# that asserts nothing left the suite at 16 passed and the register printing "60 pinning citations" clean.
+# BITES. Measured in this window rather than supposed: replacing a cited pin's entire body with a binding that
+# asserts nothing left the suite at 16 passed and the register printing its citation count clean.
 #
 # Biting is not decidable from text, and the register already records why for the easier question one level
 # down — a `cfg`-removed attribute, a definition trapped in an uninvoked macro, a definition inside a string or
 # a comment. Whether a test WOULD fail under a different reaction is a question about running a program. So
 # this gate runs the cited test against a mutated tree and reads its status.
 #
-# Three properties of the arrangement are load-bearing, each measured:
+# Four properties of the arrangement are load-bearing, each measured:
 #
-#   * The tree is built from `git archive HEAD` — TRACKED content, the same rule every gate in this family
-#     holds, and here it also keeps an interrupted run from having edited the author's files.
-#   * The build gets its OWN target directory. Reusing the repository's reports every pin as biting: cargo
-#     resolves the fingerprint against the sources the artifacts were first built from, so the mutated tree
-#     runs a binary compiled from unmutated code and reports `Finished` in 0.01s. A gate whose subject is a
-#     defence that is not defending would have been exactly that.
-#   * A mutation that breaks the BUILD is cannot-judge, never a dead pin. `cargo test` exits non-zero for a
-#     compile error too, and reading that as "the test failed, so the pin bites" is a false clean reached
-#     through the very reading this gate exists to replace. The build is therefore a separate step.
+#   * The tree is built from `git archive HEAD` — TRACKED content, the rule the register and the whitespace
+#     gate hold (the coherence gates read the worktree, so this is not a family-wide rule), and here it also
+#     keeps an interrupted run from having edited the author's files.
+#   * The build gets its OWN target directory. Cargo decides freshness by timestamp and `git archive` stamps
+#     extracted files with the commit's time, so a tree sharing a warm target directory can hold artifacts
+#     NEWER than the sources they were not built from: the mutated file is never recompiled, `Finished` comes
+#     back in 0.01s, and the cited test passes because the binary is the unmutated one. The pin then reads as
+#     SURVIVING — a violation reported over every record. That is loud rather than silent, so the isolation is
+#     what makes this gate usable; it costs one warm build.
+#   * A mutation that breaks the BUILD is cannot-judge. `cargo test` exits non-zero for a compile error as
+#     well as for a failing assertion, so the two are separated by building first. Note what this buys: the
+#     exit CLASS is already 2 without it, because `ran_exactly_one` refuses a run that executed no test — the
+#     separate build step buys the DIAGNOSTIC that names the compile error, which is the difference between an
+#     author fixing the record in a minute and hunting for it.
+#   * The records are parsed ONCE. Two readers over one file is how a set gets counted by one rule and
+#     processed by another; that shape produced a false negative here and is written up at the parser itself.
 #
 # Each record is also run UNMUTATED first. Without that control a test that fails for its own reasons reads as
 # a pin that bites, which is the `f() == f()` shape this repository refuses elsewhere.
 #
-# Coverage is partial by construction and says so: a clean run prints how many citations carry no mutation.
-# Authoring a mutation that genuinely perturbs the pinned point is expert work per bound, and a mutation that
-# misses reports a biting pin as a dead one — the safe direction, an author answers it with a better mutation.
-# A gate that reported only the mutations it ran, and stayed silent about the rest, would be the reads-as-
-# coverage failure this gate exists to end, one level up.
+# Coverage is partial by construction and says so: a clean run prints how many distinct cited tests carry no
+# mutation. Authoring a mutation that genuinely perturbs the pinned point is expert work per bound, and a
+# mutation that misses reports a biting pin as a dead one — the safe direction, an author answers it with a
+# better mutation. A gate that reported only the mutations it ran, and stayed silent about the rest, would be
+# the reads-as-coverage failure this gate exists to end, one level up.
 #
-# Exit 0 every declared mutation killed its pin, 1 a pin survived it, 2 cannot judge — the Core Contract.
+# Exit 0 every declared mutation killed its pin, 1 a record failed its half of the bargain, 2 cannot judge.
 set -Eeuo pipefail
 # The family's exit contract as a backstop — see `scripts/lib/exit_contract.sh` for what it catches, why it
 # is a trap rather than per-command handling, and the measurements behind both.
@@ -81,13 +88,39 @@ records=$work/records
 capture_or_refuse "the declared mutations in $RECORDS" "$records" cannot_judge \
     -- git show "HEAD:$RECORDS"
 
-declared=0
+# ONE parser, and the records are parsed ONCE into arrays the rest of this gate reads.
+#
+# Two readers over one file is how a set gets counted by one rule and processed by another. This gate had that
+# shape and it produced a false negative, measured on this repository: the vacuity guard read lines with
+# `IFS= read` while the record loop read them with `IFS=$'\t' read`, and TAB is IFS *whitespace*, so a
+# comment line indented with one TAB was counted as a declared mutation by the first and skipped as prose by
+# the second. A records file holding nothing to run reported `pin bites ok (0 declared mutations)` and exit 0 —
+# the one outcome the Core Contract forbids, in the gate whose whole subject is a defence that is not
+# defending. `check_whitespace_hygiene.sh` accepts a leading TAB, so nothing else stopped it being committed.
+#
+# The split is exact for the same reason: three TABs per record, no field collapsing, so a literal TAB inside a
+# substring is a loud refusal rather than a silent shift of the fields after it.
+#
 # `|| [[ -n $line ]]` keeps a final record that carries no trailing newline. Dropping it silently would be a
 # coverage loss reported as a clean run, which is this gate's own subject.
+names=()
+files=()
+froms=()
+tos=()
 while IFS= read -r line || [[ -n $line ]]; do
     [[ -n $line && ${line:0:1} != '#' ]] || continue
-    declared=$((declared + 1))
+    tabs=${line//[!$'\t']/}
+    ((${#tabs} == 3)) \
+        || cannot_judge "a record in $RECORDS carries ${#tabs} TAB(s) where a record is four TAB-separated fields (test, file, from, to). A literal TAB inside a substring must be written \\t, and a comment must open at column one — an indented \`#\` is a malformed record here, not prose, which is the safe reading of the two:
+$line"
+    rest=${line#*$'\t'}
+    names+=("${line%%$'\t'*}")
+    files+=("${rest%%$'\t'*}")
+    rest=${rest#*$'\t'}
+    froms+=("${rest%%$'\t'*}")
+    tos+=("${rest#*$'\t'}")
 done <"$records"
+declared=${#names[@]}
 
 ((declared > 0)) \
     || cannot_judge "$RECORDS declares no mutation; every property of zero mutations holds, and reporting that as conformance is the vacuity direction this repository has re-opened most often"
@@ -183,11 +216,16 @@ build_cited() {
     return "$outcome"
 }
 
-exercised=0
-while IFS=$'\t' read -r name file from to || [[ -n $name ]]; do
-    [[ -n $name && ${name:0:1} != '#' ]] || continue
-    [[ -n $file && -n $from && -n $to ]] \
-        || cannot_judge "the record for \`$name\` does not carry four TAB-separated fields (test, file, from, to)"
+covered=$work/covered
+: >"$covered"
+for index in "${!names[@]}"; do
+    name=${names[index]}
+    file=${files[index]}
+    from=${froms[index]}
+    to=${tos[index]}
+    # `to` may be empty — deleting the anchor is a legitimate perturbation. The other three may not.
+    [[ -n $name && -n $file && -n $from ]] \
+        || cannot_judge "a record carries an empty test name, path, or anchor: ${names[index]}"
 
     grep -Fxq "$name" "$citations.names" \
         || fail "the record for \`$name\` names a test no declared bound cites; a mutation is an assertion about a defence, and there is no defence here to assert about"
@@ -231,8 +269,9 @@ PY
         cannot_judge "the anchor for \`$name\` occurs $applied times in $file; zero and many are both a perturbation that was never applied, which is a different fact from the pin not biting"
     fi
 
-    # A mutation that breaks the build observed nothing. `cargo test` exits non-zero for a compile error too,
-    # and reading that as a dead-and-therefore-biting pin is the false clean this gate exists to refuse.
+    # A mutation that breaks the build observed nothing. The exit class here would be 2 in any case, since
+    # `ran_exactly_one` refuses a run that executed no test; what this step buys is the diagnostic naming the
+    # compile error rather than a report that nothing ran.
     if ! build_cited "${selector[@]}"; then
         cp "$work/original" "$tree/$file"
         cannot_judge "the mutation for \`$name\` does not compile, so the pin was never exercised:
@@ -249,9 +288,18 @@ $(tail -20 "$work/build.log")"
     $from
  -> $to"
 
-    exercised=$((exercised + 1))
-done <"$records"
+    printf '%s\n' "$name" >>"$covered"
+done
 
-printf 'pin bites ok (%d declared mutations, each killing the citation it names)\n' "$exercised"
-printf '  %d of %d pinning citations carry no mutation — a clean run here is not every pin having been exercised\n' \
-    "$((cited_total - exercised))" "$cited_total"
+# The remainder is over DISTINCT CITED TESTS, and says so, because that is the population this gate can act on
+# and it is not the register's. The register counts *citations* — one per `PINNED-BY` bullet — and blesses one
+# test cited by two bounds in one capability, so the two figures differ by design; printing an unqualified
+# "pinning citations" here made this gate a fifth answer to a question the register is the arbiter of, which
+# `observation-bound-register` says in as many words. Both sides are counted over the same set now: a record
+# names a test, several records may name one test, and covering a test twice cannot make the remainder
+# negative — it did, measured, when a record count was subtracted from a name count.
+covered_total=$(sort -u "$covered" | wc -l)
+printf 'pin bites ok (%d declared mutations over %d of %d distinct cited tests)\n' \
+    "$declared" "$covered_total" "$cited_total"
+printf '  %d distinct cited tests carry no mutation — a clean run here is not every pin having been exercised\n' \
+    "$((cited_total - covered_total))"

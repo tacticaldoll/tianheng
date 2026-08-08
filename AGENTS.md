@@ -349,9 +349,10 @@ bash scripts/check_pin_bites.sh         # every declared mutation kills the pinn
                                            # BITES, which is not a property of text — measured, a cited pin whose
                                            # whole body was replaced by a binding that asserts nothing left the
                                            # suite green and the register printing its citation count clean. It
-                                           # sits AFTER the register for the same reason those two do: the
-                                           # citations it speaks about are the register's, and a run here over a
-                                           # surface the register has not accepted would report about nothing
+                                           # sits AFTER the register, for a reason of its own rather than the
+                                           # warm-enumeration one above: the citations it speaks about are the
+                                           # register's, so a run over a surface the register has not accepted
+                                           # would report about nothing
 bash scripts/test_published_family_coverage.sh # prove the published-family ledger refuses: a family with no
                                            # fulfilled owner, and an owner claiming a family the inventory does
                                            # not list. This focused proof stays a top-level gate before the

@@ -70,10 +70,12 @@ consumer for an undemonstrated deduplication.
   *Risk:* a defence that has stopped defending is indistinguishable from one that has not, which is the failure
   the register was built to end one level down. *Promotion trigger:* fired — the gate exists; what remains is
   coverage, which grows one considered record at a time. *What closing it costs, measured while seeding:* a
-  mutation must genuinely perturb the pinned point, and authoring one is per-bound expert work. Two attempts
-  during this change did not perturb it — one masked a brace without changing the comparison's verdict, one
-  selected a cargo target the citation is not registered in — and each reported a biting pin as a dead one.
-  That direction is safe, and it is why coverage cannot be swept. *Version class:* not release-affecting; a
+  mutation must genuinely perturb the pinned point, and authoring one is per-bound expert work. One attempt
+  during this change did not — masking a brace inside a block comment left the exact one-statement comparison
+  refusing the body anyway, so the pin held and the record reported a biting pin as a dead one. That direction
+  is safe, and it is why coverage cannot be swept. (Two further failures that looked the same were gate defects,
+  not authoring cost: a lib test registering under its module path, and the cargo target derived from the
+  mutated file rather than from the test's definition. Both are fixed and neither recurs.) *Version class:* not release-affecting; a
   repository gate over this repository's own governance tests. *Authority:* `observation-bound-register`, whose
   added requirement states the obligation and the three arrangements that make it observable.
 
@@ -119,7 +121,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **60 bounds across 21 capabilities** — a live figure rather than part of the measurement
+  currently holds **61 bounds across 22 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is

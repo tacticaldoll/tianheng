@@ -143,6 +143,33 @@ empty=$(new_repo empty '# only prose
 ')
 expect_fail "$empty" 2 'declares no mutation'
 
+# The same file with its last prose line indented by a TAB, which the gate refuses as a malformed record
+# rather than reading as prose. This is not a cosmetic variant: it is the shape that defeated the guard above.
+# The vacuity count and the record loop were two readers with two splitting rules, and TAB is IFS whitespace —
+# so the line was a mutation to one and prose to the other, and a records file with nothing to run exited 0
+# saying `pin bites ok`. Whitespace hygiene accepts a leading TAB, so no sibling gate stood between that file
+# and a commit. One parser now answers both questions, and the answer here is a refusal.
+tab_prose=$(new_repo tab-prose '# only prose
+	# indented, and still prose
+')
+expect_fail "$tab_prose" 2 'a comment must open at column one'
+
+# A literal TAB inside a substring shifts every field after it. Refusing loudly beats splitting silently: the
+# record would otherwise describe a perturbation nobody wrote — measured on the unfixed parser, which shifted
+# `let`/`trimmed` into the path and anchor fields and applied nonsense. This direction guards the DIAGNOSTIC,
+# not the exit class: both parsers reach 2 here, the old one by failing to compile what it had mangled.
+literal_tab=$(new_repo literal-tab "$(printf 'a_continuation_line_is_not_recognized\tcrates/fixt/src/lib.rs\tlet\ttrimmed\tx')")
+expect_fail "$literal_tab" 2 'TAB'
+
+# --- the remainder is over a population, not over a record count ---
+
+# Two records may name one cited test; nothing forbids it and it is a normal thing to want. Counting records
+# against distinct names made the disclosure read `-1 of 1`, which is not a count of anything.
+two_records=$(new_repo two-records "$KILLS
+$(record '&& trimmed.contains("dyn ")' '|| trimmed.contains("dyn ")')")
+expect_pass "$two_records" '2 declared mutations over 1 of 1 distinct cited tests'
+expect_pass "$two_records" '0 distinct cited tests carry no mutation'
+
 # The gate judges tracked content, so a directory that is not a worktree is undecidable rather than clean.
 plain=$fixture_root/plain
 mkdir -p "$plain"

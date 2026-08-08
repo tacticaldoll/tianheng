@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**1 of 60 declared bounds have no pinning test.** That figure is the register's
+**2 of 61 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -170,6 +170,14 @@ fallback used where no manifest exists, which the register spec describes.
 > the model cannot express it, a stated bound: no declared bound exhibits the pair, and offering
 
 - **pinned by**: `granularity_is_carried_only_by_the_as_intended_extent`
+
+## observation-bound-register
+
+### `observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound`
+
+> the reaction does not decide whether that pin bites, and says how many such citations there are on
+
+- **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
 ## observer-protocol
 

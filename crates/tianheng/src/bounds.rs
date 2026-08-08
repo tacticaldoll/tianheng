@@ -132,6 +132,26 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *the shell's semantic delegation, held by construction*",
         ),
+        // --- observation-bound-register ---
+        //
+        // The register's own coverage bound, and the one place this crate declares a bound about the reaction
+        // that produces the register rather than about a dimension. `check_pin_bites.sh` decides that a
+        // citation's pin *bites* only where a mutation is declared for it; where none is, nothing decides.
+        BoundDecl::unpinned(
+            BoundId::new(
+                "observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound",
+            ),
+            "a pinning citation for which no mutation is declared",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the gate runs the mutations it is given and nothing else, so a citation with no \
+                          record is neither exercised nor refused; authoring a record that genuinely perturbs \
+                          the pinned point is per-bound work, which is why coverage is disclosed on every \
+                          clean run rather than implied"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
+        ),
         // --- gate-shape-contract ---
         //
         // Its reaction is `tests/gate_shape_contract.rs`, so this crate owns these too. The four are read out
