@@ -247,9 +247,10 @@ fn selector(tree: &Path, name: &str) -> Vec<String> {
             panic!("{path} is not under crates/<package>/, so the package to run `{name}` in is underivable")
         });
 
-    if let Some(rest) = path.strip_prefix(&format!("crates/{package}/tests/"))
-        && let Some(stem) = rest.strip_suffix(".rs")
-        && !stem.contains('/')
+    if let Some(stem) = path
+        .strip_prefix(&format!("crates/{package}/tests/"))
+        .and_then(|rest| rest.strip_suffix(".rs"))
+        .filter(|stem| !stem.contains('/'))
     {
         return vec![
             "-p".into(),

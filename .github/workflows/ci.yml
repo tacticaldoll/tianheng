@@ -30,6 +30,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The workspace suite now carries the release-coherence reaction, whose state classification
+          # follows the latest exact `release: X.Y.Z` commit. A shallow checkout cannot see that spine and
+          # the reaction refuses rather than masquerading as coherent — which is the contract working, and
+          # the reason this job needs the whole history.
+          fetch-depth: 0
       - name: the local Definition of Done matches what CI runs
         run: |
           TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test dod_coherence
@@ -63,6 +69,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - name: build and test on the declared minimum supported Rust version
         run: |
           msrv="$(cargo metadata --no-deps --format-version 1 \

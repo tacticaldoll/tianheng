@@ -655,9 +655,10 @@ fn no_hand_written_census_disagrees_with_the_register() {
             continue;
         };
         for (index, line) in text.lines().enumerate() {
-            if let Some((written_total, written_caps)) = pattern(line)
-                && (written_total != total || written_caps != capabilities.len())
-            {
+            if let Some((written_total, written_caps)) = pattern(line) {
+                if written_total == total && written_caps == capabilities.len() {
+                    continue;
+                }
                 offences.push(format!(
                     "  {path}:{} writes \"{written_total} bounds across {written_caps} capabilities\" where \
                      the register holds {total} across {} — a hand-written census of a set this reaction \

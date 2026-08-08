@@ -81,11 +81,13 @@ fn workspace_version(text: &str) -> Option<String> {
             inside = false;
             continue;
         }
-        if inside
-            && let Some(rest) = trimmed.strip_prefix("version")
-            && let Some(rest) = rest.trim_start().strip_prefix('=')
-        {
-            return Some(rest.trim().trim_matches('"').to_string());
+        if inside {
+            if let Some(rest) = trimmed
+                .strip_prefix("version")
+                .and_then(|rest| rest.trim_start().strip_prefix('='))
+            {
+                return Some(rest.trim().trim_matches('"').to_string());
+            }
         }
     }
     None
@@ -539,12 +541,10 @@ fn require_lock_versions(
             name.clear();
         } else if trimmed.starts_with("name") && trimmed.contains('=') {
             name = first_string_value(trimmed).unwrap_or_default();
-        } else if trimmed.starts_with("version")
-            && trimmed.contains('=')
-            && !name.is_empty()
-            && let Some(value) = first_string_value(trimmed)
-        {
-            versions.entry(name.clone()).or_insert(value);
+        } else if trimmed.starts_with("version") && trimmed.contains('=') && !name.is_empty() {
+            if let Some(value) = first_string_value(trimmed) {
+                versions.entry(name.clone()).or_insert(value);
+            }
         }
     }
     for (_, text) in manifests {

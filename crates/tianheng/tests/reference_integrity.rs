@@ -314,10 +314,10 @@ fn in_repository_references_resolve() {
                     // an example's README naming `tests/reaction.rs` means that example's — and against every
                     // workspace member after, which is how a governance document names one without repeating
                     // the crate.
-                    if let Some(home) = package_of(&files, rel_path)
-                        && holds(&files, &format!("{home}/{raw}"))
-                    {
-                        continue;
+                    if let Some(home) = package_of(&files, rel_path) {
+                        if holds(&files, &format!("{home}/{raw}")) {
+                            continue;
+                        }
                     }
                     if packages
                         .iter()
@@ -341,11 +341,12 @@ fn in_repository_references_resolve() {
                     // a doc comment or a test — `crates/foo/src/lib.rs` — and reading it as a dangling
                     // reference would make every example of the shape an offence. The rule needs the member
                     // set, which is why an empty one refuses above.
-                    if let Some(rest) = raw.strip_prefix("crates/")
-                        && let Some(name) = rest.split('/').next()
-                        && !members.iter().any(|m| m == name)
-                    {
-                        continue;
+                    if let Some(rest) = raw.strip_prefix("crates/") {
+                        if let Some(name) = rest.split('/').next() {
+                            if !members.iter().any(|m| m == name) {
+                                continue;
+                            }
+                        }
                     }
                     // And a repository path named INSIDE test code, which builds the shapes it judges: a
                     // fixture repository's `scripts/…` or `examples/…` exists in that fixture and nowhere

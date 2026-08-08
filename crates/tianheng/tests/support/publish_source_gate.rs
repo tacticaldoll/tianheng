@@ -67,10 +67,12 @@ fn workspace_version(repo: &Path) -> Option<String> {
             in_package = trimmed == "[workspace.package]" || trimmed == "[package]";
             continue;
         }
-        if in_package && let Some(rest) = trimmed.strip_prefix("version") {
-            let rest = rest.trim_start();
-            if let Some(rest) = rest.strip_prefix('=') {
-                return Some(rest.trim().trim_matches('"').to_string());
+        if in_package {
+            if let Some(rest) = trimmed.strip_prefix("version") {
+                let rest = rest.trim_start();
+                if let Some(rest) = rest.strip_prefix('=') {
+                    return Some(rest.trim().trim_matches('"').to_string());
+                }
             }
         }
     }
@@ -307,10 +309,10 @@ fn sign_probe(key: &Path, scratch: &Path) -> bool {
     // The payload must reach stdin before the child is waited on. Spawning and waiting immediately closes
     // stdin at once, so `ssh-keygen` signs the EMPTY payload and the round trip then fails against "probe" —
     // reporting the mechanism broken when only the harness was.
-    if let Some(stdin) = child.stdin.as_mut()
-        && stdin.write_all(b"probe").is_err()
-    {
-        return false;
+    if let Some(stdin) = child.stdin.as_mut() {
+        if stdin.write_all(b"probe").is_err() {
+            return false;
+        }
     }
     drop(child.stdin.take());
     let Ok(out) = child.wait_with_output() else {
