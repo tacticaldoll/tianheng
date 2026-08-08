@@ -606,6 +606,27 @@ them.
   dependency **requirement** moves.
 
 ### Fixed
+
+- **A dimension's dependency allowlist could name a sibling and nothing reacted** — 三儀 ⊥ 三儀 quoted in the
+  `because` while the allowlist beneath it permitted the opposite. Reproduced: widening `guibiao`'s allowlist to
+  name `hunyi` left **every** test binary in this workspace green, and `AGENTS.self-law.md` regenerated to print
+  `only: serde_json, xuanji, xingbiao, hunyi` directly beneath the reason that forbids it. Neither reaction a
+  reader would expect to catch it can: the staleness check pins the projection against the *declaration*, so a
+  blessed projection of a widened allowlist is **fresh** — and freshness is not truth — while the dependency
+  reaction cannot fire on a *widened* allowlist, because permitting more than the tree uses produces no
+  violation. The reaction now asserts membership beside the clause, names the sibling it found, and
+  `self-law-projection` states why that assertion is the sole guard. The clause check's own limit is unchanged
+  and still limited, with the limits now **stated rather than assumed**: paraphrasing the clause makes the
+  reaction *fire* (an over-reaction, refusing a reason that states the law), while a `because` carrying the
+  literal clause and *negating* it passes — so the projection can teach the negation. Both were measured by
+  writing them into the tree, neither is a declared bound yet, and `BACKLOG.md` carries them with two
+  enumeration limits of the membership half. Declaring any of them waits for a pin that runs **the reaction
+  over a declaration** rather than its predicate over a string: a draft of this change declared the first as a
+  false *negative* and pinned it with the predicate, and one run of the bound's own WHEN falsified both.
+
+  Found by three withdrawn attempts at one `PROJECT.md` paragraph, the third of which tried to stop restating
+  the law and **cite** the generated projection instead. Review showed the citation bought freshness rather than
+  truth. The paragraph kept coming out wrong because the law it described was only half reacted to.
 - **The source-shape reaction over the shell's composition body is retired, and the obligation it claimed is
   now a declared, unpinned bound.** It read the characters of one function body while the requirement is about
   what the shell *does*. Four review rounds narrowed it and each narrowing was defeated: by name resolution (a

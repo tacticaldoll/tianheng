@@ -484,6 +484,28 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **WATCH: four limits of the mutual-independence reaction, each measured, none declared.** *Observed
+  pressure:* closing the membership half of `三儀 ⊥ 三儀` exposed four more, all reproduced by writing them into
+  the tree rather than argued about. **Wording, over-reacting:** paraphrasing `guibiao`'s clause makes the
+  reaction fire — it refuses a reason that genuinely states the law. **Wording, under-reacting:** a `because`
+  carrying the literal clause while *negating* it passes, and `AGENTS.self-law.md` then teaches the negation to
+  every agent that loads it. **Enumeration, the dimension list:** `DIMENSIONS` is a hand-kept literal beside an
+  enumerable set, and the set-coverage assertion cannot notice an omission because `found` is produced by
+  filtering on `expected` — removing `guibiao` from the literal leaves a `guibiao` allowlist naming `hunyi`
+  green. **Enumeration, the rule variant:** the filter admits only `RestrictDependenciesTo`, so a second
+  boundary using `restrict_workspace_dependencies_to` — the more natural rule for this law — is never examined.
+  *Observation source:* those four perturbations, run during review of
+  `change/mutual-independence-reacts-to-membership`. *Current reaction or bound:* none of the four; the
+  reaction's doc comment and `self-law-projection` state them where a reader meets them. *Risk:* the second is
+  the serious one — the agent-facing projection can teach the negation of the law it quotes. *Promotion
+  trigger:* fired for the second; the others are recorded with it because they are one reaction's limits and
+  closing them separately would re-open the same file four times. *Version class:* patch; a `tests/` reaction of
+  this repository. *Authority:* `self-law-projection`. *Shape:* declaring any of them needs a pin that runs
+  **the reaction over a declaration**, not its predicate over a string — a draft declared the first as a false
+  *negative* and pinned it with the predicate, and one run of the bound's own WHEN falsified both the extent and
+  the pin. That means factoring the assertion loop to take a supplied `Constitution`, which is the actual work
+  here and is why this is a record rather than a fifth attempt inside the change that found them.
+
 - **WATCH: a rejected observation point is recorded only in prose, and prose reaches no agent at the moment of
   temptation.** *Observed pressure:* rejections of whole detectors and approaches are scattered across doc
   comments, `AGENTS.md`, `BACKLOG.md` and spec prose in several non-overlapping phrasings, with nothing

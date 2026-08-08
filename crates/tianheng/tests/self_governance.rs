@@ -52,9 +52,11 @@ fn workspace_manifest() -> Option<PathBuf> {
 /// (漏刻), never via a sibling. Depending on a shared base beneath the dimensions is not a
 /// cross-dimension edge; 三儀 ⊥ 三儀 forbids only dimension-to-dimension dependence. This
 /// law is **named here and in each dimension's `because`**, and a reaction —
-/// [`dimension_boundaries_declare_the_mutual_independence_law`] — asserts that every dimension
-/// boundary carries the clause, so the claim is *self-observed*, not a hand-maintained pointer
-/// that could drift (the declaration-integrity pattern: replace a prose index with a reaction).
+/// [`dimension_boundaries_declare_the_mutual_independence_law`] — asserts both that every
+/// dimension boundary carries the clause and that its allowlist **obeys** it, so the claim is
+/// *self-observed* rather than a hand-maintained pointer that could drift (the
+/// declaration-integrity pattern: replace a prose index with a reaction). The second half was
+/// added after a widened allowlist naming a sibling was measured green everywhere.
 /// A constitution reader and the 垂象 report both see the intent. It adds **no separate
 /// boundary on purpose: a dimension's `restrict_dependencies_to` allowlist names no sibling
 /// dimension, so a cross-dimension dependency already reacts. A `forbid_dependency_on`
@@ -467,12 +469,26 @@ fn self_law_projection_is_fresh() {
 /// `(boundaries 2, 3, 6)` prose index it replaces would instead have silently rotted (the exact
 /// class of the off-by-one it retires).
 ///
-/// Stated bound: the predicate observes the `because` **text** (a `contains` check), weaker than a
-/// structural fact — a reworded clause would slip it. It still reacts to the real drift (a
-/// dimension boundary losing the law), which a hand-maintained pointer could not.
+/// Two statements, and only one of them was here. The `because` **text** is observed by a `contains` check;
+/// what was missing is the other statement — that the allowlist itself **obeys** the clause it quotes.
+///
+/// The text half has two limits, both measured by writing them into the tree rather than argued about, and
+/// **neither is a declared bound**; `BACKLOG.md` carries them. Paraphrasing `guibiao`'s clause makes this
+/// reaction **fire** — an over-reaction, a refusal of a reason that genuinely states the law. A `because` that
+/// carries the literal clause while *negating* it passes, and the projection then teaches the negation — the
+/// under-reaction. A draft of this change declared the first as a false NEGATIVE, which one run of its own WHEN
+/// falsified: a bound's extent is read off that run, never off the argument for it. Widening
+/// `guibiao`'s allowlist to name `hunyi` left every test binary in this workspace green, with
+/// `AGENTS.self-law.md` printing the sibling directly beneath the reason that forbids it. Freshness pinned the
+/// projection against the declaration; nothing pinned the declaration against its own law.
 #[test]
 fn dimension_boundaries_declare_the_mutual_independence_law() {
     const CLAUSE: &str = "三儀 ⊥ 三儀";
+    // A hand-kept list beside an enumerable set: a dimension born and not added here has its allowlist
+    // unchecked, and the set-coverage assertion below cannot notice, because `found` is produced by filtering
+    // on `expected`. Measured — removing `guibiao` from this literal leaves a `guibiao` allowlist naming
+    // `hunyi` green. Nor does the filter reach `restrict_workspace_dependencies_to`, which is the more natural
+    // rule for this law. `BACKLOG.md` carries both; neither is a declared bound.
     const DIMENSIONS: [&str; 3] = ["guibiao", "hunyi", "louke"];
 
     let constitution = tianheng_constitution();
@@ -516,6 +532,31 @@ fn dimension_boundaries_declare_the_mutual_independence_law() {
             "dimension boundary for `{}` dropped the `{CLAUSE}` clause from its because — \
              the cross-cutting law is no longer self-declared at that dimension",
             cb.target().package
+        );
+
+        // The clause in the `because` said the law; this asserts the ALLOWLIST obeys it, which is a
+        // different statement and was the missing one. Reproduced before adding it: widening `guibiao`'s
+        // allowlist to name `hunyi` left every one of this workspace's test binaries green, and
+        // `AGENTS.self-law.md` regenerated to print `only: serde_json, xuanji, xingbiao, hunyi`
+        // directly beneath the reason that says no sibling is named. Freshness pinned projection against
+        // declaration; nothing pinned the declaration against the law it quotes.
+        //
+        // `tianheng_governs_itself` cannot backstop this either: a WIDENED allowlist permits more than
+        // the tree does, so no dependency violation appears and the reaction stays clean.
+        let target = cb.target().package.as_str();
+        let Rule::RestrictDependenciesTo { allowed, .. } = cb.rule() else {
+            unreachable!("the filter above selected only restrict-dependencies rules");
+        };
+        let siblings: Vec<&str> = allowed
+            .iter()
+            .map(String::as_str)
+            .filter(|name| DIMENSIONS.contains(name) && *name != target)
+            .collect();
+        assert!(
+            siblings.is_empty(),
+            "`{target}`'s allowlist names sibling dimension(s) {siblings:?}, so the boundary permits \
+             exactly what `{CLAUSE}` forbids — a dimension must never learn from a sibling, and its \
+             own `because` says so two lines above the allowlist that now allows it"
         );
     }
 }

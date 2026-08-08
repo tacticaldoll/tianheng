@@ -4,7 +4,7 @@
 `restrict_dependencies_to` boundary quotes it in its `because`, and a reaction asserts the quote is there.
 
 **Nothing asserted that the allowlist obeys it.** Reproduced: widening `guibiao`'s allowlist to name `hunyi`
-left every test binary in this workspace green, and `AGENTS.self-law.md` regenerated to print
+left every reaction in this workspace green — 49 `test result: ok` lines across 34 test binaries and 6 doc-test targets, 0 failures, and `AGENTS.self-law.md` regenerated to print
 `only: serde_json, xuanji, xingbiao, hunyi` directly beneath the reason that forbids it.
 
 Neither reaction a reader would expect to catch it can. The staleness check pins projection against

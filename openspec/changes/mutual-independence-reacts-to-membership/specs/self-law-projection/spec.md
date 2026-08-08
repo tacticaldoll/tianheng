@@ -17,8 +17,17 @@ the dependency reaction cannot fire on a **widened** allowlist, because permitti
 produces no violation. So this assertion is the sole guard, which is why it is a requirement rather than an
 implementation detail.
 
-The clause check SHALL remain, and its own limit stays declared: it observes the `because` **text**, so a
-reworded clause slips it. Membership is the structural half; wording is the half that is not.
+The clause check SHALL remain. Its limits are **stated and not yet declared as bounds**, and the requirement says
+which is which rather than leaving a reader to assume: paraphrasing the clause makes the reaction **fire**, an
+over-reaction refusing a reason that genuinely states the law; a `because` carrying the literal clause while
+*negating* it passes, and the projection then teaches the negation, which is the under-reaction. Both were
+measured by writing them into the tree. Declaring either SHALL wait for a pin that runs **the reaction over a
+declaration**, not its predicate over a string — a draft of this change declared the first as a false negative
+and pinned it with the predicate, and one run of the bound's own WHEN falsified both the extent and the pin.
+`BACKLOG.md` carries them meanwhile, together with the two enumeration limits of the membership half: a
+hand-kept dimension list nothing holds, and a rule variant the filter does not reach.
+
+Membership is the structural half; wording is the half that is not.
 
 #### Scenario: A dimension's allowlist names a sibling
 
