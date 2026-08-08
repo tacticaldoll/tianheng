@@ -757,6 +757,14 @@ no adopter runs. They are here rather than under the adopter headings above beca
   register's own diagnostic, and on its matrix's expected-output literals; widening the corpus to `scripts/`
   false-positives on the fixture censuses that matrix writes deliberately; and the one instance that occurred in a
   code doc was spelled in words. Most numbers here describe a *shape*, not a census.
+- **The class that produced three withdrawn attempts is recorded, and it grew when the paragraph landed.**
+  `PROJECT.md` restates architectural facts the generated projection already carries, and states others —
+  locations, counts — that nothing carries. `check_reference_integrity.sh` holds that a cited path exists and
+  is tracked; nothing holds that the thing described lives there, which is exactly the half a withdrawn
+  attempt got wrong. Closing the crate question added **five** more location claims to that file, so the
+  entry is filed larger than the branch it came from filed it, not smaller. Its trigger is a claim found
+  false *after* filing — the three found before are the control and cannot be evidence for themselves.
+
 - **The crate question about the three governance surfaces is closed, and `PROJECT.md` says why.** It had been
   left open by one sentence — *crate-or-convention as their nature dictates* — which answered nothing and was
   consulted three times; all three answers were withdrawn, each restating a law that was then only half reacted
