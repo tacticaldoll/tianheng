@@ -507,6 +507,27 @@ consumer for an undemonstrated deduplication.
   which kept a measured false negative out of the register a reader is told to consult before calling a
   behaviour a defect. All four are declared unpinned against this entry now.
 
+- **WATCH: the self-governance residual is a judgement over an entry's subject.** *Observed pressure:*
+  `CHANGELOG.md` is the adopter's document and offered no heading that was not an adopter's vocabulary, so
+  eleven entries whose subject is a gate had been written under `### Added` / `### Changed` / `### Fixed`. The
+  rule that now refuses them reads an entry's **references** — a path under `scripts/`, or a basename
+  `git ls-files scripts/` resolves — and an entry describing this repository's own governance while naming no
+  such path stays invisible to it. *Observation source:* two live instances, not a hypothetical: after this
+  window's move, `CHANGELOG.md:173` and `:337` both sit under adopter headings, both describe the bound
+  register's own behaviour, and both name nothing the enumerator resolves. *Current reaction or bound:*
+  declared unpinned as
+  `release-coherence/an-adopter-entry-about-self-governance-naming-no-machinery-is-not-observed-a-stated-bound`;
+  the three limits that *do* have a mechanical WHEN are pinned in `tests/release_coherence.rs`. *Risk:* low and
+  one-directional — the adopter reads a paragraph about housekeeping, never a wrong claim about what they get.
+  *Promotion trigger:* an entry of this shape carrying a claim an adopter could act on, or a count of them
+  passing what a reader will skim. **Not fired**: two, both plainly about internals. *Version class:* patch; a
+  document and a `scripts/` reaction of this repository. *Authority:* `release-coherence`. *Shape:* closing it
+  needs a judgement over the entry's **subject** rather than its references, which is the prose detector
+  `AGENTS.md` records as designed, measured three times and rejected — so the honest shape of this entry is a
+  standing decision not to build it, revisited only if the trigger fires. *Risk of the alternative:* widening
+  the matcher toward the subject — heading keywords, phrase lists — trades a declared, bounded blindness for an
+  undeclared false-positive surface, which is the wrong direction under the Core Contract.
+
 - **WATCH: a rejected observation point is recorded only in prose, and prose reaches no agent at the moment of
   temptation.** *Observed pressure:* rejections of whole detectors and approaches are scattered across doc
   comments, `AGENTS.md`, `BACKLOG.md` and spec prose in several non-overlapping phrasings, with nothing

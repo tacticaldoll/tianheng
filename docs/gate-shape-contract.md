@@ -58,6 +58,7 @@ Shell units under `scripts/` that are neither a gate nor a twin. None may carry 
 contract — a unit that does is a gate wearing another name, and the reaction refuses it:
 
 - `scripts/lib/capture.sh`
+- `scripts/lib/coherence_fixture.sh`
 - `scripts/lib/example_quality.sh`
 - `scripts/lib/example_suite.sh`
 - `scripts/lib/exit_contract.sh`
@@ -69,4 +70,4 @@ contract — a unit that does is a gate wearing another name, and the reaction r
 - `scripts/test_examples.sh`
 - `scripts/test_published_family_coverage.sh`
 
-11 units.
+12 units.

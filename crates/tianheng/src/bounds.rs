@@ -471,5 +471,71 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_comment_naming_every_member_for_another_reason_is_refused",
         ),
+        // --- release-coherence: the adopter-narrative rule's four limits ---
+        //
+        // Its reaction is a shell gate, and `PINNED-BY` resolves only a harness-registered Rust function — so
+        // three of these cite `tests/release_coherence.rs`, a file that exists for them. The twin defends each
+        // of the three too, through the same fixture builder, and cannot be cited.
+        //
+        // Every extent below is read off a run of that limit's own WHEN. The fourth has no mechanical WHEN to
+        // run, and is unpinned for that reason rather than deferred.
+        BoundDecl::pinned(
+            BoundId::new(
+                "release-coherence/a-dated-release-section-naming-machinery-is-not-observed-a-stated-bound",
+            ),
+            "an entry in a dated `## [X.Y.Z] - DATE` section naming a path under `scripts/`",
+            Extent::Reached(Reached::NotAViolation {
+                because: "a dated section records what was true at that release, so rewriting it to satisfy a \
+                          rule written afterwards would falsify the record rather than repair it — the reason \
+                          `docs/history/` is left alone; five entries in the released `[0.4.0]` name a gate and \
+                          are meant to keep doing so"
+                    .into(),
+            }),
+            "a_dated_section_naming_a_gate_is_a_stated_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "release-coherence/a-gate-named-as-bare-prose-is-not-observed-a-stated-bound",
+            ),
+            "an adopter-facing entry naming a gate as ordinary prose rather than as a backticked token",
+            Extent::Reached(Reached::UnderReacts {
+                because: "recognition is by token, so the leak the rule exists to stop passes unseen when the \
+                          name is unquoted; widening to a bare substring would fire on any sentence carrying \
+                          the characters, trading a declared blindness for an undeclared false-positive surface"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_gate_named_as_bare_prose_is_a_stated_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "release-coherence/machinery-tracked-by-nothing-is-not-observed-a-stated-bound",
+            ),
+            "an adopter-facing entry naming a file under `scripts/` that the judged repository does not track",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the enumeration is `git ls-files scripts/`, so an untracked `scripts/` reads as \
+                          absent and a citation of it goes unseen; closing this means judging worktree content, \
+                          which this repository's gates are held not to do — the larger error"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "machinery_tracked_by_nothing_is_a_stated_bound",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
+                "release-coherence/an-adopter-entry-about-self-governance-naming-no-machinery-is-not-observed-a-stated-bound",
+            ),
+            "an adopter-facing entry whose subject is this repository's own governance and which names no path \
+             under `scripts/`",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the rule reads an entry's REFERENCES, and this residual needs a judgement over its \
+                          SUBJECT — the prose instrument this repository designed, measured three times and \
+                          rejected. It is live rather than hypothetical: two entries of exactly this shape sit \
+                          under adopter headings in the section this change edited"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *the self-governance residual is a judgement over an entry's subject*",
+        ),
     ]
 }

@@ -60,13 +60,23 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
   alone. The blindness is the scope, deliberately chosen and pinned rather than inferred
 - **PINNED-BY** `a_dated_section_naming_a_gate_is_a_stated_bound`
 
-#### Scenario: An unquoted basename in prose — a stated bound
+#### Scenario: A gate named as bare prose — a stated bound
 
-- **WHEN** an entry under an adopter-facing heading names a gate as bare prose rather than as a token
-- **THEN** nothing reacts. Recognition is by token, so widening to bare prose would match any sentence
-  that happens to contain the characters; the declared blindness is narrower than the false-positive
-  surface the widening would open
-- **PINNED-BY** `an_unquoted_basename_in_prose_is_a_stated_bound`
+- **WHEN** an entry under an adopter-facing heading names a gate as ordinary prose rather than as a
+  backticked token
+- **THEN** nothing reacts, and the leak the rule exists to stop passes unseen. Widening to a bare
+  substring would fire on any sentence carrying the characters, trading a declared blindness for an
+  undeclared false-positive surface
+- **PINNED-BY** `a_gate_named_as_bare_prose_is_a_stated_bound`
+
+#### Scenario: Machinery the judged repository tracks by nothing — a stated bound
+
+- **WHEN** an entry under an adopter-facing heading names a file under `scripts/` that exists in the
+  worktree and in no commit
+- **THEN** nothing reacts. The enumeration is `git ls-files scripts/`, so an untracked `scripts/` reads
+  as absent; closing this means judging worktree content, which this repository's gates are held not to
+  do — the larger error, so the blindness is declared instead
+- **PINNED-BY** `machinery_tracked_by_nothing_is_a_stated_bound`
 
 #### Scenario: An entry about self-governance that names no machinery — a stated bound
 
@@ -78,8 +88,17 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
   blindness for an undeclared false-positive surface
 - **UNPINNED** `BACKLOG.md` — *the self-governance residual is a judgement over an entry's subject*
 
-#### Scenario: The citation shape cannot be read
+#### Scenario: The enumeration cannot be read
 
-- **WHEN** the enumeration of tracked files under `scripts/` cannot be read
-- **THEN** the reaction refuses to judge rather than reporting every entry clean against an empty
-  enumerator, which is the vacuity direction
+- **WHEN** `git ls-files scripts/` fails rather than returning nothing
+- **THEN** the reaction refuses to judge, because a failed read is not an empty result and treating it
+  as one reports a verdict over content that was never read
+
+#### Scenario: A repository tracking no machinery at all
+
+- **WHEN** the enumeration succeeds and names no file, and an entry under an adopter-facing heading
+  names a path under `scripts/`
+- **THEN** the reaction is clean, because a repository tracking no machinery has nothing an entry could
+  leak — and it SHALL reach that verdict by having nothing to match. Keying the parser on the record
+  number rather than on the input file makes an empty enumeration consume the changelog itself, after
+  which the section vacuity guard refuses a document the reaction never read
