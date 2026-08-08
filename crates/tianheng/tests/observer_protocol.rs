@@ -11,6 +11,10 @@
 //! file still observes for them is that the fixture's boundary in each reacts at all — an arm that went vacuous
 //! would otherwise leave the whole comparison resting on one dimension.
 //!
+//! Construction-held **equality** is not a construction-held delegation, and the two are one word apart. That
+//! the shell honours its obligation to leave semantic decisions to 渾儀 is still unobserved and still a
+//! declared bound: a guard deciding emptiness above the invocation compiles and passes everything here.
+//!
 //! Some of the properties below hold **by construction**, and each says which reaction stands in for the
 //! comparison that would be inert. That is deliberate, and the alternative was worse: an assertion that cannot
 //! fail reads exactly like a guarantee.

@@ -203,12 +203,13 @@ fn evaluate_constitution(
         check_and_cover(constitution.static_boundaries(), manifest_path);
     let mut outcome = static_outcome;
     if !matches!(outcome, Outcome::ConstitutionError(_)) {
-        // **Delegated, not restated**, the route the runtime arm below already takes. This arm called 渾儀's
-        // composed entry point directly, which is what `SemanticObserver::observe` does — so the two paths
-        // agreed only while nobody put a decision in between them, and `observer-protocol` declared that gap
-        // as a bound after a text reader over this body was defeated at every level it could be narrowed to.
-        // This path now IS the observer for this dimension, so there is no second site to disagree with; the
-        // cost is one clone of the declared bundle per run, paid deliberately.
+        // The built-in path obtains this dimension's outcome BY INVOKING its observer, which is what makes the
+        // two composition paths' equality construction-held here rather than measured. Note what it is not:
+        // unlike the runtime arm below — which held its own copy of 漏刻's corpus derivation, audit call and
+        // `cannot read workspace` message until delegation collapsed the three — this arm always called the
+        // one implementation `SemanticObserver::observe` calls. Nothing was deduplicated, and a guard deciding
+        // emptiness above this line still compiles and passes every gate. `observer-protocol` keeps its bound
+        // on that. The cost is one clone of the declared bundle per run, paid deliberately.
         outcome = merge_outcomes(
             outcome,
             SemanticObserver::new(constitution.semantic_boundaries().clone())

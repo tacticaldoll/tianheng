@@ -22,23 +22,6 @@ them.
 
 ## [Unreleased]
 
-### Changed
-- **The shell's semantic arm now invokes `SemanticObserver` instead of calling 渾儀's composed entry point
-  beside it.** The obligation — that every semantic composition path has one behaviour owner — was declared as
-  an unpinned bound one change earlier, after a source-shape reaction over the shell's composition body was
-  defeated at every level it could be narrowed to and retired. It is closed by construction now rather than by
-  a sixth reader: the two calls are one call, so there is no second site in which a shell-local decision could
-  sit. That is the route the runtime arm already took, and it costs one clone of the declared bundle per run,
-  the same price `to_vec` pays there. `observer-protocol` states it as a construction in requirement prose,
-  because a scenario asserting it could not fail, and the semantic dimension joins runtime in the
-  construction-held list — with the reaction still observing that the fixture's boundary in each reacts at all,
-  so an arm that quietly went vacuous cannot leave the comparison resting on the others. The **static**
-  dimension is unaffected and its equality is still measured: the built-in path calls `check_and_cover`, whose
-  coverage advisory the protocol cannot carry, while the observer calls `check`.
-
-  No adopter action. `check_constitution` and `run` return what they returned; `SemanticObserver::observe` is
-  `check_all` and always was, so the verdict for every declaration is unchanged.
-
 ### Documentation
 - Giving each bound in `external-crate-confinement`'s overview its own `(bound: …)` reference created a hole,
   and a review proved it with a fixture. A `(bound: …)` reference was only ever resolved through a bound-prose
@@ -200,7 +183,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **64 bounds across 22 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **65 bounds across 22 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
@@ -249,6 +232,26 @@ them.
   copy of it.
 
 ### Changed
+- **The shell's semantic arm now invokes `SemanticObserver` instead of calling 渾儀's composed entry point
+  beside it.** What that buys is stated exactly, because review measured the looser claim false. It makes the
+  two composition paths' **equality** for the semantic dimension construction-held — the built-in path obtains
+  that outcome by invoking the dimension's observer, so there is no second call for a verdict to differ at, and
+  the dimension joins runtime in the construction-held list. It does **not** close the delegation obligation:
+  a guard deciding semantic emptiness above that call compiles, passes the whole suite and passes every gate,
+  so `observer-protocol`'s bound on it stays declared and its `BACKLOG.md` entry stays open. The runtime arm's
+  delegation was a different case and is not a precedent for this one — that arm held a second implementation
+  of the corpus derivation, the audit call and the `cannot read workspace` message, which delegating collapsed
+  into one, whereas the semantic arm always had one implementation with two callers.
+
+  The requirement gains what keeps a construction-held dimension honest: the reaction SHALL still observe that
+  the fixture's boundary for it **reacts at all**, so an arm that quietly went vacuous cannot leave the whole
+  comparison resting on the dimensions that did not. Verified by perturbation — emptying the semantic
+  observer's verdict fails that assertion by name. The **static** dimension is unaffected and its equality is
+  still measured: the built-in path calls `check_and_cover`, whose coverage advisory the protocol cannot carry,
+  while the observer calls `check`, and emptying *its* verdict fails the equality assert itself.
+
+  No adopter action. `check_constitution` and `run` return what they returned; `SemanticObserver::observe` is
+  `check_all` and always was, so the verdict for every declaration is unchanged.
 - The `tianheng` shell no longer declares an unused direct normal dependency on `xingbiao`;
   its enforced self-law now limits the shell to the three dimensions it composes plus
   `serde_json`. Dimension crates continue to use the shared metadata substrate unchanged.

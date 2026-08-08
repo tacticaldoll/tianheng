@@ -105,16 +105,22 @@ never-invoked `macro_rules!`, or placed in a conditionally-called closure satisf
 shell decides for itself. It also cost two false-positive classes, one of them fired by `rustfmt` reformatting a
 conforming body.
 
-Retiring it was the honest disposition rather than a fifth narrowing, and the gap it left is **closed by
-construction** rather than by a sixth reader. The shell's semantic arm invokes `SemanticObserver` instead of
-calling the composed entry point beside it, so the two are one call rather than two agreeing ones and there is
-no second site in which a shell-local decision could sit — the route the runtime arm already took. What a text
-reader could still have said truthfully is narrow — that the body reaches its constitution only through the
-declared accessors — and that was never the obligation.
+Retiring it was the honest disposition rather than a fifth narrowing. What remains true of a text reader is
+narrow — that the body reaches its constitution only through the declared accessors — and that is not the
+obligation.
 
-The property therefore stands where the equality does: stated as a construction in this requirement rather
-than as a scenario, because a scenario asserting it could not fail. The cost is one clone of the declared
-bundle per run, the same price the runtime arm pays for its `to_vec`.
+The shell's semantic arm now **invokes `SemanticObserver`** rather than calling the composed entry point beside
+it, and what that buys SHALL be stated exactly, because the same words used loosely turn a constructed property
+into a claimed one. It makes the two paths' **equality** for this dimension construction-held: the built-in
+path obtains the semantic outcome by invoking that dimension's observer, so there is no second call for a
+verdict to differ at. It does **not** make an independent shell decision unwritable — a guard above that call
+compiles, passes the whole suite, and passes every gate, measured — so the delegation obligation itself remains
+unobserved and stays declared below. The runtime arm's delegation is *not* the same case and this SHALL not be
+read as it: that arm held a second implementation of the corpus derivation, the audit call and the
+`cannot read workspace` message, and delegation collapsed three copies into one. Here there was one
+implementation with two callers, and there is now one caller.
+
+The cost is one clone of the declared bundle per run, the same price the runtime arm pays for its `to_vec`.
 
 #### Scenario: Empty semantic boundaries through the public semantic entry point
 
@@ -125,6 +131,19 @@ bundle per run, the same price the runtime arm pays for its `to_vec`.
 
 - **WHEN** a semantic observer has no boundaries and receives a path that cannot be read
 - **THEN** it returns `Clean` by delegating to the public semantic entry point
+
+#### Scenario: Whether the shell makes an independent semantic decision is not observed — a stated bound
+
+- **WHEN** the shell's composition arm decides semantic emptiness itself instead of leaving the decision to the
+  observer it invokes
+- **THEN** nothing reacts — a stated bound, and a declared false negative this repository owns. A text reader
+  over the composition body was built, hardened across four review rounds and defeated at every level: name
+  resolution, the parameter's binding site, the identity of the definition, the caller frame, and execution,
+  which no reading of text reaches at all. Invoking the observer made the two paths' *equality* construction-held
+  and left this untouched: a guard written above that call compiles, passes the whole suite, and passes every
+  gate — measured on the tree that invokes the observer, not on the one that did not. The bound carries no
+  pinning test because there is no reaction left to demonstrate a gap in; it is tracked instead
+- **UNPINNED** `BACKLOG.md` — *the shell's semantic delegation, held by construction*
 
 ### Requirement: The built-in path SHALL keep its behaviour, and the two paths SHALL be held equal
 
