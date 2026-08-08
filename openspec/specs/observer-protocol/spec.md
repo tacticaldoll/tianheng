@@ -182,7 +182,11 @@ method SHALL be located by a **unique occurrence** of its signature in the sourc
 otherwise. An earlier rule required the signature to begin a trimmed line, which bought only the exclusion of a
 mid-line mention: a whole-line copy inside a block comment anchors exactly as well as the definition, and a decoy
 conforming copy above a divergent method let the equality pass on text that was not the method — measured.
-Counting occurrences excludes the mid-line mention too, as a second occurrence. And a **trailing comment** on the delegation SHALL be
+Counting occurrences does **not** subsume the mid-line mention, and the reaction SHALL require both
+conditions rather than either. A source that mentions the signature only in prose and never defines it has
+exactly one occurrence, so a count-only rule admits it, anchors in the prose, and returns the next function's
+body as this method's — measured. Each rule refuses what the other admits, and requiring both only ever
+declines more, which is this reader's declared error direction. And a **trailing comment** on the delegation SHALL be
 prose, not a second list: the region discipline this family already holds says a comment is never executed text,
 and the reaction that judges a shell gate's own text strips one before comparing for exactly this reason.
 The reaction SHALL apply Rust line-comment semantics to the inspected body: a `//` line is prose, while a Rust
@@ -190,7 +194,13 @@ attribute beginning with `#` remains executed Rust text.
 
 Where the built-in path obtains a dimension's outcome **by invoking that dimension's observer**, equality for
 that dimension holds **by construction rather than by observation**, and the spec SHALL say which dimensions
-those are — otherwise a reader takes a constructed equality for a measured one. The **runtime** and
+those are — otherwise a reader takes a constructed equality for a measured one. **Nothing observes that this
+list is correct**, and this window is the evidence: the list named runtime alone, the shell's semantic arm
+changed under it, and the list was repaired by hand rather than by a reaction. It is a membership claim about a
+set with an enumerator, which is the shape this family refuses everywhere else, and it is declared as a bound
+below rather than left implied. A reaction is conceivable but not textual — whether a dimension's equality is
+construction-held is decidable by *perturbing* that dimension's observer and seeing whether the equality assert
+or only the reacts-at-all assert fails, which needs a mutated build rather than a read. The **runtime** and
 **semantic** dimensions are such cases: the built-in path invokes `RuntimeObserver` and `SemanticObserver`, so
 for runtime its two copies of those three statements — the corpus derivation, the audit call and the
 `cannot read workspace` message — become one, and for semantic there is no second call at which the two
@@ -202,6 +212,17 @@ obligation, which is a different property with a bound of its own. The
 Where a dimension's equality is construction-held, the reaction SHALL still observe that the fixture's boundary
 for that dimension **reacts at all**. Otherwise an arm that quietly went vacuous would leave the whole
 comparison resting on the dimensions that did not.
+
+#### Scenario: Whether the stated construction-held list matches the composition path is not observed — a stated bound
+
+- **WHEN** the list of construction-held dimensions in this requirement names a different set than the built-in
+  path's actual observer invocations
+- **THEN** nothing reacts. The list is hand-maintained prose about a set the code enumerates, and falsifying it
+  passes the whole suite and every gate — measured. Deciding it needs a perturbed build, not a read: an
+  independently-implemented dimension fails the equality assert when its observer is emptied, a
+  construction-held one fails only the reacts-at-all assert, and no in-process reaction can apply that
+  perturbation to itself
+- **UNPINNED** `BACKLOG.md` — *the construction-held list is hand-maintained prose*
 
 #### Scenario: The trait-driven fold disagrees with the existing path
 

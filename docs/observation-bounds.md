@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**6 of 65 declared bounds have no pinning test.** That figure is the register's
+**7 of 66 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -210,6 +210,12 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing reacts — a stated bound, and a declared false negative this repository owns. A text reader
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the shell's semantic delegation, held by construction*
+
+### `observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound`
+
+> nothing reacts. The list is hand-maintained prose about a set the code enumerates, and falsifying it
+
+- **unpinned**, tracked by: `BACKLOG.md` — *the construction-held list is hand-maintained prose*
 
 ### `observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound`
 

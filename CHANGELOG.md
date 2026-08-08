@@ -125,7 +125,8 @@ them.
   one outcome the Core Contract forbids.
 - `guibiao`, `hunyi`, and `louke` now expose the same observation-bound and observer vocabulary
   from each dimension root: `BoundDecl`, `BoundId`, `Defence`, `Demonstrates`, `Extent`,
-  `FactGranularity`, `Observer`, `Outcome`, `Owner`, and `Reached`. A standalone-dimension adopter
+  `FactGranularity`, `Observer`, `Owner`, and `Reached` — beside `Outcome`, which each root already
+  re-exported. A standalone-dimension adopter
   no longer needs a direct `xuanji` dependency merely to name the protocol its dimension exposes.
 - The crates.io publish now runs through a source gate (`scripts/check_publish_source.sh`, reached via
   `scripts/publish.sh`) that refuses any source other than the signed-and-annotated-tagged
@@ -183,8 +184,10 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **65 bounds across 22 capabilities**, generated from the specs and staleness-checked, with
-  the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
+  closing the gap. Generated from the specs and staleness-checked, it leads with the count of bounds nothing
+  yet defends rather than burying it — and the count itself is deliberately not repeated here. The register's
+  census reaction greps every tracked Markdown file against what it holds **now**, with no exemption for a
+  released section, so a figure frozen into this entry would fail that gate the first time the register grows. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
   had defended. The list is a **floor rather than a proof**, and the projection's own header enumerates every
@@ -456,7 +459,9 @@ them.
   build compiles none of — among them two declared false negatives owned by the engine — while the composite-shape
   bound describes the always-present origin derivation on the hot path. So an audit-OFF dependent read **six**
   declared bounds for a reaction its build did not contain, and the accessor's own doc comment was false in that
-  configuration. **Adopter-visible only under a non-default feature**: such a dependent now reads one, and the
+  configuration. **No adopter reads six**: `louke::observation_bounds` is absent at `v0.4.0`, so the six were an intra-window
+  state and this is a correction rather than a change anyone upgrades through. Under the non-default feature an
+  audit-OFF dependent now reads one, and the
   `tianheng` shell enables `audit`, so nothing changes for the composed entry. The defect arrived through the
   *export* rather than through a declaration, which is why no reaction saw it — the bijection runs with
   `--all-features` — and `observation-bound-model` now carries the rule: where a reaction is behind a Cargo
@@ -550,6 +555,18 @@ them.
   explains the shape; a release note written from an unreleased baseline would describe an upgrade nobody
   performs.*
 
+### Migration
+- **Regenerate any recorded baseline.** The operand-scoped `dyn`/`impl Trait` boundaries now resolve a **bare**
+  principal trait the governed module itself declares, which closes a false negative and therefore adds
+  findings: run `tianheng check --write-baseline <file>` wherever a baseline is kept, and re-apply any
+  `owner` / `tracker` annotations onto the newly observed facts. Only those two rules are affected —
+  signature-coupling, forbidden-marker, trait-impl locality, and unsafe confinement resolve through a different
+  entry point and are unchanged.
+- **Nothing else requires action.** Every other entry in this release either adds a surface absent at `v0.4.0`
+  (the observation-bound vocabulary, the three concrete observers, `Run`, each dimension's
+  `observation_bounds()`), corrects a repository-internal reaction that ships in no crate, or is documentation.
+  No manifest, feature, `rust-version`, or dependency requirement moves.
+
 ### Fixed
 - **The source-shape reaction over the shell's composition body is retired, and the obligation it claimed is
   now a declared, unpinned bound.** It read the characters of one function body while the requirement is about
@@ -575,8 +592,10 @@ them.
 - The same decoy defeated the **bounds-method** reader, whose bound records the moved extent as *over-reacting*
   and therefore safe. A commented-out conforming copy above a divergent `bounds()` made the exact one-statement
   equality pass on text that was not the method — the safe direction inverted by the anchor rather than by an
-  in-body brace. Both readers share the recognizer, so both are repaired, and each pins the decoy separately
-  because the claim being defended is each reader's own error direction.
+  in-body brace. Both readers used the recognizer, so the repair covered both — and the delegation reader was
+  retired in this same window, so what remains is the bounds-method reader and the one decoy pin that defends it.
+  The pin sits with that reader rather than with the recognizer because the claim being defended is the reader's
+  own error direction.
 - **A bound was typed for the harmless one of its two readers.**
   `a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent` recorded the moved extent as
   *over-reacting*, read off the bounds-method comparison, where an exact one-statement equality cannot survive a
@@ -584,7 +603,7 @@ them.
   that survives one intact, and the rationale was never re-derived against it — leaving a bound on the safe side
   of the false-negative line describing a reader on the unsafe side, which reads as permission. The
   over-reaction survives on the bounds-method comparison, which is the reader it was read off; the second reader
-  was retired rather than given a bound of its own (see the entry above). No adopter action:
+  was retired rather than given a bound of its own (see the retirement entry in this section). No adopter action:
   `tianheng::observation_bounds()` is absent at `v0.4.0`, so no identity here has ever shipped.
 - `docs/observation-bound-extents.md` asserted that **refuses to judge** carried no bound while rendering one
   under that heading two sections below. The claim was a literal in the generator's template, which is the one

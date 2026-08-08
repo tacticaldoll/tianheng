@@ -10,7 +10,9 @@
 # requirements are unwatched here and were found by removing their guards and watching this matrix stay green:
 # that a record's path be TRACKED (only the containment half is pinned, by `escaping`), and that the checkout
 # carry a working repository (swapping it for an export of tracked content changes nothing below). Both
-# refusals work — each was driven from a fixture by hand — but neither is defended here.
+# refusals work — each was driven from a fixture by hand — but neither is defended here. A third is in the
+# same state and was found the same way: that an enumeration of citations yielding none refuses loudly, which
+# the READ carries — giving its `capture_or_refuse` an `--ordinary-empty 1` leaves this matrix green.
 #
 # The fixtures are minimal cargo workspaces rather than checkouts of this one, and that is the point of the
 # shape: the gate under test builds what it judges, so a fixture carrying this repository's dependency graph

@@ -378,9 +378,42 @@ fn a_brace_in_a_block_comment_moves_the_body_extent() {
     );
 }
 
+/// A signature that only ever appears as a **mention** anchors nothing, even when it appears exactly once.
+///
+/// Occurrence counting alone admits this: one occurrence, in a comment, with the definition absent because the
+/// impl moved to another file. The anchor lands in the prose, the next `{` belongs to whatever follows, and its
+/// body is returned as this method's. The line-start rule the count replaced declined it — so the two rules
+/// each admit what the other refuses, and [`function_body`] requires both.
+///
+/// The control is the same mention beside a real definition, which must still read: requiring both conditions
+/// must decline more, not decline everything.
+#[test]
+fn a_signature_that_is_only_ever_mentioned_anchors_nothing() {
+    let mention_only = Source::of(
+        "// the array points here, but the impl for `fn bounds(` moved away\nfn other() -> u8 { 0 }\n",
+    );
+    assert_eq!(
+        anchor_count(&mention_only, "fn bounds("),
+        1,
+        "the fixture is the hard case precisely because the count rule admits it"
+    );
+    assert!(
+        function_body(&mention_only, "fn bounds(").is_none(),
+        "a lone mid-line mention with no definition must decline, not read the next function's body"
+    );
+
+    let defined_beside_a_mention =
+        Source::of("fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n");
+    assert!(
+        function_body(&defined_beside_a_mention, "fn bounds(").is_some(),
+        "and the ordinary definition still reads, so requiring both conditions declines more rather than \
+         declining everything"
+    );
+}
+
 /// The bounds-method reader declines an ambiguous anchor too, and its safe direction depends on that.
 ///
-/// Both readers share [`function_body`], so both inherited the decoy hole — and for this one the consequence
+/// The reader that survives and the one this window retired both used [`function_body`], so both inherited the decoy hole — and for this one the consequence
 /// was sharper: its bound records the moved extent as *over-reacting*, safe because an exact one-statement
 /// equality refuses a conforming body. A decoy copy inverts that. The extent becomes the decoy's conforming
 /// body while the real method holds a second, divergent list, and the equality then passes on text that is not
@@ -609,14 +642,29 @@ fn function_body(source: &Source, signature: &str) -> Option<Source> {
     // `pub(crate) fn …` stops it anchoring while the commented copy still does, leaving one candidate that is
     // not the subject. Both measured end-to-end, on both readers of this recognizer.
     //
-    // Counting occurrences catches both directions and subsumes the mid-line mention, so no carve-out for
-    // which mentions could have anchored is needed — an earlier attempt stated one and stated it wrongly.
-    // Every delimiter that made a wrong extent wrong sits OUTSIDE that extent, where no in-body scan reaches,
-    // which is why this half cannot be recovered by checking the body once read.
+    // Counting occurrences catches both of those directions. It does NOT subsume the mid-line mention, and
+    // saying it did was wrong in the unsafe direction: a source that mentions the signature only inside a
+    // comment and never defines it has exactly ONE occurrence, so the count admits it, the anchor lands in the
+    // prose, and the next `{` belongs to some other function — whose body is then returned as this method's.
+    // The line-start rule declined that. Measured on `// … \`fn bounds(\` moved away` beside an unrelated
+    // `fn other() -> u8 { 0 }`, which the count rule alone reads as ` 0 `.
+    //
+    // So both conditions are required, not either: exactly one occurrence AND that occurrence beginning a
+    // trimmed line. Each rules out what the other admits — the count refuses a decoy whole-line copy and a
+    // definition spelled `pub(crate) fn …` beside one, the line start refuses an anchor that is only ever a
+    // mention. Requiring both only ever DECLINES more, which is this reader's declared error direction.
     if text.matches(signature).count() != 1 {
         return None;
     }
     let signature = text.find(signature)?;
+    if !text[..signature]
+        .rsplit_once('\n')
+        .map_or(&text[..signature], |(_, last)| last)
+        .trim()
+        .is_empty()
+    {
+        return None;
+    }
     let open = signature + masked[signature..].find('{')?;
     let mut depth = 0usize;
     let mut close = None;

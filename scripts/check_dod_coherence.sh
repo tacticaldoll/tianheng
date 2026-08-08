@@ -26,7 +26,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/exit_contract.sh"
 exit_contract_backstop 'dod coherence'
 
 # The repository to judge, so the failure matrix can build throwaway fixtures rather than being able to test
-# only this checkout — the same argument the other four gates take, for the same reason: a gate that cannot be
+# only this checkout — the same argument every sibling gate takes, for the same reason: a gate that cannot be
 # pointed at a fixture cannot have its refusals proven.
 cd "${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 

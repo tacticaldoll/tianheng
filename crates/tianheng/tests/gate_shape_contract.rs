@@ -345,7 +345,7 @@ fn read(root: &Path, relative: &str) -> Source {
 ///
 /// Not [`Source::header`], which cuts at the first `##` heading — that is a Markdown document's shape. A gate's
 /// self-description ends where its execution begins, and the region types carry the document rule because that is
-/// the one four documents share.
+/// the one every registered generated document shares.
 fn gate_header(gate: &Source) -> &str {
     let text = gate.whole();
     match text.find("\nset -") {
@@ -629,7 +629,7 @@ fn holds_both_directions(twin: &Source) -> bool {
 /// Property 7 — the twin asserts the judged repository is unchanged.
 ///
 /// Recognized by the refusal's own word in executed text. The comparison itself cannot be recognized
-/// mechanically — the six twins compare a `git status` porcelain listing, a `HEAD`, a tag list and a `find`
+/// mechanically — the twins compare a `git status` porcelain listing, a `HEAD`, a tag list and a `find`
 /// walk in four combinations — so what is required is the authored diagnostic, on the same ownership
 /// argument as property 6.
 fn asserts_read_only(twin: &Source) -> bool {
