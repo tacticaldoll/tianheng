@@ -484,6 +484,32 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **WATCH: `PROJECT.md` restates facts a generated projection already holds, and states others nothing
+  holds.** *Observed pressure:* three consecutive attempts at one paragraph were withdrawn, all failing the
+  same way — asserting a location or an absence without sweeping for it. Classifying that file's claims
+  against the generated projections splits them in two. The **architectural** ones are already carried:
+  which crates exist, what each may depend on, that no dimension names a sibling — all projected from
+  `tianheng_constitution()` into `AGENTS.self-law.md` and staleness-checked, and since
+  `mutual-independence-reacts-to-membership` the last of those is asserted rather than merely projected.
+  Two classes are carried by nothing: a **location** claim, the class that falsified the second attempt, and
+  a **count**. *Observation source:* that classification, run against the projections and the file on
+  2026-08-08. Not a census — the named instances are examples found by sampling claim-shaped lines, not an
+  enumeration. *Current reaction or bound:* half of one. `check_reference_integrity.sh` holds that a cited
+  path **exists and is tracked**; nothing holds that the thing described lives there, which is the half the
+  withdrawn attempt got wrong. *Risk:* the class that produced three withdrawn attempts, in the document
+  `AGENTS.md` names as the contract — and it **grew** when the paragraph finally landed:
+  `three-offices-are-vocabulary-not-crates` added five location claims to that file
+  (`crates/guibiao/src/projection.rs`, `crates/tianheng/src/runner/render.rs`,
+  `crates/xuanji/src/baseline.rs`, `.github/CODEOWNERS`, `crates/tianheng/src/constitution.rs`), each
+  path-checked and none content-checked. Filing this entry as a smaller problem than before would have been
+  the comfortable reading and the false one. *Promotion trigger:* a claim in `PROJECT.md` about the tree
+  found false **after** this entry — the three found before it are the control and cannot stand as evidence
+  for themselves. **Not fired.** *Version class:* not release-affecting. *Authority:* `projection-register`,
+  which already enumerates the documents a claim could cite, and `self-law-projection`, which owns the one
+  carrying the architecture. *Shape, if it fires:* not a detector over prose — that instrument was measured
+  three times and rejected. The reachable direction is to make more of what the file asserts **citable**, so
+  that restating is the strictly worse-looking option at the moment of writing.
+
 - **WATCH: four limits of the mutual-independence reaction, each measured and each declared.** *Observed
   pressure:* closing the membership half of `三儀 ⊥ 三儀` exposed four more, all reproduced by writing them into
   the tree rather than argued about. **Wording, over-reacting:** paraphrasing `guibiao`'s clause makes the
