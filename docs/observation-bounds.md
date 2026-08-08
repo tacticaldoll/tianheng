@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**0 of 61 declared bounds have no pinning test.** That figure is the register's
+**1 of 60 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -173,17 +173,11 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## observer-protocol
 
-### `observer-protocol/the-composition-body-carries-a-delimiter-that-can-move-the-read-extent-a-stated-bound`
+### `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound`
 
-> the reaction refuses to judge, naming the delimiter — a stated bound.
+> nothing reacts — a stated bound, and a declared false negative this repository owns. A text reader
 
-- **pinned by**: `an_ambiguous_delegation_extent_is_refused_rather_than_judged`
-
-### `observer-protocol/a-reach-that-is-not-a-spelling-in-the-composition-body-is-not-observed-a-stated-bound`
-
-> the reaction reports a conforming delegation — a stated bound. Each was measured end-to-end against
-
-- **pinned by**: `a_reach_that_is_not_a_spelling_in_the_body_is_not_observed`
+- **unpinned**, tracked by: `BACKLOG.md` — *the shell's semantic delegation, held by construction*
 
 ### `observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound`
 

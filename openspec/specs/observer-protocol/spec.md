@@ -94,90 +94,22 @@ reading the manifest. The shell and `SemanticObserver` SHALL delegate both empty
 to that entry point rather than maintaining independent empty-boundary guards, so every semantic composition
 path has one behavior owner.
 
-The repository reaction SHALL inspect the executed body of the shell's `evaluate_constitution` composition
-function, and SHALL hold it to an **allowlist**: every use of the `constitution` parameter in that body SHALL be
-one of the three declared owners — the static, semantic and runtime boundary accessors — and each SHALL appear
-exactly once. Any other reach for the constitution SHALL fail rather than be treated as delegation. A missing
-function SHALL be declined rather than failed, together with an ambiguous anchor, because neither is a statement
-about the body.
+**Whether the shell honours that is not observed, and the source-shape reaction that claimed to observe it is
+retired.** It read the characters of one function body; the obligation is about what the shell *does*. Four
+review rounds narrowed it and each narrowing was defeated: by resolution (a `use` shadowing the entry point's
+name, with the body byte-identical), by the binding site (the parameter renamed, or a second one added — the
+parameter list is outside the read extent), by which definition is the subject (a raw identifier, leaving a
+commented copy as the only signature occurrence), by the caller frame (the guard moved into `check_constitution`),
+and — the group no widening reaches — by **execution**: a delegation bound to `let _`, written inside a
+never-invoked `macro_rules!`, or placed in a conditionally-called closure satisfies every textual rule while the
+shell decides for itself. It also cost two false-positive classes, one of them fired by `rustfmt` reformatting a
+conforming body.
 
-**What the reaction observes is characters in one function body, and the requirement is wider than that.** The
-allowlist below closes every *spelling* of a reach for the constitution, which is a real and complete closure of
-that family. It does not reach the family beneath it — name resolution, the parameter's binding site, which
-definition is the subject, and the caller frame all sit outside the extent, and each was measured to let a
-divergent shell pass. That residual is declared as a bound rather than left implied, because a requirement whose
-reaction cannot deliver it reads as delivered.
-
-**The allowlist is what makes the spelling family's prohibition complete.** Counting reaches for the semantic boundaries was a
-denylist over spellings, and spellings are an open set: a rebinding, an associated-function call, a reborrow, a
-wrapper function, a trait method under another name, a macro, and — naming no accessor at all — a direct read of
-the private `semantic` field, which a descendant module of the crate root may simply do. Each was measured
-accepted, each was closed by its own patch, and the next was always one review away. Permitting three uses and
-refusing the complement closes all of them at once: within the body, an escape must avoid naming the parameter,
-and a body that never names it has nothing to decide with. That last clause is true only *within the body* — the
-parameter can be renamed or a second one added, and the binding site is outside the extent, which is the bound
-declared above rather than a hole in the allowlist. This is the shape the family's own dependency law already
-takes, and the reason is the same: the forbidden set is not enumerated, it is what is left.
-
-Its cost SHALL be treated as intended rather than incidental. A fourth dimension, or any other legitimate reach
-for the constitution, fails here until it is admitted — which is the amendment discipline this repository wants
-for exactly that change.
-
-The semantic owner SHALL additionally be the direct argument to 渾儀's own public entry point, matched with a
-left token boundary. A bare containment accepted any path *ending* in that call, so a wrapper module could stand
-between the shell and the dimension while the reaction reported a direct delegation.
-
-The reaction SHALL distinguish a body that does not delegate from a body it could not read. **Two** conditions
-make the text unsafe to judge and SHALL be refused; the rules after them narrow what is read, and their outcome
-is a verdict rather than a refusal.
-
-A read that finds no opening brace after the anchor, or braces that never balance, SHALL decline on the same
-terms — the reaction has not seen a body, so it makes no statement about one, and the diagnostic SHALL say which
-of these it met rather than reporting every decline as an anchor problem.
-
-**The anchor SHALL be unique, counted over occurrences.** The signature SHALL appear on exactly one line of the
-source, wherever it sits, and the read SHALL decline otherwise. Requiring the anchor to *begin* a line only ruled
-out a mid-line mention; it never made the definition findable, and a decoy exploits the gap from the other side —
-write the real definition as `pub(crate) fn …` and it stops anchoring while a commented copy still does, leaving
-one candidate that is not the subject. Measured end-to-end on both readers. Counting occurrences catches the
-decoy from either direction and subsumes the mid-line mention, so no carve-out for which mentions could have
-anchored is needed — an earlier attempt stated one and stated it wrongly.
-
-**An extent carrying a literal or comment delimiter SHALL be refused.** The extent is found by counting braces,
-and a string literal, a character literal, or a block comment inside the body moves it; where the extent carries
-`"`, `'`, or `/*` in executed code, the reaction SHALL refuse. A moved extent is not self-detecting: the
-comparison sees only what survives the cut, so a use past it is absent from what is checked. Measured on
-synthetic bodies in the tracked shape, each returning the conforming verdict before the refusal existed; the
-tracked body carries no such delimiter, which is why a fixture rather than the tracked file is the observation
-source.
-
-**Delimiters SHALL be read in executed code only, on the same terms the brace count uses.** Text after `//`
-cannot move a brace, because the count already treats it as prose, so refusing on a delimiter there would refuse
-on text that cannot cause the fault — and an apostrophe in ordinary English is one reflow away from the tracked
-body. By the same rule the comparison SHALL NOT read a comment as code: the required call appearing only in a
-comment does not satisfy the requirement, which it did while tails were compared.
-
-**The allowlist walk SHALL read text whose token boundaries survive.** Whitespace removal is applied only where
-a broken call must still be recognized; applying it before the walk glues a keyword to the parameter, so the use
-reads as the tail of a longer identifier and disappears — measured, it hid the private-field read above.
-
-Over-refusal is the declared direction, and two costs SHALL be named. A lifetime is spelled with the character
-literal's delimiter, so a composition body naming one is refused. And the allowlist matches an owner as written,
-so a `rustfmt` break inside an accessor call reads as an unpermitted use and is reported. That cost is accepted
-because a refusal is loud and repairable in the commit that causes it, while the alternative is the silent pass
-above. The reaction SHALL therefore be held to still *judging* the tracked body, so a refusal that swallowed
-every input could not pass for the closure.
-
-**This does not contradict an empty observer set being a cannot-judge**, and the difference is stated here
-because the two sentences read as a contradiction otherwise. An empty *bundle* means a participant was
-composed and declares nothing for its dimension — a static-only adoption is exactly that, and there is nothing
-to observe, so `Clean` is the honest answer. An empty *observer set* means nothing was composed at all: the
-misconfiguration is in the assembly, not in a dimension's declarations, and there is no participant whose
-silence could be read as cleanliness. Unifying them fails in both directions: making an empty bundle a
-cannot-judge would make every static-only adopter's composed run report exit `2`, a false refusal on the
-primary use case, and reporting an empty observer set as clean is the vacuous pass this repository has
-re-opened most often. The asymmetry is therefore a property of the two constructions rather than a claim a
-reaction could observe, and it carries no scenario for that reason.
+Retiring it is the honest disposition rather than a fifth narrowing. What remains true of a text reader is
+narrow — that the body reaches its constitution only through the declared accessors — and that is not the
+obligation. The closure is to make the property hold **by construction**, as the runtime dimension's equality
+already does; until then the gap is declared below rather than implied by a reaction that reported clean while
+accepting the shape it existed to refuse.
 
 #### Scenario: Empty semantic boundaries through the public semantic entry point
 
@@ -189,113 +121,15 @@ reaction could observe, and it carries no scenario for that reason.
 - **WHEN** a semantic observer has no boundaries and receives a path that cannot be read
 - **THEN** it returns `Clean` by delegating to the public semantic entry point
 
-#### Scenario: Empty semantic boundaries through the shell
+#### Scenario: Whether the shell makes an independent semantic decision is not observed — a stated bound
 
-- **WHEN** the shell composes a constitution whose semantic boundary bundle is empty
-- **THEN** the source-shape reaction finds exactly one semantic boundary access, passed directly to the public semantic entry point, and fails if the shell decides emptiness itself
-
-#### Scenario: A second semantic-boundary access sits past a moved extent
-
-- **WHEN** the composition body holds the delegation, a construct whose delimiter moves the read extent, and a
-  further `constitution.semantic_boundaries()` access beyond the resulting cut
-- **THEN** the reaction refuses to judge rather than reporting the delegation as satisfied, because the further
-  access is the one shape this requirement refuses and a moved extent never presents it to the comparison at all
-
-#### Scenario: The composition body carries a delimiter that can move the read extent — a stated bound
-
-- **WHEN** the extent read for `evaluate_constitution` carries `"`, `'`, or `/*` in executed code
-- **THEN** the reaction refuses to judge, naming the delimiter — a stated bound.
-  It does not decide whether the body delegates, because the extent it would decide over may not be the body; separating a brace in code from
-  one inside a string, a character literal, or a block comment needs the lexing this repository measured and
-  rejected, so the reaction declines the verdict instead of guessing at it. The set is three delimiters and not
-  four: a block comment opened above the signature closes *after* the brace it hides, so the extent is cut
-  before the `*/` and carries no delimiter at all — a fourth member no shape reaches is a declared set drifting
-  from its enumerator, deletable with every document still agreeing
-- **PINNED-BY** `an_ambiguous_delegation_extent_is_refused_rather_than_judged`
-
-#### Scenario: A second line could anchor the read
-
-- **WHEN** the composition function's signature appears on more than one line of the source — a commented-out
-  copy, a doc comment, a copy inside a multi-line string, or a second module's definition — or the only
-  occurrence is not the definition, as when the definition carries a visibility modifier and a commented copy
-  does not
-- **THEN** the reaction declines rather than reading one of them, because it cannot know which body is the
-  subject, and the delimiters that made the wrong extent wrong sit outside that extent where no in-body check
-  reaches them
-
-#### Scenario: The ambiguity refusal precedes the comparison
-
-- **WHEN** an extent is both moved and divergent within the text that survives the cut
-- **THEN** the reaction refuses rather than reporting the divergence, because a verdict formed on text the
-  reaction cannot vouch for is unsound whichever way that verdict happens to fall — an ordering that only
-  escalated a *passing* verdict would report the divergence and be indistinguishable on every other input
-
-#### Scenario: A delimiter appears only inside a comment
-
-- **WHEN** the extent's only `"`, `'`, or `/*` sits after a `//`, whether on its own line or as a tail
-- **THEN** the reaction judges the body normally, because the brace count already treats that text as prose and
-  a delimiter that cannot move a brace is not evidence the extent is wrong
-
-#### Scenario: The required call appears only in a comment
-
-- **WHEN** the body's only occurrence of the direct `hunyi::check_all` delegation is inside a comment
-- **THEN** the reaction does not report delegation, because a requirement satisfied by prose is satisfied in
-  appearance and failed in substance
-
-#### Scenario: The constitution is reached outside the permitted owners
-
-- **WHEN** the body reaches its constitution by any means other than the three declared accessors — a local
-  binding, an associated-function call, a reborrow, a wrapper function, a macro, or a direct read of a private
-  field that names no accessor at all
-- **THEN** the reaction reports it. None of these is recognized individually: each is a use of the parameter
-  that is not on the allowlist, and the complement is what makes the set complete
-
-#### Scenario: A permitted owner appears more than once
-
-- **WHEN** one of the three accessors appears twice in the body
-- **THEN** the reaction reports it, because the composition admits exactly one owner per dimension, and a
-  second reach is a second decision whatever it is spelled
-
-#### Scenario: The callee path merely ends in the semantic entry point
-
-- **WHEN** the semantic boundaries are passed to a path ending in `hunyi::check_all` rather than to that entry
-  point itself
-- **THEN** the reaction reports it, because a wrapper module standing between the shell and the dimension is
-  the second behavior owner the requirement exists to refuse
-
-#### Scenario: The allowlist walk is given text whose token boundaries were removed
-
-- **WHEN** whitespace is stripped before the walk, gluing a preceding keyword to the parameter
-- **THEN** the use is not recognized and the body reads as conforming, which is why the walk reads text with
-  its whitespace intact and only the delegation containment reads the compacted form
-
-#### Scenario: A moved extent leaves no delimiter behind
-
-- **WHEN** a block comment opened above the signature closes after a brace it hides, so the extent is cut before
-  any delimiter reaches it
-- **THEN** the reaction still fails rather than reporting delegation, because the surviving text loses the
-  delegation along with everything else — the residual is loud, which is a property held by a reaction rather
-  than asserted here
-
-#### Scenario: A reach that is not a spelling in the composition body is not observed — a stated bound
-
-- **WHEN** the shell decides semantic emptiness for itself by a means that is not a use of the parameter inside
-  the inspected body — shadowing the entry point's name, renaming the parameter or adding a second one, writing
-  the definition under a raw identifier so the only signature occurrence is a decoy, or guarding one frame up in
-  the caller
-- **THEN** the reaction reports a conforming delegation — a stated bound. Each was measured end-to-end against
-  the tracked composition function with the suite green and the formatter and linter silent. Closing any of them
-  needs name resolution, the binding site, the identity of the definition, or the caller frame, and none of
-  those is a character in the extent this reaction reads; the honest closure is to hold the property by
-  construction, as the runtime dimension already does, rather than to widen a character-level read again
-- **PINNED-BY** `a_reach_that_is_not_a_spelling_in_the_body_is_not_observed`
-
-#### Scenario: The tracked composition body is still judged
-
-- **WHEN** the reaction reads the tracked `evaluate_constitution` body, which carries none of those delimiters
-  on an executed line
-- **THEN** it returns a verdict rather than a refusal, because a refusal that swallowed every input would
-  satisfy the bound above while observing nothing
+- **WHEN** the shell's composition function decides semantic emptiness itself rather than delegating
+- **THEN** nothing reacts — a stated bound, and a declared false negative this repository owns. A text reader
+  over the composition body was built, hardened across four review rounds and defeated at every level: name
+  resolution, the parameter's binding site, the identity of the definition, the caller frame, and execution,
+  which no reading of text reaches at all. The bound carries no pinning test because there is no reaction left
+  to demonstrate a gap in; it is tracked instead, and closing it means holding the property by construction
+- **UNPINNED** `BACKLOG.md` — *the shell's semantic delegation, held by construction*
 
 ### Requirement: The built-in path SHALL keep its behaviour, and the two paths SHALL be held equal
 

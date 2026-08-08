@@ -147,7 +147,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **61 bounds across 21 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **60 bounds across 21 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
@@ -495,72 +495,24 @@ them.
   performs.*
 
 ### Fixed
-- **The shell-delegation reaction accepted the one body shape it exists to refuse, and a declared bound said
-  that was safe.** The reaction reads `evaluate_constitution`'s extent by counting braces, and a string
-  literal, a character literal, or a block comment inside it moves that extent. The comparison is a count and a
-  containment, and a truncated remainder satisfies both — so a second `constitution.semantic_boundaries()`
-  access sitting past the cut was never presented to it, and the divergent body read as a conforming
-  delegation. Measured on four spellings of the mechanism, every one returning the conforming verdict: a `//`
-  inside a string (which blanks a *real* opening brace whose match is on a later line), and a closing brace
-  inside a string, a block comment, or a character literal. The reaction now refuses to judge when the extent
-  it read carries `"`, `'`, or `/*` in executed code, and the refusal names the delimiter. Over-refusal
-  is the chosen direction: a lifetime shares the character-literal delimiter, so a composition body naming one
-  is refused too, loudly and in the commit that causes it.
-- **The shell-delegation reaction's claim is narrowed to what it observes, and the rest is a declared bound.**
-  Three rounds of adversarial review closed the *spelling* family completely — seven ways of reaching the
-  constitution, each measured — and then defeated the result five more ways that are not spellings at all:
-  shadowing the entry point's name with the body byte-identical, renaming the parameter or adding a second one
-  (the parameter list is outside the read extent), writing the definition under a raw identifier so the only
-  signature occurrence is a decoy, and moving the guard one frame up into the caller. Each was measured
-  end-to-end against the tracked composition function with the suite green and the formatter and linter silent.
-  What the reaction reads is characters in one function body; what the requirement is about is what the shell
-  *does*, and name resolution, the binding site, the identity of the definition and the caller frame all sit
-  outside that. The residual is now `observer-protocol`'s third bound, `OutOfReach`, pinned by a fixture that
-  exhibits a silent pass rather than asserted in prose. The honest closure is to hold the property by
-  construction, as the runtime dimension already does — that is a separate change, and the bound says so.
-- **`cargo fmt` alone could turn a conforming body into a reported violation.** The allowlist matches an owner
-  as written, so growing the runtime chain past the line width made `rustfmt` emit
-  `constitution\n    .runtime_boundaries()`, which matches no permitted owner and was reported as an independent
-  shell decision — a false accusation produced by the formatter this repository also gates on, naming a fault
-  nobody committed. A broken chain is now folded back before matching, closing up only a newline whose next
-  character is `.`, so the whitespace *between identifiers* stays untouched and the token boundary that catches
-  a private-field read survives. Both directions are pinned.
-- **The shell-delegation reaction is now an allowlist, and that is what makes the spelling family's prohibition complete.** It
-  counted reaches for the semantic boundaries, which is a denylist over *spellings* — and spellings are an open
-  set. Adversarial review walked past it seven ways across two rounds: a rebinding, an associated-function call,
-  a reborrow, a wrapper function, a trait method under another name, a macro, and — naming no accessor at all —
-  a direct read of the private `semantic` field, which a descendant module of the crate root may simply do. Each
-  was measured accepted against the tracked `crates/tianheng/src/runner.rs`, each earned its own patch, and the
-  next was always one review away. The rule is now that **every** use of the `constitution` parameter in the
-  composition body must be one of the three declared owners — static, semantic, runtime — each exactly once, and
-  everything else is refused by complement. An escape must now avoid naming the parameter, and a body that never
-  names it has no constitution to decide with. This is the shape `restrict_dependencies_to` already takes; the
-  reaction had been written in the one form the family's own law does not use.
-  Its cost is intended: a fourth dimension fails here until it is admitted, which is the amendment discipline
-  this repository wants for that change rather than an accident of the recognizer.
-- The semantic owner must additionally be the direct argument to 渾儀's entry point, matched with a **left token
-  boundary**: a bare containment accepted `crate::shim::hunyi::check_all(…)`, so a wrapper module could stand
-  between the shell and the dimension while the reaction reported a direct delegation.
-- The anchor is now counted over **occurrences** rather than lines that begin with the signature. Requiring it to
-  begin a line only ruled out a mid-line mention; it never made the definition findable, and the decoy worked
-  from the other side — write the definition as `pub(crate) fn …` and it stops anchoring while a commented copy
-  still does, leaving one candidate that is not the subject. Counting occurrences catches both directions and
-  needs no carve-out for which mentions could have anchored, one of which this window had stated wrongly.
-- **Three further ways the same reaction read text that was not the body**, each found by adversarial review of
-  the repair above and each measured end-to-end against the tracked `crates/tianheng/src/runner.rs` before being
-  closed. **The anchor was not unique**: the function is found by line position, which rules out a mid-line
-  mention and nothing more, so a whole-line copy of the signature inside a block comment, a doc comment, a
-  multi-line string, or a second module anchored just as well — and the first won. Every delimiter that made
-  that extent wrong then sat *outside* it, where no in-body check reaches, so a commented-out copy above the
-  function let a body carrying an independent shell-local guard pass. Two candidate anchors are now a refusal.
-  **The access count read one spelling**: `let shell = constitution;` and then `shell.semantic_boundaries()`
-  was a second access the count never saw, as were the associated-function and reborrow spellings; the count was
-  widened to the method name. (Superseded later in this window — counting names is still a denylist over
-  spellings, and the entry above replaces it with the allowlist that ends the class.) **A comment
-  could supply the delegation**: comment tails were compared as code, so the required call could sit entirely in
-  prose while the real body delegated through a rebinding. Tails are now removed before the comparison, which is
-  what the brace count already did to them — and by the same token a delimiter in a comment no longer refuses a
-  readable body, an over-refusal that was one reflow away from the tracked file.
+- **The source-shape reaction over the shell's composition body is retired, and the obligation it claimed is
+  now a declared, unpinned bound.** It read the characters of one function body while the requirement is about
+  what the shell *does*. Four review rounds narrowed it and each narrowing was defeated: by name resolution (a
+  `use` shadowing 渾儀's entry point, the body byte-identical), by the binding site (the parameter renamed, or a
+  second one added — the parameter list sits outside the read extent), by which definition is the subject (a raw
+  identifier, leaving a commented copy as the only signature occurrence), by the caller frame (the guard moved
+  into `check_constitution`), and by **execution** — a delegation bound to `let _`, written inside a
+  never-invoked `macro_rules!`, or placed in a conditionally-called closure satisfies every textual rule while
+  the shell decides for itself. That last group is the one no widening reaches, because it is not a property of
+  text. Every defeat was measured end-to-end against the tracked composition function with the suite green and
+  the formatter and linter silent.
+  Along the way it closed real things — seven spellings of a reach for the constitution, a decoy anchor, a
+  comment read as code — and cost two false-positive classes, one of them fired by `rustfmt` reformatting a
+  conforming body. Retiring it rather than narrowing a fifth time is the honest disposition: what a text reader
+  can still say truthfully is that the body reaches its constitution only through the declared accessors, and
+  that is not the obligation. `observer-protocol` now declares the gap as a false negative this repository owns,
+  **unpinned**, tracked for closure by construction — the route the runtime dimension's equality already takes.
+  The register leads with the count of bounds nothing yet defends, so the debt is visible rather than implied.
 - The same decoy defeated the **bounds-method** reader, whose bound records the moved extent as *over-reacting*
   and therefore safe. A commented-out conforming copy above a divergent `bounds()` made the exact one-statement
   equality pass on text that was not the method — the safe direction inverted by the anchor rather than by an

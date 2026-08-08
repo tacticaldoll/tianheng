@@ -114,40 +114,23 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_brace_in_a_block_comment_moves_the_body_extent",
         ),
-        BoundDecl::pinned(
+        // The reaction that read the composition body is retired, so what is declared is the obligation being
+        // unobserved rather than one family of escapes from a reader that no longer exists. Under-reacting with
+        // the engine as owner, not out of reach: the deciding text was inside the file the reader loaded, so the
+        // measure stopped where this repository chose to stop it, and closing it is ordinary work here.
+        BoundDecl::unpinned(
             BoundId::new(
-                "observer-protocol/a-reach-that-is-not-a-spelling-in-the-composition-body-is-not-observed-a-stated-bound",
+                "observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound",
             ),
-            "the shell deciding semantic emptiness by a means that is not a use of the parameter inside the \
-             inspected body",
-            // Out of reach rather than under-reacting, and read off where the deciding text sits rather than
-            // preferred: a shadowing `use`, the parameter list, a second definition, and the caller frame are
-            // all outside the extent, so the reaction never declines them — they are never presented.
-            Extent::OutOfReach {
-                because: "the reaction reads characters in one function body, while the requirement is about \
-                          what the shell does; name resolution, the parameter's binding site, which definition \
-                          is the subject, and the caller frame each decided a measured escape from outside \
-                          that extent, and holding the property by construction is the closure a wider \
-                          character-level read cannot be".into(),
-            },
-            "a_reach_that_is_not_a_spelling_in_the_body_is_not_observed",
-        ),
-        BoundDecl::pinned(
-            BoundId::new(
-                "observer-protocol/the-composition-body-carries-a-delimiter-that-can-move-the-read-extent-a-stated-bound",
-            ),
-            "the extent read for `evaluate_constitution` carrying `\"`, `'`, or `/*` in executed code",
-            // Refusing rather than over-reacting, because this comparison cannot detect its own truncation: the
-            // remainder can hold every permitted owner exactly once, so a use past the cut reads as the
-            // delegation the requirement demands.
-            Extent::Reached(Reached::RefusesToJudge {
-                because: "a string, character, or block-comment delimiter in executed code can hide a brace \
-                          from the extent count, so the text read may not be the function's body, and \
-                          separating the two needs the lexing this tree's own lexer suites defeat — a verdict \
-                          withheld is loud, while the verdict this comparison would give is a silent pass"
-                    .into(),
+            "the shell's composition function deciding semantic emptiness itself rather than delegating",
+            Extent::Reached(Reached::UnderReacts {
+                because: "a text reader over the composition body was defeated at every level it could be \
+                          narrowed to — name resolution, the parameter's binding site, the identity of the \
+                          definition, the caller frame, and execution, which no reading of text reaches — so \
+                          the obligation is carried by construction or not at all".into(),
+                owner: Owner::Engine,
             }),
-            "an_ambiguous_delegation_extent_is_refused_rather_than_judged",
+            "`BACKLOG.md` — *the shell's semantic delegation, held by construction*",
         ),
         // --- gate-shape-contract ---
         //
