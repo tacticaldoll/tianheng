@@ -24,20 +24,23 @@
 /// block count as prose, so a path appearing nowhere but inside one satisfied "reachable from where a reader is
 /// sent" — the requirement is about fenced code, not about one spelling of a fence.
 ///
-/// Not modelled, and none of it reachable in this repository's tracked Markdown. Each **over**-excludes — it
-/// hides text a reader can see, refusing a conforming document rather than accepting a non-conforming one:
-/// a fence indented four or more columns (an indented code block, not a fence), one on a list-marker line, a
-/// line opening with an inline code span of three or more backticks, and a fence line inside an open HTML
-/// comment span — the fence check runs first, so such a line is read as a delimiter, the comment's `-->` is then
-/// inside the fence, and the rest of the document is dropped.
+/// Block structure is not modelled, and the residue divides by direction. None of it is reachable in this
+/// repository's tracked Markdown, and every direction below was measured rather than reasoned.
 ///
-/// A blockquoted fence is handled rather than listed, because it was the one that went the **other** way.
-fn fence_run(line: &str) -> Option<Fence> {
-    // A blockquote prefix is stripped first. Every other unmodelled shape below over-excludes — it hides text a
-    // reader can see, which refuses a conforming document — but a fence inside a blockquote went the other way:
-    // unrecognized, so its contents counted as prose and a path only inside one satisfied the reachability
-    // requirement. That is a false clean against the same SHALL this reader exists to serve.
-    let trimmed = line.trim_start().trim_start_matches(['>', ' ', '\t']);
+/// **Over-excluding** — hides text a reader can see, refusing a conforming document: an unpaired fence indented
+/// four or more columns (a paired one behaves correctly), a line opening with an inline code span of three or
+/// more backticks, and a fence line inside an open HTML comment span, where the fence check runs first, the
+/// comment's `-->` then falls inside the fence, and the rest of the document is dropped.
+///
+/// **Under-excluding** — lets fenced content count as prose, which is the direction this reader exists to avoid:
+/// a fence opened on a **blockquote** or **list-marker** line. Both were left unmodelled deliberately. Handling
+/// the blockquote form by stripping a `>` prefix was tried and reverted: the strip cannot know whether a fence
+/// is already open, so a quoted run displayed *inside* a fence closed it, and a path shown in a Markdown sample
+/// became prose — a worse instance of the same fault. Closing either needs block structure, not a line rule.
+///
+/// Stated here rather than in a spec deliberately: the register's undeclared-prose direction reads only
+/// `openspec/specs/*`, so this is a note to a reader and not a bound claimed and unpinned.
+fn fence_run(trimmed: &str) -> Option<Fence> {
     let marker = trimmed.chars().next().filter(|c| *c == '`' || *c == '~')?;
     let length = trimmed.chars().take_while(|c| *c == marker).count();
     // `marker` is one of two ASCII characters, so the char count is also the byte offset past the run.

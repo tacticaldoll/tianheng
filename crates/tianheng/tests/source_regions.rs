@@ -73,8 +73,8 @@ fn prose_still_excludes_a_fenced_block() {
 /// The requirement this serves — a generated document's path must appear where a reader is *sent*, and a path
 /// only inside a fence is not that — is written about fenced code, not about one spelling of a fence. Reading
 /// only the backtick form makes a `~~~` block count as prose, so a path nothing points at in prose would
-/// satisfy the reachability rule. Latent rather than live: no tracked Markdown uses `~~~` today, which is
-/// exactly the state in which a hole is cheapest to close and least likely to be noticed.
+/// satisfy the reachability rule. Latent rather than live: no tracked Markdown has a line that *opens* a
+/// `~~~` fence, which is exactly the state in which a hole is cheapest to close and least likely to be noticed.
 #[test]
 fn prose_excludes_a_tilde_fenced_block() {
     let fenced = Source::of(format!("visible\n~~~bash\n{UNSEEN}\n~~~\n"));
@@ -121,9 +121,9 @@ fn a_run_shorter_than_three_does_not_open_a_fence() {
 /// Whitespace after a closing run is still a closing run.
 ///
 /// CommonMark allows spaces and tabs there, and losing that means a closer with a trailing space stops closing
-/// and silently swallows the remainder of the document — the direction this whole reader exists to avoid. It is
-/// also what makes a CRLF closer work, and this repository strips CR explicitly elsewhere, so it is not
-/// hypothetical.
+/// and silently swallows the remainder of the document — the direction this whole reader exists to avoid. A CRLF
+/// closer is *not* the reason: `str::lines` already drops the trailing `\r`, measured, and an earlier version of
+/// this comment claimed otherwise.
 #[test]
 fn a_closing_run_may_be_followed_by_whitespace() {
     let padded = Source::of(format!("visible\n```\n{UNSEEN}\n```  \t\ntail\n"));
@@ -132,18 +132,6 @@ fn a_closing_run_may_be_followed_by_whitespace() {
         padded.prose().contains("tail"),
         "trailing whitespace does not stop a run from closing"
     );
-}
-
-/// A fence inside a blockquote is a fence.
-///
-/// The only unmodelled shape that erred **unsafely**: unrecognized, so the block's contents counted as prose and
-/// a path appearing nowhere else would have satisfied the reachability requirement. Every other unmodelled shape
-/// over-excludes, which refuses a conforming document rather than accepting a non-conforming one.
-#[test]
-fn a_blockquoted_fence_is_recognised() {
-    let quoted = Source::of(format!("visible\n> ```\n> {UNSEEN}\n> ```\ntail\n"));
-    assert!(!quoted.prose().contains(UNSEEN));
-    assert!(quoted.prose().contains("tail"));
 }
 
 /// A closing fence carries no info string, so a run followed by text is content.
@@ -171,8 +159,8 @@ fn a_run_followed_by_an_info_string_does_not_close_a_fence() {
 
 /// A longer run closes a shorter opener; a shorter run inside a longer fence does not.
 ///
-/// Both halves, because only the second was observed: an equal-length closer satisfies `>=` and `==` alike, so
-/// the fixture asserting the first half rested on nothing until the longer-closes-shorter case was added.
+/// Both halves, because the pre-existing case closed a four-backtick opener with a four-backtick run — equal,
+/// not longer — so `==` satisfied it and `>=` was carried by nothing until the first case below was added.
 #[test]
 fn a_fence_closes_only_on_a_run_at_least_as_long() {
     let longer_closes_shorter = Source::of(format!("visible\n```\n{UNSEEN}\n````\ntail\n"));

@@ -543,11 +543,13 @@ them.
   The obvious repair — toggle on either marker — reopens the hole from the other side, letting a `~~~` displayed
   inside a backtick block close it and turning the rest of that block into prose; that is measured and pinned,
   and it matters here because `AGENTS.md` is documentation about documentation. Latent rather than live: no tracked Markdown has a line that *opens* a `~~~`
-  fence — the entry above mentions the delimiter, which is not the same thing — and that is the state in which
-  the hole is cheapest to close and least likely to be noticed. A blockquoted fence is handled rather than
-  listed as unmodelled, because it was the one remaining shape erring in the unsafe direction: unrecognized, its
-  contents counted as prose. The shapes still unmodelled all over-exclude, which refuses a conforming document
-  rather than accepting a non-conforming one.
+  fence — this entry mentions the delimiter, which is not the same thing — and that is the state in which the
+  hole is cheapest to close and least likely to be noticed. What block structure is not modelled is now recorded by
+  direction rather than lumped together: an unpaired indented fence, a leading inline code span, and a fence
+  inside an open HTML comment span over-exclude; a fence opened on a blockquote or list-marker line
+  under-excludes. Handling the blockquote form by stripping its prefix was tried and reverted — the strip cannot
+  know whether a fence is already open, so a quoted run displayed *inside* a fence closed it and a path shown in
+  a Markdown sample became prose, a worse instance of the fault being fixed.
 - **Three text recognizers read past the region they observe, each in the direction its own comment said it did
   not.** One class, found by a review of this window and repaired together. The bound register's attribute walk
   stops at a blank line so an attribute cannot cover the item beneath it — but it read the preceding lines
