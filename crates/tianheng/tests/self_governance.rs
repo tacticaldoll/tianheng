@@ -204,7 +204,7 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 - Observe only what has a real observation source; name nothing that does not react.
 - React with the outcomes: `0` clean, `1` violation, `2` constitution/usage error.
 - On a violation, repair toward the boundary's declared reason — never weaken the law to pass.
-- 三儀 (圭表 static · 渾儀 semantic · 漏刻 runtime) measure; 三司 (垂象 · 實錄 · 校讎) administer.
+- 三儀 (圭表 static · 渾儀 semantic · 漏刻 runtime) measure; 垂象 surfaces the reaction and 實錄 records it.
 ";
 
 /// The repository root — the parent of the workspace manifest. Reuses [`workspace_manifest`]'s
@@ -457,8 +457,8 @@ fn self_law_projection_is_fresh() {
         );
 }
 
-/// Contract C — the **declaration-integrity** reaction (the 潛移/校讎-adjacent shape: its
-/// observation source is the *declaration itself*, not governed code). A structural property of
+/// Contract C — the **declaration-integrity** reaction (the shape whose observation source is the
+/// *declaration itself*, not governed code). A structural property of
 /// `tianheng_constitution()` is asserted, so a hand-written pointer to that property can be
 /// *deleted* rather than kept correct by hand. Here: the cross-cutting 三儀 ⊥ 三儀 law is carried
 /// in every dimension boundary's `because`. If a dimension's reason drops the clause — or a
@@ -520,9 +520,8 @@ fn dimension_boundaries_declare_the_mutual_independence_law() {
     }
 }
 
-/// Contract D — the **declaration-integrity coverage** reaction (again the 潛移/校讎-adjacent
-/// shape: its observation source is the *declaration and the workspace metadata*, not governed
-/// code). Every workspace member must be the target of at least one boundary in
+/// Contract D — the **declaration-integrity coverage** reaction (the same shape, its observation
+/// source being the *declaration and the workspace metadata* rather than governed code). Every workspace member must be the target of at least one boundary in
 /// `tianheng_constitution()`.
 ///
 /// Without this, a crate added to the family with no self-governance boundary escapes the

@@ -263,6 +263,21 @@ them.
 
 ### Changed
 
+- **A governance office named before its reaction existed is retired, and the two that remain are located
+  rather than left a question.** `PROJECT.md` named three — 垂象 (the reaction surface), 實錄 (the baseline),
+  校讎 (the amendment flow) — and closed the paragraph with *"never named before their reaction exists"*.
+  Measured against its own rule, one failed it: 垂象 has `crates/tianheng/src/runner/render.rs` and the report
+  projections, 實錄 has `crates/xuanji/src/baseline.rs` and the `violation-baseline` capability, and 校讎 had no
+  code, no capability and no reaction — its only uses in the tree were as an adjective. It is gone from the
+  self-law preamble every agent loads, and `self-law-projection`'s requirement, which prescribes that preamble's
+  content, now forbids naming an office with no reaction.
+
+  The sentence that kept it alive as a crate candidate is replaced by where the survivors are. **Which
+  follows from topology, not importance**: 三儀 are orthogonal, so each needs a boundary the self-law can react
+  to and a crate is that boundary; a record and its rendering are not orthogonal, so a boundary between them
+  would be crossed immediately — a name with no reaction. `docs/history/0.1.0-0.3.0-built-ledger.md` keeps all
+  three, because it records what was true then.
+
 - **The bounds-method reader's anchor rule is one typed decision, and its behaviour is a table that runs.**
   Two callers each re-derived the rule and drifted twice — once counting trimmed-start lines against
   occurrences, once when a line-start condition reached the reader and not its diagnostic. They match on one

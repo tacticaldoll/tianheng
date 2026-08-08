@@ -151,11 +151,23 @@ selects governance by depending on the dimensions they want:
 **The observatory vocabulary (manifested in governance).** The three observation
 dimensions — 圭表 (static), 渾儀 (semantic), 漏刻 (runtime) — are the **三儀** (the three
 instruments): *what* Tianheng measures; each is a crate born when built, each adds a new
-drift type. The governance & observability layer — 垂象 (the reaction surface), 實錄 (the
-baseline), 校讎 (the amendment flow) — are the **三司** (the three offices): *how* a reaction
-is surfaced, recorded, and amended (see `BACKLOG.md`). 儀 measures, 司 administers — the
-三儀 add what is observed, the 三司 wrap the reaction. Both are crate-or-convention as their
-nature dictates, never named before their reaction exists.
+drift type. Two governance surfaces wrap a reaction rather than adding one: **垂象**, the
+reaction surface, which is a module of the shell (`crates/tianheng/src/runner/render.rs` and
+the report projections), and **實錄**, the baseline, which is in the bedrock
+(`crates/xuanji/src/baseline.rs`) because every dimension records its verdicts there.
+
+**Where each lives follows from topology, not importance.** 三儀 are orthogonal — a dimension
+must never learn from a sibling — so each needs a boundary the self-law can react to, and a
+crate is that boundary; the name marks it. The governance surfaces are not orthogonal: a
+record is rendered and a rendering reads a record, so a boundary between them would be one
+crossed immediately, which is a name with no reaction. Instruments get names because they must
+not touch; a surface that must touch does not earn one on the same grounds.
+
+A third office was once named beside them — 校讎, for the amendment flow — and retired: it had
+no code, no capability and no reaction, which is what the rule below forbids. The amendment
+flow is the OpenSpec lifecycle, and `AGENTS.md` owns it under that plain name.
+
+Never named before their reaction exists.
 
 ## Naming — narrative, with meaning in the SSOT
 
