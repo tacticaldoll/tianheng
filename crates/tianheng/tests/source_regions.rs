@@ -67,3 +67,116 @@ fn prose_still_excludes_a_fenced_block() {
     assert!(fenced.prose().contains("visible"));
     assert!(!fenced.prose().contains(UNSEEN));
 }
+
+/// Markdown has two fence characters, and prose is what neither of them holds.
+///
+/// The requirement this serves — a generated document's path must appear where a reader is *sent*, and a path
+/// only inside a fence is not that — is written about fenced code, not about one spelling of a fence. Reading
+/// only the backtick form makes a `~~~` block count as prose, so a path nothing points at in prose would
+/// satisfy the reachability rule. Latent rather than live: no tracked Markdown has a line that *opens* a
+/// `~~~` fence, which is exactly the state in which a hole is cheapest to close and least likely to be noticed.
+#[test]
+fn prose_excludes_a_tilde_fenced_block() {
+    let fenced = Source::of(format!("visible\n~~~bash\n{UNSEEN}\n~~~\n"));
+    assert!(fenced.prose().contains("visible"));
+    assert!(!fenced.prose().contains(UNSEEN));
+}
+
+/// A fence closes on its own character, so one form shown inside the other stays fenced.
+///
+/// The obvious repair — toggle on either marker — reopens the hole from the other side: a `~~~` line displayed
+/// inside a backtick block would close it, and the rest of that block would become prose. Measured against the
+/// naive form before this landed. CommonMark closes a fence only with a run of the character that opened it,
+/// at least as long, which is why the state carries the character rather than a boolean.
+///
+/// This matters here specifically: `AGENTS.md` is documentation about documentation, so a fence displayed
+/// inside a fence is ordinary content rather than a contrivance.
+#[test]
+fn a_fence_of_the_other_form_does_not_close_the_open_one() {
+    let nested = Source::of(format!(
+        "visible\n```markdown\nan example of the other fence:\n~~~\n{UNSEEN}\n~~~\n```\ntail\n"
+    ));
+    assert!(nested.prose().contains("visible"));
+    assert!(nested.prose().contains("tail"), "and the block does close");
+    assert!(
+        !nested.prose().contains(UNSEEN),
+        "the inner `~~~` is content of the backtick block, not a closing delimiter"
+    );
+}
+
+/// Two delimiters are not a fence, so a line opening with them is prose.
+///
+/// Three is CommonMark's minimum and also the pre-change threshold, so nothing observed it until now — a
+/// two-character run opening a fence would silently hide the rest of a document from the reader it serves.
+#[test]
+fn a_run_shorter_than_three_does_not_open_a_fence() {
+    let inline = Source::of(format!("``{SEEN}`` and ~~{UNSEEN}~~\n"));
+    let prose = inline.prose();
+    assert!(
+        prose.contains(SEEN) && prose.contains(UNSEEN),
+        "a two-character run is inline markup, not a fence, so the line stays prose"
+    );
+}
+
+/// Whitespace after a closing run is still a closing run.
+///
+/// CommonMark allows spaces and tabs there, and losing that means a closer with a trailing space stops closing
+/// and silently swallows the remainder of the document — the direction this whole reader exists to avoid. A CRLF
+/// closer is *not* the reason: `str::lines` already drops the trailing `\r`, measured, and an earlier version of
+/// this comment claimed otherwise.
+#[test]
+fn a_closing_run_may_be_followed_by_whitespace() {
+    let padded = Source::of(format!("visible\n```\n{UNSEEN}\n```  \t\ntail\n"));
+    assert!(!padded.prose().contains(UNSEEN));
+    assert!(
+        padded.prose().contains("tail"),
+        "trailing whitespace does not stop a run from closing"
+    );
+}
+
+/// A closing fence carries no info string, so a run followed by text is content.
+///
+/// This is the third leg of the same problem, and the only one that errs in **both** directions from one
+/// construct: an inner ```` ```rust ```` closed the block, so its contents counted as prose, and the bare run
+/// beneath it then re-opened a fence that never closed, so everything after was excluded forever. Found by
+/// review of the two-character fix, which had closed the cross-character and run-length legs and left this one.
+#[test]
+fn a_run_followed_by_an_info_string_does_not_close_a_fence() {
+    let inner_info_string = Source::of(format!(
+        "visible\n```\nan example markdown file:\n```rust\n{UNSEEN}\n```\nafter\n"
+    ));
+    let prose = inner_info_string.prose();
+    assert!(prose.contains("visible"));
+    assert!(
+        !prose.contains(UNSEEN),
+        "`\u{60}\u{60}\u{60}rust` inside an open fence is content, not a closer, so what follows it is still fenced"
+    );
+    assert!(
+        prose.contains("after"),
+        "and the bare run does close, so the fence does not swallow the rest of the document"
+    );
+}
+
+/// A longer run closes a shorter opener; a shorter run inside a longer fence does not.
+///
+/// Both halves, because the pre-existing case closed a four-backtick opener with a four-backtick run — equal,
+/// not longer — so `==` satisfied it and `>=` was carried by nothing until the first case below was added.
+#[test]
+fn a_fence_closes_only_on_a_run_at_least_as_long() {
+    let longer_closes_shorter = Source::of(format!("visible\n```\n{UNSEEN}\n````\ntail\n"));
+    assert!(
+        !longer_closes_shorter.prose().contains(UNSEEN),
+        "the fenced content is still fenced"
+    );
+    assert!(
+        longer_closes_shorter.prose().contains("tail"),
+        "a four-backtick run closes a three-backtick fence, which `>=` allows and `==` would not"
+    );
+
+    let long_opener = Source::of(format!("visible\n````\n```\n{UNSEEN}\n````\ntail\n"));
+    assert!(
+        !long_opener.prose().contains(UNSEEN),
+        "a three-backtick line does not close a four-backtick fence"
+    );
+    assert!(long_opener.prose().contains("tail"), "the longer run does");
+}

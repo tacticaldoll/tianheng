@@ -18,6 +18,51 @@
 //! [`Source::whole`] is the deliberate escape, spelled out so it is greppable. The family already handles `dyn`
 //! this way: not forbidden globally, but every appearance visible where it matters.
 
+/// A fence delimiter line's character, run length, and whether anything follows the run.
+///
+/// Markdown fences with either backticks or tildes, three or more. Reading only the backtick form made a `~~~`
+/// block count as prose, so a path appearing nowhere but inside one satisfied "reachable from where a reader is
+/// sent" — the requirement is about fenced code, not about one spelling of a fence.
+///
+/// Block structure is not modelled, and the residue divides by direction. None of it is reachable in this
+/// repository's tracked Markdown, and every direction below was measured rather than reasoned.
+///
+/// **Over-excluding** — hides text a reader can see, refusing a conforming document: an unpaired fence indented
+/// four or more columns (a paired one behaves correctly), a line opening with an inline code span of three or
+/// more backticks, and a fence line inside an open HTML comment span, where the fence check runs first, the
+/// comment's `-->` then falls inside the fence, and the rest of the document is dropped.
+///
+/// **Under-excluding** — lets fenced content count as prose, which is the direction this reader exists to avoid:
+/// a fence opened on a **blockquote** or **list-marker** line. Both were left unmodelled deliberately. Handling
+/// the blockquote form by stripping a `>` prefix was tried and reverted: the strip cannot know whether a fence
+/// is already open, so a quoted run displayed *inside* a fence closed it, and a path shown in a Markdown sample
+/// became prose — a worse instance of the same fault. Closing either needs block structure, not a line rule.
+///
+/// Stated here rather than in a spec deliberately: the register's undeclared-prose direction reads only
+/// `openspec/specs/*`, so this is a note to a reader and not a bound claimed and unpinned.
+fn fence_run(trimmed: &str) -> Option<Fence> {
+    let marker = trimmed.chars().next().filter(|c| *c == '`' || *c == '~')?;
+    let length = trimmed.chars().take_while(|c| *c == marker).count();
+    // `marker` is one of two ASCII characters, so the char count is also the byte offset past the run.
+    (length >= 3).then(|| Fence {
+        marker,
+        length,
+        bare: trimmed[length..].trim().is_empty(),
+    })
+}
+
+/// A fence delimiter line: which character opened it, how long the run is, and whether anything follows it.
+struct Fence {
+    marker: char,
+    length: usize,
+    /// Nothing but whitespace after the run. A **closing** fence carries no info string, so a run followed by
+    /// text is content of the open block rather than its end. Without this the third leg of the same-line
+    /// problem stays open and errs in *both* directions at once: an inner ```` ```rust ```` closed the block, so
+    /// its contents counted as prose, and the following bare run re-opened a fence that then never closed, so
+    /// everything after it was excluded forever.
+    bare: bool,
+}
+
 /// A whole tracked text, from which a region is taken.
 pub struct Source(String);
 
@@ -128,8 +173,9 @@ impl<'a> Prose<'a> {
         self.lines().any(|line| line.contains(needle))
     }
 
-    /// Prose lines, each carrying only the text a reader sees. A fence toggles on any line whose trimmed start
-    /// is ```` ``` ````; an HTML comment spans from `<!--` to `-->`, which may be one line or several.
+    /// Prose lines, each carrying only the text a reader sees. A fence opens on a run of three or more backticks
+    /// or tildes and closes only on a bare run of the same character, at least as long; an HTML comment spans
+    /// from `<!--` to `-->`, which may be one line or several.
     ///
     /// The comment **span** is excised, never the line holding it. The requirement this serves says a path
     /// appearing *only* inside an HTML comment is not a mention — so a line carrying a visible mention *and* a
@@ -140,15 +186,29 @@ impl<'a> Prose<'a> {
     /// Yields owned text because excision produces a new string; a fully-commented line yields an empty one,
     /// which is what the whole-line drop it replaces already amounted to for every caller.
     pub fn lines(&self) -> impl Iterator<Item = String> + use<'a> {
-        let mut fenced = false;
+        let mut fence: Option<(char, usize)> = None;
         let mut commented = false;
         self.0.lines().filter_map(move |line| {
             let trimmed = line.trim_start();
-            if trimmed.starts_with("```") {
-                fenced = !fenced;
+            if let Some(delimiter) = fence_run(trimmed) {
+                match fence {
+                    None => fence = Some((delimiter.marker, delimiter.length)),
+                    // Closes only on its own character, at least as long. A run of the *other* form, or a
+                    // shorter one, is content of the open block — which is why the state carries the character
+                    // instead of a boolean: toggling on either marker would let a `~~~` shown inside a backtick
+                    // block close it, turning the rest of that block into prose. Measured against that form.
+                    Some((open_marker, open_length)) => {
+                        if delimiter.bare
+                            && delimiter.marker == open_marker
+                            && delimiter.length >= open_length
+                        {
+                            fence = None;
+                        }
+                    }
+                }
                 return None;
             }
-            if fenced {
+            if fence.is_some() {
                 return None;
             }
             // Walk the line, alternating between visible text and comment span. `rest` strictly shrinks on

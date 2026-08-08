@@ -532,6 +532,24 @@ them.
   place a freshness check cannot catch a falsehood — the comparison is the generator's own text against itself.
   The lesson it carried does not need the membership claim, so the claim is gone rather than re-typed — which
   is what kept the document honest when the retirement later removed that value's only instance.
+- **A `~~~` fenced block counted as prose, so a path inside one satisfied "reachable from where a reader is
+  sent".** `Prose` recognized only the backtick fence, and `projection-register` requires every generated
+  document's path to appear in `AGENTS.md` prose — a fence is where a command lives, not where a reader is sent.
+  Markdown fences with either character, so the tilde form was read as ordinary text. A fence now opens on a run
+  of three or more backticks **or** tildes and closes only on a run of the same character, at least as long.
+  A closing fence also carries no info string, so a run followed by text is content: without that, an inner
+  `` ```rust `` closed the block — its contents counted as prose — and the bare run beneath re-opened a fence that
+  never closed, excluding everything after it. One construct erring in both directions at once.
+  The obvious repair — toggle on either marker — reopens the hole from the other side, letting a `~~~` displayed
+  inside a backtick block close it and turning the rest of that block into prose; that is measured and pinned,
+  and it matters here because `AGENTS.md` is documentation about documentation. Latent rather than live: no tracked Markdown has a line that *opens* a `~~~`
+  fence — this entry mentions the delimiter, which is not the same thing — and that is the state in which the
+  hole is cheapest to close and least likely to be noticed. What block structure is not modelled is now recorded by
+  direction rather than lumped together: an unpaired indented fence, a leading inline code span, and a fence
+  inside an open HTML comment span over-exclude; a fence opened on a blockquote or list-marker line
+  under-excludes. Handling the blockquote form by stripping its prefix was tried and reverted — the strip cannot
+  know whether a fence is already open, so a quoted run displayed *inside* a fence closed it and a path shown in
+  a Markdown sample became prose, a worse instance of the fault being fixed.
 - **Three text recognizers read past the region they observe, each in the direction its own comment said it did
   not.** One class, found by a review of this window and repaired together. The bound register's attribute walk
   stops at a blank line so an attribute cannot cover the item beneath it — but it read the preceding lines
