@@ -36,7 +36,10 @@ release_capture=$(mktemp)
 # forbids, produced by nothing more than reusing a filename. Every other capture here is sequential and may
 # share; a nested one may not.
 lock_capture=$(mktemp)
-trap 'rm -f "$release_capture" "$lock_capture"' EXIT
+# The changelog's own structure, read once and asked several questions. Sequential like `$release_capture`,
+# so it may share nothing with the nested lockfile read above.
+changelog_capture=$(mktemp)
+trap 'rm -f "$release_capture" "$lock_capture" "$changelog_capture"' EXIT
 
 cannot_judge() {
     printf 'release coherence: cannot judge: %s\n' "$*" >&2
@@ -306,5 +309,55 @@ case $state in
         require_release_surfaces
         ;;
 esac
+
+# --- the CHANGELOG's own internal consistency ---
+#
+# Everything above reads the changelog's STATE — which version, which sections exist, whether the link is
+# right. Nothing read whether a section is coherent with itself, and the closing review of the 0.5.0 window
+# found two defects of exactly that shape: an `[Unreleased]` that had grown a SECOND `### Changed` heading, and
+# a prose claim about which prior releases carry a `### Migration` section that was wrong under every reading.
+#
+# Both are decidable, and neither needs the prose detector this repository measured and rejected three times:
+# the changelog has a grammar, this gate already walks it, and these are properties of that grammar. What is
+# NOT decidable stays out — whether an entry is accurate, whether "no adopter action" is true, whether the
+# wording is right. The line is between the document's structure and its content, and only the first is here.
+changelog_sections() {
+    awk '
+        /^## \[/ { section = $0; sub(/ - .*/, "", section); printf "SECTION\t%s\n", section; next }
+        section == "" { next }
+        /^### / { printf "HEADING\t%s\t%s\n", section, substr($0, 5) }
+        /\*\*BREAKING\*\*/ { printf "BREAKING\t%s\n", section }
+    ' "$repo/CHANGELOG.md"
+}
+
+changelog_shape=$changelog_capture
+capture_or_refuse "the CHANGELOG's section structure" "$changelog_shape" cannot_judge \
+    --ordinary-empty 1 -- changelog_sections
+
+# The vacuity guard is over SECTIONS, not headings: a changelog whose sections carry bullets directly and no
+# `###` sub-headings is an ordinary small changelog, and refusing it would refuse this repository's own early
+# releases. A changelog with no `## [` section at all is the undecidable one.
+grep -q '^SECTION' "$changelog_shape" \
+    || cannot_judge "no \`## [\` section was read from CHANGELOG.md; a document with no release sections cannot be judged coherent, and reporting that as coherent is the vacuity direction"
+
+# A heading twice in one release section splits what belongs together, and a reader of the second half never
+# learns the first exists. Measured: an `[Unreleased]` carried two `### Changed` blocks 330 lines apart, each
+# describing the same window.
+duplicate_headings=$(awk -F'\t' '$1 == "HEADING" { seen[$2 "\t" $3]++ } END { for (k in seen) if (seen[k] > 1) print k }' "$changelog_shape")
+[[ -z $duplicate_headings ]] \
+    || fail "a CHANGELOG release section repeats a heading, so entries that belong together are split:
+$duplicate_headings"
+
+# A section marking a change **BREAKING** owes its reader the migration in one place. `[0.4.0]` established
+# that and `[Unreleased]` follows it; the direction is one-way, because a section may carry a migration for a
+# break marked some other way — `[0.3.0]` does.
+missing_migration=$(awk -F'\t' '
+    $1 == "BREAKING" { breaks[$2] = 1 }
+    $1 == "HEADING" && $3 == "Migration" { migration[$2] = 1 }
+    END { for (s in breaks) if (!(s in migration)) print s }
+' "$changelog_shape")
+[[ -z $missing_migration ]] \
+    || fail "a CHANGELOG section marks a change **BREAKING** and carries no \`### Migration\` section, so what an adopter must do is scattered through the entries or absent:
+$missing_migration"
 
 printf 'ok release coherence (%s: %s)\n' "$state" "$workspace_version"

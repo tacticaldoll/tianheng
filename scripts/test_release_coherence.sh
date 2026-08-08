@@ -211,6 +211,54 @@ sed -i '/^## \[Unreleased\]$/d' "$missing_unreleased/CHANGELOG.md"
 commit_all "$missing_unreleased" 'chore: omit unreleased section'
 expect_fail "$missing_unreleased" 1 'exactly one [Unreleased] section'
 
+# --- the changelog's internal consistency ---
+#
+# Both directions were produced by the 0.5.0 window rather than imagined: an `[Unreleased]` grew a second
+# `### Changed` heading three hundred lines from the first, and a prose claim about which releases carry a
+# `### Migration` section was wrong under every reading. Neither was visible to anything until a mechanical
+# sweep read the document's structure.
+
+duplicate_heading=$(new_repo duplicate-heading)
+write_workspace "$duplicate_heading" 0.2.0
+write_development_changelog "$duplicate_heading" 0.2.0
+python3 - "$duplicate_heading/CHANGELOG.md" <<'EDIT'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+p.write_text(p.read_text().replace(
+    "- An adopter-facing change.\n",
+    "### Changed\n- An adopter-facing change.\n\n### Changed\n- A second block of the same name.\n"))
+EDIT
+commit_all "$duplicate_heading" 'chore: split one section in two'
+expect_fail "$duplicate_heading" 1 'repeats a heading'
+
+breaking_without_migration=$(new_repo breaking-without-migration)
+write_workspace "$breaking_without_migration" 0.2.0
+write_development_changelog "$breaking_without_migration" 0.2.0
+python3 - "$breaking_without_migration/CHANGELOG.md" <<'EDIT'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+p.write_text(p.read_text().replace(
+    "- An adopter-facing change.\n",
+    "### Changed\n- **BREAKING** an adopter-facing change with nowhere to read what to do.\n"))
+EDIT
+commit_all "$breaking_without_migration" 'chore: mark a break with no migration'
+expect_fail "$breaking_without_migration" 1 'carries no `### Migration` section'
+
+# The control for the direction above: the same break WITH the section is coherent, so the refusal is about the
+# missing migration rather than about the marker.
+breaking_with_migration=$(new_repo breaking-with-migration)
+write_workspace "$breaking_with_migration" 0.2.0
+write_development_changelog "$breaking_with_migration" 0.2.0
+python3 - "$breaking_with_migration/CHANGELOG.md" <<'EDIT'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+p.write_text(p.read_text().replace(
+    "- An adopter-facing change.\n",
+    "### Changed\n- **BREAKING** an adopter-facing change.\n\n### Migration\n- Regenerate the baseline.\n"))
+EDIT
+commit_all "$breaking_with_migration" 'chore: mark a break and say what to do'
+expect_pass "$breaking_with_migration" 'development: 0.2.0'
+
 invalid_link=$(new_repo invalid-link)
 write_workspace "$invalid_link" 0.2.1
 write_release_changelog "$invalid_link" 0.2.1 0.2.0

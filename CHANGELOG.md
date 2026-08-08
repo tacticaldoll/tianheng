@@ -98,6 +98,21 @@ them.
   dismissing it as governed policy.
 
 ### Added
+
+- **`check_release_coherence.sh` now reads each release section's internal consistency, not only the
+  changelog's state.** Two defects of that shape landed in one window and nothing saw either: an `[Unreleased]`
+  grew a second `### Changed` heading three hundred lines from the first, and a prose claim about which prior
+  releases carry a `### Migration` section was wrong under every reading. A heading may not appear twice in one
+  section, and a section marking a change `**BREAKING**` must carry a `### Migration` — one-way, since a
+  section may carry a migration for a break marked another way, as `[0.3.0]` does. Both directions were run
+  against the gate without the extension and report exit 0 there.
+
+  The line this draws is worth stating, because a nearby detector was measured and rejected three times: the
+  changelog has a **grammar**, and these are properties of that grammar. The **content** of an entry — whether
+  it is accurate, whether "no adopter action" holds, whether a named symbol exists — stays out, because
+  deciding that is the judgement over prose that was rejected. The vacuity guard is over sections rather than
+  headings for the same reason: a changelog whose sections carry bullets directly is ordinary, and this
+  repository's own early releases are that shape.
 - **A pinning citation can now be held to *biting*, not only to running.** `check_bound_register.sh` decides
   that a `PINNED-BY` citation names a test the harness registers; it cannot decide that the test would fail if
   the reaction it defends changed. Measured rather than argued: replacing a cited pin's entire body with a
