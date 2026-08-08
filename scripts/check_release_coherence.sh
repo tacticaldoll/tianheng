@@ -369,10 +369,14 @@ changelog_sections() {
         # span rule was written first and adversarial review reproduced three false negatives against it, every
         # one of them a shape this document already uses: a span carrying anything besides the bare path
         # (`bash scripts/check_pin_bites.sh`, `scripts/check_pin_bites.sh --fix`, `./scripts/…`) compared
-        # unequal and passed; a double-backtick span — the section already holds four — mispaired the regex and
-        # swallowed the path; and an inline span wrapped across a source line left its continuation unscanned,
-        # a shape live on three lines of the governed section. Reading runs closes all three at once and
-        # reaches a markdown link target as well, which the span rule never could.
+        # unequal and passed; a padded double-backtick span — the governed section held four before this
+        # change and holds five after, one of them the sentence describing this — mispaired the regex and
+        # swallowed the path; and an inline span wrapped across a source line left its continuation unscanned.
+        # That last one is live ONCE in the section, not three times: a per-line odd-backtick count reports
+        # three, which is the two halves of the one wrap plus a well-formed ```` ```rust ```` span. It carries no
+        # machinery name either, so the wrap was a fixture-level false negative rather than a live leak — the
+        # weaker claim, and the true one. Reading runs closes all three and reaches a markdown link target as
+        # well, which the span rule never could.
         #
         # Attribution is line -> heading in force -> section, which is the document grammar this gate already
         # walks: every line of a list item sits under the same heading as its first, so item boundaries buy
@@ -433,7 +437,7 @@ $missing_migration"
 # `CHANGELOG.md` is the adopter's document. It carries eight kinds of heading — Added, Changed, Fixed,
 # Migration, Documentation, Removed, Compatibility, Compatibility evidence — and every one of them is an
 # adopter's vocabulary. It offered none that was not, so every change to this repository's own
-# machinery was written into whichever fitted least badly: nineteen entries name it — ten in `[Unreleased]`
+# machinery was written into whichever fitted least badly: twenty entries name it — eleven in `[Unreleased]`
 # and nine in the released `[0.4.0]`, across four different headings — for a directory that ships in zero
 # packages. `### Self-governance` is that missing
 # heading, and this refuses the leak back into the others.

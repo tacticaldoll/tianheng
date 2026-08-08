@@ -276,6 +276,49 @@ fn a_colliding_basename_is_a_stated_bound() {
     );
 }
 
+/// `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound`
+///
+/// `UnderReacts`, owned by the engine. Directories are derived slash-terminated, so `scripts` and `scripts/lib`
+/// name nothing. The unslashed form is a word indistinguishable from ordinary prose — `scripts` is an English
+/// plural this repository's own changelog already uses as one — and admitting it for deeper names only would
+/// make the reaction judge which of its own keys read as English.
+#[test]
+fn a_directory_named_without_its_slash_is_a_stated_bound() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let scripts = root.join("scripts");
+    let temp = scratch("unslashed");
+
+    let repo = fixture(
+        &scripts,
+        &temp,
+        r#"repo=$(coherence_fixture_repo "$2" unslashed)
+           coherence_fixture_development_changelog "$repo" 0.2.0
+           coherence_fixture_machinery "$repo"
+           coherence_fixture_unreleased_body "$repo" '### Fixed
+- A repair to the scripts and to scripts/lib, written without a trailing slash.'
+           coherence_fixture_commit "$repo" 'docs: name a directory without its slash' >/dev/null
+           printf '%s\n' "$repo""#,
+    );
+
+    assert!(
+        !tracked_machinery(&repo).is_empty(),
+        "the fixture must TRACK the machinery it names, or the silence below is the empty-enumeration bound \
+         rather than this one"
+    );
+    assert_reaction_is_live(&scripts, &temp);
+
+    let (code, output) = gate(&scripts, &repo);
+    let _ = std::fs::remove_dir_all(&temp);
+    assert_eq!(
+        code,
+        Some(0),
+        "the gate must stay silent about a directory named without its trailing slash — that is the declared \
+         bound. Got: {output}"
+    );
+}
+
 /// `release-coherence/a-name-reached-only-through-a-url-a-stated-bound`
 ///
 /// `UnderReacts`, owned by the engine. A word is a maximal run of path characters, so a scheme and host fuse

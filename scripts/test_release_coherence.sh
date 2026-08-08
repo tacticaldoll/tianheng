@@ -169,7 +169,7 @@ expect_pass "$breaking_with_migration" 'development: 0.2.0'
 # --- adopter narrative names no self-governance machinery ---
 #
 # `CHANGELOG.md` is the adopter's document and offered no heading that was not an adopter's vocabulary, so
-# nineteen entries name that machinery — ten in `[Unreleased]` and nine in the released `[0.4.0]` — spread
+# twenty entries name that machinery — eleven in `[Unreleased]` and nine in the released `[0.4.0]` — spread
 # across `### Added`, `### Changed`, `### Fixed` and `### Documentation`.
 # Every direction below asserts the exit CODE, and the pair 3/4 is what holds the rule to the enumerator
 # rather than to the `check_` prefix.
@@ -292,6 +292,92 @@ coherence_fixture_unreleased_body "$colliding_basename" '### Fixed
 - Adopters run their own `publish.sh` after upgrading.'
 coherence_fixture_commit "$colliding_basename" 'docs: write a name the repository also tracks'
 expect_fail "$colliding_basename" 1 "names this repository's own machinery"
+
+# The DIRECTORY is machinery too, and review found this branch defended by nothing: deleting it left the whole
+# matrix green. Both derived forms get a direction, because the derivation strips one component at a time and a
+# loop that stopped after the first would pass a test written only for `scripts/`.
+names_the_directory=$(coherence_fixture_repo "$fixture_root" names-the-directory)
+coherence_fixture_development_changelog "$names_the_directory" 0.2.0
+coherence_fixture_machinery "$names_the_directory"
+mkdir -p "$names_the_directory/scripts/lib"
+printf '# shellcheck shell=bash\n' >"$names_the_directory/scripts/lib/fixture_helper.sh"
+coherence_fixture_unreleased_body "$names_the_directory" '### Fixed
+- A repair described by naming `scripts/` and nothing in it.'
+coherence_fixture_commit "$names_the_directory" 'docs: name the directory itself'
+expect_fail "$names_the_directory" 1 "names this repository's own machinery"
+
+# An ANCESTOR two levels up, which is what makes the derivation a loop rather than one strip. A fixture whose
+# directory is the immediate parent of a tracked file cannot tell the two apart — measured: with the loop cut to
+# a single `if`, a `scripts/lib/` direction stayed green because `scripts/lib/` is a first strip of
+# `scripts/lib/<file>`. Only a grandparent needs the second iteration.
+names_an_ancestor=$(coherence_fixture_repo "$fixture_root" names-an-ancestor)
+coherence_fixture_development_changelog "$names_an_ancestor" 0.2.0
+mkdir -p "$names_an_ancestor/scripts/lib/nested"
+printf '# shellcheck shell=bash\n' >"$names_an_ancestor/scripts/lib/nested/fixture_helper.sh"
+coherence_fixture_unreleased_body "$names_an_ancestor" '### Fixed
+- A repair described by naming `scripts/lib/` and nothing in it.'
+coherence_fixture_commit "$names_an_ancestor" 'docs: name a derived ancestor two levels up'
+expect_fail "$names_an_ancestor" 1 "names this repository's own machinery"
+
+# A directory without its trailing slash is an ordinary word — `scripts` is an English plural, and this
+# document uses it as one. The declared bound, pinned here so the exclusion is deliberate rather than an
+# artifact of how the derivation happens to build its keys.
+names_the_directory_unslashed=$(coherence_fixture_repo "$fixture_root" names-the-directory-unslashed)
+coherence_fixture_development_changelog "$names_the_directory_unslashed" 0.2.0
+coherence_fixture_machinery "$names_the_directory_unslashed"
+coherence_fixture_unreleased_body "$names_the_directory_unslashed" '### Fixed
+- A repair to the scripts and to scripts/lib, written without a trailing slash.'
+coherence_fixture_commit "$names_the_directory_unslashed" 'docs: name a directory without its slash'
+expect_pass "$names_the_directory_unslashed" 'development: 0.2.0'
+
+# The two normalisation branches, each ALONE. Review found both undefended: `span_carries_a_command` carried a
+# bare path beside the `./` form, so the bare one satisfied it and the strip was never the reason it fired;
+# and no fixture anywhere ended a name at a sentence period.
+names_a_relative_path=$(coherence_fixture_repo "$fixture_root" names-a-relative-path)
+coherence_fixture_development_changelog "$names_a_relative_path" 0.2.0
+coherence_fixture_machinery "$names_a_relative_path"
+coherence_fixture_unreleased_body "$names_a_relative_path" '### Fixed
+- Run `./scripts/check_pin_bites.sh` to repair.'
+coherence_fixture_commit "$names_a_relative_path" 'docs: name a gate relative to the root'
+expect_fail "$names_a_relative_path" 1 "names this repository's own machinery"
+
+names_at_a_sentence_end=$(coherence_fixture_repo "$fixture_root" names-at-a-sentence-end)
+coherence_fixture_development_changelog "$names_at_a_sentence_end" 0.2.0
+coherence_fixture_machinery "$names_at_a_sentence_end"
+coherence_fixture_unreleased_body "$names_at_a_sentence_end" '### Fixed
+- A repair to scripts/check_pin_bites.sh.'
+coherence_fixture_commit "$names_at_a_sentence_end" 'docs: end a sentence on a gate'
+expect_fail "$names_at_a_sentence_end" 1 "names this repository's own machinery"
+
+# A FAILED enumeration must refuse, and this is the direction whose absence review measured as a false
+# NEGATIVE rather than a downgrade: with the refusal replaced by a plain redirect, the parser reads an empty
+# enumeration cleanly and the gate reports a real violation as coherent — exit 0 over a document naming a gate.
+enumeration_stub=$fixture_root/enumeration-stub
+mkdir -p "$enumeration_stub"
+enumeration_real_git=$(command -v git)
+cat >"$enumeration_stub/git" <<STUB
+#!/usr/bin/env bash
+previous=
+for arg in "\$@"; do
+    [[ \$previous == ls-files && \$arg == scripts/ ]] && exit 9
+    previous=\$arg
+done
+exec "$enumeration_real_git" "\$@"
+STUB
+chmod +x "$enumeration_stub/git"
+
+unreadable_enumeration=$(coherence_fixture_repo "$fixture_root" unreadable-enumeration)
+coherence_fixture_development_changelog "$unreadable_enumeration" 0.2.0
+coherence_fixture_machinery "$unreadable_enumeration"
+coherence_fixture_unreleased_body "$unreadable_enumeration" '### Fixed
+- A repair naming `scripts/check_pin_bites.sh`.'
+coherence_fixture_commit "$unreadable_enumeration" 'docs: name a gate the enumeration cannot see'
+enumeration_status=0
+enumeration_output=$(PATH="$enumeration_stub:$PATH" "$check" "$unreadable_enumeration" 2>&1) || enumeration_status=$?
+[[ $enumeration_status -eq 2 ]] \
+    || { printf 'a failed enumeration must exit 2, got %d: %s\n' "$enumeration_status" "$enumeration_output" >&2; exit 1; }
+grep -Fq 'a failed read is not an empty result' <<<"$enumeration_output" \
+    || { printf 'the refusal must say a failed read is not an empty result, got: %s\n' "$enumeration_output" >&2; exit 1; }
 
 # Reached only through a URL: the run is delimited by the first character a path cannot hold, so a scheme and
 # host fuse into one word that equals nothing. A declared bound.

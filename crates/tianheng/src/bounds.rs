@@ -471,16 +471,20 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_comment_naming_every_member_for_another_reason_is_refused",
         ),
-        // --- release-coherence: the adopter-narrative rule's four limits ---
+        // --- release-coherence: the adopter-narrative rule's limits ---
+        //
+        // How many there are is not written here. The block grew from four to seven across two review rounds
+        // while a header saying "four" sat on top of it, which is the same typed census this capability's own
+        // reaction was made to stop writing.
         //
         // Its reaction is a shell gate, and `PINNED-BY` resolves only a harness-registered Rust function — so
-        // three of these cite `tests/release_coherence.rs`, a file that exists for them. The twin defends each
-        // of the three too, through the same fixture builder, and cannot be cited.
+        // all but one cite `tests/release_coherence.rs`, a file that exists for them. The twin defends every
+        // one of those too, through the same fixture builder, and cannot be cited.
         //
         // Every extent below is read off a run of that limit's own WHEN. One has no mechanical WHEN to run and
         // is unpinned for that reason rather than deferred.
         //
-        // A sixth was declared here and RETIRED in the same window: while the scan compared whole backticked
+        // One more was declared here and RETIRED in the same window: while the scan compared whole backticked
         // spans, a gate named as unquoted prose passed, and that was declared. Adversarial review reproduced
         // three false negatives against the span reading — a span carrying a command, a double-backtick span,
         // an inline span wrapped across a line — and the word-run scan that closes all three reaches unquoted
@@ -543,8 +547,8 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             BoundId::new(
                 "release-coherence/a-basename-an-entry-writes-for-another-reason-a-stated-bound",
             ),
-            "an adopter-facing entry naming a file of its own whose basename the judged repository also tracks \
-             under `scripts/`",
+            "an adopter-facing entry naming something of its own — a basename, or the directory itself — that \
+             the judged repository also tracks under `scripts/`",
             Extent::Reached(Reached::OverReacts {
                 because: "a word is matched against basenames as well as paths, because the document cites \
                           both forms; narrowing it to full paths would lose every bare citation, and deciding \
@@ -553,6 +557,22 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                     .into(),
             }),
             "a_colliding_basename_is_a_stated_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound",
+            ),
+            "an adopter-facing entry naming a directory under `scripts/` without its trailing slash",
+            Extent::Reached(Reached::UnderReacts {
+                because: "directories are derived slash-terminated, and stripping that slash leaves a word \
+                          indistinguishable from ordinary prose — `scripts` is an English plural this document \
+                          already uses as one. Admitting the unslashed form for deeper names only, where the \
+                          collision is less likely, would make the reaction judge which of its own keys read \
+                          as English"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_directory_named_without_its_slash_is_a_stated_bound",
         ),
         BoundDecl::pinned(
             BoundId::new(

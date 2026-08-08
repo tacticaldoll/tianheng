@@ -152,16 +152,18 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 ### Requirement: Adopter narrative SHALL NOT name this repository's own machinery
 
 An entry under an adopter-facing heading of the `[Unreleased]` section SHALL NOT name this repository's
-own machinery: a path token under `scripts/`, or a bare basename that `git ls-files scripts/` resolves
-to a tracked file there.
+own machinery in any of three forms: a path under `scripts/`, a bare basename that `git ls-files scripts/`
+resolves to a tracked file there, or a **directory** under `scripts/` written with its trailing slash. All
+three are derived from the one enumeration — the directories by stripping components from each enumerated
+path — so none is a list written beside it.
 
 `CHANGELOG.md` is the adopter's document. It carries eight kinds of heading — `### Added`, `### Changed`,
 `### Fixed`, `### Migration`, `### Documentation`, `### Removed`, `### Compatibility` and
 `### Compatibility evidence` — and every one of them is an adopter's vocabulary. It offered none that was
 not, so every
-change to this repository's own governance machinery has been written into one of them. Measured: nineteen
-entries name it — ten in `[Unreleased]` and nine in the released `[0.4.0]`, across four different headings —
-for a directory that ships in **zero** packages.
+change to this repository's own governance machinery has been written into one of them. Measured: twenty
+entries name it — eleven in `[Unreleased]` and nine in the released `[0.4.0]`, across four different
+headings — for a directory that ships in **zero** packages.
 
 The `[Unreleased]` section SHALL be permitted a `### Self-governance` heading,
 under which naming that machinery is what belongs; a heading is adopter-facing when it is any `### `
@@ -174,7 +176,8 @@ into the reaction: a census is produced, never typed, and the first draft of thi
 the commit adding it made stale.
 
 A name SHALL be recognised as a **word** — a maximal run of path characters, required to equal a tracked
-path or basename. That is exact matching of a lexical token rather than substring matching: a sentence
+path, basename or derived directory. That is exact matching of a lexical token rather than substring
+matching: a sentence
 merely containing the characters cannot match, because the run is delimited by the first character a path
 cannot hold. The rule was first written to compare whole **backticked spans**, and adversarial review
 reproduced three false negatives against that reading, every one a shape this repository's own changelog
@@ -288,3 +291,25 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
   exempt heading. The reaction walks the document's line grammar and does not track fences; it is latent
   rather than live, this repository's changelog carrying no fenced block at all
 - **PINNED-BY** `a_heading_inside_a_fenced_block_is_a_stated_bound`
+
+#### Scenario: The directory itself, and a derived ancestor
+
+- **WHEN** an entry under an adopter-facing heading names `` `scripts/` ``, or `` `scripts/lib/` `` where the
+  judged repository tracks a file two levels below it
+- **THEN** the reaction fails in both, because every ancestor directory is derived from the enumeration by
+  stripping one component at a time
+
+#### Scenario: A directory named without its trailing slash — a stated bound
+
+- **WHEN** an adopter-facing entry names `scripts` or `scripts/lib` with no trailing slash
+- **THEN** nothing reacts. Directories are derived slash-terminated, and the unslashed form is a word
+  indistinguishable from ordinary prose — `scripts` is an English plural this document already uses as one.
+  Admitting it for deeper names only would make the reaction judge which of its own keys read as English
+- **PINNED-BY** `a_directory_named_without_its_slash_is_a_stated_bound`
+
+#### Scenario: The enumeration fails rather than returning nothing
+
+- **WHEN** `git ls-files scripts/` exits non-zero while an adopter-facing entry names a gate
+- **THEN** the reaction refuses to judge. This is the direction whose absence is a false **negative** rather
+  than a downgrade: with the refusal replaced by a plain redirect, the parser reads the empty capture cleanly
+  and reports a document naming a gate as coherent

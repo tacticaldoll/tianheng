@@ -758,7 +758,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   false-positives on the fixture censuses that matrix writes deliberately; and the one instance that occurred in a
   code doc was spelled in words. Most numbers here describe a *shape*, not a census.
 - **This heading exists, and `check_release_coherence.sh` refuses the leak back into the others.** `scripts/`
-  ships in zero packages — measured across all six members — yet nineteen entries name it, ten of them in
+  ships in zero packages — measured across all six members — yet twenty entries name it, eleven of them in
   `[Unreleased]` and nine in the released `[0.4.0]`, spread across `### Added`, `### Changed`, `### Fixed` and
   `### Documentation`. The document offered no heading that was not an adopter's vocabulary, so there was
   nowhere else for them to go, and an adopter reading `[Unreleased]` read about a file they can never run.
@@ -787,8 +787,11 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   The **second** rule was falsified too, by adversarial review rather than by enumeration. It compared whole
   backticked spans, and three shapes this section already uses passed clean: a span carrying anything besides
-  the bare path (`` `bash scripts/check_pin_bites.sh --fix` ``), a double-backtick span (four live in this
-  section), and an inline span wrapped across a source line (three live). A name is now a **word** — a maximal
+  the bare path (`` `bash scripts/check_pin_bites.sh --fix` ``), a padded double-backtick span (the section
+  held four before this change), and an inline span wrapped across a source line — live **once**, and carrying
+  no machinery name, so that one was a fixture-level false negative rather than a leak in this document. The
+  "three" a per-line backtick count reports is the two halves of that one wrap plus a well-formed
+  ```` ```rust ```` span. A name is now a **word** — a maximal
   run of path characters, required to equal a tracked name — which closes all three, reaches a markdown link
   target the span reading never could, and retires the declared bound about unquoted prose by making it react.
   Review also caught the reaction stating a **count** of its own enumeration, gone stale by exactly the file

@@ -207,7 +207,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **77 bounds across 23 capabilities** — a live figure rather than part of the measurement
+  currently holds **78 bounds across 23 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -507,21 +507,29 @@ consumer for an undemonstrated deduplication.
   which kept a measured false negative out of the register a reader is told to consult before calling a
   behaviour a defect. All four are declared unpinned against this entry now.
 
-- **WATCH: four capabilities have their subject inside this repository and are indistinguishable from the
-  thirty-two that describe what adopters get.** *Observed pressure:* the census that motivated
+- **ACCEPTED: capabilities whose subject is this repository are indistinguishable from those describing what
+  adopters get, and nothing can tell them apart.** *Observed pressure:* the census that motivated
   `### Self-governance` found the same mispricing at a second surface. `gate-shape-contract`,
-  `observation-bound-register`, `projection-register` and `self-law-projection` sit in the same directory,
-  under the same lifecycle and the same review bar as capabilities describing the product. Measured once, at
-  `change/adopter-narrative-names-no-self-machinery`: 1,291 of the 8,027 non-blank lines under
-  `openspec/specs`, about a sixth — recorded as an observation of that moment rather than a live figure,
-  since every one of those files changes. *Observation source:* classified by
-  counting, per capability, mentions of this repository's own artifacts against mentions of adopters; those
-  four are the only ones where the first exceeds the second. *Current reaction or bound:* none. Nothing
+  `observation-bound-register`, `projection-register`, `self-law-projection` — and `release-coherence`, which
+  review found to be a fifth — sit in the same directory, under the same lifecycle and the same review bar as
+  the capabilities describing the product. Measured once, at `change/adopter-narrative-names-no-self-machinery`
+  and over the **four originally identified**: 1,291 of the 8,027 non-blank lines under `openspec/specs`,
+  about a sixth. Recorded as an observation of that moment rather than a live figure, since every one of those
+  files changes — and since the fifth arrived while the entry was being written. *Observation source:* a keyword heuristic — per
+  capability, mentions of this repository's own artifacts against mentions of adopters — and **the heuristic
+  is part of the finding**. Run at `release/0.5.0` it named exactly those four. Run at this change it names
+  six: `observer-protocol` sat one mention below the line either way, and `release-coherence` crossed it
+  because this change added twenty-nine self-governance mentions to that spec. `release-coherence` was
+  always a fifth by a plain reading of its Purpose — "the read-only repository reaction that keeps
+  Tianheng's release commit spine coherent" — and the keyword count simply missed it. A set that a prose
+  heuristic cannot hold steady is the instrument this repository measured three times and rejected, which is
+  precisely why the set needs a marker a reaction can read. *Current reaction or bound:* none. Nothing
   distinguishes a capability whose subject is this repository from one whose subject is what ships, so
   nothing can. *Risk:* low and slow — it costs review attention and makes `openspec/specs` read as a larger
   product surface than it is; it cannot mislead an adopter, who never reads it. *Promotion trigger:* a fifth
-  capability of this kind, or a reader treating one of the four as adopter surface during review. **Not
-  fired.** *Version class:* patch; specification layout of this repository. *Authority:* undecided — marking
+  capability of this kind. **FIRED at filing**, by this entry's own measurement: `release-coherence` is the
+  fifth, and `observer-protocol` is a sixth under one reading and not under another. Recording it as unfired
+  would have been the more comfortable sentence and the false one. *Version class:* patch; specification layout of this repository. *Authority:* undecided — marking
   them is itself a governance decision about `openspec/specs`, and the change that found this deliberately
   left it alone so that change could close. *Shape:* the cheap form is a marker the register can read, so the
   distinction is enumerable rather than a convention; the expensive form is a second directory, which would
@@ -529,7 +537,7 @@ consumer for an undemonstrated deduplication.
 
 - **WATCH: the self-governance residual is a judgement over an entry's subject.** *Observed pressure:*
   `CHANGELOG.md` is the adopter's document and offered no heading that was not an adopter's vocabulary, so
-  nineteen entries name that machinery — ten in `[Unreleased]` and nine in the released `[0.4.0]` — spread
+  twenty entries name that machinery — eleven in `[Unreleased]` and nine in the released `[0.4.0]` — spread
   across `### Added`, `### Changed`, `### Fixed` and `### Documentation`. The rule that now refuses them reads an entry's
   **references** — a word equal to a path under `scripts/`, or to a basename `git ls-files scripts/` resolves
   — and an entry describing this repository's own governance while naming no such word stays invisible to it. *Observation source:* two live instances, not a hypothetical: after this

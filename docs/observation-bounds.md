@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**13 of 77 declared bounds have no pinning test.** That figure is the register's
+**13 of 78 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -306,6 +306,12 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing reacts for those entries, because that line set the heading in force and may name the one
 
 - **pinned by**: `a_heading_inside_a_fenced_block_is_a_stated_bound`
+
+### `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound`
+
+> nothing reacts. Directories are derived slash-terminated, and the unslashed form is a word
+
+- **pinned by**: `a_directory_named_without_its_slash_is_a_stated_bound`
 
 ## runtime-origin-assertion
 

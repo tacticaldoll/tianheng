@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**32 of 77 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**33 of 78 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound` — owner: engine
@@ -24,6 +24,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound` — owner: engine
 - `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound` — owner: inherited from the verification environment
 - `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound` — owner: engine
+- `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound` — owner: engine
 - `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound` — owner: engine
 - `release-coherence/a-name-reached-only-through-a-url-a-stated-bound` — owner: engine
 - `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound` — owner: engine
@@ -369,7 +370,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 
 ### `release-coherence/a-basename-an-entry-writes-for-another-reason-a-stated-bound`
 
-> an adopter-facing entry naming a file of its own whose basename the judged repository also tracks under `scripts/`
+> an adopter-facing entry naming something of its own — a basename, or the directory itself — that the judged repository also tracks under `scripts/`
 
 - **because**: a word is matched against basenames as well as paths, because the document cites both forms; narrowing it to full paths would lose every bare citation, and deciding which of two files a bare name means is a judgement about the sentence rather than about the reference
 - **its defence must show**: reacts on a harmless shape
@@ -415,7 +416,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (32)
+## under-reacts (33)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -568,6 +569,14 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **because**: a dated section records what was true at that release, so rewriting it to satisfy a rule written afterwards would falsify the record rather than repair it — the reason `docs/history/` is left alone. The leak is real and stays: an adopter reading `[0.4.0]` meets nine entries naming files they can never run, and closing it needs a form of repair that adds to the record instead of editing it
 - **its defence must show**: does not react
 - **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
+
+### `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound`
+
+> an adopter-facing entry naming a directory under `scripts/` without its trailing slash
+
+- **because**: directories are derived slash-terminated, and stripping that slash leaves a word indistinguishable from ordinary prose — `scripts` is an English plural this document already uses as one. Admitting the unslashed form for deeper names only, where the collision is less likely, would make the reaction judge which of its own keys read as English
+- **its defence must show**: does not react
+- **pinned by**: `a_directory_named_without_its_slash_is_a_stated_bound`
 
 ### `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound`
 
