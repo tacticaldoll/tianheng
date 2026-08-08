@@ -212,8 +212,8 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
 
 #### Scenario: A gate named inside a longer span, or as unquoted prose
 
-- **WHEN** an entry under an adopter-facing heading writes `` `bash scripts/check_pin_bites.sh --fix` ``, or
-  `` `` `scripts/check_pin_bites.sh` `` ``, or a span wrapped across a source line, or a markdown link whose
+- **WHEN** an entry under an adopter-facing heading writes `` `bash crates/tianheng/tests/pin_bites.rs --fix` ``, or
+  `` `` `crates/tianheng/tests/pin_bites.rs` `` ``, or a span wrapped across a source line, or a markdown link whose
   target is the gate, or the bare name with no backticks at all
 - **THEN** the reaction fails in every one of those, because the word is the unit rather than the span
 
@@ -294,14 +294,14 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
 
 #### Scenario: The directory itself, and a derived ancestor
 
-- **WHEN** an entry under an adopter-facing heading names `` `scripts/` ``, or `` `scripts/lib/` `` where the
+- **WHEN** an entry under an adopter-facing heading names `` `scripts/` ``, or `` a shared shell library `` where the
   judged repository tracks a file two levels below it
 - **THEN** the reaction fails in both, because every ancestor directory is derived from the enumeration by
   stripping one component at a time
 
 #### Scenario: A directory named without its trailing slash — a stated bound
 
-- **WHEN** an adopter-facing entry names `scripts` or `scripts/lib` with no trailing slash
+- **WHEN** an adopter-facing entry names `scripts` or a shared shell library with no trailing slash
 - **THEN** nothing reacts. Directories are derived slash-terminated, and the unslashed form is a word
   indistinguishable from ordinary prose — `scripts` is an English plural this document already uses as one.
   Admitting it for deeper names only would make the reaction judge which of its own keys read as English

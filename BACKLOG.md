@@ -103,7 +103,7 @@ consumer for an undemonstrated deduplication.
   `observer-protocol`. *Shape:* not a text reader — that route is retired and its defeat is recorded one
   requirement over. The discriminator is behavioural and needs a **perturbed build**: empty a dimension's
   observer and see which assertion fails — the equality assert for an independently-implemented dimension, only
-  the reacts-at-all assert for a construction-held one. `scripts/check_pin_bites.sh` already builds and runs a
+  the reacts-at-all assert for a construction-held one. `crates/tianheng/tests/pin_bites.rs` already builds and runs a
   mutated checkout, so the machinery exists; what it does not yet do is carry a declaration whose subject is a
   spec sentence rather than a pinning citation.
 
@@ -207,7 +207,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **78 bounds across 23 capabilities** — a live figure rather than part of the measurement
+  currently holds **73 bounds across 22 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -251,7 +251,7 @@ consumer for an undemonstrated deduplication.
   Every `check_*` gate now has a `test_*` twin, and every one of those matrices asserts the expected exit
   **code** rather than a non-zero status — the property whose absence let a 1-into-2 collapse ride green
   through CI in the release-coherence gate. The count is deliberately not written here: it is printed by
-  `docs/gate-shape-contract.md`, whose reaction enumerates the pairing.
+  the retired gate-shape projection, whose reaction enumerates the pairing.
 
 - ~~**An observer cannot be made to declare what it does not observe.**~~ **CLOSED** in the open window, and
   worth recording for what it did **not** buy as much as for what it did.
@@ -303,12 +303,12 @@ consumer for an undemonstrated deduplication.
   the fix was the same each time — recognize by position or shape, never by the bare string.
 
 - ~~**A gate's own shape is convention, so every new gate re-learns it by breaking.**~~ **CLOSED** in the open
-  window as the `gate-shape-contract` capability. `crates/tianheng/tests/gate_shape_contract.rs` enumerates the
+  window as the `gate-shape-contract` capability. the retired gate-shape reaction enumerates the
   tracked shell units under `scripts/` whose basename begins with `check_` — on the basename rather than by a
   `check_*` pathspec, since git matches pathspec wildcards without `FNM_PATHNAME` and the glob would be
   describing something other than what it says — pairs each gate with the twin its basename names, asserts every
   checkable property, declares the three semantic classes and the coverage limit as observation bounds with
-  pinning tests, and projects `docs/gate-shape-contract.md`. A Rust reaction rather than a seventh shell gate,
+  pinning tests, and projects the retired gate-shape projection. A Rust reaction rather than a seventh shell gate,
   because `PINNED-BY` resolves only a harness-registered Rust function: a shell-defended capability would have
   landed those bounds `UNPINNED` and moved the register projection's leading figure off zero. It rides the
   existing `cargo test` line, so it added no Definition of Done entry and no CI step.
@@ -347,14 +347,14 @@ consumer for an undemonstrated deduplication.
   read gives one or more. **The guard and the capture answer different questions, which is why they now sit side by
   side rather than one replacing the other.**
 
-  Eight sites migrated to `scripts/lib/capture.sh`, and **the property found two more on its first run — one of them
+  Eight sites migrated to the shell era's shared capture library, and **the property found two more on its first run — one of them
   written by the migration itself** (`< <(sort …)`), the other a per-file scan never migrated at all. A property that
   catches its own author's fresh mistake within a minute of existing is the argument for having it.
 
   **The lesson worth keeping is about the helper, not the sites.** Its first version turned `grep`'s exit 1 — a clean
   miss, the ordinary case — into cannot-judge, and the release gate's own vacuity direction failed immediately. So it
   takes `--ordinary-empty <status>` per call site: the rule is about the producer's *contract*, not about its name,
-  and `scripts/lib/exit_contract.sh` draws the same distinction for the same reason. A shared helper that decides a
+  and the shell era's shared exit-contract backstop draws the same distinction for the same reason. A shared helper that decides a
   producer's contract for its callers would have been a new class of its own.
 
   **Residual, and the bound was narrowed rather than left standing.** A status swallowed by a command substitution,
@@ -390,7 +390,7 @@ consumer for an undemonstrated deduplication.
   Also recorded: `PINNED-BY` resolving only a Rust function meant this shell gate's bound could be defended by a
   twin direction and cited by nothing. Rather than accept `UNPINNED` — which would have reported a defended bound
   as undefended, buying a true figure with a false fact — the release-repository fixture builder was extracted to
-  `scripts/lib/release_fixture.sh` and a Rust test pins the bound through it. **Measured, not estimated**: one
+  `crates/tianheng/tests/support/publish_source_gate.rs` and a Rust test pins the bound through it. **Measured, not estimated**: one
   shared builder, no second construction. So the WATCH entry on shell-defended capabilities stays WATCH; its
   trigger asks for a residual measured and found *unaffordable*, and this one was affordable.
 
@@ -602,7 +602,7 @@ consumer for an undemonstrated deduplication.
   One instance in a projection is the pattern existing without being enumerated, not the gap being closed.
   *Risk:* a rejection is re-proposed, re-measured and re-rejected; the reverse risk is equally real and is why
   this is WATCH rather than READY — see the trigger. *Promotion trigger:* **not fired.** The candidate evidence
-  points both ways. `scripts/check_bound_register.sh:399` records that the harness enumeration "was rejected
+  points both ways. `crates/tianheng/tests/bound_register.rs:399` records that the harness enumeration "was rejected
   TWICE in this file's own comments, on an unmeasured premise", then measured at 107ms cold and adopted — a
   rejection that a later reader *did* consult and correctly overturn, which argues that a durable, projected
   register would have entrenched a wrong answer twice. The trigger is a rejection demonstrably **re-proposed and
@@ -648,7 +648,7 @@ consumer for an undemonstrated deduplication.
     binaries: `Header::comments` was added with the region newtypes, never called anywhere, and passed every
     clippy pass in the Definition of Done including the two that exist to catch dead code. *Observation source:*
     the 0.5.0 closing review's expanded dead-code sweep, after an external review found the sibling instance in
-    `scripts/lib/capture.sh`; the method is deleted, the class is not. *Current reaction or bound:* none. Three
+    the shell era's shared capture library; the method is deleted, the class is not. *Current reaction or bound:* none. Three
     clippy passes cover non-`pub` Rust and a `--workspace` pass exists precisely to catch dead code that ships,
     and none of them can see past a justified allow. *Risk:* a shared test helper accumulates an API nobody calls,
     which is worse in a support module than elsewhere — it reads as the blessed way to do something, so the next
@@ -843,7 +843,7 @@ consumer for an undemonstrated deduplication.
     duplicate-keyed `fact.fields` object does resolve last-wins), but the claim does not survive
     the contract lens — the shape cannot arise from any real fact construction path in this
     codebase, only from hand-authored malformed JSON.
-  - "The composed baseline dogfood (`scripts/test_examples.sh`) exercises only the suppression
+  - "The composed baseline dogfood (`cargo test -p tianheng --test examples_suite`) exercises only the suppression
     direction, and its in-script justification misstates what the standalone test proves"
     (0.3.1 sweep). Refuted: a test-coverage complaint dressed as an unhonored claim — every
     documented claim it cites is in fact honored by the referenced test and README.
@@ -928,7 +928,7 @@ that also holds a closed READY-PATCH record.
   open window. Closed by writing unit tests for all 5 remaining UNPINNED scenarios across `external-crate-confinement`, `runtime-origin-assertion`, and `semantic-dyn-trait-boundary`, bringing `unpinned` count to 0.
 
 - ~~**`check_reference_integrity.sh` has no companion failure matrix.**~~ **CLOSED** in the
-  open window. Closed by adding `scripts/test_reference_integrity.sh`, a throwaway git repository fixture proving every refusal (exit 1 and exit 2) and pass direction of `scripts/check_reference_integrity.sh`.
+  open window. Closed by adding `crates/tianheng/tests/reference_integrity.rs`, a throwaway git repository fixture proving every refusal (exit 1 and exit 2) and pass direction of `crates/tianheng/tests/reference_integrity.rs`.
 
 - ~~**Owner-label identity collapses across a cfg-collided self-type alias.**~~ **CLOSED** in the
   0.4.0 window, after an independent review re-derived it. Closed by refusing to name the ambiguity

@@ -5,7 +5,7 @@
 //!     cargo run --bin check -- check --manifest-path . --format json
 //!
 //! `--format` changes the *presentation*, never the verdict — the exit code is identical across
-//! formats (`scripts/test_examples.sh` asserts exactly that).
+//! formats (`cargo test -p tianheng --test examples_suite` asserts exactly that).
 use std::process::ExitCode;
 
 use sans_io_kernel::governance::constitution;

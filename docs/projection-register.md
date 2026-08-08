@@ -28,12 +28,11 @@ negative owned by this engine, not a limit of what it can read.
 | document | held fresh by | regenerate with |
 | --- | --- | --- |
 | `AGENTS.self-law.md` | `crates/tianheng/tests/self_governance.rs` | `BLESS=1 cargo test -p tianheng self_law_projection_is_fresh` |
-| `docs/gate-shape-contract.md` | `crates/tianheng/tests/gate_shape_contract.rs` | `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test gate_shape_contract` |
 | `docs/observation-bound-extents.md` | `crates/tianheng/tests/observation_bound_model.rs` | `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test observation_bound_model` |
 | `docs/observation-bounds.md` | `crates/tianheng/tests/bound_register.rs` | `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test bound_register` |
 | `docs/projection-register.md` | `crates/tianheng/tests/projection_register.rs` | `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test projection_register` |
 
-5 documents.
+4 documents.
 
 ## The reactions holding them
 
@@ -41,9 +40,8 @@ Enumerated independently of what the documents claim, because a document naming 
 by the document and the call site is the fact:
 
 - `crates/tianheng/tests/bound_register.rs`
-- `crates/tianheng/tests/gate_shape_contract.rs`
 - `crates/tianheng/tests/observation_bound_model.rs`
 - `crates/tianheng/tests/projection_register.rs`
 - `crates/tianheng/tests/self_governance.rs`
 
-5 reactions.
+4 reactions.

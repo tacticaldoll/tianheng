@@ -22,7 +22,7 @@ fn executed_regions_respect_the_source_language() {
 /// Real projection paths rather than invented ones: the consumer of this region searches for exactly these, and
 /// an invented `docs/…` path is a stale in-repository reference that `check_reference_integrity.sh` refuses.
 const SEEN: &str = "docs/projection-register.md";
-const UNSEEN: &str = "docs/gate-shape-contract.md";
+const UNSEEN: &str = "the retired gate-shape projection";
 
 #[test]
 fn prose_keeps_visible_text_beside_an_html_comment() {
