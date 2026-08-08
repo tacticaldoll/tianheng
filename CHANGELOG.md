@@ -267,9 +267,12 @@ them.
   the three offices are *"crate-or-convention as their nature dictates"* — is what a reader consulted when
   asking whether one of them should become one, and it answered nothing. The answer is the drift law two
   sentences earlier: a crate is born when a **dimension** is built, because a dimension adds a new drift type
-  and needs a boundary the self-law can react to — every dimension's `restrict_dependencies_to` naming no
-  sibling **is** that reaction. A 司 adds no drift type; it surfaces, records or amends what a 儀 already found,
-  so the question does not arise from the architecture. It arose from the sentence.
+  and needs a boundary the self-law can react to. What that boundary *is* is **cited rather than restated**:
+  `AGENTS.self-law.md` already projects every crate's dependency allowlist from `tianheng_constitution()`,
+  staleness-checked, and no dimension's names a sibling. Restating a projected fact in prose is what three
+  withdrawn attempts at this paragraph did — twice getting it wrong — so it sends the reader to the table that
+  cannot come to disagree with the code. A 司 adds no drift type; it surfaces, records or amends what a 儀
+  already found, so the question does not arise from the architecture. It arose from the sentence.
 
   The self-law preamble every agent loads said only *"三司 administer"* — three names with no referent, which is
   what made them read as brandable. It names each by what it does now, and `self-law-projection`'s requirement

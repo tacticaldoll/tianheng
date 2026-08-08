@@ -484,6 +484,27 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **WATCH: `PROJECT.md` restates facts a generated projection already holds, and states others nothing
+  holds.** *Observed pressure:* three consecutive attempts at one paragraph were withdrawn, all failing the
+  same way — asserting a location or an absence without sweeping for it. A spike then classified that file's
+  claims about the tree against the four generated projections. The **architectural** ones are already carried:
+  which crates exist, what each may depend on, that no dimension names a sibling — all projected from
+  `tianheng_constitution()` into `AGENTS.self-law.md` and staleness-checked. The paragraph that failed three
+  times was restating them. Two classes are carried by nothing: a **location** claim (`report/constitution
+  assembly … lives here, not in the model`) — the class that falsified the second attempt — and a **surface
+  count** (`xuanji::Observer` has two methods). *Observation source:* that classification, run against the
+  five projections and the file, 2026-08-08. Not a census: the two named are examples found by sampling the
+  claim-shaped lines, not an enumeration of the file. *Current reaction or bound:* none; the architectural
+  claims now cite the projection instead of restating it, which is the cheap half. *Risk:* the class that
+  produced three withdrawn attempts, in the document `AGENTS.md` names as the contract. *Promotion trigger:*
+  a claim in `PROJECT.md` about the tree found false **after** this entry — the three that were found are the
+  control, so they cannot stand as evidence for themselves. *Version class:* not release-affecting.
+  *Authority:* `projection-register`, which already enumerates the documents a claim could cite, and
+  `self-law-projection`, which owns the one that carries the architecture. *Shape, if it fires:* not a detector
+  over prose — that instrument was measured three times and rejected. The reachable direction is to make more
+  of what the file asserts *citable*, so restating is the strictly worse-looking option at the moment of
+  writing.
+
 - **WATCH: a rejected observation point is recorded only in prose, and prose reaches no agent at the moment of
   temptation.** *Observed pressure:* rejections of whole detectors and approaches are scattered across doc
   comments, `AGENTS.md`, `BACKLOG.md` and spec prose in several non-overlapping phrasings, with nothing

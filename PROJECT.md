@@ -158,11 +158,15 @@ observed, the 三司 wrap the reaction.
 
 **Only a 儀 is a crate, and the reason is the drift law rather than importance or size.** A
 crate here is born when a dimension is built, because that dimension adds a new drift type and
-needs a boundary the self-law can react to — every dimension's `restrict_dependencies_to`
-naming no sibling is that reaction, which is what 三儀 ⊥ 三儀 means in code. A 司 adds no
-drift type: it surfaces, records or amends what a 儀 already found. So the question a reader
-might ask — should this one become a crate? — does not arise from the architecture. It arose
-from a sentence that left the answer open, and that sentence is gone.
+needs a boundary the self-law can react to. What that boundary *is* is not restated here —
+[`AGENTS.self-law.md`](AGENTS.self-law.md) projects every crate's `restrict dependencies to`
+allowlist from `tianheng_constitution()`, and no dimension's names a sibling. Read it there:
+it is generated and staleness-checked, so it cannot come to disagree with the code the way a
+sentence in this file can. That is 三儀 ⊥ 三儀 in the form that reacts.
+
+A 司 adds no drift type: it surfaces, records or amends what a 儀 already found. So the
+question a reader might ask — should this one become a crate? — does not arise from the
+architecture. It arose from a sentence that left the answer open, and that sentence is gone.
 
 Never name one before its reaction exists.
 
