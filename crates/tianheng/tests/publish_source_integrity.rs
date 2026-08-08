@@ -64,7 +64,6 @@ fn a_valid_signature_from_an_unauthorized_key_is_accepted() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let scripts = root.join("scripts");
     let temp = std::env::temp_dir().join(format!(
         "tianheng-publish-source-integrity-{}",
         std::process::id()
