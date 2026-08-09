@@ -18,8 +18,26 @@ use std::process::Command;
 
 use crate::refusal::{Refusal, cannot_judge, cannot_judge_out_of_reach, violation};
 
+/// The judgement's own git, isolated from everything outside the repository it judges.
+///
+/// This file already had [`hermetic`] and used it for its **fixtures**; the judgement ran through a bare
+/// `Command::new("git")`. The fixtures were isolated and the verdict was not, which is the wrong way round —
+/// a `core.excludesFile` outside the repository made the cleanliness read return empty for an untracked file.
+///
+/// Neutralising `core.excludesFile` **explicitly** is the load-bearing half, measured rather than assumed:
+///
+/// | ambient source | hermetic alone | `-c core.excludesFile=/dev/null` |
+/// |---|---|---|
+/// | global / system `core.excludesFile` | closed | closed |
+/// | `$XDG_CONFIG_HOME/git/ignore`, the default no config names | **survives** | closed |
+/// | `.git/info/exclude` | **survives** | **survives** |
+///
+/// Routing through the builder and stopping there would have read as a repair while the XDG default still hid
+/// files. What the third row costs is handled by [`hidden_by_the_checkout`], which classifies rather than
+/// refuses.
 fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git")
+    let out = hermetic("git")
+        .args(["-c", "core.excludesFile=/dev/null"])
         .args(args)
         .current_dir(repo)
         .output()
@@ -29,6 +47,84 @@ fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     } else {
         Err(String::from_utf8_lossy(&out.stderr).trim_end().to_string())
     }
+}
+
+/// One read of the worktree, and **one** refusal site serving every caller.
+///
+/// Two `cannot_judge` calls carrying one message would be shadowing: a direction asserting the message could
+/// not say which read failed, and replacing either site's message would leave it passing. One site, and the
+/// caller says what it was reading.
+fn read_worktree(repo: &Path, args: &[&str], what: &str) -> Result<String, Refusal> {
+    git(repo, args)
+        .map_err(|err| cannot_judge(format!("could not read the worktree {what}: {err}")))
+}
+
+/// Untracked files hidden by this **checkout** rather than by the repository.
+///
+/// `clean` is defined by the repository: a file ignored by tracked repository content is clean, because
+/// `cargo publish` applies the same exclusion and would not package it either. A file hidden by this clone's
+/// `.git/info/exclude`, or by a `core.excludesFile` on this machine, is not — the same commit would otherwise
+/// get different verdicts in different places.
+///
+/// `ls-files --others` applies no exclusion and `status` applies all of them, so the difference is the
+/// excluded set; `check-ignore -v` names the source file for each. A source counts as repository content only
+/// if it is **tracked** — measured, not read: an *untracked* `.gitignore` reports a repository-looking source
+/// while being no more part of the repository than the clone's own exclude file.
+///
+/// An exclusion whose source cannot be shown to be tracked is treated as the checkout's. That is the
+/// conservative direction and it is deliberate: the alternative is granting an exemption on the strength of
+/// not having read one.
+pub fn hidden_by_the_checkout(repo: &Path) -> Result<Vec<String>, Refusal> {
+    let unexcluded = read_worktree(repo, &["ls-files", "--others"], "untracked files")?;
+    let visible = read_worktree(
+        repo,
+        &["status", "--porcelain=v1", "--untracked-files=all"],
+        "state",
+    )?;
+    let shown: Vec<&str> = visible
+        .lines()
+        .filter_map(|line| line.strip_prefix("?? "))
+        .collect();
+    let excluded: Vec<&str> = unexcluded
+        .lines()
+        .filter(|path| !path.is_empty() && !shown.contains(path))
+        .collect();
+    if excluded.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut args = vec!["check-ignore", "-v", "--no-index", "--"];
+    args.extend(excluded.iter().copied());
+    // `check-ignore` exits 1 when it matched nothing, which for a path this function computed as excluded is
+    // a disagreement between two listings rather than an answer. Either way the source is unshown, and an
+    // unshown source is the checkout's.
+    let classified = git(repo, &args).unwrap_or_default();
+
+    let mut sources: std::collections::BTreeMap<&str, &str> = std::collections::BTreeMap::new();
+    for line in classified.lines() {
+        let Some((left, path)) = line.split_once('\t') else {
+            continue;
+        };
+        // `<source>:<line>:<pattern>` — split from the right, since a source path may hold a colon.
+        let mut fields = left.rsplitn(3, ':');
+        let (_pattern, _line, source) = (fields.next(), fields.next(), fields.next());
+        if let Some(source) = source {
+            sources.insert(path, source);
+        }
+    }
+
+    let mut hidden = Vec::new();
+    for path in excluded {
+        let source = sources.get(path).copied().unwrap_or("<unshown>");
+        let tracked = source != "<unshown>"
+            && git(repo, &["ls-files", "--error-unmatch", "--", source]).is_ok();
+        if !tracked {
+            hidden.push(format!(
+                "  {path} — hidden by {source}, which this repository does not track"
+            ));
+        }
+    }
+    Ok(hidden)
 }
 
 /// The `[workspace.package]` version, or the `[package]` version where there is no workspace table.
@@ -94,16 +190,30 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
     let tag = format!("v{version}");
 
     // HEAD describes what would be packaged only if nothing is uncommitted or untracked.
-    let dirty = git(repo, &["status", "--porcelain=v1", "--untracked-files=all"])
-        .map_err(|err| cannot_judge(format!("could not read the worktree state: {err}")))?;
+    let dirty = read_worktree(
+        repo,
+        &["status", "--porcelain=v1", "--untracked-files=all"],
+        "state",
+    )?;
     if !dirty.is_empty() {
         return Err(violation(format!(
             "worktree is not clean, so HEAD does not describe what would be packaged:\n{dirty}"
         )));
     }
+    let hidden = hidden_by_the_checkout(repo)?;
+    if !hidden.is_empty() {
+        return Err(violation(format!(
+            "worktree carries untracked files that only this checkout hides, so the same commit would be \
+             judged differently elsewhere:\n{}",
+            hidden.join("\n")
+        )));
+    }
 
-    let head_commit = git(repo, &["rev-parse", "HEAD"])
-        .map_err(|err| cannot_judge(format!("could not read HEAD: {err}")))?;
+    // Shares the read site above. Once `clean` is defined by the repository, a clean worktree with an
+    // unresolvable HEAD cannot be constructed — measured: every route leaves either an untracked file the
+    // checkout hides or a staged one `status` reports — so a refusal of its own would be a branch no input
+    // can take.
+    let head_commit = read_worktree(repo, &["rev-parse", "HEAD"], "HEAD")?;
     let head_subject = git(repo, &["log", "-1", "--format=%s", "HEAD"])
         .map_err(|err| cannot_judge(format!("could not read HEAD's subject: {err}")))?;
     if head_subject != format!("release: {version}") {

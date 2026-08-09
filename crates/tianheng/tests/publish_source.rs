@@ -17,7 +17,7 @@ mod refusal;
 #[path = "support/publish_source_gate.rs"]
 mod gate;
 
-use gate::{build_fixture, hermetic, judge};
+use gate::{build_fixture, hermetic, hidden_by_the_checkout, judge};
 use refusal::Kind;
 use std::path::{Path, PathBuf};
 
@@ -444,33 +444,6 @@ fn a_worktree_state_that_cannot_be_read_cannot_be_judged() {
     );
 }
 
-/// A repository with no commit, whose worktree still reads clean because everything in it is ignored.
-///
-/// The clean worktree is what makes this reachable at all: without it the judgement refuses one step earlier,
-/// for being dirty rather than for having no HEAD.
-#[test]
-fn a_repository_with_no_commit_cannot_have_its_head_read() {
-    let root = scratch("no-commit");
-    let repo = root.join("repo");
-    std::fs::create_dir_all(&repo).expect("create");
-    git(&repo, &["init", "-q", "-b", "main"]);
-    std::fs::write(repo.join(".gitignore"), "*\n").expect("write");
-    std::fs::write(
-        repo.join("Cargo.toml"),
-        "[workspace.package]\nversion = \"9.9.9\"\n",
-    )
-    .expect("write");
-    let verdict = judge(&repo, "origin");
-    let _ = std::fs::remove_dir_all(&root);
-    let refusal = verdict.expect_err("a repository with no commit must be refused");
-    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
-    assert!(
-        refusal.message.contains("could not read HEAD"),
-        "{}",
-        refusal.message
-    );
-}
-
 /// The object file a loose git object lives in, asserted to exist before it is removed.
 ///
 /// A fixture that packed its objects would leave the file absent and the corruption unapplied — a perturbation
@@ -569,6 +542,98 @@ fn a_tag_whose_commit_is_missing_cannot_be_resolved() {
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("could not resolve"),
+        "{}",
+        refusal.message
+    );
+}
+
+// --- what `clean` means ------------------------------------------------------------------------------------
+//
+// A file ignored by **tracked** repository content is clean: `cargo publish` applies the same exclusion and
+// would not package it either. A file hidden by this clone or this machine is not — the same commit would
+// otherwise be judged differently in different places, which is the one thing a governance gate must not do.
+//
+// The classifier is exercised directly, because these three cases are about which source hid a path rather
+// than about the whole judgement; one direction below carries the same shape through `judge` to show the
+// wiring.
+
+/// A repository whose only commit tracks whatever `tracked` names, with `stray` present and untracked.
+fn hiding(name: &str, tracked: &[(&str, &str)], stray: &str) -> (PathBuf, PathBuf) {
+    let root = scratch(name);
+    let repo = root.join("repo");
+    std::fs::create_dir_all(&repo).expect("create");
+    git(&repo, &["init", "-q", "-b", "main"]);
+    // The fixture's git is hermetic, so it inherits no identity — which is the point of hermetic fixtures and
+    // the reason this is set here rather than assumed from the machine.
+    git(&repo, &["config", "user.name", "T"]);
+    git(&repo, &["config", "user.email", "t@example.invalid"]);
+    git(&repo, &["config", "commit.gpgsign", "false"]);
+    for (path, contents) in tracked {
+        std::fs::write(repo.join(path), contents).expect("write");
+        git(&repo, &["add", "-f", "--", path]);
+    }
+    if !tracked.is_empty() {
+        git(&repo, &["commit", "-qm", "release: 9.9.9"]);
+    }
+    std::fs::write(repo.join(stray), "stray").expect("write");
+    (root, repo)
+}
+
+#[test]
+fn a_file_ignored_by_tracked_repository_content_is_clean() {
+    let (root, repo) = hiding(
+        "ignored-tracked",
+        &[(".gitignore", "stray.txt\n")],
+        "stray.txt",
+    );
+    let hidden = hidden_by_the_checkout(&repo).expect("the classifier reads this repository");
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        hidden.is_empty(),
+        "a file ignored by a tracked `.gitignore` was reported as hidden by the checkout, which would block a \
+         release the repository itself excludes: {hidden:?}"
+    );
+}
+
+#[test]
+fn a_file_hidden_by_an_untracked_gitignore_is_not_clean() {
+    let (root, repo) = hiding("ignored-untracked", &[("kept.txt", "k\n")], "stray.txt");
+    std::fs::write(repo.join(".gitignore"), "stray.txt\n.gitignore\n").expect("write");
+    let hidden = hidden_by_the_checkout(&repo).expect("the classifier reads this repository");
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        hidden.iter().any(|line| line.contains("stray.txt")),
+        "a file hidden by an *untracked* `.gitignore` was accepted; the source is named like repository \
+         content and is no more part of it than the clone's own exclude file: {hidden:?}"
+    );
+}
+
+#[test]
+fn a_file_hidden_by_this_clones_exclude_file_is_not_clean() {
+    let (root, repo) = hiding("ignored-clone", &[("kept.txt", "k\n")], "stray.txt");
+    std::fs::write(repo.join(".git/info/exclude"), "stray.txt\n").expect("write");
+    let hidden = hidden_by_the_checkout(&repo).expect("the classifier reads this repository");
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        hidden.iter().any(|line| line.contains("info/exclude")),
+        "a file hidden by this clone's exclude file was accepted, so the same commit would be judged \
+         differently elsewhere: {hidden:?}"
+    );
+}
+
+/// The same shape through the whole judgement, so the classifier is known to be wired to a verdict.
+#[test]
+fn a_worktree_the_checkout_hides_is_a_violation() {
+    let root = scratch("checkout-hidden");
+    let fixture = build_fixture(&root, "checkout-hidden", "9.9.9");
+    std::fs::write(fixture.repo.join(".git/info/exclude"), "stray.txt\n").expect("write");
+    std::fs::write(fixture.repo.join("stray.txt"), "stray").expect("write");
+    let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a file only this checkout hides must be refused");
+    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("only this checkout hides"),
         "{}",
         refusal.message
     );

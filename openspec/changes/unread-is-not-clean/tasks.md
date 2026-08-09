@@ -5,14 +5,14 @@
 
 ## 2. The publish gate's own git
 
-- [ ] 2.1 Route the judgement's `git()` through `hermetic()` **and** `-c core.excludesFile=/dev/null`
-- [ ] 2.2 A direction: repo-local `.git/config` setting `core.excludesFile` to hide an untracked file — clean
+- [x] 2.1 Route the judgement's `git()` through `hermetic()` **and** `-c core.excludesFile=/dev/null`
+- [x] 2.2 A direction: repo-local `.git/config` setting `core.excludesFile` to hide an untracked file — clean
       before, a violation after
-- [ ] 2.3 Classify what no configuration neutralises: the difference between an unexcluded and an excluded
+- [x] 2.3 Classify what no configuration neutralises: the difference between an unexcluded and an excluded
       listing, each path's source read with `check-ignore -v --no-index`, a source legitimate only if **tracked**
-- [ ] 2.4 Three directions, landing together: `.git/info/exclude` refuses; a **tracked** `.gitignore` is
+- [x] 2.4 Three directions, landing together: `.git/info/exclude` refuses; a **tracked** `.gitignore` is
       accepted; an **untracked** `.gitignore` refuses
-- [ ] 2.5 Every new refusal site reached by a direction, or declared — `refusal_bites` green
+- [x] 2.5 Every new refusal site reached by a direction, or declared — `refusal_bites` green
 
 ## 3. The release-coherence enumerations
 
