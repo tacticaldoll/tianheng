@@ -82,10 +82,31 @@ title=$(gh pr view "$pr" --json title --jq .title)
 : "${subject:=$title}"
 
 # The gate. A failure aborts before the merge, which is the point: the record below cannot be amended.
-TIANHENG_MERGE_SUBJECT=$subject \
+
+# `libtest` exits 0 when `--exact` selects no test — measured, an unknown name reports `0 passed` and exits 0,
+# and an `#[ignore]`d one reports `0 passed; 1 ignored` and exits 0 too. So the exit status answers *did the
+# selected tests pass* while the question here is *did the gate judge this act*, and those differ exactly when
+# a rename has quietly happened. Require the run to say it judged one thing.
+#
+# Asserted here rather than inside the gate: a renamed or silenced test cannot report that it did not run.
+require_one_pass() {
+    local what=$1 output=$2
+    if ! printf '%s' "$output" | grep -qE 'test result: ok\. 1 passed'; then
+        printf '%s\n' "$output" >&2
+        printf '%s: %s\n' "$what" \
+            "the gate did not run — its invocation selected no passing test, so the name in this script no longer names one. libtest exits 0 for a filter that matches nothing, which is why this is checked rather than trusted" >&2
+        exit 1
+    fi
+}
+
+gate_output=$(TIANHENG_MERGE_SUBJECT=$subject \
     TIANHENG_MERGE_TITLE=$title \
     TIANHENG_MERGE_BODY=$(cat -- "$body_file") \
     cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test merge_message \
-    -- --exact the_squash_message_is_the_pull_request_it_records
+    -- --exact the_squash_message_is_the_pull_request_it_records 2>&1) || {
+    printf '%s\n' "$gate_output" >&2
+    exit 1
+}
+require_one_pass 'merge message' "$gate_output"
 
 exec gh pr merge "$pr" --squash --subject "$subject" --body-file "$body_file" "${passthrough[@]}"

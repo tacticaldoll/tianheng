@@ -56,10 +56,31 @@ done
 # stands in front of the irreversible act, where the kind is what an operator acts on. The scrub is here, at
 # the point the act is launched, rather than as a check inside the gate being perturbed: a guard the
 # perturbation could itself disable is not a guard.
-env -u TIANHENG_REFUSAL_MUTANT -u TIANHENG_REFUSAL_RECORD -u TIANHENG_REFUSAL_BITES \
+
+# `libtest` exits 0 when `--exact` selects no test — measured, an unknown name reports `0 passed` and exits 0,
+# and an `#[ignore]`d one reports `0 passed; 1 ignored` and exits 0 too. So the exit status answers *did the
+# selected tests pass* while the question here is *did the gate judge this act*, and those differ exactly when
+# a rename has quietly happened. Require the run to say it judged one thing.
+#
+# Asserted here rather than inside the gate: a renamed or silenced test cannot report that it did not run.
+require_one_pass() {
+    local what=$1 output=$2
+    if ! printf '%s' "$output" | grep -qE 'test result: ok\. 1 passed'; then
+        printf '%s\n' "$output" >&2
+        printf '%s: %s\n' "$what" \
+            "the gate did not run — its invocation selected no passing test, so the name in this script no longer names one. libtest exits 0 for a filter that matches nothing, which is why this is checked rather than trusted" >&2
+        exit 1
+    fi
+}
+
+gate_output=$(env -u TIANHENG_REFUSAL_MUTANT -u TIANHENG_REFUSAL_RECORD -u TIANHENG_REFUSAL_BITES \
     TIANHENG_PUBLISH_SOURCE=1 TIANHENG_WORKSPACE_TESTS=1 \
     cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test publish_source \
-    -- --exact the_publish_source_is_the_signed_release_snapshot
+    -- --exact the_publish_source_is_the_signed_release_snapshot 2>&1) || {
+    printf '%s\n' "$gate_output" >&2
+    exit 1
+}
+require_one_pass 'publish source' "$gate_output"
 
 cd "$repo"
 exec cargo publish --workspace "$@"
