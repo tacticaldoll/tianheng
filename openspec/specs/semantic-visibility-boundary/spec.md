@@ -3,6 +3,11 @@
 ## Purpose
 
 The 渾儀 (semantic) dimension's visibility-hygiene capability: declare in Rust that a governed **module**'s direct items carry no more visibility than a declared **ceiling** — `Crate` (react on bare `pub`), `Super` (also on `pub(crate)`), or `Module` (any `pub`-family keyword). The rule is the item's **declared** visibility keyword on the module's own direct items, not crate-reachability. `must_not_declare_pub` is the `Crate`-ceiling sugar. Observed via the AST (`syn`), it is the cheapest case that earns `syn` — distinct from exposure (which types a `pub` API names) and impl locality.
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Visibility boundary declared in Rust
 

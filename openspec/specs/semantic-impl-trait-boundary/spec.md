@@ -8,6 +8,11 @@ shape (`dyn`), this forbids the *existential* shape (an unnameable type the call
 store, and to whose auto-traits the seam silently commits). It reuses the shape-only public-surface
 walk and the `dyn` node's stable shape renderer, adding a return-position existential leaf; same
 `syn` observation source, no new crate.
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Impl-trait boundary declared in Rust
 

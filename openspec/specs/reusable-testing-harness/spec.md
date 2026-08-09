@@ -4,6 +4,10 @@
 
 Provide a reusable, fluent `GovernanceTest` harness in the `tianheng` facade to streamline architecture testing in `cargo test`.
 
+## Subject
+
+- `crates/tianheng/src/testing.rs`
+
 ## Requirements
 
 ### Requirement: GovernanceTest fluent harness executes clean reactions

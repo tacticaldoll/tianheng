@@ -12,6 +12,11 @@ heads resolve through the alias-carrying use-map, local `type` aliases, and the 
 re-export closure to a fixpoint; a glob that can bring a prefix-resolving name into scope reacts
 fail-closed (stated by hazard, not shape). Source-observed on the hand-rolled 圭表 token scanner
 (serde_json-only, no `syn`); not `cargo-deny`'s resolved/whole-graph lane.
+## Subject
+
+- `crates/guibiao/src/**/*.rs`
+- `crates/guibiao/src/tests/symbol_confinement.rs`
+
 ## Requirements
 ### Requirement: Inline-symbol-path confinement declared in Rust
 

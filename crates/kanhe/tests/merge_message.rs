@@ -177,7 +177,7 @@ fn a_body_that_is_a_bare_commit_list_is_a_violation() {
     );
 }
 
-/// `rust-self-governance-gates/a-hook-is-proposed-for-this-rule-a-stated-bound`
+/// `rust-repository-reactions/a-hook-is-proposed-for-this-rule-a-stated-bound`
 ///
 /// `OutOfReach`, owned by the engine. This reaction guards the **sanctioned path** to a merge, not every path.
 /// A merge made in the GitHub web UI reaches no wrapper, and neither a `commit-msg` hook nor the repository's

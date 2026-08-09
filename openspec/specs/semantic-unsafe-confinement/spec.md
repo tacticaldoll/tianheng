@@ -3,6 +3,11 @@
 ## Purpose
 
 The 渾儀 (semantic) dimension's `unsafe`-confinement capability: declare in Rust that a crate's `unsafe` (blocks, `unsafe fn`/`impl`/`trait`, `unsafe extern`) may appear **only under** a declared subtree — the auditability boundary of a layered crate ("all `unsafe` lives behind `crate::ffi`"). It governs *where* `unsafe` lives (architectural intent), not *whether* it may exist: the crate-wide "no `unsafe`" case is `#![forbid(unsafe_code)]`'s (compile-time, stronger), so an empty or crate-root allowed set is a constitution error. Observed via the AST (`syn`), a whole-crate scan of the forbidden-marker family. This is confinement, the non-compiler-expressible complement of the attribute.
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Unsafe confinement declared in Rust
 

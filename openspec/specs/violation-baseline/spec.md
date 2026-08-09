@@ -6,6 +6,11 @@ Let a dirty project adopt a boundary without first fixing every pre-existing vio
 is a generated snapshot of accepted violations, not policy; the gate suppresses recorded violations,
 fails only on new drift, and reports stale entries so accepted debt can ratchet down.
 
+## Subject
+
+- `crates/xuanji/src/baseline.rs`
+- `crates/tianheng/tests/baseline_cli.rs`
+
 ## Requirements
 
 ### Requirement: Baseline records accepted violations

@@ -4,6 +4,12 @@
 
 Keep Tianheng's published boundary families exercised through genuine self-governance and
 adopter-shaped examples without turning tutorials into exhaustive fixtures or inventing fake law.
+## Subject
+
+- `crates/shengmo/**/*.rs`
+- `examples/**/*.rs`
+- `examples/**/Cargo.toml`
+
 ## Requirements
 ### Requirement: Public boundary families have adopter-shaped reaction coverage
 

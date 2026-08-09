@@ -164,6 +164,22 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "`BACKLOG.md` — *the construction-held list is hand-maintained prose*",
         ),
         // --- observation-bound-register ---
+        BoundDecl::unpinned(
+            BoundId::new(
+                "observation-bound-register/which-member-holds-a-reaction-is-a-judgement-a-stated-bound",
+            ),
+            "which governance member a newly added reaction belongs to",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the split is by what a reaction judges, and two mechanical rules were each \
+                          measured unreliable: a text scan reads a comment naming a governance document as \
+                          governance while a reaction scanning every tracked file names nothing, and the \
+                          workspace marker means both `this needs the repository as its subject` and `this \
+                          needs a fixture`. Position is the declaration"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *which governance member a reaction belongs to is unobserved*",
+        ),
         //
         // The register's own bounds — the only ones this crate declares about the reaction
         // that produces the register rather than about a dimension. `crates/kanhe/tests/pin_bites.rs` decides that a
@@ -388,10 +404,23 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_comment_naming_every_member_for_another_reason_is_refused",
         ),
-        // --- rust-self-governance-gates ---
+        // --- rust-repository-reactions ---
+        BoundDecl::pinned(
+            BoundId::new("rust-repository-reactions/files-no-capability-claims-a-stated-bound"),
+            "a tracked file no capability's declared subject claims",
+            Extent::Reached(Reached::UnderReacts {
+                because: "subjects are declared where a capability has something to say, and requiring them \
+                          to tile the repository would buy coverage with a claim per capability that nobody \
+                          could defend. The join reports how many tracked paths went unclaimed, so a clean \
+                          verdict is not read as a complete one"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "files_no_capability_claims_are_reported_rather_than_implied_judged",
+        ),
         BoundDecl::pinned(
             BoundId::new(
-                "rust-self-governance-gates/a-count-written-in-a-sentence-no-census-declares-a-stated-bound",
+                "rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound",
             ),
             "a figure about an enumerable set, written in a phrasing no census declares",
             Extent::Reached(Reached::UnderReacts {
@@ -538,7 +567,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "rust-self-governance-gates/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound",
+                "rust-repository-reactions/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound",
             ),
             "a refusal site declaring itself out of reach for a reason no fixture can falsify",
             Extent::OutOfReach {
@@ -550,7 +579,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "rust-self-governance-gates/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound",
+                "rust-repository-reactions/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound",
             ),
             "a second kinded refusal contract declared under other names, or inside the scan's own sources",
             Extent::OutOfReach {
@@ -562,7 +591,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "rust-self-governance-gates/a-hook-is-proposed-for-this-rule-a-stated-bound",
+                "rust-repository-reactions/a-hook-is-proposed-for-this-rule-a-stated-bound",
             ),
             "a squash merge made anywhere but through the sanctioned wrapper",
             Extent::OutOfReach {

@@ -28,6 +28,11 @@ being true. A deeper **inline-symbol-path** layer
 (`C::foo()` written with no `use`) is realized as the sibling `must_not_call_inline` rule
 (`inline-symbol-path-confinement`), which observes *calls* rather than `use` imports — not this
 capability. Not `cargo-deny`'s lane — declared and per-module, not resolved and whole-graph.
+## Subject
+
+- `crates/guibiao/src/*.rs`
+- `crates/guibiao/src/tests/external_confinement.rs`
+
 ## Requirements
 ### Requirement: External-crate confinement declared in Rust
 

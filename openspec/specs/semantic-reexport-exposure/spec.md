@@ -16,6 +16,11 @@ through a type alias or a facade closure) or a distinct `[lib] name` (absent fro
 --no-deps`), a facade hop re-exporting a privately-`use`d bare name, an edition-2015 relative local
 re-export, macro-generated — is a stated bound (bound: semantic-reexport-exposure/a-facade-hop-re-exporting-a-privately-used-bare-name-is-a-stated-bound), never a silent pass. (`pub extern crate` is now an
 observed exposure, not a bound.)
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Named public re-exports are observed by default
 

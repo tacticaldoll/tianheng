@@ -5,6 +5,11 @@
 Define a builder-owned rule construction surface that remains forward-compatibly inspectable while
 allowing rule representations to grow without parallel public variants.
 
+## Subject
+
+- `crates/xuanji/src/*.rs`
+- `crates/guibiao/src/model/*.rs`
+
 ## Requirements
 
 ### Requirement: Boundary builders own public rule construction

@@ -9,6 +9,11 @@ expose `dyn std::error::Error` freely while never leaking `dyn crate::Port`). It
 shape-only public-surface `dyn` walk and signature-coupling's resolver (resolve + re-export
 canonicalization + exact-or-module-prefix match), adding only the operand match; same `syn`
 observation source, no new crate.
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Operand-scoped dyn boundary declared in Rust
 

@@ -116,7 +116,7 @@ fn the_sweep_names_a_disagreement_it_is_shown() {
     );
 }
 
-/// `rust-self-governance-gates/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
+/// `rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
 ///
 /// `UnderReacts`, owned by the engine. The declaration is the coverage: a figure written in a phrasing no
 /// census names is unheld. Reaching it needs a judgement over prose, the instrument this repository designed,

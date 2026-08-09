@@ -9,6 +9,11 @@ positions — method parameters and the receiver — stay out of scope, since th
 definition (which signature-coupling already governs). Opt-in, not default-on: a bare boundary
 declared trait impls out of scope, and the impl-authored/trait-dictated split is a real narrowing
 choice, so this is additive depth on the patch line, not a false-negative closure.
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Opt-in modifier deepens signature-coupling to trait impls
 

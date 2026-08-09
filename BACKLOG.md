@@ -207,7 +207,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **77 bounds across 23 capabilities** — a live figure rather than part of the measurement
+  currently holds **79 bounds across 23 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -651,6 +651,14 @@ consumer for an undemonstrated deduplication.
 
 
 - **WATCH:**
+- **WATCH: which governance member a reaction belongs to is unobserved.** *Observed pressure:* the split
+  between 繩墨 (the law and the delivered product) and 勘合 (this repository's record) is a judgement about
+  what a reaction judges, and two mechanical rules were each measured unreliable — a text scan reads a comment
+  naming `AGENTS.md` as governance while a reaction scanning every tracked file names nothing, and
+  `TIANHENG_WORKSPACE_TESTS` means both "this needs the repository as its subject" and "this needs a fixture".
+  *Risk:* a reaction lands in the wrong member and the two identities blur again, which is the failure the
+  split was built to end. *Next trigger:* a third member, or a reaction whose placement two readers disagree
+  about. *Authority:* engine. *Compatibility:* none — neither member ships.
   - **A `#[path]`-shared test module's `allow(dead_code)` cannot distinguish "used by no binary" from "used by
     some".** *Observed pressure:* `crates/tianheng/tests/support/` is compiled fresh into each `*_conformance.rs`
     binary, so an item only some callers use is genuinely dead in the others — which is why the blanket

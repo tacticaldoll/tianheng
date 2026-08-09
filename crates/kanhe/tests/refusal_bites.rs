@@ -1,7 +1,7 @@
 //! Self-governance reaction: every refusal **site** is distinguished by some direction, in both of its
 //! contracts.
 //!
-//! `rust-self-governance-gates` requires a reaction's directions to *assert which outcome a shape produces*.
+//! `rust-repository-reactions` requires a reaction's directions to *assert which outcome a shape produces*.
 //! Nothing held that requirement. A review sweep at `22ec98e` counted 24 of 60 construction sites as
 //! surviving both a kind swap and a message replacement, in front of `cargo publish`, which is irreversible
 //! and where the kind is what an operator acts on. That figure conflates two facts: a perturbation kills
@@ -563,7 +563,7 @@ mod classification {
     }
 }
 
-/// `rust-self-governance-gates/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound`
+/// `rust-repository-reactions/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound`
 ///
 /// `OutOfReach`, owned by the engine. A declaration says *no environment the suite runs in can produce this
 /// precondition*; the reaction can only see that no direction reached the site. The two agree today and the
@@ -596,7 +596,7 @@ fn a_site_declared_out_of_reach_is_only_observed_to_be_unreached() {
     );
 }
 
-/// `rust-self-governance-gates/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound`
+/// `rust-repository-reactions/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound`
 ///
 /// `OutOfReach`, owned by the engine. The scan recognises the shared vocabulary's exact names. A reaction
 /// declaring the same contract as `Decision { Disagrees, Unreadable }` carries every property this family

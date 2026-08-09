@@ -5,6 +5,11 @@
 Make the set of this repository's generated documents known rather than remembered: enumerated from the marker each
 document carries, held in a two-way correspondence with the reactions that bless them, and reachable from the
 document a reader is told to open first.
+## Subject
+
+- `docs/projection-register.md`
+- `crates/kanhe/tests/projection_register.rs`
+
 ## Requirements
 ### Requirement: The generated documents SHALL be enumerated from tracked content by the marker each carries
 
