@@ -466,8 +466,7 @@ fn require_example_pins(
 
     let Ok(entries) = std::fs::read_dir(repo.join("examples")) else {
         return Err(cannot_judge(
-            "found no example manifests under examples/ — the layout changed or is absent, so example pins \
-             would be judged over nothing",
+            "the examples directory cannot be read, so example pins would be judged over nothing",
         ));
     };
     let mut dirs: Vec<PathBuf> = entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
@@ -661,14 +660,6 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
         }
     }
     Ok(names)
-}
-
-fn names_machinery(line: &str, names: &BTreeSet<String>) -> bool {
-    line.split(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '/' | '-')))
-        .any(|run| {
-            let token = run.strip_prefix("./").unwrap_or(run).trim_end_matches('.');
-            !token.is_empty() && names.contains(token)
-        })
 }
 
 fn adopter_cited_machinery(repo: &Path, changelog: &str) -> Result<Vec<String>, Refusal> {

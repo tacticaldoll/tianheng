@@ -816,15 +816,22 @@ fn a_release_subject_with_no_space_is_a_violation() {
 /// and report clean. That is the reads-as-coverage failure one level up.
 #[test]
 fn every_enumeration_refuses_rather_than_reporting_clean_over_nothing() {
-    for (name, wreck, needle) in [
+    for (_shape, wreck, needle) in [
         (
             "no internal path dependency",
             "internal-pins" as &str,
             "found no internal path dependency",
         ),
+        // Two sites once produced one needle — an unreadable directory and a readable empty one — so the
+        // direction could not say which fired, and only the first was ever reached.
         (
-            "no example manifest",
+            "an unreadable examples directory",
             "examples",
+            "the examples directory cannot be read",
+        ),
+        (
+            "an examples directory holding no manifest",
+            "examples-empty",
             "found no example manifests",
         ),
         (
@@ -850,6 +857,10 @@ fn every_enumeration_refuses_rather_than_reporting_clean_over_nothing() {
             "examples" => {
                 std::fs::remove_dir_all(fixture.repo.join("examples")).expect("remove examples");
             }
+            "examples-empty" => {
+                std::fs::remove_dir_all(fixture.repo.join("examples")).expect("remove examples");
+                std::fs::create_dir_all(fixture.repo.join("examples")).expect("recreate empty");
+            }
             "example-reqs" => {
                 std::fs::write(
                     fixture.repo.join("examples/adopter/Cargo.toml"),
@@ -862,6 +873,5 @@ fn every_enumeration_refuses_rather_than_reporting_clean_over_nothing() {
         commit(&fixture.repo, "chore: empty an enumeration");
         refuse(&fixture.repo, Kind::CannotJudge, needle);
         let _ = std::fs::remove_dir_all(&root);
-        let _ = name;
     }
 }

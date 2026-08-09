@@ -68,8 +68,15 @@ Contract forbids.
 
 ### Requirement: A reaction that runs only on request SHALL be named where the run is decided
 
-A reaction gated behind an environment variable SHALL be named on its own line in the `AGENTS.md` Definition
-of Done and in the CI job that holds it.
+A reaction that does not run in an ordinary `cargo test --workspace` SHALL be named **wherever its run is
+decided**: on its own line in the `AGENTS.md` Definition of Done and in the CI job that holds it, when the
+decision is "run it despite the cost"; or in the one path that asks for it, when the decision is "run it only
+where it can answer".
+
+The distinction is not a loophole for the second kind. `scripts/publish.sh` is where a publish-source run is
+decided, because no development checkout is a release snapshot and a pre-flight run could only ever refuse. A
+reaction gated behind an environment variable named in NEITHER place never runs at all, which is the shape
+this requirement exists to refuse.
 
 Two reactions are gated this way — the mutation suite, which checks out a worktree and builds it, and the
 examples suite, which builds seven separate crate graphs — and neither may run inside every

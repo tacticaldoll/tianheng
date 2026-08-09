@@ -382,6 +382,15 @@ fn a_signature_this_gate_cannot_read_cannot_be_judged() {
         "a block this gate cannot verify is undecidable, not a disagreement: {}",
         refusal.message
     );
+    assert!(
+        refusal
+            .message
+            .contains("carries a signature this gate cannot verify"),
+        "the refusal must name THIS undecidable — a kind-only assertion in a judgement with fifteen \
+         cannot-judge sites says nothing about which one fired, and repairing that in one test three tests \
+         earlier did not stop it being written again here: {}",
+        refusal.message
+    );
 }
 
 /// A remote whose `main` cannot be read is undecidable — the direction that keeps a network failure from

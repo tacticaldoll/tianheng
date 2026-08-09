@@ -18,10 +18,15 @@ Verifying it would mean re-entering the `cargo test` harness already running, or
 write into the tree it judges. A header naming a command that regenerates nothing is invisible here, and
 that is a declared observation bound rather than an oversight.
 
-**Not that the set is complete.** One mechanism is recognized: a Rust call to the shared blessing rule,
-and a `check_*` gate writing its projection under `BLESS`. A document generated some third way, whose
-author also omitted the marker, is absent from both sides of the correspondence — a declared false
-negative owned by this engine, not a limit of what it can read.
+**Not that the set is complete.** One mechanism is recognized: a Rust call to the shared blessing
+rule. A document generated some other way, whose author also omitted the marker, is absent from both
+sides of the correspondence — a declared false negative owned by this engine, not a limit of what it
+can read.
+
+A second was recognized until this window: a `check_*` gate writing its projection under `BLESS`. No
+tracked unit is one, so that arm asserts its own emptiness rather than being pruned — if such a unit
+exists again the reaction says so, which is the difference between retiring a recognizer and
+forgetting it.
 
 ## The register
 
