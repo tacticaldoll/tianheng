@@ -123,11 +123,11 @@
 
 ## 7. Records and closure
 
-- [ ] 7.1 `CHANGELOG.md` `[Unreleased]` under `### Self-governance` — no adopter-facing vocabulary, no version
+- [x] 7.1 `CHANGELOG.md` `[Unreleased]` under `### Self-governance` — no adopter-facing vocabulary, no version
       bump anywhere
-- [ ] 7.2 Retire the `WATCH: a refusal site is defended only if…` entry from `BACKLOG.md`, stating what closed
+- [x] 7.2 Retire the `WATCH: a refusal site is defended only if…` entry from `BACKLOG.md`, stating what closed
       it and what the residual now is
-- [ ] 7.3 Regenerate `docs/observation-bounds.md` and any projection whose figures moved; check no prose figure
+- [x] 7.3 Regenerate `docs/observation-bounds.md` and any projection whose figures moved; check no prose figure
       about this set was typed
 - [ ] 7.4 Full Definition of Done including MSRV 1.85 (**no let-chains**) and both gated suites
 - [ ] 7.5 `openspec validate refusal-site-bites`, sync the delta into

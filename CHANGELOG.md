@@ -744,15 +744,39 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
-- **A refusal is defended only if some direction dies when its kind is swapped — and the sweep that shows
-  that is not yet a reaction.** Four adversarial rounds over this window each found the class the previous
-  round had repaired, and the decisive difference was the method: disabling an `if` and re-running finds a
-  branch nothing reaches; swapping `violation`↔`cannot_judge` and sentinelling the message also finds a
-  direction that asserts a refusal happened without asserting **which**. Two such directions were repaired in
-  one commit and two more written three tests later in the same file. Sixteen refusal sites gained a direction
-  this window; twenty-four have none, and they are filed with the shape that would close the class rather than
-  the instance — `pin_bites` already perturbs a worktree and requires a cited test to die, and the same
-  machinery over every refusal site is the reaction this sweep should be.
+- **The sweep that shows a refusal is defended is now a reaction, and it separates two facts the sweep could
+  not.** Four adversarial rounds over this window each found the class the previous round had repaired, and
+  the decisive difference was the method: disabling an `if` and re-running finds a branch nothing reaches;
+  swapping `violation`↔`cannot_judge` and replacing the message also finds a direction that asserts a refusal
+  happened without asserting **which**. Run by hand, that method counted twenty-four sites as surviving both
+  perturbations — but a perturbation kills nothing for *two* reasons, no direction distinguishes the site and
+  no direction reaches it, and one number hides which. They are closed by different work.
+
+  `refusal_bites.rs` separates them. It enumerates every refusal site from **what the compiler reported
+  reading** — the dep-info beside each test executable, not a second implementation of module resolution, which
+  would miss a conventional `mod`, an `include!` and a conditional path while admitting `cfg`-excluded files.
+  It records which sites a run constructs, then runs each reached site's observing targets twice, once with
+  that site's kind swapped and once with its message replaced. Both must kill some direction, because the kind
+  is what an operator acts on before an irreversible act and the message is what tells them where to look.
+  Nothing is rebuilt between runs; the whole sweep is about a minute.
+
+      58 enumerated, 52 defended, 6 declared out of reach, 0 undistinguished, 0 unreached and unclaimed, 0 stale
+
+  The residual was closed in order — **construct, delete, declare** — because declaring first produces
+  exemptions for code that should not exist. Fourteen sites were constructed, through an index git cannot
+  parse, a worktree that reads clean because everything in it is ignored, a missing object, a directory where
+  a file was expected, and a file whose bytes are not UTF-8. Two were **deleted**: a second `rev-parse HEAD`
+  after the log whose first line is HEAD's commit, and a second read of a tag object whose type had just been
+  read. Only six were declared, each carrying a slug at the site — an argument, not a location, because a
+  location is a selector valid for one build — joined in both directions to the bound covering it, with the
+  registry↔bound edge a biconditional so the last exemption cannot vanish while the bound survives.
+
+  Two shapes stay outside and are declared rather than approximated: whether a declared-out-of-reach refusal
+  is *genuinely* unconstructible (the reaction sees only that nothing reached it), and a refusal vocabulary
+  under other names, since recognising a contract by intent is the prose judgement measured three times and
+  rejected. `scripts/publish.sh` scrubs the instrumentation before the gate that stands in front of
+  `cargo publish` — measured: unscrubbed, that gate calls a dirty worktree a cannot-judge, which is a
+  disagreement reported as something it could not read, at the moment it costs the most.
 
 - **A census is now DECLARED, and the half nothing can hold says so.** The rule had one reaction covering
   exactly one sentence, and adversarial review found **eight** figures wrong in a single change — an entry
