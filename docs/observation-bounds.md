@@ -319,27 +319,27 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **pinned by**: `a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directory`
 
-## rust-self-governance-gates
+## rust-repository-reactions
 
-### `rust-self-governance-gates/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
+### `rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
 
 > nothing reacts. The declaration is the coverage; reaching further needs a judgement over prose, which is the instrument measured three times and rejected. `AGENTS.md` carries the other half as a rule with no reaction: a count of something this repository does not produce is not written
 
 - **pinned by**: `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
 
-### `rust-self-governance-gates/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound`
+### `rust-repository-reactions/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound`
 
 > nothing reacts. The scan recognises names, and recognising a vocabulary by intent is a judgement over source, the instrument this repository has measured and rejected. No compile-time construction reaches it either: forcing a not-yet-written reaction to return the shared type requires enumerating reactions, and what counts as one has no mechanical definition
 
 - **pinned by**: `a_refusal_vocabulary_under_other_names_is_not_observed`
 
-### `rust-self-governance-gates/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound`
+### `rust-repository-reactions/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound`
 
 > the reaction observes only that no direction reaches it, never that no direction *could*. Reaching further would require constructing the environment the declaration says is unconstructible, so the declaration carries a reason the reaction cannot check, and the membership of the exempt set is produced and counted rather than approximated
 
 - **pinned by**: `a_site_declared_out_of_reach_is_only_observed_to_be_unreached`
 
-### `rust-self-governance-gates/a-hook-is-proposed-for-this-rule-a-stated-bound`
+### `rust-repository-reactions/a-hook-is-proposed-for-this-rule-a-stated-bound`
 
 > neither holds it: a squash merge runs on GitHub's servers so no local commit exists and no hook runs, and both values of that setting append the serial. Nor can a merge made in the browser be reached by a wrapper. The compliance point is one string passed at merge time, and this reaction guards the sanctioned path to it rather than every path
 

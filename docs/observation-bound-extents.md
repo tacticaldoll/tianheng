@@ -29,7 +29,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound` — owner: engine
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
 - `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound` — owner: engine
-- `rust-self-governance-gates/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
+- `rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
 - `self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound` — owner: engine
 - `self-law-projection/a-reason-carrying-the-clause-while-negating-the-law-is-not-observed-a-stated-bound` — owner: engine
 - `self-law-projection/a-workspace-dependency-allowlist-is-not-examined-a-stated-bound` — owner: engine
@@ -205,7 +205,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `source_outside_lib_or_bin_target_subtree_is_out_of_scope_corpus_bound`
 
-### `rust-self-governance-gates/a-hook-is-proposed-for-this-rule-a-stated-bound`
+### `rust-repository-reactions/a-hook-is-proposed-for-this-rule-a-stated-bound`
 
 > a squash merge made anywhere but through the sanctioned wrapper
 
@@ -213,7 +213,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_merge_made_outside_the_wrapper_is_not_observed`
 
-### `rust-self-governance-gates/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound`
+### `rust-repository-reactions/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound`
 
 > a second kinded refusal contract declared under other names, or inside the scan's own sources
 
@@ -221,7 +221,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_refusal_vocabulary_under_other_names_is_not_observed`
 
-### `rust-self-governance-gates/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound`
+### `rust-repository-reactions/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound`
 
 > a refusal site declaring itself out of reach for a reason no fixture can falsify
 
@@ -609,7 +609,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `production_probe_behind_non_production_cfg_is_counted_as_coverage`
 
-### `rust-self-governance-gates/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
+### `rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
 
 > a figure about an enumerable set, written in a phrasing no census declares
 

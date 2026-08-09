@@ -1,4 +1,4 @@
-# rust-self-governance-gates Specification
+# rust-repository-reactions Specification
 
 ## Purpose
 

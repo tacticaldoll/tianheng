@@ -744,6 +744,13 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **The capability holding this repository's reactions is renamed `rust-repository-reactions`.** Its old name
+  claimed self-governance for a population that mostly collates a record and reaches no product contract, and
+  a name is what a reader consults before filing a requirement. **Four published bound ids change value** —
+  they are derived as `<capability>/<scenario-slug>` and exported through `observation_bounds()`, so pinning
+  the old strings would have converted every one into an assignment and defeated the rule that makes them
+  checkable.
+
 - **The governance apparatus shipped to every adopter, and that is why it was misnamed.** `cargo package
   --list -p tianheng` carried all 50 files under `tests/`: every reaction judging this repository's changelog,
   squash messages, specs and documents reached every adopter, where it could only detect no workspace and

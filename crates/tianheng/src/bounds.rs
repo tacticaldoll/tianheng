@@ -388,10 +388,10 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_comment_naming_every_member_for_another_reason_is_refused",
         ),
-        // --- rust-self-governance-gates ---
+        // --- rust-repository-reactions ---
         BoundDecl::pinned(
             BoundId::new(
-                "rust-self-governance-gates/a-count-written-in-a-sentence-no-census-declares-a-stated-bound",
+                "rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound",
             ),
             "a figure about an enumerable set, written in a phrasing no census declares",
             Extent::Reached(Reached::UnderReacts {
@@ -538,7 +538,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "rust-self-governance-gates/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound",
+                "rust-repository-reactions/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound",
             ),
             "a refusal site declaring itself out of reach for a reason no fixture can falsify",
             Extent::OutOfReach {
@@ -550,7 +550,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "rust-self-governance-gates/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound",
+                "rust-repository-reactions/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound",
             ),
             "a second kinded refusal contract declared under other names, or inside the scan's own sources",
             Extent::OutOfReach {
@@ -562,7 +562,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "rust-self-governance-gates/a-hook-is-proposed-for-this-rule-a-stated-bound",
+                "rust-repository-reactions/a-hook-is-proposed-for-this-rule-a-stated-bound",
             ),
             "a squash merge made anywhere but through the sanctioned wrapper",
             Extent::OutOfReach {

@@ -16,7 +16,7 @@
 #![allow(dead_code)]
 
 /// The bound covering every entry below.
-pub const OUT_OF_REACH_BOUND: &str = "rust-self-governance-gates/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound";
+pub const OUT_OF_REACH_BOUND: &str = "rust-repository-reactions/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound";
 
 /// One site declared out of reach, joined to the bound that covers it.
 pub struct Exemption {
