@@ -72,11 +72,23 @@ fn every_declared_bound_carries_exactly_one_citation() {
 /// crate-qualified, and this repository already has one test name registered in two crates, so a
 /// workspace-wide match would let a citation qualified to one crate be satisfied by the other's test.
 fn registered_tests(root: &Path) -> BTreeMap<String, BTreeSet<String>> {
-    let members: Vec<String> = std::fs::read_dir(root.join("crates"))
-        .expect("crates/ is readable")
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.path().join("Cargo.toml").is_file())
-        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+    // Tracked content, not the working directory, and refusing rather than shortening. A listing that emits
+    // some entries and then fails leaves a short list that reads as authoritative, and every citation in a
+    // package never enumerated is then reported as one the harness does not register — a filesystem failure
+    // charged to the register. This capability's own requirement says so; nothing held it until now.
+    let manifests = must(
+        root,
+        "`git ls-files -- crates/*/Cargo.toml`",
+        &["git", "ls-files", "--", "crates/*/Cargo.toml"],
+    );
+    // git's pathspec `*` crosses directory separators, unlike the shell's — measured, the glob above also
+    // matched fixture manifests nested under a member's tests. A workspace member is one segment deep.
+    let members: Vec<String> = manifests
+        .lines()
+        .filter_map(|path| path.strip_prefix("crates/"))
+        .filter_map(|rest| rest.strip_suffix("/Cargo.toml"))
+        .filter(|member| !member.contains('/'))
+        .map(str::to_string)
         .collect();
     assert!(
         !members.is_empty(),

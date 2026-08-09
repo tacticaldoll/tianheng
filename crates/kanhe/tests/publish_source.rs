@@ -15,7 +15,10 @@ use kanhe::refusal;
 
 use kanhe::publish_source_gate as gate;
 
-use gate::{build_fixture, hermetic, hidden_by_the_checkout, judge};
+use gate::{
+    NoClassification, build_fixture, hermetic, hidden_by_the_checkout, hidden_by_the_checkout_with,
+    judge,
+};
 use refusal::Kind;
 use std::path::{Path, PathBuf};
 
@@ -568,6 +571,71 @@ fn a_file_ignored_by_tracked_repository_content_is_clean() {
         hidden.is_empty(),
         "a file ignored by a tracked `.gitignore` was reported as hidden by the checkout, which would block a \
          release the repository itself excludes: {hidden:?}"
+    );
+}
+
+/// A classifier that could not run is not one that found nothing.
+///
+/// Constructed rather than declared: the repository must still answer `ls-files` and `status` for the
+/// judgement to reach the classification at all, so the failure is supplied rather than arranged.
+#[test]
+fn an_exclusion_classifier_that_cannot_run_cannot_be_judged() {
+    let (root, repo) = hiding(
+        "classifier-failed",
+        &[(".gitignore", "stray.txt\n")],
+        "stray.txt",
+    );
+    let refusal = hidden_by_the_checkout_with(&repo, |_, _| {
+        Err(NoClassification::Failed(
+            "check-ignore exploded".to_string(),
+        ))
+    })
+    .expect_err("a classifier that could not run must refuse rather than answer");
+    let _ = std::fs::remove_dir_all(&root);
+    assert_eq!(refusal.kind, Kind::CannotJudge);
+    assert!(
+        refusal.message.contains("could not classify"),
+        "{}",
+        refusal.message
+    );
+}
+
+/// The same judgement with a classifier that ran and matched nothing: the source is unshown, which is the
+/// checkout's, and that is an answer rather than a refusal.
+#[test]
+fn an_exclusion_classifier_that_matched_nothing_still_answers() {
+    let (root, repo) = hiding(
+        "classifier-empty",
+        &[(".gitignore", "stray.txt\n")],
+        "stray.txt",
+    );
+    let hidden = hidden_by_the_checkout_with(&repo, |_, _| Err(NoClassification::MatchedNothing))
+        .expect("matching nothing is an answer, not a failure to read");
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        hidden.iter().any(|line| line.contains("<unshown>")),
+        "an unshown source is the checkout's: {hidden:?}"
+    );
+}
+
+/// The same rule, for a name git prints **quoted**.
+///
+/// `ls-files --others` prints a path with non-ASCII bytes as `"ignored-\346\231\256\351\200\232"`, and
+/// asking `check-ignore` about that literal asks about a file that does not exist. Measured before the
+/// repair: the source went unshown and the gate refused a file the repository itself ignores.
+#[test]
+fn a_file_with_quoted_bytes_ignored_by_tracked_content_is_clean() {
+    let (root, repo) = hiding(
+        "ignored-quoted",
+        &[(".gitignore", "ignored-*\n")],
+        "ignored-\u{666e}\u{901a}",
+    );
+    let hidden = hidden_by_the_checkout(&repo).expect("the classifier reads this repository");
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        hidden.is_empty(),
+        "a file whose name git prints quoted, ignored by a tracked `.gitignore`, was reported as hidden by \
+         the checkout — the classifier was asked about the quoted spelling, which names no file: {hidden:?}"
     );
 }
 

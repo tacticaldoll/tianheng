@@ -335,8 +335,18 @@ pub fn audit_corpus_and_anchor(manifest_path: &Path) -> Result<(Vec<PathBuf>, Pa
         Some(root) => root,
         None => {
             let manifest_dir = manifest_path.parent().unwrap_or(Path::new(""));
-            std::path::absolute(manifest_dir)
-                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")))
+            // The working directory is the last resort for a bare `Cargo.toml` whose parent is empty. Where
+            // even that cannot be read there is no anchor, and the error channel in this signature says so:
+            // an invented root mislabels every observed file, silently, because the anchor *is* baseline
+            // identity. Inventing one here would also be the defensive over-foolproofing of an impossible
+            // state the minimalism bound forbids.
+            std::path::absolute(manifest_dir).or_else(|_| std::env::current_dir()).map_err(|err| {
+                format!(
+                    "no anchor: {manifest_path:?} names no absolute directory and the working directory \
+                     cannot be read ({err}). Every observed file is labelled relative to the anchor, so \
+                     inventing one would mislabel a whole baseline rather than fail"
+                )
+            })?
         }
     };
     Ok((roots, anchor))
