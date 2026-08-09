@@ -112,13 +112,13 @@
 
 ## 6. Where the run is decided, and where the injection is scrubbed
 
-- [ ] 6.1 `scripts/publish.sh`: invoke the publish-source gate under
+- [x] 6.1 `scripts/publish.sh`: invoke the publish-source gate under
       `env -u TIANHENG_REFUSAL_MUTANT -u TIANHENG_REFUSAL_RECORD -u TIANHENG_REFUSAL_BITES` — all three are
       instrumentation, including `RECORD`, which writes a file from inside the gate (D8)
-- [ ] 6.2 Name the reaction on its own line in the `AGENTS.md` Definition of Done, with the cost and the reason
+- [x] 6.2 Name the reaction on its own line in the `AGENTS.md` Definition of Done, with the cost and the reason
       it is gated
-- [ ] 6.3 Add it to `.github/workflows/ci.yml` on its own line, beside the mutation and examples suites
-- [ ] 6.4 Verify 6.1 actually scrubs: with `TIANHENG_REFUSAL_MUTANT` exported, the publish gate still refuses
+- [x] 6.3 Add it to `.github/workflows/ci.yml` on its own line, beside the mutation and examples suites
+- [x] 6.4 Verify 6.1 actually scrubs: with `TIANHENG_REFUSAL_MUTANT` exported, the publish gate still refuses
       the shape it should
 
 ## 7. Records and closure
