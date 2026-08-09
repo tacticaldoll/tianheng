@@ -9,8 +9,6 @@
 //! — allowed here rather than split into per-binary variants.
 #![allow(dead_code)]
 
-pub mod region;
-
 use std::path::{Path, PathBuf};
 
 /// A minimal, dependency-free single-crate fixture (so `cargo metadata --no-deps` never touches

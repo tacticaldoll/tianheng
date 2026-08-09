@@ -74,9 +74,9 @@ workspace version.
 
 ### Requirement: A release section SHALL be coherent with itself
 
-The reaction reads the changelog's **state** — which version, which sections exist, whether the comparison link
-is right. It SHALL also read each release section's **internal** consistency, which is a different question and
-was unasked until two defects of that shape landed in one window: an `[Unreleased]` grew a second `### Changed`
+The reaction SHALL read each release section's **internal** consistency as well as the changelog's **state** —
+which version, which sections exist, whether the comparison link is right. Internal consistency is a different
+question and was unasked until two defects of that shape landed in one window: an `[Unreleased]` grew a second `### Changed`
 heading three hundred lines from the first, and a prose claim about which prior releases carry a `### Migration`
 section was wrong under every reading.
 
@@ -213,8 +213,8 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
 
 #### Scenario: A gate named inside a longer span, or as unquoted prose
 
-- **WHEN** an entry under an adopter-facing heading writes `` `bash crates/tianheng/tests/pin_bites.rs --fix` ``, or
-  `` `` `crates/tianheng/tests/pin_bites.rs` `` ``, or a span wrapped across a source line, or a markdown link whose
+- **WHEN** an entry under an adopter-facing heading writes `` `bash crates/jiaochou/tests/pin_bites.rs --fix` ``, or
+  `` `` `crates/jiaochou/tests/pin_bites.rs` `` ``, or a span wrapped across a source line, or a markdown link whose
   target is the gate, or the bare name with no backticks at all
 - **THEN** the reaction fails in every one of those, because the word is the unit rather than the span
 

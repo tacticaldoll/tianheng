@@ -9,7 +9,7 @@
 //! The functional cores ([`guibiao`], [`hunyi`], [`louke`]) do the observation and
 //! comparison; this crate owns the side effects (argument parsing, filesystem, stdout/stderr)
 //! and the composition. The cores must not depend on this shell — a crate-level invariant
-//! Tianheng enforces on itself (`tests/self_governance.rs`).
+//! Tianheng enforces on itself (`crates/shengmo/src/law.rs`).
 //!
 //! **One declared source, three projections.** An adopter writes one [`Constitution`] carrying
 //! every dimension's boundaries; the static and semantic dimensions project as a CI exit code,

@@ -109,7 +109,7 @@ by `tianheng check`.
 > crate named `example-core`). Tianheng is consumed as a **library**: declare your own
 > constitution and expose your own binary, as above.
 
-Tianheng governs **itself** with its own reaction (`crates/tianheng/tests/self_governance.rs`):
+Tianheng governs **itself** with its own reaction (`crates/shengmo/src/law.rs`):
 the core must not depend on the shell, `syn` is quarantined to `hunyi`, `xuanji` stays beneath
 every dimension.
 

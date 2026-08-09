@@ -744,6 +744,51 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **The governance apparatus shipped to every adopter, and that is why it was misnamed.** `cargo package
+  --list -p tianheng` carried all 50 files under `tests/`: every reaction judging this repository's changelog,
+  squash messages, specs and documents reached every adopter, where it could only detect no workspace and
+  return. The capability governing those reactions gives shipping in **zero** packages as its own criterion
+  for governance rather than product, so by its own test they were product. Sharing a directory is also how a
+  governance document came to state that every Rust integration test "runs Tianheng's own reactions against
+  the workspace" — false for 20 of the 25 then present, none of which reached the shipped API at all.
+
+  Two unpublished members now hold it, split by what each judges. **繩墨 (shengmo)** — the inked line —
+  carries the law 天衡 declares over itself, as library code rather than a function at line 69 of a 668-line
+  test file, and the reactions that run the delivered product against this workspace. **校讎 (jiaochou)** —
+  collation — carries the rest: two texts laid side by side to find where they disagree. The published
+  `tianheng` crate goes from 25 test targets in its tarball to 8, and the 8 are the ones whose subject is the
+  packaged code. Nothing an adopter could run has left, and no API, binary, or behaviour moves.
+
+  The law itself did not change: the regenerated projection differs by exactly three lines, all of them the
+  preamble's own self-reference. The refusal-site census is identical to the figure recorded before anything
+  moved — 67 enumerated, 60 defended, 7 declared out of reach, 0 undistinguished — which is what a move should
+  produce.
+
+- **Four documents restated a declaration the law owns, and the rule forbidding it was already written.** A
+  comment block naming every member of a live dependency allowlist is refused, with a pointer to
+  `AGENTS.self-law.md` as its repair — but the reaction read one crate's line comments against one dimension's
+  allowlist. It now reads every declared allowlist against every tracked governance document, and found four
+  restatements, including one inside the very requirement that calls a restatement there the second source of
+  truth it forbids.
+
+- **Fourteen reactions carried their own copy of the workspace probe, and eleven carried an identical copy of
+  its absent-layout direction.** Diffing the copies against each other before merging them showed the
+  duplication is in the scaffolding rather than the judgement: each differed in exactly one place, the
+  artifact its own reaction needs present. The scaffolding now has one definition and the prerequisite stays
+  with its caller; `TIANHENG_WORKSPACE_TESTS` goes from 53 occurrences to 26, and from fourteen definitions of
+  what it means to one.
+
+- **A written requirement's own scenario was refusing the proposals it excludes.** `reference-integrity`
+  states that the gate inspects tracked content *outside* active `openspec/changes/` plans and carries a
+  scenario for it; the reaction passed every tracked path as its corpus, so the exclusion existed only in
+  prose. Nothing had held it because no plan had yet named a path that did not exist — and then one did, and
+  the gate reported five offences against a proposal for describing its own deliverable.
+
+- **A spec asserted the outcome of a command nothing ran.** `observation-bound-register` states that
+  `openspec validate --specs --strict` passes over every spec. Measured, two did not, and `git grep` found
+  that command in the scenario asserting its result and nowhere else — not in CI, not in the Definition of
+  Done. It is now the one non-cargo gate in both, pinned to the validator version.
+
 - **Three judgements could report clean over something they did not read.** All three were reported by review,
   verified against the code, and one reproduced against a running git before anything was changed.
 
@@ -874,7 +919,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   code doc was spelled in words. Most numbers here describe a *shape*, not a census.
 - **The class that produced three withdrawn attempts is recorded, and it grew when the paragraph landed.**
   `PROJECT.md` restates architectural facts the generated projection already carries, and states others —
-  locations, counts — that nothing carries. `crates/tianheng/tests/reference_integrity.rs` holds that a cited path exists and
+  locations, counts — that nothing carries. `crates/jiaochou/tests/reference_integrity.rs` holds that a cited path exists and
   is tracked; nothing holds that the thing described lives there, which is exactly the half a withdrawn
   attempt got wrong. Closing the crate question added **five** more location claims to that file, so the
   entry is filed larger than the branch it came from filed it, not smaller. Its trigger is a claim found

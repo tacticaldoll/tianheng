@@ -821,7 +821,7 @@ below.
 ### Requirement: The register reaction SHALL be a local gate CI runs identically
 
 The reaction SHALL be a script invoked from the workspace root, listed in `AGENTS.md`'s Definition of
-Done and run verbatim by CI, so `crates/tianheng/tests/dod_coherence.rs` binds the two. Its failure directions SHALL
+Done and run verbatim by CI, so `crates/jiaochou/tests/dod_coherence.rs` binds the two. Its failure directions SHALL
 each be proven by a companion test against fixtures built to trip exactly one condition — a gate over a
 coverage claim that has not been observed failing is a restatement of the register, not a defence of it.
 
@@ -874,7 +874,7 @@ exit 1 no-match result.
 #### Scenario: The local gate and CI cannot drift apart
 
 - **WHEN** the gate is added to the Definition of Done
-- **THEN** the identical command appears in CI, and `crates/tianheng/tests/dod_coherence.rs` fails if it does not
+- **THEN** the identical command appears in CI, and `crates/jiaochou/tests/dod_coherence.rs` fails if it does not
 
 #### Scenario: The reaction leaves the tree unchanged
 

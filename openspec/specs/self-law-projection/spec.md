@@ -15,35 +15,38 @@ contract).
 ## Requirements
 ### Requirement: Self-law projection is generated from the enforced self-constitution
 
-The repository SHALL carry an agent-readable Markdown artifact projecting Tianheng's self-governance law. The projection SHALL be derived from the **same** constitution object the self-governance gate reacts against (`tianheng_constitution()`), never a hand-written restatement, so the projected law and the enforced law cannot diverge into two sources of truth. The projection SHALL cover every boundary the self-constitution declares, each with its target, rule, and declared `reason`. Boundary `because(...)` reasons SHALL be distilled into forward-looking shape declarations, avoiding historical debug text. Crate dependency allowlists SHALL be minimal and un-duplicated, and file-system path canonicalization SHALL be confined crate-wide across observation crates. The `tianheng` shell's normal-dependency allowlist SHALL admit only the observation dimensions it composes and its projection-serialization dependency, so no direct edge reaches the lower reaction model or metadata substrate. Its membership is owned by `tianheng_constitution()` and rendered by the projection, and this requirement SHALL NOT restate it: a restatement here is the second source of truth the paragraph above forbids, and it would go stale on a legitimate amendment with no reaction to say so.
+The constitution this projection is generated from SHALL be **library code**, not a function inside a test
+file. It is written with the product's own declaration API — the capability applied to its own author — and a
+declaration living among a dozen `#[test]` functions reads as a test rather than as the repository's law, which
+is how a governance document came to describe the reactions beside it as something they are not.
 
-Authored Rust line comments under the `tianheng` shell SHALL NOT restate the shell dependency declaration
-with `restrict_dependencies_to(` or copy every current allowlist member within one contiguous line-comment
-block. The copied-member reaction SHALL derive its tokens from the unique live `tianheng` dependency boundary,
-not repeat them in test code. A comment that explains the dependency-free implementation SHALL point to the
-generated self-law projection instead of copying the declaration or its current members.
+Authored text SHALL NOT restate a declared dependency allowlist, and the reaction holding that SHALL read
+**every** declared allowlist against **every** tracked governance document, not one crate's line comments
+against one dimension's. Measured before this change, the reaction read only Rust line comments under the
+`tianheng` shell and only the shell's allowlist, while `PROJECT.md` named every member of `guibiao`'s live
+allowlist — the same second source of truth, in a file class nothing scanned. A rule enforced at one site and
+not its neighbour is a rule about the site.
 
-The direct shell-to-metadata direction SHALL be defended by an in-repository fixture evaluated against the unique live `tianheng` dependency boundary selected from `tianheng_constitution()`. The test SHALL NOT redeclare that boundary's allowlist, and the fixture SHALL carry no other forbidden dependency that could satisfy the expected violation.
+What a declaration cannot carry SHALL stay prose: why a boundary exists, what it protects, the narrative of
+the family. What it can carry — the membership — belongs to the declaration and its projection, and the repair
+for a restatement is a pointer to `AGENTS.self-law.md`.
 
-#### Scenario: The projection carries the enforced self-law
+#### Scenario: A governance document names every member of a declared allowlist
 
-- **WHEN** the self-law projection is generated
-- **THEN** it contains every boundary `tianheng_constitution()` declares — each crate boundary with its distilled forward-looking `reason`, with `guibiao`'s allowlist carrying the functional core ⊥ shell clause without a redundant denylist boundary, with `tianheng`'s allowlist rendered from the live declaration rather than restated here, and with `std::fs::canonicalize` boundaries enforced at crate-root subtree depth for `guibiao`, `hunyi`, and `louke`
+- **WHEN** a tracked governance document names every member of any live `restrict_dependencies_to` allowlist
+- **THEN** the reaction fails, naming the document, the crate whose allowlist was copied, and the members —
+  and directs the repair to the projection rather than to a rewording
 
-#### Scenario: Authored shell comments do not copy the dependency declaration
+#### Scenario: The law is reached as a library
 
-- **WHEN** the repository self-governance tests enumerate Rust source under `crates/tianheng/src`
-- **THEN** no line comment contains `restrict_dependencies_to(`, no contiguous line-comment block contains every member derived from the live shell allowlist, and the ANSI dependency rationale points to `AGENTS.self-law.md`, without forbidding executable DSL calls or an individual dependency discussion
-
-#### Scenario: A direct shell-to-metadata dependency reacts
-
-- **WHEN** the isolated `tianheng` fixture declares `xingbiao` as its only forbidden direct normal dependency
-- **THEN** the live shell dependency boundary selected from `tianheng_constitution()` reports an enforced violation
+- **WHEN** the projection is generated and the reaction runs the constitution
+- **THEN** both read the same exported declaration, so a projection cannot be generated from one definition
+  while the reaction evaluates another
 
 ### Requirement: Observation bounds
 
-The comment reactions above read **authored text**, so what they cannot read is a limit this capability declares
-rather than leaving for the author who trips it. Both are over-reactions, which is the safe direction here: a
+The comment reactions above read **authored text**, and what they cannot read SHALL be a limit this capability
+declares rather than one left for the author who trips it. Both are over-reactions, which is the safe direction here: a
 false positive costs a sentence rewritten, while the false negative would be a restated declaration that no
 reaction governs. Neither SHALL be closed by teaching a recognizer to read intent — that is a heuristic over
 prose, which this repository has measured and rejected.
@@ -120,14 +123,14 @@ The artifact's fixed preamble SHALL describe only how to read and use the projec
 
 ### Requirement: A dimension's declared allowlist SHALL obey the law its reason quotes
 
-`tianheng_constitution()` gives each dimension a `restrict_dependencies_to` allowlist whose `because` quotes
-三儀 ⊥ 三儀 — a dimension must never learn from a sibling. The reaction over those declarations SHALL assert
-**both** statements separately: that the clause is present in the reason, and that the allowlist **names no
+The reaction over each dimension's declared allowlist SHALL assert **both** statements separately: that the clause is present in the reason, and that the allowlist **names no
 sibling dimension**. They are different statements, and only the first was asserted.
 
-That gap was a false negative, reproduced rather than reasoned about: widening `guibiao`'s allowlist to name
-`hunyi` left **every** test binary in this workspace green, and `AGENTS.self-law.md` regenerated to print
-`only: serde_json, xuanji, xingbiao, hunyi` **directly beneath** the reason that forbids it.
+That gap was a false negative, reproduced rather than reasoned about: widening a dimension's allowlist to
+name a sibling left **every** test binary in this workspace green, and `AGENTS.self-law.md` regenerated to
+print the widened membership **directly beneath** the reason that forbids it. The membership itself is not
+written here — restating it is the second source of truth this capability forbids, and a requirement that
+reproduces what it governs goes stale on a legitimate amendment with no reaction to say so.
 
 Neither of the two reactions a reader would expect to catch it can. The staleness check pins the projection
 against the declaration, so a blessed projection of a widened allowlist is *fresh* — freshness is not truth. And

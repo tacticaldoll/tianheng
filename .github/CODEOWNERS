@@ -7,7 +7,7 @@
 #
 # The protected file must be the boundary whose edit turns CI green after drift, not a
 # showcase of it:
-#   - crates/tianheng/tests/self_governance.rs is Tianheng's SELF-GOVERNING constitution
+#   - crates/shengmo/ is Tianheng's SELF-GOVERNING constitution
 #     — the boundaries it enforces on itself (the 圭表 core is serde_json-only; the core
 #     crate must not depend on the gate/shell). It is the file an agent would weaken to
 #     make Tianheng's own CI pass, so it is the primary thing to protect.
@@ -21,6 +21,6 @@
 # that relaxes the law), the repo admin must enable branch protection on the default
 # branch with "Require review from Code Owners". Until then this documents intent.
 
-/crates/tianheng/tests/self_governance.rs   @tacticaldoll
+/crates/shengmo/   @tacticaldoll
 /crates/tianheng/src/constitution.rs        @tacticaldoll
 /deny.toml                                  @tacticaldoll

@@ -1,9 +1,11 @@
 # Tianheng Self-Law Projection
 
-Generated from `tianheng_constitution()` in `crates/tianheng/tests/self_governance.rs`.
+Generated from `shengmo::law::constitution()` by `crates/shengmo/tests/self_governance.rs`.
 **Do not edit by hand.** If this file is stale, regenerate it:
-`BLESS=1 cargo test -p tianheng self_law_projection_is_fresh`.
-If the law itself is wrong, amend `self_governance.rs` through review — never edit this projection.
+`BLESS=1 cargo test -p shengmo self_law_projection_is_fresh`.
+If the law itself is wrong, amend `shengmo::law` through review — never edit this projection.
+The law is named by module rather than by file here: this header registers the unit holding the
+projection fresh, and a second tracked path in it would be an ambiguous claim about which one does.
 
 Read the projection below as the imitable shape of Tianheng itself, and work *with* the reaction:
 
@@ -57,6 +59,20 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 > the 天衡 shell remains the outward composition layer: direct normal edges end at observation dimensions and projection serialization, never at the lower reaction model or metadata substrate
 
 - **rule**: restrict dependencies to (only: guibiao, hunyi, louke, serde_json)
+- **kind**: crate · **severity**: enforce
+
+### `shengmo`
+
+> 繩墨 is an adopter of 天衡, not a member of the family it governs: it declares this law through the shell's published surface and reaches no dimension directly, so the repository's own governance exercises exactly the surface an adopter has. serde_json is the one addition, for reading cargo's own message stream where a reaction's corpus must come from the build rather than from a list
+
+- **rule**: restrict dependencies to (only: tianheng, serde_json)
+- **kind**: crate · **severity**: enforce
+
+### `jiaochou`
+
+> 校讎 collates this repository's record against itself and governs no product contract: it reaches the shell's published surface and the law's own locator, never a dimension. Keeping it distinct from 繩墨 is what stops a claim about the law being read as a claim about document hygiene
+
+- **rule**: restrict dependencies to (only: shengmo, tianheng, serde_json)
 - **kind**: crate · **severity**: enforce
 
 ### `crate`

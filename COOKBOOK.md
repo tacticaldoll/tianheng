@@ -546,7 +546,7 @@ assert!(coverage.uncovered.is_empty(), "ungoverned workspace crates: {:?}", cove
 
 Coverage changes no exit code on its own, so nothing gates unless *you* assert on it — the wall
 against a new, ungoverned crate slipping in is one you build deliberately. This is exactly how
-Tianheng gates its own coverage in `crates/tianheng/tests/self_governance.rs`.
+Tianheng gates its own coverage in `crates/shengmo/tests/self_governance.rs`.
 
 ### Govern a rule 三儀 has no DSL for (join the run as your own participant)
 

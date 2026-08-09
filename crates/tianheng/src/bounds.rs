@@ -166,7 +166,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // --- observation-bound-register ---
         //
         // The register's own bounds — the only ones this crate declares about the reaction
-        // that produces the register rather than about a dimension. `crates/tianheng/tests/pin_bites.rs` decides that a
+        // that produces the register rather than about a dimension. `crates/jiaochou/tests/pin_bites.rs` decides that a
         // citation's pin *bites* only where a mutation is declared for it; where none is, nothing decides.
         BoundDecl::unpinned(
             BoundId::new(

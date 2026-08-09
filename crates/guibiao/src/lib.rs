@@ -7,7 +7,7 @@
 //! observation + comparison — it carries **no** command-line, filesystem, or
 //! stdout/stderr shell. The imperative shell lives in the sibling `tianheng` crate,
 //! which must depend on this core and never the reverse — a crate-level invariant
-//! Tianheng enforces on itself (`tianheng` workspace `tests/self_governance.rs`).
+//! Tianheng enforces on itself (`crates/shengmo/src/law.rs`).
 //!
 //! Two reaction kinds, each with its own observation source: [`CrateBoundary`] over
 //! `cargo metadata`, and [`ModuleBoundary`] over the crate's own source `use`
