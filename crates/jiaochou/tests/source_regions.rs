@@ -1,6 +1,4 @@
-mod support;
-
-use support::region::Source;
+use jiaochou::region::Source;
 
 #[test]
 fn executed_regions_respect_the_source_language() {

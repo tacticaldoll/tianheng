@@ -21,3 +21,6 @@ publish = false
 # normal dependency rather than a dev-dependency, because the constitution is code, not test
 # scaffolding. No version: this crate is never published, so nothing resolves it from a registry.
 tianheng = { path = "../tianheng" }
+# Reading cargo's own `--message-format=json` stream: a reaction's corpus comes from the build,
+# never from a list anyone maintains. Declared in the law beside the tianheng edge.
+serde_json = { workspace = true }

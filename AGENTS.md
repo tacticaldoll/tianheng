@@ -134,12 +134,12 @@ string, and on six expected-output literals in its failure matrix; widening the 
 on the fixture censuses the register's own failure matrix writes deliberately; and the one instance that occurred in a **code
 doc** was spelled in words, which no digit-based matcher reads. Most numbers in this repository describe a *shape*
 ("two files of one module yield one violation"), not a census, so a matcher over numbers is mostly false positives.
-The census direction in `crates/tianheng/tests/bound_register.rs` stays what it is — a backstop for the one set whose phrasing is
+The census direction in `crates/jiaochou/tests/bound_register.rs` stays what it is — a backstop for the one set whose phrasing is
 stable — and the rule above is what keeps a figure honest.
 
 
 A census this repository can produce is **declared**: the reaction that enumerates the set names the one
-sentence its figures are written in, and one sweep holds every tracked document to it — `crates/tianheng/tests/census.rs`.
+sentence its figures are written in, and one sweep holds every tracked document to it — `crates/jiaochou/tests/census.rs`.
 Adding a census means declaring it, which is what makes it enumerable.
 
 **A count of something this repository does not produce is not written.** That is the other half, and nothing
@@ -240,7 +240,7 @@ itself an undetected drift, invisible to a diff-only read (the 0.3.0 `finding_ke
   each new guard, the failure observed without the change (see *Adversarial review stance* above).
 - **Curated squash message, through `scripts/merge-pr.sh`.** For a development PR into a release branch, set
   the squash subject exactly to the PR title with no auto-appended `(#N)`. That is the sanctioned path: the
-  wrapper reads the PR title, runs `crates/tianheng/tests/merge_message.rs` over the proposed message, and
+  wrapper reads the PR title, runs `crates/jiaochou/tests/merge_message.rs` over the proposed message, and
   only then reaches `gh pr merge --squash`. This rule was stated here and missed anyway — nine subjects in
   this repository's history carry the serial — and a merged squash cannot be repaired, because amending it
   changes the hash the pull request's merge record cites. Replace GitHub's concatenated commit list
@@ -289,7 +289,7 @@ branch. `cargo publish` stamps the sha1 of whatever `HEAD` it ran on into every 
 from the moment it lands. An identical tree does not make a release branch's tip an acceptable
 source: cargo records the **commit**, not the content, and the commit it would record belongs to a
 branch the ritual archives. `bash scripts/publish.sh` is that path — it runs
-`crates/tianheng/tests/publish_source.rs` (worktree clean; `HEAD` the `release: X.Y.Z` snapshot for the
+`crates/jiaochou/tests/publish_source.rs` (worktree clean; `HEAD` the `release: X.Y.Z` snapshot for the
 workspace version; `vX.Y.Z` annotated, signed, and pointing at it; `HEAD` the live tip of
 `origin/main`, read from the remote rather than a possibly-stale `refs/remotes/`) and only then
 `cargo publish --workspace`. The gate reads `0` publishable, `1` wrong source, `2` cannot judge. The
@@ -307,7 +307,7 @@ convention. What each published version actually records, and the two mechanisms
 disagreements, is inventoried in
 [`docs/history/published-artifact-provenance.md`](docs/history/published-artifact-provenance.md).
 
-`TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test release_coherence` is the release-state reaction. During development it
+`TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test release_coherence` is the release-state reaction. During development it
 requires an adopter-facing `[Unreleased]` entry and aligned workspace/internal dependency versions,
 but deliberately tolerates historical lockfile drift. Once the workspace version moves forward for
 release preparation—and at the exact `release: X.Y.Z` snapshot—the dated CHANGELOG section,
@@ -342,14 +342,14 @@ cargo fmt --all --check
 TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items
 cargo deny check
-TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test whitespace_hygiene
-TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test reference_integrity
-TIANHENG_EXAMPLES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test examples_suite
-TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test pin_bites   # a line of its own because it is env-gated: it checks out a
+TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test whitespace_hygiene
+TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test reference_integrity
+TIANHENG_EXAMPLES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p shengmo --test examples_suite
+TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test pin_bites   # a line of its own because it is env-gated: it checks out a
                                            # worktree and builds it, so the ordinary suite must not pay
                                            # for it — and leaving it to run only when someone remembers
                                            # would be the worse half of that trade
-TIANHENG_REFUSAL_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test refusal_bites  # likewise env-gated: it runs every judged test
+TIANHENG_REFUSAL_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test refusal_bites  # likewise env-gated: it runs every judged test
                                            # binary once per refusal site per perturbation. Nothing is
                                            # rebuilt between runs, but the runs are not free — about a
                                            # minute — and a minute on every `cargo test` is a minute

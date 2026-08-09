@@ -26,8 +26,7 @@ use std::path::{Path, PathBuf};
 use tianheng::check_constitution;
 use tianheng::prelude::*;
 
-mod support;
-use support::region::Source;
+use jiaochou::region::Source;
 
 fn workspace_manifest() -> Option<PathBuf> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml");

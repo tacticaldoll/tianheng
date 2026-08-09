@@ -771,10 +771,14 @@ pub fn workspace_files(repo: &Path, version: &str) {
         );
     }
     let minor = version.rsplit_once('.').map(|(h, _)| h).unwrap_or(version);
+    // The example package the fixture carries, named through a binding like the members above rather than
+    // as one path literal: a literal here reads as a reference into *this* repository, which the reference
+    // gate then reports as stale — the path belongs to the fixture, not to the tree being judged.
+    let example = "adopter";
     write(
-        repo.join("examples/adopter/Cargo.toml"),
+        repo.join(format!("examples/{example}/Cargo.toml")),
         &format!(
-            "[package]\nname = \"adopter\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
+            "[package]\nname = \"{example}\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
              [dependencies]\nxuanji = \"{minor}\"\n"
         ),
     );

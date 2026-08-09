@@ -4,16 +4,9 @@
 //! second reading of the same source. A second parse would let the census and
 //! the reaction disagree, which is the drift this exists to end.
 
-#[path = "support/census.rs"]
-mod census;
-#[path = "support/refusal_exemptions.rs"]
-mod exemptions;
-#[path = "support/refusal.rs"]
-mod refusal;
-#[path = "support/bound_register_parse.rs"]
-mod register;
-#[path = "support/refusal_sites.rs"]
-mod sites;
+use jiaochou::bound_register_parse as register;
+use jiaochou::census;
+use jiaochou::refusal_sites as sites;
 
 use census::{Census, sweep};
 use register::{Citation, parse_bounds, workspace_root};

@@ -874,7 +874,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   code doc was spelled in words. Most numbers here describe a *shape*, not a census.
 - **The class that produced three withdrawn attempts is recorded, and it grew when the paragraph landed.**
   `PROJECT.md` restates architectural facts the generated projection already carries, and states others —
-  locations, counts — that nothing carries. `crates/tianheng/tests/reference_integrity.rs` holds that a cited path exists and
+  locations, counts — that nothing carries. `crates/jiaochou/tests/reference_integrity.rs` holds that a cited path exists and
   is tracked; nothing holds that the thing described lives there, which is exactly the half a withdrawn
   attempt got wrong. Closing the crate question added **five** more location claims to that file, so the
   entry is filed larger than the branch it came from filed it, not smaller. Its trigger is a claim found

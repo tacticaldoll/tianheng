@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// The one module that may define a refusal vocabulary.
-pub const SHARED: &str = "crates/tianheng/tests/support/refusal.rs";
+pub const SHARED: &str = "crates/jiaochou/src/refusal.rs";
 
 /// The target implementing this reaction. Its own sources are exempt from the vocabulary scan.
 ///
@@ -51,6 +51,11 @@ pub const OUT_OF_REACH: &str = "cannot_judge_out_of_reach";
 #[derive(Debug, Clone)]
 pub struct Target {
     pub name: String,
+    /// The package this target belongs to. Every target of a package links that package's library, which is
+    /// what makes a site in the library observable from the integration tests that exercise it.
+    pub package: String,
+    /// Whether this is the package's own library test binary — the target whose dep-info carries `src/`.
+    pub is_lib: bool,
     pub executable: PathBuf,
     pub sources: BTreeSet<String>,
 }
@@ -158,11 +163,17 @@ pub fn targets(root: &Path) -> Vec<Target> {
         let Some(executable) = message["executable"].as_str() else {
             continue;
         };
+        let kinds = message["target"]["kind"].to_string();
         targets.push(Target {
             name: message["target"]["name"]
                 .as_str()
                 .unwrap_or_default()
                 .to_string(),
+            package: message["package_id"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string(),
+            is_lib: kinds.contains("\"lib\""),
             executable: PathBuf::from(executable),
             sources: dep_info(root, Path::new(executable)),
         });
@@ -172,6 +183,23 @@ pub fn targets(root: &Path) -> Vec<Target> {
         "the build reported no test executable; every property of an empty corpus holds, and reporting that \
          as a clean run is the vacuity direction"
     );
+
+    // A library is consumed as an rlib, and a dependent's dep-info does not carry its sources — measured:
+    // a test target using `tianheng::` lists zero files under `crates/tianheng/src`. So a judgement moved
+    // into a library would be enumerated only through the library's own test binary, and the integration
+    // tests that actually exercise it would not count as observers: the sweep would find sites and nothing
+    // to perturb them with. Every target of a package links that package's library, so folding the library's
+    // sources into its siblings is exact rather than an estimate.
+    let library: BTreeMap<String, BTreeSet<String>> = targets
+        .iter()
+        .filter(|target| target.is_lib)
+        .map(|target| (target.package.clone(), target.sources.clone()))
+        .collect();
+    for target in &mut targets {
+        if let Some(sources) = library.get(&target.package) {
+            target.sources.extend(sources.iter().cloned());
+        }
+    }
     targets
 }
 
@@ -230,12 +258,17 @@ pub fn build(root: &Path) -> Corpus {
         files.extend(target.sources.iter().cloned());
     }
 
-    // Derived, not listed: whatever the compiler says this reaction compiled.
-    let machinery: BTreeSet<String> = targets
+    // Derived, not listed: whatever the compiler says this reaction compiled, plus the file the scan itself
+    // is written in. The scan used to live inside the reaction target and was covered by it; as library code
+    // it is compiled into that target as an rlib, whose sources a dependent's dep-info does not carry. Both
+    // halves come from the compiler — one from the build's source list, one from `file!()` — rather than from
+    // a path anyone maintains.
+    let mut machinery: BTreeSet<String> = targets
         .iter()
         .find(|target| target.name == REACTION_TARGET)
         .map(|target| target.sources.clone())
         .unwrap_or_default();
+    machinery.insert(file!().to_string());
 
     // A refusal site can only exist where the shared vocabulary is compiled. Scanning every corpus file for
     // sites read 25 calls to an unrelated `fn violation(…) -> Violation` in the shell's own unit tests as
@@ -367,6 +400,10 @@ fn scan(
 ) {
     let lines: Vec<&str> = text.lines().collect();
     let judged_for_vocabulary = file != SHARED && !owns_the_scan;
+    // Whether this file brings the shared vocabulary into scope at all — by importing the module, by naming a
+    // path through it, or by being it.
+    let reaches_the_vocabulary =
+        file == SHARED || text.contains("refusal::") || text.contains("use crate::refusal");
     let holds_the_needles = owns_the_scan || file == SHARED;
 
     for (index, line) in lines.iter().enumerate() {
@@ -439,7 +476,13 @@ fn scan(
                 // Neither a call nor the import that brings the constructor in: a value taken by name reaches
                 // every call site through a binding this search cannot follow.
                 let line_text = lines.get(number as usize - 1).copied().unwrap_or_default();
+                // Only where the vocabulary is actually reached. Every target of a package links that
+                // package's library, so `can_construct` is true for files that never name a refusal at all —
+                // and an identifier Rust never brought into scope cannot be this constructor. Measured: a
+                // closure parameter written `|violation|` in a reaction over report shape was read as a
+                // constructor taken by name.
                 if can_construct
+                    && reaches_the_vocabulary
                     && !holds_the_needles
                     && !line_text.trim_start().starts_with("use ")
                 {
@@ -698,7 +741,7 @@ mod tests {
         let mut sites = Vec::new();
         let mut offences = Vec::new();
         scan(
-            "crates/tianheng/tests/support/refusal_sites.rs",
+            "crates/jiaochou/src/refusal_sites.rs",
             &fixture("a_second_refusal_type"),
             true,
             true,

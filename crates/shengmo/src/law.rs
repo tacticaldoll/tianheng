@@ -98,12 +98,24 @@ pub fn constitution() -> Constitution {
         )
         .boundary(
             CrateBoundary::crate_("shengmo")
-                .restrict_dependencies_to(["tianheng"])
+                .restrict_dependencies_to(["tianheng", "serde_json"])
                 .because(
                     "繩墨 is an adopter of 天衡, not a member of the family it governs: it \
                      declares this law through the shell's published surface and reaches no \
                      dimension directly, so the repository's own governance exercises exactly the \
-                     surface an adopter has",
+                     surface an adopter has. serde_json is the one addition, for reading cargo's \
+                     own message stream where a reaction's corpus must come from the build rather \
+                     than from a list",
+                ),
+        )
+        .boundary(
+            CrateBoundary::crate_("jiaochou")
+                .restrict_dependencies_to(["shengmo", "tianheng", "serde_json"])
+                .because(
+                    "校讎 collates this repository's record against itself and governs no product \
+                     contract: it reaches the shell's published surface and the law's own locator, \
+                     never a dimension. Keeping it distinct from 繩墨 is what stops a claim about \
+                     the law being read as a claim about document hygiene",
                 ),
         )
         // The first *semantic* self-boundary: the family dogfoods its own `sans_io_pure` profile on

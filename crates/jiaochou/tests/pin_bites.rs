@@ -24,7 +24,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const RECORDS: &str = "crates/tianheng/tests/fixtures/pin_mutations.tsv";
+const RECORDS: &str = "crates/jiaochou/tests/fixtures/pin_mutations.tsv";
 
 fn locate_layout(root: PathBuf, marker_set: bool) -> Option<PathBuf> {
     if root.join(RECORDS).is_file() {

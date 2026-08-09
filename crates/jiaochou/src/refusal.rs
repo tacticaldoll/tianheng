@@ -259,9 +259,10 @@ mod tests {
     /// report every site undistinguished — a wrong verdict that reads like a finding.
     ///
     /// The spelling is **relative to the package as cargo invoked rustc**, so it is not one string: in this
-    /// workspace it is `crates/tianheng/tests/support/refusal.rs`, and inside a packaged tarball, where the
-    /// crate is its own root, it is `tests/support/refusal.rs`. Measured by CI rather than foreseen — a
-    /// literal here passed in the workspace and failed in the tarball.
+    /// workspace it is `crates/jiaochou/src/refusal.rs`, and were this crate its own root it would be
+    /// `src/refusal.rs`. Measured rather than foreseen, twice — a literal here passed in the workspace and
+    /// failed in a packaged tarball, and it moved again when this module became library code instead of a
+    /// a `#[path]` include under `tests/support/`.
     ///
     /// So this holds the part that is invariant, and the agreement itself is held where it is actually
     /// used: `refusal_bites` requires every site a run **records** to appear in the enumeration built from
@@ -271,7 +272,7 @@ mod tests {
     fn a_site_is_spelled_the_way_the_compiler_spells_its_sources() {
         let here = Location::caller();
         assert!(
-            here.file().ends_with("tests/support/refusal.rs") && !here.file().starts_with('/'),
+            here.file().ends_with("src/refusal.rs") && !here.file().starts_with('/'),
             "the caller location spells this file as {:?}, which is neither package-relative nor this file; \
              a selector built from the compiler's source list would name no site",
             here.file()
@@ -283,10 +284,10 @@ mod tests {
         let all = parse_selector("ALL:kind");
         assert!(all.site.is_none() && all.mode == Mode::Kind);
 
-        let one = parse_selector("crates/tianheng/tests/support/refusal.rs:41:message");
+        let one = parse_selector("crates/jiaochou/src/refusal.rs:41:message");
         assert_eq!(
             one.site,
-            Some(("crates/tianheng/tests/support/refusal.rs".to_string(), 41))
+            Some(("crates/jiaochou/src/refusal.rs".to_string(), 41))
         );
         assert_eq!(one.mode, Mode::Message);
     }

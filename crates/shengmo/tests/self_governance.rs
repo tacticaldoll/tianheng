@@ -283,7 +283,7 @@ fn fixture_negative_testing_observes_shell_metadata_edge() {
         return;
     };
     let root = manifest.parent().unwrap();
-    let fixture = root.join("crates/tianheng/tests/fixtures/shell_metadata_edge/Cargo.toml");
+    let fixture = root.join("crates/shengmo/tests/fixtures/shell_metadata_edge/Cargo.toml");
     let fixture_constitution =
         Constitution::new("shell-metadata-edge").boundary(shell_dependency_boundary());
 
@@ -298,7 +298,7 @@ fn fixture_negative_testing_observes_cfg_if_violation() {
         return;
     };
     let root = manifest.parent().unwrap();
-    let fixture = root.join("crates/tianheng/tests/fixtures/cfg_if_violation/Cargo.toml");
+    let fixture = root.join("crates/shengmo/tests/fixtures/cfg_if_violation/Cargo.toml");
     let fixture_constitution = Constitution::new("example").boundary(
         ModuleBoundary::in_crate("example-core")
             .module("crate::kernel_mod")
@@ -317,7 +317,7 @@ fn fixture_negative_testing_observes_glob_hazard_violation() {
         return;
     };
     let root = manifest.parent().unwrap();
-    let fixture = root.join("crates/tianheng/tests/fixtures/glob_hazard_violation/Cargo.toml");
+    let fixture = root.join("crates/shengmo/tests/fixtures/glob_hazard_violation/Cargo.toml");
     let fixture_constitution = Constitution::new("example").boundary(
         ModuleBoundary::in_crate("example-core")
             .module("crate::app")

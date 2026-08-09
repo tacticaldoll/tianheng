@@ -38,8 +38,8 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `semantic-signature-coupling/an-impl-nested-one-level-further-or-static-wrapped-is-a-stated-bound` — owner: engine
 - `semantic-signature-coupling/an-invocation-inside-an-impl-body-is-a-stated-bound` — owner: engine
 
-Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests/observation_bound_model.rs`. **Do not edit by hand** — regenerate with
-`BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test observation_bound_model`.
+Generated from each dimension's `observation_bounds()` by `crates/jiaochou/tests/observation_bound_model.rs`. **Do not edit by hand** — regenerate with
+`BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test observation_bound_model`.
 
 **What this document does not claim.** The classification is *authored*: the type refuses a contradiction and derives what each bound's defence must demonstrate, but nothing verifies that a bound recorded as over-reacting really over-reacts rather than under-reacting. This capability declares further limits as bounds of its own — among them, an answer that depends on which corpus entry point observed it has no extent of its own and is recorded as under-reacting with the entry point as its owner, and a bound both out of reach and granularity-limited cannot be expressed at all. The sections below list every one of them; this paragraph deliberately does not, because a list typed here is a literal in a template and the freshness check compares that text with itself. The sibling capability gate-shape-contract requires its disclosure to be DERIVED from the specification and held both ways; that requirement has no counterpart here, and the backlog carries it.
 

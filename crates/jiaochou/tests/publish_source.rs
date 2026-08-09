@@ -11,11 +11,9 @@
 //! and to refusing them as a **violation** rather than as a cannot-judge, because an operator standing before
 //! an irreversible act must be able to tell "the source disagrees" from "the source could not be read".
 
-#[path = "support/refusal.rs"]
-mod refusal;
+use jiaochou::refusal;
 
-#[path = "support/publish_source_gate.rs"]
-mod gate;
+use jiaochou::publish_source_gate as gate;
 
 use gate::{build_fixture, hermetic, hidden_by_the_checkout, judge};
 use refusal::Kind;
