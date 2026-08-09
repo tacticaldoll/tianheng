@@ -492,10 +492,14 @@ fn render(documents: &BTreeMap<String, Registered>, holders: &[String]) -> Strin
          that is a declared observation bound rather than an oversight.\n\n",
     );
     out.push_str(
-        "**Not that the set is complete.** One mechanism is recognized: a Rust call to the shared blessing rule,\n\
-         and a `check_*` gate writing its projection under `BLESS`. A document generated some third way, whose\n\
-         author also omitted the marker, is absent from both sides of the correspondence — a declared false\n\
-         negative owned by this engine, not a limit of what it can read.\n\n",
+        "**Not that the set is complete.** One mechanism is recognized: a Rust call to the shared blessing\n\
+         rule. A document generated some other way, whose author also omitted the marker, is absent from both\n\
+         sides of the correspondence — a declared false negative owned by this engine, not a limit of what it\n\
+         can read.\n\n\
+         A second was recognized until this window: a `check_*` gate writing its projection under `BLESS`. No\n\
+         tracked unit is one, so that arm asserts its own emptiness rather than being pruned — if such a unit\n\
+         exists again the reaction says so, which is the difference between retiring a recognizer and\n\
+         forgetting it.\n\n",
     );
 
     out.push_str("## The register\n\n");

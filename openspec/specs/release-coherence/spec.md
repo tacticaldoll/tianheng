@@ -161,9 +161,10 @@ path — so none is a list written beside it.
 `### Fixed`, `### Migration`, `### Documentation`, `### Removed`, `### Compatibility`,
 `### Compatibility evidence` and `### Self-governance` — and every one of the first eight is an adopter's vocabulary. It offered none that was
 not, so every
-change to this repository's own governance machinery has been written into one of them. Measured: twenty
-entries name it — eleven in `[Unreleased]` and nine in the released `[0.4.0]`, across four different
-headings — for a directory that ships in **zero** packages.
+change to this repository's own governance machinery has been written into one of them. Measured **before this rule existed**, in the window that introduced it: twenty entries named it, spread
+across four adopter headings, for a directory that ships in **zero** packages. That figure is a record of a
+past state rather than a census — no reaction produces it now, the section it counted has been collapsed, and
+holding a record to today's enumeration would demand the record change every time the tree does.
 
 The `[Unreleased]` section SHALL be permitted a `### Self-governance` heading,
 under which naming that machinery is what belongs; a heading is adopter-facing when it is any `### `

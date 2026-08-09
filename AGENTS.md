@@ -149,8 +149,11 @@ decoration: the sentence it sat in said the same thing without it, right up unti
 true. Where the count matters, produce it and let the producing document carry it; where it does not, write
 the property and leave the number out.
 
-Two shapes are outside a census by construction, and stating them is the point. A figure about a **past
-state** — what a document said before a change — is a record: holding it to today's enumeration would demand
+Two shapes are outside a census by construction, and stating them is the point. A figure in a **record** — a
+commit message, a dated changelog section, `docs/history/` — is a measurement of the moment it was taken and
+stands as one; only a live document owes a produced figure. The rule reaches commit messages otherwise, and
+the commit that added it broke it in its own message within the hour. A figure about a **past state** — what a
+document said before a change — is a record for the same reason: holding it to today's enumeration would demand
 that the record change every time the tree does. And a figure written in a sentence no census declares is
 unheld; the declaration is the coverage, and widening the match to prose instead is the detector this
 repository designed, measured three times and rejected.

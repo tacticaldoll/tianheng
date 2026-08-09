@@ -744,6 +744,16 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **A refusal is defended only if some direction dies when its kind is swapped — and the sweep that shows
+  that is not yet a reaction.** Four adversarial rounds over this window each found the class the previous
+  round had repaired, and the decisive difference was the method: disabling an `if` and re-running finds a
+  branch nothing reaches; swapping `violation`↔`cannot_judge` and sentinelling the message also finds a
+  direction that asserts a refusal happened without asserting **which**. Two such directions were repaired in
+  one commit and two more written three tests later in the same file. Sixteen refusal sites gained a direction
+  this window; twenty-four have none, and they are filed with the shape that would close the class rather than
+  the instance — `pin_bites` already perturbs a worktree and requires a cited test to die, and the same
+  machinery over every refusal site is the reaction this sweep should be.
+
 - **A census is now DECLARED, and the half nothing can hold says so.** The rule had one reaction covering
   exactly one sentence, and adversarial review found **eight** figures wrong in a single change — an entry
   population corrected twice, each correction breaking the next; a block header counting four where there were
@@ -1931,14 +1941,14 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   directory-only pattern the bare form answers differently in a clone where the directory happens to
   exist (measured in a fresh clone — bare `.github/prompts` is not ignored, `.github/prompts/` is).
 - The two new gates drop their remaining **GNU-sed** dependencies, which had the same failure shape the
-  `realpath` fix removed from one of these files a commit earlier. `crates/tianheng/tests/reference_integrity.rs` marked a
+  `realpath` fix removed from one of these files a commit earlier. `check_reference_integrity.sh` marked a
   markdown link target with `\x01` in a `sed` script; `\xHH` is a GNU extension that busybox and BSD `sed`
   emit **literally**, so under a POSIX `sed` the gate reported **9 stale references that do not exist** —
   measured, a portability failure surfacing as a repository defect. The marker is now a literal control
   byte built with `printf` and interpolated, which every implementation agrees on. A companion dead filter
   went with it: `grep -v '^\x01?$'` could never fire, because without `-E` the `?` is literal, so the
   pattern meant "SOH followed by a question mark" — its intent was already served by the guard inside the
-  loop. `crates/tianheng/tests/whitespace_hygiene.rs`'s `sed 's/\r$//'` likewise now uses a literal CR byte, since BSD
+  loop. `check_whitespace_hygiene.sh`'s `sed 's/\r$//'` likewise now uses a literal CR byte, since BSD
   `sed` does not interpret that escape on the left-hand side. `tr -d '\r'` was rejected as the fix despite
   being portable: it deletes mid-line CRs too, so `text\r\r\n` would stop being an offense at all —
   trading a portability bug for a false negative. Both gates were verified to give identical verdicts under
