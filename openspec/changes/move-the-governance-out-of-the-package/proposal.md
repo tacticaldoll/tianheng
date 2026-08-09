@@ -35,9 +35,17 @@ return. Moving them leaves it running tests that actually exercise the packaged 
 - **A new workspace member, 繩墨 (`shengmo`) — the inked line**, `publish = false`. A carpenter snaps it to
   mark true; everything is judged against it, and the line is not part of the furniture. Deliberately not an
   astronomical instrument: it is not one of the 三儀 and not product, and the name says so.
-- **The governance apparatus moves into it**: this repository's law (`self_governance.rs` and its
-  constitution) and the reactions that hold the repository — 16 targets, with the support modules and fixtures
-  they own.
+- **The law becomes the member's library.** `tianheng_constitution()` is code — the product capability applied
+  to its own author — and it currently sits at line 69 of a 668-line test file. It moves to
+  `crates/shengmo/src/`, exported, with the tests reduced to the reaction that runs it. `AGENTS.self-law.md`
+  is then projected from a library rather than from a private function inside a test binary.
+- **The repository reactions move into its `tests/`** — 16 further targets, with the support modules and
+  fixtures they own.
+- **The prose that restates the law is retired with it.** The rule already exists and already reacts, but only
+  for line-comment blocks under `crates/tianheng/src` and only against the shell's allowlist. Measured,
+  `PROJECT.md` names every member of `guibiao`'s live allowlist — `serde_json, xuanji, xingbiao` — which is
+  the same second source of truth in a file class nothing scans. The reaction stops being scoped to one
+  crate's comments and one dimension, and the restated census becomes a pointer to the projection.
 - **`crates/tianheng/tests/` keeps what tests the crate**: the cross-dimension conformance matrices, the CLI
   and baseline behaviour, and the adopter-surface compile contract — everything whose subject is the code in
   the tarball.
@@ -63,6 +71,9 @@ None. The apparatus moves; what it judges does not change.
   `crates/tianheng/tests/` to the new member.
 - `projection-register`: its requirement counts the correspondence "per blessing call site in Rust tests under
   `crates/tianheng/tests/`", and those call sites move.
+- `self-law-projection`: the law is a library rather than a function in a test file, and the reaction
+  forbidding a restated allowlist stops being scoped to one crate's comments and one dimension — it reads
+  every declared allowlist against every tracked governance document.
 
 `reference-integrity` is **not** listed: it derives workspace members from tracked `crates/<name>/Cargo.toml`
 paths, and a new member is a new datum for a rule that does not change.

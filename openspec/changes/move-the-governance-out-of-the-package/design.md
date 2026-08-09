@@ -65,16 +65,50 @@ Nine of the ten support modules serve only moving targets and move with them: `b
 `pub mod region;`. Measured rather than assumed: the only users of `region::Source` are `observer_protocol`,
 `projection_register`, and `source_regions`, all three of which move.
 
-### The support modules stay `#[path]`-included rather than becoming the member's library
+### The law is the member's library, not a function inside a test file
 
-`crates/shengmo/src/lib.rs` carries documentation and no code; the tests keep including their support modules
-through `#[path = "support/…"]` exactly as today.
+`tianheng_constitution()` is **code** — a declaration written with `tianheng::{Boundary, Rule, Constitution}`,
+which is the product capability applied to its own author. It sits at line 69 of a 668-line test file among a
+dozen `#[test]` functions, and that placement is why the repository's own law reads as "a test".
 
-The alternative — making the support modules the member's actual library and replacing every `#[path]` with
-`use shengmo::…` — is the better long-term shape and is **deliberately deferred**. `refusal_sites` builds its
-corpus from what rustc reports having read, and `refusal_bites` runs every judged binary against that corpus;
-changing both the location and the inclusion mechanism in one step would make a failure in either
-indistinguishable from a failure in the other. The move is verified first.
+So `crates/shengmo/src/` holds the law, exported as a library function, and `crates/shengmo/tests/` holds the
+reaction that runs it and the projection-freshness check. `AGENTS.self-law.md` is then generated from a
+library, not from a private function in a test binary.
+
+This makes `tianheng` a **normal** dependency of 繩墨 rather than a dev-dependency: the law is not test
+scaffolding. It also means the repository's constitution must declare the crate that holds the constitution —
+and `every_workspace_member_is_self_governed` already requires it. That self-reference is settled during
+apply, not assumed away.
+
+An earlier draft of this design said `src/lib.rs` would carry "documentation and no code" while the law moved
+into `tests/`. That reproduced, one directory over, exactly the placement this change exists to correct.
+
+### The prose that restates the law is retired with it
+
+One source of truth is not achieved by moving the law while a second copy stays in a document.
+
+The rule is already written and already reacts — for line-comment blocks under `crates/tianheng/src`, against
+the shell's allowlist: a block naming every live member is refused, with "refer to `AGENTS.self-law.md`
+instead" as its repair. Measured, `PROJECT.md` carries the same shape for a different dimension —
+`guibiao`'s live allowlist is `serde_json, xuanji, xingbiao`, and `PROJECT.md` names all three — in a file
+class the reaction does not scan.
+
+So the reaction stops being scoped to one crate's comments and one dimension's allowlist: **every** declared
+allowlist is checked against **every** tracked governance document, and the restated census in `PROJECT.md`
+becomes a pointer to the projection. What stays in prose is what a declaration cannot carry — why a boundary
+exists, what it protects, the narrative of the family. What leaves is the membership, which the declaration
+owns.
+
+### The support modules stay `#[path]`-included for now
+
+The tests keep including their support modules through `#[path = "support/…"]` exactly as today.
+
+Making them part of the member's library too is the better long-term shape and is **deliberately deferred**.
+`refusal_sites` builds its corpus from what rustc reports having read for each test target, and a dependency
+consumed as an rlib does not appear in that target's dep-info — so moving the judgement code into the library
+would silently drop its refusal sites from the corpus `refusal_bites` perturbs. That is a corpus change
+needing its own verification, and it must not be entangled with a file move. The law has no such coupling: it
+constructs no refusal.
 
 ## Risks / Trade-offs
 
