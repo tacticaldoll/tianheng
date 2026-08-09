@@ -129,7 +129,7 @@ fn drain(input: syn::parse::ParseStream) -> syn::Result<()> {
 
 /// Advance one token tree, whatever it is — the predicate attributes and `if` / `else` keywords
 /// between arms. Never names a `proc_macro2` type: 渾儀's dependency surface is `syn` only
-/// (`self_governance.rs`'s own crate boundary), so the cursor's token tree is stepped over rather
+/// (`crates/shengmo/src/law.rs`'s own crate boundary), so the cursor's token tree is stepped over rather
 /// than matched on.
 fn skip_token(input: syn::parse::ParseStream) -> syn::Result<()> {
     input.step(|cursor| match cursor.token_tree() {

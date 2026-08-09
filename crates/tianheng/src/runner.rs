@@ -18,7 +18,7 @@
 //!
 //! IO (filesystem, stdout/stderr) is quarantined here; the `guibiao` crate stays the
 //! pure functional core (the model plus [`check`](crate::check)), and must not depend on
-//! this shell — a crate-level invariant (see `tests/self_governance.rs`). The numeric
+//! this shell — a crate-level invariant (see `crates/shengmo/src/law.rs`). The numeric
 //! work lives in the private [`dispatch`], so the exit code is unit-testable; [`run`] is
 //! a thin [`ExitCode`] wrapper.
 

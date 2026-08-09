@@ -1,5 +1,5 @@
 # cargo-deny supply-chain policy — Tianheng gates its own dependency surface, the same
-# spirit as `crates/tianheng/tests/self_governance.rs`. This file is repo tooling (it
+# spirit as `crates/shengmo/src/law.rs`. This file is repo tooling (it
 # lives at the workspace root, outside the crates, so it is never packaged).
 #
 # Run: `cargo deny check`. Wired into CI as the `supply-chain` job.
@@ -32,7 +32,7 @@ confidence-threshold = 0.9
 
 [bans]
 # New external dependencies are already governed by Tianheng's own reaction (the 圭表
-# core is serde_json-only; see self_governance.rs); here we only flag accidental
+# core is serde_json-only; see crates/shengmo/src/law.rs); here we only flag accidental
 # duplicate versions so the tiny tree stays tidy.
 multiple-versions = "warn"
 

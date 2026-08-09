@@ -32,7 +32,7 @@ forgetting it.
 
 | document | held fresh by | regenerate with |
 | --- | --- | --- |
-| `AGENTS.self-law.md` | `crates/tianheng/tests/self_governance.rs` | `BLESS=1 cargo test -p tianheng self_law_projection_is_fresh` |
+| `AGENTS.self-law.md` | `crates/shengmo/tests/self_governance.rs` | `BLESS=1 cargo test -p shengmo self_law_projection_is_fresh` |
 | `docs/observation-bound-extents.md` | `crates/tianheng/tests/observation_bound_model.rs` | `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test observation_bound_model` |
 | `docs/observation-bounds.md` | `crates/tianheng/tests/bound_register.rs` | `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test bound_register` |
 | `docs/projection-register.md` | `crates/tianheng/tests/projection_register.rs` | `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test projection_register` |
@@ -44,9 +44,9 @@ forgetting it.
 Enumerated independently of what the documents claim, because a document naming its generator is a claim
 by the document and the call site is the fact:
 
+- `crates/shengmo/tests/self_governance.rs`
 - `crates/tianheng/tests/bound_register.rs`
 - `crates/tianheng/tests/observation_bound_model.rs`
 - `crates/tianheng/tests/projection_register.rs`
-- `crates/tianheng/tests/self_governance.rs`
 
 4 reactions.

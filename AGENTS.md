@@ -25,7 +25,7 @@ the count of bounds nothing yet defends.
    forbids or restricts, and its declared reason. Read it so you know the architectural
    shape you must not drift. (The published binary's `list` projects the *demo* constitution;
    for Tianheng's **own** enforced self-law, read [`AGENTS.self-law.md`](AGENTS.self-law.md) — a
-   projection generated from `self_governance.rs` and staleness-checked by `cargo test`.)
+   projection generated from `crates/shengmo/src/law.rs` and staleness-checked by `cargo test`.)
 2. **After changing code — react.** `tianheng check --format json` evaluates the
    constitution against the workspace. Exit `0` is clean (or warn-only / fully baselined),
    `1` is an enforced violation, `2` is a constitution/scan/usage error.
@@ -62,7 +62,7 @@ Keep every reason **within the boundary's observable perimeter** — a reason mu
 Each document has one job, so a fact lives in one place. `PROJECT.md` is the contract — the *why*
 and the invariants, with significant calls recorded in its Decisions section.
 [`AGENTS.self-law.md`](AGENTS.self-law.md) is the enforced self-law, projected from
-`self_governance.rs` (never hand-edited). `openspec/specs/*` is the per-capability requirement
+`crates/shengmo/src/law.rs` (never hand-edited). `openspec/specs/*` is the per-capability requirement
 truth. `BACKLOG.md` records deferred work and explicit non-goals. This file is the operating
 protocol for humans and agents. **Provenance — why a change was made — lives in its commit body and
 PR, not a separate ADR file class.** When two documents conflict, fix the conflict (an OpenSpec
@@ -320,7 +320,9 @@ keeps it out of the constitution.
 
 ## Self-governance — don't weaken the law to make CI pass
 
-Tianheng governs itself: `crates/tianheng/tests/self_governance.rs` and sibling Rust integration tests (`crates/tianheng/tests/*.rs`) run Tianheng's own reactions against the workspace as `cargo test` gates. Its live invariants are declared in Rust and projected into [`AGENTS.self-law.md`](AGENTS.self-law.md); do not hand-maintain a second list here.
+**Self-governance is Tianheng governing itself with the capability it ships.** `crates/shengmo/src/law.rs` declares a real constitution through the published surface an adopter uses, and `crates/shengmo/tests/self_governance.rs` runs it against this workspace as a `cargo test` gate. Its live invariants are declared in Rust and projected into [`AGENTS.self-law.md`](AGENTS.self-law.md); do not hand-maintain a second list here.
+
+Beside it sit this repository's other reactions — hand-written `cargo test` gates over its changelog, specs, scripts, and documents. They govern the repository too, and they are held to the same standard, but they are **not** the product running on itself: a claim about one is not a claim about the other. An earlier version of this sentence said every Rust integration test ran Tianheng's own reactions against the workspace, which was false for 20 of the 25 then present — none of them reached the shipped API at all.
 
 **Projections are text views, not reactions**: Contract projections and censuses (such as [`AGENTS.self-law.md`](AGENTS.self-law.md), [`docs/observation-bounds.md`](docs/observation-bounds.md), the retired gate-shape projection, [`docs/observation-bound-extents.md`](docs/observation-bound-extents.md), and [`docs/projection-register.md`](docs/projection-register.md)) are derived text views. They are NOT reactions, NOT governance, and NOT shipped product code. Their freshness is asserted by Rust `cargo test` gates ("*A census is produced, never typed*").
 
@@ -354,7 +356,7 @@ TIANHENG_REFUSAL_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --tes
                                            # nobody keeps paying
 ```
 
-The self-governance gate (`self_governance.rs`, run under `cargo test`) and its projection
+The self-governance reaction (`crates/shengmo/tests/self_governance.rs`, run under `cargo test`) and its projection
 (`self_law_projection_is_fresh`) must stay green — never weaken the law to pass it. So must
 `observation_bound_model.rs`, which holds every declared observation bound's spec scenario and its typed
 classification in a bijection and projects `docs/observation-bound-extents.md`; it needs no line of its own

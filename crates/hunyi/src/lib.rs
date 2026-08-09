@@ -7,7 +7,7 @@
 //!
 //! Declare a [`SignatureBoundary`] in Rust, [`check`] it against a Cargo workspace, and get
 //! an [`Outcome`]. The heavy `syn` parser is quarantined to this crate, keeping the functional
-//! core dependency-light (`self_governance.rs`).
+//! core dependency-light (`crates/shengmo/src/law.rs`).
 //!
 //! Govern by reaction, not instruction.
 //!

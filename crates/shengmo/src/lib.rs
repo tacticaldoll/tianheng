@@ -25,3 +25,10 @@
 //! The name is chosen to say that before a reader has to ask.
 
 #![forbid(unsafe_code)]
+
+pub mod law;
+pub mod restatement;
+pub mod workspace;
+
+#[cfg(test)]
+mod tests;

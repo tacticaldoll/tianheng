@@ -714,7 +714,7 @@ fn run_args(args: &[&str]) -> u8 {
 
 // Most runner unit tests below need no fixture: each asserts an exit code decided
 // during argument parsing, before any workspace is observed. The reaction paths that
-// require a real workspace are exercised against one directly: `tests/self_governance.rs`
+// require a real workspace are exercised against one directly: `crates/shengmo/tests/self_governance.rs`
 // drives the static `check` end-to-end against Tianheng's own workspace, and the
 // dispatch tests below (e.g. `the_trait_impl_dimension_is_wired_through_dispatch`) drive
 // each dimension through `dispatch` + real `cargo metadata`. The per-dimension finding

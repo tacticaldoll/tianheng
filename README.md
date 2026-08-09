@@ -337,7 +337,7 @@ bases `xuanji` and `xingbiao`). See
 design questions) and the governance/observability layer.
 
 Tianheng governs **itself** with its own reaction: the live self-law is declared in
-`crates/tianheng/tests/self_governance.rs`, projected into `AGENTS.self-law.md`, and enforced as
+`crates/shengmo/src/law.rs`, projected into `AGENTS.self-law.md`, and enforced as
 a `cargo test` gate.
 
 ## Adoption & stability

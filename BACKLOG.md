@@ -884,7 +884,7 @@ consumer for an undemonstrated deduplication.
   - `cfg_attr(path)` observe-both semantics (union-scan over default and physically existing `cfg_attr(path)` target paths).
   - `guibiao`'s own module-boundary walk now tolerates a module backed only by one or more resolved `cfg_attr(path)` remaps (no plain conventional file, no direct `#[path]`), matching `hunyi`/`louke`'s identical rule for the same shape.
   - Reusable testing harness (`tianheng::testing::GovernanceTest` fluent builder in facade for reaction, coverage, projection freshness with `BLESS=1`, and fixture testing).
-  - Self-governance observation depth upgrade (explicit ScanDepth declarations across self_governance.rs boundaries).
+  - Self-governance observation depth upgrade (explicit ScanDepth declarations across crates/shengmo/src/law.rs boundaries).
   - `PublicSeam::InherentMethod`/`InherentAssoc` now carry the impl block's own declaring module,
     closing the two-different-modules false negative verified real during the 0.3.1 sweep
     (`hunyi-public-seam-module-injection`).

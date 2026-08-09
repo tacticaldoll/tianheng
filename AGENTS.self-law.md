@@ -1,9 +1,11 @@
 # Tianheng Self-Law Projection
 
-Generated from `tianheng_constitution()` in `crates/tianheng/tests/self_governance.rs`.
+Generated from `shengmo::law::constitution()` by `crates/shengmo/tests/self_governance.rs`.
 **Do not edit by hand.** If this file is stale, regenerate it:
-`BLESS=1 cargo test -p tianheng self_law_projection_is_fresh`.
-If the law itself is wrong, amend `self_governance.rs` through review — never edit this projection.
+`BLESS=1 cargo test -p shengmo self_law_projection_is_fresh`.
+If the law itself is wrong, amend `shengmo::law` through review — never edit this projection.
+The law is named by module rather than by file here: this header registers the unit holding the
+projection fresh, and a second tracked path in it would be an ambiguous claim about which one does.
 
 Read the projection below as the imitable shape of Tianheng itself, and work *with* the reaction:
 

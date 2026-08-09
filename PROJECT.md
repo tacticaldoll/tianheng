@@ -120,7 +120,7 @@ false negative, and only the reaction can foreclose it.
 
 **Functional core ⊥ imperative shell, at crate granularity.** `guibiao` must not depend
 on `tianheng`. This is the crate-level upgrade of modou's module-level `engine ⊥ runner`,
-and Tianheng enforces it on itself (`crates/tianheng/tests/self_governance.rs`) — eating
+and Tianheng enforces it on itself (`crates/shengmo/src/law.rs`) — eating
 its own dog food, now across crate boundaries.
 
 **A dimension is a crate born when built** (drift law at crate granularity), and the user

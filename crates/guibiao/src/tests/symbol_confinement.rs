@@ -2065,7 +2065,7 @@ pub(super) fn legacy_inline_confinement_defaults_to_subtree_and_preserves_identi
 /// Two-crate reproduction of the audit-sweep finding: identical governed module path + rule
 /// declared against two different workspace members must stay two distinct violations, never
 /// dedup into one and never let one crate's baseline suppress the other's unaccepted violation.
-/// Mirrors the exact shape `crates/tianheng/tests/self_governance.rs` declares on itself
+/// Mirrors the exact shape `crates/shengmo/src/law.rs` declares on itself
 /// (the identical rule on guibiao/hunyi/louke).
 #[test]
 pub(super) fn two_crates_with_the_identical_module_boundary_stay_distinct_violations() {
