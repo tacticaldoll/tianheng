@@ -74,9 +74,9 @@ workspace version.
 
 ### Requirement: A release section SHALL be coherent with itself
 
-The reaction reads the changelog's **state** — which version, which sections exist, whether the comparison link
-is right. It SHALL also read each release section's **internal** consistency, which is a different question and
-was unasked until two defects of that shape landed in one window: an `[Unreleased]` grew a second `### Changed`
+The reaction SHALL read each release section's **internal** consistency as well as the changelog's **state** —
+which version, which sections exist, whether the comparison link is right. Internal consistency is a different
+question and was unasked until two defects of that shape landed in one window: an `[Unreleased]` grew a second `### Changed`
 heading three hundred lines from the first, and a prose claim about which prior releases carry a `### Migration`
 section was wrong under every reading.
 

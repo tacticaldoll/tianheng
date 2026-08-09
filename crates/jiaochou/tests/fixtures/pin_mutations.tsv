@@ -10,5 +10,5 @@
 # A record is added only after it has been RUN and seen to kill the pin it names. A mutation that fails to
 # perturb the pinned point reports a biting pin as a dead one — the safe direction, but it is noise, and the
 # gate's own matrix is what proves the refusal rather than a record standing in for it.
-a_trait_object_on_a_continuation_line_is_not_recognized	crates/shengmo/tests/observer_protocol.rs	trimmed.starts_with("pub ") && trimmed.contains("dyn ")	trimmed.contains("dyn ")
+a_trait_object_on_a_continuation_line_is_not_recognized	crates/jiaochou/tests/observer_protocol.rs	trimmed.starts_with("pub ") && trimmed.contains("dyn ")	trimmed.contains("dyn ")
 the_derived_origin_honors_its_stated_shape_bounds	crates/louke/src/dsl.rs	    let head = match type_path.find('<') {\n        Some(open) => &type_path[..open],\n        None => type_path,\n    };	    let head = type_path;

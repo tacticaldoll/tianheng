@@ -17,7 +17,7 @@
 //! leaves the tree edited.
 //!
 //! **`Location::caller()` is read in each constructor's own body.** `#[track_caller]` propagates only through
-//! annotated frames, so reading it inside [`instrument`] — which is not annotated, and must not be — would
+//! annotated frames, so reading it inside `instrument` — which is not annotated, and must not be — would
 //! measure this file's own interior: every site would report one location, the sweep would enumerate sixty
 //! sites and intercept one, and it would report clean over all of it. The location is therefore read at the
 //! top of each constructor and passed down as a value.

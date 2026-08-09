@@ -85,7 +85,7 @@ title=$(gh pr view "$pr" --json title --jq .title)
 TIANHENG_MERGE_SUBJECT=$subject \
     TIANHENG_MERGE_TITLE=$title \
     TIANHENG_MERGE_BODY=$(cat -- "$body_file") \
-    cargo test --manifest-path "$repo/Cargo.toml" -p tianheng --test merge_message \
+    cargo test --manifest-path "$repo/Cargo.toml" -p jiaochou --test merge_message \
     -- --exact the_squash_message_is_the_pull_request_it_records
 
 exec gh pr merge "$pr" --squash --subject "$subject" --body-file "$body_file" "${passthrough[@]}"

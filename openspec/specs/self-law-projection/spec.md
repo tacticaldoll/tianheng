@@ -42,8 +42,8 @@ The direct shell-to-metadata direction SHALL be defended by an in-repository fix
 
 ### Requirement: Observation bounds
 
-The comment reactions above read **authored text**, so what they cannot read is a limit this capability declares
-rather than leaving for the author who trips it. Both are over-reactions, which is the safe direction here: a
+The comment reactions above read **authored text**, and what they cannot read SHALL be a limit this capability
+declares rather than one left for the author who trips it. Both are over-reactions, which is the safe direction here: a
 false positive costs a sentence rewritten, while the false negative would be a restated declaration that no
 reaction governs. Neither SHALL be closed by teaching a recognizer to read intent — that is a heuristic over
 prose, which this repository has measured and rejected.
@@ -120,9 +120,7 @@ The artifact's fixed preamble SHALL describe only how to read and use the projec
 
 ### Requirement: A dimension's declared allowlist SHALL obey the law its reason quotes
 
-`tianheng_constitution()` gives each dimension a `restrict_dependencies_to` allowlist whose `because` quotes
-三儀 ⊥ 三儀 — a dimension must never learn from a sibling. The reaction over those declarations SHALL assert
-**both** statements separately: that the clause is present in the reason, and that the allowlist **names no
+The reaction over each dimension's declared allowlist SHALL assert **both** statements separately: that the clause is present in the reason, and that the allowlist **names no
 sibling dimension**. They are different statements, and only the first was asserted.
 
 That gap was a false negative, reproduced rather than reasoned about: widening a dimension's allowlist to

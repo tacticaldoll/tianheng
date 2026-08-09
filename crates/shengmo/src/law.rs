@@ -8,11 +8,11 @@ use tianheng::{Boundary, Rule};
 
 /// **Tianheng's self-constitution — the law it enforces on itself.**
 ///
-/// Declared in the same Rust DSL adopters use. [`tianheng_governs_itself`] runs it as a
+/// Declared in the same Rust DSL adopters use. `tianheng_governs_itself` runs it as a
 /// real reaction against the workspace, so the dogfooding is a non-bypassable gate, not
 /// a hope. Each boundary below carries its own `because` — its target, allowlist, and reason
 /// — and those project (target · rule · reason) into the generated, byte-checked
-/// `AGENTS.self-law.md` (gated by [`self_law_projection_is_fresh`]). This doc comment therefore
+/// `AGENTS.self-law.md` (gated by `self_law_projection_is_fresh`). This doc comment therefore
 /// does **not** re-list the boundaries by hand: a per-boundary index restated in prose is the
 /// drift surface the declaration-integrity pattern retires — the same class as the removed
 /// `(boundaries 2, 3, 6)` pointer that once drifted off-by-one. It records only the cross-cutting
@@ -26,7 +26,7 @@ use tianheng::{Boundary, Rule};
 /// (漏刻), never via a sibling. Depending on a shared base beneath the dimensions is not a
 /// cross-dimension edge; 三儀 ⊥ 三儀 forbids only dimension-to-dimension dependence. This
 /// law is **named here and in each dimension's `because`**, and a reaction —
-/// [`dimension_boundaries_declare_the_mutual_independence_law`] — asserts both that every
+/// `dimension_boundaries_declare_the_mutual_independence_law` — asserts both that every
 /// dimension boundary carries the clause and that its allowlist **obeys** it, so the claim is
 /// *self-observed* rather than a hand-maintained pointer that could drift (the
 /// declaration-integrity pattern: replace a prose index with a reaction). The second half was
