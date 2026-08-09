@@ -29,4 +29,4 @@
 - [x] 4.1 `AGENTS.md` names the wrapper where the merge is decided
 - [x] 4.2 `CHANGELOG.md` `[Unreleased]` under `### Self-governance`, no version bump
 - [x] 4.3 Full Definition of Done including MSRV 1.85 and all gated suites
-- [ ] 4.4 Sync the delta, archive, and merge **through the new wrapper** — its first use is this change
+- [x] 4.4 Sync the delta, archive, and merge **through the new wrapper** — its first use is this change
