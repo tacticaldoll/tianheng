@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**13 of 76 declared bounds have no pinning test.** That figure is the register's
+**13 of 77 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -338,6 +338,12 @@ fallback used where no manifest exists, which the register spec describes.
 > the reaction observes only that no direction reaches it, never that no direction *could*. Reaching further would require constructing the environment the declaration says is unconstructible, so the declaration carries a reason the reaction cannot check, and the membership of the exempt set is produced and counted rather than approximated
 
 - **pinned by**: `a_site_declared_out_of_reach_is_only_observed_to_be_unreached`
+
+### `rust-self-governance-gates/a-hook-is-proposed-for-this-rule-a-stated-bound`
+
+> neither holds it: a squash merge runs on GitHub's servers so no local commit exists and no hook runs, and both values of that setting append the serial. Nor can a merge made in the browser be reached by a wrapper. The compliance point is one string passed at merge time, and this reaction guards the sanctioned path to it rather than every path
+
+- **pinned by**: `a_merge_made_outside_the_wrapper_is_not_observed`
 
 ## self-law-projection
 

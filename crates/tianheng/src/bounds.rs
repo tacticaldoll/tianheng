@@ -560,5 +560,18 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "a_refusal_vocabulary_under_other_names_is_not_observed",
         ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "rust-self-governance-gates/a-hook-is-proposed-for-this-rule-a-stated-bound",
+            ),
+            "a squash merge made anywhere but through the sanctioned wrapper",
+            Extent::OutOfReach {
+                because: "a squash merge runs on GitHub's servers, so no local commit exists and no hook \
+                          runs, and both values of the repository's squash-title setting append the serial; \
+                          the reaction guards the sanctioned path to a merge, and a browser reaches no \
+                          wrapper".into(),
+            },
+            "a_merge_made_outside_the_wrapper_is_not_observed",
+        ),
     ]
 }

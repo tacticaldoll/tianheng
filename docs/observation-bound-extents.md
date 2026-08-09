@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**32 of 76 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**32 of 77 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -131,7 +131,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: does not react
 - **pinned by**: `a_plain_fn_directly_in_a_const_body_stays_a_stated_bound`
 
-## out of reach (25)
+## out of reach (26)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
@@ -204,6 +204,14 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **because**: the audit's corpus is the member's library and binary targets, so it never reads those files at all
 - **its defence must show**: does not react
 - **pinned by**: `source_outside_lib_or_bin_target_subtree_is_out_of_scope_corpus_bound`
+
+### `rust-self-governance-gates/a-hook-is-proposed-for-this-rule-a-stated-bound`
+
+> a squash merge made anywhere but through the sanctioned wrapper
+
+- **because**: a squash merge runs on GitHub's servers, so no local commit exists and no hook runs, and both values of the repository's squash-title setting append the serial; the reaction guards the sanctioned path to a merge, and a browser reaches no wrapper
+- **its defence must show**: does not react
+- **pinned by**: `a_merge_made_outside_the_wrapper_is_not_observed`
 
 ### `rust-self-governance-gates/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound`
 
