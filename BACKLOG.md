@@ -303,8 +303,8 @@ consumer for an undemonstrated deduplication.
   the fix was the same each time — recognize by position or shape, never by the bare string.
 
 - ~~**A gate's own shape is convention, so every new gate re-learns it by breaking.**~~ **CLOSED** in the open
-  window as the `gate-shape-contract` capability. the retired gate-shape reaction enumerates the
-  tracked shell units under `scripts/` whose basename begins with `check_` — on the basename rather than by a
+  window as the `gate-shape-contract` capability, whose reaction enumerated the
+  tracked shell units under `scripts/` whose basename began with `check_` — on the basename rather than by a
   `check_*` pathspec, since git matches pathspec wildcards without `FNM_PATHNAME` and the glob would be
   describing something other than what it says — pairs each gate with the twin its basename names, asserts every
   checkable property, declares the three semantic classes and the coverage limit as observation bounds with
@@ -687,7 +687,7 @@ consumer for an undemonstrated deduplication.
     `2` (a violation as cannot-judge). *Observation source:* that commit's own reproduction, and the re-reading
     that corrected the bound's stated cause. *Current reaction or bound:* the enabling mechanism is **closed** —
     what let the inversion pass CI was the matrix asserting a non-zero status rather than a code, and
-    `gate-shape-contract`'s `exit codes` property now requires the exact code from every twin, citing this
+    the retired gate-shape capability's `exit codes` property required the exact code from every twin, citing this
     instance in its remedy. What is left unobserved is the semantic judgment alone, and the bound now says so.
     *Risk:* a gate whose twin asserts an exact code that is the wrong code reads as fully conformant, and the
     consumer of a wrong code is sent looking for the wrong kind of problem. *Promotion trigger:* an instance where

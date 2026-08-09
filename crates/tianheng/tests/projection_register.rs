@@ -232,15 +232,20 @@ fn holders(root: &Path) -> Vec<String> {
             let is_gate = path
                 .rsplit_once('/')
                 .is_some_and(|(dir, base)| dir == "scripts" && base.starts_with("check_"));
-            if !is_rust && !is_gate {
+            // The shell arm has no possible instance: `git ls-files scripts/` names one unit and it is a
+            // wrapper, not a `check_` gate. It is kept only to make the emptiness visible in the assertion
+            // below rather than silently pruned — a recogniser arm that can never match is the vacuity this
+            // register exists to report, and it is now reported.
+            assert!(
+                !is_gate,
+                "a `scripts/check_*` unit exists again ({path}); this recogniser arm was retired as \
+                 unreachable and its projection text says one mechanism is recognized"
+            );
+            if !is_rust {
                 return false;
             }
             let text = read(root, path);
-            if is_rust {
-                holds_a_projection(&text)
-            } else {
-                text.shell().contains("BLESS")
-            }
+            holds_a_projection(&text)
         })
         .collect();
     found.sort();
@@ -487,7 +492,7 @@ fn render(documents: &BTreeMap<String, Registered>, holders: &[String]) -> Strin
          that is a declared observation bound rather than an oversight.\n\n",
     );
     out.push_str(
-        "**Not that the set is complete.** Two mechanisms are recognized: a Rust call to the shared blessing rule,\n\
+        "**Not that the set is complete.** One mechanism is recognized: a Rust call to the shared blessing rule,\n\
          and a `check_*` gate writing its projection under `BLESS`. A document generated some third way, whose\n\
          author also omitted the marker, is absent from both sides of the correspondence — a declared false\n\
          negative owned by this engine, not a limit of what it can read.\n\n",

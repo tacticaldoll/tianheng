@@ -16,13 +16,13 @@ judgment regardless of its parent process.
 #### Scenario: Ambient state names a smaller set
 
 - **WHEN** a required governance document is absent and the process environment names a smaller document set
-- **THEN** the gate still exits 2 naming the absent required document
+- **THEN** the reaction still fails, naming the absent required document
 
 ### Requirement: Fixture policy narrowing SHALL be explicit and confined
 
 The gate SHALL accept an explicit fixture-only governance-document set when judging a repository other than
 Tianheng's own physical workspace. The set SHALL be non-empty. The option SHALL be refused on the real workspace,
-and unknown or incomplete argument shapes SHALL exit 2 cannot-judge.
+and an unreadable or incomplete input SHALL fail, naming what could not be read.
 
 #### Scenario: The zero-corpus fixture narrows its prerequisite set
 
@@ -32,12 +32,12 @@ and unknown or incomplete argument shapes SHALL exit 2 cannot-judge.
 #### Scenario: Fixture policy targets the real workspace
 
 - **WHEN** fixture-only policy narrowing is requested for Tianheng's own physical workspace
-- **THEN** the gate exits 2 rather than weakening the required set
+- **THEN** the reaction fails rather than weakening the required set
 
 #### Scenario: Fixture policy is empty, surplus, or an argument is unknown
 
 - **WHEN** the fixture option has no non-empty value or has surplus values, or an unknown argument is supplied
-- **THEN** the gate exits 2 naming the invalid invocation
+- **THEN** the reaction fails, naming the invalid invocation
 
 ### Requirement: Tracked checkout content is the reference evidence
 
@@ -57,7 +57,7 @@ of any prerequisite SHALL be cannot-judge rather than clean.
 #### Scenario: Required evidence is absent
 
 - **WHEN** a required governance document, every tracked workspace member, or every inspectable Markdown and Rust source is absent
-- **THEN** the gate exits 2 and names the missing prerequisite instead of reporting clean
+- **THEN** the reaction fails, naming the missing prerequisite instead of reporting clean
 
 #### Scenario: An untracked manifest cannot create a workspace member
 
@@ -104,34 +104,37 @@ the answer does not depend on whether an ignored directory happens to exist in t
 - **WHEN** a recognized untracked reference is covered by the repository's ignore rules
 - **THEN** the gate emits no stale-reference finding for that path
 
-### Requirement: Observation failures are cannot-judge
+### Requirement: Observation failures fail loudly rather than reading as clean
 
-The gate SHALL exit 2 when it cannot build the tracked-path index, enumerate the inspected corpus, read an
-inspected source, or normalize extracted references. An otherwise-unhandled command failure SHALL also be
-translated to exit 2 by the shared exit-contract backstop. These failures SHALL identify the observation
-that failed rather than masquerade as an empty or clean repository.
+The reaction SHALL **fail, naming the observation it could not make**, when it cannot build the tracked-path
+index, enumerate the inspected corpus, read an inspected source, or read the deletion history. A failed read
+is not an empty result, and reporting one as the other is the vacuity direction the Core Contract forbids.
+
+The three-way exit contract does not survive as an exit code — a Rust test passes or fails — so every
+cannot-judge condition fails loudly and says which read it was. That is the safe direction: the alternative is
+a reaction reporting clean over content it never read.
 
 #### Scenario: The tracked-path index cannot be built
 
 - **WHEN** the Git enumeration that owns every tracked-path answer fails
-- **THEN** the gate exits 2 and names the tracked-path index failure
+- **THEN** the reaction fails, naming the tracked-path index failure
 
 #### Scenario: Extracted references cannot be normalized
 
 - **WHEN** the normalization pipeline fails for references extracted from an inspected file
-- **THEN** the gate exits 2 and names that file instead of silently examining an empty stream
+- **THEN** the reaction fails, naming that file instead of silently examining an empty stream
 
 #### Scenario: An unhandled command fails
 
 - **WHEN** an unwrapped command fails while the gate is running
-- **THEN** the exit-contract backstop emits a cannot-judge diagnostic and exits 2
+- **THEN** the reaction fails, naming the read it could not make rather than reporting a clean corpus
 
 ### Requirement: The gate is a read-only 0/1/2 reaction
 
 The reference-integrity gate SHALL be read-only. A clean judgment SHALL exit 0, print its positive summary
 on standard output, and print nothing on standard error. One or more stale references SHALL be aggregated
 and exit 1 with remediation. An invalid invocation, missing prerequisite, or observation failure SHALL
-exit 2. No verdict SHALL alter tracked, untracked, or commit state in the repository being judged.
+fail loudly. No verdict SHALL alter tracked, untracked, or commit state in the repository being judged.
 
 #### Scenario: A clean repository passes silently on standard error
 

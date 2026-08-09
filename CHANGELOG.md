@@ -822,8 +822,8 @@ no adopter runs. They are here rather than under the adopter headings above beca
   equal a tracked name. Seven limits are declared, six pinned.
 
 - **The self-governance reactions are Rust tests, and the repair of that move is the larger half of this
-  entry.** `scripts/` held seven `check_*.sh` gates, eleven `test_*.sh` twins and seven libraries — 3,954
-  non-comment lines, 57% of them twin matrices that existed only because a gate was a shell script. In Rust a
+  entry.** `scripts/` held seven `check_*.sh` gates, eleven `test_*.sh` twins and seven libraries — 6,827 lines,
+  4,000 of them once blanks and comments are dropped, 56% of those twin matrices that existed only because a gate was a shell script. In Rust a
   test's failure mode is asserted inline, so the twin obligation buys nothing and the pairing retires with it;
   `gate-shape-contract`, the capability specifying that pairing, is retired for the same reason, its own
   projection having reached `0 gates, 11 properties each` and reported clean over it.
@@ -846,8 +846,9 @@ no adopter runs. They are here rather than under the adopter headings above beca
   All six are restored, each holding what its capability specifies and each refusal seen to fail. Test-ness is
   decided by the harness rather than the source text, the mutation suite checks out a detached worktree with
   hooks disabled and re-runs its control after the restore, the publish judgement separates a violation from a
-  cannot-judge in its **type**, and the two reactions that cannot run in every suite are named on their own
-  lines in the Definition of Done and in CI — a reaction that runs only when someone remembers is worse than
+  cannot-judge in its **type**, and the two reactions too costly for every suite are named on their own
+  lines in the Definition of Done and in CI — a third, the publish gate, is asked for by `scripts/publish.sh`
+  at the one moment a release snapshot exists to judge — a reaction that runs only when someone remembers is worse than
   one that costs.
 
 - **The publish wrapper refuses `--manifest-path`** (either spelling) before the source gate runs. The gate
