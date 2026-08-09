@@ -281,14 +281,44 @@ fn join_offences(
     offences
 }
 
+/// The names of the targets a run recorded as constructing one site.
+fn reached_by(per_target: &[(String, BTreeSet<String>)], key: &str) -> BTreeSet<String> {
+    per_target
+        .iter()
+        .filter(|(_, sites)| sites.contains(key))
+        .map(|(name, _)| name.clone())
+        .collect()
+}
+
 /// Which perturbations of this site kill some direction.
-fn perturbations_that_kill(root: &Path, corpus: &Corpus, site: &Site) -> Vec<&'static str> {
-    let observers = corpus.observers(&site.file);
+///
+/// Only the targets **measured** to construct this site are run. Compiling a file is not reaching a site in
+/// it, and since a library's sources belong to every target of its package, `observers` names each of them —
+/// perturbing one that never constructed the site cannot kill anything, and the unperturbed recording already
+/// says which did. Sound in both directions: a target that constructed the site takes the same path under a
+/// perturbation, and one that did not cannot be made to by swapping a kind or replacing a message.
+fn perturbations_that_kill(
+    root: &Path,
+    corpus: &Corpus,
+    site: &Site,
+    reached_by: &BTreeSet<String>,
+) -> Vec<&'static str> {
+    let compiled = corpus.observers(&site.file);
     assert!(
-        !observers.is_empty(),
+        !compiled.is_empty(),
         "no target compiles {}, yet a run recorded constructing a refusal there; the corpus and the run \
          disagree about what was built",
         site.file
+    );
+    let observers: Vec<_> = compiled
+        .into_iter()
+        .filter(|target| reached_by.contains(&target.name))
+        .collect();
+    assert!(
+        !observers.is_empty(),
+        "a run recorded constructing a refusal at {}, yet no target is recorded as having reached it; the \
+         recording and the classification disagree about the same run",
+        site.key()
     );
     let mut killed = Vec::new();
     for mode in ["kind", "message"] {
@@ -423,7 +453,7 @@ fn every_refusal_site_is_distinguished_in_both_its_contracts() {
     for site in &corpus.sites {
         let is_reached = seen.contains(&site.key());
         let killed = if is_reached && !site.declares_out_of_reach() {
-            perturbations_that_kill(&root, &corpus, site)
+            perturbations_that_kill(&root, &corpus, site, &reached_by(&per_target, &site.key()))
         } else {
             Vec::new()
         };
