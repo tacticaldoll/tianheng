@@ -405,6 +405,21 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a_comment_naming_every_member_for_another_reason_is_refused",
         ),
         // --- rust-repository-reactions ---
+        BoundDecl::unpinned(
+            BoundId::new(
+                "rust-repository-reactions/a-gate-reached-without-the-wrapper-a-stated-bound",
+            ),
+            "an act reaching cargo publish or a merge without going through its wrapper",
+            Extent::Reached(Reached::UnderReacts {
+                because: "both assertions guard the sanctioned path -- the wrapper requiring its gate to \
+                          report one passing test, and the reaction pinning the identifier it cites. \
+                          Reaching further would mean observing the operator's shell or GitHub's servers \
+                          rather than this repository"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*",
+        ),
         BoundDecl::pinned(
             BoundId::new("rust-repository-reactions/files-no-capability-claims-a-stated-bound"),
             "a tracked file no capability's declared subject claims",

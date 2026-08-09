@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**14 of 79 declared bounds have no pinning test.** That figure is the register's
+**15 of 80 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -356,6 +356,12 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing reacts to it. Subjects are declared where a capability has something to say, and requiring them to tile the tree would buy coverage with thirty-six claims nobody could defend. The blindness is declared so that a clean report is not read as a complete one, and the reaction prints how many tracked paths went unclaimed rather than leaving the reader to assume none did
 
 - **pinned by**: `files_no_capability_claims_are_reported_rather_than_implied_judged`
+
+### `rust-repository-reactions/a-gate-reached-without-the-wrapper-a-stated-bound`
+
+> nothing reacts. Both assertions guard the sanctioned path; reaching further would mean observing the operator's shell or GitHub's servers rather than this repository. The pinning reaction narrows this without closing it: it keeps the sanctioned path sanctioned, so what is left is choosing not to use it rather than using it unguarded
+
+- **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
 
 ## self-law-projection
 

@@ -744,6 +744,14 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **Both wrappers standing in front of an irreversible act could be disarmed by a rename, silently.** They
+  reach their gate through `cargo test … -- --exact <name>`, and `libtest` exits `0` when that filter selects
+  nothing — measured, and `0` again for an `#[ignore]`d test. So the exit status they read answers *did the
+  selected tests pass* while the question they ask is *did the gate judge this act*. Each now requires the run
+  to report exactly one passing test, and a reaction pins every `--exact <ident>` a tracked script cites to
+  the `--test` target of the same invocation. Both are needed and measurement says so: `--list` includes an
+  ignored test, so the reaction cannot see a silenced gate, while the wrapper's `1 passed` can.
+
 - **The filing join accepted one claimant, and that could not catch the defect it was written from.** Where
   two capabilities' subjects overlap — `scripts/publish.sh` is claimed both by `publish-source-integrity` and,
   through `scripts/*.sh`, by `rust-repository-reactions` — naming either satisfied the join, so the original
