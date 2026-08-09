@@ -19,13 +19,13 @@
 
 - [x] 2.1 A direction building two refusals on two different lines of a fixture and requiring the recorded
       locations to **differ** — the `#[track_caller]` chain proof (D2)
-- [ ] 2.2 A control requiring `ALL:kind` to make a target run **fail** — the injection is wired
-- [ ] 2.3 A control requiring a selector naming no site to leave a target run **green** — the injection is not
+- [x] 2.2 A control requiring `ALL:kind` to make a target run **fail** — the injection is wired
+- [x] 2.3 A control requiring a selector naming no site to leave a target run **green** — the injection is not
       spurious
 - [x] 2.4 A **pair** over fixture refusals: one no assertion distinguishes, required to classify as
       undefended, and one a direction does distinguish, required to classify as defended — a classifier that
       always answers the same way fails one of the two
-- [ ] 2.5 Run **each** guard against its own defect, one at a time, and record each failure:
+- [x] 2.5 Run **each** guard against its own defect, one at a time, and record each failure:
       2.2 against a disabled injection point; 2.3 against a site-match condition forced true; 2.4 against its
       own pair; 2.1 against `#[track_caller]` removed from a fixture constructor. One blanket perturbation is
       not acceptable — disabling the injection leaves 2.3 passing vacuously (a poison that never fires does
@@ -33,7 +33,7 @@
 - [x] 2.6 Recording integrity: appends within a process serialised, one record file per target run, an
       unparseable line refused, and the record **created by the parent** before the run so a failed read
       cannot read as a run that constructed nothing
-- [ ] 2.7 See 2.6's failure directions fail: a failed write, an unreadable record, a malformed line
+- [x] 2.7 See 2.6's failure directions fail: a failed write, an unreadable record, a malformed line
 
 ## 3. Enumeration, totality, and reach
 
@@ -79,28 +79,28 @@
       (`60 enumerated, 51 defended, 0 undistinguished, 9 never reached`), through a corrupt index, an
       everything-ignored worktree, a missing object, a directory where a file is expected, and a file whose
       bytes are not UTF-8
-- [ ] 5.1b **Delete** what a preceding check makes logically unreachable. Eight of the nine remaining re-read
+- [x] 5.1b **Delete** what a preceding check makes logically unreachable. Eight of the nine remaining re-read
       something the judgement has already established; a dead refusal is a smaller artefact than a bound
       declaring a false negative about an impossible input
-- [ ] 5.1c **Declare** only what survives both — a precondition no environment the suite runs in can produce
-- [ ] 5.2 Declare the bound covering the exempt class in the **delta** spec and in
+- [x] 5.1c **Declare** only what survives both — a precondition no environment the suite runs in can produce
+- [x] 5.2 Declare the bound covering the exempt class in the **delta** spec and in
       `crates/tianheng/src/bounds.rs`, extent `OutOfReach`, pinned by
       `a_site_declared_out_of_reach_is_only_observed_to_be_unreached`. **Do not widen `Extent`** — it is a
       shipped public type reached through `pub observation_bounds()`. The main spec is not edited during
       apply; the delta reaches it at sync (7.5)
-- [ ] 5.2a Add the repository-local exemption registry in test support: `Exemption { slug, bound, because }`,
+- [x] 5.2a Add the repository-local exemption registry in test support: `Exemption { slug, bound, because }`,
       joined against the produced site enumeration and the live `observation_bounds()` set
-- [ ] 5.2b Declare the one residual the scan admits: a refusal vocabulary under other names, or inside the
+- [x] 5.2b Declare the one residual the scan admits: a refusal vocabulary under other names, or inside the
       reaction's own exempt sources (`a_refusal_vocabulary_under_other_names_is_not_observed`). The feature-set
       statement is a **definition, not a bound** — the corpus is the build that is perturbed, so a file outside
       it holds no refusal the suite could reach, and a bound over that empty set is the permanent residue the
       registry biconditional exists to prevent
-- [ ] 5.3 Refuse, each seen to fail: a slug carried by two sites; a slug no registry entry covers; a registry
+- [x] 5.3 Refuse, each seen to fail: a slug carried by two sites; a slug no registry entry covers; a registry
       entry naming a slug no site carries; a registry entry naming a `BoundId` the live bound set does not
       contain; **an empty registry while the exemption-class bound is declared** (the biconditional — one
       direction alone leaves the bound as permanent residue after the last exemption goes); and a
       declared-out-of-reach site observed being reached (the stale exemption)
-- [ ] 5.4 Declare the exempt census in `crates/tianheng/tests/census.rs`:
+- [x] 5.4 Declare the exempt census in `crates/tianheng/tests/census.rs`:
       **phrase** `"{} of {} refusal sites are declared out of reach"` — the sweep's own declaration guards
       compute and assert the length and single-line constraints, so no figure about the phrase is typed here;
       **figures** produced by `support/refusal_sites.rs`, the same enumerator `refusal_bites.rs` uses, so the
@@ -108,7 +108,7 @@
       **carrier during apply**: the sentence goes in the delta spec only
       (`openspec/changes/refusal-site-bites/specs/rust-self-governance-gates/spec.md`), on one line. It reaches
       `openspec/specs/` at sync (7.5), never by editing the main spec during apply
-- [ ] 5.5 `TIANHENG_REFUSAL_BITES=1 … cargo test -p tianheng --test refusal_bites` green
+- [x] 5.5 `TIANHENG_REFUSAL_BITES=1 … cargo test -p tianheng --test refusal_bites` green
 
 ## 6. Where the run is decided, and where the injection is scrubbed
 

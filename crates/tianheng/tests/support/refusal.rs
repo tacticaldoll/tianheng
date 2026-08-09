@@ -194,6 +194,20 @@ fn selector() -> Option<&'static Selector> {
         .as_ref()
 }
 
+/// Open the record for appending, or fail with the instrument's own marker.
+///
+/// Separated so it can be shown a path it cannot open. A record that silently fails to open is the same
+/// defect as one that silently fails to read: a site it drops looks legally unreached.
+fn open_record(path: &std::ffi::OsStr) -> std::fs::File {
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .unwrap_or_else(|err| {
+            panic!("{INSTRUMENT_PANIC}: cannot open {RECORD}={path:?} for appending: {err}")
+        })
+}
+
 /// Append this construction's site to the record file, if one was named.
 ///
 /// **A lost line is not self-announcing.** For a site that declares itself out of reach, a lost record makes
@@ -202,17 +216,7 @@ fn selector() -> Option<&'static Selector> {
 /// than degrading.
 fn record(site: &Location<'_>) {
     static FILE: OnceLock<Option<Mutex<std::fs::File>>> = OnceLock::new();
-    let handle = FILE.get_or_init(|| {
-        let path = std::env::var_os(RECORD)?;
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .unwrap_or_else(|err| {
-                panic!("{INSTRUMENT_PANIC}: cannot open {RECORD}={path:?} for appending: {err}")
-            });
-        Some(Mutex::new(file))
-    });
+    let handle = FILE.get_or_init(|| Some(Mutex::new(open_record(&std::env::var_os(RECORD)?))));
     let Some(handle) = handle else {
         return;
     };
@@ -276,6 +280,45 @@ mod tests {
             Some(("crates/tianheng/tests/support/refusal.rs".to_string(), 41))
         );
         assert_eq!(one.mode, Mode::Message);
+    }
+
+    /// A selector names the site it names, and no other.
+    ///
+    /// The control that a nonexistent selector leaves a run green rests on this. Its own defect is a match
+    /// condition forced true, which that control would catch end-to-end and this catches in one call.
+    #[test]
+    fn a_selector_names_the_site_it_names_and_no_other() {
+        let one = parse_selector("some/file.rs:12:kind");
+        let here = Location::caller();
+        assert!(
+            !one.names(here),
+            "a selector matched a site it does not name"
+        );
+
+        let every = parse_selector("ALL:kind");
+        assert!(
+            every.names(here),
+            "the every-site selector named no site, so the control proving the injection is wired would be \
+             vacuous"
+        );
+    }
+
+    /// A record path that cannot be opened is the instrument failing, and says so.
+    #[test]
+    fn an_unopenable_record_is_an_instrument_panic() {
+        let nowhere = std::env::temp_dir().join("tianheng-refusal-no-such-dir/record");
+        let _ = std::fs::remove_dir_all(nowhere.parent().expect("has a parent"));
+        let err = std::panic::catch_unwind(|| open_record(nowhere.as_os_str()))
+            .expect_err("an unopenable record must not be treated as no record at all");
+        let said = err
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .unwrap_or_default();
+        assert!(
+            said.contains(INSTRUMENT_PANIC),
+            "the panic carries no instrument marker, so the sweep would read the instrument's own failure as \
+             a site being distinguished: {said}"
+        );
     }
 
     #[test]

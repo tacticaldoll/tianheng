@@ -124,6 +124,12 @@ fn run_target(root: &Path, target: &Target, mutant: Option<&str>, record: Option
     }
 }
 
+/// Whether a recorded line names a site: a path, a colon, a line number, and nothing else.
+fn parses_as_a_site(line: &str) -> bool {
+    line.rsplit_once(':')
+        .is_some_and(|(file, number)| !file.is_empty() && number.parse::<u32>().is_ok())
+}
+
 /// The sites each judged target actually constructs, per target.
 ///
 /// Per target rather than merged, because the controls below need a target that **reaches** a site, not one
@@ -167,8 +173,7 @@ fn reached(root: &Path, corpus: &Corpus) -> Vec<(String, BTreeSet<String>)> {
         let mut seen = BTreeSet::new();
         for line in text.lines() {
             assert!(
-                line.rsplit_once(':')
-                    .is_some_and(|(file, number)| !file.is_empty() && number.parse::<u32>().is_ok()),
+                parses_as_a_site(line),
                 "the reach record for {} carries the unparseable line {line:?}; a lost or malformed record is \
                  not self-announcing, because a site that declares itself out of reach then looks legally \
                  unreached and the run reports clean",
@@ -376,6 +381,23 @@ fn every_refusal_site_is_distinguished_in_both_its_contracts() {
          per-site attribution holds"
     );
 
+    // The `#[track_caller]` chain, checked against what a real run recorded rather than against a fixture.
+    // Were the location read inside the shared module's own helper, every construction would report a line
+    // in that module and the sweep would enumerate 58 sites while intercepting one — reporting clean over
+    // the rest. A run that recorded anything must therefore have recorded it somewhere else.
+    let inside_the_shared_module = seen
+        .iter()
+        .filter(|key| key.starts_with(&format!("{}:", sites::SHARED)))
+        .count();
+    assert!(
+        !seen.is_empty() && inside_the_shared_module == 0,
+        "{} of {} recorded constructions report a location inside {}, so the caller location is being read \
+         outside the #[track_caller] chain and every site looks like one site",
+        inside_the_shared_module,
+        seen.len(),
+        sites::SHARED
+    );
+
     let enumerated: BTreeSet<String> = corpus.sites.iter().map(Site::key).collect();
     let unenumerated: Vec<&String> = seen.difference(&enumerated).collect();
     assert!(
@@ -446,6 +468,33 @@ fn every_refusal_site_is_distinguished_in_both_its_contracts() {
         unclaimed.join("\n"),
         stale.join("\n")
     );
+}
+
+#[cfg(test)]
+mod records {
+    use super::*;
+
+    /// A malformed record line is refused rather than absorbed.
+    ///
+    /// Its own defect is a parser that accepts anything, which this catches in one call: a lost or garbled
+    /// record makes a site look legally unreached, and for a site that declares itself out of reach that
+    /// reads as a clean run.
+    #[test]
+    fn a_record_line_that_names_no_site_is_refused() {
+        assert!(parses_as_a_site("crates/a/tests/support/gate.rs:12"));
+        for malformed in [
+            "",
+            "no-colon-at-all",
+            "crates/a.rs:",
+            "crates/a.rs:twelve",
+            ":12",
+        ] {
+            assert!(
+                !parses_as_a_site(malformed),
+                "{malformed:?} was accepted as a recorded site"
+            );
+        }
+    }
 }
 
 #[cfg(test)]
