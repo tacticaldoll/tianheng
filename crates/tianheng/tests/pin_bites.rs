@@ -334,7 +334,6 @@ fn every_declared_mutation_kills_the_pin_it_names() {
     let cited = cited_names(&root);
     let scratch = Scratch::new(&root);
     let tree = scratch.tree.clone();
-    let target_dir = scratch.work.join("target");
 
     for record in &records {
         let name = &record.name;
@@ -456,7 +455,6 @@ fn every_declared_mutation_kills_the_pin_it_names() {
         );
     }
 
-    let _ = &target_dir;
     eprintln!(
         "pin bites ok ({} declared mutation(s) covering {} of {} cited test(s)) — the uncovered remainder is \
          the point: a gate reporting only the mutations it ran would be the reads-as-coverage failure it \

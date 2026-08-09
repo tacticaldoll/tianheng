@@ -1,15 +1,13 @@
 //! Self-governance reaction: every declared census agrees with the reaction that produces it.
 //!
-//! Each census below is **produced** by the enumeration it is about — the register's own parse, the release
-//! reaction's own scan — never by a second reading of the same source. A second parse would let the census and
+//! Each census below is **produced** by the enumeration it is about — the register's own parse — never by a
+//! second reading of the same source. A second parse would let the census and
 //! the reaction disagree, which is the drift this exists to end.
 
 #[path = "support/census.rs"]
 mod census;
 #[path = "support/bound_register_parse.rs"]
 mod register;
-#[path = "support/release_coherence_gate.rs"]
-mod release;
 
 use census::{Census, sweep};
 use register::{Citation, parse_bounds, workspace_root};
@@ -89,7 +87,9 @@ fn the_sweep_names_a_disagreement_it_is_shown() {
     let wrong = vec![Census {
         subject: "a control",
         phrase: "{} bounds across {} capabilities",
-        figures: vec![bounds.len() + 1, capabilities.len()],
+        // Far enough from any real figure that no document can accidentally agree with it. `len() + 1` was
+        // the first draft, and editing `BACKLOG.md` to that very number disabled this control.
+        figures: vec![bounds.len() + 10_000, capabilities.len()],
     }];
     let offences = sweep(&root, &files, &wrong);
     assert!(

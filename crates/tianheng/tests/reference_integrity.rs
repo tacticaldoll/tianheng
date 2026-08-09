@@ -211,7 +211,6 @@ fn offences_in(
 ) -> BTreeSet<String> {
     let all = tracked_paths;
     let files: HashSet<String> = all.iter().cloned().collect();
-    let root = root;
 
     let members: Vec<String> = all
         .iter()
@@ -393,7 +392,7 @@ fn offences_in(
                 }
 
                 if raw.contains('/') {
-                    if holds(&files, raw) || ignored(&root, raw) {
+                    if holds(&files, raw) || ignored(root, raw) {
                         continue;
                     }
                     // Illustrative rather than real, in two decidable forms.
