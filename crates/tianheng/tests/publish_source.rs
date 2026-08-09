@@ -286,3 +286,118 @@ fn an_absent_layout_is_loud_when_the_workspace_marker_is_set() {
         "an absent layout must fail loudly under TIANHENG_WORKSPACE_TESTS rather than skip"
     );
 }
+
+// --- the cannot-judge directions, and the two the matrix was shadowing -------------------------------------
+
+/// The refusal KIND was defended; the refusal's SUBJECT was not.
+///
+/// `an_unreadable_source_cannot_be_judged_rather_than_refused` asserted only `kind == CannotJudge` for a
+/// directory with no manifest, so either of two branches alone satisfied it — a shadowing pair review found by
+/// deleting each and watching nothing fail. Each direction below names the message it expects.
+#[test]
+fn each_unreadable_input_says_which_one_it_could_not_read() {
+    let root = scratch("unreadable-each");
+
+    let bare = root.join("no-manifest");
+    std::fs::create_dir_all(&bare).expect("create");
+    let refusal = judge(&bare, "origin").expect_err("a directory with no manifest is unjudgeable");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("has no Cargo.toml"),
+        "{}",
+        refusal.message
+    );
+
+    // A manifest but no repository: the next branch, which the one above was standing in for.
+    let not_a_repo = root.join("not-a-repo");
+    std::fs::create_dir_all(&not_a_repo).expect("create");
+    std::fs::write(
+        not_a_repo.join("Cargo.toml"),
+        "[workspace]\nmembers = []\n\n[workspace.package]\nversion = \"9.9.9\"\n",
+    )
+    .expect("write");
+    let refusal =
+        judge(&not_a_repo, "origin").expect_err("a directory that is no worktree is unjudgeable");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("is not a git worktree"),
+        "{}",
+        refusal.message
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// An annotated tag carrying no signature at all, distinguished from one whose signature does not verify.
+///
+/// `an_unsigned_annotated_tag_is_a_violation` asserted `contains("carries no signature") || contains("does
+/// not verify")` — a disjunction that cannot say which branch fired, and which always fired on the second.
+#[test]
+fn a_tag_with_no_signature_block_is_named_as_such() {
+    let root = scratch("no-signature");
+    let fixture = build_fixture(&root, "no-signature", "9.9.9");
+    git(&fixture.repo, &["tag", "-d", "v9.9.9"]);
+    git(
+        &fixture.repo,
+        &[
+            "tag",
+            "-a",
+            "v9.9.9",
+            "-m",
+            "v9.9.9 with no signature at all",
+        ],
+    );
+    let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("an annotated tag carrying no signature must be refused");
+    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("carries no signature"),
+        "the refusal must name the ABSENT signature rather than a failed verification: {}",
+        refusal.message
+    );
+}
+
+/// A signature block this gate cannot read is undecidable, not a violation.
+#[test]
+fn a_signature_this_gate_cannot_read_cannot_be_judged() {
+    let root = scratch("foreign-signature");
+    let fixture = build_fixture(&root, "foreign-signature", "9.9.9");
+    git(&fixture.repo, &["tag", "-d", "v9.9.9"]);
+    git(
+        &fixture.repo,
+        &[
+            "tag",
+            "-a",
+            "v9.9.9",
+            "-m",
+            "v9.9.9\n-----BEGIN PGP SIGNATURE-----\nnot ssh\n-----END PGP SIGNATURE-----",
+        ],
+    );
+    let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a signature this gate cannot read must be refused");
+    assert_eq!(
+        refusal.kind,
+        Kind::CannotJudge,
+        "a block this gate cannot verify is undecidable, not a disagreement: {}",
+        refusal.message
+    );
+}
+
+/// A remote whose `main` cannot be read is undecidable — the direction that keeps a network failure from
+/// reading as "the snapshot is behind".
+#[test]
+fn a_remote_that_cannot_be_read_cannot_be_judged() {
+    let root = scratch("no-remote");
+    let fixture = build_fixture(&root, "no-remote", "9.9.9");
+    let absent = root.join("there-is-no-remote-here.git");
+    let verdict = judge(&fixture.repo, &absent.display().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("an unreadable remote must be refused");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("could not read refs/heads/main"),
+        "{}",
+        refusal.message
+    );
+}

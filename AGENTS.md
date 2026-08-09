@@ -124,7 +124,7 @@ falsified.
 
 **A figure inside a generated document is only safe if it is computed.** A literal in the template is the one place
 a projection cannot self-correct: the freshness check compares the generator's own text with itself, so
-`gate-shape-contract`'s projection typed both a figure and a list of bounds and silently omitted one added in the
+the retired gate-shape capability's projection typed both a figure and a list of bounds and silently omitted one added in the
 same window. Where a projection discloses a set, derive the membership from the source of truth and hold it in
 **both** directions; the figure is then `len()`.
 
@@ -134,7 +134,7 @@ string, and on six expected-output literals in its failure matrix; widening the 
 on the fixture censuses the register's own failure matrix writes deliberately; and the one instance that occurred in a **code
 doc** was spelled in words, which no digit-based matcher reads. Most numbers in this repository describe a *shape*
 ("two files of one module yield one violation"), not a census, so a matcher over numbers is mostly false positives.
-The census direction in `check_bound_register.sh` stays what it is — a backstop for the one set whose phrasing is
+The census direction in `crates/tianheng/tests/bound_register.rs` stays what it is — a backstop for the one set whose phrasing is
 stable — and the rule above is what keeps a figure honest.
 
 
@@ -348,20 +348,8 @@ The self-governance gate (`self_governance.rs`, run under `cargo test`) and its 
 classification in a bijection and projects `docs/observation-bound-extents.md`; it needs no line of its own
 above because it runs under that same `cargo test`. And so must `observer_protocol.rs`, which holds the
 trait-driven fold and the built-in composition path to one verdict — two paths that could disagree silently
-are the drift a seam is supposed to end. And so must `gate_shape_contract.rs`, which enumerates this
-repository's own `check_*` gates and their twins from tracked content, holds each to the structural properties of the
-family's exit contract, and projects the retired gate-shape projection — the table
-saying which gate holds what, and which of the classes it was built for are declared bounds rather than
-checks. That list and its figure are read from the specification by the projection, so they are not restated
-here. It adds no line above for the same reason. And so must `projection_register.rs`, which is the inventory of
-every document in this paragraph: it enumerates the generated documents from the marker each carries, holds each
-one against the reaction that blesses it in both directions, requires that this file names each of them, and
-projects [`docs/projection-register.md`](docs/projection-register.md). Adding a projection without mentioning it
-here used to be an unchecked step; it is now a failing test. Beyond the list
-above, CI also runs a **default-features** `clippy`/`doc` pass (catching an unused item or a broken
-intra-doc link when the `audit` feature is off), the declared-MSRV build and test, license-text
-bundling, the packaged-tarball self-test, and the reaction on the clean/violating fixtures (see
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+are the drift a seam is supposed to end.
+
 
 ## Versioning — SemVer honesty (the modou lesson)
 

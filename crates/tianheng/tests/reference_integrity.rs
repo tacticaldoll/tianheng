@@ -187,6 +187,29 @@ fn in_repository_references_resolve() {
         return;
     };
     let all = tracked(&root);
+    let offences = offences_in(&root, &root, &all, &all);
+    assert!(
+        offences.is_empty(),
+        "{} stale in-repository reference(s) — point each at the file that now holds the referenced item, \
+         or drop the reference:\n{}",
+        offences.len(),
+        offences.iter().cloned().collect::<Vec<_>>().join("\n")
+    );
+}
+
+/// Every stale reference `corpus` carries, judged against the paths `tracked` names.
+///
+/// Split from the reaction so a NEGATIVE fixture can call it. Asserting `offences.is_empty()` over a clean
+/// tree is a verdict that deleting a detector can only make emptier: measured, all four extraction forms were
+/// disabled one at a time and the reaction stayed green every time. A reaction whose only assertion is that
+/// it found nothing cannot be shown to find anything.
+fn offences_in(
+    root: &Path,
+    corpus_root: &Path,
+    tracked_paths: &[String],
+    corpus: &[String],
+) -> BTreeSet<String> {
+    let all = tracked_paths;
     let files: HashSet<String> = all.iter().cloned().collect();
 
     let members: Vec<String> = all
@@ -214,20 +237,41 @@ fn in_repository_references_resolve() {
     // ambiguous and says nothing about which file it meant.
     let mut basename_count: std::collections::HashMap<&str, usize> =
         std::collections::HashMap::new();
-    for path in &all {
+    for path in all {
         *basename_count
             .entry(path.rsplit('/').next().unwrap_or(path))
             .or_default() += 1;
     }
 
+    // Every basename this repository once tracked outside a change directory. A change directory's
+    // scaffolding is pruned at every sync, so its names are the lifecycle's vocabulary rather than paths.
+    let deleted_outside_changes: BTreeSet<String> = {
+        let out = Command::new("git")
+            .args(["log", "--diff-filter=D", "--name-only", "--format="])
+            .current_dir(root)
+            .output()
+            .expect("run git log");
+        assert!(
+            out.status.success(),
+            "could not read the deletion history; a failed read is not an empty result"
+        );
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter(|p| !p.is_empty() && !p.starts_with("openspec/changes/"))
+            .filter_map(|p| p.rsplit('/').next())
+            .filter(|base| !all.iter().any(|f| f.rsplit('/').next() == Some(*base)))
+            .map(str::to_string)
+            .collect()
+    };
+
     let mut offences: BTreeSet<String> = BTreeSet::new();
     let mut inspected = 0usize;
 
-    for rel_path in &all {
+    for rel_path in corpus {
         if !rel_path.ends_with(".md") && !rel_path.ends_with(".rs") {
             continue;
         }
-        let Ok(content) = std::fs::read_to_string(root.join(rel_path)) else {
+        let Ok(content) = std::fs::read_to_string(corpus_root.join(rel_path)) else {
             panic!(
                 "cannot read tracked file '{rel_path}' — a file this reaction claims to have inspected must \
                  have been read"
@@ -235,8 +279,24 @@ fn in_repository_references_resolve() {
         };
         inspected += 1;
         let is_test_source = rel_path.contains("/tests/");
+        // A record names what was true then. `docs/history/` is one by definition, and a DATED changelog
+        // section is one by construction — `release-coherence` refuses to rewrite them for exactly this
+        // reason, and requiring them to name what is true now is the falsification that rule forbids.
+        // Measured the hard way: a sweep that did not know this rewrote eight hunks inside the released
+        // `[0.4.0]`, leaving it saying a Rust test "normalizes a link target with portable shell".
+        let is_record_document = rel_path.starts_with("docs/history/");
+        let mut in_dated_section = false;
 
         for line in content.lines() {
+            if rel_path == "CHANGELOG.md" && line.starts_with("## [") {
+                in_dated_section = line.contains("] - ");
+            }
+            // A record names what was true then; test code names the shapes it judges and builds. Neither
+            // is a claim about the tree as it stands, and holding either to today's paths is the
+            // falsification `release-coherence` refuses for dated sections.
+            if is_record_document || in_dated_section || is_test_source {
+                continue;
+            }
             for reference in extract(line) {
                 let raw = reference.text.trim_end_matches(['.', ',', ')', '`']);
                 let raw = raw.split('#').next().unwrap_or(raw);
@@ -332,7 +392,7 @@ fn in_repository_references_resolve() {
                 }
 
                 if raw.contains('/') {
-                    if holds(&files, raw) || ignored(&root, raw) {
+                    if holds(&files, raw) || ignored(root, raw) {
                         continue;
                     }
                     // Illustrative rather than real, in two decidable forms.
@@ -348,28 +408,34 @@ fn in_repository_references_resolve() {
                             }
                         }
                     }
-                    // And a repository path named INSIDE test code, which builds the shapes it judges: a
-                    // fixture repository's `scripts/…` or `examples/…` exists in that fixture and nowhere
-                    // here. What this costs is declared — a genuinely stale reference written into a test
-                    // goes unseen — and the alternative costs more: without it, every reaction that
-                    // constructs a fixture is an offence for constructing one.
-                    if is_test_source
-                        && (raw.starts_with("scripts/") || raw.starts_with("examples/"))
-                    {
-                        continue;
-                    }
                     offences.insert(format!(
                         "{rel_path}: references '{raw}', which is not tracked in this repository"
                     ));
                     continue;
                 }
 
-                // A bare basename is a reference only where exactly one tracked file carries it. Several
-                // means the word says nothing about which file it meant; NONE means it is not a path at all —
-                // `proposal.md` and `tasks.md` name the OpenSpec change scaffolding a completed change prunes,
-                // and reading them as dangling would make the lifecycle's own vocabulary an offence. The real
-                // signal is the qualified form above, which this leaves untouched.
-                let _ = basename_count.get(raw);
+                // A bare basename. Several tracked files carrying it says nothing about which was meant, and
+                // one means the reference resolves. NONE is the case the spec left open, and discarding it
+                // made this whole form inert — extracted and thrown away, which is why twenty-odd references
+                // to files this window deleted survived the sweep.
+                //
+                // The decidable split: a name that WAS tracked, somewhere other than a change directory, is a
+                // stale reference to something deleted. A name tracked only under `openspec/changes/` is the
+                // lifecycle's own vocabulary — `proposal.md`, `tasks.md`, `design.md` are pruned at every
+                // sync by design — and a name never tracked at all is not a path.
+                match basename_count.get(raw) {
+                    Some(_) => {}
+                    None => {
+                        // Test code names the shapes it judges, including ones this repository deleted —
+                        // the same exemption the qualified branch carries, for the same reason.
+                        if !is_test_source && deleted_outside_changes.contains(raw) {
+                            offences.insert(format!(
+                                "{rel_path}: references '{raw}', which this repository deleted — point it at \
+                                 what replaced it, or drop the reference"
+                            ));
+                        }
+                    }
+                }
             }
         }
     }
@@ -379,13 +445,7 @@ fn in_repository_references_resolve() {
         "inspected 0 files — no tracked *.md or *.rs, so this reaction would report clean without having \
          read anything"
     );
-    assert!(
-        offences.is_empty(),
-        "{} stale in-repository reference(s) across {inspected} files — point each at the file that now \
-         holds the referenced item, or drop the reference:\n{}",
-        offences.len(),
-        offences.iter().cloned().collect::<Vec<_>>().join("\n")
-    );
+    offences
 }
 
 #[test]
@@ -396,5 +456,73 @@ fn an_absent_layout_is_loud_when_the_workspace_marker_is_set() {
     assert!(
         std::panic::catch_unwind(|| locate_layout(absent, true)).is_err(),
         "an absent layout must fail loudly under TIANHENG_WORKSPACE_TESTS rather than skip"
+    );
+}
+
+/// Each extraction form, planted and required to be seen.
+///
+/// This is the direction the reaction had none of. Its verdict is that it found nothing, and a verdict of
+/// that shape survives every detector being deleted — measured on all four forms, each disabled in turn,
+/// green every time. The claim that they had been "disabled in turn" was therefore unfalsifiable, and one of
+/// the four was in fact inert: the bare-basename branch extracted its references and discarded them, which is
+/// why twenty-odd references to files this window deleted survived the sweep.
+#[test]
+fn every_extraction_form_is_seen_when_it_names_something_absent() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let tracked_paths = tracked(&root);
+
+    let scratch = std::env::temp_dir().join(format!(
+        "tianheng-reference-integrity-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(scratch.join("crates/tianheng")).expect("scratch is writable");
+
+    // The corpus is judged against THIS repository's tracked paths, so "absent" means absent here.
+    let planted = [
+        (
+            "a qualified path",
+            "probe-qualified.md",
+            "See `crates/tianheng/src/zzz_absent.rs` for details.\n",
+        ),
+        (
+            "a markdown link",
+            "probe-link.md",
+            // A ROOT-level target, which only the link form can see: the prefixed form needs a known
+            // top-level directory and the bare form fires only on names this repository once tracked. A
+            // probe both forms can see proves neither.
+            "See [the doc](zzz-absent-root.md).\n",
+        ),
+        (
+            "a package-relative test path",
+            "crates/tianheng/probe-member.md",
+            "See `tests/zzz_absent_probe.rs`.\n",
+        ),
+        (
+            "a bare basename",
+            "probe-basename.md",
+            "The `check_dod_coherence.sh` gate says so.\n",
+        ),
+    ];
+    for (_, path, body) in &planted {
+        let full = scratch.join(path);
+        std::fs::create_dir_all(full.parent().expect("a parent")).expect("scratch subdir");
+        std::fs::write(full, body).expect("write the probe");
+    }
+
+    let mut unseen = Vec::new();
+    for (form, path, _) in &planted {
+        let offences = offences_in(&root, &scratch, &tracked_paths, &[path.to_string()]);
+        if offences.is_empty() {
+            unseen.push(format!("  {form} — planted in {path} and seen by nothing"));
+        }
+    }
+    let _ = std::fs::remove_dir_all(&scratch);
+    assert!(
+        unseen.is_empty(),
+        "an extraction form names something absent and the reaction says nothing:\n{}",
+        unseen.join("\n")
     );
 }

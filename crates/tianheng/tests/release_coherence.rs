@@ -636,3 +636,232 @@ fn an_absent_layout_is_loud_when_the_workspace_marker_is_set() {
         "an absent layout must fail loudly under TIANHENG_WORKSPACE_TESTS rather than skip"
     );
 }
+
+// --- the changelog surfaces and the vacuity guards, which nothing covered ----------------------------------
+
+#[test]
+fn two_unreleased_sections_are_a_violation() {
+    let root = scratch("two-unreleased");
+    let fixture = build_fixture(&root, "two-unreleased", "0.2.0");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    let path = fixture.repo.join("CHANGELOG.md");
+    let text = std::fs::read_to_string(&path).expect("read");
+    std::fs::write(
+        &path,
+        text.replace("## [Unreleased]\n", "## [Unreleased]\n\n## [Unreleased]\n"),
+    )
+    .expect("write");
+    commit(&fixture.repo, "chore: grow a second unreleased section");
+    refuse(
+        &fixture.repo,
+        Kind::Violation,
+        "exactly one [Unreleased] section",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_snapshot_whose_unreleased_carries_an_item_is_a_violation() {
+    let root = scratch("snapshot-unreleased");
+    let fixture = build_fixture(&root, "snapshot-unreleased", "0.2.0");
+    let path = fixture.repo.join("CHANGELOG.md");
+    let text = std::fs::read_to_string(&path).expect("read");
+    std::fs::write(
+        &path,
+        text.replace(
+            "## [Unreleased]\n",
+            "## [Unreleased]\n\n- A leftover item.\n",
+        ),
+    )
+    .expect("write");
+    git(&fixture.repo, &["add", "."]);
+    git(
+        &fixture.repo,
+        &["commit", "-q", "--amend", "-m", "release: 0.2.0"],
+    );
+    refuse(
+        &fixture.repo,
+        Kind::Violation,
+        "must be empty in snapshot state",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_release_with_no_dated_notes_is_a_violation() {
+    let root = scratch("no-dated-notes");
+    let fixture = build_fixture(&root, "no-dated-notes", "0.2.0");
+    workspace_files(&fixture.repo, "0.2.1");
+    development_changelog(&fixture.repo, "0.2.1", false);
+    commit(&fixture.repo, "chore: prepare without notes");
+    refuse(
+        &fixture.repo,
+        Kind::Violation,
+        "missing dated release notes for 0.2.1",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn an_unreleased_comparison_link_that_does_not_start_at_the_version_is_a_violation() {
+    let root = scratch("bad-unreleased-link");
+    let fixture = build_fixture(&root, "bad-unreleased-link", "0.2.0");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    let path = fixture.repo.join("CHANGELOG.md");
+    let text = std::fs::read_to_string(&path).expect("read");
+    std::fs::write(&path, text.replace("v0.2.0...HEAD", "v0.1.0...HEAD")).expect("write");
+    commit(&fixture.repo, "chore: point the link at the wrong version");
+    refuse(
+        &fixture.repo,
+        Kind::Violation,
+        "comparison link must start at v0.2.0",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_dated_comparison_link_that_does_not_start_at_the_previous_release_is_a_violation() {
+    let root = scratch("bad-dated-link");
+    let fixture = build_fixture(&root, "bad-dated-link", "0.2.0");
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.0.9");
+    commit(
+        &fixture.repo,
+        "chore: point the release link at the wrong predecessor",
+    );
+    refuse(&fixture.repo, Kind::Violation, "must start at v0.2.0");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_lockfile_missing_a_workspace_package_is_a_violation() {
+    let root = scratch("lock-missing");
+    let fixture = build_fixture(&root, "lock-missing", "0.2.0");
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    let lock = fixture.repo.join("Cargo.lock");
+    let text = std::fs::read_to_string(&lock).expect("read");
+    std::fs::write(
+        &lock,
+        text.replace(
+            "\n[[package]]\nname = \"xuanji\"\nversion = \"0.2.1\"\n",
+            "\n",
+        ),
+    )
+    .expect("write");
+    commit(&fixture.repo, "chore: drop a package from the lockfile");
+    refuse(
+        &fixture.repo,
+        Kind::Violation,
+        "Cargo.lock is missing workspace package xuanji",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn an_internal_dependency_with_no_version_pin_is_a_violation() {
+    let root = scratch("unpinned-internal");
+    let fixture = build_fixture(&root, "unpinned-internal", "0.2.0");
+    let manifest = fixture.repo.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        text.replace(
+            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }",
+            "xuanji = { path = \"crates/xuanji\" }",
+        ),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: drop the internal pin");
+    refuse(&fixture.repo, Kind::Violation, "has no version pin");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_snapshot_whose_version_disagrees_with_its_subject_is_a_violation() {
+    let root = scratch("snapshot-mismatch");
+    let fixture = build_fixture(&root, "snapshot-mismatch", "0.2.0");
+    workspace_files(&fixture.repo, "0.3.0");
+    git(&fixture.repo, &["add", "."]);
+    git(
+        &fixture.repo,
+        &["commit", "-q", "--amend", "-m", "release: 0.2.0"],
+    );
+    refuse(
+        &fixture.repo,
+        Kind::Violation,
+        "release snapshot subject is 0.2.0 but workspace version is 0.3.0",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_release_subject_with_no_space_is_a_violation() {
+    let root = scratch("no-space-subject");
+    let fixture = build_fixture(&root, "no-space-subject", "0.2.0");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "release:0.3.0");
+    refuse(
+        &fixture.repo,
+        Kind::Violation,
+        "malformed release history subject",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The vacuity guards — the direction this judgement's own doc-comment argues for, and which nothing covered.
+///
+/// Each removes the thing an enumeration counts, so the loop that judges it would otherwise iterate nothing
+/// and report clean. That is the reads-as-coverage failure one level up.
+#[test]
+fn every_enumeration_refuses_rather_than_reporting_clean_over_nothing() {
+    for (name, wreck, needle) in [
+        (
+            "no internal path dependency",
+            "internal-pins" as &str,
+            "found no internal path dependency",
+        ),
+        (
+            "no example manifest",
+            "examples",
+            "found no example manifests",
+        ),
+        (
+            "no family requirement in any example",
+            "example-reqs",
+            "found no family dependency requirement",
+        ),
+    ] {
+        let root = scratch(wreck);
+        let fixture = build_fixture(&root, wreck, "0.2.0");
+        development_changelog(&fixture.repo, "0.2.0", true);
+        match wreck {
+            "internal-pins" => {
+                let manifest = fixture.repo.join("Cargo.toml");
+                let text = std::fs::read_to_string(&manifest).expect("read");
+                let cut = text
+                    .lines()
+                    .filter(|l| !l.contains("path = \"crates/"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                std::fs::write(&manifest, cut).expect("write");
+            }
+            "examples" => {
+                std::fs::remove_dir_all(fixture.repo.join("examples")).expect("remove examples");
+            }
+            "example-reqs" => {
+                std::fs::write(
+                    fixture.repo.join("examples/adopter/Cargo.toml"),
+                    "[package]\nname = \"adopter\"\nversion = \"0.0.0\"\nedition = \"2024\"\n",
+                )
+                .expect("write");
+            }
+            _ => unreachable!(),
+        }
+        commit(&fixture.repo, "chore: empty an enumeration");
+        refuse(&fixture.repo, Kind::CannotJudge, needle);
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = name;
+    }
+}

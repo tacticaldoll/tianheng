@@ -71,8 +71,11 @@ Contract forbids.
 A reaction gated behind an environment variable SHALL be named on its own line in the `AGENTS.md` Definition
 of Done and in the CI job that holds it.
 
-Two reactions are gated: the mutation suite checks out a worktree and builds it, and the examples suite builds
-seven separate crate graphs. Neither may run inside every `cargo test --workspace`. A reaction that runs only
+Two reactions are gated this way — the mutation suite, which checks out a worktree and builds it, and the
+examples suite, which builds seven separate crate graphs — and neither may run inside every
+`cargo test --workspace`. A third, the publish-source gate, is gated differently and deliberately: no
+development checkout is a release snapshot, so it is asked for by `scripts/publish.sh` at the one moment it
+can answer, which is where its run is decided and where it is named. A reaction that runs only
 when someone remembers is worse than one that costs — the cost is visible and the omission is not.
 
 #### Scenario: A gated reaction absent from the Definition of Done
@@ -130,7 +133,7 @@ sweep holds every tracked document to that declaration.
 A census phrase SHALL be specific enough to name its own set, and SHALL be matchable — a phrase spanning lines
 can never match a line-oriented sweep, and would be declared, enumerable and silent. Figures SHALL be read in
 digits **and in words**, because this repository's prose writes counts as words; a matcher reading digits only
-left two of the first four censuses declared here inert against the very documents they are for.
+left two of the four censuses first declared here inert against the very documents they are for.
 
 **What a census does not reach is declared rather than approximated.** A figure written in a sentence no
 census declares is unheld, and a figure about a **past state** is a record: holding it to today's enumeration

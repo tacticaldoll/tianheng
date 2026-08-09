@@ -157,9 +157,9 @@ resolves to a tracked file there, or a **directory** under `scripts/` written wi
 three are derived from the one enumeration — the directories by stripping components from each enumerated
 path — so none is a list written beside it.
 
-`CHANGELOG.md` is the adopter's document. It carries eight kinds of heading — `### Added`, `### Changed`,
-`### Fixed`, `### Migration`, `### Documentation`, `### Removed`, `### Compatibility` and
-`### Compatibility evidence` — and every one of them is an adopter's vocabulary. It offered none that was
+`CHANGELOG.md` is the adopter's document. It carries nine kinds of heading — `### Added`, `### Changed`,
+`### Fixed`, `### Migration`, `### Documentation`, `### Removed`, `### Compatibility`,
+`### Compatibility evidence` and `### Self-governance` — and every one of the first eight is an adopter's vocabulary. It offered none that was
 not, so every
 change to this repository's own governance machinery has been written into one of them. Measured: twenty
 entries name it — eleven in `[Unreleased]` and nine in the released `[0.4.0]`, across four different
@@ -207,7 +207,7 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
 
 #### Scenario: A bare basename the enumerator resolves
 
-- **WHEN** an entry under an adopter-facing heading names `check_pin_bites.sh` with no directory
+- **WHEN** an entry under an adopter-facing heading names `publish.sh` with no directory
 - **THEN** the reaction fails, because `git ls-files scripts/` resolves that basename to a tracked file
 
 #### Scenario: A gate named inside a longer span, or as unquoted prose

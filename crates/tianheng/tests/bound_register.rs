@@ -392,57 +392,8 @@ fn the_register_projection_is_generated_and_fresh() {
     );
 }
 
-#[test]
-fn no_hand_written_census_disagrees_with_the_register() {
-    let Some(root) = workspace_root() else {
-        return;
-    };
-    let bounds = parse_bounds(&root);
-    let total = bounds.len();
-    let capabilities: BTreeSet<&str> = bounds.iter().map(|b| b.capability.as_str()).collect();
-
-    let tracked = must(&root, "`git ls-files`", &["git", "ls-files"]);
-    let mut offences = Vec::new();
-    let pattern = regex_lite_census();
-    for path in tracked.lines().filter(|p| p.ends_with(".md")) {
-        let Ok(text) = std::fs::read_to_string(root.join(path)) else {
-            continue;
-        };
-        for (index, line) in text.lines().enumerate() {
-            if let Some((written_total, written_caps)) = pattern(line) {
-                if written_total == total && written_caps == capabilities.len() {
-                    continue;
-                }
-                offences.push(format!(
-                    "  {path}:{} writes \"{written_total} bounds across {written_caps} capabilities\" where \
-                     the register holds {total} across {} — a hand-written census of a set this reaction \
-                     enumerates goes stale silently",
-                    index + 1,
-                    capabilities.len()
-                ));
-            }
-        }
-    }
-    assert!(
-        offences.is_empty(),
-        "hand-written censuses disagreeing with the register:\n{}",
-        offences.join("\n")
-    );
-}
-
-/// Recognise `<n> bounds across <m> capabilities` without pulling in a regex dependency.
-fn regex_lite_census() -> impl Fn(&str) -> Option<(usize, usize)> {
-    |line: &str| {
-        let at = line.find(" bounds across ")?;
-        let before = line[..at].rsplit(|c: char| !c.is_ascii_digit()).next()?;
-        let rest = &line[at + " bounds across ".len()..];
-        let after: String = rest.chars().take_while(char::is_ascii_digit).collect();
-        if !rest[after.len()..].trim_start().starts_with("capabilit") {
-            return None;
-        }
-        Some((before.parse().ok()?, after.parse().ok()?))
-    }
-}
+// The census this file once swept for lives in `census.rs`, declared beside every other, so one
+// reaction holds them all. Two implementations of one comparison is what that file exists to end.
 
 #[test]
 fn an_absent_layout_is_loud_when_the_workspace_marker_is_set() {
