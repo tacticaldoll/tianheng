@@ -10,9 +10,9 @@
 //! each shape — and to refusing it with its **own** message, so that no two sites can stand in for each
 //! other.
 
-use jiaochou::refusal;
+use kanhe::refusal;
 
-use jiaochou::merge_message_gate as gate;
+use kanhe::merge_message_gate as gate;
 
 use gate::judge;
 use refusal::Kind;

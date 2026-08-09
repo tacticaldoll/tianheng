@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 0
       - name: repository release surfaces agree
         run: |
-          TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test release_coherence --test publish_source
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test release_coherence --test publish_source
 
   dod:
     name: Definition of Done
@@ -38,19 +38,19 @@ jobs:
           fetch-depth: 0
       - name: the local Definition of Done matches what CI runs
         run: |
-          TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test dod_coherence
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test dod_coherence
       - name: whitespace hygiene across every tracked text file
         run: |
-          TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test whitespace_hygiene
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test whitespace_hygiene
       - name: in-repository references resolve
         run: |
-          TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test reference_integrity
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test reference_integrity
       - name: every declared mutation kills the pin it names
         run: |
-          TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test pin_bites
+          TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test pin_bites
       - name: every refusal site is distinguished in both its contracts
         run: |
-          TIANHENG_REFUSAL_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test refusal_bites
+          TIANHENG_REFUSAL_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_bites
       - name: build / test / clippy / fmt / doc
         run: |
           cargo build --workspace
@@ -65,7 +65,7 @@ jobs:
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items
       - name: observation bounds are declared and defended
         run: |
-          TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test bound_register --test pin_bites
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register --test pin_bites
 
   msrv:
     name: MSRV (rust-version)

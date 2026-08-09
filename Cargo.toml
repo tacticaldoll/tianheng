@@ -14,7 +14,7 @@
 # WHEN built (drift law: no name without a reaction).
 [workspace]
 resolver = "2"
-members = ["crates/xuanji", "crates/xingbiao", "crates/hunyi", "crates/guibiao", "crates/louke", "crates/tianheng", "crates/shengmo", "crates/jiaochou"]
+members = ["crates/xuanji", "crates/xingbiao", "crates/hunyi", "crates/guibiao", "crates/louke", "crates/tianheng", "crates/shengmo", "crates/kanhe"]
 # Every fixture and example is its own workspace root (each carries `[workspace]`), which is what
 # actually keeps this workspace from absorbing their deliberate faults — `members` above is an
 # explicit list with no globs, so nothing under these trees is inferred into it. These two entries

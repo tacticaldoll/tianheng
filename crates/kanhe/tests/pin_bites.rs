@@ -24,7 +24,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const RECORDS: &str = "crates/jiaochou/tests/fixtures/pin_mutations.tsv";
+const RECORDS: &str = "crates/kanhe/tests/fixtures/pin_mutations.tsv";
 
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(

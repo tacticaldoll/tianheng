@@ -169,6 +169,13 @@ the name would mark nothing — the drift law's own prohibition rather than a st
 This says nothing about `xuanji` or `tianheng`, which are crates and are not instruments; it
 says a surface with no boundary earns no crate.
 
+**Two names are crates and are neither 儀 nor 司.** 繩墨 (the inked line) holds the law this repository
+declares over itself and the reactions that run the delivered product against this workspace; 勘合 (the split
+tally) holds the reactions that fit its record against itself. Both ship in **zero** packages, which is what
+separates governance from product here, and both are deliberately outside the observatory vocabulary: they
+measure nothing and administer nothing. 勘合 was first drafted as 校讎 — a word already spent above, on the
+amendment flow — and taking a name that already has a referent is the misnaming these crates exist to end.
+
 This paragraph replaced one reading *crate-or-convention as their nature dictates*, which
 answered nothing and was consulted three times. The three answers written for it were all
 withdrawn, each restating a law that was then only half reacted to. None of the three names

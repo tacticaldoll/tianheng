@@ -34,11 +34,11 @@
 //! malfunction — a false negative. Every instrument panic carries a marker, and a run carrying it is refused
 //! rather than concluded from.
 
-use jiaochou::refusal;
+use kanhe::refusal;
 
-use jiaochou::refusal_sites as sites;
+use kanhe::refusal_sites as sites;
 
-use jiaochou::refusal_exemptions as exemptions;
+use kanhe::refusal_exemptions as exemptions;
 
 use exemptions::Exemption;
 use sites::{Corpus, Site, Target};

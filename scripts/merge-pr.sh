@@ -9,7 +9,7 @@
 # undone. A merged squash cannot be repaired: amending it changes its hash, and the pull request's merge
 # record cites that hash, so the two would name different things afterwards.
 #
-# Nothing here carries a verdict. The judgement is `crates/jiaochou/tests/merge_message.rs`, a Rust reaction
+# Nothing here carries a verdict. The judgement is `crates/kanhe/tests/merge_message.rs`, a Rust reaction
 # like every other one judging this repository; this script gathers the inputs and refuses to reach `gh`
 # without it.
 #
@@ -85,7 +85,7 @@ title=$(gh pr view "$pr" --json title --jq .title)
 TIANHENG_MERGE_SUBJECT=$subject \
     TIANHENG_MERGE_TITLE=$title \
     TIANHENG_MERGE_BODY=$(cat -- "$body_file") \
-    cargo test --manifest-path "$repo/Cargo.toml" -p jiaochou --test merge_message \
+    cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test merge_message \
     -- --exact the_squash_message_is_the_pull_request_it_records
 
 exec gh pr merge "$pr" --squash --subject "$subject" --body-file "$body_file" "${passthrough[@]}"

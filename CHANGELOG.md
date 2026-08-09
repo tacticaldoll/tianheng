@@ -754,8 +754,8 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   Two unpublished members now hold it, split by what each judges. **繩墨 (shengmo)** — the inked line —
   carries the law 天衡 declares over itself, as library code rather than a function at line 69 of a 668-line
-  test file, and the reactions that run the delivered product against this workspace. **校讎 (jiaochou)** —
-  collation — carries the rest: two texts laid side by side to find where they disagree. The published
+  test file, and the reactions that run the delivered product against this workspace. **勘合 (kanhe)** — the
+  split tally — carries the rest: one record made in two halves, proven genuine by fitting them together. The published
   `tianheng` crate goes from 25 test targets in its tarball to 8, and the 8 are the ones whose subject is the
   packaged code. Nothing an adopter could run has left, and no API, binary, or behaviour moves.
 
@@ -919,7 +919,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   code doc was spelled in words. Most numbers here describe a *shape*, not a census.
 - **The class that produced three withdrawn attempts is recorded, and it grew when the paragraph landed.**
   `PROJECT.md` restates architectural facts the generated projection already carries, and states others —
-  locations, counts — that nothing carries. `crates/jiaochou/tests/reference_integrity.rs` holds that a cited path exists and
+  locations, counts — that nothing carries. `crates/kanhe/tests/reference_integrity.rs` holds that a cited path exists and
   is tracked; nothing holds that the thing described lives there, which is exactly the half a withdrawn
   attempt got wrong. Closing the crate question added **five** more location claims to that file, so the
   entry is filed larger than the branch it came from filed it, not smaller. Its trigger is a claim found

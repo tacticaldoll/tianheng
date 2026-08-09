@@ -1,4 +1,4 @@
-use jiaochou::region::Source;
+use kanhe::region::Source;
 
 #[test]
 fn executed_regions_respect_the_source_language() {

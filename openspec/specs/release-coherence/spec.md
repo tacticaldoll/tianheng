@@ -213,8 +213,8 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
 
 #### Scenario: A gate named inside a longer span, or as unquoted prose
 
-- **WHEN** an entry under an adopter-facing heading writes `` `bash crates/jiaochou/tests/pin_bites.rs --fix` ``, or
-  `` `` `crates/jiaochou/tests/pin_bites.rs` `` ``, or a span wrapped across a source line, or a markdown link whose
+- **WHEN** an entry under an adopter-facing heading writes `` `bash crates/kanhe/tests/pin_bites.rs --fix` ``, or
+  `` `` `crates/kanhe/tests/pin_bites.rs` `` ``, or a span wrapped across a source line, or a markdown link whose
   target is the gate, or the bare name with no backticks at all
 - **THEN** the reaction fails in every one of those, because the word is the unit rather than the span
 

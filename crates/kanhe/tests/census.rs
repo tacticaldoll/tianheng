@@ -4,9 +4,9 @@
 //! second reading of the same source. A second parse would let the census and
 //! the reaction disagree, which is the drift this exists to end.
 
-use jiaochou::bound_register_parse as register;
-use jiaochou::census;
-use jiaochou::refusal_sites as sites;
+use kanhe::bound_register_parse as register;
+use kanhe::census;
+use kanhe::refusal_sites as sites;
 
 use census::{Census, sweep};
 use register::{Citation, parse_bounds, workspace_root};

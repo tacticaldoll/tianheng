@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 use tianheng::check_constitution;
 use tianheng::prelude::*;
 
-use jiaochou::region::Source;
+use kanhe::region::Source;
 
 fn workspace_manifest() -> Option<PathBuf> {
     shengmo::workspace::locate(
