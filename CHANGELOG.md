@@ -744,6 +744,22 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **Four judgements answered about something other than what they read.** The publish gate asked
+  `check-ignore` about git's **quoted** spelling of a path — measured, a file named `ignored-普通` ignored by
+  a *tracked* `.gitignore` is listed as `"ignored-\346\231\256\351\200\232"`, that literal matches
+  nothing, and the gate refused a file the repository itself ignores. Every path is now carried in git's `-z`
+  form, so the bytes it asks about are the bytes it was given. The same function read that classifier's
+  *failure* as an empty classification; it now refuses. The bound register's package enumeration read the
+  working directory and dropped failed entries — which its own capability already forbade in writing — and now
+  reads tracked manifests, refusing rather than shortening. And the corpus anchor invented `/` where its
+  signature already carried an error channel; an invented anchor mislabels every observed file, because the
+  anchor *is* baseline identity.
+
+  Two things surfaced in the repair: git's pathspec `*` crosses directory separators unlike the shell's, so
+  the first enumeration also matched fixture manifests nested inside a member; and a classifier that cannot
+  run is not a state a fixture repository can be put into while `ls-files` still answers, so the judgement now
+  takes its classifier as an argument and both directions — failed, and matched nothing — are constructed.
+
 - **Both wrappers standing in front of an irreversible act could be disarmed by a rename, silently.** They
   reach their gate through `cargo test … -- --exact <name>`, and `libtest` exits `0` when that filter selects
   nothing — measured, and `0` again for an `#[ignore]`d test. So the exit status they read answers *did the

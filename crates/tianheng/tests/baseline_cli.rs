@@ -455,10 +455,15 @@ fn rewriting_an_existing_baseline_leaves_no_stray_temp_file() {
         "the atomic-rename write must land the document whole, not truncated: {rewritten_doc:?}"
     );
 
+    // This direction asserts an **absence**, so a dropped entry is a leftover it did not see. The entries it
+    // counts are the evidence; failing to read one is not the same as there being none.
     let sibling_temp_files: Vec<_> = std::fs::read_dir(path.parent().unwrap())
         .expect("read baseline's parent dir")
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.file_name())
+        .map(|entry| {
+            entry
+                .expect("a readable entry beside the baseline")
+                .file_name()
+        })
         .filter(|name| {
             name.to_string_lossy()
                 .starts_with(path.file_name().unwrap().to_string_lossy().as_ref())

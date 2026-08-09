@@ -71,44 +71,71 @@ fn read_worktree(repo: &Path, args: &[&str], what: &str) -> Result<String, Refus
 /// if it is **tracked** — measured, not read: an *untracked* `.gitignore` reports a repository-looking source
 /// while being no more part of the repository than the clone's own exclude file.
 ///
+/// **Every path is carried in git's `-z` form.** Git prints a name with special or non-ASCII bytes quoted,
+/// and a quoted spelling is a different string: measured, a file named `ignored-普通` ignored by a tracked
+/// `.gitignore` is listed as `"ignored-\346\231\256\351\200\232"`, `check-ignore` returns exit 1 for that
+/// literal, and the gate refused a file the repository itself ignores. Unquoting it here would be a third
+/// hand-rolled unescaper inside the judgement that decides whether a publish may proceed; `-z` removes the
+/// question instead of answering it.
+///
 /// An exclusion whose source cannot be shown to be tracked is treated as the checkout's. That is the
 /// conservative direction and it is deliberate: the alternative is granting an exemption on the strength of
 /// not having read one.
 pub fn hidden_by_the_checkout(repo: &Path) -> Result<Vec<String>, Refusal> {
-    let unexcluded = read_worktree(repo, &["ls-files", "--others"], "untracked files")?;
+    hidden_by_the_checkout_with(repo, classify)
+}
+
+/// The judgement above, with the exclusion classifier supplied.
+///
+/// Split so a direction can hand it a classifier that **failed** rather than one that matched nothing. The
+/// two are different facts and the refusal below says so; without this split the failing arm would be
+/// constructed by nothing, since a classifier that cannot run is not a state a fixture repository can be put
+/// into while `ls-files` and `status` still answer.
+pub fn hidden_by_the_checkout_with(
+    repo: &Path,
+    classify: impl Fn(&Path, &[&str]) -> Result<String, NoClassification>,
+) -> Result<Vec<String>, Refusal> {
+    let unexcluded = read_worktree(repo, &["ls-files", "-z", "--others"], "untracked files")?;
     let visible = read_worktree(
         repo,
-        &["status", "--porcelain=v1", "--untracked-files=all"],
+        &["status", "-z", "--porcelain=v1", "--untracked-files=all"],
         "state",
     )?;
+    // `-z` records are NUL-separated and carry no quoting. An untracked record is `?? <path>`; only a rename
+    // record carries a second path, and a rename is never untracked, which is all this comparison reads.
     let shown: Vec<&str> = visible
-        .lines()
-        .filter_map(|line| line.strip_prefix("?? "))
+        .split('\0')
+        .filter_map(|record| record.strip_prefix("?? "))
         .collect();
     let excluded: Vec<&str> = unexcluded
-        .lines()
+        .split('\0')
         .filter(|path| !path.is_empty() && !shown.contains(path))
         .collect();
     if excluded.is_empty() {
         return Ok(Vec::new());
     }
 
-    let mut args = vec!["check-ignore", "-v", "--no-index", "--"];
-    args.extend(excluded.iter().copied());
     // `check-ignore` exits 1 when it matched nothing, which for a path this function computed as excluded is
-    // a disagreement between two listings rather than an answer. Either way the source is unshown, and an
-    // unshown source is the checkout's.
-    let classified = git(repo, &args).unwrap_or_default();
+    // a disagreement between two listings rather than an answer: the source is unshown, and an unshown source
+    // is the checkout's. Any other failure is the classifier being unable to run, which is not the same fact
+    // — reading it as an empty classification lets an unusable classifier answer.
+    let classified = match classify(repo, &excluded) {
+        Ok(classified) => classified,
+        Err(NoClassification::MatchedNothing) => String::new(),
+        Err(NoClassification::Failed(err)) => {
+            return Err(cannot_judge(format!(
+                "could not classify which exclusion hides {} untracked path(s): {err}. An unusable \
+                 classifier is not one that found nothing",
+                excluded.len()
+            )));
+        }
+    };
 
     let mut sources: std::collections::BTreeMap<&str, &str> = std::collections::BTreeMap::new();
-    for line in classified.lines() {
-        let Some((left, path)) = line.split_once('\t') else {
-            continue;
-        };
-        // `<source>:<line>:<pattern>` — split from the right, since a source path may hold a colon.
-        let mut fields = left.rsplitn(3, ':');
-        let (_pattern, _line, source) = (fields.next(), fields.next(), fields.next());
-        if let Some(source) = source {
+    // `-z -v` emits four NUL-separated fields per answer: source, line, pattern, path.
+    let fields: Vec<&str> = classified.split('\0').collect();
+    for answer in fields.chunks(4) {
+        if let [source, _line, _pattern, path] = answer {
             sources.insert(path, source);
         }
     }
@@ -117,7 +144,7 @@ pub fn hidden_by_the_checkout(repo: &Path) -> Result<Vec<String>, Refusal> {
     for path in excluded {
         let source = sources.get(path).copied().unwrap_or("<unshown>");
         let tracked = source != "<unshown>"
-            && git(repo, &["ls-files", "--error-unmatch", "--", source]).is_ok();
+            && git(repo, &["ls-files", "--error-unmatch", "-z", "--", source]).is_ok();
         if !tracked {
             hidden.push(format!(
                 "  {path} — hidden by {source}, which this repository does not track"
@@ -125,6 +152,52 @@ pub fn hidden_by_the_checkout(repo: &Path) -> Result<Vec<String>, Refusal> {
         }
     }
     Ok(hidden)
+}
+
+/// Why `check-ignore` produced no classification: it matched nothing, or it could not run.
+pub enum NoClassification {
+    /// It ran and matched nothing.
+    MatchedNothing,
+    /// It could not run, which is not the same fact.
+    Failed(String),
+}
+
+/// Ask `check-ignore` which exclusion hides each path, feeding the paths as raw bytes on stdin.
+pub fn classify(repo: &Path, paths: &[&str]) -> Result<String, NoClassification> {
+    use std::io::Write;
+    let mut child = hermetic("git")
+        .args(["-c", "core.excludesFile=/dev/null"])
+        .args(["check-ignore", "-z", "-v", "--no-index", "--stdin"])
+        .current_dir(repo)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|err| NoClassification::Failed(format!("cannot run git check-ignore: {err}")))?;
+    {
+        let stdin = child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| NoClassification::Failed("check-ignore took no stdin".to_string()))?;
+        for path in paths {
+            stdin
+                .write_all(path.as_bytes())
+                .and_then(|()| stdin.write_all(b"\0"))
+                .map_err(|err| {
+                    NoClassification::Failed(format!("cannot write paths to check-ignore: {err}"))
+                })?;
+        }
+    }
+    let out = child
+        .wait_with_output()
+        .map_err(|err| NoClassification::Failed(format!("check-ignore did not finish: {err}")))?;
+    match out.status.code() {
+        Some(0) => Ok(String::from_utf8_lossy(&out.stdout).to_string()),
+        Some(1) => Err(NoClassification::MatchedNothing),
+        _ => Err(NoClassification::Failed(
+            String::from_utf8_lossy(&out.stderr).trim_end().to_string(),
+        )),
+    }
 }
 
 /// The `[workspace.package]` version, or the `[package]` version where there is no workspace table.
