@@ -18,10 +18,18 @@ use gate::judge;
 use refusal::Kind;
 
 const OK_SUBJECT: &str = "feat(tianheng): hold every refusal site to both of its contracts";
+/// Commit subjects a body could be the concatenation of, for directions not about that question.
+fn commits() -> Vec<String> {
+    vec![
+        "feat(x): one thing".to_string(),
+        "fix(y): another".to_string(),
+    ]
+}
+
 const OK_BODY: &str = "Why this exists and what contract it preserves.\n";
 
 fn refuse(subject: &str, body: &str, title: &str, kind: Kind, needle: &str) {
-    let refusal = judge(subject, body, title)
+    let refusal = judge(subject, body, title, &commits())
         .expect_err(&format!("expected a refusal containing {needle:?}"));
     assert_eq!(refusal.kind, kind, "{}", refusal.message);
     assert!(
@@ -43,7 +51,15 @@ fn the_squash_message_is_the_pull_request_it_records() {
     };
     let body = std::env::var("TIANHENG_MERGE_BODY").unwrap_or_default();
     let title = std::env::var("TIANHENG_MERGE_TITLE").unwrap_or_default();
-    match judge(&subject, &body, &title) {
+    // The pull request's own commit subjects, newline-separated. Absent, the judgement refuses rather than
+    // falling back to refusing every bulleted body.
+    let supplied: Vec<String> = std::env::var("TIANHENG_MERGE_COMMITS")
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(str::to_string)
+        .collect();
+    match judge(&subject, &body, &title, &supplied) {
         Ok(report) => eprintln!("{report}"),
         Err(refusal) => panic!("merge message ({:?}): {}", refusal.kind, refusal.message),
     }
@@ -54,7 +70,7 @@ fn the_squash_message_is_the_pull_request_it_records() {
 /// The whole shape, accepted — so every refusal below is about the thing it names.
 #[test]
 fn a_subject_that_is_its_title_with_a_body_is_accepted() {
-    let verdict = judge(OK_SUBJECT, OK_BODY, OK_SUBJECT);
+    let verdict = judge(OK_SUBJECT, OK_BODY, OK_SUBJECT, &commits());
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
@@ -135,7 +151,7 @@ fn a_breaking_subject_with_no_migration_footer_is_a_violation() {
         "names no `BREAKING CHANGE:` footer",
     );
     let with_footer = format!("{OK_BODY}\nBREAKING CHANGE: adopters regenerate their baseline.\n");
-    assert!(judge(subject, &with_footer, subject).is_ok());
+    assert!(judge(subject, &with_footer, subject, &commits()).is_ok());
 }
 
 #[test]
@@ -155,6 +171,40 @@ fn agent_attribution_anywhere_in_the_message_is_a_violation() {
     }
 }
 
+/// A summary may carry an exclamation mark; only the head marks a migration.
+#[test]
+fn a_bang_in_the_summary_is_not_a_breaking_marker() {
+    let subject = "fix(tianheng): preserve bang! in summaries";
+    let verdict = judge(subject, OK_BODY, subject, &commits());
+    assert!(verdict.is_ok(), "{:?}", verdict.err());
+}
+
+/// A terse body written as bullets none of which is a commit subject is self-contained.
+#[test]
+fn a_bullet_body_that_is_not_the_commit_subjects_is_accepted() {
+    let verdict = judge(
+        OK_SUBJECT,
+        "- Why: the contract this preserves.\n- Contract: what it must not break.\n",
+        OK_SUBJECT,
+        &["feat(x): one".to_string(), "fix(y): another".to_string()],
+    );
+    assert!(verdict.is_ok(), "{:?}", verdict.err());
+}
+
+/// Without the commit subjects the judgement refuses rather than falling back to the shape, which is the
+/// over-reaction reading them removes.
+#[test]
+fn a_body_judged_without_the_commit_subjects_cannot_be_judged() {
+    let refusal = judge(OK_SUBJECT, "- a bullet\n", OK_SUBJECT, &[])
+        .expect_err("no commit subjects is a refusal to judge, not a fallback");
+    assert_eq!(refusal.kind, Kind::CannotJudge);
+    assert!(
+        refusal.message.contains("commit subjects are unavailable"),
+        "{}",
+        refusal.message
+    );
+}
+
 #[test]
 fn an_empty_body_is_a_violation() {
     refuse(
@@ -170,7 +220,7 @@ fn an_empty_body_is_a_violation() {
 fn a_body_that_is_a_bare_commit_list_is_a_violation() {
     refuse(
         OK_SUBJECT,
-        "* feat: one thing\n* fix: another\n* docs: a third\n",
+        &format!("* {}\n* {}\n", commits()[0], commits()[1]),
         OK_SUBJECT,
         Kind::Violation,
         "bare list of commit subjects",
@@ -189,13 +239,21 @@ fn a_body_that_is_a_bare_commit_list_is_a_violation() {
 #[test]
 fn a_merge_made_outside_the_wrapper_is_not_observed() {
     // What the reaction does hold: a message handed to it.
-    assert!(judge(OK_SUBJECT, OK_BODY, OK_SUBJECT).is_ok());
-    assert!(judge(&format!("{OK_SUBJECT} (#1)"), OK_BODY, OK_SUBJECT).is_err());
+    assert!(judge(OK_SUBJECT, OK_BODY, OK_SUBJECT, &commits()).is_ok());
+    assert!(
+        judge(
+            &format!("{OK_SUBJECT} (#1)"),
+            OK_BODY,
+            OK_SUBJECT,
+            &commits()
+        )
+        .is_err()
+    );
 
     // What it cannot: a merge that never hands it one. There is no input to this function representing a
     // merge made elsewhere, which is the bound — the judgement is over a message, and a browser supplies
     // none. Reaching further would mean observing GitHub's server, not this repository.
-    let observed_without_a_message = judge("", "", "");
+    let observed_without_a_message = judge("", "", "", &commits());
     assert_eq!(
         observed_without_a_message.err().map(|r| r.kind),
         Some(Kind::CannotJudge),

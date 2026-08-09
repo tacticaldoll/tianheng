@@ -744,6 +744,17 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **The squash gate refused two legal shapes.** Any `!` in a subject was read as a breaking marker, so
+  `fix(tianheng): preserve bang! in summaries` was required to carry a `BREAKING CHANGE:` footer; it is now
+  read from the Conventional Commit head, which the same judgement already parses five lines above. And any
+  all-bullet body was read as GitHub's commit list, so a self-contained `- Why: …` / `- Contract: …` body was
+  refused for its formatting. The wrapper now supplies the pull request's own commit subjects and a body is a
+  bare list when every bullet **is** one of them — the exact question rather than a tighter resemblance, since
+  every commit here is conventional and a shape rule would refuse a hand-written `- fix: …` body while missing
+  a branch carrying one non-conventional subject. Read from `git log`, because GitHub's `messageHeadline`
+  truncates at 69 characters and this repository's subjects run longer. Without them the gate refuses to
+  judge rather than falling back to the shape.
+
 - **Four judgements answered about something other than what they read.** The publish gate asked
   `check-ignore` about git's **quoted** spelling of a path — measured, a file named `ignored-普通` ignored by
   a *tracked* `.gitignore` is listed as `"ignored-\346\231\256\351\200\232"`, that literal matches
