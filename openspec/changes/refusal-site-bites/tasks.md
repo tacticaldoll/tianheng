@@ -67,7 +67,7 @@
 - [x] 4.1 Unpoisoned control run per target set, required green before any site is poisoned
 - [x] 4.2 For each reached site, run its target set twice — `kind` then `message` — requiring some direction to
       fail under each, and requiring the run to have executed at least one test
-- [ ] 4.3 Report the residual the reaction measures: sites declared out of reach, and the count, in the shape
+- [x] 4.3 Report the residual the reaction measures: sites declared out of reach, and the count, in the shape
       `pin_bites` already uses for its uncovered remainder
 - [x] 4.4 **Measure and record the population, in two classes.** Done: `60 enumerated, 37 defended,
       0 undistinguished, 23 never reached` on the first run. The earlier 24 bounds neither class — it merges
@@ -129,8 +129,8 @@
       it and what the residual now is
 - [x] 7.3 Regenerate `docs/observation-bounds.md` and any projection whose figures moved; check no prose figure
       about this set was typed
-- [ ] 7.4 Full Definition of Done including MSRV 1.85 (**no let-chains**) and both gated suites
-- [ ] 7.5 `openspec validate refusal-site-bites`, sync the delta into
+- [x] 7.4 Full Definition of Done including MSRV 1.85 (**no let-chains**) and both gated suites
+- [x] 7.5 `openspec validate refusal-site-bites`, sync the delta into
       `openspec/specs/rust-self-governance-gates/spec.md`, archive the change
 - [ ] 7.6 One squash PR from `change/refusal-site-bites` into `release/0.5.0`, curated subject and body, no AI
       attribution
