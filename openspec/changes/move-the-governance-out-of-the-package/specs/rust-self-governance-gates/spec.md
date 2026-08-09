@@ -12,6 +12,13 @@ themselves failed it: `cargo package --list -p tianheng` carried all 50 files un
 reaction judging this repository's changelog, specs, scripts and documents reached every adopter, where it
 could only detect no workspace and return.
 
+Outside every published package is a floor, not the whole answer: it says where a reaction must **not** live
+and nothing about where it belongs. Reactions SHALL therefore be held apart by **what they judge** — the law
+this repository declares over itself and the reactions that run the delivered product against this workspace
+in one member, the reactions that collate its record against itself in another. Measured when only the floor
+was applied: 13 of 17 targets in a member whose stated identity was the law judged neither a product contract
+nor an architecture, which is the dilution the move set out to end.
+
 The location is not cosmetic. A repository's own law living under a published package's `tests/` lends its
 name to everything beside it, and a governance document came to state that twenty reactions reaching no
 shipped API "run Tianheng's own reactions against the workspace". Position is what makes the two populations
