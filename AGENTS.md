@@ -238,8 +238,12 @@ itself an undetected drift, invisible to a diff-only read (the 0.3.0 `finding_ke
   public/migration effect and whether manifests or package versions changed. Verification names the
   commands and external consumers actually checked — never an unqualified "tests pass" — and, for
   each new guard, the failure observed without the change (see *Adversarial review stance* above).
-- **Curated squash message.** For a development PR into a release branch, set the squash subject
-  exactly to the PR title with no auto-appended `(#N)`. Replace GitHub's concatenated commit list
+- **Curated squash message, through `scripts/merge-pr.sh`.** For a development PR into a release branch, set
+  the squash subject exactly to the PR title with no auto-appended `(#N)`. That is the sanctioned path: the
+  wrapper reads the PR title, runs `crates/tianheng/tests/merge_message.rs` over the proposed message, and
+  only then reaches `gh pr merge --squash`. This rule was stated here and missed anyway — nine subjects in
+  this repository's history carry the serial — and a merged squash cannot be repaired, because amending it
+  changes the hash the pull request's merge record cites. Replace GitHub's concatenated commit list
   with a self-contained body distilled from the PR's why, reaction, and compatibility result;
   retain any `BREAKING CHANGE:` footer. The branch's fine-grained commits remain review provenance,
   not the release branch's message body.

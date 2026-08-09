@@ -744,6 +744,26 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **The squash-message rule gains a reaction, and a wrapper to reach it through.** `AGENTS.md` said the squash
+  subject is the pull request's title with **no auto-appended `(#N)`**, and nothing held it: nine subjects in
+  this repository's history carry that serial, the most recent on the commit that landed a reaction for a
+  requirement enforced by nothing.
+
+  The rule cannot be held where rules are usually held here, and that was measured rather than assumed. A
+  squash merge runs on GitHub's servers, so no local commit exists and no `commit-msg` hook runs. Both values
+  of `squash_merge_commit_title` append the serial, so the repository setting cannot suppress it. The serial
+  is GitHub's rather than the title's, so a check on the title changes nothing. What remains is one string
+  passed at merge time — at the moment a record lands and stops being repairable, since amending a merged
+  squash changes the hash its pull request cites.
+
+  So `scripts/merge-pr.sh` stands in front of `gh pr merge` the way `scripts/publish.sh` stands in front of
+  `cargo publish`, and carries no verdict of its own: the judgement is a Rust reaction with a failure matrix,
+  returning the shared kinded refusal so its own construction sites are swept like every other. It holds the
+  subject to being the title, to carrying no serial, and to Conventional Commit shape; a breaking subject to
+  naming its migration; and the body to being non-empty, free of agent attribution, and not the concatenated
+  commit list the rule exists to replace. A merge made in a browser reaches no wrapper, and that is declared
+  as a bound rather than implied.
+
 - **The sweep that shows a refusal is defended is now a reaction, and it separates two facts the sweep could
   not.** Four adversarial rounds over this window each found the class the previous round had repaired, and
   the decisive difference was the method: disabling an `if` and re-running finds a branch nothing reaches;
