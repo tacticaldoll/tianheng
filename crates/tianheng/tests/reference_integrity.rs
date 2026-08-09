@@ -271,6 +271,18 @@ fn offences_in(
         if !rel_path.ends_with(".md") && !rel_path.ends_with(".rs") {
             continue;
         }
+        // Counted before the exclusion below, because the guard downstream asks whether the **enumeration**
+        // produced anything — a file deliberately left unjudged is still evidence that it did, while zero
+        // files of either extension means the corpus never arrived.
+        inspected += 1;
+        // An active plan names what it intends to create, so judging it for existence refuses a proposal for
+        // describing its own deliverable. The requirement states this exclusion and carries a scenario for it;
+        // nothing held either until a plan first named a path that did not exist yet, and the reaction then
+        // reported five offences against the change proposing them. Filtered here rather than at the caller,
+        // so the fixture below exercises the same judgement the reaction runs.
+        if rel_path.starts_with("openspec/changes/") {
+            continue;
+        }
         let Ok(content) = std::fs::read_to_string(corpus_root.join(rel_path)) else {
             panic!(
                 "cannot read tracked file '{rel_path}' — a file this reaction claims to have inspected must \
@@ -524,5 +536,48 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
         unseen.is_empty(),
         "an extraction form names something absent and the reaction says nothing:\n{}",
         unseen.join("\n")
+    );
+}
+
+/// `reference-integrity`'s scenario *An active OpenSpec plan names future paths*, held.
+///
+/// One body, two locations. Outside a plan it must be refused; inside one it must not — so the exclusion
+/// cannot pass by the reference being unrecognizable, which is what asserting only the second half would
+/// allow.
+#[test]
+fn an_active_plan_may_name_a_path_it_intends_to_create() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let tracked_paths = tracked(&root);
+    let scratch = std::env::temp_dir().join(format!(
+        "tianheng-reference-integrity-plan-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&scratch);
+
+    // Under a **tracked** member: an untracked crate directory is unenforceable by design, so a probe there
+    // would be unrefused for a reason that has nothing to do with the exclusion being tested.
+    let body = "The member will hold `crates/tianheng/src/zzz_absent_planned_dir/`.\n";
+    let outside = "probe-outside-a-plan.md";
+    let inside = "openspec/changes/zzz-probe-plan/proposal.md";
+    for path in [outside, inside] {
+        let full = scratch.join(path);
+        std::fs::create_dir_all(full.parent().expect("a parent")).expect("scratch subdir");
+        std::fs::write(full, body).expect("write the probe");
+    }
+
+    let seen_outside = offences_in(&root, &scratch, &tracked_paths, &[outside.to_string()]);
+    let seen_inside = offences_in(&root, &scratch, &tracked_paths, &[inside.to_string()]);
+    let _ = std::fs::remove_dir_all(&scratch);
+
+    assert!(
+        !seen_outside.is_empty(),
+        "the same reference outside a plan must be refused, or the exclusion below proves nothing"
+    );
+    assert!(
+        seen_inside.is_empty(),
+        "an active plan naming a path it intends to create must not be a stale reference, but got:\n{}",
+        seen_inside.iter().cloned().collect::<Vec<_>>().join("\n")
     );
 }
