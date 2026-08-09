@@ -744,6 +744,13 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **The two unpublished members carry a front page of their own.** `繩墨` and `勘合` are what a reader meets
+  first when browsing `crates/`, and they are the two most likely to be misread as a seventh and eighth
+  product crate — which is the confusion this window exists to end. Each now says what it is, what it is
+  **not** (no 儀, no 司), and that `cargo publish` packages neither; the root README says the same where it
+  already pointed at the self-law. Hand-written in the family's style rather than generated: no other crate's
+  README is a projection, and inventing that mechanism for these two would replace one asymmetry with another.
+
 - **The squash gate refused two legal shapes.** Any `!` in a subject was read as a breaking marker, so
   `fix(tianheng): preserve bang! in summaries` was required to carry a `BREAKING CHANGE:` footer; it is now
   read from the Conventional Commit head, which the same judgement already parses five lines above. And any
