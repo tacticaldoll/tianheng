@@ -536,5 +536,29 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_heading_inside_a_fenced_block_is_a_stated_bound",
         ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "rust-self-governance-gates/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound",
+            ),
+            "a refusal site declaring itself out of reach for a reason no fixture can falsify",
+            Extent::OutOfReach {
+                because: "the reaction observes that no direction reaches the site, never that none could; \
+                          reaching further would mean constructing the environment the declaration says is \
+                          unconstructible".into(),
+            },
+            "a_site_declared_out_of_reach_is_only_observed_to_be_unreached",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "rust-self-governance-gates/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound",
+            ),
+            "a second kinded refusal contract declared under other names, or inside the scan's own sources",
+            Extent::OutOfReach {
+                because: "the scan recognises the shared vocabulary's exact names; recognising a contract by \
+                          intent is a judgement over source, and no compile-time construction reaches a \
+                          reaction not yet written".into(),
+            },
+            "a_refusal_vocabulary_under_other_names_is_not_observed",
+        ),
     ]
 }

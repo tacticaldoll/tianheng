@@ -15,31 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Kind {
-    Violation,
-    CannotJudge,
-}
-
-#[derive(Debug, Clone)]
-pub struct Refusal {
-    pub kind: Kind,
-    pub message: String,
-}
-
-fn violation(message: impl Into<String>) -> Refusal {
-    Refusal {
-        kind: Kind::Violation,
-        message: message.into(),
-    }
-}
-
-fn cannot_judge(message: impl Into<String>) -> Refusal {
-    Refusal {
-        kind: Kind::CannotJudge,
-        message: message.into(),
-    }
-}
+use crate::refusal::{Refusal, cannot_judge, violation};
 
 pub fn hermetic(program: &str) -> Command {
     let mut command = Command::new(program);
@@ -183,10 +159,17 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     let subjects = git(repo, &["log", "--format=%H%x09%s"])
         .map_err(|err| cannot_judge(format!("could not read the release history: {err}")))?;
     let mut history: Vec<(String, String)> = Vec::new();
+    // HEAD's own commit is the first line this log produced, so asking git for it again would be a second
+    // read of something already in hand — and a refusal guarding that second read is a branch no input can
+    // take. Taken here instead.
+    let mut head: Option<String> = None;
     for line in subjects.lines() {
         let Some((commit, subject)) = line.split_once('\t') else {
             continue;
         };
+        if head.is_none() {
+            head = Some(commit.to_string());
+        }
         if let Some(rest) = subject.strip_prefix("release: ") {
             if semver(rest).is_none() {
                 return Err(violation(format!(
@@ -207,8 +190,10 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
         ));
     };
     let previous_release = history.get(1).map(|(_, v)| v.clone());
-    let head = git(repo, &["rev-parse", "HEAD"])
-        .map_err(|err| cannot_judge(format!("could not read HEAD: {err}")))?;
+    // A release commit exists, so at least one line of the log parsed, so this is Some. Provable from the
+    // loop above rather than assumed about git.
+    let head =
+        head.expect("the log line that produced a release commit also produced HEAD's own commit");
 
     let state = if head == release_commit {
         if version != release_version {

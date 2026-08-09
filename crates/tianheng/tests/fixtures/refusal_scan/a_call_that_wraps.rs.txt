@@ -1,0 +1,4 @@
+fn judge() -> Result<(), Refusal> {
+    return Err(cannot_judge
+        ("the input could not be read"));
+}

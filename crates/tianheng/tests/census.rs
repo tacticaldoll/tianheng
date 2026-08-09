@@ -6,8 +6,14 @@
 
 #[path = "support/census.rs"]
 mod census;
+#[path = "support/refusal_exemptions.rs"]
+mod exemptions;
+#[path = "support/refusal.rs"]
+mod refusal;
 #[path = "support/bound_register_parse.rs"]
 mod register;
+#[path = "support/refusal_sites.rs"]
+mod sites;
 
 use census::{Census, sweep};
 use register::{Citation, parse_bounds, workspace_root};
@@ -42,6 +48,17 @@ fn every_declared_census_agrees_with_what_produces_it() {
         .iter()
         .filter(|b| !matches!(b.citation, Citation::PinnedBy(_)))
         .count();
+    let corpus = sites::build(&root);
+    assert!(
+        corpus.offences.is_empty(),
+        "the refusal-site enumeration this census is produced from is not sound:\n{}",
+        corpus.offences.join("\n")
+    );
+    let refusal_sites = corpus.sites;
+    let out_of_reach = refusal_sites
+        .iter()
+        .filter(|s| s.declares_out_of_reach())
+        .count();
 
     // What is NOT declared here, and why. `[Unreleased]`'s prose states how many entries named this
     // repository's machinery BEFORE the section was collapsed — a historical observation, not a live count,
@@ -59,6 +76,13 @@ fn every_declared_census_agrees_with_what_produces_it() {
             subject: "declared observation bounds with no pinning test",
             phrase: "{} of {} declared bounds have no pinning test",
             figures: vec![unpinned, bounds.len()],
+        },
+        Census {
+            subject: "refusal sites declared out of reach",
+            phrase: "{} of {} refusal sites are declared out of reach",
+            // Produced by the same enumeration `refusal_bites` perturbs, not by a second reading of the same
+            // source: a census and the reaction it is about must not be able to disagree.
+            figures: vec![out_of_reach, refusal_sites.len()],
         },
     ];
 

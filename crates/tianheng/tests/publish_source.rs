@@ -11,10 +11,14 @@
 //! and to refusing them as a **violation** rather than as a cannot-judge, because an operator standing before
 //! an irreversible act must be able to tell "the source disagrees" from "the source could not be read".
 
+#[path = "support/refusal.rs"]
+mod refusal;
+
 #[path = "support/publish_source_gate.rs"]
 mod gate;
 
-use gate::{Kind, build_fixture, hermetic, judge};
+use gate::{build_fixture, hermetic, judge};
+use refusal::Kind;
 use std::path::{Path, PathBuf};
 
 fn locate_layout(root: PathBuf, marker_set: bool) -> Option<PathBuf> {
@@ -406,6 +410,165 @@ fn a_remote_that_cannot_be_read_cannot_be_judged() {
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("could not read refs/heads/main"),
+        "{}",
+        refusal.message
+    );
+}
+
+// --- the inputs this judgement cannot read ---------------------------------------------------------------
+//
+// Found by running the refusal-site sweep rather than by reading: a `cannot_judge` no direction constructs is
+// a refusal whose kind and message can both change with the suite green — and this gate stands in front of an
+// irreversible act, where the kind is what an operator acts on.
+
+/// An index git cannot parse: the worktree state cannot be read, which is not a dirty worktree.
+///
+/// Measured against real git before being relied on: a corrupt index fails `status` and `ls-files` while
+/// `rev-parse --is-inside-work-tree` and `log` still answer, so the judgement reaches this point rather than
+/// refusing earlier for a different reason.
+#[test]
+fn a_worktree_state_that_cannot_be_read_cannot_be_judged() {
+    let root = scratch("unreadable-index");
+    let fixture = build_fixture(&root, "unreadable-index", "9.9.9");
+    std::fs::write(fixture.repo.join(".git/index"), b"not an index").expect("corrupt the index");
+    let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("an unreadable worktree state must be refused");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal
+            .message
+            .contains("could not read the worktree state"),
+        "{}",
+        refusal.message
+    );
+}
+
+/// A repository with no commit, whose worktree still reads clean because everything in it is ignored.
+///
+/// The clean worktree is what makes this reachable at all: without it the judgement refuses one step earlier,
+/// for being dirty rather than for having no HEAD.
+#[test]
+fn a_repository_with_no_commit_cannot_have_its_head_read() {
+    let root = scratch("no-commit");
+    let repo = root.join("repo");
+    std::fs::create_dir_all(&repo).expect("create");
+    git(&repo, &["init", "-q", "-b", "main"]);
+    std::fs::write(repo.join(".gitignore"), "*\n").expect("write");
+    std::fs::write(
+        repo.join("Cargo.toml"),
+        "[workspace.package]\nversion = \"9.9.9\"\n",
+    )
+    .expect("write");
+    let verdict = judge(&repo, "origin");
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a repository with no commit must be refused");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("could not read HEAD"),
+        "{}",
+        refusal.message
+    );
+}
+
+/// The object file a loose git object lives in, asserted to exist before it is removed.
+///
+/// A fixture that packed its objects would leave the file absent and the corruption unapplied — a perturbation
+/// that never happened reads as a judgement that did.
+fn drop_object(repo: &Path, sha: &str) {
+    let (dir, rest) = sha.split_at(2);
+    let object = repo.join(".git/objects").join(dir).join(rest);
+    assert!(
+        object.is_file(),
+        "{object:?} is not a loose object, so removing it would not corrupt anything and the direction below \
+         would be about an intact repository"
+    );
+    std::fs::remove_file(&object).expect("remove the object");
+}
+
+fn rev(repo: &Path, what: &str) -> String {
+    let out = hermetic("git")
+        .args(["rev-parse", what])
+        .current_dir(repo)
+        .output()
+        .expect("run git rev-parse");
+    assert!(out.status.success(), "git rev-parse {what} failed");
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+/// The tag ref resolves and the tag object is gone: it cannot be read, which is not "it is lightweight".
+#[test]
+fn a_tag_whose_object_is_missing_cannot_be_read() {
+    let root = scratch("missing-tag");
+    let fixture = build_fixture(&root, "missing-tag", "9.9.9");
+    drop_object(&fixture.repo, &rev(&fixture.repo, "refs/tags/v9.9.9"));
+    let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a missing tag object must be refused");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("could not read the tag object"),
+        "{}",
+        refusal.message
+    );
+}
+
+/// A commit HEAD depends on is missing: its subject cannot be read, which is not a wrong subject.
+///
+/// Reading `HEAD` itself answers and `git status` answers, because both need only HEAD's own object. Reading
+/// its **subject** traverses parents — measured, not assumed: removing HEAD's own object made `status` refuse
+/// first, and removing an ancestor's is what leaves this the first thing that cannot be read.
+#[test]
+fn a_head_whose_ancestor_is_missing_cannot_have_its_subject_read() {
+    let root = scratch("missing-ancestor");
+    let fixture = build_fixture(&root, "missing-ancestor", "9.9.9");
+    let tagged = rev(&fixture.repo, "refs/tags/v9.9.9^{commit}");
+    std::fs::write(fixture.repo.join("later.txt"), "later").expect("write");
+    git(&fixture.repo, &["add", "."]);
+    git(&fixture.repo, &["commit", "-qm", "release: 9.9.9"]);
+    drop_object(&fixture.repo, &tagged);
+    let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a missing ancestor object must be refused");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("could not read HEAD's subject"),
+        "{}",
+        refusal.message
+    );
+}
+
+/// The tag object reads and the commit it names does not: the tag cannot be resolved to a commit.
+///
+/// HEAD is an **orphan** commit carrying the same release subject, so reading its subject traverses no
+/// parents — measured, not assumed: a HEAD with the missing commit as an ancestor refuses one step earlier,
+/// which is the direction above. Everything before this point reads objects that are still there; only
+/// peeling the tag needs the one that is gone.
+#[test]
+fn a_tag_whose_commit_is_missing_cannot_be_resolved() {
+    let root = scratch("missing-tag-commit");
+    let fixture = build_fixture(&root, "missing-tag-commit", "9.9.9");
+    let tagged = rev(&fixture.repo, "refs/tags/v9.9.9^{commit}");
+    git(&fixture.repo, &["checkout", "-q", "--orphan", "detached"]);
+    git(&fixture.repo, &["rm", "-rq", "--cached", "."]);
+    std::fs::write(fixture.repo.join("only.txt"), "orphan").expect("write");
+    for stray in ["Cargo.toml", "CHANGELOG.md"] {
+        let _ = std::fs::remove_file(fixture.repo.join(stray));
+    }
+    std::fs::write(
+        fixture.repo.join("Cargo.toml"),
+        "[workspace.package]\nversion = \"9.9.9\"\n",
+    )
+    .expect("write");
+    git(&fixture.repo, &["add", "-A"]);
+    git(&fixture.repo, &["commit", "-qm", "release: 9.9.9"]);
+    drop_object(&fixture.repo, &tagged);
+    let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a tag naming a missing commit must be refused");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("could not resolve"),
         "{}",
         refusal.message
     );

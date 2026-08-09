@@ -207,7 +207,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **74 bounds across 23 capabilities** — a live figure rather than part of the measurement
+  currently holds **76 bounds across 23 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/tianheng/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -561,28 +561,14 @@ consumer for an undemonstrated deduplication.
   distinction is enumerable rather than a convention; the expensive form is a second directory, which would
   move files every gate resolves by path.
 
-- **WATCH: a refusal site is defended only if some direction dies when its kind is swapped or its message
-  sentinelled — and twenty-four are not.** *Observed pressure:* four adversarial rounds over one window, each
-  finding the class the previous round had repaired. The decisive difference was the METHOD: my sweep disabled
-  an `if` condition and re-ran; review swapped `violation`↔`cannot_judge` at each construction site **and**
-  prefixed the message with a sentinel. The second finds everything the first does and also finds a direction
-  that asserts a refusal happened without asserting which. *Observation source:* that sweep, run over
-  `crates/tianheng/tests/support/publish_source_gate.rs` (25 sites, 12 surviving) and
-  `crates/tianheng/tests/support/release_coherence_gate.rs` (35 sites, 12 surviving) at `22ec98e`. Four
-  survivors are trivially reachable — a root with no manifest, no changelog, no git history, and an examples
-  directory that reads empty — and the rest include `ssh-keygen` being unavailable and the signature
-  mechanism failing its own round trip. *Current reaction or bound:* none; the sweep is a review technique,
-  not a reaction, which is why each round found what the last one missed. *Risk:* a refusal that no direction
-  distinguishes can change kind or message silently, and the kind is what an operator acts on before an
-  irreversible act. *Promotion trigger:* **fired** — the survivors are measured, not hypothesised. *Version
-  class:* patch; repository-internal, shipping in no crate. *Authority:* `rust-self-governance-gates`, which
-  already requires every refusal to have been seen to fail. *Shape:* `pin_bites` generalised. It already
-  checks out a detached worktree, perturbs it, and requires a cited test to die; the same machinery over
-  every refusal construction site, with the perturbation being the kind swap and the message sentinel, turns
-  the review technique into the reaction. It must be env-gated for the same reason `pin_bites` is — roughly
-  sixty sites, one build each — and named where its run is decided. *Why not hand-pinning the twenty-four:*
-  it would close this instance and not the class, and three rounds of exactly that is what produced this
-  entry.
+- ~~**WATCH: a refusal site is defended only if some direction dies when its kind is swapped or its message
+  sentinelled — and twenty-four are not.**~~ **Closed** by `crates/tianheng/tests/refusal_bites.rs`, which
+  turns the review technique into a reaction and, in doing so, corrects the entry: the twenty-four merged two
+  populations a hand-run sweep cannot separate, because a perturbation kills nothing both when no direction
+  distinguishes a site and when no direction reaches it. Measured separately on the current tree:
+  `58 enumerated, 52 defended, 6 declared out of reach, 0 undistinguished, 0 unreached and unclaimed, 0 stale`.
+  The residual was closed in order — fourteen sites constructed, two deleted as second reads of something the
+  judgement already held, six declared with a slug joined in both directions to a bound.
 
 - **WATCH: the self-governance residual is a judgement over an entry's subject.** *Observed pressure:*
   `CHANGELOG.md` is the adopter's document and offered no heading that was not an adopter's vocabulary, so

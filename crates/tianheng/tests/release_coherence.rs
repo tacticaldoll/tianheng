@@ -6,13 +6,17 @@
 //! reading only "non-zero" was blind to exactly the regression the shell era's shared backstop introduced,
 //! where every genuine incoherence was reported as cannot-judge with CI green throughout.
 
+#[path = "support/refusal.rs"]
+mod refusal;
+
 #[path = "support/release_coherence_gate.rs"]
 mod gate;
 
 use gate::{
-    Kind, build_fixture, commit, development_changelog, hermetic, judge, release_changelog,
+    build_fixture, commit, development_changelog, hermetic, judge, release_changelog,
     workspace_files,
 };
+use refusal::Kind;
 use std::path::{Path, PathBuf};
 
 fn locate_layout(root: PathBuf, marker_set: bool) -> Option<PathBuf> {
@@ -874,4 +878,166 @@ fn every_enumeration_refuses_rather_than_reporting_clean_over_nothing() {
         refuse(&fixture.repo, Kind::CannotJudge, needle);
         let _ = std::fs::remove_dir_all(&root);
     }
+}
+
+// --- the inputs this judgement cannot read ---------------------------------------------------------------
+//
+// Every direction below constructs a refusal that no direction previously reached. They were found by
+// running the refusal-site sweep rather than by reading: a `cannot_judge` nothing constructs is a refusal
+// whose kind and whose message can both change with the suite green, and the kind is what an operator acts
+// on before an irreversible act.
+
+/// A bare directory, before anything has been laid out in it.
+fn bare(root: &Path, name: &str) -> PathBuf {
+    let repo = root.join(name);
+    std::fs::create_dir_all(&repo).expect("the fixture root is writable");
+    repo
+}
+
+fn initialised(repo: &Path) {
+    git(repo, &["init", "-q", "-b", "main"]);
+    git(repo, &["config", "user.name", "T"]);
+    git(repo, &["config", "user.email", "t@example.invalid"]);
+    git(repo, &["config", "commit.gpgsign", "false"]);
+}
+
+#[test]
+fn a_root_without_a_manifest_cannot_be_judged() {
+    let root = scratch("no-manifest");
+    let repo = bare(&root, "repo");
+    refuse(&repo, Kind::CannotJudge, "has no Cargo.toml");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_root_without_a_changelog_cannot_be_judged() {
+    let root = scratch("no-changelog");
+    let repo = bare(&root, "repo");
+    std::fs::write(repo.join("Cargo.toml"), "[workspace]\n").expect("write");
+    refuse(&repo, Kind::CannotJudge, "has no CHANGELOG.md");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// Not a git worktree at all — a different fact from a history too shallow to read.
+#[test]
+fn a_root_that_is_not_a_worktree_cannot_be_judged() {
+    let root = scratch("no-worktree");
+    let repo = bare(&root, "repo");
+    std::fs::write(repo.join("Cargo.toml"), "[workspace]\n").expect("write");
+    std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
+    refuse(&repo, Kind::CannotJudge, "has no git history");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_manifest_with_no_workspace_version_cannot_be_judged() {
+    let root = scratch("no-version");
+    let repo = bare(&root, "repo");
+    initialised(&repo);
+    std::fs::write(
+        repo.join("Cargo.toml"),
+        "[workspace.package]\nedition = \"2024\"\n",
+    )
+    .expect("write");
+    std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
+    refuse(
+        &repo,
+        Kind::CannotJudge,
+        "workspace version is missing or malformed",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A repository with no commit at all: the release history cannot be read, which is not a shallow clone.
+#[test]
+fn a_repository_with_no_commit_cannot_have_its_history_read() {
+    let root = scratch("no-commit");
+    let repo = bare(&root, "repo");
+    initialised(&repo);
+    std::fs::write(
+        repo.join("Cargo.toml"),
+        "[workspace.package]\nversion = \"0.2.0\"\n",
+    )
+    .expect("write");
+    std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
+    refuse(
+        &repo,
+        Kind::CannotJudge,
+        "could not read the release history",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A tracked path that is a directory where a file is expected: the read fails rather than returning empty.
+#[test]
+fn a_lockfile_that_is_a_directory_cannot_be_read() {
+    let root = scratch("lock-directory");
+    let fixture = build_fixture(&root, "lock-directory", "0.2.0");
+    std::fs::remove_file(fixture.repo.join("Cargo.lock")).expect("remove the lockfile");
+    std::fs::create_dir(fixture.repo.join("Cargo.lock")).expect("put a directory in its place");
+    refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "could not read Cargo.lock",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn an_absent_crate_directory_cannot_be_enumerated() {
+    let root = scratch("no-crates");
+    let fixture = build_fixture(&root, "no-crates", "0.2.0");
+    std::fs::remove_dir_all(fixture.repo.join("crates")).expect("remove crates/");
+    refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "found no workspace crate manifests",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The directory is there and holds no manifest — a different read from the directory being absent.
+#[test]
+fn a_crate_directory_holding_no_manifest_cannot_be_enumerated() {
+    let root = scratch("empty-crates");
+    let fixture = build_fixture(&root, "empty-crates", "0.2.0");
+    std::fs::remove_dir_all(fixture.repo.join("crates")).expect("remove crates/");
+    std::fs::create_dir(fixture.repo.join("crates")).expect("recreate it empty");
+    refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "found no workspace crate manifests under crates/",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A member manifest that is a file and is still not readable **as text**.
+///
+/// A directory in its place is skipped, because the enumeration asks `is_file()` first — measured, not
+/// assumed: the first attempt put a directory there and the judgement sailed past to a later check. Invalid
+/// UTF-8 is the shape that satisfies `is_file()` and fails the read, and it needs no permission games that a
+/// run as root would defeat.
+#[test]
+fn a_member_manifest_that_is_not_text_cannot_be_read() {
+    let root = scratch("manifest-not-text");
+    let fixture = build_fixture(&root, "manifest-not-text", "0.2.0");
+    let manifest = fixture.repo.join("crates/xuanji/Cargo.toml");
+    std::fs::write(&manifest, [0x5b, 0x70, 0xff, 0xfe, 0x5d])
+        .expect("write bytes that are not UTF-8");
+    refuse(&fixture.repo, Kind::CannotJudge, "could not read");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The machinery enumeration reads the index; an index git cannot parse cannot be enumerated.
+#[test]
+fn machinery_that_cannot_be_enumerated_cannot_be_judged() {
+    let root = scratch("unreadable-index");
+    let fixture = build_fixture(&root, "unreadable-index", "0.2.0");
+    std::fs::write(fixture.repo.join(".git/index"), b"not an index").expect("corrupt the index");
+    refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "could not enumerate scripts/",
+    );
+    let _ = std::fs::remove_dir_all(&root);
 }
