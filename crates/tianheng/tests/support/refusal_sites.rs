@@ -293,12 +293,46 @@ fn signature_from(lines: &[&str], index: usize) -> String {
     joined
 }
 
+/// Comment-only lines blanked, byte offsets preserved so an offset still maps to its line.
+///
+/// A whole-text scan is what lets a call wrap; blanking rather than dropping is what keeps the offsets of
+/// everything after a comment correct.
+fn masked(text: &str) -> String {
+    let mut bytes = text.as_bytes().to_vec();
+    let mut at = 0usize;
+    for line in text.lines() {
+        if line.trim_start().starts_with("//") {
+            bytes[at..at + line.len()].fill(b' ');
+        }
+        at += line.len() + 1;
+        if at > bytes.len() {
+            break;
+        }
+    }
+    String::from_utf8(bytes).expect("blanking whole lines with spaces preserves UTF-8")
+}
+
+/// The 1-based line an offset falls on.
+fn line_of(starts: &[usize], offset: usize) -> u32 {
+    match starts.binary_search(&offset) {
+        Ok(index) => index as u32 + 1,
+        Err(index) => index as u32,
+    }
+}
+
 /// One file's sites, and its offences against the vocabulary being singular.
 ///
-/// `owns_the_scan` exempts only the **vocabulary** offences, never the site enumeration: the reaction's own
-/// sources hold the needles as literals, but they hold no refusal construction. `can_construct` says whether
-/// the shared vocabulary is compiled into this file's targets at all — where it is not, a call spelled
+/// `owns_the_scan` exempts the **vocabulary** offences, never the site enumeration: the reaction's own sources
+/// hold the needles as literals, but they hold no refusal construction. `can_construct` says whether the
+/// shared vocabulary is compiled into this file's targets at all — where it is not, a call spelled
 /// `violation(` is a different function with the same ordinary name.
+///
+/// The site search runs over the **whole text**, not line by line, and allows whitespace between the name and
+/// its `(`. A line-oriented search missed a call that wrapped, and a wrapped call that no direction reached
+/// would have been invisible to the static enumeration and to the reach recording at once — the false clean
+/// this reaction exists to refuse. Two forms that would still evade a name-and-paren search are closed by
+/// **refusing** them rather than by trying to follow them: an aliased import, and a bare mention that is
+/// neither a call nor that import.
 fn scan(
     file: &str,
     text: &str,
@@ -309,13 +343,13 @@ fn scan(
 ) {
     let lines: Vec<&str> = text.lines().collect();
     let judged_for_vocabulary = file != SHARED && !owns_the_scan;
+    let holds_the_needles = owns_the_scan || file == SHARED;
+
     for (index, line) in lines.iter().enumerate() {
         let number = index as u32 + 1;
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("//") {
+        if line.trim_start().starts_with("//") {
             continue;
         }
-
         if judged_for_vocabulary {
             for definition in ["struct Refusal", "enum Refusal"] {
                 if line.contains(definition) {
@@ -335,49 +369,88 @@ fn scan(
                 }
             }
         }
-
-        let mut on_this_line = 0;
-        for constructor in CONSTRUCTORS {
-            let needle = format!("{constructor}(");
-            let mut from = 0;
-            while let Some(at) = line[from..].find(&needle) {
-                let at = from + at;
-                from = at + needle.len();
-                let preceded_by_identifier = line[..at]
-                    .chars()
-                    .next_back()
-                    .is_some_and(|c| c.is_alphanumeric() || c == '_');
-                if preceded_by_identifier {
-                    continue;
-                }
-                if line[..at].trim_end().ends_with("fn") {
-                    // A definition, not a site — and a second vocabulary only if it actually returns the
-                    // shared refusal. `violation` is an ordinary word: this workspace already has an
-                    // unrelated `fn violation(…) -> Violation` building a structured finding, and refusing it
-                    // would be a reaction crying about a name rather than about a contract.
-                    if judged_for_vocabulary && signature_from(&lines, index).contains("-> Refusal")
-                    {
-                        offences.push(format!(
-                            "  {file}:{number} defines `fn {constructor}` returning a Refusal outside {SHARED}"
-                        ));
-                    }
-                    continue;
-                }
-                if !can_construct {
-                    continue;
-                }
-                on_this_line += 1;
-                sites.push(Site {
-                    file: file.to_string(),
-                    line: number,
-                    constructor: constructor.to_string(),
-                });
-            }
-        }
-        if on_this_line > 1 {
+        // An import that renames a constructor puts every call to it beyond any search for its name. Refused
+        // rather than followed: following a rename means resolving names, which is the compiler's job.
+        if !holds_the_needles
+            && line.contains("use ")
+            && line.contains(" as ")
+            && CONSTRUCTORS.iter().any(|c| line.contains(c))
+        {
             offences.push(format!(
-                "  {file}:{number} constructs {on_this_line} refusals on one line; a site is selected by its \
-                 line, so two on one line cannot be perturbed apart"
+                "  {file}:{number} imports a refusal constructor under another name, which puts its call \
+                 sites beyond any search for that name"
+            ));
+        }
+    }
+
+    let masked = masked(text);
+    let mut starts = vec![0usize];
+    starts.extend(text.match_indices('\n').map(|(at, _)| at + 1));
+
+    let mut per_line: BTreeMap<u32, usize> = BTreeMap::new();
+    for constructor in CONSTRUCTORS {
+        let mut from = 0;
+        while let Some(found) = masked[from..].find(constructor) {
+            let at = from + found;
+            from = at + constructor.len();
+            let before = &masked[..at];
+            if before
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric() || c == '_')
+            {
+                continue;
+            }
+            let number = line_of(&starts, at);
+            let rest = masked[from..].trim_start();
+
+            if !rest.starts_with('(') {
+                // Neither a call nor the import that brings the constructor in: a value taken by name reaches
+                // every call site through a binding this search cannot follow.
+                let line_text = lines.get(number as usize - 1).copied().unwrap_or_default();
+                if can_construct
+                    && !holds_the_needles
+                    && !line_text.trim_start().starts_with("use ")
+                {
+                    offences.push(format!(
+                        "  {file}:{number} mentions `{constructor}` without calling it; a constructor taken \
+                         by name is called somewhere this enumeration cannot see"
+                    ));
+                }
+                continue;
+            }
+
+            if before.trim_end().ends_with("fn") {
+                // A definition, not a site — and a second vocabulary only if it actually returns the shared
+                // refusal. `violation` is an ordinary word: this workspace already has an unrelated
+                // `fn violation(…) -> Violation` building a structured finding, and refusing that would be a
+                // reaction crying about a name rather than about a contract.
+                if judged_for_vocabulary
+                    && signature_from(&lines, number as usize - 1).contains("-> Refusal")
+                {
+                    offences.push(format!(
+                        "  {file}:{number} defines `fn {constructor}` returning a Refusal outside {SHARED}"
+                    ));
+                }
+                continue;
+            }
+            if !can_construct {
+                continue;
+            }
+            *per_line.entry(number).or_default() += 1;
+            sites.push(Site {
+                file: file.to_string(),
+                line: number,
+                constructor: constructor.to_string(),
+            });
+        }
+    }
+
+    for (number, count) in per_line {
+        if count > 1 {
+            offences.push(format!(
+                "  {file}:{number} constructs {count} refusals on one line; a site is selected by its line, \
+                 so two on one line cannot be perturbed apart"
             ));
         }
     }
@@ -510,6 +583,44 @@ mod tests {
             "asserting `Kind::CannotJudge` was read as declaring a variant, which would refuse the very \
              directions this reaction exists to require: {offences:?}"
         );
+    }
+
+    /// A call may wrap, and a wrapped call no direction reaches would be invisible twice over.
+    ///
+    /// The line-oriented search this replaced would have missed it in the static enumeration, and a site
+    /// nothing constructs is missed by the reach recording too — both halves blind at once, which is the
+    /// false clean this reaction exists to refuse.
+    #[test]
+    fn a_call_split_across_lines_is_still_a_site() {
+        let (sites, offences) = scanned("a_call_that_wraps");
+        assert_eq!(
+            sites.len(),
+            1,
+            "a wrapped call was not enumerated: {sites:?}"
+        );
+        assert_eq!(
+            sites[0].line, 2,
+            "a wrapped call is the line its name is on"
+        );
+        assert!(offences.is_empty(), "{offences:?}");
+    }
+
+    /// Two forms that would evade a search for the name are refused rather than followed.
+    ///
+    /// Following either means resolving names, which is the compiler's job and not a scan's. Refusing them
+    /// keeps the enumeration total without pretending to a reach it does not have.
+    #[test]
+    fn a_renamed_or_unapplied_constructor_is_refused() {
+        for (probe, expected) in [
+            ("an_aliased_import", "under another name"),
+            ("a_constructor_taken_by_name", "without calling it"),
+        ] {
+            let (_, offences) = scanned(probe);
+            assert!(
+                offences.iter().any(|o| o.contains(expected)),
+                "{probe} puts call sites beyond this enumeration and was not refused: {offences:?}"
+            );
+        }
     }
 
     /// The scan's own sources are exempt from the vocabulary offences, and from nothing else.

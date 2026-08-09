@@ -126,8 +126,13 @@ fn reached(root: &Path, corpus: &Corpus) -> BTreeSet<String> {
 
     let mut seen = BTreeSet::new();
     for target in corpus.judged() {
-        // One file per target run, so no two processes interleave their appends.
+        // One file per target run, so no two processes interleave their appends — and **created here**, by
+        // the parent, so that a later read failing means something went wrong rather than meaning the child
+        // constructed nothing. Reading it with a default on error was the hole: an unreadable record is
+        // indistinguishable from an empty one, and an empty one is a legal answer.
         let record = scratch.join(format!("{}.reach", target.name));
+        std::fs::write(&record, "")
+            .expect("the record file is creatable before the run that appends to it");
         match run_target(root, target, None, Some(&record)) {
             Run::Green => {}
             Run::Instrument(log) => panic!(
@@ -139,7 +144,14 @@ fn reached(root: &Path, corpus: &Corpus) -> BTreeSet<String> {
                 target.name
             ),
         }
-        let text = std::fs::read_to_string(&record).unwrap_or_default();
+        let text = std::fs::read_to_string(&record).unwrap_or_else(|err| {
+            panic!(
+                "the reach record for {} cannot be read ({err}); this file was created before the run, so a \
+                 failed read is a lost record rather than a run that constructed nothing — and a lost record \
+                 is not self-announcing, since a site it drops looks legally unreached",
+                target.name
+            )
+        });
         for line in text.lines() {
             assert!(
                 line.rsplit_once(':')
