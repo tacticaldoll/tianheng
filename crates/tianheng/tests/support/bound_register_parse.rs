@@ -113,6 +113,11 @@ pub enum Citation {
     /// The whole remainder of the `UNPINNED` line, which names the tracker and says what it owns.
     Unpinned(String),
     UnpinnedWithoutTracker,
+    /// More than one `UNPINNED`. Several trackers are several **owners of one gap**, which is two answers to
+    /// the question a citation exists to answer — unlike several `PINNED-BY`, which are several defences of
+    /// one bound. The declaration holds one tracker, so keeping one of them silently records a bound whose
+    /// owner is whichever line happened to be last.
+    RepeatedUnpinned,
     Both,
     Neither,
 }
@@ -153,6 +158,103 @@ pub fn tracked_specs(root: &Path) -> Vec<(String, String)> {
 }
 
 /// Read every declared bound out of the tracked specs.
+/// Every declared bound in **one** spec's text.
+///
+/// Split out so a direction can be shown a shape rather than only this repository's own specs. A second
+/// implementation of the parse would be the twin-drift class this repository keeps closing, and a control
+/// pinned against a copy of the parse would say nothing about the parse.
+pub fn bounds_in(capability: &str, spec: &str, text: &str) -> Vec<Bound> {
+    let mut bounds = Vec::new();
+    let lines: Vec<&str> = text.lines().collect();
+
+    for (index, raw) in lines.iter().enumerate() {
+        let Some(heading) = raw.strip_prefix("#### Scenario:") else {
+            continue;
+        };
+        let heading = heading.trim();
+        if !marks_a_bound(heading) {
+            continue;
+        }
+
+        let mut body = String::new();
+        let mut pinned: Vec<String> = Vec::new();
+        let mut unpinned: Vec<String> = Vec::new();
+        let mut unpinned_bare = false;
+        let mut in_then = false;
+
+        for line in lines.iter().skip(index + 1) {
+            let trimmed = line.trim();
+            if trimmed.starts_with("#### ")
+                || trimmed.starts_with("### ")
+                || trimmed.starts_with("## ")
+            {
+                break;
+            }
+            if let Some(rest) = trimmed.strip_prefix("- **THEN** ") {
+                body.push_str(rest);
+                in_then = true;
+                continue;
+            }
+            if let Some(rest) = trimmed.strip_prefix("- **PINNED-BY** ") {
+                pinned.push(rest.trim().trim_matches('`').to_string());
+                in_then = false;
+                continue;
+            }
+            if trimmed == "- **UNPINNED**" {
+                unpinned_bare = true;
+                in_then = false;
+                continue;
+            }
+            if let Some(rest) = trimmed.strip_prefix("- **UNPINNED** ") {
+                let rest = rest.trim();
+                if rest.is_empty() {
+                    unpinned_bare = true;
+                } else {
+                    unpinned.push(rest.to_string());
+                }
+                in_then = false;
+                continue;
+            }
+            if trimmed.starts_with("- ") {
+                in_then = false;
+                continue;
+            }
+            if in_then && !trimmed.is_empty() {
+                body.push(' ');
+                body.push_str(trimmed);
+            }
+        }
+
+        // A scenario carrying two citations declares two bounds behind one heading, so the register
+        // holds one of them and the other is defended by a test nothing points at. The old shell gate
+        // projected the FIRST and moved on; rebuilding this reaction surfaced the one live instance.
+        let tracked = !unpinned.is_empty() || unpinned_bare;
+        let citation = if !pinned.is_empty() && tracked {
+            Citation::Both
+        } else if !pinned.is_empty() {
+            Citation::PinnedBy(pinned)
+        } else if unpinned.len() > 1 {
+            Citation::RepeatedUnpinned
+        } else if let Some(tracker) = unpinned.pop() {
+            Citation::Unpinned(tracker)
+        } else if unpinned_bare {
+            Citation::UnpinnedWithoutTracker
+        } else {
+            Citation::Neither
+        };
+
+        bounds.push(Bound {
+            id: format!("{capability}/{}", slug_of(heading)),
+            capability: capability.to_string(),
+            spec: spec.to_string(),
+            line: index + 1,
+            body,
+            citation,
+        });
+    }
+    bounds
+}
+
 pub fn parse_bounds(root: &Path) -> Vec<Bound> {
     let mut bounds = Vec::new();
 
@@ -163,91 +265,7 @@ pub fn parse_bounds(root: &Path) -> Vec<Bound> {
                  leaves the register undecided rather than clean"
             )
         });
-        let lines: Vec<&str> = text.lines().collect();
-
-        for (index, raw) in lines.iter().enumerate() {
-            let Some(heading) = raw.strip_prefix("#### Scenario:") else {
-                continue;
-            };
-            let heading = heading.trim();
-            if !marks_a_bound(heading) {
-                continue;
-            }
-
-            let mut body = String::new();
-            let mut pinned: Vec<String> = Vec::new();
-            let mut unpinned: Vec<String> = Vec::new();
-            let mut unpinned_bare = false;
-            let mut in_then = false;
-
-            for line in lines.iter().skip(index + 1) {
-                let trimmed = line.trim();
-                if trimmed.starts_with("#### ")
-                    || trimmed.starts_with("### ")
-                    || trimmed.starts_with("## ")
-                {
-                    break;
-                }
-                if let Some(rest) = trimmed.strip_prefix("- **THEN** ") {
-                    body.push_str(rest);
-                    in_then = true;
-                    continue;
-                }
-                if let Some(rest) = trimmed.strip_prefix("- **PINNED-BY** ") {
-                    pinned.push(rest.trim().trim_matches('`').to_string());
-                    in_then = false;
-                    continue;
-                }
-                if trimmed == "- **UNPINNED**" {
-                    unpinned_bare = true;
-                    in_then = false;
-                    continue;
-                }
-                if let Some(rest) = trimmed.strip_prefix("- **UNPINNED** ") {
-                    let rest = rest.trim();
-                    if rest.is_empty() {
-                        unpinned_bare = true;
-                    } else {
-                        unpinned.push(rest.to_string());
-                    }
-                    in_then = false;
-                    continue;
-                }
-                if trimmed.starts_with("- ") {
-                    in_then = false;
-                    continue;
-                }
-                if in_then && !trimmed.is_empty() {
-                    body.push(' ');
-                    body.push_str(trimmed);
-                }
-            }
-
-            // A scenario carrying two citations declares two bounds behind one heading, so the register
-            // holds one of them and the other is defended by a test nothing points at. The old shell gate
-            // projected the FIRST and moved on; rebuilding this reaction surfaced the one live instance.
-            let tracked = !unpinned.is_empty() || unpinned_bare;
-            let citation = if !pinned.is_empty() && tracked {
-                Citation::Both
-            } else if !pinned.is_empty() {
-                Citation::PinnedBy(pinned)
-            } else if let Some(tracker) = unpinned.pop() {
-                Citation::Unpinned(tracker)
-            } else if unpinned_bare {
-                Citation::UnpinnedWithoutTracker
-            } else {
-                Citation::Neither
-            };
-
-            bounds.push(Bound {
-                id: format!("{capability}/{}", slug_of(heading)),
-                capability: capability.clone(),
-                spec: spec.clone(),
-                line: index + 1,
-                body,
-                citation,
-            });
-        }
+        bounds.extend(bounds_in(&capability, &spec, &text));
     }
 
     assert!(

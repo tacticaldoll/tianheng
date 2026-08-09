@@ -21,7 +21,9 @@
 #[path = "support/bound_register_parse.rs"]
 mod parse;
 
-use parse::{Bound, Citation, locate_layout, must, parse_bounds, search, workspace_root};
+use parse::{
+    Bound, Citation, bounds_in, locate_layout, must, parse_bounds, search, workspace_root,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -42,6 +44,11 @@ fn every_declared_bound_carries_exactly_one_citation() {
             Citation::Neither => Some(
                 "carries neither PINNED-BY nor UNPINNED; a bound with no recorded defence is indistinguishable \
                  from an oversight",
+            ),
+            Citation::RepeatedUnpinned => Some(
+                "carries more than one UNPINNED; several trackers are several owners of one gap, which is \
+                 two answers to one question — and the declaration holds one, so keeping the last records a \
+                 bound whose owner is whichever line came last",
             ),
             Citation::UnpinnedWithoutTracker => Some(
                 "is UNPINNED with no tracker; untracked debt is indistinguishable from debt nobody owns",
@@ -403,5 +410,57 @@ fn an_absent_layout_is_loud_when_the_workspace_marker_is_set() {
     assert!(
         std::panic::catch_unwind(|| locate_layout(absent, true)).is_err(),
         "an absent layout must fail loudly under TIANHENG_WORKSPACE_TESTS rather than skip"
+    );
+}
+
+/// A citation answered twice fails — and the asymmetry with `PINNED-BY` is deliberate, so it has a control.
+///
+/// Several pinning tests are several **defences of one bound**; several trackers are several **owners of one
+/// gap**. The declaration holds one tracker, so keeping the last silently recorded a bound whose owner was
+/// whichever line came last. The comment beside the parse described this defect and the code implemented it
+/// only for the `PINNED-BY`+`UNPINNED` pair.
+#[test]
+fn a_citation_answered_twice_fails_whichever_answer_is_repeated() {
+    let scenario = |citations: &str| {
+        format!(
+            "#### Scenario: Something is not observed — a stated bound\n\n- **WHEN** a shape appears\n- **THEN** nothing reacts\n{citations}"
+        )
+    };
+
+    let repeated_unpinned = bounds_in(
+        "some-capability",
+        "openspec/specs/some-capability/spec.md",
+        &scenario("- **UNPINNED** BACKLOG: one owner\n- **UNPINNED** BACKLOG: another owner\n"),
+    );
+    assert_eq!(repeated_unpinned.len(), 1, "{repeated_unpinned:?}");
+    assert_eq!(
+        repeated_unpinned[0].citation,
+        Citation::RepeatedUnpinned,
+        "two trackers were reduced to one, so the bound records whichever line came last"
+    );
+
+    // The control. Flattening the two would break a live declaration: `observation-bound-model` states that
+    // several `PINNED-BY` lines are all retained, and a first draft of this reaction read the rule as a
+    // bullet count and split the one live instance in two.
+    let repeated_pinned = bounds_in(
+        "some-capability",
+        "openspec/specs/some-capability/spec.md",
+        &scenario("- **PINNED-BY** `first_test`\n- **PINNED-BY** `second_test`\n"),
+    );
+    assert_eq!(
+        repeated_pinned[0].citation,
+        Citation::PinnedBy(vec!["first_test".into(), "second_test".into()]),
+        "several tests defending one bound is not two answers to one question"
+    );
+
+    // And one tracker still reads as one tracker.
+    let single = bounds_in(
+        "some-capability",
+        "openspec/specs/some-capability/spec.md",
+        &scenario("- **UNPINNED** BACKLOG: the one owner\n"),
+    );
+    assert_eq!(
+        single[0].citation,
+        Citation::Unpinned("BACKLOG: the one owner".into())
     );
 }

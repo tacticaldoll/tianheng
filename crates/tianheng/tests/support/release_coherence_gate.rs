@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::refusal::{Refusal, cannot_judge, violation};
+use crate::refusal::{Refusal, cannot_judge, cannot_judge_out_of_reach, violation};
 
 pub fn hermetic(program: &str) -> Command {
     let mut command = Command::new(program);
@@ -357,18 +357,40 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     ))
 }
 
+/// The entries of a directory, with a failure to yield one **propagated** rather than dropped.
+///
+/// `filter_map(|e| e.ok())` silently shortens the enumeration, and the counters this judgement then reasons
+/// from are satisfied by whatever did yield — so a run reports clean over the entry it never saw. One site
+/// serves both enumerations, because two calls carrying one message would be shadowing.
+fn entries_of(dir: &Path) -> Result<Vec<PathBuf>, Refusal> {
+    let listing = std::fs::read_dir(dir).map_err(|err| {
+        cannot_judge(format!(
+            "found no enumerable directory at {}: {err} — the layout changed or is absent, so what it holds \
+             cannot be judged",
+            dir.display()
+        ))
+    })?;
+    let mut paths = Vec::new();
+    for entry in listing {
+        let entry = entry.map_err(|err| {
+            cannot_judge_out_of_reach(
+                "directory-entry-unyieldable",
+                format!(
+                    "an entry of {} could not be read while enumerating it: {err}",
+                    dir.display()
+                ),
+            )
+        })?;
+        paths.push(entry.path());
+    }
+    paths.sort();
+    Ok(paths)
+}
+
 fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal> {
     let crates = repo.join("crates");
     let mut out = Vec::new();
-    let entries = std::fs::read_dir(&crates).map_err(|err| {
-        cannot_judge(format!(
-            "found no workspace crate manifests under {}: {err} — the crate layout changed or is absent, so \
-             version inheritance cannot be judged",
-            crates.display()
-        ))
-    })?;
-    let mut dirs: Vec<PathBuf> = entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
-    dirs.sort();
+    let dirs = entries_of(&crates)?;
     for dir in dirs {
         let manifest = dir.join("Cargo.toml");
         if manifest.is_file() {
@@ -449,18 +471,20 @@ fn require_example_pins(
     let mut example_manifests = 0usize;
     let mut requirements = 0usize;
 
-    let Ok(entries) = std::fs::read_dir(repo.join("examples")) else {
-        return Err(cannot_judge(
-            "the examples directory cannot be read, so example pins would be judged over nothing",
-        ));
-    };
-    let mut dirs: Vec<PathBuf> = entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
-    dirs.sort();
+    let dirs = entries_of(&repo.join("examples"))?;
     for dir in dirs {
         let manifest = dir.join("Cargo.toml");
-        let Ok(text) = std::fs::read_to_string(&manifest) else {
+        // Absent is not unreadable. Skipping both alike let the remaining readable examples satisfy the
+        // counters below, so the judgement reported clean over the very manifest it could not read.
+        if !manifest.is_file() {
             continue;
-        };
+        }
+        let text = std::fs::read_to_string(&manifest).map_err(|err| {
+            cannot_judge(format!(
+                "could not read the example manifest {}: {err}",
+                manifest.display()
+            ))
+        })?;
         example_manifests += 1;
         let name = dir
             .file_name()

@@ -744,6 +744,44 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **Three judgements could report clean over something they did not read.** All three were reported by review,
+  verified against the code, and one reproduced against a running git before anything was changed.
+
+  **The publish gate's cleanliness answer depended on the machine.** The gate defined a hermetic command
+  builder and used it for its *fixtures*; the judgement ran through a bare `git`. A `core.excludesFile` outside
+  the repository made the cleanliness read return empty for an untracked file. The obvious repair is not the
+  repair: routing through the existing builder closes one of three ambient sources and leaves the
+  `$XDG_CONFIG_HOME/git/ignore` default — which no configuration names — still hiding files, measured. So the
+  neutralisation is explicit, and what no configuration can neutralise is classified by **source** instead:
+  the excluded set is the difference between an unexcluded listing and an excluded one, and each path's source
+  file is readable. A source counts as repository content only if it is **tracked**, because an untracked
+  `.gitignore` reports a repository-looking source while being no more part of the repository than the clone's
+  own exclude file. Classification rather than a blanket refusal, because refusing whenever a clone carries an
+  exclude file trades a false clean for a false alarm on the gate standing before an irreversible act.
+
+  `clean` is now defined in the specification before anything relies on it: ignored by tracked repository
+  content is clean, because `cargo publish` applies the same exclusion; hidden by this clone or this machine is
+  not, because the same commit must not be judged differently in different places. That amendment had to come
+  first — the requirement read *any untracked file*, and an ignored file is untracked, so the control this
+  change needs would otherwise have asserted the opposite of the live rule.
+
+  **Two enumerations dropped I/O failures.** A failed directory entry was discarded, and an example manifest
+  that existed but could not be read was skipped *identically to one that is absent* — so the remaining
+  readable examples satisfied the counters the judgement then reasons from. Absent is now distinguished from
+  unreadable, one read site serves both enumerations so neither can shadow the other, and the entry failure a
+  fixture cannot schedule is declared out of reach with a slug of its own.
+
+  **A bound carrying two `UNPINNED` citations kept the last.** Several pinning tests are several defences of
+  one bound; several trackers are several owners of one gap, and the declaration holds one — so the register
+  recorded whichever line came last. Repeated `UNPINNED` is now an invalid citation state naming the bound,
+  with a control keeping repeated `PINNED-BY` accepted, since flattening that asymmetry would break a live
+  declaration.
+
+  One repair refused one of this repository's own fixtures — it made a worktree read clean with an untracked
+  `.gitignore`, the exact hole being closed — and then made that direction unconstructible: once `clean` is
+  defined by the repository, a clean worktree with an unresolvable HEAD cannot exist. Measured across every
+  route, so the read joined the shared site rather than keeping a refusal no input can take.
+
 - **The squash-message rule gains a reaction, and a wrapper to reach it through.** `AGENTS.md` said the squash
   subject is the pull request's title with **no auto-appended `(#N)`**, and nothing held it: nine subjects in
   this repository's history carry that serial, the most recent on the commit that landed a reaction for a

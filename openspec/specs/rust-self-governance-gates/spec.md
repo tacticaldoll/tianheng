@@ -438,9 +438,10 @@ Declaring first produces exemptions for code that should not exist, and the exem
 of the reaction rather than as a property of the world.
 
 The size of that set SHALL be a declared census, produced by the same enumeration the reaction perturbs, so it
-cannot grow without a document disagreeing with it. Today **6 of 66 refusal sites are declared out of reach**,
-every one of them inside the tag-signature check: four describe the machine the gate runs on rather than the
-repository it judges, and two are git's own two extractions of one object disagreeing with each other.
+cannot grow without a document disagreeing with it. Today **7 of 67 refusal sites are declared out of reach**:
+four describe the machine the gate runs on rather than the repository it judges, two are git's own two
+extractions of one object disagreeing with each other, and one is an I/O failure part-way through a directory
+enumeration, which a fixture cannot schedule.
 
 This closes the category a coverage report would otherwise absorb. A reaction that perturbed only the sites it
 observed being reached, and reported the rest as "not exercised", would read as coverage of the whole

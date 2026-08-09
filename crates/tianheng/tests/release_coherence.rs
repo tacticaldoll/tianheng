@@ -831,7 +831,7 @@ fn every_enumeration_refuses_rather_than_reporting_clean_over_nothing() {
         (
             "an unreadable examples directory",
             "examples",
-            "the examples directory cannot be read",
+            "found no enumerable directory at",
         ),
         (
             "an examples directory holding no manifest",
@@ -991,7 +991,7 @@ fn an_absent_crate_directory_cannot_be_enumerated() {
     refuse(
         &fixture.repo,
         Kind::CannotJudge,
-        "found no workspace crate manifests",
+        "found no enumerable directory at",
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1040,4 +1040,46 @@ fn machinery_that_cannot_be_enumerated_cannot_be_judged() {
         "could not enumerate scripts/",
     );
     let _ = std::fs::remove_dir_all(&root);
+}
+
+/// An example manifest that exists and cannot be read is a cannot-judge, not a directory holding none.
+///
+/// Skipping both alike let the remaining readable examples satisfy the counters this judgement reasons from,
+/// so a run reported clean over the very manifest it could not read. Invalid UTF-8 is the shape that satisfies
+/// `is_file()` and fails the read, needing no permission games a run as root would defeat.
+#[test]
+fn an_example_manifest_that_is_not_text_cannot_be_read() {
+    let root = scratch("example-not-text");
+    let fixture = build_fixture(&root, "example-not-text", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    assert!(manifest.is_file(), "the fixture builds an example manifest");
+    std::fs::write(&manifest, [0x5b, 0x70, 0xff, 0xfe, 0x5d])
+        .expect("write bytes that are not UTF-8");
+    refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "could not read the example manifest",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A directory under `examples/` holding no manifest is still skipped — absence is not a failed read.
+#[test]
+fn an_example_directory_holding_no_manifest_is_skipped() {
+    let root = scratch("example-no-manifest");
+    let fixture = build_fixture(&root, "example-no-manifest", "0.2.0");
+    std::fs::create_dir_all(fixture.repo.join("examples/notes")).expect("create");
+    std::fs::write(fixture.repo.join("examples/notes/README.md"), "prose\n").expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "docs: add a directory that is not an example crate",
+    );
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "a directory with no Cargo.toml was treated as a failed read: {:?}",
+        verdict.err()
+    );
 }

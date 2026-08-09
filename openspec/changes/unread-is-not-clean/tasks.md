@@ -16,19 +16,19 @@
 
 ## 3. The release-coherence enumerations
 
-- [ ] 3.1 An example manifest that exists and cannot be read is a cannot-judge naming the path; a directory with
+- [x] 3.1 An example manifest that exists and cannot be read is a cannot-judge naming the path; a directory with
       no `Cargo.toml` is still skipped
-- [ ] 3.2 Propagate a failed directory entry in both enumerations
-- [ ] 3.3 Attempt a fixture producing an iteration error; if none exists, declare each site with **its own slug**
-- [ ] 3.4 `refusal_bites` green and the exempt census moved if anything was declared
+- [x] 3.2 Propagate a failed directory entry in both enumerations
+- [x] 3.3 Attempt a fixture producing an iteration error; if none exists, declare each site with **its own slug**
+- [x] 3.4 `refusal_bites` green and the exempt census moved if anything was declared
 
 ## 4. The citation answered twice
 
-- [ ] 4.1 Repeated `UNPINNED` becomes an invalid citation state naming the bound
-- [ ] 4.2 A direction for it, and a control keeping two `PINNED-BY` accepted
+- [x] 4.1 Repeated `UNPINNED` becomes an invalid citation state naming the bound
+- [x] 4.2 A direction for it, and a control keeping two `PINNED-BY` accepted
 
 ## 5. Records and closure
 
-- [ ] 5.1 `CHANGELOG.md` `[Unreleased]`, no version bump
-- [ ] 5.2 Full Definition of Done including MSRV 1.85 and all four gated suites
-- [ ] 5.3 Sync the three deltas, archive, one squash PR merged through `scripts/merge-pr.sh`
+- [x] 5.1 `CHANGELOG.md` `[Unreleased]`, no version bump
+- [x] 5.2 Full Definition of Done including MSRV 1.85 and all four gated suites
+- [x] 5.3 Sync the three deltas, archive, one squash PR merged through `scripts/merge-pr.sh`
