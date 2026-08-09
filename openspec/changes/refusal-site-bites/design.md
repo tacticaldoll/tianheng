@@ -4,7 +4,9 @@ Two reactions carry a kinded refusal: `crates/tianheng/tests/support/publish_sou
 sites) and `crates/tianheng/tests/support/release_coherence_gate.rs` (35). Each defines its own `Kind`,
 `Refusal`, `violation` and `cannot_judge`. `rust-self-governance-gates` already requires their directions to
 assert *which* outcome a shape produces; nothing holds that requirement, and a review sweep at `22ec98e`
-measured **24 of the 60 sites** as surviving both a kind swap and a message replacement.
+counted **24 of the 60 sites** as surviving both a kind swap and a message replacement — a figure that
+merges two populations, since a perturbation kills nothing whether the site is undistinguished or simply never
+reached.
 
 The measured ground this design rests on, taken before designing rather than after:
 
@@ -65,7 +67,8 @@ or replaces the message. The consequences:
 - **No rebuild between perturbations.** One `--no-run` build, then N process runs of already-built binaries.
 - **Restore is free.** Nothing on disk changed, so there is no window in which a killed run leaves the tree
   edited — the reason `pin_bites` needs a detached worktree at all.
-- **Cost:** 25 sites × 2 perturbations × 931ms + 35 × 2 × 255ms ≈ **65 seconds**, plus controls.
+- **Cost:** measured on the finished reaction at **37 seconds** for 60 sites, because only reached sites are
+  perturbed. The pre-build estimate from per-target run times was 65 seconds.
 
 *Alternative rejected — source mutation.* Same answers, two orders of magnitude more expensive, and it
 reintroduces the destructive-restore window this repository has already been bitten by.
@@ -155,7 +158,7 @@ The message perturbation replaces rather than prefixes. A prefix leaves `contain
 finds neither of the two things above.
 
 Requiring *either* would let a site be observed in one contract and rot in the other. Requiring *both* is the
-stronger reading and is what the sweep that produced the 24 actually did in each half.
+stronger reading, and it is what separates a site whose message rots from one whose kind inverts.
 
 ### D5: Every site falls into exactly one of five classes, and three of them are red
 
@@ -249,6 +252,45 @@ Two derivations, from the same corpus:
   for release sites: not wrong, since a target that does not compile the site cannot be affected by poisoning
   it, but it would triple the sweep and it would stop being a statement about who can observe the site.
 
+### D5c: The enumeration is made total by refusing what it cannot follow
+
+The first implementation read one line at a time and required `name(` adjacent. A call written across two
+lines was invisible to it — and a wrapped call that no direction reaches is invisible to the reach recording
+as well, so both halves would be blind at once. The search therefore runs over the **whole text**, with
+comment-only lines blanked in place so byte offsets still map to their lines, and allows whitespace between a
+name and its `(`.
+
+Two forms survive even that, and neither is followed:
+
+| Form | Why it is refused rather than resolved |
+|---|---|
+| `use …::cannot_judge as cj;` | following a rename means resolving names, which is the compiler's job |
+| `let build = violation;` | a constructor taken as a value reaches its call sites through a binding |
+
+Refusing is what keeps the enumeration total without claiming a reach it does not have. The population is
+unchanged at 60 under the widened search, which is the evidence that the widening closed a hole rather than
+moving the answer.
+
+### D5d: A lost reach record is created by the parent so it cannot read as an empty one
+
+The record file is created by the reaction **before** the run that appends to it. Reading it with a default on
+error made an unreadable record indistinguishable from a run that constructed nothing — and constructing
+nothing is a legal answer, so the failure would have been absorbed rather than reported. With the file
+created first, a failed read is a lost record, and it panics.
+
+### D5e: A residual is closed in order — construct, then delete, then declare
+
+A site the suite never reaches is not automatically an exemption. The order is:
+
+1. **Construct it.** Most defensive refusals turn out to be reachable through a fixture, and this is where the
+   measurement moved from 23 unreached to 9.
+2. **Delete it.** Where a preceding check makes a branch logically unreachable, the branch is dead code. A
+   bound declaring a false negative about an impossible input is a heavier artefact than the deletion.
+3. **Declare it.** Only what survives both — a precondition no environment the suite runs in can produce.
+
+Reversing the order produces exemptions for code that should not exist, and the exempt set then reads as a
+limit of the reaction rather than as a property of the world.
+
 ### D6: One `Refusal`, at the test root, not nested `#[path]`
 
 `Kind`, `Refusal`, the constructors, the injection point and the recording go to
@@ -313,10 +355,11 @@ rather than on every save.
 
 ## Risks / Trade-offs
 
-- **The undefended population is measured, not known** → 24 is the floor under "either perturbation"; under
-  "both" it can only be larger, up to 60. The first run of the reaction produces the number, and the scope of
-  the direction-writing follows from that measurement. Estimating it here and then writing to the estimate is
-  the failure mode this repository has recorded twice.
+- **The population is measured, not known, and 24 is not its floor** → the 24 was counted on a different
+  tree by a method that merges the undistinguished with the unreached, so it bounds neither class. The first
+  run of the reaction produces both numbers separately, and the scope of the direction-writing follows from
+  that measurement. Estimating here and then writing to the estimate is the failure mode this repository has
+  recorded twice.
 - **Exemptions become the escape hatch** → an exemption is a compile-checked slug, joined to one declared
   bound, and its count is a census produced by the reaction, so growth is visible in a document rather than
   invisible in a habit. A slug whose site becomes reachable fails.

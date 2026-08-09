@@ -21,10 +21,11 @@ the twin-drift class this family exists to close: the two can disagree about wha
 read as holding the same contract.
 
 And the obligation on directions SHALL be held by a reaction rather than by discipline. "Its directions assert
-the kind" was specified here and enforced by nothing; a review sweep measured **24 of 60** refusal
-construction sites as distinguished by no direction at all. A requirement about the shape of directions is
+the kind" was specified here and enforced by nothing; a review sweep counted **24 of 60** refusal
+construction sites as surviving both perturbations, without being able to say which of those were
+undistinguished and which were simply never constructed. A requirement about the shape of directions is
 exactly the kind a reading cannot settle, because what a direction asserts is a question about running a
-program.
+program — and so is the difference between those two answers.
 
 #### Scenario: A reaction reaches both outcomes
 
@@ -75,6 +76,13 @@ The enumeration SHALL be **total** and SHALL verify its own totality: no source 
 constructions, and no refusal value may be built outside the constructors. Either shape SHALL fail the
 reaction rather than silently shrinking the set it enumerates.
 
+The site search SHALL NOT be line-oriented. A construction may be written across lines, and one that no
+direction reaches would then be invisible to the static enumeration and to the reach recording at once. Where
+a construction can be written so that no search for the constructor's name finds it — an import that renames
+it, a constructor taken as a value — that form SHALL **fail** rather than be followed: following a name
+through a binding is resolving names, which is the compiler's work and not a scan's, and a scan that tried
+would claim a reach it does not have.
+
 The reaction SHALL be gated and named where its run is decided, and the environment that selects a
 perturbation SHALL be scrubbed at the point an irreversible act is launched — not guarded by a check inside
 the reaction being perturbed, which the perturbation could itself disable.
@@ -109,6 +117,18 @@ the reaction being perturbed, which the perturbation could itself disable.
 - **WHEN** a refusal is built as a struct literal, or two constructions share a source line
 - **THEN** the reaction fails on its own enumeration, because a site it cannot name is a site it cannot
   perturb
+
+#### Scenario: A construction is written across lines
+
+- **WHEN** a refusal is constructed with its name and its arguments on different lines
+- **THEN** it is still enumerated; a line-oriented search would miss it, and a wrapped construction no
+  direction reaches is missed by the reach recording too — both halves blind at once
+
+#### Scenario: A constructor is renamed or taken as a value
+
+- **WHEN** a constructor is imported under another name, or bound to a value and called through that binding
+- **THEN** the reaction fails on that form rather than following it, because resolving a name through a
+  binding is the compiler's work and a scan that attempted it would claim a reach it does not have
 
 ### Requirement: A perturbation selector SHALL NOT be an exemption identity
 
@@ -270,6 +290,12 @@ A refusal site the suite never reaches SHALL fail unless it declares itself out 
 
 A site no direction constructs is not defended by anything, and it is a strictly worse fact than a site
 reached but undistinguished: there is no evidence the refusal is even attainable.
+
+Closing one SHALL be attempted in order: **construct** it through a fixture; where a preceding check makes the
+branch logically unreachable, **delete** it, since a dead refusal is a smaller artefact than a bound declaring
+a false negative about an impossible input; and only what survives both SHALL be declared out of reach.
+Declaring first produces exemptions for code that should not exist, and the exempt set then reads as a limit
+of the reaction rather than as a property of the world.
 
 This closes the category a coverage report would otherwise absorb. A reaction that perturbed only the sites it
 observed being reached, and reported the rest as "not exercised", would read as coverage of the whole

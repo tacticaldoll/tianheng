@@ -9,9 +9,12 @@ message finds a direction that asserts a refusal happened without asserting *whi
 technique, not a reaction — so it stopped when the reviewer stopped, and its findings were recorded as a
 count rather than as a floor.
 
-Measured at `22ec98e` over the two kinded gates: **60 refusal construction sites, 24 of them survived both
-perturbations** — a refusal that can silently change kind or message, standing in front of `cargo publish`,
-which is irreversible and whose kind is what an operator acts on before running it.
+Measured at `22ec98e` over the two kinded gates: **60 refusal construction sites, 24 surviving both
+perturbations**. That number is not one fact. A perturbation kills nothing for two different reasons — no
+direction *distinguishes* the site, and no direction *reaches* it — and a sweep run by hand cannot tell them
+apart. Both are refusals that can silently change kind or message in front of `cargo publish`, which is
+irreversible and whose kind is what an operator acts on, but they are closed by different work, and reporting
+them as one number hides which.
 
 ## What Changes
 
@@ -28,8 +31,17 @@ which is irreversible and whose kind is what an operator acts on before running 
   can observe it twice: once with that site's kind swapped and once with its message replaced. Some direction
   must fail under **each** perturbation, because the kind and the message are two independent contracts — a
   site observed only in kind lets its message rot into a sentence about something else.
-- **Survivors are red.** A reached site that no direction distinguishes fails the reaction. A site the suite
-  never reaches fails too, unless it is declared out of reach.
+- **Survivors are red, in two named classes.** A reached site that no direction distinguishes fails. A site
+  the suite never reaches fails too, unless it is declared out of reach — and it is reported as its own class,
+  because the two are closed by different work and one number hides which.
+- **The enumeration is total by refusal, not by cleverness.** The site search runs over the whole text so a
+  call may wrap; a wrapped call no direction reaches would otherwise be invisible to the static enumeration
+  and to the reach recording at once. Two forms that would still evade a search for a name — an import that
+  renames a constructor, and a constructor taken as a value — **fail** rather than being followed, because
+  following either means resolving names, which is the compiler's job.
+- **A residual is closed in order: construct it, or delete it, before declaring it.** A refusal branch that a
+  preceding check makes logically unreachable is dead code, and deleting it is the smaller change than
+  declaring a bound about it.
 - **An out-of-reach site is declared in source and joined to a bound.** Sites that genuinely cannot be
   constructed — `ssh-keygen` absent, the signature mechanism failing its own round trip — use a named
   constructor form carrying a stable slug. A **repository-local typed registry** in test support joins each
@@ -79,9 +91,9 @@ None. The authority already exists.
 - **New**: `crates/tianheng/tests/support/refusal.rs`, `crates/tianheng/tests/refusal_bites.rs`.
 - **Amended**: `crates/tianheng/tests/publish_source.rs`, `publish_source_integrity.rs`,
   `release_coherence.rs` — they gain the shared module and lose their local `Kind` imports.
-- **Amended**: whichever directions the reaction finds undefended, in those three targets. The population is
-  measured, not assumed: 24 is the floor under "either perturbation", and the "each perturbation" figure is
-  produced by the reaction's first run rather than estimated here.
+- **Amended**: whichever directions the reaction finds missing, in those three targets. The population is
+  measured, not assumed — the 24 counted on the earlier tree bounds neither class, because it merges them, so
+  both figures come from the reaction's first run rather than from an estimate here.
 - **Amended**: `crates/tianheng/src/bounds.rs` (one added declaration), `crates/tianheng/tests/census.rs` (the
   exempt-count census, produced by the shared site enumerator), `scripts/publish.sh`, `AGENTS.md`,
   `.github/workflows/ci.yml`, `CHANGELOG.md`, `BACKLOG.md` (the `WATCH` entry this change closes),
