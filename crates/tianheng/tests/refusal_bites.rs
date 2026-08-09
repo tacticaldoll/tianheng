@@ -1,0 +1,371 @@
+//! Self-governance reaction: every refusal **site** is distinguished by some direction, in both of its
+//! contracts.
+//!
+//! `rust-self-governance-gates` requires a reaction's directions to *assert which outcome a shape produces*.
+//! Nothing held that requirement, and a review sweep measured 24 of 60 construction sites as distinguished by
+//! no direction at all — in front of `cargo publish`, which is irreversible, where the kind is what an
+//! operator acts on before running it.
+//!
+//! A site carries **two independent contracts**. Its kind is what an operator acts on; its message is what
+//! tells them where to look. Both are perturbed, and some direction must die under each. The message
+//! perturbation **replaces** rather than prefixes, which is what finds *shadowing* — two sites producing one
+//! needle, where no assertion can say which fired.
+//!
+//! Every site falls into exactly one of five classes and three of them fail, so there is no category left for
+//! a coverage report to absorb:
+//!
+//! | site | verdict |
+//! |---|---|
+//! | reached, both perturbations kill a direction | defended |
+//! | reached, some perturbation kills nothing | **undistinguished** |
+//! | never reached, declared out of reach | declared, and counted in the residual |
+//! | never reached, not declared | **unreachable and unclaimed** |
+//! | declared out of reach, but reached | **stale exemption** |
+//!
+//! **It is gated behind `TIANHENG_REFUSAL_BITES`** and named on its own line in the Definition of Done and in
+//! CI. It runs every judged test binary once per site per perturbation; nothing is rebuilt between runs, but
+//! the runs themselves are not free.
+//!
+//! A target's failure is read as *the site was distinguished*. A panic from the instrument is not that, and a
+//! sweep that could not tell them apart would report a site as defended on the strength of its own
+//! malfunction — a false negative. Every instrument panic carries a marker, and a run carrying it is refused
+//! rather than concluded from.
+
+#[path = "support/refusal.rs"]
+mod refusal;
+
+#[path = "support/refusal_sites.rs"]
+mod sites;
+
+use sites::{Corpus, Site, Target};
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+fn locate_layout(root: PathBuf, marker_set: bool) -> Option<PathBuf> {
+    if root.join("Cargo.toml").is_file() {
+        return Some(root);
+    }
+    assert!(
+        !marker_set,
+        "Cargo.toml expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is set — a governance \
+         reaction that quietly does nothing in CI is the shape this family argues against"
+    );
+    None
+}
+
+fn workspace_root() -> Option<PathBuf> {
+    locate_layout(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+        std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_some(),
+    )
+}
+
+/// What one run of a judged target came to.
+#[derive(Debug, PartialEq, Eq)]
+enum Run {
+    /// Every direction passed.
+    Green,
+    /// Some direction failed — under a perturbation, that is the site being distinguished.
+    Died,
+    /// The instrument itself failed, which is not the same fact and must never be read as the site being
+    /// distinguished.
+    Instrument(String),
+}
+
+/// Run a built test binary directly.
+///
+/// Directly rather than through `cargo test`: nothing is being rebuilt between perturbations, and cargo's own
+/// overhead would be paid roughly a hundred times.
+fn run_target(root: &Path, target: &Target, mutant: Option<&str>, record: Option<&Path>) -> Run {
+    let mut command = Command::new(&target.executable);
+    command
+        .current_dir(root)
+        .env_remove(refusal::MUTANT)
+        .env_remove(refusal::RECORD)
+        // This reaction is itself a judged target — it compiles the shared vocabulary — so a child that
+        // inherited the gate variable would run this sweep again, and again. The child is asked for its
+        // directions, never for its own sweep.
+        .env_remove("TIANHENG_REFUSAL_BITES")
+        // A gate asked for only where it can answer must not be asked for here.
+        .env_remove("TIANHENG_PUBLISH_SOURCE")
+        .env("TIANHENG_WORKSPACE_TESTS", "1");
+    if let Some(mutant) = mutant {
+        command.env(refusal::MUTANT, mutant);
+    }
+    if let Some(record) = record {
+        command.env(refusal::RECORD, record);
+    }
+    let out = command.output().unwrap_or_else(|err| {
+        panic!(
+            "cannot run the built test binary {}: {err}",
+            target.executable.display()
+        )
+    });
+    let log = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    if log.contains(refusal::INSTRUMENT_PANIC) {
+        return Run::Instrument(log);
+    }
+    if out.status.success() {
+        Run::Green
+    } else {
+        Run::Died
+    }
+}
+
+/// The sites a run of every judged target actually constructs.
+fn reached(root: &Path, corpus: &Corpus) -> BTreeSet<String> {
+    let scratch =
+        std::env::temp_dir().join(format!("tianheng-refusal-reach-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).expect("the scratch root is writable");
+
+    let mut seen = BTreeSet::new();
+    for target in corpus.judged() {
+        // One file per target run, so no two processes interleave their appends.
+        let record = scratch.join(format!("{}.reach", target.name));
+        match run_target(root, target, None, Some(&record)) {
+            Run::Green => {}
+            Run::Instrument(log) => panic!(
+                "the instrument failed while recording {}'s reach, so what it constructs cannot be read:\n{log}",
+                target.name
+            ),
+            Run::Died => panic!(
+                "{} does not pass unperturbed, so no failure under a perturbation could be attributed to one",
+                target.name
+            ),
+        }
+        let text = std::fs::read_to_string(&record).unwrap_or_default();
+        for line in text.lines() {
+            assert!(
+                line.rsplit_once(':')
+                    .is_some_and(|(file, number)| !file.is_empty() && number.parse::<u32>().is_ok()),
+                "the reach record for {} carries the unparseable line {line:?}; a lost or malformed record is \
+                 not self-announcing, because a site that declares itself out of reach then looks legally \
+                 unreached and the run reports clean",
+                target.name
+            );
+            seen.insert(line.to_string());
+        }
+    }
+    let _ = std::fs::remove_dir_all(&scratch);
+    seen
+}
+
+/// Where a site stands.
+#[derive(Debug, PartialEq, Eq)]
+enum Verdict {
+    Defended,
+    Undistinguished(Vec<&'static str>),
+    UnreachedAndUnclaimed,
+}
+
+/// The classification, as a function of produced inputs, so it can be shown a case rather than trusted.
+fn classify(reached: bool, killed_by: &[&'static str]) -> Verdict {
+    if !reached {
+        return Verdict::UnreachedAndUnclaimed;
+    }
+    let missing: Vec<&'static str> = ["kind", "message"]
+        .into_iter()
+        .filter(|mode| !killed_by.contains(mode))
+        .collect();
+    if missing.is_empty() {
+        Verdict::Defended
+    } else {
+        Verdict::Undistinguished(missing)
+    }
+}
+
+/// Which perturbations of this site kill some direction.
+fn perturbations_that_kill(root: &Path, corpus: &Corpus, site: &Site) -> Vec<&'static str> {
+    let observers = corpus.observers(&site.file);
+    assert!(
+        !observers.is_empty(),
+        "no target compiles {}, yet a run recorded constructing a refusal there; the corpus and the run \
+         disagree about what was built",
+        site.file
+    );
+    let mut killed = Vec::new();
+    for mode in ["kind", "message"] {
+        let selector = format!("{}:{}:{mode}", site.file, site.line);
+        for target in &observers {
+            match run_target(root, target, Some(&selector), None) {
+                Run::Died => {
+                    killed.push(mode);
+                    break;
+                }
+                Run::Green => {}
+                Run::Instrument(log) => panic!(
+                    "the instrument failed under {selector} in {}, so this run says nothing about the site — \
+                     reading it as the site being distinguished would be a false negative:\n{log}",
+                    target.name
+                ),
+            }
+        }
+    }
+    killed
+}
+
+#[test]
+fn every_refusal_site_is_distinguished_in_both_its_contracts() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    if std::env::var_os("TIANHENG_REFUSAL_BITES").is_none() {
+        eprintln!(
+            "refusal bites: skipped — set TIANHENG_REFUSAL_BITES=1 to run it. It is named on its own line in \
+             the Definition of Done and in CI, so skipping here is a cost decision rather than a hole."
+        );
+        return;
+    }
+
+    let corpus = sites::build(&root);
+    assert!(
+        corpus.offences.is_empty(),
+        "the enumeration this reaction rests on is not sound:\n{}",
+        corpus.offences.join("\n")
+    );
+    assert!(
+        !corpus.sites.is_empty(),
+        "no refusal site was enumerated; every property of zero sites holds, and reporting that as a clean \
+         run is the vacuity direction"
+    );
+    assert!(
+        !corpus.judged().is_empty(),
+        "no target compiles the shared refusal vocabulary, so nothing could be perturbed"
+    );
+
+    // The controls, before any verdict rests on them. The probe must be a target that actually compiles a
+    // site: this reaction is itself judged — it compiles the shared vocabulary — and constructs nothing, so
+    // poisoning every site in it would change nothing and the control would fail for the wrong reason.
+    let probe = *corpus
+        .observers(&corpus.sites[0].file)
+        .first()
+        .expect("some target compiles the file the first site is in");
+    assert_eq!(
+        run_target(&root, probe, Some("ALL:kind"), None),
+        Run::Died,
+        "poisoning every site in {} changed nothing, so the injection is not reached at all and every \
+         per-site verdict below would be vacuous",
+        probe.name
+    );
+    assert_eq!(
+        run_target(
+            &root,
+            probe,
+            Some(&format!("{}:999999:kind", sites::SHARED)),
+            None
+        ),
+        Run::Green,
+        "a selector naming no site made {} fail, so the poison fires where it was not aimed and no per-site \
+         attribution holds",
+        probe.name
+    );
+
+    let seen = reached(&root, &corpus);
+    let enumerated: BTreeSet<String> = corpus.sites.iter().map(Site::key).collect();
+    let unenumerated: Vec<&String> = seen.difference(&enumerated).collect();
+    assert!(
+        unenumerated.is_empty(),
+        "a run constructed refusals the enumeration does not name, so the scan is missing sites: {unenumerated:?}"
+    );
+
+    let mut undistinguished = Vec::new();
+    let mut unclaimed = Vec::new();
+    let mut defended = 0usize;
+    for site in &corpus.sites {
+        let is_reached = seen.contains(&site.key());
+        let killed = if is_reached {
+            perturbations_that_kill(&root, &corpus, site)
+        } else {
+            Vec::new()
+        };
+        match classify(is_reached, &killed) {
+            Verdict::Defended => defended += 1,
+            Verdict::Undistinguished(missing) => undistinguished.push(format!(
+                "  {}:{} `{}` — no direction dies when its {} is perturbed",
+                site.file,
+                site.line,
+                site.constructor,
+                missing.join(" or its ")
+            )),
+            Verdict::UnreachedAndUnclaimed => unclaimed.push(format!(
+                "  {}:{} `{}` — no direction constructs it at all",
+                site.file, site.line, site.constructor
+            )),
+        }
+    }
+
+    eprintln!(
+        "refusal sites: {} enumerated, {defended} defended, {} undistinguished, {} never reached",
+        corpus.sites.len(),
+        undistinguished.len(),
+        unclaimed.len()
+    );
+    assert!(
+        undistinguished.is_empty() && unclaimed.is_empty(),
+        "a refusal can change kind or message with nothing noticing:\n{}\n{}",
+        undistinguished.join("\n"),
+        unclaimed.join("\n")
+    );
+}
+
+#[cfg(test)]
+mod classification {
+    use super::*;
+
+    /// The classifier's own pair: it must name the undefended case **and** not name the defended one.
+    ///
+    /// A classifier that always answers the same way passes one of these and fails the other. Run against its
+    /// own defect rather than against a blanket perturbation, because disabling the injection would leave
+    /// this untouched while making the "injection is wired" control fail — one negative run that only some
+    /// guards notice reports the rest as exercised when nothing tested them.
+    #[test]
+    fn the_classifier_names_the_undefended_case_and_only_it() {
+        assert_eq!(classify(true, &["kind", "message"]), Verdict::Defended);
+        assert_eq!(
+            classify(true, &["kind"]),
+            Verdict::Undistinguished(vec!["message"])
+        );
+        assert_eq!(
+            classify(true, &["message"]),
+            Verdict::Undistinguished(vec!["kind"])
+        );
+        assert_eq!(
+            classify(true, &[]),
+            Verdict::Undistinguished(vec!["kind", "message"])
+        );
+        assert_eq!(classify(false, &[]), Verdict::UnreachedAndUnclaimed);
+    }
+
+    /// A site killed by one perturbation is not defended.
+    ///
+    /// The kind and the message are independent contracts; accepting either would let a site be observed in
+    /// one and rot in the other — a message that has become a sentence about something else, or a kind that
+    /// has silently inverted, with the suite green.
+    #[test]
+    fn one_perturbation_is_not_enough() {
+        for killed in [vec!["kind"], vec!["message"]] {
+            assert_ne!(
+                classify(true, &killed),
+                Verdict::Defended,
+                "a site distinguished only by its {killed:?} was accepted as defended"
+            );
+        }
+    }
+}
+
+#[test]
+fn an_absent_layout_is_loud_when_the_workspace_marker_is_set() {
+    let absent = std::env::temp_dir().join("tianheng-refusal-bites-absent");
+    let _ = std::fs::remove_dir_all(&absent);
+    assert!(locate_layout(absent.clone(), false).is_none());
+    assert!(
+        std::panic::catch_unwind(|| locate_layout(absent, true)).is_err(),
+        "an absent layout must fail loudly under TIANHENG_WORKSPACE_TESTS rather than skip"
+    );
+}

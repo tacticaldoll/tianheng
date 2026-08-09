@@ -1,0 +1,5 @@
+fn violation(
+    message: impl Into<String>,
+) -> Refusal {
+    todo!()
+}
