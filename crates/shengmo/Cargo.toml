@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "README.md"
 # 繩墨 (Shéngmò) — the carpenter's inked line. Everything is judged straight against it, and the
 # line is not part of the furniture: this member holds the repository's own law and the reactions
 # holding the repository, and it ships in no package. Deliberately not an astronomical instrument

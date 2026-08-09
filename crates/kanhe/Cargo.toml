@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "README.md"
 # 勘合 (Kānhé) — the split tally: one document made in two halves, and authenticity proven by fitting
 # them together. That is what every reaction here does — AGENTS.md against ci.yml, CHANGELOG against
 # the tree, a spec against the code answering it, a generated document against its generator.

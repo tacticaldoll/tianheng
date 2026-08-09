@@ -340,6 +340,15 @@ Tianheng governs **itself** with its own reaction: the live self-law is declared
 `crates/shengmo/src/law.rs`, projected into `AGENTS.self-law.md`, and enforced as
 a `cargo test` gate.
 
+**Two workspace members are not product and are published nowhere.**
+[`shengmo`](crates/shengmo/README.md) (繩墨, the inked line) holds that law and the reactions that
+run the delivered product against this workspace; [`kanhe`](crates/kanhe/README.md) (勘合, the split
+tally) holds the reactions that fit this repository's own record against itself — its Definition of
+Done against CI, a spec's declared bound against the test defending it, a generated document against
+its generator. Both carry `publish = false`, so `cargo publish` packages neither, and neither is one
+of the 三儀: they measure nothing about an adopter's workspace and appear in no dependency you would
+take.
+
 ## Adoption & stability
 
 **A ladder, not a wall.** Adopt one instrument as an on-ramp and graduate to the composed
