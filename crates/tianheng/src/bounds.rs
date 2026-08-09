@@ -388,6 +388,22 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_comment_naming_every_member_for_another_reason_is_refused",
         ),
+        // --- rust-self-governance-gates ---
+        BoundDecl::pinned(
+            BoundId::new(
+                "rust-self-governance-gates/a-count-written-in-a-sentence-no-census-declares-a-stated-bound",
+            ),
+            "a figure about an enumerable set, written in a phrasing no census declares",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the declaration is the coverage — a census names the one sentence its figures are \
+                          written in, and a count outside that sentence is unheld. Reaching it needs a \
+                          judgement over prose, the instrument this repository designed, measured three times \
+                          and rejected; `AGENTS.md` carries the other half as a rule with no reaction"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_count_in_an_undeclared_phrasing_is_a_stated_bound",
+        ),
         // --- release-coherence: the adopter-narrative rule's limits ---
         //
         // How many there are is not written here. The block grew from four to seven across two review rounds

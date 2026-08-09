@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**13 of 73 declared bounds have no pinning test.** That figure is the register's
+**13 of 74 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -318,6 +318,14 @@ fallback used where no manifest exists, which the register spec describes.
 > the root-file run reports the seam covered, while the directory run reports it unprobed — the stated bound of the legacy corpus, recorded rather than presented as equivalent coverage
 
 - **pinned by**: `a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directory`
+
+## rust-self-governance-gates
+
+### `rust-self-governance-gates/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
+
+> nothing reacts. The declaration is the coverage; reaching further needs a judgement over prose, which is the instrument measured three times and rejected. `AGENTS.md` carries the other half as a rule with no reaction: a count of something this repository does not produce is not written
+
+- **pinned by**: `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
 
 ## self-law-projection
 

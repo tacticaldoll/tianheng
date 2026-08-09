@@ -644,6 +644,90 @@ fn section_shape(changelog: &str) -> Shape {
 /// Adopter-facing is the **complement** of `### Self-governance`, so a heading nobody anticipated reacts
 /// rather than being exempt by default. Dated sections are record: rewriting one to satisfy a rule written
 /// afterwards would falsify it.
+/// How many entries name this repository's own machinery, and how many of those sit in `[Unreleased]`.
+///
+/// Produced by the same scan the reaction uses, so the census and the refusal cannot disagree.
+pub struct NamingCensus {
+    pub total: usize,
+    pub unreleased: usize,
+}
+
+pub fn entries_naming_machinery(repo: &Path, changelog: &str) -> NamingCensus {
+    let names = machinery_names(repo).unwrap_or_default();
+    let mut total = 0usize;
+    let mut unreleased = 0usize;
+    let mut section = String::new();
+    let mut entry_hit = false;
+    let mut entry_unreleased = false;
+    let flush = |hit: &mut bool, un: &mut bool, total: &mut usize, unreleased: &mut usize| {
+        if *hit {
+            *total += 1;
+            if *un {
+                *unreleased += 1;
+            }
+        }
+        *hit = false;
+    };
+    for line in changelog.lines() {
+        if line.starts_with("## [") {
+            section = line
+                .split(" - ")
+                .next()
+                .unwrap_or(line)
+                .trim_end()
+                .to_string();
+        }
+        if line.starts_with("- ") {
+            flush(
+                &mut entry_hit,
+                &mut entry_unreleased,
+                &mut total,
+                &mut unreleased,
+            );
+            entry_unreleased = section == "## [Unreleased]";
+        }
+        if names_machinery(line, &names) {
+            entry_hit = true;
+        }
+    }
+    flush(
+        &mut entry_hit,
+        &mut entry_unreleased,
+        &mut total,
+        &mut unreleased,
+    );
+    NamingCensus { total, unreleased }
+}
+
+/// Every word that names this repository's own machinery: a tracked path under `scripts/`, its basename, or an
+/// ancestor directory derived from that enumeration.
+fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
+    let listing = git(repo, &["ls-files", "scripts/"])
+        .map_err(|err| cannot_judge(format!("could not enumerate scripts/: {err}")))?;
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    for path in listing.lines().filter(|l| !l.is_empty()) {
+        names.insert(path.to_string());
+        if let Some(base) = path.rsplit('/').next() {
+            names.insert(base.to_string());
+        }
+        let mut dir = path.to_string();
+        while let Some(cut) = dir.rfind('/') {
+            dir.truncate(cut + 1);
+            names.insert(dir.clone());
+            dir.truncate(cut);
+        }
+    }
+    Ok(names)
+}
+
+fn names_machinery(line: &str, names: &BTreeSet<String>) -> bool {
+    line.split(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '/' | '-')))
+        .any(|run| {
+            let token = run.strip_prefix("./").unwrap_or(run).trim_end_matches('.');
+            !token.is_empty() && names.contains(token)
+        })
+}
+
 fn adopter_cited_machinery(repo: &Path, changelog: &str) -> Result<Vec<String>, Refusal> {
     let listing = git(repo, &["ls-files", "scripts/"])
         .map_err(|err| cannot_judge(format!("could not enumerate scripts/: {err}")))?;

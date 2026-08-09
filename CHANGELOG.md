@@ -744,6 +744,29 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **A census is now DECLARED, and the half nothing can hold says so.** The rule had one reaction covering
+  exactly one sentence, and adversarial review found **eight** figures wrong in a single change — an entry
+  population corrected twice, each correction breaking the next; a block header counting four where there were
+  seven; a ratio that drifted inside its own pull request; and a file count the commit typing it had just made
+  stale. The reaction that enumerates a set now names the one sentence its figures are written in and produces
+  them, and one sweep holds every tracked document to every declaration. Adding a census means declaring it,
+  which is what makes it enumerable.
+
+  Two of the first four declarations were **inert against the very documents they are for**, and both were
+  found by running them rather than reading them. The matcher read digits, and this repository's prose writes
+  counts as words — `twenty entries`, `eleven of them` — so it matched nothing. And one phrase spanned lines
+  against a line-oriented sweep: declared, enumerable and silent. Both are now guarded on the declaration
+  itself, along with a phrase too generic to name its own set, which had matched an unrelated sentence in a
+  specification.
+
+  Two shapes stay outside by construction and are stated rather than approximated. A figure about a **past
+  state** is a record — holding it to today's enumeration would demand the record change every time the tree
+  does — and a figure in a phrasing no census declares is unheld, because reaching it needs the prose detector
+  measured three times and rejected. `AGENTS.md` carries that half as a rule with no reaction: **a count of
+  something this repository does not produce is not written.** Each of the three wrong figures it would have
+  caught was decoration — the sentence said the same thing without the number, right up until the number
+  stopped being true.
+
 - **A census is produced, never typed, and `AGENTS.md` now says so.** Hand-written figures drifted in every kind of
   place they can live during this window — a code doc, two backlog entries, a changelog sentence, three files at
   once, the version-horizon paragraph that assigns the release number, and a **generated projection's template**.
@@ -782,7 +805,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   reaction"*. The set name 三司 goes with them; 司 keeps a definition in place, because the 潛移 paragraph's
   contrast against it still needs an antecedent.
 - **This heading exists, and a reaction refuses the leak back into the others.** `scripts/` and `docs/` ship
-  in zero packages, yet twenty entries named that machinery under `### Added`, `### Changed`, `### Fixed` and
+  in zero packages, and before this change twenty entries named that machinery under `### Added`, `### Changed`, `### Fixed` and
   `### Documentation`, because the document offered no heading that was not an adopter's vocabulary. What is
   separated is **publication, not rigour**: no reaction, twin, observation bound or exit-contract obligation
   was removed, and the test is that deleting an adopter-facing entry about a gate changes nothing about that

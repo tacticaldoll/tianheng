@@ -137,6 +137,24 @@ doc** was spelled in words, which no digit-based matcher reads. Most numbers in 
 The census direction in `check_bound_register.sh` stays what it is — a backstop for the one set whose phrasing is
 stable — and the rule above is what keeps a figure honest.
 
+
+A census this repository can produce is **declared**: the reaction that enumerates the set names the one
+sentence its figures are written in, and one sweep holds every tracked document to it — `crates/tianheng/tests/census.rs`.
+Adding a census means declaring it, which is what makes it enumerable.
+
+**A count of something this repository does not produce is not written.** That is the other half, and nothing
+observes it. Eight figures were found wrong in one change and three of them counted sets no reaction
+enumerates — how many spans of a shape a document carries, how many commits a window holds. Each was
+decoration: the sentence it sat in said the same thing without it, right up until the number stopped being
+true. Where the count matters, produce it and let the producing document carry it; where it does not, write
+the property and leave the number out.
+
+Two shapes are outside a census by construction, and stating them is the point. A figure about a **past
+state** — what a document said before a change — is a record: holding it to today's enumeration would demand
+that the record change every time the tree does. And a figure written in a sentence no census declares is
+unheld; the declaration is the coverage, and widening the match to prose instead is the detector this
+repository designed, measured three times and rejected.
+
 ## A repair loop is a diagnosis, not a schedule
 
 **When a round of repairs produces its own findings, count what kind they are before deciding what to do
