@@ -4,6 +4,9 @@
 //! Two constructions of "a signed release repository" would be the twin-drift class this repository keeps
 //! closing, and the whole reason the builder is shared.
 
+#[path = "support/refusal.rs"]
+mod refusal;
+
 #[path = "support/publish_source_gate.rs"]
 mod gate;
 

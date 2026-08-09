@@ -15,31 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Kind {
-    Violation,
-    CannotJudge,
-}
-
-#[derive(Debug, Clone)]
-pub struct Refusal {
-    pub kind: Kind,
-    pub message: String,
-}
-
-fn violation(message: impl Into<String>) -> Refusal {
-    Refusal {
-        kind: Kind::Violation,
-        message: message.into(),
-    }
-}
-
-fn cannot_judge(message: impl Into<String>) -> Refusal {
-    Refusal {
-        kind: Kind::CannotJudge,
-        message: message.into(),
-    }
-}
+use crate::refusal::{Refusal, cannot_judge, violation};
 
 pub fn hermetic(program: &str) -> Command {
     let mut command = Command::new(program);

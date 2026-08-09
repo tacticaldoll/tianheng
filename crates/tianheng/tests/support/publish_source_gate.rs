@@ -16,33 +16,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Kind {
-    /// The source disagrees with what a release publishes from.
-    Violation,
-    /// The source could not be read, which is not the same fact.
-    CannotJudge,
-}
-
-#[derive(Debug, Clone)]
-pub struct Refusal {
-    pub kind: Kind,
-    pub message: String,
-}
-
-fn violation(message: impl Into<String>) -> Refusal {
-    Refusal {
-        kind: Kind::Violation,
-        message: message.into(),
-    }
-}
-
-fn cannot_judge(message: impl Into<String>) -> Refusal {
-    Refusal {
-        kind: Kind::CannotJudge,
-        message: message.into(),
-    }
-}
+use crate::refusal::{Refusal, cannot_judge, violation};
 
 fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     let out = Command::new("git")

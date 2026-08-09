@@ -6,13 +6,17 @@
 //! reading only "non-zero" was blind to exactly the regression the shell era's shared backstop introduced,
 //! where every genuine incoherence was reported as cannot-judge with CI green throughout.
 
+#[path = "support/refusal.rs"]
+mod refusal;
+
 #[path = "support/release_coherence_gate.rs"]
 mod gate;
 
 use gate::{
-    Kind, build_fixture, commit, development_changelog, hermetic, judge, release_changelog,
+    build_fixture, commit, development_changelog, hermetic, judge, release_changelog,
     workspace_files,
 };
+use refusal::Kind;
 use std::path::{Path, PathBuf};
 
 fn locate_layout(root: PathBuf, marker_set: bool) -> Option<PathBuf> {
