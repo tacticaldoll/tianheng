@@ -48,8 +48,8 @@ labelled relative to it — so an invented one mislabels every finding silently.
 - `observation-bound-register`: the package enumeration requirement gains the scenario that holds it.
 
 `rust-repository-reactions` claims `crates/kanhe/**` and is accounted for here: the reactions change, their
-requirements do not. `violation-baseline` claims `crates/tianheng/tests/baseline_cli.rs`, whose direction is
-repaired without its requirement changing. `release-coherence` claims `CHANGELOG.md`, which records this.
+requirements do not. `violation-baseline` and `cli-check-runner` both claim
+`crates/tianheng/tests/baseline_cli.rs`, whose direction is repaired without either requirement changing. `release-coherence` claims `CHANGELOG.md`, which records this.
 
 ## Impact
 
