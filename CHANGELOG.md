@@ -744,6 +744,14 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **The filing join accepted one claimant, and that could not catch the defect it was written from.** Where
+  two capabilities' subjects overlap — `scripts/publish.sh` is claimed both by `publish-source-integrity` and,
+  through `scripts/*.sh`, by `rust-repository-reactions` — naming either satisfied the join, so the original
+  misfiling would have passed. The direction asserting otherwise was built on a **constructed** claim map
+  rather than the declared subjects, which is why it was green. It now reads this repository's own
+  declarations, and every claimant must be accounted for: named as modified, or named with the reason its
+  requirements do not change.
+
 - **Which capability a requirement belongs to is now checked where it is decided.** It was chosen once, in a
   proposal, and held by nothing — and it went wrong twice in one window, both times caught by a reader. Every
   capability declares a `## Subject` (the tracked-path globs it governs, resolved by `git ls-files` so

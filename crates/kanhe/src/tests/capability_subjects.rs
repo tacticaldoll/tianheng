@@ -105,13 +105,36 @@ fn a_shell_wrapper_filed_under_the_rust_reaction_capability_is_refused() {
     assert!(offences[0].message.contains("scripts/publish.sh"));
 }
 
+/// Every claimant, not one. Naming one was the first rule and it could not catch the defect the join was
+/// written from, because the two capabilities claiming that file overlap.
 #[test]
-fn naming_one_of_two_claiming_capabilities_satisfies_the_join() {
+fn naming_one_of_two_claiming_capabilities_does_not_satisfy_the_join() {
+    let offences = join_offences(
+        "c",
+        &["shared.rs".to_string()],
+        &listed(&["second"]),
+        &claimed(&[("first", &["shared.rs"]), ("second", &["shared.rs"])]),
+    );
+    assert_eq!(offences.len(), 1);
+    assert!(
+        offences[0].message.contains("`first`"),
+        "{}",
+        offences[0].message
+    );
+    assert!(
+        !offences[0].message.contains("`second` governs"),
+        "{}",
+        offences[0].message
+    );
+}
+
+#[test]
+fn accounting_for_both_claimants_satisfies_the_join() {
     assert!(
         join_offences(
             "c",
             &["shared.rs".to_string()],
-            &listed(&["second"]),
+            &listed(&["first", "second"]),
             &claimed(&[("first", &["shared.rs"]), ("second", &["shared.rs"])]),
         )
         .is_empty()

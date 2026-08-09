@@ -96,12 +96,19 @@ pub fn declaration_offences(
     offences
 }
 
-/// Whether a change named a capability claiming each file it touches.
+/// Whether a change accounted for every capability claiming a file it touches.
 ///
-/// Where more than one capability claims a file, naming **one** satisfies the join: two capabilities may
-/// legitimately govern one file, and demanding all of them would refuse honest proposals. A file no
-/// capability claims is not judged — subjects are declared where a capability has something to say, and that
-/// blindness is a declared bound rather than an omission.
+/// **Every** claimant, not one of them. Naming one was the first rule and it was measured unable to catch the
+/// defect it was written from: `scripts/publish.sh` is claimed both by the capability governing what must be
+/// true before a publish and by the capability governing this repository's reactions, so a change naming only
+/// the second passed while filing a wrapper's requirement under a Rust-reaction subject.
+///
+/// Requiring all of them does not refuse an honest proposal, because *accounting for* a capability is not
+/// *listing it as modified*: a Capabilities section that names it while saying why its requirements do not
+/// change satisfies this, and writing that sentence is the discipline the join exists to make routine.
+///
+/// A file no capability claims is not judged — subjects are declared where a capability has something to say,
+/// and that blindness is a declared bound rather than an omission.
 pub fn join_offences(
     change: &str,
     touched: &[String],
@@ -111,13 +118,18 @@ pub fn join_offences(
     let mut offences = Vec::new();
     for path in touched {
         let claimants = claimants(path, claimed);
-        if claimants.is_empty() || claimants.iter().any(|c| listed.contains(c)) {
+        let unaccounted: Vec<String> = claimants
+            .into_iter()
+            .filter(|c| !listed.contains(c))
+            .collect();
+        if unaccounted.is_empty() {
             continue;
         }
         offences.push(violation(format!(
-            "`{change}` touches `{path}`, which `{}` governs, and its proposal names {}. A capability's \
-             requirements are filed where its subject is, and the filing decision is made in the proposal",
-            claimants.join("`, `"),
+            "`{change}` touches `{path}`, which `{}` governs without being accounted for, and its proposal \
+             names {}. Name each in the Capabilities section — as modified, or with the reason its \
+             requirements do not change",
+            unaccounted.join("`, `"),
             if listed.is_empty() {
                 "no capability".to_string()
             } else {

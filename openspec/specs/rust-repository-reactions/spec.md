@@ -580,8 +580,15 @@ actually touches. The touched set SHALL be **produced** — the change's diff ag
 from the change's own prose, because the capability list and any prose inventory come from the same decision
 and comparing them is a comparison of a value with itself.
 
-Where more than one capability claims a touched file, naming **one** of them SHALL satisfy the join. Two
-capabilities may legitimately govern one file, and demanding all of them would refuse honest proposals.
+**Every** capability claiming a touched file SHALL be accounted for, not one of them. Naming one was measured
+unable to catch the defect this requirement was written from: the publish wrapper is claimed both by the
+capability governing what must be true before a publish and by the capability governing this repository's
+reactions, so a change naming only the second passed while filing a wrapper's requirement under a
+Rust-reaction subject.
+
+Accounting for a capability is **not** listing it as modified: a Capabilities section naming it while stating
+why its requirements do not change satisfies this. So requiring all of them refuses no honest proposal — it
+requires the proposal to say what it is doing, which is the discipline the join exists to make routine.
 
 The base SHALL be resolved, and a base that cannot be resolved SHALL be a cannot-judge. Reading an
 unresolvable base as *nothing was touched* would report clean over every change, which is the direction this
