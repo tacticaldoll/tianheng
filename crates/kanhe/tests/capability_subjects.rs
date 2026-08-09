@@ -282,3 +282,41 @@ fn a_branch_with_no_resolvable_base_cannot_be_judged() {
         refusal.message
     );
 }
+
+/// The defect the join was written from, against the **declared** subjects rather than a constructed map.
+///
+/// The unit matrix exercises the rule; this exercises the rule *on this repository*. Both are needed, and
+/// only this one can say whether the claim "it would have caught that filing" is true — measured, under the
+/// first rule it was false, because `rust-repository-reactions` claims `scripts/*.sh` and naming one claimant
+/// was enough.
+#[test]
+fn the_parked_misfiling_is_refused_against_the_declared_subjects() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let claimed = claimed(&root, &specs(&root));
+    let wrapper = "scripts/publish.sh".to_string();
+    let claimants: Vec<String> = claimed
+        .iter()
+        .filter(|(_, paths)| paths.contains(&wrapper))
+        .map(|(capability, _)| capability.clone())
+        .collect();
+    assert!(
+        claimants.len() > 1,
+        "this direction is about overlapping subjects, and `{wrapper}` is claimed by {claimants:?} — with \
+         one claimant it would pass for a reason unrelated to the rule"
+    );
+
+    let named: BTreeSet<String> = ["rust-repository-reactions".to_string()]
+        .into_iter()
+        .collect();
+    let offences = join_offences("a-gate-that-matched-no-test", &[wrapper], &named, &claimed);
+    assert!(
+        offences
+            .iter()
+            .any(|refusal| refusal.message.contains("publish-source-integrity")),
+        "a change touching the publish wrapper while naming only the Rust-reaction capability must be \
+         refused, and named for the capability it failed to account for; got: {:?}",
+        offences.iter().map(|r| &r.message).collect::<Vec<_>>()
+    );
+}
