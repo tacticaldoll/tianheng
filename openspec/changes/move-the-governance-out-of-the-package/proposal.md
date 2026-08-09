@@ -39,8 +39,16 @@ return. Moving them leaves it running tests that actually exercise the packaged 
   to its own author — and it currently sits at line 69 of a 668-line test file. It moves to
   `crates/shengmo/src/`, exported, with the tests reduced to the reaction that runs it. `AGENTS.self-law.md`
   is then projected from a library rather than from a private function inside a test binary.
-- **The repository reactions move into its `tests/`** — 16 further targets, with the support modules and
-  fixtures they own.
+- **The apparatus takes its siblings' shape.** `guibiao` and `hunyi` already split an earlier single
+  `src/tests.rs` into `src/tests/<topic>.rs` beside the code it tests. 繩墨 follows it: the judgements
+  (`merge_message_gate::judge`, `publish_source_gate::judge`, `refusal::Refusal`) are library modules, their
+  failure matrices are `#[cfg(test)]` units beside them, and `crates/shengmo/tests/` keeps only the reactions
+  that run against the real repository. `tests/support/` and every `#[path = "support/…"]` include disappear.
+- **The duplication that shape was hiding collapses.** Measured: **14** targets each carry their own
+  `workspace_root` / `locate_layout`, **11** carry an identical copy of one absent-layout test, and
+  `TIANHENG_WORKSPACE_TESTS` is asserted at **53** sites. Eleven identical tests over fourteen identical
+  functions is the twin-matrix shape this repository retired when it stopped writing gates as shell scripts —
+  regrown in Rust because there was no `src/` to share from.
 - **The prose that restates the law is retired with it.** The rule already exists and already reacts, but only
   for line-comment blocks under `crates/tianheng/src` and only against the shell's allowlist. Measured,
   `PROJECT.md` names every member of `guibiao`'s live allowlist — `serde_json, xuanji, xingbiao` — which is

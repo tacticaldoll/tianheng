@@ -40,18 +40,25 @@
 - [ ] 3a.5 Confirm the declared over-reaction still holds: a document naming those members for another reason
   is refused too, which is an existing stated bound rather than a case to work around.
 
-## 4. The reactions follow, with their support modules (N3)
+## 4. The judgements become library code and their matrices unit tests (N3)
 
-- [ ] 4.1 Move the nine support modules whose only users move: `bound_register_parse`, `census`,
+- [ ] 4.1 The nine support modules become modules of `crates/shengmo/src/`: `bound_register_parse`, `census`,
   `merge_message_gate`, `publish_source_gate`, `refusal`, `refusal_exemptions`, `refusal_sites`, `region`,
-  `release_coherence_gate`. `support/mod.rs` stays and drops `pub mod region;`.
-- [ ] 4.2 Move the remaining 16 targets and their fixtures. Keep `#[path = "support/…"]` inclusion exactly as
-  it is — the inclusion mechanism does not change in the same step as the location.
-- [ ] 4.3 `refusal_sites` builds its corpus from dep-info: confirm it enumerates shengmo's targets and that
-  `refusal_bites` reports the same site classification as 1.2 recorded. A different census here is a defect in
-  the move, not a new fact about the tree.
-- [ ] 4.4 `crates/tianheng/tests/` holds only the eight crate tests. `cargo test -p tianheng` passes without
-  any workspace marker, and `cargo package --list -p tianheng` no longer carries a governance target.
+  `release_coherence_gate`. `support/mod.rs` stays with the conformance matrices in `tianheng` and drops
+  `pub mod region;`.
+- [ ] 4.2 The failure matrices become `crates/shengmo/src/tests/<topic>.rs` with a shared `helpers.rs`,
+  following the shape `guibiao` and `hunyi` already carry. What stays in `crates/shengmo/tests/` is the
+  reactions — what runs against the real repository. Every `#[path = "support/…"]` include disappears.
+- [ ] 4.3 Collapse the duplication: one `workspace_root`, one absent-layout direction, one meaning for
+  `TIANHENG_WORKSPACE_TESTS`. **Diff the 14 copies against each other before merging them** — a marker asserted
+  at 53 sites has had room to drift, and a copy that differs is a finding rather than a conflict to smooth
+  over.
+- [ ] 4.4 The corpus, verified rather than assumed: the library's unit-test target enters the enumeration
+  through its own executable, and `refusal_bites` reports the site census recorded in 1.2 **identically**. The
+  same sites exist in different files; a shrink means the enumeration lost them, a growth means it was already
+  missing some.
+- [ ] 4.5 `crates/tianheng/tests/` holds only the eight crate tests, `cargo test -p tianheng` passes with no
+  workspace marker, and `cargo package --list -p tianheng` carries no governance target.
 
 ## 5. Every invocation follows (N4)
 

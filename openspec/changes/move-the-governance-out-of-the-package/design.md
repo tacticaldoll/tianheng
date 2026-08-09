@@ -99,25 +99,49 @@ becomes a pointer to the projection. What stays in prose is what a declaration c
 exists, what it protects, the narrative of the family. What leaves is the membership, which the declaration
 owns.
 
-### The support modules stay `#[path]`-included for now
+### The member takes its siblings' shape: units in `src/`, matrices in `src/tests/`, reactions in `tests/`
 
-The tests keep including their support modules through `#[path = "support/…"]` exactly as today.
+`merge_message_gate::judge`, `publish_source_gate::judge`, `refusal::Refusal` and the rest are the
+**implementation**; the failure matrices are their unit tests. `guibiao` and `hunyi` already carry that
+shape — `src/tests/<topic>.rs` with a shared `helpers.rs`, split from an earlier single `src/tests.rs` — and
+繩墨 follows it rather than inventing a third arrangement:
 
-Making them part of the member's library too is the better long-term shape and is **deliberately deferred**.
-`refusal_sites` builds its corpus from what rustc reports having read for each test target, and a dependency
-consumed as an rlib does not appear in that target's dep-info — so moving the judgement code into the library
-would silently drop its refusal sites from the corpus `refusal_bites` perturbs. That is a corpus change
-needing its own verification, and it must not be entangled with a file move. The law has no such coupling: it
-constructs no refusal.
+- `crates/shengmo/src/` — the law, the judgements, and the scaffolding they share.
+- `crates/shengmo/src/tests/` — the failure matrices, as `#[cfg(test)]` unit tests of those judgements.
+- `crates/shengmo/tests/` — the reactions themselves: what runs against the real repository.
+
+`tests/support/` and every `#[path = "support/…"]` include disappear with it.
+
+**The duplication is why the shape matters.** Measured: 14 targets each carry their own `workspace_root` /
+`locate_layout`, 11 carry an identical copy of `an_absent_layout_is_loud_when_the_workspace_marker_is_set`,
+and `TIANHENG_WORKSPACE_TESTS` is asserted at 53 sites. Eleven identical tests over fourteen identical
+functions is the twin-matrix shape this repository retired when it stopped writing gates as shell scripts; it
+regrew in Rust because there was no `src/` to put a shared function in. It is also why that environment marker
+means two different things today — it has fourteen definitions and therefore none.
+
+**The obstacle this appeared to have dissolves under the same shape.** `refusal_sites` enumerates from
+`cargo test --no-run --message-format=json`, taking messages that carry an `executable`, and reads the
+dep-info beside each. An rlib's sources are invisible to a dependent — `observer_protocol` uses `tianheng::`
+and its dep-info lists **zero** files under `crates/tianheng/src`. But a library's **unit-test** target *is*
+an executable: measured on `guibiao`, its rlib dep-info lists 0 source files while its unit-test executable's
+lists **102**, the whole of `src/` including `src/tests/`. So judgement code in `src/`, with its matrices as
+`#[cfg(test)]` units, enters the corpus through the ordinary enumeration and `refusal_sites` needs no change.
+
+An earlier draft deferred this move to protect the corpus. That was protecting against a problem the wrong
+structure creates: with the right one it does not arise.
 
 ## Risks / Trade-offs
 
-- **[A package whose only real content is tests]** → `src/lib.rs` exists and is documented rather than empty,
-  so the member has a target and a reader is told what it is for. Whether the repository's own constitution
-  reacts to a doc-only crate is verified during apply, not assumed.
-- **[`refusal_sites` enumerates its corpus from dep-info of test targets]** → the corpus follows the targets
-  because it is produced from the build rather than from a list. Confirmed by running `refusal_bites` after
-  the move and comparing its census against the pre-move figures.
+- **[The library grows a unit-test target the corpus has never enumerated]** → that is the mechanism this
+  design relies on, so it is verified rather than assumed: the site census recorded before the move must come
+  back identical, since the same sites exist in different files. A shrink means the enumeration lost them; a
+  growth means it was missing something already.
+- **[Collapsing 14 copies into one changes behaviour if the copies were not identical]** → they are diffed
+  against each other before the collapse, not assumed equal. Where one differs, the difference is the finding
+  and it is resolved deliberately — a marker asserted at 53 sites has had room to drift.
+- **[The constitution must declare the crate that holds the constitution]** →
+  `every_workspace_member_is_self_governed` already requires every member to be covered, so the self-reference
+  is forced rather than optional, and it is settled before any target moves.
 - **[Every invocation of a moved target must follow]** → they are enumerable: `--test <name>` in `ci.yml`,
   `AGENTS.md`, and `scripts/`. `dod_coherence` holds the DoD-to-CI correspondence, and `reference_integrity`
   holds every path reference, so a missed one is red rather than silent — which is also why those two move
