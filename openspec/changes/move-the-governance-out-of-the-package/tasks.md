@@ -1,30 +1,30 @@
 ## 1. Record what ships today
 
-- [ ] 1.1 `cargo package --list -p tianheng` — the file count under `tests/` and the target names, before
+- [x] 1.1 `cargo package --list -p tianheng` — the file count under `tests/` and the target names, before
   anything moves. This is the figure the change is measured against.
-- [ ] 1.2 Record the pre-move census figures the moved reactions produce — `refusal_bites`' site counts, the
+- [x] 1.2 Record the pre-move census figures the moved reactions produce — `refusal_bites`' site counts, the
   bound register's totals, the projection register's rows — so the post-move run is compared against a
   recorded observation rather than a memory.
 
 ## 2. The member exists and is empty (N1)
 
-- [ ] 2.1 `crates/shengmo/Cargo.toml`: `publish = false`, `license.workspace = true`, no license texts, and a
+- [x] 2.1 `crates/shengmo/Cargo.toml`: `publish = false`, `license.workspace = true`, no license texts, and a
   dev-dependency on `tianheng` for the law. Add it to the workspace's explicit `members` list.
-- [ ] 2.2 `crates/shengmo/src/lib.rs`: what 繩墨 is and why it ships in no package. `tianheng` is a **normal**
+- [x] 2.2 `crates/shengmo/src/lib.rs`: what 繩墨 is and why it ships in no package. `tianheng` is a **normal**
   dependency, not a dev-dependency — the law is not test scaffolding.
-- [ ] 2.3 `cargo build --workspace` passes with the member present and empty. Settle the self-reference the
+- [x] 2.3 `cargo build --workspace` passes with the member present and empty. Settle the self-reference the
   constitution creates: `every_workspace_member_is_self_governed` requires the member holding the law to be
   declared in the law. Decide it here, before any target moves.
 
 ## 3. The law becomes a library, alone (N2)
 
-- [ ] 3.1 `tianheng_constitution()` and its helpers move to `crates/shengmo/src/`, exported. What stays behind
+- [x] 3.1 `tianheng_constitution()` and its helpers move to `crates/shengmo/src/`, exported. What stays behind
   as a test is the reaction that runs it, the projection freshness check, and the fixture directions.
-- [ ] 3.2 `AGENTS.self-law.md` regenerates **byte-identically** from the library. The projection is a record of
+- [x] 3.2 `AGENTS.self-law.md` regenerates **byte-identically** from the library. The projection is a record of
   the law; a move that changes it changed the law. Diff it, do not trust the gate alone.
-- [ ] 3.3 Follow its invocations: `.github/CODEOWNERS`, `docs/projection-register.md`, `README.md`, `deny.toml`,
+- [x] 3.3 Follow its invocations: `.github/CODEOWNERS`, `docs/projection-register.md`, `README.md`, `deny.toml`,
   `AGENTS.md`. Regenerate the projection register rather than hand-editing it.
-- [ ] 3.4 The law alone, moved and green, before anything else moves. If this step is wrong, everything after
+- [x] 3.4 The law alone, moved and green, before anything else moves. If this step is wrong, everything after
   it is wrong for the same reason.
 
 ## 3a. The prose that restates the law is retired (N2b)
