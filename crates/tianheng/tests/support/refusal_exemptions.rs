@@ -56,6 +56,14 @@ pub fn exemptions() -> Vec<Exemption> {
             because: "the write goes into a directory this same call has just created under the process's \
                       temp directory",
         },
+        // --- an I/O failure a fixture cannot schedule ---
+        Exemption {
+            slug: "directory-entry-unyieldable",
+            bound: OUT_OF_REACH_BOUND,
+            because: "a `read_dir` iterator yields an error only when the filesystem fails part-way through \
+                      an enumeration, which a fixture cannot schedule; propagating it is still right, because \
+                      dropping the entry lets the remainder satisfy the counters the judgement reasons from",
+        },
         // --- git's two extractions disagreeing with each other ---
         Exemption {
             slug: "signature-block-unreadable",
