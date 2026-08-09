@@ -744,6 +744,14 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **Which capability a requirement belongs to is now checked where it is decided.** It was chosen once, in a
+  proposal, and held by nothing — and it went wrong twice in one window, both times caught by a reader. Every
+  capability declares a `## Subject` (the tracked-path globs it governs, resolved by `git ls-files` so
+  membership is produced rather than modelled), and a reaction joins each active change's **diff against its
+  base** to the capabilities its proposal names. Reading the touched set from the change's own prose would
+  compare the list against something written by the same decision. Two bounds are declared with it: subjects
+  do not tile the repository, and which governance member a reaction belongs to is unobserved.
+
 - **The capability holding this repository's reactions is renamed `rust-repository-reactions`.** Its old name
   claimed self-governance for a population that mostly collates a record and reaches no product contract, and
   a name is what a reader consults before filing a requirement. **Four published bound ids change value** —
