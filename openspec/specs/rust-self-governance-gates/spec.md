@@ -120,3 +120,40 @@ holds an adopter-facing entry to naming none of this repository's own machinery.
 - **WHEN** a reader treats a generated document as the authority
 - **THEN** they are reading a view; the specification the projection derives from is what a change must
   satisfy, and the projection's freshness reaction is what keeps the two together
+
+### Requirement: A census SHALL be declared by the reaction that produces it
+
+A figure a document states about a set this repository enumerates SHALL be **declared as a census**: the
+reaction that enumerates the set names the one sentence the figures are written in and produces them, and one
+sweep holds every tracked document to that declaration.
+
+A census phrase SHALL be specific enough to name its own set, and SHALL be matchable — a phrase spanning lines
+can never match a line-oriented sweep, and would be declared, enumerable and silent. Figures SHALL be read in
+digits **and in words**, because this repository's prose writes counts as words; a matcher reading digits only
+left two of the first four censuses declared here inert against the very documents they are for.
+
+**What a census does not reach is declared rather than approximated.** A figure written in a sentence no
+census declares is unheld, and a figure about a **past state** is a record: holding it to today's enumeration
+would demand that the record change every time the tree does. Widening the match toward prose instead is the
+detector `AGENTS.md` records as designed, measured three times and rejected.
+
+#### Scenario: A declared census disagrees with what produces it
+
+- **WHEN** a tracked document writes a declared census's phrase with figures the enumerating reaction does not
+  produce
+- **THEN** the sweep fails, naming the document, the line, both figures and the subject
+
+#### Scenario: A census that can never match
+
+- **WHEN** a census declares a phrase spanning lines, or one whose longest literal is too short to name its
+  set
+- **THEN** the sweep fails on the declaration itself, because a census that cannot match reads as covered
+  while defending nothing
+
+#### Scenario: A count written in a sentence no census declares — a stated bound
+
+- **WHEN** a document writes a figure about an enumerable set in a phrasing no census names
+- **THEN** nothing reacts. The declaration is the coverage; reaching further needs a judgement over prose,
+  which is the instrument measured three times and rejected. `AGENTS.md` carries the other half as a rule with
+  no reaction: a count of something this repository does not produce is not written
+- **PINNED-BY** `a_count_in_an_undeclared_phrasing_is_a_stated_bound`

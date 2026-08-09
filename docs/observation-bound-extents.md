@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**31 of 73 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**32 of 74 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -29,6 +29,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound` — owner: engine
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
 - `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound` — owner: engine
+- `rust-self-governance-gates/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
 - `self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound` — owner: engine
 - `self-law-projection/a-reason-carrying-the-clause-while-negating-the-law-is-not-observed-a-stated-bound` — owner: engine
 - `self-law-projection/a-workspace-dependency-allowlist-is-not-examined-a-stated-bound` — owner: engine
@@ -390,7 +391,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (31)
+## under-reacts (32)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -583,6 +584,14 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **because**: the audit is cfg-blind and counts the probe as coverage, so a seam with no production probe reads as probed
 - **its defence must show**: does not react
 - **pinned by**: `production_probe_behind_non_production_cfg_is_counted_as_coverage`
+
+### `rust-self-governance-gates/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
+
+> a figure about an enumerable set, written in a phrasing no census declares
+
+- **because**: the declaration is the coverage — a census names the one sentence its figures are written in, and a count outside that sentence is unheld. Reaching it needs a judgement over prose, the instrument this repository designed, measured three times and rejected; `AGENTS.md` carries the other half as a rule with no reaction
+- **its defence must show**: does not react
+- **pinned by**: `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
 
 ### `self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound`
 
