@@ -85,6 +85,28 @@ pub fn cannot_judge(message: impl Into<String>) -> Refusal {
     )
 }
 
+/// A cannot-judge whose precondition no environment the suite runs in can produce.
+///
+/// The slug is what a declared bound is joined to. It is an argument at the site rather than a location,
+/// because a location is a **selector** — valid for one build, and moved by inserting a line above it — while
+/// an exemption has to outlive every build. Being an argument, it moves with the site and the compiler checks
+/// it exists; being a slug rather than the message, rewording an operator-facing sentence cannot silently
+/// move an exemption.
+///
+/// There is no violation-shaped counterpart. Every site this repository has had to declare is a cannot-judge,
+/// and a constructor with no call site is dead code that reads as capability.
+#[track_caller]
+pub fn cannot_judge_out_of_reach(_slug: &'static str, message: impl Into<String>) -> Refusal {
+    let site = Location::caller();
+    instrument(
+        site,
+        Refusal {
+            kind: Kind::CannotJudge,
+            message: message.into(),
+        },
+    )
+}
+
 /// Record this construction, then apply whatever perturbation names it.
 ///
 /// Deliberately **not** `#[track_caller]`: it receives the site rather than asking for it, which is what keeps

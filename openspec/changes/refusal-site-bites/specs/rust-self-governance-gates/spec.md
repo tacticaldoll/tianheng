@@ -217,6 +217,11 @@ future kinded gate would be claiming coverage it does not have.
 A site's observing targets SHALL be derived from which targets' reported sources contain that site's **file**,
 not from which targets include the shared module.
 
+The corpus is the source list of one feature set, and it SHALL be the feature set the perturbation runs — so
+enumeration and run are about the same binaries by construction. This is a definition rather than a bound: a
+file outside that build is also outside the binaries being perturbed, so no refusal it holds is one the suite
+could have reached.
+
 #### Scenario: A refusal site is added but not committed
 
 - **WHEN** a new refusal site exists in the worktree, is not committed, and no direction reaches it
@@ -244,20 +249,14 @@ not from which targets include the shared module.
 #### Scenario: A refusal vocabulary under different names is not observed — a stated bound
 
 - **WHEN** a reaction declares the same contract under other names — a `Decision` type with `Disagrees` and
-  `Unreadable`, say — and never touches the shared module
+  `Unreadable`, say — and never touches the shared module; or declares the shared names inside the sources of
+  the reaction performing the scan, which are exempt because a reaction over text holds the text it recognises
 - **THEN** nothing reacts. The scan recognises names, and recognising a vocabulary by intent is a judgement
   over source, the instrument this repository has measured and rejected. No compile-time construction reaches
   it either: forcing a not-yet-written reaction to return the shared type requires enumerating reactions, and
   what counts as one has no mechanical definition
 - **PINNED-BY** `a_refusal_vocabulary_under_other_names_is_not_observed`
 
-#### Scenario: A file compiled only under another feature set is not observed — a stated bound
-
-- **WHEN** a refusal site lives in a file the build under `--all-features` does not compile
-- **THEN** it is outside the corpus, because the corpus is the source list of the build that is also the build
-  being perturbed. Enumerating every feature combination would multiply the sweep by the powerset of the
-  feature space to reach files this workspace does not have
-- **PINNED-BY** `the_corpus_is_the_feature_set_that_is_perturbed`
 
 ### Requirement: The reach recording SHALL fail loudly, and each guard SHALL be falsified by its own defect
 
@@ -297,6 +296,11 @@ a false negative about an impossible input; and only what survives both SHALL be
 Declaring first produces exemptions for code that should not exist, and the exempt set then reads as a limit
 of the reaction rather than as a property of the world.
 
+The size of that set SHALL be a declared census, produced by the same enumeration the reaction perturbs, so it
+cannot grow without a document disagreeing with it. Today **6 of 58 refusal sites are declared out of reach**,
+every one of them inside the tag-signature check: four describe the machine the gate runs on rather than the
+repository it judges, and two are git's own two extractions of one object disagreeing with each other.
+
 This closes the category a coverage report would otherwise absorb. A reaction that perturbed only the sites it
 observed being reached, and reported the rest as "not exercised", would read as coverage of the whole
 enumeration while saying nothing about the part most likely to be wrong.
@@ -307,7 +311,7 @@ enumeration while saying nothing about the part most likely to be wrong.
 - **THEN** the reaction fails unless that site declares itself out of reach with a slug the declared bound
   covers
 
-#### Scenario: Whether a declared-out-of-reach refusal is genuinely unconstructible is not observed — a stated bound
+#### Scenario: Whether a declared out of reach refusal is genuinely unconstructible is not observed — a stated bound
 
 - **WHEN** a site declares itself out of reach because its precondition cannot be produced in any environment
   the suite runs in — an absent `ssh-keygen`, a signature mechanism failing its own round trip

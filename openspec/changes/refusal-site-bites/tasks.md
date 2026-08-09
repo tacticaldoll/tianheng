@@ -90,9 +90,11 @@
       apply; the delta reaches it at sync (7.5)
 - [ ] 5.2a Add the repository-local exemption registry in test support: `Exemption { slug, bound, because }`,
       joined against the produced site enumeration and the live `observation_bounds()` set
-- [ ] 5.2b Declare the two residual bounds this reaction admits: a refusal vocabulary under other names
-      (`a_refusal_vocabulary_under_other_names_is_not_observed`), and a file outside the perturbed feature set
-      (`the_corpus_is_the_feature_set_that_is_perturbed`)
+- [ ] 5.2b Declare the one residual the scan admits: a refusal vocabulary under other names, or inside the
+      reaction's own exempt sources (`a_refusal_vocabulary_under_other_names_is_not_observed`). The feature-set
+      statement is a **definition, not a bound** — the corpus is the build that is perturbed, so a file outside
+      it holds no refusal the suite could reach, and a bound over that empty set is the permanent residue the
+      registry biconditional exists to prevent
 - [ ] 5.3 Refuse, each seen to fail: a slug carried by two sites; a slug no registry entry covers; a registry
       entry naming a slug no site carries; a registry entry naming a `BoundId` the live bound set does not
       contain; **an empty registry while the exemption-class bound is declared** (the biconditional — one

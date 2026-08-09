@@ -16,7 +16,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::refusal::{Refusal, cannot_judge, violation};
+use crate::refusal::{Refusal, cannot_judge, cannot_judge_out_of_reach, violation};
 
 fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     let out = Command::new("git")
@@ -182,9 +182,10 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
 /// A signature block quoted in a tag *message* is text; only the payload the object actually signs decides.
 fn verify_tag_signature(repo: &Path, tag: &str, tag_object: &str) -> Result<(), Refusal> {
     if Command::new("ssh-keygen").arg("-h").output().is_err() {
-        return Err(cannot_judge(format!(
-            "ssh-keygen is unavailable, so {tag}'s signature cannot be verified"
-        )));
+        return Err(cannot_judge_out_of_reach(
+            "ssh-keygen-absent",
+            format!("ssh-keygen is unavailable, so {tag}'s signature cannot be verified"),
+        ));
     }
     // Unique per CALL, not per (process, tag). Every fixture in the failure matrix tags `v9.9.9`, and the
     // matrix runs in parallel, so a key built from the tag had each test's `Drop` deleting another's scratch
@@ -196,8 +197,12 @@ fn verify_tag_signature(repo: &Path, tag: &str, tag_object: &str) -> Result<(), 
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&scratch);
-    std::fs::create_dir_all(&scratch)
-        .map_err(|err| cannot_judge(format!("could not create a signature scratch dir: {err}")))?;
+    std::fs::create_dir_all(&scratch).map_err(|err| {
+        cannot_judge_out_of_reach(
+            "signature-scratch-not-creatable",
+            format!("could not create a signature scratch dir: {err}"),
+        )
+    })?;
     let guard = Scratch(scratch.clone());
 
     // The mechanism proves itself before it is trusted to judge: a round trip over a throwaway key. Without
@@ -211,10 +216,13 @@ fn verify_tag_signature(repo: &Path, tag: &str, tag_object: &str) -> Result<(), 
         .unwrap_or(false)
         && sign_probe(&probe, &scratch);
     if !round_trip {
-        return Err(cannot_judge(format!(
-            "the signature mechanism failed its own round-trip, so no verdict on {tag}'s signature would be \
-             about {tag}"
-        )));
+        return Err(cannot_judge_out_of_reach(
+            "signature-mechanism-round-trip",
+            format!(
+                "the signature mechanism failed its own round-trip, so no verdict on {tag}'s signature \
+                 would be about {tag}"
+            ),
+        ));
     }
 
     let signature = git(
@@ -225,7 +233,12 @@ fn verify_tag_signature(repo: &Path, tag: &str, tag_object: &str) -> Result<(), 
             &format!("refs/tags/{tag}"),
         ],
     )
-    .map_err(|err| cannot_judge(format!("could not read {tag}'s signature block: {err}")))?;
+    .map_err(|err| {
+        cannot_judge_out_of_reach(
+            "signature-block-unreadable",
+            format!("could not read {tag}'s signature block: {err}"),
+        )
+    })?;
 
     if signature.trim().is_empty() {
         return Err(violation(format!(
@@ -239,15 +252,21 @@ fn verify_tag_signature(repo: &Path, tag: &str, tag_object: &str) -> Result<(), 
         )));
     }
     let Some(payload) = tag_object.strip_suffix(signature.trim_end()) else {
-        return Err(cannot_judge(format!(
-            "{tag}'s extracted signature is not the tag object's suffix, so the signed payload cannot be \
-             reconstructed"
-        )));
+        return Err(cannot_judge_out_of_reach(
+            "signature-block-not-a-suffix",
+            format!(
+                "{tag}'s extracted signature is not the tag object's suffix, so the signed payload cannot \
+                 be reconstructed"
+            ),
+        ));
     };
 
     let sig_path = scratch.join("tag.sig");
     std::fs::write(&sig_path, format!("{}\n", signature.trim_end())).map_err(|err| {
-        cannot_judge(format!("could not write the signature for checking: {err}"))
+        cannot_judge_out_of_reach(
+            "signature-file-not-writable",
+            format!("could not write the signature for checking: {err}"),
+        )
     })?;
     let verified = check_novalidate(payload, &sig_path);
     drop(guard);

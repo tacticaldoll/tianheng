@@ -40,8 +40,12 @@ pub const SHARED: &str = "crates/tianheng/tests/support/refusal.rs";
 /// own sources is not observed.
 pub const REACTION_TARGET: &str = "refusal_bites";
 
-/// The constructors a site is built with.
-pub const CONSTRUCTORS: [&str; 2] = ["violation", "cannot_judge"];
+/// The constructors a site is built with. The out-of-reach form is longest-first, so a search for
+/// `cannot_judge` never claims the site that `cannot_judge_out_of_reach` owns.
+pub const CONSTRUCTORS: [&str; 3] = ["cannot_judge_out_of_reach", "violation", "cannot_judge"];
+
+/// The constructor that declares a site out of reach, and carries the slug a bound is joined to.
+pub const OUT_OF_REACH: &str = "cannot_judge_out_of_reach";
 
 /// One test binary, and the sources the compiler reported reading for it.
 #[derive(Debug, Clone)]
@@ -64,6 +68,14 @@ pub struct Site {
     pub file: String,
     pub line: u32,
     pub constructor: String,
+    /// Present exactly when the site declares itself out of reach.
+    pub slug: Option<String>,
+}
+
+impl Site {
+    pub fn declares_out_of_reach(&self) -> bool {
+        self.constructor == OUT_OF_REACH
+    }
 }
 
 impl Site {
@@ -293,6 +305,18 @@ fn signature_from(lines: &[&str], index: usize) -> String {
     joined
 }
 
+/// The first argument of a call, when it is a plain string literal.
+///
+/// A slug has to be readable without running anything, so it is required to be a literal rather than a
+/// constant or a `format!`: a name this scan cannot read is a name the join cannot check.
+fn slug_argument(rest: &str) -> Option<String> {
+    let inside = rest.strip_prefix('(')?.trim_start();
+    let inside = inside.strip_prefix('"')?;
+    let end = inside.find('"')?;
+    let slug = &inside[..end];
+    (!slug.is_empty()).then(|| slug.to_string())
+}
+
 /// Comment-only lines blanked, byte offsets preserved so an offset still maps to its line.
 ///
 /// A whole-text scan is what lets a call wrap; blanking rather than dropping is what keeps the offsets of
@@ -401,6 +425,13 @@ fn scan(
             {
                 continue;
             }
+            // The right boundary matters as much as the left: without it `cannot_judge` would be found inside
+            // `cannot_judge_out_of_reach`, reported as a name mentioned but never called, and the site that
+            // longer name owns would be refused rather than enumerated.
+            let after = masked[from..].chars().next();
+            if after.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                continue;
+            }
             let number = line_of(&starts, at);
             let rest = masked[from..].trim_start();
 
@@ -437,11 +468,26 @@ fn scan(
             if !can_construct {
                 continue;
             }
+            let slug = if constructor == OUT_OF_REACH {
+                match slug_argument(rest) {
+                    Some(slug) => Some(slug),
+                    None => {
+                        offences.push(format!(
+                            "  {file}:{number} declares itself out of reach without a slug written as a \
+                             string literal; an exemption joined to nothing excuses nothing"
+                        ));
+                        continue;
+                    }
+                }
+            } else {
+                None
+            };
             *per_line.entry(number).or_default() += 1;
             sites.push(Site {
                 file: file.to_string(),
                 line: number,
                 constructor: constructor.to_string(),
+                slug,
             });
         }
     }
@@ -454,6 +500,29 @@ fn scan(
             ));
         }
     }
+}
+
+/// The scan, for a reaction that needs to show it what it does **not** recognise.
+///
+/// Exposed rather than duplicated: a second construction of the scan is the twin-drift class this repository
+/// keeps closing, and a bound pinned against a copy of the scan would say nothing about the scan.
+pub fn scan_for_tests(
+    file: &str,
+    text: &str,
+    owns_the_scan: bool,
+    can_construct: bool,
+) -> (Vec<Site>, Vec<String>) {
+    let mut sites = Vec::new();
+    let mut offences = Vec::new();
+    scan(
+        file,
+        text,
+        owns_the_scan,
+        can_construct,
+        &mut sites,
+        &mut offences,
+    );
+    (sites, offences)
 }
 
 /// Group sites by file, for reporting and for deriving who observes what.

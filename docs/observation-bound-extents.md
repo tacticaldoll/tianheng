@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**32 of 74 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**32 of 76 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -131,7 +131,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **its defence must show**: does not react
 - **pinned by**: `a_plain_fn_directly_in_a_const_body_stays_a_stated_bound`
 
-## out of reach (23)
+## out of reach (25)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
@@ -204,6 +204,22 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 - **because**: the audit's corpus is the member's library and binary targets, so it never reads those files at all
 - **its defence must show**: does not react
 - **pinned by**: `source_outside_lib_or_bin_target_subtree_is_out_of_scope_corpus_bound`
+
+### `rust-self-governance-gates/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound`
+
+> a second kinded refusal contract declared under other names, or inside the scan's own sources
+
+- **because**: the scan recognises the shared vocabulary's exact names; recognising a contract by intent is a judgement over source, and no compile-time construction reaches a reaction not yet written
+- **its defence must show**: does not react
+- **pinned by**: `a_refusal_vocabulary_under_other_names_is_not_observed`
+
+### `rust-self-governance-gates/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound`
+
+> a refusal site declaring itself out of reach for a reason no fixture can falsify
+
+- **because**: the reaction observes that no direction reaches the site, never that none could; reaching further would mean constructing the environment the declaration says is unconstructible
+- **its defence must show**: does not react
+- **pinned by**: `a_site_declared_out_of_reach_is_only_observed_to_be_unreached`
 
 ### `semantic-dyn-trait-boundary/a-macro-generated-dyn-is-a-documented-bound`
 
