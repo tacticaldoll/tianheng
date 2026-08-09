@@ -4,4 +4,5 @@
 //! rather than in a separate binary reaching back in through `#[path]`.
 
 mod capability_subjects;
+mod gate_identity;
 mod restatement;

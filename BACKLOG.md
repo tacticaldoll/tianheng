@@ -207,7 +207,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **79 bounds across 23 capabilities** — a live figure rather than part of the measurement
+  currently holds **80 bounds across 23 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -651,6 +651,12 @@ consumer for an undemonstrated deduplication.
 
 
 - **WATCH:**
+- **WATCH: a merge or publish made outside the wrapper is not observed.** *Observed pressure:* both
+  assertions guard the sanctioned path — the wrapper's `1 passed` and the reaction pinning the identifier it
+  cites. A `cargo publish` run directly, or a merge made in the browser, reaches neither. *Risk:* the record
+  or the published source escapes the gate that stands in front of it. *Next trigger:* an act reaching either
+  without the wrapper. *Authority:* engine. *Compatibility:* none — reaching further means observing the
+  operator's shell or GitHub's servers rather than this repository.
 - **WATCH: which governance member a reaction belongs to is unobserved.** *Observed pressure:* the split
   between 繩墨 (the law and the delivered product) and 勘合 (this repository's record) is a judgement about
   what a reaction judges, and two mechanical rules were each measured unreliable — a text scan reads a comment

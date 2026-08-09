@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**34 of 79 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**35 of 80 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -31,6 +31,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
 - `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound` — owner: engine
 - `rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
+- `rust-repository-reactions/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
 - `rust-repository-reactions/files-no-capability-claims-a-stated-bound` — owner: engine
 - `self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound` — owner: engine
 - `self-law-projection/a-reason-carrying-the-clause-while-negating-the-law-is-not-observed-a-stated-bound` — owner: engine
@@ -417,7 +418,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (34)
+## under-reacts (35)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -626,6 +627,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the declaration is the coverage — a census names the one sentence its figures are written in, and a count outside that sentence is unheld. Reaching it needs a judgement over prose, the instrument this repository designed, measured three times and rejected; `AGENTS.md` carries the other half as a rule with no reaction
 - **its defence must show**: does not react
 - **pinned by**: `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
+
+### `rust-repository-reactions/a-gate-reached-without-the-wrapper-a-stated-bound`
+
+> an act reaching cargo publish or a merge without going through its wrapper
+
+- **because**: both assertions guard the sanctioned path -- the wrapper requiring its gate to report one passing test, and the reaction pinning the identifier it cites. Reaching further would mean observing the operator's shell or GitHub's servers rather than this repository
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
 
 ### `rust-repository-reactions/files-no-capability-claims-a-stated-bound`
 

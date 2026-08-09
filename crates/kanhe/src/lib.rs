@@ -29,6 +29,7 @@
 pub mod bound_register_parse;
 pub mod capability_subjects;
 pub mod census;
+pub mod gate_identity;
 pub mod merge_message_gate;
 pub mod publish_source_gate;
 pub mod refusal;
