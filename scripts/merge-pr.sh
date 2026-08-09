@@ -99,8 +99,17 @@ require_one_pass() {
     fi
 }
 
+# The pull request's own commit subjects, so the gate can ask whether this body *is* their concatenation
+# rather than whether it looks like one. Read from `git log`, not from the API: `messageHeadline` truncates at
+# 69 characters with an ellipsis, and this repository's subjects run longer, so comparing against it would
+# never match. An unreadable list reaches the gate empty and the gate refuses to judge.
+base_ref=$(gh pr view "$pr" --json baseRefName --jq .baseRefName)
+head_ref=$(gh pr view "$pr" --json headRefName --jq .headRefName)
+commits=$(git -C "$repo" log --format='%s' "origin/$base_ref..origin/$head_ref" 2>/dev/null || true)
+
 gate_output=$(TIANHENG_MERGE_SUBJECT=$subject \
     TIANHENG_MERGE_TITLE=$title \
+    TIANHENG_MERGE_COMMITS=$commits \
     TIANHENG_MERGE_BODY=$(cat -- "$body_file") \
     cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test merge_message \
     -- --exact the_squash_message_is_the_pull_request_it_records 2>&1) || {

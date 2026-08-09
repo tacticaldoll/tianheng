@@ -62,12 +62,24 @@ fn is_conventional(subject: &str) -> bool {
     TYPES.contains(&name)
 }
 
-/// Whether every non-blank line of the body is a bullet — GitHub's concatenated commit list.
-fn is_a_bare_commit_list(body: &str) -> bool {
+/// Whether the body is GitHub's concatenated commit list — every bullet one of **these** commits.
+///
+/// Recognised by what the bullets say, not by their shape. Refusing every all-bullet body refused a terse
+/// self-contained one for its formatting, and tightening the shape instead — requiring a bullet to look like
+/// a Conventional Commit — would refuse a hand-written `- fix: …` body while a branch carrying one
+/// non-conventional subject slipped through. The exact question is *are these the commits*, and the wrapper
+/// can answer it.
+fn is_a_bare_commit_list(body: &str, commits: &[String]) -> bool {
     let mut saw_one = false;
     for line in body.lines().filter(|line| !line.trim().is_empty()) {
         let trimmed = line.trim_start();
-        if !(trimmed.starts_with("* ") || trimmed.starts_with("- ")) {
+        let Some(text) = trimmed
+            .strip_prefix("* ")
+            .or_else(|| trimmed.strip_prefix("- "))
+        else {
+            return false;
+        };
+        if !commits.iter().any(|subject| subject == text.trim()) {
             return false;
         }
         saw_one = true;
@@ -80,7 +92,12 @@ fn is_a_bare_commit_list(body: &str) -> bool {
 /// Ordered most-specific first. A subject carrying a serial also differs from its title and is also still
 /// conventional-shaped; reporting the general fact for the specific one sends a reader to compare two strings
 /// that differ by exactly the thing the rule already names.
-pub fn judge(subject: &str, body: &str, title: &str) -> Result<String, Refusal> {
+pub fn judge(
+    subject: &str,
+    body: &str,
+    title: &str,
+    commits: &[String],
+) -> Result<String, Refusal> {
     if title.trim().is_empty() {
         return Err(cannot_judge(
             "the pull request's title is unavailable, so whether the subject is that title cannot be \
@@ -107,7 +124,12 @@ pub fn judge(subject: &str, body: &str, title: &str) -> Result<String, Refusal> 
              `<type>(<scope>)!?: <summary>` with a lowercase type from {TYPES:?}"
         )));
     }
-    if subject.contains('!') && !body.contains("BREAKING CHANGE:") {
+    // The head, not the whole subject: a summary may carry an exclamation mark for its own reasons, and the
+    // shape check above already reads the head to strip a trailing `!` before matching the type.
+    let head_is_breaking = subject
+        .split_once(": ")
+        .is_some_and(|(head, _)| head.ends_with('!'));
+    if head_is_breaking && !body.contains("BREAKING CHANGE:") {
         return Err(violation(
             "the squash subject is marked breaking and the body names no `BREAKING CHANGE:` footer, so the \
              record announces a migration it does not describe",
@@ -127,7 +149,14 @@ pub fn judge(subject: &str, body: &str, title: &str) -> Result<String, Refusal> 
              preserves, and the branch's fine-grained commits are review provenance rather than this record",
         ));
     }
-    if is_a_bare_commit_list(body) {
+    if commits.is_empty() {
+        return Err(cannot_judge(
+            "the pull request's commit subjects are unavailable, so whether this body is the default \
+             concatenation of them cannot be decided — falling back to refusing every bulleted body is the \
+             over-reaction this reads them to avoid",
+        ));
+    }
+    if is_a_bare_commit_list(body, commits) {
         return Err(violation(
             "the squash body is a bare list of commit subjects, which is the default this rule exists to \
              replace with something self-contained",
