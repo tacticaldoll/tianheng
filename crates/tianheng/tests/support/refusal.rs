@@ -252,20 +252,29 @@ mod tests {
         );
     }
 
-    /// What `Location::caller().file()` actually says, measured rather than assumed.
+    /// A caller location names this file the way the compiler was given it.
     ///
-    /// The sweep matches a site against the source list the compiler reported reading, and those are relative
-    /// to the workspace root. If the two spellings disagree, every selector names nothing, every poisoned run
-    /// stays green, and the sweep reports all sixty sites undistinguished — a wrong verdict that looks like a
-    /// finding.
+    /// The sweep matches a site against the source list the compiler reported reading. If the two spellings
+    /// disagreed, every selector would name nothing, every poisoned run would stay green, and the sweep would
+    /// report every site undistinguished — a wrong verdict that reads like a finding.
+    ///
+    /// The spelling is **relative to the package as cargo invoked rustc**, so it is not one string: in this
+    /// workspace it is `crates/tianheng/tests/support/refusal.rs`, and inside a packaged tarball, where the
+    /// crate is its own root, it is `tests/support/refusal.rs`. Measured by CI rather than foreseen — a
+    /// literal here passed in the workspace and failed in the tarball.
+    ///
+    /// So this holds the part that is invariant, and the agreement itself is held where it is actually
+    /// used: `refusal_bites` requires every site a run **records** to appear in the enumeration built from
+    /// dep-info. That is the same claim over fifty-two real constructions instead of one literal, and it is
+    /// checked in the build the sweep runs in rather than in every build this file compiles in.
     #[test]
     fn a_site_is_spelled_the_way_the_compiler_spells_its_sources() {
         let here = Location::caller();
-        assert_eq!(
-            here.file(),
-            "crates/tianheng/tests/support/refusal.rs",
-            "the caller location spells this file differently from the compiler's own source list, so a \
-             selector built from that list would name no site"
+        assert!(
+            here.file().ends_with("tests/support/refusal.rs") && !here.file().starts_with('/'),
+            "the caller location spells this file as {:?}, which is neither package-relative nor this file; \
+             a selector built from the compiler's source list would name no site",
+            here.file()
         );
     }
 
