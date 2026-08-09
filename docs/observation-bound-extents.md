@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**32 of 77 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**34 of 79 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -15,6 +15,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound` — owner: engine
+- `observation-bound-register/which-member-holds-a-reaction-is-a-judgement-a-stated-bound` — owner: engine
 - `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound` — owner: engine
 - `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound` — owner: adopter
 - `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound` — owner: engine
@@ -30,6 +31,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
 - `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound` — owner: engine
 - `rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
+- `rust-repository-reactions/files-no-capability-claims-a-stated-bound` — owner: engine
 - `self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound` — owner: engine
 - `self-law-projection/a-reason-carrying-the-clause-while-negating-the-law-is-not-observed-a-stated-bound` — owner: engine
 - `self-law-projection/a-workspace-dependency-allowlist-is-not-examined-a-stated-bound` — owner: engine
@@ -415,7 +417,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (32)
+## under-reacts (34)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -496,6 +498,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: a killed pin does not say what killed it, and refusing a record that edits its pin's own file would refuse this tree's first seeded record, which legitimately perturbs a recognizer sitting beside the pin that defends it
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+### `observation-bound-register/which-member-holds-a-reaction-is-a-judgement-a-stated-bound`
+
+> which governance member a newly added reaction belongs to
+
+- **because**: the split is by what a reaction judges, and two mechanical rules were each measured unreliable: a text scan reads a comment naming a governance document as governance while a reaction scanning every tracked file names nothing, and the workspace marker means both `this needs the repository as its subject` and `this needs a fixture`. Position is the declaration
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *which governance member a reaction belongs to is unobserved*
 
 ### `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`
 
@@ -616,6 +626,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the declaration is the coverage — a census names the one sentence its figures are written in, and a count outside that sentence is unheld. Reaching it needs a judgement over prose, the instrument this repository designed, measured three times and rejected; `AGENTS.md` carries the other half as a rule with no reaction
 - **its defence must show**: does not react
 - **pinned by**: `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
+
+### `rust-repository-reactions/files-no-capability-claims-a-stated-bound`
+
+> a tracked file no capability's declared subject claims
+
+- **because**: subjects are declared where a capability has something to say, and requiring them to tile the repository would buy coverage with a claim per capability that nobody could defend. The join reports how many tracked paths went unclaimed, so a clean verdict is not read as a complete one
+- **its defence must show**: does not react
+- **pinned by**: `files_no_capability_claims_are_reported_rather_than_implied_judged`
 
 ### `self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound`
 

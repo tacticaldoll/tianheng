@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**13 of 77 declared bounds have no pinning test.** That figure is the register's
+**14 of 79 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -140,6 +140,12 @@ fallback used where no manifest exists, which the register spec describes.
 - **pinned by**: `granularity_is_carried_only_by_the_as_intended_extent`
 
 ## observation-bound-register
+
+### `observation-bound-register/which-member-holds-a-reaction-is-a-judgement-a-stated-bound`
+
+> nothing observes whether it landed in the right one. The split is by what a reaction judges — the law and the delivered product on one side, this repository's record on the other — and two mechanical rules were each measured unreliable: a text scan reads a comment naming `AGENTS.md` as governance while a reaction scanning every tracked file names nothing, and the workspace marker means both "this needs the repository as its subject" and "this needs a fixture". Position is the declaration; the join below catches a **capability** named wrongly, never a member chosen wrongly
+
+- **unpinned**, tracked by: `BACKLOG.md` — *which governance member a reaction belongs to is unobserved*
 
 ### `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound`
 
@@ -344,6 +350,12 @@ fallback used where no manifest exists, which the register spec describes.
 > neither holds it: a squash merge runs on GitHub's servers so no local commit exists and no hook runs, and both values of that setting append the serial. Nor can a merge made in the browser be reached by a wrapper. The compliance point is one string passed at merge time, and this reaction guards the sanctioned path to it rather than every path
 
 - **pinned by**: `a_merge_made_outside_the_wrapper_is_not_observed`
+
+### `rust-repository-reactions/files-no-capability-claims-a-stated-bound`
+
+> nothing reacts to it. Subjects are declared where a capability has something to say, and requiring them to tile the tree would buy coverage with thirty-six claims nobody could defend. The blindness is declared so that a clean report is not read as a complete one, and the reaction prints how many tracked paths went unclaimed rather than leaving the reader to assume none did
+
+- **pinned by**: `files_no_capability_claims_are_reported_rather_than_implied_judged`
 
 ## self-law-projection
 
