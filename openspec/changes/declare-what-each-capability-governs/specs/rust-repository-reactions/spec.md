@@ -45,7 +45,9 @@ the join below, and the reaction SHALL say so rather than imply a coverage it do
 - **WHEN** a tracked file is claimed by no capability's subject
 - **THEN** nothing reacts to it. Subjects are declared where a capability has something to say, and requiring
   them to tile the tree would buy coverage with thirty-six claims nobody could defend. The blindness is
-  declared so that a clean report is not read as a complete one
+  declared so that a clean report is not read as a complete one, and the reaction prints how many tracked
+  paths went unclaimed rather than leaving the reader to assume none did
+- **PINNED-BY** `files_no_capability_claims_are_reported_rather_than_implied_judged`
 
 ### Requirement: A change SHALL name every capability whose subject it touches
 

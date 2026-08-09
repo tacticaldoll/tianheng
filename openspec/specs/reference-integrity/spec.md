@@ -5,6 +5,10 @@
 Keep tracked in-repository path references and Tianheng's required governance surface honest under a hermetic
 policy, so a checkout's verdict does not depend on ambient process state.
 
+## Subject
+
+- `crates/kanhe/tests/reference_integrity.rs`
+
 ## Requirements
 
 ### Requirement: The real governance-document policy SHALL be hermetic

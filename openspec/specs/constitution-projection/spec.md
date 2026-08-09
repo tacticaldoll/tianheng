@@ -9,6 +9,12 @@ adopter gets it), it serves a steward reviewing an amendment, an operator readin
 CI log, and a tool or agent that wants the declared law. A projection is never a
 reaction: `list` observes nothing, claims no target or drift type, and always
 exits 0.
+## Subject
+
+- `crates/tianheng/src/constitution.rs`
+- `crates/tianheng/src/runner/render.rs`
+- `crates/guibiao/src/projection.rs`
+
 ## Requirements
 ### Requirement: List command projects the declared constitution
 

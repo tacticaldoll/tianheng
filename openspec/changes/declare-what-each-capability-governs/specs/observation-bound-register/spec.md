@@ -34,3 +34,4 @@ is a deliberate limit on that churn, not an oversight.
   scanning every tracked file names nothing, and the workspace marker means both "this needs the repository as
   its subject" and "this needs a fixture". Position is the declaration; the join below catches a **capability**
   named wrongly, never a member chosen wrongly
+- **UNPINNED** `BACKLOG.md` — *which governance member a reaction belongs to is unobserved*

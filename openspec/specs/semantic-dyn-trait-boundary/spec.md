@@ -7,6 +7,11 @@ not expose trait-object (`dyn`) syntax. It is the type-shape complement of
 exposed *type shape* (a `dyn` node at any depth in the public surface). Internal `dyn` is never a
 violation; leaking dynamic dispatch across the *declared* seam is, so the rule is declarative
 intent (by anchor scoping), not a lint. Shape-only: any exposed `dyn` reacts.
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Dyn-trait boundary declared in Rust
 

@@ -5,6 +5,12 @@
 Define the read-only repository reaction that keeps Tianheng's release commit spine, Cargo version
 surfaces, lock snapshot, and adopter-facing changelog coherent without time-based release policy.
 
+## Subject
+
+- `CHANGELOG.md`
+- `crates/kanhe/tests/release_coherence.rs`
+- `crates/kanhe/src/release_coherence_gate.rs`
+
 ## Requirements
 
 ### Requirement: Repository state determines the release phase

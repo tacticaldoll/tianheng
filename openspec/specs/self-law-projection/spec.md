@@ -12,6 +12,14 @@ rather than the demo. Two contracts are kept distinct: the **repo artifact** mus
 from the enforced law (a test reacts), and the **public renderer's Markdown layout** is a
 human/agent surface that may evolve (a doc contract, never frozen — JSON remains the machine
 contract).
+## Subject
+
+- `crates/shengmo/src/law.rs`
+- `crates/shengmo/tests/self_governance.rs`
+- `crates/kanhe/tests/law_restatement.rs`
+- `crates/kanhe/src/restatement.rs`
+- `AGENTS.self-law.md`
+
 ## Requirements
 ### Requirement: Self-law projection is generated from the enforced self-constitution
 

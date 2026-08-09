@@ -5,6 +5,13 @@
 Govern what must be true of the source `cargo publish` runs from: the committed state asserted before an
 irreversible act, the tag signature actually verified rather than shape-matched, and the one thing about that
 signature this gate deliberately does not judge.
+## Subject
+
+- `scripts/publish.sh`
+- `crates/kanhe/tests/publish_source.rs`
+- `crates/kanhe/tests/publish_source_integrity.rs`
+- `crates/kanhe/src/publish_source_gate.rs`
+
 ## Requirements
 ### Requirement: A publish SHALL run only from the tagged release commit on the remote's main
 

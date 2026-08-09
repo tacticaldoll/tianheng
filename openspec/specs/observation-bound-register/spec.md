@@ -18,6 +18,13 @@ Where the register cannot see, it says so in that same document rather than impl
 prose scan is a floor over recognizable wording, and the restatement direction reaches a shared citation
 rather than a shared behaviour. A register that overclaimed would mislead exactly where it is most
 trusted — and would be committing the failure it exists to end.
+## Subject
+
+- `openspec/specs/*/spec.md`
+- `crates/kanhe/tests/bound_register.rs`
+- `crates/kanhe/src/bound_register_parse.rs`
+- `docs/observation-bounds.md`
+
 ## Requirements
 ### Requirement: An observation bound is declared as a scenario that names itself one
 

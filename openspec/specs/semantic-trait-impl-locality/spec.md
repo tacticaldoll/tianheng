@@ -3,6 +3,11 @@
 ## Purpose
 
 The 渾儀 (semantic) dimension's impl-locality capability: declare in Rust that a trait may be implemented only within an allowed module location **inside the local crate** — "only `crate::commands::*` may `impl Command`". Observed via the AST (`syn`), it governs *impl locality* — the complement of exposure (`semantic-signature-coupling`) and of import (the static dimension). It governs only the crate's own impl sites; it makes no claim about downstream crates (external trait sealing is a rejected, essential-gap non-goal).
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Trait-impl-locality boundary declared in Rust
 

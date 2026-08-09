@@ -10,6 +10,11 @@ declares `[Registry, Path]` to forbid any git source (an *optional* git dependen
 publishing too). It deepens the proven static engine on the *same* observation — a finer read
 of the manifest, no new source, no new crate, hermetic (a pure function of the manifests).
 
+## Subject
+
+- `crates/guibiao/src/*.rs`
+- `crates/guibiao/src/tests/crate_dependency.rs`
+
 ## Requirements
 
 ### Requirement: Dependency-source boundary declared in Rust

@@ -43,6 +43,16 @@ None. One capability is renamed and two gain requirements.
 - `observation-bound-register`: the new bound — that no mechanical rule separates the two governance members —
   is declared where declared bounds live.
 
+Two further capabilities' subjects are touched and their requirements are **not** changing, which is stated
+here rather than left for a reader to infer — the join below requires a proposal to account for every
+capability whose subject it touches, by listing it or by saying why it is not listed:
+
+- `observation-bound-model` claims `crates/*/src/bounds.rs` and `docs/observation-bound-extents.md`. Both
+  carry bound ids derived from the renamed capability, so their **content** moves while the requirement that
+  an id is derived from its capability stays exactly as it is — that requirement is why they move at all.
+- `release-coherence` claims `CHANGELOG.md`, which records the rename under `[Unreleased]`. Recording a
+  change is what that capability requires; nothing about the requirement changes.
+
 ## Impact
 
 - `openspec/specs/rust-self-governance-gates/` → `openspec/specs/rust-repository-reactions/`; every capability
