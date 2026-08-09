@@ -5,21 +5,11 @@
 
 use std::path::PathBuf;
 
-fn locate_layout(root: PathBuf, marker_set: bool) -> Option<PathBuf> {
-    if root.join("AGENTS.md").is_file() && root.join(".github/workflows/ci.yml").is_file() {
-        return Some(root);
-    }
-    assert!(
-        !marker_set,
-        "AGENTS.md or ci.yml expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is set"
-    );
-    None
-}
-
 fn workspace_root() -> Option<PathBuf> {
-    locate_layout(
+    shengmo::workspace::locate(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
-        std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_some(),
+        |root| root.join("AGENTS.md").is_file() && root.join(".github/workflows/ci.yml").is_file(),
+        shengmo::workspace::marker_set(),
     )
 }
 
@@ -90,16 +80,5 @@ fn local_dod_commands_exist_in_ci() {
         missing.is_empty(),
         "Local Definition of Done contains commands missing from CI workflow:\n{}",
         missing.join("\n")
-    );
-}
-
-#[test]
-fn an_absent_layout_is_loud_when_the_workspace_marker_is_set() {
-    let absent = std::env::temp_dir().join("tianheng-dod-coherence-absent");
-    let _ = std::fs::remove_dir_all(&absent);
-    assert!(locate_layout(absent.clone(), false).is_none());
-    assert!(
-        std::panic::catch_unwind(|| locate_layout(absent, true)).is_err(),
-        "an absent layout must fail loudly under TIANHENG_WORKSPACE_TESTS rather than skip"
     );
 }

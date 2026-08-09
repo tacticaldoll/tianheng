@@ -42,26 +42,13 @@ const RULE_CALLS: [&str; 2] = ["assert_projection_matches(", "assert_projection_
 /// The document a reader is told to open first, and therefore the one every projection must be named in.
 const READERS_ENTRY_POINT: &str = "AGENTS.md";
 
-/// The repository layout, or `None` outside a checkout.
-///
-/// Split from [`workspace_root`] so the marker discipline can be observed failing without a test mutating the
-/// process environment: `set_var` is unsafe and would race every other test in this binary.
-fn locate_layout(root: PathBuf, marker_set: bool) -> Option<PathBuf> {
-    if root.join(READERS_ENTRY_POINT).is_file() && root.join("docs").is_dir() {
-        return Some(root);
-    }
-    assert!(
-        !marker_set,
-        "{READERS_ENTRY_POINT} and docs/ expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is \
-         set — a governance reaction that quietly does nothing in CI is the shape this capability argues against"
-    );
-    None
-}
-
+/// The repository root, or `None` outside a checkout: the shared locator with this reaction\'s own
+/// prerequisite.
 fn workspace_root() -> Option<PathBuf> {
-    locate_layout(
+    shengmo::workspace::locate(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
-        std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_some(),
+        |root| root.join(READERS_ENTRY_POINT).is_file() && root.join("docs").is_dir(),
+        shengmo::workspace::marker_set(),
     )
 }
 
@@ -438,17 +425,6 @@ fn an_empty_surface_fails_rather_than_reporting_clean() {
     assert!(
         message.contains("no generated document found"),
         "the refusal must name the emptiness rather than fail incidentally, got: {message}"
-    );
-}
-
-#[test]
-fn an_absent_layout_is_loud_when_the_workspace_marker_is_set() {
-    let absent = std::env::temp_dir().join("tianheng-projection-register-absent-layout");
-    let _ = std::fs::remove_dir_all(&absent);
-    assert!(locate_layout(absent.clone(), false).is_none());
-    assert!(
-        std::panic::catch_unwind(|| locate_layout(absent, true)).is_err(),
-        "an absent layout must fail loudly under TIANHENG_WORKSPACE_TESTS rather than skip"
     );
 }
 

@@ -17,22 +17,11 @@ use gate::{
 use refusal::Kind;
 use std::path::{Path, PathBuf};
 
-fn locate_layout(root: PathBuf, marker_set: bool) -> Option<PathBuf> {
-    if root.join("CHANGELOG.md").is_file() {
-        return Some(root);
-    }
-    assert!(
-        !marker_set,
-        "CHANGELOG.md expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is set — a governance \
-         reaction that quietly does nothing in CI is the shape this family argues against"
-    );
-    None
-}
-
 fn workspace_root() -> Option<PathBuf> {
-    locate_layout(
+    shengmo::workspace::locate(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
-        std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_some(),
+        |root| root.join("CHANGELOG.md").is_file(),
+        shengmo::workspace::marker_set(),
     )
 }
 
@@ -625,17 +614,6 @@ fn a_heading_inside_a_fenced_block_is_a_stated_bound() {
         verdict.is_ok(),
         "the reaction must stay silent when a fenced heading reattributes a later entry. Got: {:?}",
         verdict.err()
-    );
-}
-
-#[test]
-fn an_absent_layout_is_loud_when_the_workspace_marker_is_set() {
-    let absent = std::env::temp_dir().join("tianheng-release-coherence-absent");
-    let _ = std::fs::remove_dir_all(&absent);
-    assert!(locate_layout(absent.clone(), false).is_none());
-    assert!(
-        std::panic::catch_unwind(|| locate_layout(absent, true)).is_err(),
-        "an absent layout must fail loudly under TIANHENG_WORKSPACE_TESTS rather than skip"
     );
 }
 

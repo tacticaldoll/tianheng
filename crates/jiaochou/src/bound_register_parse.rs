@@ -9,22 +9,11 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-pub fn locate_layout(root: PathBuf, marker_set: bool) -> Option<PathBuf> {
-    if root.join("openspec/specs").is_dir() {
-        return Some(root);
-    }
-    assert!(
-        !marker_set,
-        "openspec/specs expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is set — a \
-         governance reaction that quietly does nothing in CI is the shape this family argues against"
-    );
-    None
-}
-
 pub fn workspace_root() -> Option<PathBuf> {
-    locate_layout(
+    shengmo::workspace::locate(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
-        std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_some(),
+        |root| root.join("openspec/specs").is_dir(),
+        shengmo::workspace::marker_set(),
     )
 }
 

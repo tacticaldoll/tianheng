@@ -20,9 +20,7 @@
 
 use jiaochou::bound_register_parse as parse;
 
-use parse::{
-    Bound, Citation, bounds_in, locate_layout, must, parse_bounds, search, workspace_root,
-};
+use parse::{Bound, Citation, bounds_in, must, parse_bounds, search, workspace_root};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -400,17 +398,6 @@ fn the_register_projection_is_generated_and_fresh() {
 
 // The census this file once swept for lives in `census.rs`, declared beside every other, so one
 // reaction holds them all. Two implementations of one comparison is what that file exists to end.
-
-#[test]
-fn an_absent_layout_is_loud_when_the_workspace_marker_is_set() {
-    let absent = std::env::temp_dir().join("tianheng-bound-register-absent");
-    let _ = std::fs::remove_dir_all(&absent);
-    assert!(locate_layout(absent.clone(), false).is_none());
-    assert!(
-        std::panic::catch_unwind(|| locate_layout(absent, true)).is_err(),
-        "an absent layout must fail loudly under TIANHENG_WORKSPACE_TESTS rather than skip"
-    );
-}
 
 /// A citation answered twice fails — and the asymmetry with `PINNED-BY` is deliberate, so it has a control.
 ///

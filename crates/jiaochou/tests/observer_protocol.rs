@@ -29,30 +29,21 @@ use tianheng::prelude::*;
 use jiaochou::region::Source;
 
 fn workspace_manifest() -> Option<PathBuf> {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml");
-    if manifest.is_file() {
-        return Some(manifest);
-    }
-    assert!(
-        std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
-        "workspace manifest expected at {manifest:?} but absent while TIANHENG_WORKSPACE_TESTS is set — \
-         the protocol's equality reaction must not silently skip in CI"
-    );
-    None
+    shengmo::workspace::locate(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+        |root| root.join("Cargo.toml").is_file(),
+        shengmo::workspace::marker_set(),
+    )
+    .map(|root| root.join("Cargo.toml"))
 }
 
 /// The workspace root, or `None` outside a checkout — the same skip-here / loud-in-CI discipline as above.
 fn workspace_root() -> Option<PathBuf> {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    if root.join("crates").is_dir() {
-        return Some(root);
-    }
-    assert!(
-        std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
-        "crates/ expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is set — the protocol's \
-         delegation reaction must not silently skip in CI"
-    );
-    None
+    shengmo::workspace::locate(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+        |root| root.join("crates").is_dir(),
+        shengmo::workspace::marker_set(),
+    )
 }
 
 /// One dimension of 三儀, as both reactions below need it.

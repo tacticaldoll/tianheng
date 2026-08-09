@@ -27,16 +27,11 @@ const EXTENT_PROJECTION: &str = "docs/observation-bound-extents.md";
 /// when `TIANHENG_WORKSPACE_TESTS` is set. A governance reaction that quietly does nothing in CI is the shape
 /// this whole capability argues against.
 fn workspace_root() -> Option<PathBuf> {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    if root.join("openspec/specs").is_dir() {
-        return Some(root);
-    }
-    assert!(
-        std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
-        "openspec/specs expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is set — \
-         the bound-model reaction must not silently skip in CI"
-    );
-    None
+    shengmo::workspace::locate(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+        |root| root.join("openspec/specs").is_dir(),
+        shengmo::workspace::marker_set(),
+    )
 }
 
 /// The slug rule the register derives an id with: lowercased, each run of non-alphanumerics collapsed to one
