@@ -207,7 +207,7 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
 
 #### Scenario: A bare basename the enumerator resolves
 
-- **WHEN** an entry under an adopter-facing heading names `check_pin_bites.sh` with no directory
+- **WHEN** an entry under an adopter-facing heading names `crates/tianheng/tests/pin_bites.rs` with no directory
 - **THEN** the reaction fails, because `git ls-files scripts/` resolves that basename to a tracked file
 
 #### Scenario: A gate named inside a longer span, or as unquoted prose

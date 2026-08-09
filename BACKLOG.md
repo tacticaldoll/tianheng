@@ -128,11 +128,11 @@ consumer for an undemonstrated deduplication.
 
 - **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
   register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
-  in a worktree left the suite green and the register clean. `check_pin_bites.sh` closes that for the citations
+  in a worktree left the suite green and the register clean. `crates/tianheng/tests/pin_bites.rs` closes that for the citations
   that declare a mutation, and it prints how many do not on every clean run — the figure is produced there, not
   typed here. *Observation source:* that gutting, and the anchor-counting rule in `observer_protocol.rs` losing
   its only assertions during the composition-body retirement, found by a reviewer reading the diff.
-  *Current reaction or bound:* `check_pin_bites.sh` over the declared mutations; nothing over the rest.
+  *Current reaction or bound:* `crates/tianheng/tests/pin_bites.rs` over the declared mutations; nothing over the rest.
   *Risk:* a defence that has stopped defending is indistinguishable from one that has not, which is the failure
   the register was built to end one level down. *Promotion trigger:* fired — the gate exists; what remains is
   coverage, which grows one considered record at a time. That last claim was false while the tree under test
@@ -209,7 +209,7 @@ consumer for an undemonstrated deduplication.
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
   currently holds **74 bounds across 23 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
-  `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
+  `crates/tianheng/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
   the drift class this family already refuses. *First step, and why it is not simply "add a gate":* the binding must
   be **derived**, not declared — which test defends a requirement is nowhere written, so the honest first move is to
@@ -224,7 +224,7 @@ consumer for an undemonstrated deduplication.
   requirement prose instead. This does not close the entry — review convention cannot derive the missing binding —
   but it prevents sync from knowingly admitting another un-reacted scenario while the derived capability is designed.
 
-- ~~**`check_release_coherence.sh`'s subshell reads have not been audited for a swallowed status.**~~
+- ~~**`crates/tianheng/tests/release_coherence.rs`'s subshell reads have not been audited for a swallowed status.**~~
   **CLOSED** in the open window. Audited read by read rather than swept: four of the five consumers already
   carried a vacuity guard (the release spine, the crate-manifest set, and both example-pin counters), which
   is why the entry's MEDIUM risk did not materialise as a false clean. The fifth — the internal-pin loop —
@@ -240,9 +240,9 @@ consumer for an undemonstrated deduplication.
   assert the code, which is the property that would have caught it.
 
 - ~~**Two gates have no companion failure matrix.**~~ **CLOSED** in the open window. Both now have one, and
-  both were worth building rather than recording. `test_whitespace_hygiene.sh` is the only fixture that pins
+  both were worth building rather than recording. `crates/tianheng/tests/whitespace_hygiene.rs` is the only fixture that pins
   the exit-contract backstop's subshell misfire — removing that guard fails it and no other matrix.
-  `test_dod_coherence.sh` closes the gate whose subject is a claim `AGENTS.md` makes about **itself**, so a
+  `crates/tianheng/tests/dod_coherence.rs` closes the gate whose subject is a claim `AGENTS.md` makes about **itself**, so a
   reaction nobody had watched refuse was all that stood behind it; its zero-commands direction is the one that
   matters most, since without that guard the gate reports `ok: every local Definition of Done command (0
   parsed) is run by CI` and exits 0. Each gate gained the target-directory argument that makes a fixture
@@ -339,10 +339,10 @@ consumer for an undemonstrated deduplication.
   a gate may not consume an observation source through `< <(producer)` whose producer can fail.
 
   **Both failure directions are measured, which is what made the class worth a property rather than a habit.** A
-  `git ls-files --eol` truncated after one clean row made `check_whitespace_hygiene.sh` report
+  `git ls-files --eol` truncated after one clean row made `crates/tianheng/tests/whitespace_hygiene.rs` report
   `whitespace hygiene ok (1 tracked text files)` at **exit 0** over a repository it had read one file of — the count
   fell from two to one in its own output and nothing reacted to it. A `git log` truncated the same way made
-  `check_release_coherence.sh` conclude snapshot state and report `[Unreleased] must be empty` at **exit 1**, a
+  `crates/tianheng/tests/release_coherence.rs` conclude snapshot state and report `[Unreleased] must be empty` at **exit 1**, a
   violation invented from a partial read. A vacuity guard reaches neither: it was built for zero rows, and a partial
   read gives one or more. **The guard and the capture answer different questions, which is why they now sit side by
   side rather than one replacing the other.**
@@ -464,7 +464,7 @@ consumer for an undemonstrated deduplication.
   reaction stops the next one accumulating silently.
 
   The register made it measurable on its first projection: two behaviours were declared as bounds in three
-  capabilities each, all six declarations citing one test. `check_bound_register.sh` now fails when a test
+  capabilities each, all six declarations citing one test. `crates/tianheng/tests/bound_register.rs` now fails when a test
   is cited by declared bounds in more than one capability, keyed on the shared citation rather than on
   statement text — two declarations of one behaviour do not have identical prose, so text similarity would
   be a heuristic where a shared citation is a fact. Repetition within one capability is not a restatement
@@ -494,7 +494,7 @@ consumer for an undemonstrated deduplication.
   Two classes are carried by nothing: a **location** claim, the class that falsified the second attempt, and
   a **count**. *Observation source:* that classification, run against the projections and the file on
   2026-08-08. Not a census — the named instances are examples found by sampling claim-shaped lines, not an
-  enumeration. *Current reaction or bound:* half of one. `check_reference_integrity.sh` holds that a cited
+  enumeration. *Current reaction or bound:* half of one. `crates/tianheng/tests/reference_integrity.rs` holds that a cited
   path **exists and is tracked**; nothing holds that the thing described lives there, which is the half the
   withdrawn attempt got wrong. *Risk:* the class that produced three withdrawn attempts, in the document
   `AGENTS.md` names as the contract — and it **grew** when the paragraph finally landed:
@@ -928,7 +928,7 @@ that also holds a closed READY-PATCH record.
 - ~~**Five declared bounds have no pinning test.**~~ **CLOSED** in the
   open window. Closed by writing unit tests for all 5 remaining UNPINNED scenarios across `external-crate-confinement`, `runtime-origin-assertion`, and `semantic-dyn-trait-boundary`, bringing `unpinned` count to 0.
 
-- ~~**`check_reference_integrity.sh` has no companion failure matrix.**~~ **CLOSED** in the
+- ~~**`crates/tianheng/tests/reference_integrity.rs` has no companion failure matrix.**~~ **CLOSED** in the
   open window. Closed by adding `crates/tianheng/tests/reference_integrity.rs`, a throwaway git repository fixture proving every refusal (exit 1 and exit 2) and pass direction of `crates/tianheng/tests/reference_integrity.rs`.
 
 - ~~**Owner-label identity collapses across a cfg-collided self-type alias.**~~ **CLOSED** in the
@@ -1275,7 +1275,7 @@ it before assigning a horizon here; the entries below are horizons, not a second
 
   What is deliberately **not** done yet: the workspace version is still `0.4.0`, and the bump, the dated
   CHANGELOG section, the internal pins, and `Cargo.lock` all move together at release preparation. Until then
-  `check_release_coherence.sh` reports `development: 0.4.0`, which is the coherent state for an open window —
+  `crates/tianheng/tests/release_coherence.rs` reports `development: 0.4.0`, which is the coherent state for an open window —
   it reads versions, never a branch name, so the rename changed nothing it judges.
 - **Next breaking window (if earned)** — requires real adopter or correctness pressure.
 

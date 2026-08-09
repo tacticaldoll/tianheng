@@ -782,7 +782,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   code doc was spelled in words. Most numbers here describe a *shape*, not a census.
 - **The class that produced three withdrawn attempts is recorded, and it grew when the paragraph landed.**
   `PROJECT.md` restates architectural facts the generated projection already carries, and states others —
-  locations, counts — that nothing carries. `check_reference_integrity.sh` holds that a cited path exists and
+  locations, counts — that nothing carries. `crates/tianheng/tests/reference_integrity.rs` holds that a cited path exists and
   is tracked; nothing holds that the thing described lives there, which is exactly the half a withdrawn
   attempt got wrong. Closing the crate question added **five** more location claims to that file, so the
   entry is filed larger than the branch it came from filed it, not smaller. Its trigger is a claim found
@@ -922,7 +922,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   accurate, and `BACKLOG.md` spells the range branch-qualified. Four adopter-facing self-descriptions still
   named `0.3.0` as the current line, one of them actively misleading ("0.3.0 spends a deliberate breaking
   window on reaction identity" — that is this window). Two were not load-bearing and now name no version at
-  all, following the rule applied to `.gitignore` and `cargo test -p tianheng --test examples_suite`; two are compatibility
+  all, following the rule applied to `.gitignore` and `scripts/test_examples.sh`; two are compatibility
   statements and moved to 0.4.0. The Migration section drops another drifting count and gains the steps it
   omitted: new entries from causes outside the inbound `Shallow` cell (a second compiled root, an outbound
   rule's second importing module), and the shapes that now refuse to judge (exit 2) where they previously
@@ -944,7 +944,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   *Closed in the 0.4.0 window* section, the class heading is now honestly empty, and the governance
   vocabulary states the rule so the next closure does not repeat it. Three refuted references are
   corrected — a test file renamed by this window's own reversal, a regression test that was replaced by
-  its inverse, and a claim that two doc comments pin a bound they now contradict. `cargo test -p tianheng --test examples_suite`
+  its inverse, and a claim that two doc comments pin a bound they now contradict. `scripts/test_examples.sh`
   stops naming the family version in prose, the fix already applied to `.gitignore`'s comment for the same
   reason.
 - Made "a guard is not a guard until it has been seen to fail" an explicit rule in `AGENTS.md`'s
@@ -1718,7 +1718,7 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   default is `"warn"`, so `cargo deny check` was printing `warning[yanked]: detected yanked crate`
   and still exiting 0 (`advisories ok`) — reproduced against a real yanked crate pinned into the
   lockfile — directly contradicting the section's own stated claim that yanked crates are denied.
-  `cargo test -p tianheng --test examples_suite` now asserts (`cargo tree -p <crate> --depth 0`) that every example's
+  `scripts/test_examples.sh` now asserts (`cargo tree -p <crate> --depth 0`) that every example's
   `patch.crates-io` override actually resolved to local source, for every family crate it patches:
   reproduced against a version-bumped scratch copy of the workspace, Cargo was silently dropping an
   incompatible patch (`patch ... was not used in the crate graph`) and falling back to the last
@@ -1910,7 +1910,7 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   is not the same exposure: `unlink` does not follow symlinks, so a planted symlink is itself what
   gets removed, never its target (verified). Not breaking — no API, no identity shape, and the
   published mode is byte-for-byte what it was.
-- A 14th Definition-of-Done gate, `crates/tianheng/tests/reference_integrity.rs`, asserts that every
+- A 14th Definition-of-Done gate, `scripts/check_reference_integrity.sh`, asserts that every
   in-repository path a document or a source comment points at exists. This class has now been fixed by
   hand twice — the second sweep covered `*.md` only — and a module split landing after that sweep
   reintroduced it in **nine** places across documents and `.rs` comments, two of which no review found.
@@ -1930,20 +1930,20 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   directory-only pattern the bare form answers differently in a clone where the directory happens to
   exist (measured in a fresh clone — bare `.github/prompts` is not ignored, `.github/prompts/` is).
 - The two new gates drop their remaining **GNU-sed** dependencies, which had the same failure shape the
-  `realpath` fix removed from one of these files a commit earlier. `check_reference_integrity.sh` marked a
+  `realpath` fix removed from one of these files a commit earlier. `crates/tianheng/tests/reference_integrity.rs` marked a
   markdown link target with `\x01` in a `sed` script; `\xHH` is a GNU extension that busybox and BSD `sed`
   emit **literally**, so under a POSIX `sed` the gate reported **9 stale references that do not exist** —
   measured, a portability failure surfacing as a repository defect. The marker is now a literal control
   byte built with `printf` and interpolated, which every implementation agrees on. A companion dead filter
   went with it: `grep -v '^\x01?$'` could never fire, because without `-E` the `?` is literal, so the
   pattern meant "SOH followed by a question mark" — its intent was already served by the guard inside the
-  loop. `check_whitespace_hygiene.sh`'s `sed 's/\r$//'` likewise now uses a literal CR byte, since BSD
+  loop. `crates/tianheng/tests/whitespace_hygiene.rs`'s `sed 's/\r$//'` likewise now uses a literal CR byte, since BSD
   `sed` does not interpret that escape on the left-hand side. `tr -d '\r'` was rejected as the fix despite
   being portable: it deletes mid-line CRs too, so `text\r\r\n` would stop being an offense at all —
   trading a portability bug for a false negative. Both gates were verified to give identical verdicts under
   GNU and busybox userlands, and — the check that matters more — to still *catch* a planted broken relative
   link, a planted broken prose path, and a planted trailing-whitespace offense under both.
-- `crates/tianheng/tests/reference_integrity.rs` normalizes a link target with portable shell instead of
+- `scripts/check_reference_integrity.sh` normalizes a link target with portable shell instead of
   `realpath -m --relative-to`, whose `-m` and `--relative-to` are GNU coreutils extensions that BSD and
   macOS `realpath` reject. The script sits in a Definition of Done that states no platform restriction,
   and under `set -e` the unrecognized option would have exited with realpath's own status — landing on
@@ -1958,7 +1958,7 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   popping after the first `..`, so a doubly-ascending link came out with a doubled separator
   (`…//PROJECT.md`) instead of resolving to the root document — which is what the equivalence comparison
   was written to catch, and it differed on eight of forty-eight cases.
-- `crates/tianheng/tests/reference_integrity.rs` covers root-level references and stops swallowing read errors.
+- `scripts/check_reference_integrity.sh` covers root-level references and stops swallowing read errors.
   Its extraction regex recognized only paths under `crates/`, `scripts/`, `openspec/`, `docs/`,
   `examples/`, and `.github/`, so 259 references to `PROJECT.md`, `AGENTS.self-law.md`, `BACKLOG.md`,
   `Cargo.toml` and their siblings never entered the check — a false negative against the gate's own
@@ -1974,7 +1974,7 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   ran with `2>/dev/null` inside a process substitution, which hid exit 2 (cannot read) behind exit 1 (no
   match) where `set -e` could not see it: an unreadable tracked file counted as inspected and the run
   reported clean. The two exits are now distinguished and the unreadable case refuses to judge.
-- `crates/tianheng/tests/release_coherence.rs` now also requires every example's committed family-crate version
+- `scripts/check_release_coherence.sh` now also requires every example's committed family-crate version
   requirement to be satisfiable by the workspace version. The script claimed workspace/dependency version
   alignment and never read `examples/*/Cargo.toml`, where all seven requirements pin the previous minor.
   The failure was already caught — `test_examples.sh` asserts each `patch.crates-io` override took
@@ -1987,7 +1987,7 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   workspace so a seventh crate is covered the day it becomes a member. Three failure directions are added
   to `test_release_coherence.sh`'s matrix: a stale example pin, a missing `examples/` directory, and a
   table-form requirement that is stale.
-- A 13th Definition-of-Done gate, `crates/tianheng/tests/whitespace_hygiene.rs`, asserts over every tracked
+- A 13th Definition-of-Done gate, `scripts/check_whitespace_hygiene.sh`, asserts over every tracked
   text file that no line carries trailing whitespace, no file ends on a blank line, and every file
   ends with a newline. `cargo fmt` governs `.rs` only, so nothing in the repository checked `.md`,
   `.toml`, `.sh`, or `.yml` — and three blank lines at EOF reached this release branch through 23

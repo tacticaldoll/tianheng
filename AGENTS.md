@@ -134,7 +134,7 @@ string, and on six expected-output literals in its failure matrix; widening the 
 on the fixture censuses the register's own failure matrix writes deliberately; and the one instance that occurred in a **code
 doc** was spelled in words, which no digit-based matcher reads. Most numbers in this repository describe a *shape*
 ("two files of one module yield one violation"), not a census, so a matcher over numbers is mostly false positives.
-The census direction in `check_bound_register.sh` stays what it is — a backstop for the one set whose phrasing is
+The census direction in `crates/tianheng/tests/bound_register.rs` stays what it is — a backstop for the one set whose phrasing is
 stable — and the rule above is what keeps a figure honest.
 
 
