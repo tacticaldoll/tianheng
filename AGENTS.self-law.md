@@ -59,6 +59,13 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 - **rule**: restrict dependencies to (only: guibiao, hunyi, louke, serde_json)
 - **kind**: crate · **severity**: enforce
 
+### `shengmo`
+
+> 繩墨 is an adopter of 天衡, not a member of the family it governs: it declares this law through the shell's published surface and reaches no dimension directly, so the repository's own governance exercises exactly the surface an adopter has
+
+- **rule**: restrict dependencies to (only: tianheng)
+- **kind**: crate · **severity**: enforce
+
 ### `crate`
 
 > 璇璣 is the measure-only reaction model: it reads no ambient clock inline and exposes no async surface — time and effects enter only through the dimensions above it, never the model itself

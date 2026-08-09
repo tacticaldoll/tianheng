@@ -1,0 +1,23 @@
+[package]
+name = "shengmo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# 繩墨 (Shéngmò) — the carpenter's inked line. Everything is judged straight against it, and the
+# line is not part of the furniture: this member holds the repository's own law and the reactions
+# holding the repository, and it ships in no package. Deliberately not an astronomical instrument
+# — it is not one of the 三儀 and not product, and the name says so before a reader has to ask.
+description = "繩墨 (Shengmo) — the inked line: this repository's own law and the reactions that hold it. Not product; ships in no package."
+# Never published. `cargo publish` packages only crate-local files, and this crate's whole purpose
+# is to be outside every tarball — which is the criterion the governance capability itself gives
+# for machinery being governance rather than product. CI's license-files job reads this same flag,
+# so no LICENSE-* texts are carried here.
+publish = false
+
+[dependencies]
+# The law is written with the product's own declaration API: 天衡 governing its own author. A
+# normal dependency rather than a dev-dependency, because the constitution is code, not test
+# scaffolding. No version: this crate is never published, so nothing resolves it from a registry.
+tianheng = { path = "../tianheng" }

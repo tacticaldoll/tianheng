@@ -122,6 +122,16 @@ fn tianheng_constitution() -> Constitution {
                      lower reaction model or metadata substrate",
                 ),
         )
+        .boundary(
+            CrateBoundary::crate_("shengmo")
+                .restrict_dependencies_to(["tianheng"])
+                .because(
+                    "繩墨 is an adopter of 天衡, not a member of the family it governs: it \
+                     declares this law through the shell's published surface and reaches no \
+                     dimension directly, so the repository's own governance exercises exactly the \
+                     surface an adopter has",
+                ),
+        )
         // The first *semantic* self-boundary: the family dogfoods its own `sans_io_pure` profile on
         // 璇璣, the crate that most owes the sans-I/O property. It spans two dimensions (圭表
         // must-not-call-inline for the clock, 渾儀 must-not-expose-async for the API), so it is the
