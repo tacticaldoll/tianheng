@@ -18,7 +18,7 @@
 //! released before the test binary runs, so the inner enumeration neither blocks nor rebuilds, and it shares
 //! the warm target directory instead of paying for one of its own.
 
-use jiaochou::bound_register_parse as parse;
+use kanhe::bound_register_parse as parse;
 
 use parse::{Bound, Citation, bounds_in, must, parse_bounds, search, workspace_root};
 use std::collections::{BTreeMap, BTreeSet};
@@ -294,8 +294,8 @@ named shape, so that shape is governed policy rather than a defect.
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
-Generated from `openspec/specs/*/spec.md` by `crates/jiaochou/tests/bound_register.rs`. **Do not edit by hand** —
-regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test bound_register`. A stale projection fails that gate.
+Generated from `openspec/specs/*/spec.md` by `crates/kanhe/tests/bound_register.rs`. **Do not edit by hand** —
+regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register`. A stale projection fails that gate.
 
 **What this document does not claim.** It lists the bounds the specs *state in a recognizable form*: a
 scenario whose heading marks it a bound. The undeclared-prose direction that keeps this list honest has

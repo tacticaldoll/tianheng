@@ -928,7 +928,7 @@ fn a_literal_declaration_borrows_every_string_it_carries() {
     // owned one cannot — and `borrows_every_string()` reaches the other string positions.
     //
     // How many there are is deliberately not written here. It was, as "fifty-three", while the register counted
-    // fifty-four — a census in prose with no observation source, which `crates/jiaochou/tests/bound_register.rs` prints on every
+    // fifty-four — a census in prose with no observation source, which `crates/kanhe/tests/bound_register.rs` prints on every
     // clean run precisely so a number like that is read rather than remembered.
     const SHAPE: &str = "a shape whose pointer identity is what this test reads";
     let declaration = BoundDecl::pinned(

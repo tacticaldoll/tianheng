@@ -7,7 +7,7 @@
 //! shell-defended capability could not pin the bounds this one declares — they would land `UNPINNED` and turn
 //! the register projection's leading figure from zero into three.
 //!
-//! What it does **not** take over: `crates/jiaochou/tests/bound_register.rs` still owns the citation, tracker, prose and
+//! What it does **not** take over: `crates/kanhe/tests/bound_register.rs` still owns the citation, tracker, prose and
 //! projection directions. This reaction owns one obligation — that every declared bound is classified, and every
 //! classification names a declared bound.
 
@@ -387,9 +387,9 @@ fn derived_ids_agree_with_the_register_projection() {
     let derived: BTreeSet<String> = spec_bounds(&root).into_keys().collect();
     assert_eq!(
         derived, projected,
-        "the ids this reaction derives differ from the ids `crates/jiaochou/tests/bound_register.rs` wrote into \
+        "the ids this reaction derives differ from the ids `crates/kanhe/tests/bound_register.rs` wrote into \
          {projection:?} — either the slug rule has drifted between the two implementations, or the projection \
-         is stale. Regenerate with `BLESS=1 bash crates/jiaochou/tests/bound_register.rs` and, if the difference \
+         is stale. Regenerate with `BLESS=1 bash crates/kanhe/tests/bound_register.rs` and, if the difference \
          survives, the two derivations disagree."
     );
 }
@@ -440,8 +440,8 @@ fn render_extents(code: &BTreeMap<String, BoundDecl>) -> String {
 
     out.push_str(
         "\nGenerated from each dimension's `observation_bounds()` by \
-         `crates/jiaochou/tests/observation_bound_model.rs`. **Do not edit by hand** — regenerate with\n\
-         `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p jiaochou --test observation_bound_model`.\n\n",
+         `crates/kanhe/tests/observation_bound_model.rs`. **Do not edit by hand** — regenerate with\n\
+         `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test observation_bound_model`.\n\n",
     );
     out.push_str(
         "**What this document does not claim.** The classification is *authored*: the type refuses a \

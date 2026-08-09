@@ -6,9 +6,9 @@
 //! reading only "non-zero" was blind to exactly the regression the shell era's shared backstop introduced,
 //! where every genuine incoherence was reported as cannot-judge with CI green throughout.
 
-use jiaochou::refusal;
+use kanhe::refusal;
 
-use jiaochou::release_coherence_gate as gate;
+use kanhe::release_coherence_gate as gate;
 
 use gate::{
     build_fixture, commit, development_changelog, hermetic, judge, release_changelog,

@@ -14,8 +14,8 @@
 
 use std::path::PathBuf;
 
-use jiaochou::region::{Source, declares_itself_generated};
-use jiaochou::restatement::{
+use kanhe::region::{Source, declares_itself_generated};
+use kanhe::restatement::{
     assert_comment_block_does_not_copy_allowlist, comment_restates_the_declaration,
 };
 use shengmo::law::{constitution, shell_dependency_allowlist, shell_dependency_boundary};
@@ -138,7 +138,7 @@ fn no_governance_document_restates_a_declared_allowlist() {
     );
 
     let allowlists =
-        jiaochou::restatement::allowlists(constitution().static_boundaries().boundaries());
+        kanhe::restatement::allowlists(constitution().static_boundaries().boundaries());
     assert!(
         !allowlists.is_empty(),
         "the live constitution declares no dependency allowlist, so this reaction compares against nothing"
@@ -159,7 +159,7 @@ fn no_governance_document_restates_a_declared_allowlist() {
             continue;
         }
         read += 1;
-        offences.extend(jiaochou::restatement::document_offences(
+        offences.extend(kanhe::restatement::document_offences(
             path,
             &text,
             &allowlists,

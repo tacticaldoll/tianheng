@@ -58,7 +58,7 @@ done
 # perturbation could itself disable is not a guard.
 env -u TIANHENG_REFUSAL_MUTANT -u TIANHENG_REFUSAL_RECORD -u TIANHENG_REFUSAL_BITES \
     TIANHENG_PUBLISH_SOURCE=1 TIANHENG_WORKSPACE_TESTS=1 \
-    cargo test --manifest-path "$repo/Cargo.toml" -p jiaochou --test publish_source \
+    cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test publish_source \
     -- --exact the_publish_source_is_the_signed_release_snapshot
 
 cd "$repo"

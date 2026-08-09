@@ -11,9 +11,9 @@
 //! and to refusing them as a **violation** rather than as a cannot-judge, because an operator standing before
 //! an irreversible act must be able to tell "the source disagrees" from "the source could not be read".
 
-use jiaochou::refusal;
+use kanhe::refusal;
 
-use jiaochou::publish_source_gate as gate;
+use kanhe::publish_source_gate as gate;
 
 use gate::{build_fixture, hermetic, hidden_by_the_checkout, judge};
 use refusal::Kind;

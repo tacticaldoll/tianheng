@@ -1,11 +1,16 @@
-//! 校讎 (Jiàochóu) — collation.
+//! 勘合 (Kānhé) — the split tally.
 //!
-//! Two texts laid side by side to find where they disagree. Every reaction in this crate does that:
+//! A 勘合 is one document made in two halves, kept apart, and proven genuine by fitting them back
+//! together. Every reaction in this crate does that:
 //! `AGENTS.md` against `.github/workflows/ci.yml`, `CHANGELOG.md` against the tree it describes, a
 //! spec's declared bound against the test that defends it, a generated document against the
 //! generator its own header names.
 //!
-//! It is **not** self-governance. 繩墨 holds the law 天衡 declares over itself and the reactions that
+//! It is **not** 校讎. That word is already spent: 校讎 is one of the 三司 and names the *amendment
+//! flow* — the steward routing, the OpenSpec lifecycle — while this crate collates a record. A first
+//! draft of this crate took the name anyway, which is the misnaming its own siblings exist to end.
+//!
+//! It is **not** self-governance either. 繩墨 holds the law 天衡 declares over itself and the reactions that
 //! run the delivered product against this workspace; what lives here judges the repository's
 //! *record*, and reaches no product contract at all. Keeping the two apart is the point: a claim
 //! about one was read as a claim about both for as long as they shared a directory.

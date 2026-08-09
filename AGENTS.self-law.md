@@ -68,9 +68,9 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 - **rule**: restrict dependencies to (only: tianheng, serde_json)
 - **kind**: crate · **severity**: enforce
 
-### `jiaochou`
+### `kanhe`
 
-> 校讎 collates this repository's record against itself and governs no product contract: it reaches the shell's published surface and the law's own locator, never a dimension. Keeping it distinct from 繩墨 is what stops a claim about the law being read as a claim about document hygiene
+> 勘合 fits this repository's record against itself and governs no product contract: it reaches the shell's published surface and the law's own locator, never a dimension. Keeping it distinct from 繩墨 is what stops a claim about the law being read as a claim about document hygiene
 
 - **rule**: restrict dependencies to (only: shengmo, tianheng, serde_json)
 - **kind**: crate · **severity**: enforce

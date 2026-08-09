@@ -259,7 +259,7 @@ mod tests {
     /// report every site undistinguished — a wrong verdict that reads like a finding.
     ///
     /// The spelling is **relative to the package as cargo invoked rustc**, so it is not one string: in this
-    /// workspace it is `crates/jiaochou/src/refusal.rs`, and were this crate its own root it would be
+    /// workspace it is `crates/kanhe/src/refusal.rs`, and were this crate its own root it would be
     /// `src/refusal.rs`. Measured rather than foreseen, twice — a literal here passed in the workspace and
     /// failed in a packaged tarball, and it moved again when this module became library code instead of a
     /// a `#[path]` include under `tests/support/`.
@@ -284,10 +284,10 @@ mod tests {
         let all = parse_selector("ALL:kind");
         assert!(all.site.is_none() && all.mode == Mode::Kind);
 
-        let one = parse_selector("crates/jiaochou/src/refusal.rs:41:message");
+        let one = parse_selector("crates/kanhe/src/refusal.rs:41:message");
         assert_eq!(
             one.site,
-            Some(("crates/jiaochou/src/refusal.rs".to_string(), 41))
+            Some(("crates/kanhe/src/refusal.rs".to_string(), 41))
         );
         assert_eq!(one.mode, Mode::Message);
     }

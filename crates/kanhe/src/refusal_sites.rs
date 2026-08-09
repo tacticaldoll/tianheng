@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// The one module that may define a refusal vocabulary.
-pub const SHARED: &str = "crates/jiaochou/src/refusal.rs";
+pub const SHARED: &str = "crates/kanhe/src/refusal.rs";
 
 /// The target implementing this reaction. Its own sources are exempt from the vocabulary scan.
 ///
@@ -741,7 +741,7 @@ mod tests {
         let mut sites = Vec::new();
         let mut offences = Vec::new();
         scan(
-            "crates/jiaochou/src/refusal_sites.rs",
+            "crates/kanhe/src/refusal_sites.rs",
             &fixture("a_second_refusal_type"),
             true,
             true,

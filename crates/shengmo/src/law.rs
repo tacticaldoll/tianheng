@@ -109,10 +109,10 @@ pub fn constitution() -> Constitution {
                 ),
         )
         .boundary(
-            CrateBoundary::crate_("jiaochou")
+            CrateBoundary::crate_("kanhe")
                 .restrict_dependencies_to(["shengmo", "tianheng", "serde_json"])
                 .because(
-                    "校讎 collates this repository's record against itself and governs no product \
+                    "勘合 fits this repository's record against itself and governs no product \
                      contract: it reaches the shell's published surface and the law's own locator, \
                      never a dimension. Keeping it distinct from 繩墨 is what stops a claim about \
                      the law being read as a claim about document hygiene",

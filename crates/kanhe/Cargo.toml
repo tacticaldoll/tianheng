@@ -1,0 +1,25 @@
+[package]
+name = "kanhe"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# 勘合 (Kānhé) — the split tally: one document made in two halves, and authenticity proven by fitting
+# them together. That is what every reaction here does — AGENTS.md against ci.yml, CHANGELOG against
+# the tree, a spec against the code answering it, a generated document against its generator.
+#
+# Deliberately NOT 校讎, which this repository's vocabulary already spends: 校讎 is one of the 三司 and
+# means the amendment flow — 垂象 surfaces a reaction, 實錄 records one, 校讎 amends one. Taking a word
+# that already has a referent is the misnaming this whole family of changes exists to end, and a first
+# draft did exactly that.
+description = "勘合 (Kanhe) — the split tally: this repository's record held against itself. Not product; ships in no package."
+publish = false
+
+[dependencies]
+# The law's own locator, so the repository is found one way rather than once per reaction.
+shengmo = { path = "../shengmo" }
+# Reactions that read the product's declared surface — the bound register and the observer protocol.
+tianheng = { path = "../tianheng" }
+# Cargo's `--message-format=json` stream: a corpus comes from the build, never from a list.
+serde_json = { workspace = true }

@@ -4,7 +4,7 @@
 //! Two constructions of "a signed release repository" would be the twin-drift class this repository keeps
 //! closing, and the whole reason the builder is shared.
 
-use jiaochou::publish_source_gate as gate;
+use kanhe::publish_source_gate as gate;
 
 use gate::{build_fixture, judge};
 use std::path::PathBuf;
