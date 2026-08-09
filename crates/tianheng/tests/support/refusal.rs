@@ -4,8 +4,9 @@
 //! Two reactions each defined their own `Kind`, `Refusal`, `violation` and `cannot_judge`. Two constructions
 //! of one concept is the twin-drift class this repository keeps closing, and here it had a second cost: the
 //! contract `rust-self-governance-gates` places on directions — *assert which outcome a shape produces* — was
-//! enforced by nothing, and a review sweep measured 24 of 60 construction sites as distinguished by no
-//! direction at all.
+//! enforced by nothing. A review sweep at `22ec98e` counted 24 of 60 construction sites as surviving both a
+//! kind swap and a message replacement — a figure that conflates two different facts, because a manual sweep
+//! cannot tell a site no direction *distinguishes* from a site no direction *reaches*.
 //!
 //! A **site** is one construction of a refusal. It carries two independent contracts: the **kind**, which is
 //! what an operator acts on before an irreversible act, and the **message**, which is what tells them where to

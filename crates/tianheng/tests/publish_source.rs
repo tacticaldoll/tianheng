@@ -496,9 +496,9 @@ fn rev(repo: &Path, what: &str) -> String {
     String::from_utf8_lossy(&out.stdout).trim().to_string()
 }
 
-/// The tag ref resolves and the tag object is gone: whether it is annotated cannot be decided.
+/// The tag ref resolves and the tag object is gone: it cannot be read, which is not "it is lightweight".
 #[test]
-fn a_tag_whose_object_is_missing_cannot_have_its_kind_read() {
+fn a_tag_whose_object_is_missing_cannot_be_read() {
     let root = scratch("missing-tag");
     let fixture = build_fixture(&root, "missing-tag", "9.9.9");
     drop_object(&fixture.repo, &rev(&fixture.repo, "refs/tags/v9.9.9"));
@@ -507,7 +507,7 @@ fn a_tag_whose_object_is_missing_cannot_have_its_kind_read() {
     let refusal = verdict.expect_err("a missing tag object must be refused");
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
-        refusal.message.contains("object type"),
+        refusal.message.contains("could not read the tag object"),
         "{}",
         refusal.message
     );
@@ -533,6 +533,42 @@ fn a_head_whose_ancestor_is_missing_cannot_have_its_subject_read() {
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("could not read HEAD's subject"),
+        "{}",
+        refusal.message
+    );
+}
+
+/// The tag object reads and the commit it names does not: the tag cannot be resolved to a commit.
+///
+/// HEAD is an **orphan** commit carrying the same release subject, so reading its subject traverses no
+/// parents — measured, not assumed: a HEAD with the missing commit as an ancestor refuses one step earlier,
+/// which is the direction above. Everything before this point reads objects that are still there; only
+/// peeling the tag needs the one that is gone.
+#[test]
+fn a_tag_whose_commit_is_missing_cannot_be_resolved() {
+    let root = scratch("missing-tag-commit");
+    let fixture = build_fixture(&root, "missing-tag-commit", "9.9.9");
+    let tagged = rev(&fixture.repo, "refs/tags/v9.9.9^{commit}");
+    git(&fixture.repo, &["checkout", "-q", "--orphan", "detached"]);
+    git(&fixture.repo, &["rm", "-rq", "--cached", "."]);
+    std::fs::write(fixture.repo.join("only.txt"), "orphan").expect("write");
+    for stray in ["Cargo.toml", "CHANGELOG.md"] {
+        let _ = std::fs::remove_file(fixture.repo.join(stray));
+    }
+    std::fs::write(
+        fixture.repo.join("Cargo.toml"),
+        "[workspace.package]\nversion = \"9.9.9\"\n",
+    )
+    .expect("write");
+    git(&fixture.repo, &["add", "-A"]);
+    git(&fixture.repo, &["commit", "-qm", "release: 9.9.9"]);
+    drop_object(&fixture.repo, &tagged);
+    let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a tag naming a missing commit must be refused");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("could not resolve"),
         "{}",
         refusal.message
     );

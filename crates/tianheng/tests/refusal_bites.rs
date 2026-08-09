@@ -2,9 +2,12 @@
 //! contracts.
 //!
 //! `rust-self-governance-gates` requires a reaction's directions to *assert which outcome a shape produces*.
-//! Nothing held that requirement, and a review sweep measured 24 of 60 construction sites as distinguished by
-//! no direction at all — in front of `cargo publish`, which is irreversible, where the kind is what an
-//! operator acts on before running it.
+//! Nothing held that requirement. A review sweep at `22ec98e` counted 24 of 60 construction sites as
+//! surviving both a kind swap and a message replacement, in front of `cargo publish`, which is irreversible
+//! and where the kind is what an operator acts on. That figure conflates two facts: a perturbation kills
+//! nothing both when no direction distinguishes the site and when no direction reaches it. Separating them is
+//! this reaction's first job, and on the current tree it measures **zero undistinguished** among reached
+//! sites.
 //!
 //! A site carries **two independent contracts**. Its kind is what an operator acts on; its message is what
 //! tells them where to look. Both are perturbed, and some direction must die under each. The message

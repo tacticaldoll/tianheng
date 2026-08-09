@@ -123,15 +123,26 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
             "there is no tag {tag}; the release snapshot is tagged before it is published"
         )));
     }
-    let object_kind = git(repo, &["cat-file", "-t", &format!("refs/tags/{tag}")])
-        .map_err(|err| cannot_judge(format!("could not read {tag}'s object type: {err}")))?;
-    if object_kind != "tag" {
-        return Err(violation(format!(
-            "{tag} is a lightweight tag; the release tags are annotated (`git tag -s`)"
-        )));
-    }
+    // The tag object, read **once**. Asking git for its type and then for its content is two reads of one
+    // object, and the second cannot fail once the first has answered — a branch no input can take, which is
+    // dead code rather than a guard. So the content is read first, and the type is asked for only to say what
+    // that failure *means*: a lightweight tag is a violation, an unreadable object is not.
+    let tag_object = match git(repo, &["cat-file", "tag", &format!("refs/tags/{tag}")]) {
+        Ok(object) => object,
+        Err(err) => {
+            let kind = git(repo, &["cat-file", "-t", &format!("refs/tags/{tag}")]);
+            return Err(match kind.as_deref() {
+                Ok("tag") | Err(_) => {
+                    cannot_judge(format!("could not read the tag object for {tag}: {err}"))
+                }
+                Ok(_) => violation(format!(
+                    "{tag} is a lightweight tag; the release tags are annotated (`git tag -s`)"
+                )),
+            });
+        }
+    };
 
-    verify_tag_signature(repo, &tag)?;
+    verify_tag_signature(repo, &tag, &tag_object)?;
 
     let tag_commit = git(repo, &["rev-list", "-n", "1", &tag])
         .map_err(|err| cannot_judge(format!("could not resolve {tag} to a commit: {err}")))?;
@@ -169,7 +180,7 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
 /// The tag must carry an SSH signature that verifies **over the tag object**.
 ///
 /// A signature block quoted in a tag *message* is text; only the payload the object actually signs decides.
-fn verify_tag_signature(repo: &Path, tag: &str) -> Result<(), Refusal> {
+fn verify_tag_signature(repo: &Path, tag: &str, tag_object: &str) -> Result<(), Refusal> {
     if Command::new("ssh-keygen").arg("-h").output().is_err() {
         return Err(cannot_judge(format!(
             "ssh-keygen is unavailable, so {tag}'s signature cannot be verified"
@@ -206,8 +217,6 @@ fn verify_tag_signature(repo: &Path, tag: &str) -> Result<(), Refusal> {
         )));
     }
 
-    let tag_object = git(repo, &["cat-file", "tag", &format!("refs/tags/{tag}")])
-        .map_err(|err| cannot_judge(format!("could not read the tag object for {tag}: {err}")))?;
     let signature = git(
         repo,
         &[
