@@ -243,3 +243,14 @@ impl<'a> Prose<'a> {
         })
     }
 }
+
+/// The warning a generated document carries in its header.
+pub const DO_NOT_EDIT: &str = "Do not edit by hand";
+
+/// Whether a document declares itself generated: the marker, bolded, in its header.
+///
+/// One definition, because two readers ask it — the projection register, which enumerates generated
+/// documents, and the restatement reaction, which must not judge a projection for naming what it projects.
+pub fn declares_itself_generated(header: &Header<'_>) -> bool {
+    header.contains(&format!("**{DO_NOT_EDIT}"))
+}

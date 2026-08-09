@@ -17,18 +17,10 @@ use std::process::Command;
 
 use tianheng::testing::assert_projection_matches;
 
-use jiaochou::region::{Header, Prose, Source};
+use jiaochou::region::{Header, Prose, Source, declares_itself_generated};
 
 /// This reaction's own projection, which is itself a member of the register.
 const PROJECTION: &str = "docs/projection-register.md";
-
-/// The marker a generated document carries. Required **bolded** and **above the first `##` heading**.
-///
-/// Both qualifiers are load-bearing. A rule on the bare string would enumerate this capability's own
-/// specification, which quotes the marker while requiring it — a false positive in the register's founding
-/// member. And position has a reason of its own: a generated document warns at the *top*, because that is where a
-/// reader about to edit it looks; below the first section heading the warning sits where the damage is done.
-const MARKER: &str = "Do not edit by hand";
 
 /// The file that **defines** the shared blessing rule is not a holder of anything.
 ///
@@ -83,11 +75,6 @@ fn read(root: &Path, relative: &str) -> Source {
     Source::of(
         std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("cannot read {path:?}: {err}")),
     )
-}
-
-/// Whether a document declares itself generated: the marker, bolded, in its header.
-fn declares_itself_generated(header: &Header<'_>) -> bool {
-    header.contains(&format!("**{MARKER}"))
 }
 
 /// The tracked paths a document's header names.

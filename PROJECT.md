@@ -107,9 +107,9 @@ false negative, and only the reaction can foreclose it.
   shadow — imports, dependencies, and inline symbol-path calls (the clock-free
   `must_not_call_inline` confinement). The dependency-light static engine, derived from
   modou: declare crate- and module-import boundaries, observe from `cargo metadata` (read
-  through 星表) and source `use` / symbol scans, compare, react. Pure functional core — no shell. Depends on `xuanji`
-  (the reaction model), `xingbiao` (the metadata substrate), and `serde_json` only; the
-  report/constitution *assembly* (which folds in the static `Coverage`) lives here, not in the model.
+  through 星表) and source `use` / symbol scans, compare, react. Pure functional core — no shell; its dependency
+  allowlist is declared in the law and rendered in [`AGENTS.self-law.md`](AGENTS.self-law.md), not restated
+  here. The report/constitution *assembly* (which folds in the static `Coverage`) lives here, not in the model.
 - **`tianheng` (天衡) — the shell.** The celestial balance that weighs declared against
   observed: the imperative shell + facade — CLI (arg parsing, filesystem, stdout/stderr),
   the `run` reaction that composes every dimension into one, and the re-exported public

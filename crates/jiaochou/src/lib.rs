@@ -30,3 +30,7 @@ pub mod refusal_exemptions;
 pub mod refusal_sites;
 pub mod region;
 pub mod release_coherence_gate;
+pub mod restatement;
+
+#[cfg(test)]
+mod tests;

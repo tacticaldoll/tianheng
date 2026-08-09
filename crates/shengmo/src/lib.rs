@@ -27,8 +27,4 @@
 #![forbid(unsafe_code)]
 
 pub mod law;
-pub mod restatement;
 pub mod workspace;
-
-#[cfg(test)]
-mod tests;

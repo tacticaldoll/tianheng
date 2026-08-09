@@ -6,10 +6,7 @@
 //! enforce `engine ⊥ runner` *within* one crate, 天衡 enforces the functional-core ⊥
 //! imperative-shell split across *crate* boundaries.
 
-use shengmo::law::{PREAMBLE, constitution, shell_dependency_allowlist, shell_dependency_boundary};
-use shengmo::restatement::{
-    assert_comment_block_does_not_copy_allowlist, comment_restates_the_declaration,
-};
+use shengmo::law::{PREAMBLE, constitution, shell_dependency_boundary};
 use shengmo::workspace::{manifest as workspace_manifest, root as workspace_root};
 use tianheng::prelude::*;
 
@@ -23,92 +20,6 @@ fn tianheng_governs_itself() {
         .assert_clean();
 }
 
-/// Authored shell comments may explain the dependency boundary, but the live declaration and its
-/// generated projection own the membership. The declaration token and a full member census are distinct
-/// copied forms; both are refused without forbidding product code from legitimately calling the public DSL.
-#[test]
-fn shell_comments_do_not_restate_the_dependency_allowlist() {
-    let Some(root) = workspace_root() else {
-        return; // outside a checkout — the authored repository source is not present
-    };
-    let shell_boundary = shell_dependency_boundary();
-    let allowlist = shell_dependency_allowlist(&shell_boundary);
-    let mut pending = vec![root.join("crates/tianheng/src")];
-    let mut rust_sources = Vec::new();
-
-    while let Some(directory) = pending.pop() {
-        for entry in std::fs::read_dir(&directory)
-            .unwrap_or_else(|error| panic!("cannot read {}: {error}", directory.display()))
-        {
-            let entry = entry.unwrap_or_else(|error| {
-                panic!("cannot enumerate {}: {error}", directory.display())
-            });
-            let path = entry.path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path.extension().is_some_and(|extension| extension == "rs") {
-                rust_sources.push(path);
-            }
-        }
-    }
-
-    rust_sources.sort();
-    for source in rust_sources {
-        let text = std::fs::read_to_string(&source)
-            .unwrap_or_else(|error| panic!("cannot read {}: {error}", source.display()));
-        let mut comment_block = String::new();
-        let mut block_start = 0usize;
-        for (index, line) in text.lines().enumerate() {
-            if line.trim_start().starts_with("//") {
-                if comment_block.is_empty() {
-                    block_start = index + 1;
-                }
-                assert!(
-                    !comment_restates_the_declaration(line),
-                    "{}:{} names the shell dependency declaration in a comment; refer to \
-                     AGENTS.self-law.md instead. This reads a comment's text and not its purpose, so it \
-                     also refuses a doc example of the DSL — a declared over-reaction of \
-                     `self-law-projection`, not a case to work around",
-                    source.display(),
-                    index + 1
-                );
-                comment_block.push_str(line);
-                comment_block.push('\n');
-            } else if !comment_block.is_empty() {
-                assert_comment_block_does_not_copy_allowlist(
-                    &source,
-                    block_start,
-                    &comment_block,
-                    allowlist,
-                );
-                comment_block.clear();
-            }
-        }
-        if !comment_block.is_empty() {
-            assert_comment_block_does_not_copy_allowlist(
-                &source,
-                block_start,
-                &comment_block,
-                allowlist,
-            );
-        }
-    }
-
-    let style_source = root.join("crates/tianheng/src/runner/term_color.rs");
-    let style_text = std::fs::read_to_string(&style_source)
-        .unwrap_or_else(|error| panic!("cannot read {}: {error}", style_source.display()));
-    assert!(
-        style_text.lines().any(|line| {
-            line.trim_start().starts_with("//") && line.contains("AGENTS.self-law.md")
-        }),
-        "{} must direct its dependency rationale to the generated self-law projection",
-        style_source.display()
-    );
-}
-
-/// Contract A — the agent-loaded `AGENTS.self-law.md` must byte-match the live projection of
-/// `constitution()`. Stale → fail (with the regenerate command); `BLESS=1` → rewrite
-/// the file instead of asserting (so the artifact changes by regeneration, never by hand).
 #[test]
 fn self_law_projection_is_fresh() {
     let Some(root) = workspace_root() else {

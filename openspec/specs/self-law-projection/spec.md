@@ -125,9 +125,11 @@ The artifact's fixed preamble SHALL describe only how to read and use the projec
 **both** statements separately: that the clause is present in the reason, and that the allowlist **names no
 sibling dimension**. They are different statements, and only the first was asserted.
 
-That gap was a false negative, reproduced rather than reasoned about: widening `guibiao`'s allowlist to name
-`hunyi` left **every** test binary in this workspace green, and `AGENTS.self-law.md` regenerated to print
-`only: serde_json, xuanji, xingbiao, hunyi` **directly beneath** the reason that forbids it.
+That gap was a false negative, reproduced rather than reasoned about: widening a dimension's allowlist to
+name a sibling left **every** test binary in this workspace green, and `AGENTS.self-law.md` regenerated to
+print the widened membership **directly beneath** the reason that forbids it. The membership itself is not
+written here — restating it is the second source of truth this capability forbids, and a requirement that
+reproduces what it governs goes stale on a legitimate amendment with no reaction to say so.
 
 Neither of the two reactions a reader would expect to catch it can. The staleness check pins the projection
 against the declaration, so a blessed projection of a widened allowlist is *fresh* — freshness is not truth. And

@@ -1,6 +1,8 @@
 //! The restatement judgement's failure matrix: what it refuses, and what it over-refuses.
 
-use crate::restatement::{comment_block_copies_allowlist, comment_restates_the_declaration};
+use crate::restatement::{
+    comment_block_copies_allowlist, comment_restates_the_declaration, document_offences,
+};
 
 /// `self-law-projection/a-doc-example-of-the-dependency-dsl-is-refused-a-stated-bound`
 ///
@@ -61,5 +63,63 @@ fn a_comment_naming_every_member_for_another_reason_is_refused() {
         ),
         "the control: naming some of them is accepted, so the refusal above is about the full set and not \
          about mentioning a crate at all"
+    );
+}
+
+// --- the census a document must not reproduce ---------------------------------------------------------
+
+fn lists() -> Vec<(String, Vec<String>)> {
+    vec![
+        (
+            "guibiao".to_string(),
+            ["serde_json", "xuanji", "xingbiao"]
+                .map(str::to_string)
+                .to_vec(),
+        ),
+        ("xuanji".to_string(), vec!["serde_json".to_string()]),
+    ]
+}
+
+#[test]
+fn a_block_naming_a_crate_and_every_member_of_its_allowlist_is_refused() {
+    let offences = document_offences(
+        "PROBE.md",
+        "- `guibiao` depends on `xuanji`, `xingbiao`, and `serde_json` only.\n",
+        &lists(),
+    );
+    assert_eq!(offences.len(), 1, "{offences:?}");
+    assert!(offences[0].contains("guibiao"), "{offences:?}");
+}
+
+/// `self-law-projection`'s bound: a membership reproduced without naming the crate it governs is not
+/// observed. Reading it as one would refuse any paragraph listing the same crate names for another reason.
+#[test]
+fn a_block_naming_the_members_but_not_the_crate_is_not_observed() {
+    assert!(
+        document_offences(
+            "PROBE.md",
+            "- The bases are `xuanji`, `xingbiao`, and `serde_json`.\n",
+            &lists(),
+        )
+        .is_empty()
+    );
+}
+
+/// The same bound's other half: an allowlist of one cannot be told from a mention of that crate.
+#[test]
+fn a_single_member_allowlist_is_not_observed() {
+    assert!(document_offences("PROBE.md", "- `xuanji` needs `serde_json`.\n", &lists()).is_empty());
+}
+
+/// A list is read one item at a time, so a census assembled across separate entries is not one block.
+#[test]
+fn a_census_spread_across_separate_items_is_not_one_block() {
+    assert!(
+        document_offences(
+            "PROBE.md",
+            "- `guibiao` reads through `xingbiao`.\n- It also uses `xuanji`.\n- And `serde_json`.\n",
+            &lists(),
+        )
+        .is_empty()
     );
 }
