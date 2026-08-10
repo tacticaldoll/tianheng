@@ -251,6 +251,28 @@ this requirement closes.
 - **THEN** the bijection fails, naming every id left unclassified, because the register reads the answer rather
   than reading past it
 
+### Requirement: The published shell bound catalog SHALL exclude Kanhe-owned declarations
+
+The public `tianheng::observation_bounds()` catalog SHALL contain no bound id under the
+`rust-repository-reactions/` capability. Surviving declarations for that capability SHALL be returned by a
+Kanhe-owned catalog that the repository model gate consumes separately. That capability governs this
+repository's unpublished checks, so emitting its declarations from a published crate crosses repository test
+support into the product surface.
+
+#### Scenario: A Kanhe-owned bound enters the published catalog
+
+- **WHEN** `tianheng::observation_bounds()` returns a bound whose id begins
+  `rust-repository-reactions/`
+- **THEN** the repository's observation-bound model gate fails and names the leaked id, even if Kanhe also
+  returns the same declaration
+
+#### Scenario: The capability catalog moves to Kanhe
+
+- **WHEN** the mutation sweep and its declarations are retired and the surviving capability declarations move
+  to Kanhe
+- **THEN** the published catalog omits the capability, Kanhe returns only its surviving declarations, and the
+  combined spec and typed declaration sets stay in bijection
+
 ### Requirement: The extents SHALL be projected into a generated, staleness-checked document
 
 The reaction SHALL emit a projection grouping every declared bound by its extent, blessed by an environment

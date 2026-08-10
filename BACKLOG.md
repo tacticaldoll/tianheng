@@ -207,7 +207,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **80 bounds across 23 capabilities** — a live figure rather than part of the measurement
+  currently holds **78 bounds across 23 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -562,13 +562,15 @@ consumer for an undemonstrated deduplication.
   move files every gate resolves by path.
 
 - ~~**WATCH: a refusal site is defended only if some direction dies when its kind is swapped or its message
-  sentinelled — and twenty-four are not.**~~ **Closed** by `crates/kanhe/tests/refusal_bites.rs`, which
-  turns the review technique into a reaction and, in doing so, corrects the entry: the twenty-four merged two
-  populations a hand-run sweep cannot separate, because a perturbation kills nothing both when no direction
-  distinguishes a site and when no direction reaches it. Measured separately on the current tree:
+  sentinelled — and twenty-four are not.**~~ **Closed at the time** by the now-retired refusal mutation sweep,
+  which turned the review technique into a repository check and, in doing so, corrected the entry: the
+  twenty-four merged two populations a hand-run sweep cannot separate, because a perturbation kills nothing
+  both when no direction distinguishes a site and when no direction reaches it. At closure it measured:
   `58 enumerated, 52 defended, 6 declared out of reach, 0 undistinguished, 0 unreached and unclaimed, 0 stale`.
   The residual was closed in order — fourteen sites constructed, two deleted as second reads of something the
-  judgement already held, six declared with a slug joined in both directions to a bound.
+  judgement already held, six declared with a slug joined in both directions to a bound. The mechanism was
+  later retired when constructor locations were reclassified as implementation coverage rather than
+  repository governance identities; focused behavior matrices retain the operator-facing evidence.
 
 - **WATCH: the self-governance residual is a judgement over an entry's subject.** *Observed pressure:*
   `CHANGELOG.md` is the adopter's document and offered no heading that was not an adopter's vocabulary, so

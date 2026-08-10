@@ -238,9 +238,9 @@ fn declared_bounds() -> BTreeMap<String, BoundDecl> {
     // bijection's verdict depends on the answer.
     //
     // The shell's own declarations are chained too, and those come from the free function because the shell is
-    // **not** an observer: it composes dimensions rather than being one. `observation-bound-model`'s reaction
-    // lives here, so this crate owns its bounds — and a capability that exempted itself from its own bijection
-    // would be counting everyone else's unclassified bounds while hiding its own.
+    // **not** an observer: it composes dimensions rather than being one. Kanhe's repository-check declarations
+    // come from its own catalog instead, so an unpublished capability does not leak into the product catalog.
+    // Both still enter this one bijection; moving ownership must not make a declaration disappear.
     for decl in StaticObserver::new(Constitution::new("bounds").static_boundaries().clone())
         .bounds()
         .into_iter()
@@ -250,6 +250,7 @@ fn declared_bounds() -> BTreeMap<String, BoundDecl> {
         )
         .chain(RuntimeObserver::new(Vec::new()).bounds())
         .chain(tianheng::observation_bounds())
+        .chain(kanhe::bounds::observation_bounds())
     {
         let id = decl.id().as_str().to_string();
         assert!(
@@ -262,6 +263,20 @@ fn declared_bounds() -> BTreeMap<String, BoundDecl> {
         "no dimension exported a typed declaration; a bijection over an empty set holds while proving nothing"
     );
     all
+}
+
+#[test]
+fn the_published_shell_catalog_carries_no_kanhe_owned_bounds() {
+    let leaked: Vec<String> = tianheng::observation_bounds()
+        .into_iter()
+        .map(|decl| decl.id().as_str().to_string())
+        .filter(|id| id.starts_with("rust-repository-reactions/"))
+        .collect();
+
+    assert!(
+        leaked.is_empty(),
+        "the published Tianheng bound catalog carries Kanhe-owned declarations: {leaked:?}"
+    );
 }
 
 /// Every one of the family's own declarations borrows every string it carries.

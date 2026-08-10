@@ -1,12 +1,9 @@
-//! The shell's own declared bounds: every capability whose reaction lives in this crate, typed in the model
-//! those reactions describe. Which capabilities those are is not listed here — the set is read from the
-//! declarations below by `observation-bound-model`'s bijection, and a second copy in prose would be the
-//! hand-typed census this family refuses.
+//! The declarations exported through the shell's public observation-bound catalog.
 //!
-//! The capability that classifies where every other reaction stops must classify where **it** stops, or its
-//! leading figure — the count of declared false negatives — would be a number the counter had exempted itself
-//! from. Its reaction lives in this crate (`tests/observation_bound_model.rs`, the only place that sees all
-//! three dimensions), so this crate owns the declarations.
+//! Membership is read from the values below by the repository's observation-bound-model bijection; a second
+//! list in prose would be the hand-typed census that model exists to retire. The
+//! `rust-repository-reactions` declarations owned by Kanhe's unpublished checks live in Kanhe and are joined
+//! only by that repository gate.
 
 use crate::{BoundDecl, BoundId, Extent, FactGranularity, Owner, Reached};
 
@@ -405,49 +402,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a_comment_naming_every_member_for_another_reason_is_refused",
         ),
         // --- rust-repository-reactions ---
-        BoundDecl::unpinned(
-            BoundId::new(
-                "rust-repository-reactions/a-gate-reached-without-the-wrapper-a-stated-bound",
-            ),
-            "an act reaching cargo publish or a merge without going through its wrapper",
-            Extent::Reached(Reached::UnderReacts {
-                because: "both assertions guard the sanctioned path -- the wrapper requiring its gate to \
-                          report one passing test, and the reaction pinning the identifier it cites. \
-                          Reaching further would mean observing the operator's shell or GitHub's servers \
-                          rather than this repository"
-                    .into(),
-                owner: Owner::Engine,
-            }),
-            "`BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*",
-        ),
-        BoundDecl::pinned(
-            BoundId::new("rust-repository-reactions/files-no-capability-claims-a-stated-bound"),
-            "a tracked file no capability's declared subject claims",
-            Extent::Reached(Reached::UnderReacts {
-                because: "subjects are declared where a capability has something to say, and requiring them \
-                          to tile the repository would buy coverage with a claim per capability that nobody \
-                          could defend. The join reports how many tracked paths went unclaimed, so a clean \
-                          verdict is not read as a complete one"
-                    .into(),
-                owner: Owner::Engine,
-            }),
-            "files_no_capability_claims_are_reported_rather_than_implied_judged",
-        ),
-        BoundDecl::pinned(
-            BoundId::new(
-                "rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound",
-            ),
-            "a figure about an enumerable set, written in a phrasing no census declares",
-            Extent::Reached(Reached::UnderReacts {
-                because: "the declaration is the coverage — a census names the one sentence its figures are \
-                          written in, and a count outside that sentence is unheld. Reaching it needs a \
-                          judgement over prose, the instrument this repository designed, measured three times \
-                          and rejected; `AGENTS.md` carries the other half as a rule with no reaction"
-                    .into(),
-                owner: Owner::Engine,
-            }),
-            "a_count_in_an_undeclared_phrasing_is_a_stated_bound",
-        ),
         // --- release-coherence: the adopter-narrative rule's limits ---
         //
         // How many there are is not written here. The block grew from four to seven across two review rounds
@@ -579,43 +533,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 owner: Owner::Engine,
             }),
             "a_heading_inside_a_fenced_block_is_a_stated_bound",
-        ),
-        BoundDecl::pinned(
-            BoundId::new(
-                "rust-repository-reactions/whether-a-declared-out-of-reach-refusal-is-genuinely-unconstructible-is-not-observed-a-stated-bound",
-            ),
-            "a refusal site declaring itself out of reach for a reason no fixture can falsify",
-            Extent::OutOfReach {
-                because: "the reaction observes that no direction reaches the site, never that none could; \
-                          reaching further would mean constructing the environment the declaration says is \
-                          unconstructible".into(),
-            },
-            "a_site_declared_out_of_reach_is_only_observed_to_be_unreached",
-        ),
-        BoundDecl::pinned(
-            BoundId::new(
-                "rust-repository-reactions/a-refusal-vocabulary-under-different-names-is-not-observed-a-stated-bound",
-            ),
-            "a second kinded refusal contract declared under other names, or inside the scan's own sources",
-            Extent::OutOfReach {
-                because: "the scan recognises the shared vocabulary's exact names; recognising a contract by \
-                          intent is a judgement over source, and no compile-time construction reaches a \
-                          reaction not yet written".into(),
-            },
-            "a_refusal_vocabulary_under_other_names_is_not_observed",
-        ),
-        BoundDecl::pinned(
-            BoundId::new(
-                "rust-repository-reactions/a-hook-is-proposed-for-this-rule-a-stated-bound",
-            ),
-            "a squash merge made anywhere but through the sanctioned wrapper",
-            Extent::OutOfReach {
-                because: "a squash merge runs on GitHub's servers, so no local commit exists and no hook \
-                          runs, and both values of the repository's squash-title setting append the serial; \
-                          the reaction guards the sanctioned path to a merge, and a browser reaches no \
-                          wrapper".into(),
-            },
-            "a_merge_made_outside_the_wrapper_is_not_observed",
         ),
     ]
 }

@@ -12,8 +12,7 @@
 //! merge record cites its hash.
 //!
 //! The verdict is the shared kinded [`Refusal`], so *the message disagrees* stays separate from *the title
-//! could not be read* — and so these construction sites are enumerated and perturbed by `refusal_bites` like
-//! every other.
+//! could not be read*. The focused failure matrix asserts both observable outcomes and their actionable text.
 
 #![allow(dead_code)]
 

@@ -20,9 +20,8 @@ pub struct Citation {
 
 /// Physical lines joined where one ends in a backslash — the shell's own continuation rule.
 ///
-/// A gate invocation spans several lines. Asking about `--exact` and `--test` per physical line would find
-/// them in different units and bind neither; this is the mistake the refusal-site scan made and corrected,
-/// where a line-oriented search missed a constructor whose call was wrapped.
+/// A gate invocation spans several lines. Asking about `--exact` and `--test` per physical line can find them
+/// in different units and bind neither, so the shell's continuation rule is applied before either is read.
 pub fn logical_lines(script: &str) -> Vec<String> {
     let mut joined = Vec::new();
     let mut current = String::new();
