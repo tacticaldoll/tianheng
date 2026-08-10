@@ -22,19 +22,6 @@ them.
 
 ## [Unreleased]
 
-### Removed
-
-- `tianheng::observation_bounds()` is retired before its first published appearance. Its residual membership
-  described only this repository's unpublished governance: self-law projection declarations now live beside
-  Shengmo's dogfood gates, and the remaining repository declarations live beside Kanhe's record and
-  coherence checks. Direct callers of the unreleased checkout must stop using the shell entrypoint; v0.4.0
-  adopters take no action. `BoundDecl`, `Extent`, dimension observers, evaluators, reports, and every product
-  architecture-boundary declaration remain unchanged.
-- Kanhe no longer instruments every typed repository-check refusal with caller-location recording and runtime
-  mutation. The compiler-corpus scanner, exemption registry, process-per-site matrix, census, and env-gated
-  workflow command are removed together. Focused failure matrices still assert the result kind and actionable
-  message at each operator-facing judgement boundary.
-
 ### Documentation
 
 - **Every vocabulary type the observation protocol publishes was ruled on before it ships, by asking what a
@@ -840,6 +827,17 @@ no adopter runs. They are here rather than under the adopter headings above beca
   judgement over text this repository has designed, measured and rejected, and what makes a mention bite is the
   compiler.
 
+- **`### Removed` is gone, because neither thing it announced ever existed in a release.** One was
+  `tianheng::observation_bounds()`, retired before its first published appearance; the other was Kanhe's
+  refusal instrumentation, which ships in no package at all. Both were built and retired inside this same
+  unreleased window, so the adopter delta for each is **zero** — and announcing the removal of something nobody
+  ever received is worse than silence once the section is dated, because a dated section is a record and a
+  record is never repaired. Verified before deleting rather than assumed: both retirements are settled calls
+  (`PROJECT.md` states that the shell exposes no repository catalog; the instrumentation went when constructor
+  locations were reclassified as implementation coverage), so neither returns, and nothing in the tree ever
+  consumed the shell entrypoint. Their provenance stays where provenance lives — the pull requests, and
+  `BACKLOG.md`'s closed records.
+
 - **A closing sweep of this window found four wrong claims and three of them were written by the sweep's own
   changes, hours earlier.** Sorted the way *A repair loop is a diagnosis* asks: not one was a code defect. Every
   one was a sentence about the tree, and the class recurring **under an author actively watching for it** is the
@@ -893,11 +891,12 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   The `[Unreleased]` entry it found was **deleted rather than annotated**, which is the sharper half. The
   mechanism it described in the present tense was built and retired inside this window, so no release ever had
-  it and the adopter delta is zero: `### Removed` already records the retirement, `BACKLOG.md` keeps the closed
-  entry with what the sweep measured at closure, and the method it established — that swapping a refusal's kind
-  and replacing its message find *different* defects — belongs where lessons belong rather than in the adopter's
-  document. Annotating it instead would have frozen a description of a mechanism nobody received into a section
-  that becomes a record on the day it is dated, and a record is never repaired.
+  it and the adopter delta is zero: `BACKLOG.md` keeps the closed entry with what the sweep measured at closure,
+  and the method it established — that swapping a refusal's kind and replacing its message find *different*
+  defects — belongs where lessons belong rather than in the adopter's document. Annotating it instead would have
+  frozen a description of a mechanism nobody received into a section that becomes a record on the day it is
+  dated, and a record is never repaired. The retirement notice went the same way for the same reason, one entry
+  later in this window.
 
 - **The two unpublished members carry a front page of their own.** `繩墨` and `勘合` are what a reader meets
   first when browsing `crates/`, and they are the two most likely to be misread as a seventh and eighth
