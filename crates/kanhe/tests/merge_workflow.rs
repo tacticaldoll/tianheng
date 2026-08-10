@@ -252,3 +252,42 @@ fn an_unresolved_canonical_pull_request_number_stops_before_live_acquisition() {
         run.gh_log
     );
 }
+
+/// A value-taking flag given no value is named, not silently arithmetic.
+///
+/// The shape this closes: `shift 2` with one argument left returns non-zero, `set -e` takes that as the exit,
+/// and the wrapper stops with **no output at all** — in a script where every other refusal prints
+/// `merge message: …`. A missing flag value is an observable misconfiguration, which is precisely what the
+/// minimalism bound says to fail loud on, and the operator meets it at the moment before a record lands and
+/// stops being repairable.
+///
+/// No controlled `PATH` is needed: this refusal happens before the wrapper reaches `gh` or the gate, which is
+/// itself part of the claim — the assertions below require that nothing was invoked.
+#[test]
+fn a_value_taking_flag_with_no_value_is_named_and_refused() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    for flag in ["--subject", "--body-file"] {
+        let output = Command::new("bash")
+            .arg(root.join("scripts/merge-pr.sh"))
+            .args(["42", flag])
+            .output()
+            .expect("run the wrapper with a flag given no value");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "a missing flag value is a usage refusal, not a silent stop; got {:?} with stderr {stderr:?}",
+            output.status.code()
+        );
+        assert!(
+            stderr.contains("merge message:") && stderr.contains(flag),
+            "the refusal must name the flag in this script's own diagnostic form, got {stderr:?}"
+        );
+        assert!(
+            stderr.contains("usage:"),
+            "the refusal must show the usage the operator needs, got {stderr:?}"
+        );
+    }
+}
