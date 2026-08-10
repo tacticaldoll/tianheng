@@ -632,24 +632,32 @@ consumer for an undemonstrated deduplication.
   buries the one unclosable false negative — and make strength **derived** from structural facts rather than
   authored, the way `Extent::demonstrates` is, so it cannot be self-assessed.
 
-- **WATCH: the rule shape the self-law relies on most is absent from `examples/`.**
-  *Observed pressure:* `restrict_dependencies_to` carries six of the eleven boundaries in `AGENTS.self-law.md`
-  and appears **zero** times anywhere under `examples/` (`grep -rc restrict_dependencies_to examples/`). Examples are the 潛移 imitation surface, so the allowlist shape the project
-  governs itself with is one an adopter running the dogfood never meets. Narrow deliberately: `COOKBOOK.md` is
-  also an imitation surface and *does* carry copyable recipes using it, so the pressure is the executable
-  examples specifically, not the teaching surface as a whole — an earlier draft claimed the wider thing and was
-  wrong. *Observation source:* `grep -rc restrict_dependencies_to examples/` against
-  `grep -c 'restrict dependencies to' AGENTS.self-law.md` — note the two spellings, the DSL method and the
-  projection's rendering; a grep for the method name against the projection returns zero and means nothing.
-  Read 2026-08-07.
-  *Current reaction or bound:* none. *Risk:* an adopter imitates what the examples show. *Promotion trigger:* an
-  example is added or revised for another reason, at which point the shape is chosen deliberately rather than by
-  omission. *Version class:* patch; `examples/` ships in no crate. *Authority:* `governance-dogfood`, which owns
-  the examples' reaction. *Explicitly not claimed:* that enumerated denylists are wrong, or that the self-law
-  avoids them. It does not — its inline-symbol-path confinements each carry an enumerated verb list, and
-  `inline-symbol-path-confinement` already declares the unlisted remainder as a bound the adopter owns. An
-  earlier draft of this entry claimed the opposite on four counts and was corrected by review; what survives is
-  the absence above and nothing more.
+- ~~**WATCH: the rule shape the self-law relies on most is absent from `examples/`.**~~ **CLOSED** in the open
+  window, by its own trigger firing and being noticed rather than by a decision to go looking. The trigger was
+  *an example is added or revised for another reason, at which point the shape is chosen deliberately rather
+  than by omission* — and `examples/observer-participant` was added mid-window while
+  `grep -rc restrict_dependencies_to examples/` still returned zero. The shape had been chosen by omission one
+  more time, and the entry existed to make that visible.
+
+  `examples/guibiao-standalone` now declares a crate-level allowlist beside its module boundary. The landing
+  site was not a free choice: that example's manifest already claimed its one-dependency footprint **is** the
+  圭表 pitch, "demonstrated here rather than asserted" — a claim in a comment with no reaction, which is the
+  open loop this project exists to close. Declaring it makes the pitch react.
+
+  **The evidence a holding boundary needs is different, and that shaped the change.** A passing allowlist is
+  indistinguishable from one reading the wrong thing, so `tests/reaction.rs` points the same shape at the same
+  real manifest with the dependency excluded and requires it to name that dependency and gate. Measured
+  separately, by adding a second dependency to the manifest and running the demo: the declaration in
+  `governance()` reports it and exits 1.
+
+  **Two figures in this entry had drifted before it closed**, which is the class the window spent itself on: it
+  said the rule carries six of eleven self-law boundaries, and measured it is neither number. They are not
+  replaced with corrected ones — the projection enumerates that set, and the property the sentence needed is
+  that the rule carries *more of the self-law than any other*, which is true without arithmetic. *Version
+  class:* patch; `examples/` ships in no crate. *Authority:* `governance-dogfood`, which owns the examples'
+  reaction. **Still not claimed**, unchanged from the original entry: that enumerated denylists are wrong, or
+  that the self-law avoids them. It does not — its inline-symbol-path confinements each carry an enumerated verb
+  list, and `inline-symbol-path-confinement` declares the unlisted remainder as a bound the adopter owns.
 
 
 - **WATCH:**
