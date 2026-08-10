@@ -33,7 +33,7 @@ governance: not the law, but whether the repository's own record agrees with its
 
 ## Layout
 
-- `src/` — the law, and the locator every reaction reads the repository through.
+- `src/` — the law, its declared observation bounds, and the locator every reaction reads the repository through.
 - `src/tests/` — failure matrices, beside the judgements they test.
 - `tests/` — the reactions themselves.
 

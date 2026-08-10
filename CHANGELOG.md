@@ -24,12 +24,12 @@ them.
 
 ### Removed
 
-- **BREAKING:** `tianheng::observation_bounds()` no longer returns declarations owned by the unpublished
-  `rust-repository-reactions` capability. Those bounds describe Kanhe's checks over this repository rather
-  than behavior the published shell observes; the surviving declarations now live in Kanhe, while the
-  constructor-mutation-only declarations are retired with their sweep. Consumers that explicitly matched a
-  `rust-repository-reactions/*` bound id must stop expecting it from the product catalog. `BoundDecl`,
-  `Extent`, evaluators, reports, and every architecture-boundary declaration remain unchanged.
+- `tianheng::observation_bounds()` is retired before its first published appearance. Its residual membership
+  described only this repository's unpublished governance: self-law projection declarations now live beside
+  Shengmo's dogfood reaction, and the remaining repository declarations live beside Kanhe's record and
+  coherence checks. Direct callers of the unreleased checkout must stop using the shell entrypoint; v0.4.0
+  adopters take no action. `BoundDecl`, `Extent`, dimension observers, evaluators, reports, and every product
+  architecture-boundary declaration remain unchanged.
 - Kanhe no longer instruments every typed repository-check refusal with caller-location recording and runtime
   mutation. The compiler-corpus scanner, exemption registry, process-per-site matrix, census, and env-gated
   workflow command are removed together. Focused failure matrices still assert the result kind and actionable

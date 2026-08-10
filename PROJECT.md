@@ -275,8 +275,11 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
 - **Repository-check diagnostics are behavior-tested, not constructor-governed.** Kanhe keeps one pure typed
   result separating a disagreement from an input it cannot judge, and focused matrices assert the kind and
   actionable message at operator-facing boundaries. Constructor locations are implementation detail: they do
-  not carry runtime mutation, reach recording, exemptions, or product-visible observation bounds. Bounds for
-  `rust-repository-reactions` live in unpublished Kanhe, never in `tianheng::observation_bounds()`.
+  not carry runtime mutation, reach recording, exemptions, or product-visible observation bounds.
+- **Repository observation-bound catalogs stay with their unpublished reaction owner.** Kanhe returns bounds
+  for its record and coherence checks, Shengmo returns bounds for its self-law dogfood, and the repository model
+  composes both with the product dimensions. Tianheng exposes no repository catalog: the shell composes product
+  observers rather than claiming unpublished governance as product capability.
 - **Governance is driven by an audit cycle against an enumerated surface, not by invented hypotheses.**
   A sweep that invents its own scope cannot be dry, only tired: it reports the shapes someone happened to
   think of, and "the audit was thorough" is then unfalsifiable. So the standing direction is to enumerate a

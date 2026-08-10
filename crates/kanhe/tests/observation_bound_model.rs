@@ -1,11 +1,11 @@
 //! `observation-bound-model`'s reaction: the specs' declared bounds and the code's typed declarations are one
 //! set, and the classification is projected where a reader can count it.
 //!
-//! Why this lives in the composed shell rather than in a dimension: it is the only crate that sees 圭表, 渾儀
-//! and 漏刻 at once, and the bijection is meaningless from inside one of them. Why it is a Rust reaction rather
+//! Why this lives in Kanhe rather than in a dimension: this unpublished repository-governance crate sees
+//! 圭表, 渾儀 and 漏刻 through Tianheng, and the bijection is meaningless from inside one of them. Why it is a Rust reaction rather
 //! than a seventh shell gate: a `PINNED-BY` citation resolves only to a harness-registered Rust function, so a
-//! shell-defended capability could not pin the bounds this one declares — they would land `UNPINNED` and turn
-//! the register projection's leading figure from zero into three.
+//! shell-defended capability could not pin the bounds this one declares — they would land `UNPINNED` and
+//! increase the register projection's audit backlog.
 //!
 //! What it does **not** take over: `crates/kanhe/tests/bound_register.rs` still owns the citation, tracker, prose and
 //! projection directions. This reaction owns one obligation — that every declared bound is classified, and every
@@ -13,6 +13,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use tianheng::prelude::*;
 use tianheng::testing::assert_projection_matches;
@@ -237,10 +238,9 @@ fn declared_bounds() -> BTreeMap<String, BoundDecl> {
     // had no consumer at all: nothing in the tree read it, so a dimension could have answered anything. Now the
     // bijection's verdict depends on the answer.
     //
-    // The shell's own declarations are chained too, and those come from the free function because the shell is
-    // **not** an observer: it composes dimensions rather than being one. Kanhe's repository-check declarations
-    // come from its own catalog instead, so an unpublished capability does not leak into the product catalog.
-    // Both still enter this one bijection; moving ownership must not make a declaration disappear.
+    // Repository-governance declarations are chained from the unpublished crate whose reaction they qualify:
+    // Kanhe for record/coherence checks and Shengmo for self-law dogfood. The published shell is **not** an
+    // observer and has no catalog of its own; it composes product dimensions rather than restating them.
     for decl in StaticObserver::new(Constitution::new("bounds").static_boundaries().clone())
         .bounds()
         .into_iter()
@@ -249,8 +249,8 @@ fn declared_bounds() -> BTreeMap<String, BoundDecl> {
                 .bounds(),
         )
         .chain(RuntimeObserver::new(Vec::new()).bounds())
-        .chain(tianheng::observation_bounds())
         .chain(kanhe::bounds::observation_bounds())
+        .chain(shengmo::bounds::observation_bounds())
     {
         let id = decl.id().as_str().to_string();
         assert!(
@@ -266,16 +266,43 @@ fn declared_bounds() -> BTreeMap<String, BoundDecl> {
 }
 
 #[test]
-fn the_published_shell_catalog_carries_no_kanhe_owned_bounds() {
-    let leaked: Vec<String> = tianheng::observation_bounds()
-        .into_iter()
-        .map(|decl| decl.id().as_str().to_string())
-        .filter(|id| id.starts_with("rust-repository-reactions/"))
+fn the_published_shell_defines_no_repository_bound_catalog() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let listed = Command::new("git")
+        .args([
+            "-C",
+            root.to_str().expect("UTF-8 root"),
+            "ls-files",
+            "-z",
+            "--",
+            "crates/tianheng/src",
+        ])
+        .output()
+        .expect("git must enumerate Tianheng's tracked source");
+    assert!(
+        listed.status.success(),
+        "git could not enumerate Tianheng's tracked source: {}",
+        String::from_utf8_lossy(&listed.stderr)
+    );
+
+    let offenders: Vec<String> = listed
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|raw| !raw.is_empty())
+        .map(|raw| String::from_utf8(raw.to_vec()).expect("tracked source path must be UTF-8"))
+        .filter(|file| file.ends_with(".rs"))
+        .filter(|file| {
+            std::fs::read_to_string(root.join(file))
+                .unwrap_or_else(|err| panic!("cannot read {file}: {err}"))
+                .contains("observation_bounds")
+        })
         .collect();
 
     assert!(
-        leaked.is_empty(),
-        "the published Tianheng bound catalog carries Kanhe-owned declarations: {leaked:?}"
+        offenders.is_empty(),
+        "the published Tianheng source defines repository bound-catalog vocabulary in {offenders:?}"
     );
 }
 
