@@ -18,7 +18,8 @@ fn executed_regions_respect_the_source_language() {
 /// register refused a document that satisfies the rule. The two directions are asserted together because either
 /// alone is satisfiable by a degenerate reader — one that hides everything, or one that hides nothing.
 /// Real projection paths rather than invented ones: the consumer of this region searches for exactly these, and
-/// an invented `docs/…` path is a stale in-repository reference that `check_reference_integrity.sh` refuses.
+/// an invented `docs/…` path is a stale in-repository reference that
+/// `crates/kanhe/tests/reference_integrity.rs` refuses.
 const SEEN: &str = "docs/projection-register.md";
 const UNSEEN: &str = "the retired gate-shape projection";
 

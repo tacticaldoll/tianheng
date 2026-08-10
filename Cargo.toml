@@ -26,7 +26,8 @@ members = ["crates/xuanji", "crates/xingbiao", "crates/hunyi", "crates/guibiao",
 # they replace covered 3 of 5 fixtures and 3 of 6 examples — it had drifted, silently, because a
 # hand-maintained enumeration of a directory's contents rots as the directory grows, and a
 # governance rule that has drifted is read as license rather than law. A prefix cannot fall behind
-# what it contains. CI exercises the examples in isolation via scripts/test_examples.sh.
+# what it contains. CI exercises the examples in isolation through
+# `crates/shengmo/tests/examples_suite.rs`.
 exclude = ["crates/tianheng/tests/fixtures", "examples"]
 
 [workspace.package]

@@ -331,9 +331,9 @@ fn a_brace_in_a_comment_tail_no_longer_closes_the_body() {
 /// A brace inside a block comment or a string literal still moves the body extent — a declared bound.
 ///
 /// Recognizing it would need the string-literal lexing this file deliberately does not carry, and which
-/// `check_bound_register.sh` measured and rejected for the same reason: this tree's own lexer suites put
-/// comment delimiters inside string literals, several of them nested, so a delimiter-counting stripper opens a
-/// phantom comment at the first of them.
+/// `crates/kanhe/tests/bound_register.rs` measured and rejected for the same reason: this tree's own lexer suites
+/// put comment delimiters inside string literals, several of them nested, so a delimiter-counting stripper opens
+/// a phantom comment at the first of them.
 ///
 /// It is declared rather than closed because **for this comparison** the error direction is the safe one, which
 /// this pin is what shows: a moved extent makes a **conforming** body read as non-conforming, because no
