@@ -11,6 +11,7 @@ fn bound_markers_are_bare_singular_word_sequences() {
         ("Which member owns it — a cfg-blind stated bound", false),
         ("Metadata stated boundary", false),
         ("Data stated bound", false),
+        ("資料a stated bound", false),
     ];
 
     for (heading, expected) in cases {

@@ -97,8 +97,8 @@ fn contains_words(text: &str, words: &str) -> bool {
     text.match_indices(words).any(|(start, matched)| {
         let before = text[..start].chars().next_back();
         let after = text[start + matched.len()..].chars().next();
-        before.is_none_or(|ch| !ch.is_ascii_alphanumeric())
-            && after.is_none_or(|ch| !ch.is_ascii_alphanumeric())
+        before.is_none_or(|ch| !ch.is_alphanumeric())
+            && after.is_none_or(|ch| !ch.is_alphanumeric())
     })
 }
 
