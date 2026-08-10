@@ -768,6 +768,11 @@ no adopter runs. They are here rather than under the adopter headings above beca
   the same cannot-judge. The two remain fail-loud, but now name different facts: the failed read includes Git's
   error, while a successful empty read names the absent `refs/heads/main`.
 
+- **The Definition-of-Done reaction now observes cargo-deny's effective CI command.** It previously skipped
+  `cargo deny check` because CI expresses it through `EmbarkStudios/cargo-deny-action`; removing or
+  misconfiguring that action therefore stayed green. The reaction now projects the action's declared
+  `with.command` into the same command set as `run:` lines, while deliberately interpreting no other action.
+
 - **Four judgements answered about something other than what they read.** The publish gate asked
   `check-ignore` about git's **quoted** spelling of a path — measured, a file named `ignored-普通` ignored by
   a *tracked* `.gitignore` is listed as `"ignored-\346\231\256\351\200\232"`, that literal matches
