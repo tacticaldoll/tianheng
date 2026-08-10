@@ -18,6 +18,8 @@ use tianheng::prelude::*;
 use tianheng::testing::assert_projection_matches;
 use tianheng::{BoundDecl, Defence, Extent, Owner, Reached};
 
+use kanhe::bound_register_parse::marks_a_bound;
+
 /// The projection this reaction holds fresh.
 const EXTENT_PROJECTION: &str = "docs/observation-bound-extents.md";
 
@@ -56,15 +58,6 @@ fn slug_of(heading: &str) -> String {
         }
     }
     out
-}
-
-/// Whether a scenario heading marks itself a bound, in the one form the register now admits: the marker word
-/// adjacent to "bound", no interposed qualifier.
-fn marks_a_bound(heading: &str) -> bool {
-    heading.contains("stated bound")
-        || heading.contains("documented bound")
-        || heading.contains("stated bounds")
-        || heading.contains("documented bounds")
 }
 
 /// One bound as the specs declare it: where it sits, and the test it cites.

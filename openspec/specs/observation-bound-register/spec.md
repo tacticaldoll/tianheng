@@ -46,10 +46,25 @@ kind of stop a bound describes SHALL instead be carried by its typed declaration
 closed and a contradiction is a compile error. A heading carrying a qualifier SHALL fail, naming the heading and
 the repair.
 
-The two marker words SHALL remain interchangeable. They carry no information — some specs use both bare forms
-internally — but they mislead no reader, where a qualifier did; and each removal changes the bound's derived id,
-so a sweep is charged against every reference to it. Closing the harmful half of the slot rather than all of it
-is a deliberate limit on that churn, not an oversight.
+The bare singular phrases `a stated bound` and `a documented bound` SHALL remain interchangeable. They carry no
+information — some specs use both forms internally — but they mislead no reader, where a qualifier did; and each
+removal changes the bound's derived id, so a sweep is charged against every reference to it. Closing the harmful
+half of the slot rather than all of it is a deliberate limit on that churn, not an oversight. Every repository
+consumer that enumerates declared bounds SHALL call the register parser's canonical marker predicate rather than
+reproduce this grammar. Article-less fragments, plural forms, and forms carrying an interposed qualifier SHALL
+NOT declare a bound.
+
+#### Scenario: Either canonical bare singular marker declares a bound
+
+- **WHEN** a scenario heading contains `a stated bound` or `a documented bound`
+- **THEN** every bound enumerator includes the scenario through the same canonical predicate
+
+#### Scenario: A near-miss marker does not declare a bound
+
+- **WHEN** a scenario heading contains `stated bound`, `stated bounds`, `documented bounds`, or an interposed
+  qualifier but not either canonical bare singular phrase
+- **THEN** every bound enumerator excludes the scenario, so one gate cannot classify a population the register
+  never declared
 
 #### Scenario: Which member holds a reaction is a judgement — a stated bound
 

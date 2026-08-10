@@ -88,7 +88,18 @@ pub fn slug_of(heading: &str) -> String {
 /// adjacent to `bound`, with no interposed qualifier. Measured: admitting one interposed word let the phrase
 /// "stated and not yet declared as bounds" read as a declaration.
 pub fn marks_a_bound(heading: &str) -> bool {
-    heading.contains("a stated bound") || heading.contains("a documented bound")
+    ["a stated bound", "a documented bound"]
+        .into_iter()
+        .any(|marker| contains_words(heading, marker))
+}
+
+fn contains_words(text: &str, words: &str) -> bool {
+    text.match_indices(words).any(|(start, matched)| {
+        let before = text[..start].chars().next_back();
+        let after = text[start + matched.len()..].chars().next();
+        before.is_none_or(|ch| !ch.is_alphanumeric())
+            && after.is_none_or(|ch| !ch.is_alphanumeric())
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
