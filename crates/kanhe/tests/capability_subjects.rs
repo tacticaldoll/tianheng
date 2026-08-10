@@ -226,7 +226,7 @@ fn a_change_names_every_capability_whose_subject_it_touches() {
 /// `repository-checks/a-tracked-file-no-capability-claims-is-not-judged-a-stated-bound`
 ///
 /// Subjects are declared where a capability has something to say, and requiring them to tile the repository
-/// would buy coverage with thirty-six claims nobody could defend. The blindness is declared so a clean report
+/// would buy coverage with a claim per capability nobody could defend. The blindness is declared so a clean report
 /// is not read as a complete one — and it is reported rather than left silent.
 #[test]
 fn files_no_capability_claims_are_reported_rather_than_implied_judged() {
