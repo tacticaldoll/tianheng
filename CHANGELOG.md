@@ -827,6 +827,14 @@ no adopter runs. They are here rather than under the adopter headings above beca
   judgement over text this repository has designed, measured and rejected, and what makes a mention bite is the
   compiler.
 
+- **The sanctioned merge wrapper stopped silently when a flag was given no value.** `--subject` or `--body-file`
+  passed as the final argument made `shift 2` return non-zero, `set -e` took that as the exit, and the wrapper
+  ended with **no output at all** — in a script where every other refusal prints `merge message: …` and points at
+  what to do instead. A missing flag value is an observable misconfiguration, which is exactly what the
+  minimalism bound says to fail loud on, and the operator meets it at the one moment before a record lands and
+  stops being repairable. Both arms now validate before shifting, name the flag, show the usage, and exit `2` —
+  the same class the wrapper already uses for a malformed pull-request number.
+
 - **Three reads in the enforcement floor treated "could not read" as "nothing to report", and one of them had
   the correct sibling seven lines below it.** The census sweep skipped a tracked document it could not read, so a
   clean verdict could rest on a corpus it never examined — while its sibling reference gate refuses that outright

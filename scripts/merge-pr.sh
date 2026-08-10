@@ -35,14 +35,31 @@ shift
 subject=""
 body_file=""
 passthrough=()
+# A value-taking flag given no value is an OBSERVABLE misconfiguration, so it fails loud. Before this it failed
+# silent: `shift 2` with one argument left returns non-zero, `set -e` took that as the exit, and the wrapper
+# stopped with no output at all — while every other refusal below prints `merge message: …`. Reproduced by
+# running the wrapper with `--subject` last: empty output, exit 1. Validating before shifting is what keeps the
+# arithmetic from becoming the diagnostic.
+require_value() {
+    if (($1 < 2)); then
+        printf 'merge message: %s\n' \
+            "refusing \`$2\` with no value: pass the value as the next argument, or drop the flag and let the \
+subject default to the pull request title" >&2
+        usage
+        exit 2
+    fi
+}
+
 while (($#)); do
     case $1 in
     --subject)
-        subject=${2:-}
+        require_value "$#" "$1"
+        subject=$2
         shift 2
         ;;
     --body-file)
-        body_file=${2:-}
+        require_value "$#" "$1"
+        body_file=$2
         shift 2
         ;;
     # Both spellings, because `--subject=TEXT` and `--subject TEXT` reach `gh` identically and a guard
