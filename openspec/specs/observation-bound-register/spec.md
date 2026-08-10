@@ -66,16 +66,16 @@ NOT declare a bound.
 - **THEN** every bound enumerator excludes the scenario, so one gate cannot classify a population the register
   never declared
 
-#### Scenario: Which member holds a reaction is a judgement — a stated bound
+#### Scenario: Which member holds a check is a judgement — a stated bound
 
-- **WHEN** a reaction is added under `crates/shengmo/` or `crates/kanhe/`
-- **THEN** nothing observes whether it landed in the right one. The split is by what a reaction judges — the
+- **WHEN** a check is added under `crates/shengmo/` or `crates/kanhe/`
+- **THEN** nothing observes whether it landed in the right one. The split is by what a check judges — the
   law and the delivered product on one side, this repository's record on the other — and two mechanical rules
-  were each measured unreliable: a text scan reads a comment naming `AGENTS.md` as governance while a reaction
+  were each measured unreliable: a text scan reads a comment naming `AGENTS.md` as governance while a check
   scanning every tracked file names nothing, and the workspace marker means both "this needs the repository as
   its subject" and "this needs a fixture". Position is the declaration; the join below catches a **capability**
   named wrongly, never a member chosen wrongly
-- **UNPINNED** `BACKLOG.md` — *which governance member a reaction belongs to is unobserved*
+- **UNPINNED** `BACKLOG.md` — *which governance member a check belongs to is unobserved*
 
 ### Requirement: A declared bound SHALL carry exactly one citation naming its defence
 
@@ -486,7 +486,7 @@ is coverage, which grows one authored record at a time.
   checkout exists to avoid, so the two properties are in tension and this one is given up deliberately
 - **UNPINNED** `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
-#### Scenario: Whether a record perturbs the reaction or the pin's own assertions is not observed — a stated bound
+#### Scenario: Whether a record perturbs the check or the pin's own assertions is not observed — a stated bound
 
 - **WHEN** a record names the file its pin lives in and neutralises one of that pin's assertions
 - **THEN** the pin fails and the citation is counted as exercised, because a killed pin does not say what killed

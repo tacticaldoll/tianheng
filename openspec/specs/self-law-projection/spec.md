@@ -168,8 +168,8 @@ Membership is the structural half; wording is the half that is not.
 - **THEN** the reaction **fires**, refusing a reason that genuinely states the law. Measured by writing that
   WHEN into the tree: paraphrasing `guibiao`'s clause produces *"dimension boundary for `guibiao` dropped the
   `三儀 ⊥ 三儀` clause"*. The direction is the safe one — an author meets a refusal to argue with — and closing
-  it needs the reaction to decide two wordings state one law, a judgement over prose measured and rejected here
-- **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence reaction*
+  it needs the check to decide two wordings state one law, a judgement over prose measured and rejected here
+- **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence check*
 
 #### Scenario: A reason carrying the clause while negating the law is not observed — a stated bound
 
@@ -177,16 +177,16 @@ Membership is the structural half; wording is the half that is not.
 - **THEN** nothing reacts, and `AGENTS.self-law.md` projects the negation to every agent that loads it. This is
   the serious direction of the pair: the teaching surface can carry the law's opposite while satisfying the
   check that exists to keep the law taught. Measured, with the projection blessed and the whole suite green
-- **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence reaction*
+- **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence check*
 
-#### Scenario: A dimension absent from the reaction's own list is not examined — a stated bound
+#### Scenario: A dimension absent from the check's own list is not examined — a stated bound
 
 - **WHEN** a dimension crate exists and its package name is not in the reaction's hand-kept list
 - **THEN** its allowlist is never examined, and the set-coverage assertion cannot notice, because the set it
   compares is produced by filtering on that same list. Measured: removing `guibiao` from the literal leaves a
   `guibiao` allowlist naming `hunyi` green. Closing it needs the dimension set derived from something that
   enumerates it rather than typed beside it
-- **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence reaction*
+- **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence check*
 
 #### Scenario: A workspace-dependency allowlist is not examined — a stated bound
 
@@ -195,7 +195,7 @@ Membership is the structural half; wording is the half that is not.
 - **THEN** the reaction never examines it, though that rule governs workspace-member edges specifically and is
   the more natural one for this law. Measured: a second `guibiao` boundary of that variant naming `hunyi` is
   green, and set coverage still reads the three dimensions
-- **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence reaction*
+- **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence check*
 
 #### Scenario: A dimension's allowlist names a sibling
 
