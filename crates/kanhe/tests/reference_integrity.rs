@@ -23,7 +23,7 @@ const PATH_PREFIXES: [&str; 6] = [
     "examples/",
     ".github/",
 ];
-const BASENAME_EXTENSIONS: [&str; 5] = [".md", ".toml", ".sh", ".yml", ".lock"];
+const BASENAME_EXTENSIONS: [&str; 6] = [".md", ".toml", ".sh", ".yml", ".lock", ".rs"];
 
 /// Documents this repository names as its own governance surface. Their absence is not a stale reference but
 /// a repository that cannot be judged: every rule about them would hold vacuously.
@@ -530,6 +530,15 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
             "probe-basename.md",
             "The `check_dod_coherence.sh` gate says so.\n",
         ),
+        (
+            // A bare RUST basename, which the form excluded until this window: the extension list admitted
+            // the governance extensions only, so the branch below was inert for every Rust file this
+            // repository has ever deleted. Its own row rather than trust in the `.sh` one, because what was
+            // missing was an extension rather than a branch, and a row per branch cannot see that.
+            "a bare Rust basename",
+            "probe-rust-basename.md",
+            "The shadowing lives in `collect.rs`.\n",
+        ),
     ];
     for (_, path, body) in &planted {
         let full = scratch.join(path);
@@ -549,6 +558,56 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
         unseen.is_empty(),
         "an extraction form names something absent and the check says nothing:\n{}",
         unseen.join("\n")
+    );
+}
+
+/// The bare Rust form reacts for a name this repository DELETED, and stays silent for one it never tracked.
+///
+/// Both directions on one body shape, differing only in the name, because the whole safety of admitting `.rs`
+/// rests on that discriminator: this repository's prose is full of illustrative Rust filenames describing a
+/// shape rather than naming a file — `weird.rs`, `never.rs`, `child.rs`, `foo.rs` — and every one of them
+/// would be an offence if the form judged existence instead. Measured before admitting the extension: of the
+/// bare Rust basenames this repository's documents name, the ones it once tracked and no longer does were the
+/// only ones the form reports. The positive direction is the control; without it the negative is satisfiable
+/// by a form that recognizes nothing.
+#[test]
+fn a_bare_rust_basename_reacts_only_for_a_name_this_repository_deleted() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let tracked_paths = tracked(&root);
+    let scratch = std::env::temp_dir().join(format!(
+        "tianheng-reference-integrity-rust-basename-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).expect("scratch is writable");
+
+    let deleted = "probe-deleted.md";
+    let never = "probe-never-tracked.md";
+    std::fs::write(
+        scratch.join(deleted),
+        "The shadowing lived in `collect.rs`.\n",
+    )
+    .expect("write the deleted-name probe");
+    std::fs::write(
+        scratch.join(never),
+        "The shadowing lived in `zzz_never_tracked_probe.rs`.\n",
+    )
+    .expect("write the never-tracked probe");
+
+    let seen_deleted = offences_in(&root, &scratch, &tracked_paths, &[deleted.to_string()]);
+    let seen_never = offences_in(&root, &scratch, &tracked_paths, &[never.to_string()]);
+    let _ = std::fs::remove_dir_all(&scratch);
+
+    assert!(
+        !seen_deleted.is_empty(),
+        "a bare Rust basename this repository deleted must be refused, or the silence below proves nothing"
+    );
+    assert!(
+        seen_never.is_empty(),
+        "a bare Rust basename this repository never tracked is an illustrative name, not a path, but got:\n{}",
+        seen_never.iter().cloned().collect::<Vec<_>>().join("\n")
     );
 }
 

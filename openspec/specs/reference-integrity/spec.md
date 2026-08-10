@@ -85,11 +85,16 @@ source; absence of any prerequisite SHALL fail loudly rather than read as clean.
 ### Requirement: Reference syntax determines path resolution
 
 The gate SHALL recognize repository-relative paths under Tianheng's own top-level directories, Markdown
-link targets, bare `tests/*.rs` references written inside member crates, and unambiguous bare root
-filenames. Markdown links SHALL resolve lexically relative to the referring file. Bare test references
-SHALL be satisfied by the matching tracked test under any workspace member. A `crates/<name>/...`
-reference SHALL be judged only when `<name>` is a real workspace member; ambiguous bare filenames,
-illustrative non-member crates, and glob patterns SHALL remain outside the existence judgment.
+link targets, bare `tests/*.rs` references written inside member crates, and bare filenames carrying a
+governance or Rust extension. Markdown links SHALL resolve lexically relative to the referring file. Bare
+test references SHALL be satisfied by the matching tracked test under any workspace member. A
+`crates/<name>/...` reference SHALL be judged only when `<name>` is a real workspace member; illustrative
+non-member crates and glob patterns SHALL remain outside the existence judgment.
+
+A bare filename SHALL react only when this repository once tracked that name outside a change directory and
+tracks it no longer. A name any tracked file still carries resolves; a name no tracked file has ever carried
+is not a path but an illustrative shape, which is what admits the Rust extension without judging every
+fixture name this repository's prose invents.
 
 #### Scenario: A stale repository-relative prose path reacts
 
@@ -105,6 +110,18 @@ illustrative non-member crates, and glob patterns SHALL remain outside the exist
 
 - **WHEN** Rust source in a workspace member names `tests/*.rs` and no workspace member tracks that test path
 - **THEN** the reaction fails and reports that the reference is tracked under no workspace member
+
+#### Scenario: A bare filename names something this repository deleted
+
+- **WHEN** live prose or a source comment names a bare filename this repository once tracked outside a change
+  directory and tracks no longer
+- **THEN** the reaction fails and reports that this repository deleted it
+
+#### Scenario: A bare filename no tracked file has ever carried is not a path
+
+- **WHEN** prose names a bare filename this repository has never tracked, as an illustrative name inside an
+  explanation of a shape
+- **THEN** the reaction is silent, because such a name describes a shape rather than naming a file
 
 ### Requirement: Deliberate absence does not become a stale-reference finding
 
