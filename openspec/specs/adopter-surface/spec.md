@@ -107,6 +107,36 @@ harness promise MUST NOT remain in this capability.
 - **WHEN** the wildcard prelude contract is compiled
 - **THEN** `GovernanceTest` and `ScanDepth` resolve as public types
 
+### Requirement: Every promised prelude member is named by the external compilation reaction
+
+The composed wildcard prelude is the adopter's entrypoint, so every name it re-exports SHALL be mentioned by
+the external-view integration test compiled against it. The relation SHALL be **containment, not equality**:
+the reaction legitimately names root imports and its own helpers, which the prelude does not promise, and
+requiring equality would refuse it for being a test. A promised member SHALL be named in whatever form its
+kind admits — a type through a type assertion, a trait through a bound, a function item through its own call
+shape — because requiring one form would demand either a hand-kept list per kind or a contract that cannot
+name its trait at all. The promise SHALL be read from the prelude's own block rather than from any
+`pub use super::{…}` in the shell, which carries several that are not the promise.
+
+#### Scenario: A prelude addition the contract never mentions reacts
+
+- **WHEN** the prelude promises a member that appears nowhere in the external compilation reaction
+- **THEN** the repository check fails and names each unmentioned member
+
+#### Scenario: The contract may name more than the prelude promises
+
+- **WHEN** the reaction names an item reached by a root import rather than through the prelude
+- **THEN** that is not a disagreement, because the promise is what the prelude carries
+
+#### Scenario: An input that cannot be read is refused rather than reported clean
+
+- **WHEN** the prelude block parses to no member, or the reaction yields no identifier at all
+- **THEN** the check refuses as cannot-judge, because a promise of nothing and an unread contract both make
+  every direction hold vacuously
+
+Where the holding check's own observation stops is `repository-checks`'s to declare, since the limit belongs
+to the check rather than to the promise.
+
 ### Requirement: Focused semantic checks remain explicit
 
 The public `check_semantic` alias for the signature-coupling semantic check SHALL remain available

@@ -535,3 +535,19 @@ to the shape, because falling back is the false refusal being removed.
 - **WHEN** the wrapper supplies no commit subjects
 - **THEN** the judgement refuses as a cannot-judge naming what it could not read, rather than falling back to
   the shape it was refusing before
+
+### Requirement: The prelude promise SHALL be held against the contract compiled from outside
+
+The composed wildcard prelude's promise is `adopter-surface`'s; holding it is a repository check's. A check
+SHALL read the promise from the prelude's own block, read the external-view integration test compiled against
+it, and refuse when a promised member is mentioned nowhere. It SHALL refuse as a cannot-judge when the promise
+parses to nothing or the contract yields no identifier, since both make every direction hold vacuously.
+
+#### Scenario: Whether a mention compiles anything is not observed — a stated bound
+
+- **WHEN** the contract names a promised member only in a comment
+- **THEN** the check counts it as named, a stated bound: deciding that a mention is load-bearing is a
+  judgement over text, the instrument this repository has designed, measured and rejected, and what makes a
+  mention bite is the compiler rather than this check. A comment-only mention still fails the reviewer reading
+  the diff, which is the layer that owns it
+- **PINNED-BY** `a_longer_identifier_containing_a_promised_name_is_not_a_mention`
