@@ -359,7 +359,7 @@ pub(super) fn a_blanket_impls_own_generic_param_is_not_resolved_through_a_same_n
     // unrelated `use ... as T` alias resolved the self type through that alias, fabricating a
     // marker-acquisition finding on the aliased type even though the source never writes `impl
     // Marker for` it at all. The sibling exposure collectors already shadow an impl's own generic
-    // params for every OTHER position (collect.rs::type_param_names); the marker gate's self-type
+    // params for every OTHER position (collect::exposure::type_param_names); the marker gate's self-type
     // check lacked the identical shadowing. Fixed by threading each ImplSite's own
     // `type_params` (impl<T, ..>'s declared names) into resolve_self_type, which now drops a bare
     // self type matching one of them before any resolution is attempted.

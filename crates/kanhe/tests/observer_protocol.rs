@@ -577,8 +577,7 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
             .map(|line| {
                 // A trailing comment is PROSE, not a second list. `Executed` filters comment lines and not
                 // comment tails, so without this `observation_bounds() // why` compares unequal and the check
-                // reports an offence — measured. Both whole-line recognizers in `gate_shape_contract.rs` already
-                // strip one; this is the same rule, not a new allowance.
+                // reports an offence — measured.
                 let code = match line.find("//") {
                     Some(index) => &line[..index],
                     None => line,

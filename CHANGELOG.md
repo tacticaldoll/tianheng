@@ -764,6 +764,36 @@ Changes to this repository's own governance machinery, which ships in no package
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
 
+- **The bare-filename form was inert for every Rust file this repository has ever deleted, and the extension
+  list was why.** `crates/kanhe/tests/reference_integrity.rs` recognized a bare filename only when it carried a
+  governance extension, so a reference to a deleted Rust module never reached the branch that decides
+  deleted-versus-never-tracked — the branch was there and correct, and nothing arrived at it. Admitting the Rust
+  extension reported stale references this repository had carried unseen: an `[Unreleased]` entry describing a
+  retired mechanism, a doc comment and a test comment both naming a module the 0.4.0 collector split replaced,
+  and a comment justifying its own rule by citing two recognizers in a test file this window deleted. Only the
+  first had been reported by anyone.
+
+  **The discriminator that makes the extension safe already existed.** A bare name reacts only when this
+  repository once tracked it outside a change directory and tracks it no longer; an illustrative fixture name —
+  the kind this repository's prose invents freely to describe a shape rather than to name a file — was never
+  tracked and cannot enter. Measured before admitting the extension, and both directions now carry a scenario
+  and a direction that holds them, the positive one as the control so the silence proves something.
+
+  One repair went further than the reaction asked. The doc comment among the four named its sibling by file
+  path, which this gate checks for *existence* and nothing checks for holding what the sentence claims; it now
+  names the function by an intra-doc link instead, so `rustdoc` resolves it and the Definition of Done's
+  `-D warnings` documentation pass refuses a break — observed by breaking it, which reports `unresolved link`.
+  A reference the compiler resolves is a strictly stronger instrument than one a text gate can only confirm
+  points at some file.
+
+  The `[Unreleased]` entry it found was **deleted rather than annotated**, which is the sharper half. The
+  mechanism it described in the present tense was built and retired inside this window, so no release ever had
+  it and the adopter delta is zero: `### Removed` already records the retirement, `BACKLOG.md` keeps the closed
+  entry with what the sweep measured at closure, and the method it established — that swapping a refusal's kind
+  and replacing its message find *different* defects — belongs where lessons belong rather than in the adopter's
+  document. Annotating it instead would have frozen a description of a mechanism nobody received into a section
+  that becomes a record on the day it is dated, and a record is never repaired.
+
 - **The two unpublished members carry a front page of their own.** `繩墨` and `勘合` are what a reader meets
   first when browsing `crates/`, and they are the two most likely to be misread as a seventh and eighth
   product crate — which is the confusion this window exists to end. Each now says what it is, what it is
@@ -948,40 +978,6 @@ no adopter runs. They are here rather than under the adopter headings above beca
   naming its migration; and the body to being non-empty, free of agent attribution, and not the concatenated
   commit list the rule exists to replace. A merge made in a browser reaches no wrapper, and that is declared
   as a bound rather than implied.
-
-- **The sweep that shows a refusal is defended is now a reaction, and it separates two facts the sweep could
-  not.** Four adversarial rounds over this window each found the class the previous round had repaired, and
-  the decisive difference was the method: disabling an `if` and re-running finds a branch nothing reaches;
-  swapping `violation`↔`cannot_judge` and replacing the message also finds a direction that asserts a refusal
-  happened without asserting **which**. Run by hand, that method counted twenty-four sites as surviving both
-  perturbations — but a perturbation kills nothing for *two* reasons, no direction distinguishes the site and
-  no direction reaches it, and one number hides which. They are closed by different work.
-
-  `refusal_bites.rs` separates them. It enumerates every refusal site from **what the compiler reported
-  reading** — the dep-info beside each test executable, not a second implementation of module resolution, which
-  would miss a conventional `mod`, an `include!` and a conditional path while admitting `cfg`-excluded files.
-  It records which sites a run constructs, then runs each reached site's observing targets twice, once with
-  that site's kind swapped and once with its message replaced. Both must kill some direction, because the kind
-  is what an operator acts on before an irreversible act and the message is what tells them where to look.
-  Nothing is rebuilt between runs; the whole sweep is about a minute.
-
-      58 enumerated, 52 defended, 6 declared out of reach, 0 undistinguished, 0 unreached and unclaimed, 0 stale
-
-  The residual was closed in order — **construct, delete, declare** — because declaring first produces
-  exemptions for code that should not exist. Fourteen sites were constructed, through an index git cannot
-  parse, a worktree that reads clean because everything in it is ignored, a missing object, a directory where
-  a file was expected, and a file whose bytes are not UTF-8. Two were **deleted**: a second `rev-parse HEAD`
-  after the log whose first line is HEAD's commit, and a second read of a tag object whose type had just been
-  read. Only six were declared, each carrying a slug at the site — an argument, not a location, because a
-  location is a selector valid for one build — joined in both directions to the bound covering it, with the
-  registry↔bound edge a biconditional so the last exemption cannot vanish while the bound survives.
-
-  Two shapes stay outside and are declared rather than approximated: whether a declared-out-of-reach refusal
-  is *genuinely* unconstructible (the reaction sees only that nothing reached it), and a refusal vocabulary
-  under other names, since recognising a contract by intent is the prose judgement measured three times and
-  rejected. `scripts/publish.sh` scrubs the instrumentation before the gate that stands in front of
-  `cargo publish` — measured: unscrubbed, that gate calls a dirty worktree a cannot-judge, which is a
-  disagreement reported as something it could not read, at the moment it costs the most.
 
 - **A census is now DECLARED, and the half nothing can hold says so.** The rule had one reaction covering
   exactly one sentence, and adversarial review found **eight** figures wrong in a single change — an entry

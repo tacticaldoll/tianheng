@@ -51,7 +51,7 @@ pub(crate) fn path_leaf(path: &syn::Path) -> String {
 ///
 /// `impl_type_params` shadows the impl block's OWN declared generic type-parameter names
 /// (`impl<T> Marker for T {}`'s `T`), the identical shadowing the exposure collectors already
-/// apply (`collect.rs::type_param_names`) for every OTHER impl-site position — see
+/// apply ([`crate::collect::exposure::type_param_names`]) for every OTHER impl-site position — see
 /// `semantic-forbidden-marker`'s "Anchor resolution and observation bounds" requirement (the
 /// blanket-impl/projection/qualified-path shadow scenarios) for the full rationale. Found missing
 /// on a round-9 adversarial review: a blanket `impl<T> Marker for T {}` beside an unrelated `use
