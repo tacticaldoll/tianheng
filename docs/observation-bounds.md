@@ -303,7 +303,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `repository-checks/files-no-capability-claims-a-stated-bound`
 
-> no repository check fires. Subjects are declared where a capability has something to say, and requiring them to tile the tree would buy coverage with thirty-six claims nobody could defend. The blindness is declared so that a clean report is not read as a complete one, and the check prints how many tracked paths went unclaimed rather than leaving the reader to assume none did
+> no repository check fires. Subjects are declared where a capability has something to say, and requiring them to tile the tree would buy coverage with a claim per capability nobody could defend. The blindness is declared so that a clean report is not read as a complete one, and the check prints how many tracked paths went unclaimed rather than leaving the reader to assume none did
 
 - **pinned by**: `files_no_capability_claims_are_reported_rather_than_implied_judged`
 

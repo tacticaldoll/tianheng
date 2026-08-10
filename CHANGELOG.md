@@ -827,6 +827,14 @@ no adopter runs. They are here rather than under the adopter headings above beca
   judgement over text this repository has designed, measured and rejected, and what makes a mention bite is the
   compiler.
 
+- **One bound was projected in two wordings, and only the typed one was number-free.** The subject-coverage
+  bound's declaration in Rust already said its blindness would cost *a claim per capability*; its spec scenario
+  said *thirty-six claims*, and that scenario's body is quoted verbatim into a generated projection — so one
+  hand-typed word travelled into a document whose own header says it is generated. The figure was right the day
+  it was written (`git ls-files 'openspec/specs/*/spec.md'` returns exactly that many) and held by nothing, in a
+  window that added eight capability specs. All three renderings now say what the declaration says, and the
+  projection is re-blessed from them.
+
 - **The sanctioned merge wrapper stopped silently when a flag was given no value.** `--subject` or `--body-file`
   passed as the final argument made `shift 2` return non-zero, `set -e` took that as the exit, and the wrapper
   ended with **no output at all** — in a script where every other refusal prints `merge message: …` and points at
