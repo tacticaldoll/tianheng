@@ -14,9 +14,9 @@
 //! it. Adding a census means declaring it, which makes it enumerable; a figure written in an undeclared
 //! sentence stays outside, and that residual is declared as a bound rather than approximated.
 
-#![allow(dead_code)]
-
 use std::path::Path;
+
+use crate::refusal::{Refusal, cannot_judge, violation};
 
 /// One census: a set some check enumerates, and the sentence its figures are written in.
 pub struct Census {
@@ -136,8 +136,13 @@ fn number_at(rest: &str) -> Option<(usize, usize)> {
     best
 }
 
-/// Every tracked document stating a declared census with the wrong figures.
-pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<String> {
+/// Every tracked document stating a declared census with the wrong figures, and every one it could not read.
+///
+/// The two are different facts and the return type says so. A tracked document this sweep cannot read is not a
+/// document with no census in it: skipping it silently would report clean over a corpus the sweep never
+/// examined, which is the direction its sibling reference gate already refuses outright — *a file this check
+/// claims to have inspected must have been read*.
+pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusal> {
     assert!(
         !declared.is_empty(),
         "no census was declared, so this sweep would report clean without comparing anything — the vacuity \
@@ -178,8 +183,15 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<String
     }
     let mut offences = Vec::new();
     for path in tracked.iter().filter(|p| p.ends_with(".md")) {
-        let Ok(text) = std::fs::read_to_string(root.join(path)) else {
-            continue;
+        let text = match std::fs::read_to_string(root.join(path)) {
+            Ok(text) => text,
+            Err(err) => {
+                offences.push(cannot_judge(format!(
+                    "  {path} is tracked and could not be read ({err}), so its censuses were never compared \
+                     — an unread document is not a document without one"
+                )));
+                continue;
+            }
         };
         for (index, line) in text.lines().enumerate() {
             for census in declared {
@@ -187,13 +199,13 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<String
                     continue;
                 };
                 if written != census.figures {
-                    offences.push(format!(
+                    offences.push(violation(format!(
                         "  {path}:{} writes {written:?} for {} where the check that enumerates it \
                          produces {:?} — a census is produced, never typed",
                         index + 1,
                         census.subject,
                         census.figures
-                    ));
+                    )));
                 }
             }
         }

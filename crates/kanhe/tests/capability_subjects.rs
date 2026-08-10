@@ -66,19 +66,33 @@ fn specs(root: &Path) -> BTreeMap<String, String> {
     specs
 }
 
-/// The tracked paths each capability's subject claims.
-fn claimed(root: &Path, specs: &BTreeMap<String, String>) -> BTreeMap<String, BTreeSet<String>> {
+/// The tracked paths each capability's subject claims, or the read that could not be made.
+///
+/// A glob whose listing cannot be read is **not** a glob claiming nothing. Swallowing the failure silently
+/// shrinks the claimed set, and the filing join downstream then reports a change clean over the very capability
+/// whose subject it touched — a false negative in the enforcement floor, arrived at by a read nobody was told
+/// had failed. The sibling direction in this file already refuses rather than under-claims; this one now agrees
+/// with it instead of diverging by one `if let`.
+fn claimed(
+    root: &Path,
+    specs: &BTreeMap<String, String>,
+) -> Result<BTreeMap<String, BTreeSet<String>>, Refusal> {
     let mut claimed = BTreeMap::new();
     for (capability, spec) in specs {
         let mut paths = BTreeSet::new();
         for glob in subject_globs(spec).unwrap_or_default() {
-            if let Ok(listing) = git(root, &["ls-files", "--", &glob]) {
-                paths.extend(lines(&listing));
-            }
+            let listing = git(root, &["ls-files", "--", &glob]).map_err(|err| {
+                cannot_judge(format!(
+                    "`{capability}` declares the subject glob `{glob}` and it could not be resolved ({err}); \
+                     an unresolved glob is not a glob claiming nothing, and treating it as one would let a \
+                     change touching this capability's subject read as filed"
+                ))
+            })?;
+            paths.extend(lines(&listing));
         }
         claimed.insert(capability.clone(), paths);
     }
-    claimed
+    Ok(claimed)
 }
 
 /// Every capability declares a subject, and every glob it declares resolves.
@@ -176,7 +190,9 @@ fn a_change_names_every_capability_whose_subject_it_touches() {
     let touched_all = lines(&diff);
 
     let specs = specs(&root);
-    let claimed = claimed(&root, &specs);
+    let claimed = claimed(&root, &specs).unwrap_or_else(|refusal| {
+        panic!("capability subjects (cannot judge): {}", refusal.message)
+    });
 
     let mut offences = Vec::new();
     for proposal_path in changes {
@@ -218,7 +234,9 @@ fn files_no_capability_claims_are_reported_rather_than_implied_judged() {
         return;
     };
     let specs = specs(&root);
-    let claimed = claimed(&root, &specs);
+    let claimed = claimed(&root, &specs).unwrap_or_else(|refusal| {
+        panic!("capability subjects (cannot judge): {}", refusal.message)
+    });
     let every: BTreeSet<String> = claimed.values().flatten().cloned().collect();
     let tracked = lines(&git(&root, &["ls-files"]).expect("the tracked set is enumerable"));
     let unclaimed = tracked.len() - every.len();
@@ -294,7 +312,9 @@ fn the_parked_misfiling_is_refused_against_the_declared_subjects() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let claimed = claimed(&root, &specs(&root));
+    let claimed = claimed(&root, &specs(&root)).unwrap_or_else(|refusal| {
+        panic!("capability subjects (cannot judge): {}", refusal.message)
+    });
     let wrapper = "scripts/publish.sh".to_string();
     let claimants: Vec<String> = claimed
         .iter()
