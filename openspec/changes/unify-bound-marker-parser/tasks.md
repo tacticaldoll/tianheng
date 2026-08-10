@@ -12,9 +12,9 @@
 
 - [x] 3.1 Run the controlled widened-predicate defect and record the model gate's failure.
 - [x] 3.2 Run the focused register/model gates on the repaired tree.
-- [ ] 3.3 Run the full Definition of Done.
+- [x] 3.3 Run the full Definition of Done.
 
 ## 4. Lifecycle
 
-- [ ] 4.1 Sync the delta specs to the main specs.
+- [x] 4.1 Sync the delta specs to the main specs.
 - [ ] 4.2 Archive the change, remove its dated archive, and retain only `archive/.gitkeep`.

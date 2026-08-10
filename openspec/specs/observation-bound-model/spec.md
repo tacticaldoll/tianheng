@@ -194,6 +194,11 @@ declared in code, and SHALL name every id on either side that has no counterpart
 duplicate-free before the sets are compared, since two declarations collapsing onto one id would satisfy an
 equality that proves nothing.
 
+The spec-side set SHALL be enumerated with the observation-bound register's canonical marker predicate; this
+gate SHALL NOT carry a second marker implementation. Slug derivation SHALL remain independently implemented and
+compared with the register projection, because sharing the id function would collapse that comparison to the
+same implementation on both sides.
+
 The id SHALL be the `<capability>/<scenario-slug>` form the register already derives, so this reaction
 introduces no second naming scheme and no lookup table.
 
@@ -210,6 +215,17 @@ consumer, and a dimension returning the wrong set now fails here.
 The **shell's** own declarations SHALL keep coming from its free function, because the shell composes dimensions
 rather than being one and implements no observer. That asymmetry is stated so it does not read as the same gap
 this requirement closes.
+
+#### Scenario: The model consumes the register's declaration grammar
+
+- **WHEN** a heading is accepted or rejected by the canonical bound-marker predicate
+- **THEN** the model makes the same membership decision by calling that predicate, while independently deriving
+  the accepted heading's id
+
+#### Scenario: A widened model-only marker would fail the bijection
+
+- **WHEN** the model is perturbed to admit a plural near-miss that the canonical predicate rejects
+- **THEN** the model gate fails because it invents a spec declaration with no typed counterpart
 
 #### Scenario: A spec declares a bound with no typed declaration
 

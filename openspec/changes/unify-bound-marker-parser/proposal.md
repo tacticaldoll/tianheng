@@ -16,6 +16,7 @@ The observation-bound register and the typed bound-model gate independently deci
 
 - `observation-bound-model`: the spec-side enumeration uses the canonical register marker grammar.
 - `observation-bound-register`: the marker predicate is explicitly reusable by every consumer that enumerates declared bounds.
+- `rust-repository-reactions`: requirements do not change; its declared subject includes the Kanhe implementation and test paths touched while implementing the two capabilities above.
 
 ## Impact
 
