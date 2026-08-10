@@ -459,7 +459,7 @@ Declaring first produces exemptions for code that should not exist, and the exem
 of the reaction rather than as a property of the world.
 
 The size of that set SHALL be a declared census, produced by the same enumeration the reaction perturbs, so it
-cannot grow without a document disagreeing with it. Today **7 of 79 refusal sites are declared out of reach**:
+cannot grow without a document disagreeing with it. Today **7 of 80 refusal sites are declared out of reach**:
 four describe the machine the gate runs on rather than the repository it judges, two are git's own two
 extractions of one object disagreeing with each other, and one is an I/O failure part-way through a directory
 enumeration, which a fixture cannot schedule.

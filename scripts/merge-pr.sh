@@ -80,6 +80,12 @@ fi
 
 title=$(gh pr view "$pr" --json title --jq .title)
 : "${subject:=$title}"
+pr_number=$(gh pr view "$pr" --json number --jq .number)
+if [[ ! $pr_number =~ ^[1-9][0-9]*$ ]]; then
+    printf 'merge message: %s\n' \
+        "cannot resolve $pr to one pull request number; the live commits endpoint requires its canonical identity" >&2
+    exit 1
+fi
 
 # The gate. A failure aborts before the merge, which is the point: the record below cannot be amended.
 
@@ -99,13 +105,18 @@ require_one_pass() {
     fi
 }
 
-# The pull request's own commit subjects, so the gate can ask whether this body *is* their concatenation
-# rather than whether it looks like one. Read from `git log`, not from the API: `messageHeadline` truncates at
-# 69 characters with an ellipsis, and this repository's subjects run longer, so comparing against it would
-# never match. An unreadable list reaches the gate empty and the gate refuses to judge.
-base_ref=$(gh pr view "$pr" --json baseRefName --jq .baseRefName)
-head_ref=$(gh pr view "$pr" --json headRefName --jq .headRefName)
-commits=$(git -C "$repo" log --format='%s' "origin/$base_ref..origin/$head_ref" 2>/dev/null || true)
+# The pull request's own LIVE commit subjects, so the gate can ask whether this body *is* their concatenation
+# rather than whether it looks like one. Local remote-tracking refs can lag the pull request or carry no fork
+# head at all, and a stale subset makes a default body containing the missing subjects look unrelated and pass.
+# The commits endpoint returns the full message; take its first line rather than `messageHeadline`, which
+# truncates long subjects. `--paginate` keeps a large pull request one set rather than its first page.
+commits=$(gh api --paginate "repos/{owner}/{repo}/pulls/$pr_number/commits" \
+    --jq '.[].commit.message | split("\n")[0]')
+if [[ -z ${commits//[[:space:]]/} ]]; then
+    printf 'merge message: %s\n' \
+        "cannot read any commit subjects from pull request $pr_number; an empty live set is not evidence about its body" >&2
+    exit 1
+fi
 
 gate_output=$(TIANHENG_MERGE_SUBJECT=$subject \
     TIANHENG_MERGE_TITLE=$title \
