@@ -142,10 +142,10 @@ pub struct SemanticBoundaries {
 
 /// One capability's boundaries, its `crate_package` accessor, and its `check_*_boundary`
 /// reaction, behind one dyn-safe surface — so [`SemanticBoundaries::is_empty`],
-/// [`SemanticBoundaries::crate_packages`], and [`eval_all`] each enumerate the eight capabilities
-/// via one loop over [`SemanticBoundaries::capability_sets`] rather than independently
-/// hand-enumerating all eight (the drift risk a ninth capability's addition would otherwise
-/// carry: three lists to remember, not one).
+/// [`SemanticBoundaries::crate_packages`], and [`eval_all`] each enumerate the capabilities via one
+/// loop over [`SemanticBoundaries::capability_sets`] rather than independently hand-enumerating them
+/// (the drift risk a further capability's addition would otherwise carry: three lists to remember,
+/// not one).
 trait CapabilitySet<'a> {
     fn is_empty(&self) -> bool;
     fn crate_packages(&self) -> Vec<&'a str>;

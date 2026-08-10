@@ -18,7 +18,7 @@ Verifying it would mean re-entering the `cargo test` harness already running, or
 write into the tree it judges. A header naming a command that regenerates nothing is invisible here, and
 that is a declared observation bound rather than an oversight.
 
-**Not that the set is complete.** One mechanism is recognized: a Rust call to the shared blessing
+**Not that the set is complete.** The recognized mechanism is a Rust call to the shared blessing
 rule. A document generated some other way, whose author also omitted the marker, is absent from both
 sides of the correspondence — a declared false negative owned by this engine, not a limit of what it
 can read.
