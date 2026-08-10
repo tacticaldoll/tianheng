@@ -24,6 +24,8 @@ That matrix has expanded into a second governance system around repository diagn
 ### Existing Capabilities
 
 - `publish-source-integrity`: requirements do not change; `scripts/publish.sh` only stops scrubbing mutation variables that no longer exist.
+- `release-coherence`: requirements do not change; its gate and focused matrix only adopt the pure shared refusal constructor, while the changelog records the catalog migration.
+- `observation-bound-register`: requirements do not change; its generated projection and governed specs only reflect the relocated and retired declarations.
 
 ## Impact
 
