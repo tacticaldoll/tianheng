@@ -24,6 +24,22 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
+                "repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound",
+            ),
+            "a declared census written with the wrong figures in a tracked file that is not Markdown",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the corpus is tracked Markdown, and widening it was measured rather than reasoned \
+                          about: this repository's Rust sources carry census phrases as fixture input, where \
+                          the figures are a parser's expected output and deliberately arbitrary, so admitting \
+                          them would report a test asserting its own parser as a drifted document. The narrow \
+                          corpus is what keeps every report actionable"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_census_outside_markdown_is_a_stated_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound",
             ),
             "a promised prelude member the external contract names only in a comment",
@@ -405,6 +421,21 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // an inline span wrapped across a line — and the word-run scan that closes all three reaches unquoted
         // prose too. Its WHEN was rerun against the new tree and the check fires, which is what retires a
         // bound rather than an argument that it should have closed.
+        BoundDecl::pinned(
+            BoundId::new(
+                "release-coherence/prose-about-the-marker-is-read-as-a-marker-a-stated-bound",
+            ),
+            "a release section that discusses the breaking marker without marking anything",
+            Extent::Reached(Reached::OverReacts {
+                because: "the classifier reads the marker's presence rather than its position, so a section \
+                          describing the marking rule is required to carry a migration it does not owe. The \
+                          reach is kept deliberately: a positional matcher would stop observing a real break \
+                          whose marker sits anywhere but an entry's first token, buying a false negative in \
+                          the floor to remove a refusal an author can argue with"
+                    .into(),
+            }),
+            "prose_about_the_marker_is_read_as_a_marker_a_stated_bound",
+        ),
         BoundDecl::pinned(
             BoundId::new(
                 "release-coherence/a-dated-release-section-names-a-gate-a-stated-bound",

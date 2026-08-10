@@ -307,6 +307,32 @@ fn a_break_with_its_migration_is_coherent() {
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
+/// `release-coherence/prose-about-the-marker-is-read-as-a-marker-a-stated-bound`
+///
+/// `OverReacts`, owned by the engine. The classifier asks whether a release section *contains* `**BREAKING**`,
+/// so a section that merely **discusses** the marker is required to carry a `### Migration` it does not owe.
+/// Shown rather than described: the body below announces nothing and marks nothing, and the refusal arrives
+/// anyway.
+///
+/// Recognising the marker at an entry's start instead was considered and declined. Over-reaction is the safe
+/// direction — the Core Contract forbids exactly one bug, and it is the false negative — while a positional
+/// matcher buys a false-negative risk in the floor: a real break whose marker sits anywhere but the entry's
+/// first token would stop being observed at all. A false refusal an author argues with beats a break nobody is
+/// told about, so the reaction keeps its reach and the cost is declared here.
+#[test]
+fn prose_about_the_marker_is_read_as_a_marker_a_stated_bound() {
+    let root = scratch("breaking-prose");
+    let fixture = build_fixture(&root, "breaking-prose", "0.2.0");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    unreleased_body(
+        &fixture.repo,
+        "### Changed\n- A diagnostic whose exit code does not move, so it earns no **BREAKING** mark.",
+    );
+    commit(&fixture.repo, "chore: discuss the marker without using it");
+    refuse(&fixture.repo, Kind::Violation, "carries no `### Migration`");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 // --- adopter narrative names no self-governance machinery ---------------------------------------------------
 
 #[test]

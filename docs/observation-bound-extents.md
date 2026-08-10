@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**36 of 79 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**37 of 81 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -28,6 +28,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `release-coherence/a-name-reached-only-through-a-url-a-stated-bound` — owner: engine
 - `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound` — owner: engine
 - `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound` — owner: engine
+- `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
 - `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
 - `repository-checks/files-no-capability-claims-a-stated-bound` — owner: engine
@@ -329,7 +330,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (9)
+## over-reacts (10)
 
 ### `crate-source-boundary/a-git-plus-version-dependency-is-flagged-though-it-would-publish-a-stated-bound`
 
@@ -362,6 +363,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: a word is matched against basenames as well as paths, because the document cites both forms; narrowing it to full paths would lose every bare citation, and deciding which of two files a bare name means is a judgement about the sentence rather than about the reference
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_colliding_basename_is_a_stated_bound`
+
+### `release-coherence/prose-about-the-marker-is-read-as-a-marker-a-stated-bound`
+
+> a release section that discusses the breaking marker without marking anything
+
+- **because**: the classifier reads the marker's presence rather than its position, so a section describing the marking rule is required to carry a migration it does not owe. The reach is kept deliberately: a positional matcher would stop observing a real break whose marker sits anywhere but an entry's first token, buying a false negative in the floor to remove a refusal an author can argue with
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `prose_about_the_marker_is_read_as_a_marker_a_stated_bound`
 
 ### `runtime-origin-assertion/a-composite-shape-yields-a-truncated-origin-a-stated-bound`
 
@@ -403,7 +412,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (36)
+## under-reacts (37)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -588,6 +597,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the enumeration is `git ls-files scripts/`, so an untracked `scripts/` reads as absent and a citation of it goes unseen; closing this means judging worktree content, which this repository's gates are held not to do — the larger error
 - **its defence must show**: does not react
 - **pinned by**: `machinery_tracked_by_nothing_is_a_stated_bound`
+
+### `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound`
+
+> a declared census written with the wrong figures in a tracked file that is not Markdown
+
+- **because**: the corpus is tracked Markdown, and widening it was measured rather than reasoned about: this repository's Rust sources carry census phrases as fixture input, where the figures are a parser's expected output and deliberately arbitrary, so admitting them would report a test asserting its own parser as a drifted document. The narrow corpus is what keeps every report actionable
+- **its defence must show**: does not react
+- **pinned by**: `a_census_outside_markdown_is_a_stated_bound`
 
 ### `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
 

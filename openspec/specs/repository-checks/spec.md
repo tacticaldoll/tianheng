@@ -220,7 +220,7 @@ holds an adopter-facing entry to naming none of this repository's own machinery.
 
 A figure a document states about a set this repository enumerates SHALL be **declared as a census**: the
 check that enumerates the set names the one sentence the figures are written in and produces them, and one
-sweep holds every tracked document to that declaration.
+sweep holds every tracked **Markdown** document to that declaration.
 
 A census phrase SHALL be specific enough to name its own set, and SHALL be matchable — a phrase spanning lines
 can never match a line-oriented sweep, and would be declared, enumerable and silent. Figures SHALL be read in
@@ -234,8 +234,8 @@ detector `AGENTS.md` records as designed, measured three times and rejected.
 
 #### Scenario: A declared census disagrees with what produces it
 
-- **WHEN** a tracked document writes a declared census's phrase with figures the enumerating check does not
-  produce
+- **WHEN** a tracked Markdown document writes a declared census's phrase with figures the enumerating check does
+  not produce
 - **THEN** the sweep fails, naming the document, the line, both figures and the subject
 
 #### Scenario: A census that can never match
@@ -252,6 +252,17 @@ detector `AGENTS.md` records as designed, measured three times and rejected.
   which is the instrument measured three times and rejected. `AGENTS.md` carries the other half as a rule with
   no check: a count of something this repository does not produce is not written
 - **PINNED-BY** `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
+
+#### Scenario: A census written outside Markdown is not observed — a stated bound
+
+- **WHEN** a tracked file that is not Markdown — a Rust doc comment, a shell comment, a manifest — writes a
+  declared census's phrase with the wrong figures
+- **THEN** the sweep does not see it, a stated bound: the corpus is tracked Markdown, and widening it was
+  measured rather than reasoned about. This repository's Rust sources carry census phrases **as fixture input**,
+  where the figures are a parser's expected output and deliberately arbitrary; admitting them would report a test
+  asserting its own parser as a drifted document. The narrow corpus is what keeps the sweep's every report
+  actionable, and the residual is a figure in a code comment, which `AGENTS.md` measured and left to the reviewer
+- **PINNED-BY** `a_census_outside_markdown_is_a_stated_bound`
 
 ### Requirement: A squash message SHALL be judged before the merge that records it
 
