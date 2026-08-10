@@ -1,14 +1,14 @@
-//! `observation-bound-model`'s reaction: the specs' declared bounds and the code's typed declarations are one
+//! `observation-bound-model`'s check: the specs' declared bounds and the code's typed declarations are one
 //! set, and the classification is projected where a reader can count it.
 //!
 //! Why this lives in Kanhe rather than in a dimension: this unpublished repository-governance crate sees
-//! 圭表, 渾儀 and 漏刻 through Tianheng, and the bijection is meaningless from inside one of them. Why it is a Rust reaction rather
+//! 圭表, 渾儀 and 漏刻 through Tianheng, and the bijection is meaningless from inside one of them. Why it is a Rust check rather
 //! than a seventh shell gate: a `PINNED-BY` citation resolves only to a harness-registered Rust function, so a
 //! shell-defended capability could not pin the bounds this one declares — they would land `UNPINNED` and
 //! increase the register projection's audit backlog.
 //!
 //! What it does **not** take over: `crates/kanhe/tests/bound_register.rs` still owns the citation, tracker, prose and
-//! projection directions. This reaction owns one obligation — that every declared bound is classified, and every
+//! projection directions. This check owns one obligation — that every declared bound is classified, and every
 //! classification names a declared bound.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -21,13 +21,13 @@ use tianheng::{BoundDecl, Defence, Extent, Owner, Reached};
 
 use kanhe::bound_register_parse::marks_a_bound;
 
-/// The projection this reaction holds fresh.
+/// The projection this check holds fresh.
 const EXTENT_PROJECTION: &str = "docs/observation-bound-extents.md";
 
 /// The workspace root, or `None` outside a checkout.
 ///
 /// Same discipline six crates already follow: absent layout is a skip outside a checkout and a LOUD failure
-/// when `TIANHENG_WORKSPACE_TESTS` is set. A governance reaction that quietly does nothing in CI is the shape
+/// when `TIANHENG_WORKSPACE_TESTS` is set. A governance check that quietly does nothing in CI is the shape
 /// this whole capability argues against.
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
@@ -118,7 +118,7 @@ fn unpinned_fixture() -> BoundDecl {
 
 /// Every declared bound the specs state, keyed by derived id.
 ///
-/// Fails loudly on an empty enumeration in either direction. A reaction reporting a perfect bijection between
+/// Fails loudly on an empty enumeration in either direction. A check reporting a perfect bijection between
 /// two empty sets is the vacuity this repository has re-opened six times in one window.
 fn spec_bounds(root: &Path) -> BTreeMap<String, SpecBound> {
     let specs_dir = root.join("openspec/specs");
@@ -238,7 +238,7 @@ fn declared_bounds() -> BTreeMap<String, BoundDecl> {
     // had no consumer at all: nothing in the tree read it, so a dimension could have answered anything. Now the
     // bijection's verdict depends on the answer.
     //
-    // Repository-governance declarations are chained from the unpublished crate whose reaction they qualify:
+    // Repository-governance declarations are chained from the unpublished crate whose check they qualify:
     // Kanhe for record/coherence checks and Shengmo for self-law dogfood. The published shell is **not** an
     // observer and has no catalog of its own; it composes product dimensions rather than restating them.
     for decl in StaticObserver::new(Constitution::new("bounds").static_boundaries().clone())
@@ -311,10 +311,10 @@ fn the_published_shell_defines_no_repository_bound_catalog() {
 /// The specification says the family's declarations stay literals and that the owned-or-borrowed form exists for
 /// implementors whose reactions do not know their limits when they are written. Nothing measured it: the
 /// constructors accept anything convertible, so a declaration rewritten as `format!(…)` compiles, allocates on
-/// every pass of this reaction and of the projection below, and would be named by nothing.
+/// every pass of this check and of the projection below, and would be named by nothing.
 ///
 /// The counter-example is deliberate and lives outside this workspace — `examples/observer-participant`'s
-/// declarations are computed on purpose, which is what the form is for. This reaction is about *these*
+/// declarations are computed on purpose, which is what the form is for. This check is about *these*
 /// declarations, so it reads the family's four sets and nothing else.
 #[test]
 fn every_declaration_of_this_family_borrows_every_string_it_carries() {
@@ -323,7 +323,7 @@ fn every_declaration_of_this_family_borrows_every_string_it_carries() {
     // and this states the dependency where a reader of this assertion is standing.
     assert!(
         !declarations.is_empty(),
-        "no declaration was read, so this reaction would hold over nothing"
+        "no declaration was read, so this check would hold over nothing"
     );
     let allocating: Vec<&str> = declarations
         .values()
@@ -422,7 +422,7 @@ fn derived_ids_agree_with_the_register_projection() {
     let derived: BTreeSet<String> = spec_bounds(&root).into_keys().collect();
     assert_eq!(
         derived, projected,
-        "the ids this reaction derives differ from the ids `crates/kanhe/tests/bound_register.rs` wrote into \
+        "the ids this check derives differ from the ids `crates/kanhe/tests/bound_register.rs` wrote into \
          {projection:?} — either the slug rule has drifted between the two implementations, or the projection \
          is stale. Regenerate with `BLESS=1 bash crates/kanhe/tests/bound_register.rs` and, if the difference \
          survives, the two derivations disagree."

@@ -1,6 +1,6 @@
-//! A census is **declared**, produced by the reaction that enumerates the set, and swept for.
+//! A census is **declared**, produced by the check that enumerates the set, and swept for.
 //!
-//! `AGENTS.md` has said *a census is produced, never typed* since the 0.5.0 window, and one reaction has
+//! `AGENTS.md` has said *a census is produced, never typed* since the 0.5.0 window, and one check has
 //! enforced it — for exactly one sentence, `N bounds across M capabilities`. Every other figure about a set
 //! this repository enumerates was outside anything, and adversarial review found **eight** of them wrong in a
 //! single change: an entry population stated as eleven, then nineteen, then twenty, each corrected by the very
@@ -9,7 +9,7 @@
 //! just made stale.
 //!
 //! The shape that ends the class is not a wider detector — a judgement over prose is the instrument this
-//! repository designed, measured three times and rejected. It is a **declaration**: a reaction that enumerates
+//! repository designed, measured three times and rejected. It is a **declaration**: a check that enumerates
 //! a set declares the one sentence its figures are written in, and one sweep holds every tracked document to
 //! it. Adding a census means declaring it, which makes it enumerable; a figure written in an undeclared
 //! sentence stays outside, and that residual is declared as a bound rather than approximated.
@@ -18,14 +18,14 @@
 
 use std::path::Path;
 
-/// One census: a set some reaction enumerates, and the sentence its figures are written in.
+/// One census: a set some check enumerates, and the sentence its figures are written in.
 pub struct Census {
     /// What is counted, for the diagnostic.
     pub subject: &'static str,
     /// The sentence, with `{}` where each figure goes. Everything outside the placeholders is matched
     /// literally, so a document may phrase the surrounding prose freely and still be held to the figures.
     pub phrase: &'static str,
-    /// The figures, in the order the placeholders appear, **produced** by the enumerating reaction.
+    /// The figures, in the order the placeholders appear, **produced** by the enumerating check.
     pub figures: Vec<usize>,
 }
 
@@ -188,7 +188,7 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<String
                 };
                 if written != census.figures {
                     offences.push(format!(
-                        "  {path}:{} writes {written:?} for {} where the reaction that enumerates it \
+                        "  {path}:{} writes {written:?} for {} where the check that enumerates it \
                          produces {:?} — a census is produced, never typed",
                         index + 1,
                         census.subject,

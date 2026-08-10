@@ -15,7 +15,7 @@ in imitable form) → the relevant `openspec/specs/*` (the capability you are to
 generated projection, and requirement detail in the specs — read those, do not inflate these.
 
 Where the law stops is written down too: [`docs/observation-bounds.md`](docs/observation-bounds.md)
-projects every **observation bound** — each claim that a reaction deliberately stops at a named shape —
+projects every **observation bound** — each claim that a product reaction or repository check deliberately stops at a named shape —
 with the test that defends it, or the tracker that owns closing the gap. Read it before reporting a
 behaviour as a defect: a declared bound means the shape is governed policy, and the projection leads with
 the count of bounds nothing yet defends.
@@ -91,7 +91,7 @@ Conventional Commit types:
 4. **sync** — merge the delta into `openspec/specs/*` (agent-driven).
 
 At sync, every new or materially changed scenario must carry its observation evidence in the same
-change: either name the existing reaction in the change's design/tasks and PR `## Verification`, or
+change: either name the existing reaction or repository check in the change's design/tasks and PR `## Verification`, or
 add a new guard and record the required negative run. If a property cannot fail because the data model
 constructs it, state that construction in requirement prose rather than inventing a scenario. A scenario
 with neither form of evidence does not enter the main specs.
@@ -110,7 +110,7 @@ release* below.
 ## A census is produced, never typed
 
 A figure saying **how many members a set in this repository currently has** is produced by whatever enumerates
-that set — printed by its reaction on a clean run, or *computed* into a generated, staleness-checked projection.
+that set — printed by its repository check on a clean run, or *computed* into a generated, staleness-checked projection.
 It is never typed into prose, a doc comment, or a projection's template. Where nothing enumerates the set, anchor
 the figure to a past moment so a reader cannot mistake it for current ("measured before proposing", "at `v0.4.0`"),
 or drop it: the claim almost never needs the number.
@@ -138,12 +138,12 @@ The census direction in `crates/kanhe/tests/bound_register.rs` stays what it is 
 stable — and the rule above is what keeps a figure honest.
 
 
-A census this repository can produce is **declared**: the reaction that enumerates the set names the one
+A census this repository can produce is **declared**: the repository check that enumerates the set names the one
 sentence its figures are written in, and one sweep holds every tracked document to it — `crates/kanhe/tests/census.rs`.
 Adding a census means declaring it, which is what makes it enumerable.
 
 **A count of something this repository does not produce is not written.** That is the other half, and nothing
-observes it. Eight figures were found wrong in one change and three of them counted sets no reaction
+observes it. Eight figures were found wrong in one change and three of them counted sets no repository check
 enumerates — how many spans of a shape a document carries, how many commits a window holds. Each was
 decoration: the sentence it sat in said the same thing without it, right up until the number stopped being
 true. Where the count matters, produce it and let the producing document carry it; where it does not, write
@@ -174,8 +174,8 @@ one. The reader's behaviour was fine throughout.
 
 Two moves end those two classes, and neither is a review:
 
-- **A claim about what a reaction does becomes an executable case, never a comment.** Enumerate the shapes the
-  reaction decides and assert the decision for each, so the description *is* the run. A declared bound's WHEN
+- **A claim about what a repository check does becomes an executable case, never a comment.** Enumerate the shapes the
+  check decides and assert the decision for each, so the description *is* the run. A declared bound's WHEN
   and THEN are then read off that table rather than typed beside it, and a reviewer's perturbation lands as a
   row instead of a finding.
 - **One rule gets one implementation returning a typed result, and its consumers match exhaustively.** Where
@@ -184,7 +184,7 @@ Two moves end those two classes, and neither is a review:
   enumerating the outcomes is then a census of a set the type already holds — see *A census is produced, never
   typed*.
 
-**This rule has no reaction, and that is stated rather than left to be discovered.** Deciding that a comment
+**This rule has no repository check, and that is stated rather than left to be discovered.** Deciding that a comment
 describes something a run could falsify is a judgement over prose, which this repository has designed and
 measured three times and rejected. What it is instead is the question to ask when a repair round comes back
 non-empty — and the second move above, once applied, is enforced by the compiler rather than by this paragraph.
@@ -230,7 +230,7 @@ itself an undetected drift, invisible to a diff-only read (the 0.3.0 `finding_ke
   in a `BREAKING CHANGE:` footer. Do not use lifecycle phases, branch roles, issue numbers, or a
   vague `update` as the type.
 - **Bodies carry provenance.** Except for the release snapshot below, every commit has a concise
-  body that explains why the change exists and what contract or reaction it preserves. Separate it
+  body that explains why the change exists and what contract, reaction, or repository check it preserves. Separate it
   from the subject with one blank line; do not merely repeat the diff or rely on a PR number.
 - **PR title and body are merge inputs.** A PR title is the exact Conventional Commit subject
   intended for the squash commit. Its body uses `## Why`, `## What changed`,
@@ -244,7 +244,7 @@ itself an undetected drift, invisible to a diff-only read (the 0.3.0 `finding_ke
   only then reaches `gh pr merge --squash`. This rule was stated here and missed anyway — nine subjects in
   this repository's history carry the serial — and a merged squash cannot be repaired, because amending it
   changes the hash the pull request's merge record cites. Replace GitHub's concatenated commit list
-  with a self-contained body distilled from the PR's why, reaction, and compatibility result;
+  with a self-contained body distilled from the PR's why, verification evidence, and compatibility result;
   retain any `BREAKING CHANGE:` footer. The branch's fine-grained commits remain review provenance,
   not the release branch's message body.
 - **No AI/agent attribution.** Commit messages and PR descriptions must NOT contain a
@@ -307,7 +307,7 @@ convention. What each published version actually records, and the two mechanisms
 disagreements, is inventoried in
 [`docs/history/published-artifact-provenance.md`](docs/history/published-artifact-provenance.md).
 
-`TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test release_coherence` is the release-state reaction. During development it
+`TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test release_coherence` is the release-state check. During development it
 requires an adopter-facing `[Unreleased]` entry and aligned workspace/internal dependency versions,
 but deliberately tolerates historical lockfile drift. Once the workspace version moves forward for
 release preparation—and at the exact `release: X.Y.Z` snapshot—the dated CHANGELOG section,
@@ -315,16 +315,16 @@ internal pins, and every workspace package entry in `Cargo.lock` must all name t
 check is read-only and needs full git history; it never bumps, commits, tags, or publishes.
 
 Like the self-describing-commit rule above, this is a convention for humans and agents, not a
-Tianheng reaction: a branching pattern is not an observable architectural fact, so the drift law
+Tianheng boundary or repository check: a branching pattern is not an observable architectural fact, so the drift law
 keeps it out of the constitution.
 
 ## Self-governance — don't weaken the law to make CI pass
 
 **Self-governance is Tianheng governing itself with the capability it ships.** `crates/shengmo/src/law.rs` declares a real constitution through the published surface an adopter uses, and `crates/shengmo/tests/self_governance.rs` runs it against this workspace as a `cargo test` gate. Its live invariants are declared in Rust and projected into [`AGENTS.self-law.md`](AGENTS.self-law.md); do not hand-maintain a second list here.
 
-Beside it sit this repository's other reactions — hand-written `cargo test` gates over its changelog, specs, scripts, and documents. They govern the repository too, and they are held to the same standard, but they are **not** the product running on itself: a claim about one is not a claim about the other. An earlier version of this sentence said every Rust integration test ran Tianheng's own reactions against the workspace, which was false for 20 of the 25 then present — none of them reached the shipped API at all.
+Beside it sit this repository's other checks — hand-written `cargo test` gates over its changelog, specs, scripts, and documents. They govern the repository too, and they are held to the same standard, but they are **not** the product running on itself: a claim about one is not a claim about the other. An earlier version of this sentence said every Rust integration test ran Tianheng's own reactions against the workspace, which was false for 20 of the 25 then present — none of them reached the shipped API at all.
 
-**Projections are text views, not reactions**: Contract projections and censuses (such as [`AGENTS.self-law.md`](AGENTS.self-law.md), [`docs/observation-bounds.md`](docs/observation-bounds.md), the retired gate-shape projection, [`docs/observation-bound-extents.md`](docs/observation-bound-extents.md), and [`docs/projection-register.md`](docs/projection-register.md)) are derived text views. They are NOT reactions, NOT governance, and NOT shipped product code. Their freshness is asserted by Rust `cargo test` gates ("*A census is produced, never typed*").
+**Projections are text views, not reactions or checks**: Contract projections and censuses (such as [`AGENTS.self-law.md`](AGENTS.self-law.md), [`docs/observation-bounds.md`](docs/observation-bounds.md), the retired gate-shape projection, [`docs/observation-bound-extents.md`](docs/observation-bound-extents.md), and [`docs/projection-register.md`](docs/projection-register.md)) are derived text views. They are NOT reactions, NOT checks, NOT governance, and NOT shipped product code. Their freshness is asserted by Rust `cargo test` gates ("*A census is produced, never typed*").
 
 If a change makes a self-governance test fail, **fix the change**, not the test. A boundary is altered only by a deliberate, human-reviewed amendment — never by quietly weakening it so CI turns green.
 
@@ -351,7 +351,7 @@ TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test pin_b
                                            # would be the worse half of that trade
 ```
 
-The self-governance reaction (`crates/shengmo/tests/self_governance.rs`, run under `cargo test`) and its projection
+The self-governance dogfood gate (`crates/shengmo/tests/self_governance.rs`, which runs the product reaction under `cargo test`) and its projection
 (`self_law_projection_is_fresh`) must stay green — never weaken the law to pass it. So must
 `observation_bound_model.rs`, which holds every declared observation bound's spec scenario and its typed
 classification in a bijection and projects `docs/observation-bound-extents.md`; it needs no line of its own
@@ -365,7 +365,7 @@ are the drift a seam is supposed to end.
 Version literals in prose name only an immutable historical/provenance fact, a migration target, or the active
 release-planning surface. An `[Unreleased]` adopter narrative may therefore name its intended release; long-lived
 comments and live documentation do not restate a "current" or prospective version — say `[Unreleased]`, workspace
-version, manifest requirement, or this checkout instead. The release-coherence reaction owns only the mutable
+version, manifest requirement, or this checkout instead. The release-coherence check owns only the mutable
 version-bearing surfaces it enumerates; do not add a general prose-number detector.
 
 - Pre-1.0 and at `0.0.x`: **no inter-release compatibility is promised**; any release may
@@ -406,6 +406,6 @@ publish` packages only files inside each crate's own directory, so the workspace
 `LICENSE-*` and the inherited SPDX `license` field are not enough — each crate must physically
 carry `LICENSE-MIT` and `LICENSE-APACHE`, or it ships without them (as 0.1.0/0.1.1 did, before
 this was caught). `cargo package --list -p <crate>` shows exactly what a crate would ship. This
-is release/packaging hygiene, not architectural drift, so it is a **CI reaction** (the
+is release/packaging hygiene, not architectural drift, so it is a **CI check** (the
 `License texts bundled` job), never a Tianheng constitution boundary — the same reason the
-branching/release ritual above stays convention rather than a reaction.
+branching/release ritual above stays convention rather than a check.

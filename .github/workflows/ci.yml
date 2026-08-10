@@ -31,9 +31,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          # The workspace suite now carries the release-coherence reaction, whose state classification
+          # The workspace suite now carries the release-coherence check, whose state classification
           # follows the latest exact `release: X.Y.Z` commit. A shallow checkout cannot see that spine and
-          # the reaction refuses rather than masquerading as coherent — which is the contract working, and
+          # the check refuses rather than masquerading as coherent — which is the contract working, and
           # the reason this job needs the whole history.
           fetch-depth: 0
       - name: the local Definition of Done matches what CI runs
@@ -93,7 +93,7 @@ jobs:
           # workspace-root LICENSE-* files and the inherited SPDX `license` field are NOT enough:
           # each publishable crate must physically carry its license texts or it ships without
           # them (a packaging defect latent in 0.1.0/0.1.1). This is release hygiene, not
-          # architectural drift, so it is a CI reaction here — not a Tianheng boundary. Catch a
+          # architectural drift, so it is a CI check here — not a Tianheng boundary. Catch a
           # new crate that forgets the texts before it is ever published.
           missing=0
           for manifest in crates/*/Cargo.toml; do

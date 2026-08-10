@@ -9,12 +9,12 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
     vec![
         BoundDecl::unpinned(
             BoundId::new(
-                "rust-repository-reactions/a-gate-reached-without-the-wrapper-a-stated-bound",
+                "repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound",
             ),
             "an act reaching cargo publish or a merge without going through its wrapper",
             Extent::Reached(Reached::UnderReacts {
                 because: "both assertions guard the sanctioned path -- the wrapper requiring its gate to \
-                          report one passing test, and the reaction pinning the identifier it cites. \
+                          report one passing test, and the check pinning the identifier it cites. \
                           Reaching further would mean observing the operator's shell or GitHub's servers \
                           rather than this repository"
                     .into(),
@@ -23,7 +23,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "`BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*",
         ),
         BoundDecl::pinned(
-            BoundId::new("rust-repository-reactions/files-no-capability-claims-a-stated-bound"),
+            BoundId::new("repository-checks/files-no-capability-claims-a-stated-bound"),
             "a tracked file no capability's declared subject claims",
             Extent::Reached(Reached::UnderReacts {
                 because: "subjects are declared where a capability has something to say, and requiring them \
@@ -37,14 +37,14 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound",
+                "repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound",
             ),
             "a figure about an enumerable set, written in a phrasing no census declares",
             Extent::Reached(Reached::UnderReacts {
                 because: "the declaration is the coverage — a census names the one sentence its figures are \
                           written in, and a count outside that sentence is unheld. Reaching it needs a \
                           judgement over prose, the instrument this repository designed, measured three times \
-                          and rejected; `AGENTS.md` carries the other half as a rule with no reaction"
+                          and rejected; `AGENTS.md` carries the other half as a rule with no check"
                     .into(),
                 owner: Owner::Engine,
             }),
@@ -52,13 +52,13 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "rust-repository-reactions/a-hook-is-proposed-for-this-rule-a-stated-bound",
+                "repository-checks/a-hook-is-proposed-for-this-rule-a-stated-bound",
             ),
             "a squash merge made anywhere but through the sanctioned wrapper",
             Extent::OutOfReach {
                 because: "a squash merge runs on GitHub's servers, so no local commit exists and no hook \
                           runs, and both values of the repository's squash-title setting append the serial; \
-                          the reaction guards the sanctioned path to a merge, and a browser reaches no \
+                          the check guards the sanctioned path to a merge, and a browser reaches no \
                           wrapper"
                     .into(),
             },
@@ -165,7 +165,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_brace_in_a_block_comment_moves_the_body_extent",
         ),
-        // The reaction that read the composition body is retired, so what is declared is the obligation being
+        // The check that read the composition body is retired, so what is declared is the obligation being
         // unobserved rather than one family of escapes from a reader that no longer exists. Under-reacting with
         // the engine as owner, not out of reach: the deciding text was inside the file the reader loaded, so the
         // measure stopped where this repository chose to stop it, and closing it is ordinary work here.
@@ -217,29 +217,29 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // --- observation-bound-register ---
         BoundDecl::unpinned(
             BoundId::new(
-                "observation-bound-register/which-member-holds-a-reaction-is-a-judgement-a-stated-bound",
+                "observation-bound-register/which-member-holds-a-check-is-a-judgement-a-stated-bound",
             ),
-            "which governance member a newly added reaction belongs to",
+            "which governance member a newly added check belongs to",
             Extent::Reached(Reached::UnderReacts {
-                because: "the split is by what a reaction judges, and two mechanical rules were each \
+                because: "the split is by what a check judges, and two mechanical rules were each \
                           measured unreliable: a text scan reads a comment naming a governance document as \
-                          governance while a reaction scanning every tracked file names nothing, and the \
+                          governance while a check scanning every tracked file names nothing, and the \
                           workspace marker means both `this needs the repository as its subject` and `this \
                           needs a fixture`. Position is the declaration"
                     .into(),
                 owner: Owner::Engine,
             }),
-            "`BACKLOG.md` — *which governance member a reaction belongs to is unobserved*",
+            "`BACKLOG.md` — *which governance member a check belongs to is unobserved*",
         ),
         //
-        // The register's own bounds — the only ones this crate declares about the reaction
+        // The register's own bounds — the only ones this crate declares about the check
         // that produces the register rather than about a dimension. `crates/kanhe/tests/pin_bites.rs` decides that a
         // citation's pin *bites* only where a mutation is declared for it; where none is, nothing decides.
         BoundDecl::unpinned(
             BoundId::new(
                 "observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound",
             ),
-            "code run inside the checkout writing outside it, or replacing a checked path so the reaction's own write lands elsewhere",
+            "code run inside the checkout writing outside it, or replacing a checked path so the check's own write lands elsewhere",
             Extent::Reached(Reached::UnderReacts {
                 because: "running the cited test is the whole method, so code execution inside the checkout \
                           is granted unconditionally; the shared common directory is what makes a \
@@ -256,7 +256,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             ),
             "a cited test passing and failing by a period the fixed run sequence does not break",
             Extent::Reached(Reached::UnderReacts {
-                because: "the reaction runs the test a fixed number of times and the number is readable in \
+                because: "the check runs the test a fixed number of times and the number is readable in \
                           its own source, so a matching period escapes; closing it needs each run unable to \
                           observe how many times the test has run, whose cost grows with the coverage this \
                           capability exists to grow"
@@ -281,7 +281,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::unpinned(
             BoundId::new(
-                "observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound",
+                "observation-bound-register/whether-a-record-perturbs-the-check-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound",
             ),
             "a record naming the file its pin lives in and neutralising one of that pin's assertions",
             Extent::Reached(Reached::UnderReacts {
@@ -309,12 +309,12 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
         ),
         //
-        // Its reaction is `the retired gate-shape reaction`, so this crate owns these too. The four are read out
+        // Its check is `the retired gate-shape check`, so this crate owns these too. The four are read out
         // of each scenario's WHEN and THEN rather than out of a shared adjective: three name shapes the
-        // reaction never looks at, and one names a shape it looks straight at and declines to judge.
+        // check never looks at, and one names a shape it looks straight at and declines to judge.
         // --- publish-source-integrity ---
         //
-        // Its reaction is a shell gate, and `PINNED-BY` resolves only a harness-registered Rust function — so
+        // Its check is a Rust gate invoked by shell, and `PINNED-BY` resolves only a harness-registered Rust function — so
         // its citation is `tests/publish_source_integrity.rs`, a file that exists for this one bound. The shell
         // gate defends it too, and cannot be cited.
         BoundDecl::pinned(
@@ -339,9 +339,9 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         // --- projection-register ---
         //
-        // Its reaction is `tests/projection_register.rs`, so this crate owns these too. The two sit on opposite
+        // Its check is `tests/projection_register.rs`, so this crate owns these too. The two sit on opposite
         // sides of the false-negative line, which is exactly what the retired adjective slot could not express:
-        // one is a shape the reaction never evaluates, the other a shape it can read and does not react to.
+        // one is a shape the check never evaluates, the other a shape it can read and does not flag.
         BoundDecl::pinned(
             BoundId::new(
                 "projection-register/whether-a-stated-regeneration-command-regenerates-its-document-is-not-observed-a-stated-bound",
@@ -350,7 +350,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::OutOfReach {
                 because: "the header is read and never evaluated; running the command would mean re-entering the \
                           `cargo test` harness already running, or — for the shell mechanism — writing the \
-                          projection into the tree the reaction is judging, which every gate in this family is \
+                          projection into the tree the check is judging, which every gate in this family is \
                           forbidden from doing".into(),
             },
             "a_regeneration_command_is_registered_and_never_run",
@@ -364,8 +364,8 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::Reached(Reached::UnderReacts {
                 because: "it is absent from both sides of the correspondence, so that correspondence holds over \
                           a surface missing a member and the register reports itself complete".into(),
-                // Not out of reach: the third mechanism's source sits in the tree this reaction already reads,
-                // so it is seen and not reacted to. Recording it as out-of-reach would be the misclassification
+                // Not out of reach: the third mechanism's source sits in the tree this check already reads,
+                // so it is seen and not flagged. Recording it as out-of-reach would be the misclassification
                 // this model exists to prevent — a silent false negative dressed as an invisible shape.
                 owner: Owner::Engine,
             }),
@@ -375,9 +375,9 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         //
         // How many there are is not written here. The block grew from four to seven across two review rounds
         // while a header saying "four" sat on top of it, which is the same typed census this capability's own
-        // reaction was made to stop writing.
+        // check was made to stop writing.
         //
-        // Its reaction is a shell gate, and `PINNED-BY` resolves only a harness-registered Rust function — so
+        // Its check is a Rust gate invoked by shell, and `PINNED-BY` resolves only a harness-registered Rust function — so
         // all but one cite `tests/release_coherence.rs`, a file that exists for them. The twin defends every
         // one of those too, through the same fixture builder, and cannot be cited.
         //
@@ -388,7 +388,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // spans, a gate named as unquoted prose passed, and that was declared. Adversarial review reproduced
         // three false negatives against the span reading — a span carrying a command, a double-backtick span,
         // an inline span wrapped across a line — and the word-run scan that closes all three reaches unquoted
-        // prose too. Its WHEN was rerun against the new tree and the reaction fires, which is what retires a
+        // prose too. Its WHEN was rerun against the new tree and the check fires, which is what retires a
         // bound rather than an argument that it should have closed.
         BoundDecl::pinned(
             BoundId::new(
@@ -397,7 +397,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "an entry in a dated `## [X.Y.Z] - DATE` section naming a path under `scripts/`",
             // Under-reacting rather than not-a-violation, and the distinction was argued in review rather than
             // assumed. Both values derive the same defence — does not react — so no run can separate them, and
-            // the first draft picked the wrong one. `NotAViolation` says the reaction is RIGHT because nothing
+            // the first draft picked the wrong one. `NotAViolation` says the check is RIGHT because nothing
             // is wrong. Something is: nine entries in the released `[0.4.0]` name machinery an adopter reading
             // that section still meets, which is exactly the harm this rule exists to stop. What is refused is
             // the REPAIR, not the diagnosis — and a limit accepted for a policy reason is a declared false
@@ -467,7 +467,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 because: "directories are derived slash-terminated, and stripping that slash leaves a word \
                           indistinguishable from ordinary prose — `scripts` is an English plural this document \
                           already uses as one. Admitting the unslashed form for deeper names only, where the \
-                          collision is less likely, would make the reaction judge which of its own keys read \
+                          collision is less likely, would make the check judge which of its own keys read \
                           as English"
                     .into(),
                 owner: Owner::Engine,
@@ -482,7 +482,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::Reached(Reached::UnderReacts {
                 because: "a word is a maximal run of path characters, so a scheme and host fuse with the path \
                           into one run that equals no tracked name; splitting a URL into its path would make \
-                          the reaction judge a foreign host's layout as though it were this repository's"
+                          the check judge a foreign host's layout as though it were this repository's"
                     .into(),
                 owner: Owner::Engine,
             }),
@@ -494,7 +494,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             ),
             "a `### ` line inside a fenced code block, followed by entries that name machinery",
             Extent::Reached(Reached::UnderReacts {
-                because: "the reaction walks the document's line grammar and does not track fences, so such a \
+                because: "the check walks the document's line grammar and does not track fences, so such a \
                           line sets the heading in force and can name the one exempt heading; it is latent \
                           rather than live — this repository's changelog carries no fenced block — and closing \
                           it means a second, stateful reading of a document this gate reads once"

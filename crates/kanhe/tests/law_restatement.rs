@@ -1,10 +1,10 @@
 //! Collation: authored text against the law it describes.
 //!
 //! The membership of a declared allowlist belongs to `shengmo::law` and its projection. A second copy in a
-//! comment or a document is a source of truth that goes stale with no reaction to say so, and the repair is
+//! comment or a document is a source of truth that goes stale with no check to say so, and the repair is
 //! always the same — point at `AGENTS.self-law.md` instead of restating what it renders.
 //!
-//! This reaction read **one** crate's line comments against **one** dimension's allowlist until this change.
+//! This check read **one** crate's line comments against **one** dimension's allowlist until this change.
 //! Measured, `PROJECT.md` named `serde_json`, `xuanji` and `xingbiao` — every member of 圭表's live
 //! allowlist — in a file class nothing scanned. A rule enforced at one site and not its neighbour is a rule
 //! about the site.
@@ -72,7 +72,7 @@ fn shell_comments_do_not_restate_the_dependency_allowlist() {
                     !comment_restates_the_declaration(line),
                     "{}:{} names the shell dependency declaration in a comment; refer to \
                      AGENTS.self-law.md instead. This reads a comment's text and not its purpose, so it \
-                     also refuses a doc example of the DSL — a declared over-reaction of \
+                     also refuses a doc example of the DSL — a declared false refusal of \
                      `self-law-projection`, not a case to work around",
                     source.display(),
                     index + 1
@@ -134,14 +134,14 @@ fn no_governance_document_restates_a_declared_allowlist() {
     let paths: Vec<&str> = listing.lines().filter(|p| !p.is_empty()).collect();
     assert!(
         !paths.is_empty(),
-        "no tracked Markdown was enumerated, so this reaction would report clean over nothing"
+        "no tracked Markdown was enumerated, so this check would report clean over nothing"
     );
 
     let allowlists =
         kanhe::restatement::allowlists(constitution().static_boundaries().boundaries());
     assert!(
         !allowlists.is_empty(),
-        "the live constitution declares no dependency allowlist, so this reaction compares against nothing"
+        "the live constitution declares no dependency allowlist, so this check compares against nothing"
     );
 
     let mut offences = Vec::new();

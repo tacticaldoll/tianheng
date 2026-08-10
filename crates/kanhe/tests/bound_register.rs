@@ -1,7 +1,7 @@
-//! Self-governance reaction: the observation bound register.
+//! Repository check: the observation bound register.
 //!
 //! Every observation bound this family declares lives as a scenario in `openspec/specs/*/spec.md` whose
-//! heading marks it one. This reaction holds each of them to carrying exactly one citation — a `PINNED-BY`
+//! heading marks it one. This check holds each of them to carrying exactly one citation — a `PINNED-BY`
 //! naming a test the harness registers, or an `UNPINNED` naming a tracker the repository tracks — resolves
 //! every reference, refuses a bound stated in prose and declared nowhere, and generates
 //! `docs/observation-bounds.md` from what it read.
@@ -10,7 +10,7 @@
 //! `observation-bound-register` makes that normative, and it is the discipline this repository adopted after
 //! measuring and rejecting the text route three times: a `pinned by` line could otherwise be satisfied by a
 //! definition commented out, inside a string literal, removed by a `cfg`, or trapped in an uninvoked macro.
-//! So this reaction runs `cargo test -p <member> -- --list` per package — per package rather than per
+//! So this check runs `cargo test -p <member> -- --list` per package — per package rather than per
 //! workspace, because the enumeration carries no crate label while a citation may be crate-qualified, and
 //! this repository already has one test name registered in two crates.
 //!
@@ -153,7 +153,7 @@ fn every_pinning_citation_resolves_to_one_registered_test() {
             };
             if !ascii_ident(name) || citation.matches("::").count() > 1 {
                 offences.push(format!(
-                "  {at} is PINNED-BY `{citation}`, which is not a citation this reaction can resolve"
+                "  {at} is PINNED-BY `{citation}`, which is not a citation this check can resolve"
             ));
                 continue;
             }
@@ -312,7 +312,7 @@ regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test b
 **What this document does not claim.** It lists the bounds the specs *state in a recognizable form*: a
 scenario whose heading marks it a bound. The undeclared-prose direction that keeps this list honest has
 three known residuals and one deliberate exemption, all four enumerated here rather than left in the
-reaction's comments, because a residual a reader cannot see is one the register is lying about:
+check's comments, because a residual a reader cannot see is one the register is lying about:
 
 1. **Unrecognized wording.** A bound worded outside the scanned form — "out-of-scope", "does not claim
    to observe", "a stated, inherited bound" — is invisible to the scan.
@@ -322,7 +322,7 @@ reaction's comments, because a residual a reader cannot see is one the register 
    how many bounds that prose states, or whether the bound it names is one of them. This is how a
    retired `#[path]` bound survived two sweeps inside a sentence listing four inherited bounds behind
    one reference to a fifth. The discipline is one reference per stated bound, and it is the author's:
-   closing it would mean reading which bounds a sentence lists, which no reaction can do. Scanning
+   closing it would mean reading which bounds a sentence lists, which no repository check can do. Scanning
    paragraphs instead of lines was measured against that defect and would not have caught it, because
    the paragraph carries the same clearing reference.
 
@@ -384,7 +384,7 @@ fn render_projection(bounds: &[Bound]) -> String {
                 }
                 other => panic!(
                     "bound {} reached the projection with an invalid citation {other:?} — the citation \
-                     reaction must refuse it before this one renders it",
+                     check must refuse it before this one renders it",
                     bound.id
                 ),
             }
@@ -409,7 +409,7 @@ fn the_register_projection_is_generated_and_fresh() {
 }
 
 // The census this file once swept for lives in `census.rs`, declared beside every other, so one
-// reaction holds them all. Two implementations of one comparison is what that file exists to end.
+// check holds them all. Two implementations of one comparison is what that file exists to end.
 
 /// A citation answered twice fails — and the asymmetry with `PINNED-BY` is deliberate, so it has a control.
 ///
@@ -438,7 +438,7 @@ fn a_citation_answered_twice_fails_whichever_answer_is_repeated() {
     );
 
     // The control. Flattening the two would break a live declaration: `observation-bound-model` states that
-    // several `PINNED-BY` lines are all retained, and a first draft of this reaction read the rule as a
+    // several `PINNED-BY` lines are all retained, and a first draft of this check read the rule as a
     // bullet count and split the one live instance in two.
     let repeated_pinned = bounds_in(
         "some-capability",

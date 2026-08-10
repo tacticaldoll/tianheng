@@ -1,4 +1,4 @@
-//! Self-governance reaction: the squash message a merge is about to record.
+//! Repository check: the squash message a merge is about to record.
 //!
 //! It stands before a record. A merged squash on a release branch cannot be repaired: amending it changes its
 //! hash, and the pull request's merge record cites that hash, so the two would name different things. The
@@ -74,7 +74,7 @@ fn a_subject_that_is_its_title_with_a_body_is_accepted() {
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
-/// The defect this reaction was built for, in the exact shape it took.
+/// The defect this check was built for, in the exact shape it took.
 #[test]
 fn a_subject_carrying_a_pull_request_serial_is_a_violation() {
     refuse(
@@ -192,7 +192,7 @@ fn a_bullet_body_that_is_not_the_commit_subjects_is_accepted() {
 }
 
 /// Without the commit subjects the judgement refuses rather than falling back to the shape, which is the
-/// over-reaction reading them removes.
+/// false refusal reading them removes.
 #[test]
 fn a_body_judged_without_the_commit_subjects_cannot_be_judged() {
     let refusal = judge(OK_SUBJECT, "- a bullet\n", OK_SUBJECT, &[])
@@ -227,9 +227,9 @@ fn a_body_that_is_a_bare_commit_list_is_a_violation() {
     );
 }
 
-/// `rust-repository-reactions/a-hook-is-proposed-for-this-rule-a-stated-bound`
+/// `repository-checks/a-hook-is-proposed-for-this-rule-a-stated-bound`
 ///
-/// `OutOfReach`, owned by the engine. This reaction guards the **sanctioned path** to a merge, not every path.
+/// `OutOfReach`, owned by the engine. This check guards the **sanctioned path** to a merge, not every path.
 /// A merge made in the GitHub web UI reaches no wrapper, and neither a `commit-msg` hook nor the repository's
 /// squash-title setting can hold the rule at all — the first because a squash merge creates no local commit,
 /// the second because both of its values append the serial.
@@ -238,7 +238,7 @@ fn a_body_that_is_a_bare_commit_list_is_a_violation() {
 /// `COMMIT_OR_PR_TITLE`, and nine subjects in its history carry the serial that setting produced.
 #[test]
 fn a_merge_made_outside_the_wrapper_is_not_observed() {
-    // What the reaction does hold: a message handed to it.
+    // What the check does hold: a message handed to it.
     assert!(judge(OK_SUBJECT, OK_BODY, OK_SUBJECT, &commits()).is_ok());
     assert!(
         judge(
@@ -257,7 +257,7 @@ fn a_merge_made_outside_the_wrapper_is_not_observed() {
     assert_eq!(
         observed_without_a_message.err().map(|r| r.kind),
         Some(Kind::CannotJudge),
-        "with no message at all the reaction can only refuse to judge, which is exactly what it can say \
+        "with no message at all the check can only refuse to judge, which is exactly what it can say \
          about a merge made outside the wrapper"
     );
 }

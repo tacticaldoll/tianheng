@@ -1,4 +1,4 @@
-//! Self-governance reaction: Definition of Done coherence between AGENTS.md and .github/workflows/ci.yml.
+//! Repository check: Definition of Done coherence between AGENTS.md and .github/workflows/ci.yml.
 //!
 //! Asserts that every command listed in AGENTS.md's Definition of Done block appears
 //! in .github/workflows/ci.yml so local pre-flight gates remain a strict subset of CI.

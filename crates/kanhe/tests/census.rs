@@ -1,8 +1,8 @@
-//! Self-governance reaction: every declared census agrees with the reaction that produces it.
+//! Repository check: every declared census agrees with the check that produces it.
 //!
 //! Each census below is **produced** by the enumeration it is about — the register's own parse — never by a
 //! second reading of the same source. A second parse would let the census and
-//! the reaction disagree, which is the drift this exists to end.
+//! the check disagree, which is the drift this exists to end.
 
 use kanhe::bound_register_parse as register;
 use kanhe::census;
@@ -42,7 +42,7 @@ fn every_declared_census_agrees_with_what_produces_it() {
         .count();
     // What is NOT declared here, and why. `[Unreleased]`'s prose states how many entries named this
     // repository's machinery BEFORE the section was collapsed — a historical observation, not a live count,
-    // and the reaction that enumerates the set today produces a different and equally correct figure. A
+    // and the check that enumerates the set today produces a different and equally correct figure. A
     // census holds a figure about the CURRENT tree; a figure about a past state is a record, and holding it
     // to today's enumeration would demand that the record change every time the tree does. That residual is
     // declared as a bound rather than approximated.
@@ -62,7 +62,7 @@ fn every_declared_census_agrees_with_what_produces_it() {
     let offences = sweep(&root, &files, &declared);
     assert!(
         offences.is_empty(),
-        "a hand-written census disagrees with the reaction that enumerates its set:\n{}",
+        "a hand-written census disagrees with the check that enumerates its set:\n{}",
         offences.join("\n")
     );
 }
@@ -96,11 +96,11 @@ fn the_sweep_names_a_disagreement_it_is_shown() {
     );
 }
 
-/// `rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
+/// `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
 ///
 /// `UnderReacts`, owned by the engine. The declaration is the coverage: a figure written in a phrasing no
 /// census names is unheld. Reaching it needs a judgement over prose, the instrument this repository designed,
-/// measured three times and rejected — and `AGENTS.md` carries the other half as a rule with no reaction.
+/// measured three times and rejected — and `AGENTS.md` carries the other half as a rule with no check.
 #[test]
 fn a_count_in_an_undeclared_phrasing_is_a_stated_bound() {
     let Some(root) = workspace_root() else {

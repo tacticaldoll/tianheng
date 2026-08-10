@@ -13,7 +13,7 @@ regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test b
 **What this document does not claim.** It lists the bounds the specs *state in a recognizable form*: a
 scenario whose heading marks it a bound. The undeclared-prose direction that keeps this list honest has
 three known residuals and one deliberate exemption, all four enumerated here rather than left in the
-reaction's comments, because a residual a reader cannot see is one the register is lying about:
+check's comments, because a residual a reader cannot see is one the register is lying about:
 
 1. **Unrecognized wording.** A bound worded outside the scanned form — "out-of-scope", "does not claim
    to observe", "a stated, inherited bound" — is invisible to the scan.
@@ -23,7 +23,7 @@ reaction's comments, because a residual a reader cannot see is one the register 
    how many bounds that prose states, or whether the bound it names is one of them. This is how a
    retired `#[path]` bound survived two sweeps inside a sentence listing four inherited bounds behind
    one reference to a fifth. The discipline is one reference per stated bound, and it is the author's:
-   closing it would mean reading which bounds a sentence lists, which no reaction can do. Scanning
+   closing it would mean reading which bounds a sentence lists, which no repository check can do. Scanning
    paragraphs instead of lines was measured against that defect and would not have caught it, because
    the paragraph carries the same clearing reference.
 
@@ -141,11 +141,11 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## observation-bound-register
 
-### `observation-bound-register/which-member-holds-a-reaction-is-a-judgement-a-stated-bound`
+### `observation-bound-register/which-member-holds-a-check-is-a-judgement-a-stated-bound`
 
-> nothing observes whether it landed in the right one. The split is by what a reaction judges — the law and the delivered product on one side, this repository's record on the other — and two mechanical rules were each measured unreliable: a text scan reads a comment naming `AGENTS.md` as governance while a reaction scanning every tracked file names nothing, and the workspace marker means both "this needs the repository as its subject" and "this needs a fixture". Position is the declaration; the join below catches a **capability** named wrongly, never a member chosen wrongly
+> nothing observes whether it landed in the right one. The split is by what a check judges — the law and the delivered product on one side, this repository's record on the other — and two mechanical rules were each measured unreliable: a text scan reads a comment naming `AGENTS.md` as governance while a check scanning every tracked file names nothing, and the workspace marker means both "this needs the repository as its subject" and "this needs a fixture". Position is the declaration; the join below catches a **capability** named wrongly, never a member chosen wrongly
 
-- **unpinned**, tracked by: `BACKLOG.md` — *which governance member a reaction belongs to is unobserved*
+- **unpinned**, tracked by: `BACKLOG.md` — *which governance member a check belongs to is unobserved*
 
 ### `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound`
 
@@ -165,7 +165,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
-### `observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound`
+### `observation-bound-register/whether-a-record-perturbs-the-check-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound`
 
 > the pin fails and the citation is counted as exercised, because a killed pin does not say what killed it. Separating the two by refusing a record that edits its pin's file was measured against this tree's own first record, which legitimately edits the file its pin lives in, so the rule would refuse a conforming shape
 
@@ -225,13 +225,13 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `projection-register/whether-a-stated-regeneration-command-regenerates-its-document-is-not-observed-a-stated-bound`
 
-> the reaction does not observe it, a stated bound: verifying the claim means running the command, and both mechanisms refuse — a Rust `BLESS=1 cargo test` re-enters the harness already running, and the shell one **writes** the projection, which would make the reaction mutate the tree it judges
+> the check does not observe it, a stated bound: verifying the claim means running the command, and both mechanisms refuse — a Rust `BLESS=1 cargo test` re-enters the harness already running, and the shell one **writes** the projection, which would make the check mutate the tree it judges
 
 - **pinned by**: `a_regeneration_command_is_registered_and_never_run`
 
 ### `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound`
 
-> the reaction does not observe it, a stated bound: it is absent from both sides of the correspondence, which then holds over a surface missing a member. This is a false negative rather than a limit of the corpus — the third mechanism's source sits in the tree the reaction already reads — so it is owned by the engine
+> the check does not observe it, a stated bound: it is absent from both sides of the correspondence, which then holds over a surface missing a member. This is a false negative rather than a limit of the corpus — the third mechanism's source sits in the tree the check already reads — so it is owned by the engine
 
 - **pinned by**: `a_third_generation_mechanism_is_not_recognized`
 
@@ -287,6 +287,32 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **pinned by**: `a_directory_named_without_its_slash_is_a_stated_bound`
 
+## repository-checks
+
+### `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
+
+> no repository check fires. The declaration is the coverage; reaching further needs a judgement over prose, which is the instrument measured three times and rejected. `AGENTS.md` carries the other half as a rule with no check: a count of something this repository does not produce is not written
+
+- **pinned by**: `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
+
+### `repository-checks/a-hook-is-proposed-for-this-rule-a-stated-bound`
+
+> neither holds it: a squash merge runs on GitHub's servers so no local commit exists and no hook runs, and both values of that setting append the serial. Nor can a merge made in the browser be reached by a wrapper. The compliance point is one string passed at merge time, and this check guards the sanctioned path to it rather than every path
+
+- **pinned by**: `a_merge_made_outside_the_wrapper_is_not_observed`
+
+### `repository-checks/files-no-capability-claims-a-stated-bound`
+
+> no repository check fires. Subjects are declared where a capability has something to say, and requiring them to tile the tree would buy coverage with thirty-six claims nobody could defend. The blindness is declared so that a clean report is not read as a complete one, and the check prints how many tracked paths went unclaimed rather than leaving the reader to assume none did
+
+- **pinned by**: `files_no_capability_claims_are_reported_rather_than_implied_judged`
+
+### `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound`
+
+> no repository check fires. Both assertions guard the sanctioned path; reaching further would mean observing the operator's shell or GitHub's servers rather than this repository. The pinning check narrows this without closing it: it keeps the sanctioned path sanctioned, so what is left is choosing not to use it rather than using it unguarded
+
+- **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
+
 ## runtime-origin-assertion
 
 ### `runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-bound`
@@ -325,32 +351,6 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **pinned by**: `a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directory`
 
-## rust-repository-reactions
-
-### `rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
-
-> nothing reacts. The declaration is the coverage; reaching further needs a judgement over prose, which is the instrument measured three times and rejected. `AGENTS.md` carries the other half as a rule with no reaction: a count of something this repository does not produce is not written
-
-- **pinned by**: `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
-
-### `rust-repository-reactions/a-hook-is-proposed-for-this-rule-a-stated-bound`
-
-> neither holds it: a squash merge runs on GitHub's servers so no local commit exists and no hook runs, and both values of that setting append the serial. Nor can a merge made in the browser be reached by a wrapper. The compliance point is one string passed at merge time, and this reaction guards the sanctioned path to it rather than every path
-
-- **pinned by**: `a_merge_made_outside_the_wrapper_is_not_observed`
-
-### `rust-repository-reactions/files-no-capability-claims-a-stated-bound`
-
-> nothing reacts to it. Subjects are declared where a capability has something to say, and requiring them to tile the tree would buy coverage with thirty-six claims nobody could defend. The blindness is declared so that a clean report is not read as a complete one, and the reaction prints how many tracked paths went unclaimed rather than leaving the reader to assume none did
-
-- **pinned by**: `files_no_capability_claims_are_reported_rather_than_implied_judged`
-
-### `rust-repository-reactions/a-gate-reached-without-the-wrapper-a-stated-bound`
-
-> nothing reacts. Both assertions guard the sanctioned path; reaching further would mean observing the operator's shell or GitHub's servers rather than this repository. The pinning reaction narrows this without closing it: it keeps the sanctioned path sanctioned, so what is left is choosing not to use it rather than using it unguarded
-
-- **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
-
 ## self-law-projection
 
 ### `self-law-projection/a-doc-example-of-the-dependency-dsl-is-refused-a-stated-bound`
@@ -367,27 +367,27 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `self-law-projection/a-reason-that-paraphrases-the-law-is-refused-a-stated-bound`
 
-> the reaction **fires**, refusing a reason that genuinely states the law. Measured by writing that WHEN into the tree: paraphrasing `guibiao`'s clause produces *"dimension boundary for `guibiao` dropped the `三儀 ⊥ 三儀` clause"*. The direction is the safe one — an author meets a refusal to argue with — and closing it needs the reaction to decide two wordings state one law, a judgement over prose measured and rejected here
+> the reaction **fires**, refusing a reason that genuinely states the law. Measured by writing that WHEN into the tree: paraphrasing `guibiao`'s clause produces *"dimension boundary for `guibiao` dropped the `三儀 ⊥ 三儀` clause"*. The direction is the safe one — an author meets a refusal to argue with — and closing it needs the check to decide two wordings state one law, a judgement over prose measured and rejected here
 
-- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
+- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence check*
 
 ### `self-law-projection/a-reason-carrying-the-clause-while-negating-the-law-is-not-observed-a-stated-bound`
 
 > nothing reacts, and `AGENTS.self-law.md` projects the negation to every agent that loads it. This is the serious direction of the pair: the teaching surface can carry the law's opposite while satisfying the check that exists to keep the law taught. Measured, with the projection blessed and the whole suite green
 
-- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
+- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence check*
 
-### `self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound`
+### `self-law-projection/a-dimension-absent-from-the-check-s-own-list-is-not-examined-a-stated-bound`
 
 > its allowlist is never examined, and the set-coverage assertion cannot notice, because the set it compares is produced by filtering on that same list. Measured: removing `guibiao` from the literal leaves a `guibiao` allowlist naming `hunyi` green. Closing it needs the dimension set derived from something that enumerates it rather than typed beside it
 
-- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
+- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence check*
 
 ### `self-law-projection/a-workspace-dependency-allowlist-is-not-examined-a-stated-bound`
 
 > the reaction never examines it, though that rule governs workspace-member edges specifically and is the more natural one for this law. Measured: a second `guibiao` boundary of that variant naming `hunyi` is green, and set coverage still reads the three dimensions
 
-- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
+- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence check*
 
 ## semantic-async-exposure-boundary
 

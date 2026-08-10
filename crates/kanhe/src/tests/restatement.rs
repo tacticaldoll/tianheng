@@ -20,13 +20,13 @@ fn a_doc_example_of_the_dependency_dsl_is_refused() {
             "/// CrateBoundary::crate_(\"x\").restrict_dependencies_to([\"y\"])"
         ),
         "a doc example of the DSL is refused, though it restates nothing about this shell — the declared \
-         over-reaction"
+         false refusal"
     );
     assert!(
         comment_restates_the_declaration(
             "// the shell's own restrict_dependencies_to(guibiao, hunyi) list"
         ),
-        "the control in the other direction: a real restatement is what the reaction is for"
+        "the control in the other direction: a real restatement is what the check is for"
     );
     assert!(
         !comment_restates_the_declaration(
@@ -54,7 +54,7 @@ fn a_comment_naming_every_member_for_another_reason_is_refused() {
             "//! The shell composes guibiao, hunyi and louke, and serializes its report with serde_json.\n",
             &allowlist
         ),
-        "a block naming the members for another reason is refused — the declared over-reaction"
+        "a block naming the members for another reason is refused — the declared false refusal"
     );
     assert!(
         !comment_block_copies_allowlist(

@@ -20,7 +20,7 @@
 # argument. It was stated as an accepted bound here rather than refused, on the reasoning that the
 # caller is the one human authorized to publish at all; the gate beside this one exists because
 # "publish `main`, not the release branch" was likewise stated and then missed in the same window it
-# was written, and a rule that has been stated and then missed needs a reaction rather than another
+# was written, and a rule that has been stated and then missed needs a check rather than another
 # sentence. Four lines is what it costs, and no legitimate publish passes it.
 #
 # What is still forwarded, deliberately: `-p`/`--package`, `--dry-run`, `--allow-dirty` (which the
@@ -46,7 +46,7 @@ for arg in "$@"; do
     esac
 done
 
-# The source gate. It lives in Rust with every other self-governance reaction and does not run in
+# The source gate. It lives in Rust with the other repository gates and does not run in
 # development — no development checkout is a release snapshot — so it is asked for explicitly here, the one
 # moment it can answer. A failure aborts before `cargo publish`, which is the point: the act below is
 # irreversible.

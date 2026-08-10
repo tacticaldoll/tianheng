@@ -26,7 +26,7 @@ them.
 
 - `tianheng::observation_bounds()` is retired before its first published appearance. Its residual membership
   described only this repository's unpublished governance: self-law projection declarations now live beside
-  Shengmo's dogfood reaction, and the remaining repository declarations live beside Kanhe's record and
+  Shengmo's dogfood gates, and the remaining repository declarations live beside Kanhe's record and
   coherence checks. Direct callers of the unreleased checkout must stop using the shell entrypoint; v0.4.0
   adopters take no action. `BoundDecl`, `Extent`, dimension observers, evaluators, reports, and every product
   architecture-boundary declaration remain unchanged.
@@ -36,6 +36,13 @@ them.
   message at each operator-facing judgement boundary.
 
 ### Documentation
+
+- Product vocabulary now follows the boundary already present in the manifests: **product** means publishable
+  crates, **reaction** means their observable boundary behavior, Shengmo supplies dogfood gates that invoke
+  those reactions, Kanhe supplies repository checks, and shell/CI only orchestrate them. The unpublished
+  capability formerly called `rust-repository-reactions` is therefore `repository-checks`; its spec, bound ids,
+  fixtures, and generated projections move together. No published API, outcome, report, exit class, manifest,
+  or product law changes, so released adopters take no action.
 
 - **`AGENTS.md` gains *A repair loop is a diagnosis, not a schedule*.** Three consecutive repair rounds on one
   text reader produced findings every time, and across all three **not one was a new code defect** — every
@@ -813,13 +820,13 @@ no adopter runs. They are here rather than under the adopter headings above beca
   reach their gate through `cargo test … -- --exact <name>`, and `libtest` exits `0` when that filter selects
   nothing — measured, and `0` again for an `#[ignore]`d test. So the exit status they read answers *did the
   selected tests pass* while the question they ask is *did the gate judge this act*. Each now requires the run
-  to report exactly one passing test, and a reaction pins every `--exact <ident>` a tracked script cites to
+  to report exactly one passing test, and a repository check pins every `--exact <ident>` a tracked script cites to
   the `--test` target of the same invocation. Both are needed and measurement says so: `--list` includes an
-  ignored test, so the reaction cannot see a silenced gate, while the wrapper's `1 passed` can.
+  ignored test, so the check cannot see a silenced gate, while the wrapper's `1 passed` can.
 
 - **The filing join accepted one claimant, and that could not catch the defect it was written from.** Where
   two capabilities' subjects overlap — `scripts/publish.sh` is claimed both by `publish-source-integrity` and,
-  through `scripts/*.sh`, by `rust-repository-reactions` — naming either satisfied the join, so the original
+  through `scripts/*.sh`, by `repository-checks` — naming either satisfied the join, so the original
   misfiling would have passed. The direction asserting otherwise was built on a **constructed** claim map
   rather than the declared subjects, which is why it was green. It now reads this repository's own
   declarations, and every claimant must be accounted for: named as modified, or named with the reason its
@@ -828,22 +835,21 @@ no adopter runs. They are here rather than under the adopter headings above beca
 - **Which capability a requirement belongs to is now checked where it is decided.** It was chosen once, in a
   proposal, and held by nothing — and it went wrong twice in one window, both times caught by a reader. Every
   capability declares a `## Subject` (the tracked-path globs it governs, resolved by `git ls-files` so
-  membership is produced rather than modelled), and a reaction joins each active change's **diff against its
+  membership is produced rather than modelled), and a repository check joins each active change's **diff against its
   base** to the capabilities its proposal names. Reading the touched set from the change's own prose would
   compare the list against something written by the same decision. Two bounds are declared with it: subjects
-  do not tile the repository, and which governance member a reaction belongs to is unobserved.
+  do not tile the repository, and which governance member a check belongs to is unobserved.
 
-- **The capability holding this repository's reactions is renamed `rust-repository-reactions`.** Its old name
+- **The capability holding this repository's checks is named `repository-checks`.** Its earlier name
   claimed self-governance for a population that mostly collates a record and reaches no product contract, and
-  a name is what a reader consults before filing a requirement. **Four published bound ids change value** —
-  they are derived as `<capability>/<scenario-slug>` and exported through `observation_bounds()`, so pinning
-  the old strings would have converted every one into an assignment and defeated the rule that makes them
-  checkable.
+  a name is what a reader consults before filing a requirement. Its repository-only bound ids follow the
+  capability identity; the product no longer exports this unpublished catalog, so released adopters take no
+  action.
 
 - **The governance apparatus shipped to every adopter, and that is why it was misnamed.** `cargo package
-  --list -p tianheng` carried all 50 files under `tests/`: every reaction judging this repository's changelog,
+  --list -p tianheng` carried all 50 files under `tests/`: every check judging this repository's changelog,
   squash messages, specs and documents reached every adopter, where it could only detect no workspace and
-  return. The capability governing those reactions gives shipping in **zero** packages as its own criterion
+  return. The capability governing those checks gives shipping in **zero** packages as its own criterion
   for governance rather than product, so by its own test they were product. Sharing a directory is also how a
   governance document came to state that every Rust integration test "runs Tianheng's own reactions against
   the workspace" — false for 20 of the 25 then present, none of which reached the shipped API at all.
@@ -1054,19 +1060,19 @@ no adopter runs. They are here rather than under the adopter headings above beca
   inline span wrapped across a source line. A name is a **word**: a maximal run of path characters required to
   equal a tracked name. Seven limits are declared, six pinned.
 
-- **The self-governance reactions are Rust tests, and the repair of that move is the larger half of this
+- **The repository checks and self-governance dogfood gates are Rust tests, and the repair of that move is the larger half of this
   entry.** `scripts/` held seven `check_*.sh` gates, eleven `test_*.sh` twins and seven libraries — 6,827 lines,
   4,000 of them once blanks and comments are dropped, 56% of those twin matrices that existed only because a gate was a shell script. In Rust a
   test's failure mode is asserted inline, so the twin obligation buys nothing and the pairing retires with it;
   `gate-shape-contract`, the capability specifying that pairing, is retired for the same reason, its own
   projection having reached `0 gates, 11 properties each` and reported clean over it.
 
-  **The move landed with six of the reactions inert, and each was measured rather than reasoned about.** The
+  **The move landed with six of the checks inert, and each was measured rather than reasoned about.** The
   bound register collected citations into a list and asserted only that the list was non-empty — it never read
   `PINNED-BY` once, while its doc comment claimed it did; its projection check read the document and compared
   it to itself, an assertion that cannot fail and that under `BLESS` wrote the file back to itself. Pin-bites
   counted tab-separated lines. Release coherence kept only its bound pins, which assert *silence* and passed
-  trivially against a reaction that no longer existed. Reference integrity read markdown links only, and read
+  trivially against a check that no longer existed. Reference integrity read markdown links only, and read
   the worktree rather than the index. The examples suite ran `cargo check` and discarded the result. The
   publish-source gate asserted that `Cargo.toml` exists and that `git status` runs — in front of an
   irreversible act — while `scripts/publish.sh` still called a file the move had deleted, exiting **127**.

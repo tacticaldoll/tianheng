@@ -1,13 +1,13 @@
-//! `projection-register`'s reaction: the inventory of this repository's generated documents.
+//! `projection-register`'s check: the inventory of this repository's generated documents.
 //!
 //! Four documents are blessed and diffed by something, and until this existed the list of them was prose in
-//! `AGENTS.md` — written across two paragraphs at four different times, checked by nothing. A fifth reaction
+//! `AGENTS.md` — written across two paragraphs at four different times, checked by nothing. A fifth check
 //! could project a document, hold it fresh, be named nowhere, and no gate or test would find out. That is the
 //! class the two changes before this one closed a level down, carried by the mechanism whose whole purpose is to
 //! stop documents drifting.
 //!
 //! What it owns is one obligation the projections' own capabilities do not: that the **set** of such documents is
-//! known, that each has a reaction behind its warning, and that a reader can find each one. Freshness stays with
+//! known, that each has a check behind its warning, and that a reader can find each one. Freshness stays with
 //! each holder — a second implementation of that rule, inside the register built to end duplication, would refute
 //! itself.
 
@@ -19,7 +19,7 @@ use tianheng::testing::assert_projection_matches;
 
 use kanhe::region::{Header, Prose, Source, declares_itself_generated};
 
-/// This reaction's own projection, which is itself a member of the register.
+/// This check's own projection, which is itself a member of the register.
 const PROJECTION: &str = "docs/projection-register.md";
 
 /// The file that **defines** the shared blessing rule is not a holder of anything.
@@ -34,7 +34,7 @@ const RULE_CALLS: [&str; 2] = ["assert_projection_matches(", "assert_projection_
 /// The document a reader is told to open first, and therefore the one every projection must be named in.
 const READERS_ENTRY_POINT: &str = "AGENTS.md";
 
-/// The repository root, or `None` outside a checkout: the shared locator with this reaction\'s own
+/// The repository root, or `None` outside a checkout: the shared locator with this check\'s own
 /// prerequisite.
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
@@ -96,7 +96,7 @@ fn paths_named_in_header(header: &Header<'_>, tracked_files: &BTreeSet<&str>) ->
 /// The definition is recognized as a **line beginning** with the signature, not as a substring. The looser form
 /// excluded *this file*, which names the signature in a constant and therefore contains it: a self-reference trap,
 /// and the third in this capability after the specification quoting the marker it requires and the register having
-/// to bless itself twice. The lesson each time is the same — when a reaction's subject is text, the reaction's own
+/// to bless itself twice. The lesson each time is the same — when a check's subject is text, the check's own
 /// text is part of the corpus, so recognize by position or shape rather than by the bare string.
 fn defines_the_rule(source: &Source) -> bool {
     source.rust().starts_a_line_with(RULE_DEFINITION)
@@ -243,7 +243,7 @@ fn every_generated_document_has_a_holder_and_every_holder_is_registered() {
 
     // Document → holder. A file saying "do not edit by hand" whose freshness nothing asserts is a
     // hand-maintained document wearing a generated one's warning: worse than plain prose, because a reader
-    // trusts it more and no reaction defends it.
+    // trusts it more and no check defends it.
     for entry in documents.values() {
         match &entry.generator {
             None if entry.named.is_empty() => offences.push(format!(
@@ -319,7 +319,7 @@ fn every_generated_document_has_a_holder_and_every_holder_is_registered() {
 
     assert!(
         offences.is_empty(),
-        "the projection register and the reactions holding those projections disagree:\n{}",
+        "the projection register and the checks holding those projections disagree:\n{}",
         offences.join("\n")
     );
 }
@@ -359,7 +359,7 @@ fn the_register_includes_itself() {
     assert_eq!(
         own.generator.as_deref(),
         Some("crates/kanhe/tests/projection_register.rs"),
-        "the register's own projection must name this reaction as its generator"
+        "the register's own projection must name this check as its generator"
     );
 }
 
@@ -369,7 +369,7 @@ fn an_empty_surface_fails_rather_than_reporting_clean() {
         return;
     };
     // A repository with the layout and no generated document. Every property of zero documents holds, so a
-    // reaction that did not refuse here would report the register complete.
+    // check that did not refuse here would report the register complete.
     let fixture = std::env::temp_dir().join(format!(
         "tianheng-projection-register-empty-{}",
         std::process::id()
@@ -426,7 +426,7 @@ fn the_projection_register_is_fresh() {
     assert_projection_matches(&root, PROJECTION, &render(&documents, &holders));
 }
 
-/// The projection: every generated document, the reaction that holds it fresh, and the command its header names.
+/// The projection: every generated document, the check that holds it fresh, and the command its header names.
 ///
 /// The command is **printed rather than checked** — see the declared bound below — and saying so beside it is the
 /// point of printing it at all.
@@ -434,7 +434,7 @@ fn render(documents: &BTreeMap<String, Registered>, holders: &[String]) -> Strin
     let mut out = String::new();
     out.push_str("# The projection register\n\n");
     out.push_str(
-        "Every generated document in this repository, the reaction that holds it fresh, and the command its own\n\
+        "Every generated document in this repository, the check that holds it fresh, and the command its own\n\
          header names for regenerating it. Enumerated from tracked content by the marker each document carries, so\n\
          a document enters this table the moment it declares itself generated.\n\n",
     );
@@ -446,11 +446,11 @@ fn render(documents: &BTreeMap<String, Registered>, holders: &[String]) -> Strin
     out.push_str(
         "**Not freshness.** Each document's own holder asserts that its content matches what the code would\n\
          produce, and duplicating that here — inside the register built to end duplication — would refute itself.\n\
-         This table says a document is known, has a reaction behind its warning, and can be found.\n\n",
+         This table says a document is known, has a check behind its warning, and can be found.\n\n",
     );
     out.push_str(
         "**Not that the command works.** The regeneration command in each header is registered and never run.\n\
-         Verifying it would mean re-entering the `cargo test` harness already running, or letting this reaction\n\
+         Verifying it would mean re-entering the `cargo test` harness already running, or letting this check\n\
          write into the tree it judges. A header naming a command that regenerates nothing is invisible here, and\n\
          that is a declared observation bound rather than an oversight.\n\n",
     );
@@ -461,7 +461,7 @@ fn render(documents: &BTreeMap<String, Registered>, holders: &[String]) -> Strin
          can read.\n\n\
          A second was recognized until this window: a `check_*` gate writing its projection under `BLESS`. No\n\
          tracked unit is one, so that arm asserts its own emptiness rather than being pruned — if such a unit\n\
-         exists again the reaction says so, which is the difference between retiring a recognizer and\n\
+         exists again the check says so, which is the difference between retiring a recognizer and\n\
          forgetting it.\n\n",
     );
 
@@ -480,7 +480,7 @@ fn render(documents: &BTreeMap<String, Registered>, holders: &[String]) -> Strin
     }
     out.push_str(&format!("\n{} documents.\n", documents.len()));
 
-    out.push_str("\n## The reactions holding them\n\n");
+    out.push_str("\n## The checks holding them\n\n");
     out.push_str(
         "Enumerated independently of what the documents claim, because a document naming its generator is a claim\n\
          by the document and the call site is the fact:\n\n",
@@ -488,7 +488,7 @@ fn render(documents: &BTreeMap<String, Registered>, holders: &[String]) -> Strin
     for holder in holders {
         out.push_str(&format!("- `{holder}`\n"));
     }
-    out.push_str(&format!("\n{} reactions.\n", holders.len()));
+    out.push_str(&format!("\n{} checks.\n", holders.len()));
     out
 }
 
@@ -521,11 +521,11 @@ fn command_in(document: &str) -> String {
 /// `projection-register/whether-a-stated-regeneration-command-regenerates-its-document-is-not-observed-a-stated-bound`
 ///
 /// `OutOfReach`: the header is read and never evaluated. Running the command means re-entering the harness already
-/// running, or — for the shell mechanism — writing the projection into the tree the reaction is judging, which is
+/// running, or — for the shell mechanism — writing the projection into the tree the check is judging, which is
 /// the property this repository requires of every gate.
 #[test]
 fn a_regeneration_command_is_registered_and_never_run() {
-    // A document whose header names a command that cannot regenerate anything. Every property this reaction
+    // A document whose header names a command that cannot regenerate anything. Every property this check
     // checks holds: it declares itself generated, and it names exactly one tracked generator.
     let document = Source::of(
         "# A fixture projection\n\n\
@@ -543,7 +543,7 @@ fn a_regeneration_command_is_registered_and_never_run() {
         1,
         "the fixture must name exactly one generator, so nothing but the command is wrong with it"
     );
-    // And the command is a command no run of it could satisfy. The reaction reports nothing about that: nothing
+    // And the command is a command no run of it could satisfy. The check reports nothing about that: nothing
     // above is a function of it, which is what makes this a bound rather than a check.
     assert!(
         document.whole().contains("BLESS=1 false"),
@@ -554,7 +554,7 @@ fn a_regeneration_command_is_registered_and_never_run() {
 /// `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound`
 ///
 /// `UnderReacts`, owned by the **engine**. Not out of reach: the third mechanism's source sits in the tree this
-/// reaction already reads. It is seen and not reacted to, so the correspondence holds over a surface missing a
+/// check already reads. It is seen and not flagged, so the correspondence holds over a surface missing a
 /// member — which is a false negative, and recording it as out-of-reach would be the misclassification
 /// `observation-bound-model` exists to prevent.
 #[test]

@@ -4,12 +4,12 @@
 #
 # Why a wrapper rather than a documented rule. `AGENTS.md` already says the squash subject is the pull
 # request's title with no auto-appended `(#N)`; nine subjects in this repository's history carry that serial
-# anyway, the most recent on the commit that landed a reaction for a requirement enforced by nothing. The
+# anyway, the most recent on the commit that landed a check for a requirement enforced by nothing. The
 # failure mode is not disagreement about the rule — it is one string typed at the one moment nothing can be
 # undone. A merged squash cannot be repaired: amending it changes its hash, and the pull request's merge
 # record cites that hash, so the two would name different things afterwards.
 #
-# Nothing here carries a verdict. The judgement is `crates/kanhe/tests/merge_message.rs`, a Rust reaction
+# Nothing here carries a verdict. The judgement is `crates/kanhe/tests/merge_message.rs`, a Rust repository check
 # like every other one judging this repository; this script gathers the inputs and refuses to reach `gh`
 # without it.
 #

@@ -1,4 +1,4 @@
-//! `observer-protocol`'s reaction: the trait-driven fold and the built-in path are one verdict, each observer
+//! `observer-protocol`'s check: the trait-driven fold and the built-in path are one verdict, each observer
 //! declares exactly its dimension's bounds, and the fold's ordering directions hold.
 //!
 //! Two composition paths exist deliberately for the **static** dimension alone — the built-in one calls
@@ -15,7 +15,7 @@
 //! the shell honours its obligation to leave semantic decisions to 渾儀 is still unobserved and still a
 //! declared bound: a guard deciding emptiness above the invocation compiles and passes everything here.
 //!
-//! Some of the properties below hold **by construction**, and each says which reaction stands in for the
+//! Some of the properties below hold **by construction**, and each says which check stands in for the
 //! comparison that would be inert. That is deliberate, and the alternative was worse: an assertion that cannot
 //! fail reads exactly like a guarantee.
 
@@ -46,11 +46,11 @@ fn workspace_root() -> Option<PathBuf> {
     )
 }
 
-/// One dimension of 三儀, as both reactions below need it.
+/// One dimension of 三儀, as both checks below need it.
 ///
-/// One array rather than three hand-written arms, because both reactions are three-way and a forgotten arm is
+/// One array rather than three hand-written arms, because both checks are three-way and a forgotten arm is
 /// precisely an arm that silently proves nothing — which is the defect this shape exists to have closed. An
-/// entry says everything either reaction needs about its dimension, so the fixture and the fold cannot come to
+/// entry says everything either check needs about its dimension, so the fixture and the fold cannot come to
 /// describe different dimension sets.
 struct Dimension {
     label: &'static str,
@@ -74,7 +74,7 @@ struct Dimension {
 ///
 /// **The order is part of the comparison, not cosmetic.** `Run::observe` folds eagerly and `merge_outcomes`
 /// concatenates violations in fold order, so the two `Debug` renderings compared below only match while this
-/// array is in `evaluate_constitution`'s order: 圭表, 渾儀, 漏刻. Sorting it would break the equality reaction
+/// array is in `evaluate_constitution`'s order: 圭表, 渾儀, 漏刻. Sorting it would break the equality check
 /// without any dimension having changed.
 const DIMENSIONS: [Dimension; 3] = [
     Dimension {
@@ -237,7 +237,7 @@ fn the_trait_driven_fold_agrees_with_the_built_in_path() {
 /// inert.
 ///
 /// What the requirement actually fears is a **second, divergent list** — and a second list is something written
-/// in the body. So the property is the body's shape, which can fail: write a `vec![...]` there and this reaction
+/// in the body. So the property is the body's shape, which can fail: write a `vec![...]` there and this check
 /// reports it. The declarations' *content* is held elsewhere and does not need re-asserting here: drifting an
 /// extent fails `observation_bound_model`'s `the_extent_projection_is_fresh`, verified by the same perturbation.
 ///
@@ -278,18 +278,18 @@ fn every_observer_declares_exactly_its_dimension_s_bounds() {
 
 /// A source with no `fn bounds` is a **refusal to judge**, not a pass.
 ///
-/// The reaction panics naming the dimension when the method is absent from the file its array entry points at.
+/// The check panics naming the dimension when the method is absent from the file its array entry points at.
 /// That path is unreachable for a conforming `Observer` — the trait requires the method, so a rename fails to
 /// compile — and reachable the moment an impl moves to a file the array does not name. Asserted here because the
-/// scenario states it: a reaction that finds nothing to read has not observed that the obligation holds, and the
+/// scenario states it: a check that finds nothing to read has not observed that the obligation holds, and the
 /// distinction between "no body" and "an empty body" is what decides whether it refuses or reports.
 #[test]
 fn a_source_with_no_bounds_method_yields_no_body_to_judge() {
     assert!(
         bounds_body(&Source::of("fn other() -> u8 { 0 }\n")).is_none(),
-        "no `fn bounds` means nothing to judge, which the reaction turns into a refusal rather than a pass"
+        "no `fn bounds` means nothing to judge, which the check turns into a refusal rather than a pass"
     );
-    // The discriminator: a body that exists and is EMPTY is `Some(vec![])`, which the reaction reports as an
+    // The discriminator: a body that exists and is EMPTY is `Some(vec![])`, which the check reports as an
     // offence. Without this, the assertion above would also hold for a recognizer that never finds anything.
     assert_eq!(
         bounds_body(&Source::of("fn bounds(&self) -> Vec<BoundDecl> {\n}\n")),
@@ -315,7 +315,7 @@ fn a_brace_in_a_comment_tail_no_longer_closes_the_body() {
     assert_eq!(
         bounds_body(&hidden_second_list).as_deref(),
         Some(["observation_bounds()".to_string(), "Vec::new()".to_string()].as_slice()),
-        "the body runs to its real closing brace, so the second list is what the reaction judges"
+        "the body runs to its real closing brace, so the second list is what the check judges"
     );
 
     let delegation_with_a_comment =
@@ -355,7 +355,7 @@ fn a_brace_in_a_block_comment_moves_the_body_extent() {
         bounds_body(&braced_block_comment).as_deref(),
         Some(["observation_bounds()".to_string()].as_slice()),
         "the extent stops at the commented brace, so this body — which delegates exactly — is refused; that \
-         over-reaction is the declared bound"
+         false refusal is the declared bound"
     );
 
     let same_body_uncommented =
@@ -576,7 +576,7 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
             .filter(|line| !line.is_empty())
             .map(|line| {
                 // A trailing comment is PROSE, not a second list. `Executed` filters comment lines and not
-                // comment tails, so without this `observation_bounds() // why` compares unequal and the reaction
+                // comment tails, so without this `observation_bounds() // why` compares unequal and the check
                 // reports an offence — measured. Both whole-line recognizers in `gate_shape_contract.rs` already
                 // strip one; this is the same rule, not a new allowance.
                 let code = match line.find("//") {
@@ -603,7 +603,7 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
 ///
 /// Why it exists: [`function_body`] counted braces through comments, so `observation_bounds(); // }` closed the
 /// body at the comment and everything after it — a second list — was never read. `bounds_body`'s own `//`-tail
-/// stripping then made the truncated remainder look like the exact delegation, and the reaction passed. The
+/// stripping then made the truncated remainder look like the exact delegation, and the check passed. The
 /// stripping had to move *before* the brace count, not after it.
 ///
 /// [`Executed`] cannot do this job: it filters lines whose trimmed start is `//`, so a comment TAIL — which is

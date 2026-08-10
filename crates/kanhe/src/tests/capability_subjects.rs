@@ -87,16 +87,16 @@ fn listed(names: &[&str]) -> BTreeSet<String> {
 }
 
 /// The defect this join was written from, reconstructed: a shell wrapper filed under the capability whose
-/// subject is this repository's Rust reactions.
+/// subject is this repository's checks.
 #[test]
 fn a_shell_wrapper_filed_under_the_rust_reaction_capability_is_refused() {
     let offences = join_offences(
         "a-gate-that-matched-no-test",
         &["scripts/publish.sh".to_string()],
-        &listed(&["rust-repository-reactions"]),
+        &listed(&["repository-checks"]),
         &claimed(&[
             ("publish-source-integrity", &["scripts/publish.sh"]),
-            ("rust-repository-reactions", &["crates/kanhe/tests/x.rs"]),
+            ("repository-checks", &["crates/kanhe/tests/x.rs"]),
         ]),
     );
     assert_eq!(offences.len(), 1);
