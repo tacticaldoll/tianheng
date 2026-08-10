@@ -14,8 +14,6 @@
 //! The verdict is the shared kinded [`Refusal`], so *the message disagrees* stays separate from *the title
 //! could not be read*. The focused failure matrix asserts both observable outcomes and their actionable text.
 
-#![allow(dead_code)]
-
 use crate::refusal::{Refusal, cannot_judge, violation};
 
 /// The Conventional Commit types `AGENTS.md` admits.

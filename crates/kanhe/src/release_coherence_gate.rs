@@ -9,8 +9,6 @@
 //! the surfaces disagree, and reporting them as if they did tells a reader to go looking for a disagreement
 //! that does not exist.
 
-#![allow(dead_code)]
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;

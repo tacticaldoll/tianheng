@@ -11,8 +11,6 @@
 //! could not be read), and collapsing the two would tell an operator to go looking for a disagreement that
 //! does not exist.
 
-#![allow(dead_code)]
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -456,13 +454,26 @@ impl Drop for Scratch {
     }
 }
 
+/// Deliver `payload` to the child's stdin and report whether the whole round trip succeeded.
+///
+/// **The write outcome is part of the answer, not a side effect.** A discarded write lets a short or failed
+/// delivery reach `wait()` as if the payload had arrived: the child then judges something other than what it
+/// was given, and its verdict is reported as the verdict about the payload. Seven lines below, the signing
+/// probe already checks its own write and says why — an unnoticed empty payload makes `ssh-keygen` sign
+/// nothing and the round trip fail, "reporting the mechanism broken when only the harness was". This function
+/// sits under release-tag signature verification, in front of the one irreversible act, where a refusal
+/// invented by the harness is exactly as costly as a miss.
 fn pipe_into(mut child: std::process::Child, payload: &str) -> bool {
     use std::io::Write;
-    if let Some(stdin) = child.stdin.as_mut() {
-        let _ = stdin.write_all(payload.as_bytes());
-    }
+    let delivered = match child.stdin.as_mut() {
+        Some(stdin) => stdin.write_all(payload.as_bytes()).is_ok(),
+        None => false,
+    };
     drop(child.stdin.take());
-    child.wait().map(|s| s.success()).unwrap_or(false)
+    let waited = child.wait().map(|status| status.success()).unwrap_or(false);
+    // Reaped either way — the child is waited on before the delivery result is consulted, so a failed write
+    // cannot leave it behind.
+    delivered && waited
 }
 
 fn sign_probe(key: &Path, scratch: &Path) -> bool {
@@ -625,4 +636,46 @@ pub fn build_fixture(root: &Path, name: &str, version: &str) -> Fixture {
     run(&repo, "git", &["push", "-q", "origin", "main"]);
 
     Fixture { repo, remote, key }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A payload that could not be delivered is not a successful round trip.
+    ///
+    /// The direction the discarded write hid: with stdin unpiped there is nowhere to write, and the child —
+    /// `true`, which succeeds at nothing — then exits 0. Consulting only `wait()` reported that as the
+    /// payload having been judged, which in front of `cargo publish` means a signature verdict about a
+    /// payload the verifier never received. The child is reaped either way; only the answer changes.
+    #[test]
+    fn a_payload_that_could_not_be_delivered_is_not_a_success() {
+        let child = Command::new("true")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("`true` is spawnable");
+        assert!(
+            !pipe_into(child, "a payload nobody can receive"),
+            "an undeliverable payload must not report a successful round trip, however the child exits"
+        );
+    }
+
+    /// The control: the same helper reports success when the payload does arrive.
+    ///
+    /// Without it the assertion above is satisfiable by a helper that always answers `false`.
+    #[test]
+    fn a_delivered_payload_reports_the_child_s_own_verdict() {
+        let child = Command::new("cat")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("`cat` is spawnable");
+        assert!(
+            pipe_into(child, "a payload that arrives"),
+            "a delivered payload reaching a child that exits 0 is a successful round trip"
+        );
+    }
 }

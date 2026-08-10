@@ -827,6 +827,25 @@ no adopter runs. They are here rather than under the adopter headings above beca
   judgement over text this repository has designed, measured and rejected, and what makes a mention bite is the
   compiler.
 
+- **Three reads in the enforcement floor treated "could not read" as "nothing to report", and one of them had
+  the correct sibling seven lines below it.** The census sweep skipped a tracked document it could not read, so a
+  clean verdict could rest on a corpus it never examined — while its sibling reference gate refuses that outright
+  ("a file this check claims to have inspected must have been read"). The subject-glob read swallowed a failure,
+  which silently shrinks what a capability claims and lets the filing join report a change clean over the very
+  capability whose subject it touched. And the payload delivery in front of release-tag signature verification
+  discarded the write result, so a short or failed write reached the child's exit status as if the payload had
+  arrived — the signing probe in the same file already checks its own write and explains why, an unnoticed empty
+  payload making the tool sign nothing and "reporting the mechanism broken when only the harness was".
+
+  The sweep's return type now carries the distinction rather than losing it, the glob read propagates a
+  cannot-judge, and the delivery reports whether the payload actually arrived. Each is a different operator
+  action, which is the whole reason this repository has one typed refusal.
+
+  **Five module-level `#![allow(dead_code)]` are gone from the floor's own crate.** Measured: deleting all five
+  and running `cargo clippy -p kanhe --all-targets -- -D warnings` produces nothing, so they suppressed no
+  live warning. What they *could* suppress is an orphaned private helper inside the checks that judge this
+  repository — the one place in a `-D warnings` workspace where enforcement code can rot unobserved.
+
 - **The rule shape this project governs itself with most is finally one an adopter meets by running an
   example.** A crate-level dependency allowlist carries more of `AGENTS.self-law.md` than any other rule, and it
   appeared nowhere under `examples/` — so an adopter working through the dogfood met every other shape and not

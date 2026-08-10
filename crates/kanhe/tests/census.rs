@@ -8,6 +8,7 @@ use kanhe::bound_register_parse as register;
 use kanhe::census;
 
 use census::{Census, sweep};
+use kanhe::refusal::Kind;
 use register::{Citation, parse_bounds, workspace_root};
 use std::collections::BTreeSet;
 
@@ -62,8 +63,51 @@ fn every_declared_census_agrees_with_what_produces_it() {
     let offences = sweep(&root, &files, &declared);
     assert!(
         offences.is_empty(),
-        "a hand-written census disagrees with the check that enumerates its set:\n{}",
-        offences.join("\n")
+        "a hand-written census disagrees with the check that enumerates its set, or a tracked document could \
+         not be read:\n{}",
+        offences
+            .iter()
+            .map(|refusal| format!("{:?}: {}", refusal.kind, refusal.message))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
+/// A tracked document the sweep cannot read is reported as **cannot judge**, not skipped.
+///
+/// The distinction is the whole point of the typed result: skipping would report clean over a corpus the sweep
+/// never examined, and a clean verdict that rests on an unread file is the shape its sibling reference gate
+/// refuses outright. Shown rather than asserted about — the corpus names a document that is not there, which
+/// is what an unreadable tracked path looks like from inside the read.
+#[test]
+fn a_tracked_document_the_sweep_cannot_read_is_a_cannot_judge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let declared = vec![Census {
+        subject: "a control",
+        phrase: "{} bounds across {} capabilities",
+        figures: vec![1, 1],
+    }];
+    let offences = sweep(
+        &root,
+        &["zzz_absent_census_probe.md".to_string()],
+        &declared,
+    );
+    assert_eq!(
+        offences.len(),
+        1,
+        "an unreadable tracked document must produce exactly one refusal, got {offences:?}"
+    );
+    assert_eq!(
+        offences[0].kind,
+        Kind::CannotJudge,
+        "an unread document is not a document without a census, so it is not a violation"
+    );
+    assert!(
+        offences[0].message.contains("zzz_absent_census_probe.md"),
+        "the refusal must name the document it could not read, got {:?}",
+        offences[0].message
     );
 }
 

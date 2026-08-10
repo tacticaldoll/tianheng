@@ -4,8 +4,6 @@
 //! enumerates the set — a second parse would let the two disagree, which is the drift the census rule exists
 //! to end.
 
-#![allow(dead_code)]
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
