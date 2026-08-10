@@ -4,7 +4,10 @@
 //! separate crate compiled against it — so every name it mentions is reachable the way an adopter reaches
 //! it. That file's own header says it "deliberately names the whole promised surface", and until this check
 //! nothing held it: the promise grew and the contract did not, which is how a window's worth of additions
-//! reached the prelude without one of them being compiled from outside.
+//! reached the prelude without one of them entering the file whose job is to enumerate them. Not the stronger
+//! claim that nothing outside had compiled them — `examples/observer-participant` is its own workspace and
+//! reaches part of the protocol through a source patch. What went unheld is the correspondence, not the
+//! reachability.
 //!
 //! **The relation is containment, not equality, and the asymmetry is the point.** Every promised member must
 //! be mentioned; the contract may mention more, because it legitimately names things that are not prelude
@@ -37,10 +40,13 @@ pub enum Promise {
 
 /// The names `pub mod prelude` re-exports, recognized by **position** rather than by a bare marker.
 ///
-/// The block is found by entering `pub mod prelude {` and reading its `pub use super::{ … };`, so a
-/// `pub use super::{…}` anywhere else in the file — and there are several — is not the promise. Recognizing
-/// the promise by the `pub use` alone was the first shape tried and it collected the crate's whole re-export
-/// surface, which is a different set with a different contract.
+/// The block is found by entering `pub mod prelude {` and reading its `pub use super::{ … };`, so a re-export
+/// anywhere else in the file is not the promise. **Entering the module is what makes that true by construction
+/// rather than by circumstance.** A reader keyed on the marker alone agrees exactly while no sibling re-export
+/// of that form exists, and the first one added would widen the promise without changing a line here — a
+/// correctness that depends on the absence of something is the shape this family declines. Measured when this
+/// was written: no sibling existed, which is precisely why the looser reader could not have been caught by
+/// running it.
 pub fn promised_members(lib_rs: &str) -> BTreeSet<String> {
     let Some(module) = lib_rs.split_once("pub mod prelude {") else {
         return BTreeSet::new();

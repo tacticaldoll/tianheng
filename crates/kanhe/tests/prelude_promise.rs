@@ -49,9 +49,10 @@ fn every_prelude_member_is_named_by_the_external_contract() {
 
 /// The promise is read from the prelude's own block, not from any `pub use super::{…}` in the file.
 ///
-/// This repository's shell carries several of the latter. Keying on the `pub use` alone was the first shape
-/// written and it collected the whole re-export surface — a different set under a different contract — so the
-/// distinction is asserted rather than left to the reader of the parser.
+/// A reader keyed on the marker alone agrees with this one exactly while no sibling re-export of that form
+/// exists, and measured when this was written none did — so running it against the real shell could not have
+/// told the two apart. The fixture supplies the sibling the shell does not have, which is the only way to
+/// assert the distinction before it costs something.
 #[test]
 fn the_promise_is_the_prelude_block_and_not_a_sibling_reexport() {
     let elsewhere =
@@ -100,8 +101,9 @@ fn an_input_that_cannot_be_read_is_refused_rather_than_reported_clean() {
 
 /// A mention is an identifier, so a substring of one is not a mention.
 ///
-/// `Run` inside `RuntimeObserver` would satisfy a substring reader while the contract never names `Run`, and
-/// the promise carries both — which is exactly the pair that would have hidden.
+/// The promise carries both `Run` and `RuntimeObserver`, and the shorter sits inside the longer — so a
+/// substring reader reports `Run` named by any mention of the observer. That is what it would have hidden when
+/// the contract named neither, and the fixture keeps the distinction asserted now that it names both.
 #[test]
 fn a_longer_identifier_containing_a_promised_name_is_not_a_mention() {
     let mentioned = mentioned_identifiers("fn t() { let _ = RuntimeObserver; }");

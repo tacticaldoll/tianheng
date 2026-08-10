@@ -115,8 +115,9 @@ the reaction legitimately names root imports and its own helpers, which the prel
 requiring equality would refuse it for being a test. A promised member SHALL be named in whatever form its
 kind admits — a type through a type assertion, a trait through a bound, a function item through its own call
 shape — because requiring one form would demand either a hand-kept list per kind or a contract that cannot
-name its trait at all. The promise SHALL be read from the prelude's own block rather than from any
-`pub use super::{…}` in the shell, which carries several that are not the promise.
+name its trait at all. The promise SHALL be read by entering the prelude's own module rather than by matching a re-export marker
+anywhere in the shell, so that what counts as promised does not depend on no sibling re-export of that form
+happening to exist.
 
 #### Scenario: A prelude addition the contract never mentions reacts
 
