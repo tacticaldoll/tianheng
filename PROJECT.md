@@ -321,4 +321,13 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   another's output, so the shell composes and the dimensions do not — and it is **eager**, which is why no trait
   object exists anywhere: the heterogeneous set never forms. Assembly order is part of the contract, because it
   decides which cannot-judge is reported.
+- **A published vocabulary value is admissible only if a third party owns one.** The question to ask of any
+  enum reaching the public surface is whether an outsider occupies one of its values or must borrow one of this
+  family's. `Owner` (`Engine` / `Inherited` / `Adopter`) names **roles**, so a third party's own engine is its
+  `Engine`; `BoundaryKind` (`Crate` / `Module` / `Semantic` / `Runtime`) names **三儀's own dimensions**, so an
+  outside `Observer` must label its findings with a dimension that did not produce them. Identity-bound versus
+  role-relative is the discriminator, and it is applied before publication because that is the only moment the
+  answer is free: a shipped variant cannot be unshipped, and an adopter who has already labelled findings has
+  already been made to lie. It is not a general preference for abstraction — `BoundaryKind`'s four names are
+  right for the dimensions they name, and the gap is that nothing else can be said.
 - **The composed adopter surface is compile-reacted.** `tianheng::prelude::*` is the entrypoint. `check_constitution(&Constitution, &Path) -> Outcome` unifies CLI and library testing evaluation.

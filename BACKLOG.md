@@ -743,18 +743,38 @@ consumer for an undemonstrated deduplication.
     *Observation source:* `examples/observer-participant`, written for the change that gave
     `Observer::bounds` a consumer; its house rule is a file-header convention, and it reports `Module`
     as the nearest honest fit with a comment saying so. *Current reaction or bound:* none — the kind is
-    accepted as written, and nothing checks that a participant's kind matches what it governs. *Risk:* the
-    kind is the projection label a report, a SARIF render and a **baseline** all carry, so borrowed kinds
-    make an adopter's recorded entries group under a dimension that did not produce them; a consumer
-    filtering by kind sees an outsider's findings as 圭表's. *Promotion trigger:* a participant that is not
-    this repository's own example — an adopter's, or a second one here — where the borrowed kind is shown to
-    mis-group a real baseline or filter, rather than merely reading wrong. One example that chose the label
-    itself is not evidence about adopters, which is the trap the shell-gate entry above records.
+    accepted as written, and nothing checks that a participant's kind matches what it governs.
+    *Risk, corrected by measurement:* the kind is the label a **report** and a **SARIF render** carry, so a
+    consumer filtering by kind sees an outsider's findings as 圭表's. It does **not** reach a baseline. An
+    earlier version of this entry said it did, and the code says otherwise: `BaselineEntry` carries
+    `{ id, rule, finding, owner, tracker }`, `ViolationId` is `{ target, rule_key, fact }`, `RuleKey` is
+    `{ rule_type, fields }`, `Baseline::to_json` emits no kind at all, and de-duplication is by `ViolationId`.
+    So a borrowed kind cannot mis-group an adopter's recorded entries and cannot make one stale — which
+    lowers this entry's urgency by exactly the half that would have forced a decision before publication.
+    *Promotion trigger, made fireable:* the previous wording asked for a participant that is not this
+    repository's own example, which **could not fire before `0.5.0` ships** — no third party can write an
+    `Observer` against an unpublished trait, so the trigger demanded evidence the release itself has to exist
+    to produce. It now reads: an `Observer` implementation outside this repository — an adopter's, or a
+    second one here written for a different purpose — whose borrowed kind is shown to mislead a real report
+    consumer or SARIF ingest. One example that chose its own label is still not evidence about adopters.
     *Version class:* minor at most. Adding a variant to a `#[non_exhaustive]` enum breaks no downstream
     match, and it changes no verdict; what it changes is the projection vocabulary, which is why it is a
-    decision rather than an addition. *Authority:* `observer-protocol`'s requirement that a participant
-    outside the family be demonstrated joining a run, and that example's README, which records the finding
-    where someone writing their own participant will meet it.
+    decision rather than an addition. Deferring is the reversible half: a variant, once shipped, cannot be
+    unshipped. *Authority:* `observer-protocol`'s requirement that a participant outside the family be
+    demonstrated joining a run, and that example's README, which records the finding where someone writing
+    their own participant will meet it.
+
+    *What the rest of the new vocabulary was measured against, and passed.* Before `0.5.0` publishes the
+    observation protocol, every vocabulary type it adds was read against one question — does a third party own
+    a value, or must they borrow one of this family's? `BoundaryKind` fails it because `Crate`/`Module`/
+    `Semantic`/`Runtime` name 三儀's own dimensions. Every other type passes, because each names a **role** an
+    outsider occupies rather than a member of this family: `Owner` is `Engine` (theirs) / `Inherited` / `Adopter`;
+    `Extent` and `Reached` name positions any reaction can be in relative to its own observation; `Demonstrates`
+    names directions any pinning test can take; `FactGranularity` names properties of a fact; `Defence` is
+    `PinnedBy` (their test) or `Unpinned` (their tracker), and its two variants cover the whole space of *bounds*
+    because a construction-held property is stated in requirement prose rather than declared as one. `BoundId::new`
+    accepts any `Into<Cow<'static, str>>` precisely so a computed id is expressible. The recurrence this review
+    was opened to look for is therefore not there, and that is the finding.
   - Token/Lexer extraction (requires cross-scanner false negative or 3rd scanner).
   - `qianyi` generator & LSP/editor integration.
   - ~~A `#[cfg_attr(pred, path=…)]` remap on an **inline** `mod name { … }`~~ **CLOSED** in the 0.4.0

@@ -53,9 +53,11 @@ stopped contributing entirely.
 
 `BoundaryKind` has **no value a participant owns**. An outsider's violation must claim one of the family's four
 — `Crate`, `Module`, `Semantic`, `Runtime` — so this participant reports `Module` as the nearest honest fit while
-governing nothing 圭表 would call a module boundary. The kind is the projection label a report and a baseline
-carry, so it is a vocabulary decision rather than a variant to add in passing; it is recorded in `BACKLOG.md`
-with its trigger instead of being worked around here.
+governing nothing 圭表 would call a module boundary. The kind is the label a report and a SARIF render carry —
+**not** a baseline, which records `(target, rule_key, fact)` and no kind at all — so a borrowed one misleads a
+consumer filtering by dimension without making anyone's recorded entries stale. That is a vocabulary decision
+rather than a variant to add in passing, and it is recorded in `BACKLOG.md` with its trigger instead of being
+worked around here.
 
 ## Running it
 

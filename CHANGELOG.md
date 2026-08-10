@@ -37,6 +37,25 @@ them.
 
 ### Documentation
 
+- **Every vocabulary type the observation protocol publishes was ruled on before it ships, by asking what a
+  third party can own.** `0.5.0` is the first release in which an outside `Observer` can exist, so it is the
+  last moment a vocabulary decision is free. The question applied to each: does an outsider occupy one of the
+  values, or must they borrow one of this family's? `Owner` (`Engine` / `Inherited` / `Adopter`) names **roles**,
+  so a third party's own engine is its `Engine`. `Extent` and `Reached` name positions any reaction can be in
+  relative to its own observation; `Demonstrates` names directions any pinning test can take; `FactGranularity`
+  names properties of a fact; `Defence` is their test or their tracker; and `BoundId::new` accepts any
+  `Into<Cow<'static, str>>` so a computed id is expressible. All pass.
+
+  `BoundaryKind` is the one that does not, and it stays as it is deliberately. `Crate` / `Module` / `Semantic` /
+  `Runtime` name 三儀's own dimensions, so an outside participant labels its findings with a dimension that did
+  not produce them — the example shipped beside the protocol reports `Module` and says so in a comment. **The
+  correction that matters to an adopter:** the kind is the label a report and a SARIF render carry, and **not**
+  a baseline. A recorded entry is `(target, rule_key, fact)` with no kind in it, and de-duplication is by that
+  identity, so a borrowed kind misleads a consumer filtering by dimension without making anyone's recorded
+  entries stale or forcing a regeneration. Earlier prose said a baseline carried it; the code says otherwise, and
+  that half is what would have forced a decision before publication. Adding a variant later breaks no downstream
+  match on a `#[non_exhaustive]` enum, so deferring is the reversible choice and a shipped variant is not.
+
 - **The composed prelude promised the whole observation protocol, and no external crate had ever compiled
   against any of it.** `crates/tianheng/tests/adopter_surface.rs` is a separate crate that reaches every name
   through the same wildcard prelude an adopter uses, and its own header says it "deliberately names the whole
