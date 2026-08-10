@@ -17,7 +17,7 @@ use kanhe::merge_message_gate as gate;
 use gate::judge;
 use refusal::Kind;
 
-const OK_SUBJECT: &str = "feat(tianheng): hold every refusal site to both of its contracts";
+const OK_SUBJECT: &str = "feat(tianheng): hold the squash message to its pull request";
 /// Commit subjects a body could be the concatenation of, for directions not about that question.
 fn commits() -> Vec<String> {
     vec![

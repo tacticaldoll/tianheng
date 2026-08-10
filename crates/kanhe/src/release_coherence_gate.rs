@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::refusal::{Refusal, cannot_judge, cannot_judge_out_of_reach, violation};
+use crate::refusal::{Refusal, cannot_judge, violation};
 
 pub fn hermetic(program: &str) -> Command {
     let mut command = Command::new(program);
@@ -373,13 +373,10 @@ fn entries_of(dir: &Path) -> Result<Vec<PathBuf>, Refusal> {
     let mut paths = Vec::new();
     for entry in listing {
         let entry = entry.map_err(|err| {
-            cannot_judge_out_of_reach(
-                "directory-entry-unyieldable",
-                format!(
-                    "an entry of {} could not be read while enumerating it: {err}",
-                    dir.display()
-                ),
-            )
+            cannot_judge(format!(
+                "an entry of {} could not be read while enumerating it: {err}",
+                dir.display()
+            ))
         })?;
         paths.push(entry.path());
     }

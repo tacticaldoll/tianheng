@@ -857,11 +857,6 @@ fn every_enumeration_refuses_rather_than_reporting_clean_over_nothing() {
 }
 
 // --- the inputs this judgement cannot read ---------------------------------------------------------------
-//
-// Every direction below constructs a refusal that no direction previously reached. They were found by
-// running the refusal-site sweep rather than by reading: a `cannot_judge` nothing constructs is a refusal
-// whose kind and whose message can both change with the suite green, and the kind is what an operator acts
-// on before an irreversible act.
 
 /// A bare directory, before anything has been laid out in it.
 fn bare(root: &Path, name: &str) -> PathBuf {

@@ -22,6 +22,19 @@ them.
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING:** `tianheng::observation_bounds()` no longer returns declarations owned by the unpublished
+  `rust-repository-reactions` capability. Those bounds describe Kanhe's checks over this repository rather
+  than behavior the published shell observes; the surviving declarations now live in Kanhe, while the
+  constructor-mutation-only declarations are retired with their sweep. Consumers that explicitly matched a
+  `rust-repository-reactions/*` bound id must stop expecting it from the product catalog. `BoundDecl`,
+  `Extent`, evaluators, reports, and every architecture-boundary declaration remain unchanged.
+- Kanhe no longer instruments every typed repository-check refusal with caller-location recording and runtime
+  mutation. The compiler-corpus scanner, exemption registry, process-per-site matrix, census, and env-gated
+  workflow command are removed together. Focused failure matrices still assert the result kind and actionable
+  message at each operator-facing judgement boundary.
+
 ### Documentation
 
 - **`AGENTS.md` gains *A repair loop is a diagnosis, not a schedule*.** Three consecutive repair rounds on one

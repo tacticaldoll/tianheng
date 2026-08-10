@@ -50,13 +50,6 @@ done
 # development — no development checkout is a release snapshot — so it is asked for explicitly here, the one
 # moment it can answer. A failure aborts before `cargo publish`, which is the point: the act below is
 # irreversible.
-#
-# The environment is scrubbed of the refusal-site instrumentation first. Those variables can make a refusal
-# report the wrong kind or the wrong message — that is what they are for — and this gate is the one that
-# stands in front of the irreversible act, where the kind is what an operator acts on. The scrub is here, at
-# the point the act is launched, rather than as a check inside the gate being perturbed: a guard the
-# perturbation could itself disable is not a guard.
-
 # `libtest` exits 0 when `--exact` selects no test — measured, an unknown name reports `0 passed` and exits 0,
 # and an `#[ignore]`d one reports `0 passed; 1 ignored` and exits 0 too. So the exit status answers *did the
 # selected tests pass* while the question here is *did the gate judge this act*, and those differ exactly when
@@ -73,8 +66,7 @@ require_one_pass() {
     fi
 }
 
-gate_output=$(env -u TIANHENG_REFUSAL_MUTANT -u TIANHENG_REFUSAL_RECORD -u TIANHENG_REFUSAL_BITES \
-    TIANHENG_PUBLISH_SOURCE=1 TIANHENG_WORKSPACE_TESTS=1 \
+gate_output=$(TIANHENG_PUBLISH_SOURCE=1 TIANHENG_WORKSPACE_TESTS=1 \
     cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test publish_source \
     -- --exact the_publish_source_is_the_signed_release_snapshot 2>&1) || {
     printf '%s\n' "$gate_output" >&2

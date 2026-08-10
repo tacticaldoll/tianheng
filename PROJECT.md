@@ -272,6 +272,11 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
 - **Unsafe-site identity is structurally decomposed, not compressed into one label.** 渾儀's unsafe-confinement fact carries owner, owner kind, trait, and name as separate structured fields across nine site shapes (free fn, inherent/trait/trait-impl method, inherent/trait impl, trait, extern block, block), so two distinct sites sharing a name never collapse under one baseline entry.
 - **Async identity is the seam, not the rendered signature.** An async-exposure fact's identity is its module, owner kind, canonical owner, and item name; the full parameter/return signature is human diagnostic presentation only and never enters identity — a signature-only change preserves the baseline, while a different owner or name is a new fact.
 - **Rule construction is builder-owned; inspection stays open-ended.** Data-carrying `Rule`/`ModuleRule` variants are `#[non_exhaustive]`.
+- **Repository-check diagnostics are behavior-tested, not constructor-governed.** Kanhe keeps one pure typed
+  result separating a disagreement from an input it cannot judge, and focused matrices assert the kind and
+  actionable message at operator-facing boundaries. Constructor locations are implementation detail: they do
+  not carry runtime mutation, reach recording, exemptions, or product-visible observation bounds. Bounds for
+  `rust-repository-reactions` live in unpublished Kanhe, never in `tianheng::observation_bounds()`.
 - **Governance is driven by an audit cycle against an enumerated surface, not by invented hypotheses.**
   A sweep that invents its own scope cannot be dry, only tired: it reports the shapes someone happened to
   think of, and "the audit was thorough" is then unfalsifiable. So the standing direction is to enumerate a

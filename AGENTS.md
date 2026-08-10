@@ -349,11 +349,6 @@ TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test pin_b
                                            # worktree and builds it, so the ordinary suite must not pay
                                            # for it — and leaving it to run only when someone remembers
                                            # would be the worse half of that trade
-TIANHENG_REFUSAL_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_bites  # likewise env-gated: it runs every judged test
-                                           # binary once per refusal site per perturbation. Nothing is
-                                           # rebuilt between runs, but the runs are not free — about a
-                                           # minute — and a minute on every `cargo test` is a minute
-                                           # nobody keeps paying
 ```
 
 The self-governance reaction (`crates/shengmo/tests/self_governance.rs`, run under `cargo test`) and its projection

@@ -15,8 +15,6 @@ disagree.
 - A capability's declared subject against what a change's diff actually touched.
 - A proposed squash message against the pull request it would record — the one gate that runs at
   merge time, because a merged squash cannot be amended.
-- Every refusal site against a run that perturbs it, so a refusal cannot change kind or message
-  with nothing noticing.
 
 ## Not 校讎, and not one of the 三儀
 
@@ -34,7 +32,7 @@ a directory.
 ## Layout
 
 - `src/` — the judgements: what a squash message must be, what a release section must say, where a
-  refusal may be constructed.
+  refusal may be constructed, and the bounds declared by Kanhe-owned checks.
 - `src/tests/` — their failure matrices, beside what they test.
 - `tests/` — the reactions that run against the real repository.
 

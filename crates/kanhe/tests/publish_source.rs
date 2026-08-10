@@ -432,10 +432,6 @@ fn a_remote_without_main_is_named_as_missing_the_ref() {
 }
 
 // --- the inputs this judgement cannot read ---------------------------------------------------------------
-//
-// Found by running the refusal-site sweep rather than by reading: a `cannot_judge` no direction constructs is
-// a refusal whose kind and message can both change with the suite green — and this gate stands in front of an
-// irreversible act, where the kind is what an operator acts on.
 
 /// An index git cannot parse: the worktree state cannot be read, which is not a dirty worktree.
 ///
