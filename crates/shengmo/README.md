@@ -1,6 +1,6 @@
 # 繩墨 / shengmo
 
-**惟木從繩則正。** — *Wood that follows the inked line is made straight.* (尚書·說命上)
+**彈繩正木,枉直自形。** — *Snap the line true against the wood; crooked and straight take their own shape.*
 
 **This repository's own law, and the reactions that run [Tianheng](https://github.com/tacticaldoll/tianheng)'s delivered product against this workspace.** Not product. Ships in no package.
 
