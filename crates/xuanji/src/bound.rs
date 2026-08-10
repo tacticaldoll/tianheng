@@ -313,6 +313,12 @@ impl Extent {
 }
 
 /// What a reaction does with a shape it *did* see.
+///
+/// **Which bounds hold a given value is not restated on the variants below.** That is a census of a set the
+/// extent projection already renders, and a membership typed beside the enum goes stale the moment the set
+/// moves — measured: one variant said *one* while the projection rendered six, and its sibling saying *three*
+/// was right only by luck of nothing having been added. Each variant documents the **distinction** that earns
+/// it a place instead, which is the property a reader needs and the one that does not move.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Reached {
@@ -322,9 +328,7 @@ pub enum Reached {
     /// withholds a verdict, the other gives one while stepping over something, and an adopter meets them
     /// differently.
     ///
-    /// Which bounds hold this value is not restated here — that is a census of a set the extent projection
-    /// already renders, and naming either state goes stale the moment membership moves. What earns the value
-    /// its place is the distinction: the misclassification this whole model exists to prevent was exactly a
+    /// What earns the value its place is the distinction: the misclassification this whole model exists to prevent was exactly a
     /// confusion between this and [`Extent::OutOfReach`], where a backlog entry predicted a silent false
     /// negative for a `#[cfg_attr]` path remap whose real behaviour was a fail-loud refusal, and it drove
     /// urgency the wrong way. A direction that cannot be *named* cannot be predicted with.
@@ -334,8 +338,8 @@ pub enum Reached {
     },
     /// Deliberately does *not* refuse — continues past a shape that could have been a scan error.
     ///
-    /// The mirror of [`Reached::RefusesToJudge`], and a real declaration rather than a symmetry: one declared
-    /// bound records that a cfg-gated module with an absent file is skipped rather than failing the gate.
+    /// The mirror of [`Reached::RefusesToJudge`], and a real declaration rather than a symmetry: a cfg-gated
+    /// module with an absent file is skipped rather than failing the gate, and a bound records it.
     DeclinesToRefuse {
         /// Why continuing is preferred to erroring.
         because: Cow<'static, str>,
@@ -360,18 +364,18 @@ pub enum Reached {
     /// reader does not misread the silence as an escape.
     ///
     /// Distinct from [`Extent::OutOfReach`] in the direction that matters — the reaction *saw* the shape and was
-    /// *right* — and distinct from [`Reached::AsIntended`] because nothing is bounded at all. Three declared
-    /// bounds are exactly this: `pub use … as _` binds no nameable path a consumer can reach, and a `mod` or a
-    /// plain item inside a function body is unreachable as `crate::…`.
+    /// *right* — and distinct from [`Reached::AsIntended`] because nothing is bounded at all. The shapes that
+    /// earn it are the ones a reader could misread as an escape: `pub use … as _` binds no nameable path a
+    /// consumer can reach, and a `mod` or a plain item inside a function body is unreachable as `crate::…`.
     NotAViolation {
         /// Why the shape is genuinely not a violation.
         because: Cow<'static, str>,
     },
     /// Reacts exactly as intended. What is bounded is the *granularity of the fact*, not the reaction.
     ///
-    /// One declared bound is precisely this: two trait objects differing only in an unrenderable sub-node
-    /// share one identity, and each still reacts on first occurrence — only baseline-dedup granularity is
-    /// bounded. An extent implying the reaction were limited would misreport a working one.
+    /// What it looks like: two trait objects differing only in an unrenderable sub-node share one identity,
+    /// and each still reacts on first occurrence — only baseline-dedup granularity is bounded. An extent
+    /// implying the reaction were limited would misreport a working one.
     AsIntended {
         /// Which part of the fact is bounded. Carried only here: no declared bound is both out of reach and
         /// granularity-limited, so offering this on every extent would invite a combination nothing exhibits.

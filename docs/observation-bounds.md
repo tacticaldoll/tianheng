@@ -11,9 +11,9 @@ Generated from `openspec/specs/*/spec.md` by `crates/kanhe/tests/bound_register.
 regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register`. A stale projection fails that gate.
 
 **What this document does not claim.** It lists the bounds the specs *state in a recognizable form*: a
-scenario whose heading marks it a bound. The undeclared-prose direction that keeps this list honest has
-three known residuals and one deliberate exemption, all four enumerated here rather than left in the
-check's comments, because a residual a reader cannot see is one the register is lying about:
+scenario whose heading marks it a bound. The undeclared-prose direction that keeps this list honest has known
+residuals and a deliberate exemption, each stated in this document rather than left in the check's
+comments, because a residual a reader cannot see is one the register is lying about:
 
 1. **Unrecognized wording.** A bound worded outside the scanned form — "out-of-scope", "does not claim
    to observe", "a stated, inherited bound" — is invisible to the scan.

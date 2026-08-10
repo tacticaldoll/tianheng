@@ -28,8 +28,8 @@ fn anchor_line(anchor: Option<&str>) -> String {
 
 /// Projection data for one module-scoped boundary text block. The `target` field encodes the
 /// kind-specific prefix ("module X in Y", "trait X in Y", "subtree X in Y", "crate X"), so a
-/// single `render_section` skeleton handles all eight boundary types — the format string is
-/// written once, not eight times.
+/// single `render_section` skeleton handles every module-scoped boundary kind — the format string
+/// is written once, not once per kind.
 struct ModuleBlockSpec<'a> {
     severity: &'a str,
     target: String,

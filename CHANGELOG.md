@@ -37,6 +37,21 @@ them.
 
 ### Documentation
 
+- **A membership typed beside its enumerator went stale, and the sites that had not yet gone stale were the
+  same shape.** `xuanji`'s `Reached::AsIntended` said *one* declared bound holds it while the extent projection
+  rendered six, and the example it gave was the last of them; its sibling `NotAViolation` said *three* and was
+  right only by luck of nothing having been added since. The rule against exactly this was already written on a
+  third variant of the same enum — one rule, three places, two of them not following it — so it moves **up to
+  the enum**, and every variant now documents the distinction that earns it a place instead. The distinction is
+  the property a reader needs, and it is the one that does not move when the set does.
+
+  Two internal doc comments carried the same shape and are repaired with it: one counted the boundary kinds a
+  single rendering skeleton handles, the other the capabilities a single loop enumerates. In both the number was
+  decoration and the point was the *oneness* — which is what they now say.
+
+  `xuanji` is a published crate, so its variant documentation is adopter-facing. No signature, variant, outcome,
+  identity, or exit class moves.
+
 - Product vocabulary now follows the boundary already present in the manifests: **product** means publishable
   crates, **reaction** means their observable boundary behavior, Shengmo supplies dogfood gates that invoke
   those reactions, Kanhe supplies repository checks, and shell/CI only orchestrate them. The unpublished
@@ -763,6 +778,15 @@ them.
 Changes to this repository's own governance machinery, which ships in no package and which
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
+
+- **Three of this repository's own documents counted a set instead of pointing at what enumerates it.** The
+  bound register's projection typed its residual tally three lines below the figure it *computes* — the one
+  place a freshness check structurally cannot see, because it compares the generator's text with itself, so a
+  fourth residual would have arrived silently. The projection register said how many generating mechanisms it
+  recognizes rather than naming the one it does. And `repository-checks`'s Purpose said `git ls-files scripts/`
+  names one unit while citing the very command that reports two, both of them wrappers; it now states the
+  property that carries the weight — only wrappers there, no gate — since a gate returning is a real change of
+  state while the arithmetic never was.
 
 - **The bare-filename form was inert for every Rust file this repository has ever deleted, and the extension
   list was why.** `crates/kanhe/tests/reference_integrity.rs` recognized a bare filename only when it carried a

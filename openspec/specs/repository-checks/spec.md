@@ -8,7 +8,7 @@ deliberately does not reach, and none of them is product.
 
 This capability replaces `gate-shape-contract`, which specified the pairing of a `scripts/check_*.sh` gate
 with a `scripts/test_*.sh` twin and the exit contract between them. That subject no longer exists —
-`git ls-files scripts/` names one unit, `publish.sh`, which is a wrapper rather than a gate — and its
+`git ls-files scripts/` names only wrappers, no gate — and its
 check had reached the vacuity its own bounds warned about, enumerating **zero** gates, projecting
 `0 gates, 11 properties each`, and reporting clean over all of it.
 

@@ -455,7 +455,7 @@ fn render(documents: &BTreeMap<String, Registered>, holders: &[String]) -> Strin
          that is a declared observation bound rather than an oversight.\n\n",
     );
     out.push_str(
-        "**Not that the set is complete.** One mechanism is recognized: a Rust call to the shared blessing\n\
+        "**Not that the set is complete.** The recognized mechanism is a Rust call to the shared blessing\n\
          rule. A document generated some other way, whose author also omitted the marker, is absent from both\n\
          sides of the correspondence — a declared false negative owned by this engine, not a limit of what it\n\
          can read.\n\n\
