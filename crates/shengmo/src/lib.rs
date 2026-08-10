@@ -14,7 +14,8 @@
 //!
 //! The same shape 圭表 and 渾儀 already carry, for the same reason:
 //!
-//! - **`src/`** — the law and the judgements. A judgement is implementation, not a test.
+//! - **`src/`** — the law, its declared observation bounds and the judgements. A judgement is implementation,
+//!   not a test.
 //! - **`src/tests/`** — the failure matrices, as unit tests beside what they test.
 //! - **`tests/`** — the reactions: what runs against the real repository.
 //!
@@ -26,5 +27,6 @@
 
 #![forbid(unsafe_code)]
 
+pub mod bounds;
 pub mod law;
 pub mod workspace;

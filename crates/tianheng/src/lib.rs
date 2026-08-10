@@ -47,10 +47,6 @@ pub use guibiao::{
 // pure static core (`guibiao::check`) takes this type; the self-governance gate uses it directly.
 pub use guibiao::Constitution as GnomonConstitution;
 
-// This crate's own declared observation bounds, for the capabilities whose reactions live here.
-mod bounds;
-pub use bounds::observation_bounds;
-
 // The declared-observation-bound model is reached through 渾儀 rather than a direct shell-to-璇璣
 // edge, preserving the dependency direction this crate governs itself by.
 pub use hunyi::{

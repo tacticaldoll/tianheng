@@ -30,6 +30,9 @@ Keeping the entrypoint therefore makes repository test support look like product
 - `publish-source-integrity`: requirements do not change; its declaration moves beside the Kanhe gate.
 - `release-coherence`: requirements do not change; its declarations move beside the Kanhe gate and its governed changelog records the compatibility result.
 - `adopter-surface`: no promised prelude or inspection name changes; the unpromised, unreleased repository catalog entrypoint is removed from the crate root.
+- `composed-library-check`: composition behavior does not change; Tianheng's crate root only stops exporting the unrelated repository catalog.
+- `governance-dogfood`: Shengmo's law and execution requirements do not change; its source gains ownership of the bounds qualifying that dogfood.
+- `rust-repository-reactions`: Kanhe and Shengmo check behavior does not change; their source catalogs only relocate declarations already consumed by the same repository model.
 
 ## Impact
 
