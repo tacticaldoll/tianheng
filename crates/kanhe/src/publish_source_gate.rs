@@ -335,7 +335,14 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
         )));
     }
 
-    let listing = git(repo, &["ls-remote", remote, "refs/heads/main"]).unwrap_or_default();
+    // A failed live read and a successful read of no `main` are different facts. Preserve the command's cause
+    // before parsing its output; defaulting the error to an empty string makes both branches say the ref is
+    // absent and sends an operator looking at repository state when the remote was actually unreadable.
+    let listing = git(repo, &["ls-remote", remote, "refs/heads/main"]).map_err(|err| {
+        cannot_judge(format!(
+            "could not read refs/heads/main from remote \"{remote}\": {err}"
+        ))
+    })?;
     let remote_main = listing
         .lines()
         .next()
@@ -344,8 +351,8 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
         .to_string();
     if remote_main.is_empty() {
         return Err(cannot_judge(format!(
-            "could not read refs/heads/main from remote \"{remote}\", so whether HEAD is the released \
-             snapshot cannot be decided"
+            "remote \"{remote}\" has no refs/heads/main, so whether HEAD is the released snapshot cannot \
+             be decided"
         )));
     }
     if remote_main != head_commit {

@@ -388,8 +388,45 @@ fn a_remote_that_cannot_be_read_cannot_be_judged() {
     let refusal = verdict.expect_err("an unreadable remote must be refused");
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
-        refusal.message.contains("could not read refs/heads/main"),
-        "{}",
+        refusal
+            .message
+            .contains("does not appear to be a git repository"),
+        "the refusal must preserve the failed live read's cause: {}",
+        refusal.message
+    );
+    assert!(
+        refusal.message.contains(&absent.display().to_string()),
+        "the refusal must name the remote whose read failed: {}",
+        refusal.message
+    );
+}
+
+/// A successful live read with no `main` is distinct from a live read that could not run.
+#[test]
+fn a_remote_without_main_is_named_as_missing_the_ref() {
+    let root = scratch("remote-without-main");
+    let fixture = build_fixture(&root, "remote-without-main", "9.9.9");
+    let remote_without_main = root.join("remote-without-main.git");
+    git(
+        &root,
+        &[
+            "init",
+            "--bare",
+            "-q",
+            remote_without_main.to_str().expect("fixture path is UTF-8"),
+        ],
+    );
+
+    let verdict = judge(
+        &fixture.repo,
+        remote_without_main.to_str().expect("fixture path is UTF-8"),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a remote without main must be refused");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("has no refs/heads/main"),
+        "a successful empty read must name the absent ref, not a command failure: {}",
         refusal.message
     );
 }

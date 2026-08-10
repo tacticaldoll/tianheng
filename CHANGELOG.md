@@ -758,9 +758,15 @@ no adopter runs. They are here rather than under the adopter headings above beca
   refused for its formatting. The wrapper now supplies the pull request's own commit subjects and a body is a
   bare list when every bullet **is** one of them — the exact question rather than a tighter resemblance, since
   every commit here is conventional and a shape rule would refuse a hand-written `- fix: …` body while missing
-  a branch carrying one non-conventional subject. Read from `git log`, because GitHub's `messageHeadline`
-  truncates at 69 characters and this repository's subjects run longer. Without them the gate refuses to
-  judge rather than falling back to the shape.
+  a branch carrying one non-conventional subject. The wrapper reads the live pull request's paginated commits,
+  taking the first line of each full message because GitHub's `messageHeadline` truncates long subjects; local
+  remote-tracking refs can lag the pull request or carry no fork head at all. Without a live set the workflow
+  stops rather than substituting a local subset or falling back to the shape.
+
+- **A failed publish remote read keeps its cause.** The publish-source gate previously defaulted a failed
+  `git ls-remote` to an empty response, making an unavailable remote and a repository with no `main` ref emit
+  the same cannot-judge. The two remain fail-loud, but now name different facts: the failed read includes Git's
+  error, while a successful empty read names the absent `refs/heads/main`.
 
 - **Four judgements answered about something other than what they read.** The publish gate asked
   `check-ignore` about git's **quoted** spelling of a path — measured, a file named `ignored-普通` ignored by
