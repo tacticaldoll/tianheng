@@ -230,6 +230,17 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
 - **THEN** the reaction is clean, so the rule is held to the enumerator rather than to the `check_`
   prefix
 
+#### Scenario: Prose about the marker is read as a marker — a stated bound
+
+- **WHEN** a release section discusses `**BREAKING**` without marking anything — an entry saying a change
+  *earns no* such mark, or one describing how the marking rule works
+- **THEN** the section is classified as breaking and required to carry a `### Migration` it does not owe. The
+  reaction reads the marker's presence rather than its position, and that reach is kept deliberately:
+  over-reaction is the safe direction, while a positional matcher would stop observing a real break whose marker
+  sits anywhere but an entry's first token — buying a false negative in the floor to remove a refusal an author
+  can argue with. The Core Contract forbids exactly one bug and it is the false negative
+- **PINNED-BY** `prose_about_the_marker_is_read_as_a_marker_a_stated_bound`
+
 #### Scenario: A dated release section names a gate — a stated bound
 
 - **WHEN** a dated `## [X.Y.Z] - DATE` section carries an entry naming a path under `scripts/`

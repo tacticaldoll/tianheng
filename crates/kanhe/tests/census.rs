@@ -191,3 +191,52 @@ fn a_count_in_an_undeclared_phrasing_is_a_stated_bound() {
          bound, and reaching it needs the prose detector this repository rejected. Got: {offences:?}"
     );
 }
+
+/// `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound`
+///
+/// `UnderReacts`, owned by the engine. The corpus is tracked Markdown, and the narrowing was measured rather
+/// than reasoned about: this repository's Rust sources carry census phrases **as fixture input** — the figures
+/// above in this very file are a parser's expected output and deliberately arbitrary — so admitting `.rs` would
+/// report a test asserting its own parser as a drifted document. Both directions on one body, differing only in
+/// the extension, because a bound whose silence is not contrasted with a reaction is indistinguishable from a
+/// sweep that reads nothing.
+#[test]
+fn a_census_outside_markdown_is_a_stated_bound() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let bounds = parse_bounds(&root);
+    let capabilities: BTreeSet<&str> = bounds.iter().map(|b| b.capability.as_str()).collect();
+    let declared = vec![Census {
+        subject: "declared observation bounds and the capabilities declaring them",
+        phrase: "{} bounds across {} capabilities",
+        figures: vec![bounds.len(), capabilities.len()],
+    }];
+    let wrong = format!(
+        "  a line writing {} bounds across {} capabilities\n",
+        bounds.len() + 1,
+        capabilities.len()
+    );
+
+    let scratch =
+        std::env::temp_dir().join(format!("tianheng-census-corpus-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).expect("the scratch root is writable");
+    std::fs::write(scratch.join("held.md"), &wrong).expect("write the Markdown control");
+    std::fs::write(scratch.join("unheld.rs"), &wrong).expect("write the Rust subject");
+
+    // The control: the same figures, in Markdown, are reported. Without it the silence below is satisfiable by
+    // a sweep that reads nothing at all.
+    assert!(
+        !sweep(&scratch, &["held.md".to_string()], &declared).is_empty(),
+        "the sweep must report a disagreement it is shown in Markdown, or the bound below proves nothing"
+    );
+    // The bound: the same figures, in a Rust source, are not.
+    let unheld = sweep(&scratch, &["unheld.rs".to_string()], &declared);
+    let _ = std::fs::remove_dir_all(&scratch);
+    assert!(
+        unheld.is_empty(),
+        "the corpus is tracked Markdown, so a census outside it is a stated bound rather than a finding, got \
+         {unheld:?}"
+    );
+}

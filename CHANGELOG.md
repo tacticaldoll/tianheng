@@ -827,6 +827,21 @@ no adopter runs. They are here rather than under the adopter headings above beca
   judgement over text this repository has designed, measured and rejected, and what makes a mention bite is the
   compiler.
 
+- **Two observation limits were real and undeclared, and each is now declared instead of removed.** The census
+  sweep reads tracked **Markdown**, while its requirement said "every tracked document" — the requirement was the
+  outlier, since the register spec and this changelog both already said Markdown. Widening the corpus was measured
+  rather than argued: this repository's Rust sources carry census phrases **as fixture input**, where the figures
+  are a parser's expected output and deliberately arbitrary, so admitting them would report a test asserting its
+  own parser as a drifted document. The requirement now says what reacts, and the narrow corpus is a declared
+  bound with a pinning test that contrasts the silence against a reaction on the same content.
+
+  The release-coherence classifier reads whether a section *contains* `**BREAKING**`, so a section that merely
+  **discusses** the marker is required to carry a `### Migration` it does not owe. **The reach is kept
+  deliberately.** Recognising the marker at an entry's start would remove a refusal an author can argue with and
+  buy a false negative in the floor: a real break whose marker sits anywhere but the first token would stop being
+  observed. The Core Contract forbids exactly one bug and it is the false negative, so the over-reaction is
+  declared with a fixture that shows it — a body announcing nothing, refused anyway.
+
 - **One bound was projected in two wordings, and only the typed one was number-free.** The subject-coverage
   bound's declaration in Rust already said its blindness would cost *a claim per capability*; its spec scenario
   said *thirty-six claims*, and that scenario's body is quoted verbatim into a generated projection — so one

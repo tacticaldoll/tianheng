@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**15 of 79 declared bounds have no pinning test.** That figure is the register's
+**15 of 81 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -245,6 +245,12 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## release-coherence
 
+### `release-coherence/prose-about-the-marker-is-read-as-a-marker-a-stated-bound`
+
+> the section is classified as breaking and required to carry a `### Migration` it does not owe. The reaction reads the marker's presence rather than its position, and that reach is kept deliberately: over-reaction is the safe direction, while a positional matcher would stop observing a real break whose marker sits anywhere but an entry's first token — buying a false negative in the floor to remove a refusal an author can argue with. The Core Contract forbids exactly one bug and it is the false negative
+
+- **pinned by**: `prose_about_the_marker_is_read_as_a_marker_a_stated_bound`
+
 ### `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
 
 > nothing reacts, and the leak is real: an adopter reading `[0.4.0]` meets nine entries naming files they can never run. What is refused is the **repair**, not the diagnosis — rewriting a dated section to satisfy a rule written afterwards would falsify the record, the same reason `docs/history/` is left alone — so this is a declared false negative with an owner rather than a shape that is harmless. Closing it needs a repair that adds to the record instead of editing it
@@ -294,6 +300,12 @@ fallback used where no manifest exists, which the register spec describes.
 > no repository check fires. The declaration is the coverage; reaching further needs a judgement over prose, which is the instrument measured three times and rejected. `AGENTS.md` carries the other half as a rule with no check: a count of something this repository does not produce is not written
 
 - **pinned by**: `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
+
+### `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound`
+
+> the sweep does not see it, a stated bound: the corpus is tracked Markdown, and widening it was measured rather than reasoned about. This repository's Rust sources carry census phrases **as fixture input**, where the figures are a parser's expected output and deliberately arbitrary; admitting them would report a test asserting its own parser as a drifted document. The narrow corpus is what keeps the sweep's every report actionable, and the residual is a figure in a code comment, which `AGENTS.md` measured and left to the reviewer
+
+- **pinned by**: `a_census_outside_markdown_is_a_stated_bound`
 
 ### `repository-checks/a-hook-is-proposed-for-this-rule-a-stated-bound`
 
