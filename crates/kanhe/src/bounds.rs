@@ -23,6 +23,21 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "`BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*",
         ),
         BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound",
+            ),
+            "a promised prelude member the external contract names only in a comment",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the check asks whether the promise was noticed at all, and deciding that a \
+                          mention is load-bearing is a judgement over text this repository has designed, \
+                          measured and rejected. What makes a mention bite is the compiler; a comment-only \
+                          mention still fails the reviewer reading the diff, which is the layer that owns it"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_longer_identifier_containing_a_promised_name_is_not_a_mention",
+        ),
+        BoundDecl::pinned(
             BoundId::new("repository-checks/files-no-capability-claims-a-stated-bound"),
             "a tracked file no capability's declared subject claims",
             Extent::Reached(Reached::UnderReacts {

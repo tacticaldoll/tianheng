@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**35 of 78 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**36 of 79 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -31,6 +31,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
 - `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
 - `repository-checks/files-no-capability-claims-a-stated-bound` — owner: engine
+- `repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound` — owner: engine
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
 - `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound` — owner: engine
 - `self-law-projection/a-dimension-absent-from-the-check-s-own-list-is-not-examined-a-stated-bound` — owner: engine
@@ -402,7 +403,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (35)
+## under-reacts (36)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -611,6 +612,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: subjects are declared where a capability has something to say, and requiring them to tile the repository would buy coverage with a claim per capability that nobody could defend. The join reports how many tracked paths went unclaimed, so a clean verdict is not read as a complete one
 - **its defence must show**: does not react
 - **pinned by**: `files_no_capability_claims_are_reported_rather_than_implied_judged`
+
+### `repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound`
+
+> a promised prelude member the external contract names only in a comment
+
+- **because**: the check asks whether the promise was noticed at all, and deciding that a mention is load-bearing is a judgement over text this repository has designed, measured and rejected. What makes a mention bite is the compiler; a comment-only mention still fails the reviewer reading the diff, which is the layer that owns it
+- **its defence must show**: does not react
+- **pinned by**: `a_longer_identifier_containing_a_promised_name_is_not_a_mention`
 
 ### `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound`
 

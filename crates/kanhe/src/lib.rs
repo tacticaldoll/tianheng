@@ -32,6 +32,7 @@ pub mod capability_subjects;
 pub mod census;
 pub mod gate_identity;
 pub mod merge_message_gate;
+pub mod prelude_promise;
 pub mod publish_source_gate;
 pub mod refusal;
 pub mod region;

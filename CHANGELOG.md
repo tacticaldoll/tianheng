@@ -37,6 +37,26 @@ them.
 
 ### Documentation
 
+- **The composed prelude promised the whole observation protocol, and no external crate had ever compiled
+  against any of it.** `crates/tianheng/tests/adopter_surface.rs` is a separate crate that reaches every name
+  through the same wildcard prelude an adopter uses, and its own header says it "deliberately names the whole
+  promised surface" — but the protocol this window added reached the prelude without one member entering that
+  contract: the `Observer` trait, `Run`, the three dimension observers, and the typed bound model
+  (`BoundDecl`, `BoundId`, `Extent`, `Reached`, `Owner`, `Defence`, `Demonstrates`, `FactGranularity`). All of
+  them are now named, in the form each kind admits, and the composition an outside participant actually writes
+  — a run opened over a manifest, each dimension observer joining it, one verdict out — is type-checked from
+  outside for the first time.
+
+  **A trait cannot be named the way a type is**, which is why the contract gained a second helper rather than a
+  longer list: `assert_public_type::<Observer>()` is `E0782: expected a type, found a trait`. Naming it in a
+  bound proves more anyway — the trait is reachable *and* the observers re-exported beside it satisfy it, which
+  is precisely what a third party writing their own participant needs to be true.
+
+  Recorded because an adopter meets it: composing a run from a composed `Constitution` **clones per dimension**.
+  Each observer's constructor takes its dimension's declarations by value while the `Constitution` lends them,
+  so an outside caller owns a copy of each. That is the shape the shell's own documentation already prescribes;
+  writing it into the external contract is what makes the cost visible from outside rather than only within.
+
 - **A membership typed beside its enumerator went stale, and the sites that had not yet gone stale were the
   same shape.** `xuanji`'s `Reached::AsIntended` said *one* declared bound holds it while the extent projection
   rendered six, and the example it gave was the last of them; its sibling `NotAViolation` said *three* and was
@@ -778,6 +798,21 @@ them.
 Changes to this repository's own governance machinery, which ships in no package and which
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
+
+- **The prelude's promise now has a reaction, and the requirement it holds did not exist.** The compile
+  contract's claim to name the whole promised surface was a header comment: the one requirement about prelude
+  additions names three specific types and nothing generalised it, so a window's worth of additions could
+  reach the prelude unchallenged. `crates/kanhe/tests/prelude_promise.rs` reads the promise from the prelude's
+  own block — not from any sibling `pub use super::{…}`, of which the shell carries several — and refuses when a
+  promised member is mentioned nowhere in the contract. The relation is **containment, not equality**: the
+  contract legitimately names root imports and its own helpers, and demanding equality would refuse it for
+  being a test. Both cannot-judge directions are seen to refuse rather than assumed to: a promise that parses
+  to nothing, and a contract that yields no identifier.
+
+  Where the check stops is declared rather than left to be discovered: it asks whether a promised member is
+  *mentioned*, so a mention that compiles nothing counts. Deciding that a mention is load-bearing is the
+  judgement over text this repository has designed, measured and rejected, and what makes a mention bite is the
+  compiler.
 
 - **Three of this repository's own documents counted a set instead of pointing at what enumerates it.** The
   bound register's projection typed its residual tally three lines below the figure it *computes* — the one
