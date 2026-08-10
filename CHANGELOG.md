@@ -56,15 +56,22 @@ them.
   that half is what would have forced a decision before publication. Adding a variant later breaks no downstream
   match on a `#[non_exhaustive]` enum, so deferring is the reversible choice and a shipped variant is not.
 
-- **The composed prelude promised the whole observation protocol, and no external crate had ever compiled
-  against any of it.** `crates/tianheng/tests/adopter_surface.rs` is a separate crate that reaches every name
-  through the same wildcard prelude an adopter uses, and its own header says it "deliberately names the whole
-  promised surface" — but the protocol this window added reached the prelude without one member entering that
-  contract: the `Observer` trait, `Run`, the three dimension observers, and the typed bound model
+- **The composed prelude promised the whole observation protocol, and the contract whose job is to name that
+  promise named none of it.** `crates/tianheng/tests/adopter_surface.rs` is a separate crate that reaches every
+  name through the same wildcard prelude an adopter uses, and its own header says it "deliberately names the
+  whole promised surface" — but the protocol this window added reached the prelude without one member entering
+  that contract: the `Observer` trait, `Run`, the three dimension observers, and the typed bound model
   (`BoundDecl`, `BoundId`, `Extent`, `Reached`, `Owner`, `Defence`, `Demonstrates`, `FactGranularity`). All of
-  them are now named, in the form each kind admits, and the composition an outside participant actually writes
-  — a run opened over a manifest, each dimension observer joining it, one verdict out — is type-checked from
-  outside for the first time.
+  them are now named, in the form each kind admits, and the composition an outside participant writes — a run
+  opened over a manifest, each dimension observer joining it, one verdict out — is type-checked through the
+  wildcard prelude for the first time.
+
+  Stated precisely, because a first draft of this entry overstated it: an external crate *had* compiled against
+  part of the protocol. `examples/observer-participant` is its own workspace, depends on the shell, and reaches
+  `Observer`, `Run`, `BoundDecl`, `BoundId`, `Extent`, `Reached` and `StaticObserver` — through a source patch,
+  since the protocol is unpublished and no released consumer could. What had never happened is the thing the
+  contract exists for: the promise growing and the contract that enumerates it standing still, with nothing
+  holding the two together.
 
   **A trait cannot be named the way a type is**, which is why the contract gained a second helper rather than a
   longer list: `assert_public_type::<Observer>()` is `E0782: expected a type, found a trait`. Naming it in a
@@ -118,7 +125,7 @@ them.
 - `` `extern crate`-blind `` was an **undeclared and undefended** bound in the same capability, stated twice
   and invisible to the register both times — once with no trigger words, once as "a stated, inherited bound"
   whose comma breaks the adjacency the scan needs, which is the very wording the projection's first residual
-  cites as its example. It is now the capability's **fourth declared bound**, pinned by
+  cites as its example. It is now a **declared bound** of that capability, pinned by
   `confine_ignores_an_extern_crate_declaration`: probed before declaring, and discriminating because the
   sibling test puts `use libc as c;` in the identical fixture shape and gets a violation. **Every bound the
   register holds is cited**, which the reaction requires rather than this note asserting a count.
@@ -833,10 +840,30 @@ no adopter runs. They are here rather than under the adopter headings above beca
   judgement over text this repository has designed, measured and rejected, and what makes a mention bite is the
   compiler.
 
+- **A closing sweep of this window found four wrong claims and three of them were written by the sweep's own
+  changes, hours earlier.** Sorted the way *A repair loop is a diagnosis* asks: not one was a code defect. Every
+  one was a sentence about the tree, and the class recurring **under an author actively watching for it** is the
+  finding rather than the four repairs.
+
+  What the mechanical passes caught, by class rather than by reading. An **absolute claim**: "no external crate
+  had ever compiled against any of it" was false — `examples/observer-participant` is its own workspace and
+  reaches part of the protocol through a source patch. What had never happened is narrower and is what the new
+  check holds: the promise growing while the file that enumerates it stood still. A **claim about the tree**: a
+  justification said the shell carries several sibling re-exports of the prelude's form, and it carries none, so
+  the looser reader it argued against would have agreed exactly and could not have been caught by running it —
+  the correctness now rests on entering the module rather than on that absence, which is the point the false
+  count was reaching for. A **claim invalidated by its own change**: a fixture's comment said the contract never
+  names `Run`, written before the same change made it name `Run`. And an **ordinal**: an entry called a bound its
+  capability's fourth, which is true and held by nothing.
+
+  The first repair of the count class then wrote a fresh one — "carries exactly one … today" — and the second
+  pass caught that too. A figure anchored to *today* is a figure; the property it was reaching for is that
+  entering the module removes the dependency on any absence, and stating the property is what ends the loop.
+
 - **Three of this repository's own documents counted a set instead of pointing at what enumerates it.** The
   bound register's projection typed its residual tally three lines below the figure it *computes* — the one
   place a freshness check structurally cannot see, because it compares the generator's text with itself, so a
-  fourth residual would have arrived silently. The projection register said how many generating mechanisms it
+  further residual would have arrived silently. The projection register said how many generating mechanisms it
   recognizes rather than naming the one it does. And `repository-checks`'s Purpose said `git ls-files scripts/`
   names one unit while citing the very command that reports two, both of them wrappers; it now states the
   property that carries the weight — only wrappers there, no gate — since a gate returning is a real change of
