@@ -378,8 +378,9 @@ fn an_empty_surface_fails_rather_than_reporting_clean() {
     std::fs::create_dir_all(fixture.join("docs")).expect("the fixture directory is writable");
     std::fs::write(fixture.join(READERS_ENTRY_POINT), "# AGENTS\n").expect("writable");
     // Joined from components, and the fixture document below is named without a directory, because
-    // `check_reference_integrity.sh` reads a repository-shaped path in any tracked `.rs` as a claim that the
-    // file exists — and these exist only inside a temporary directory this test builds and removes.
+    // `crates/kanhe/tests/reference_integrity.rs` reads a repository-shaped path in a Rust line comment as a
+    // claim that the file exists — and these exist only inside a temporary directory this test builds and
+    // removes.
     std::fs::write(
         fixture.join("docs").join("notes.md"),
         "# Notes\n\nHand written.\n",

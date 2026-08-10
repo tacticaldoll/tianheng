@@ -2,7 +2,7 @@
 #
 # This example is its own workspace (`[workspace]` below) so its *deliberate* boundary
 # violation (domain → infra) is never swept by Tianheng's workspace-wide gates. CI runs it in
-# isolation via `scripts/test_examples.sh`, which patches the family crates to local source so
+# isolation through `crates/shengmo/tests/examples_suite.rs`, which patches the family crates to local source so
 # the manifest keeps the adopter's real published-version requirement while exercising this
 # checkout. The footprint is deliberately one dependency, no `syn`: that light
 # footprint IS the 圭表 product pitch, demonstrated here rather than asserted.

@@ -5,7 +5,7 @@
 # are prose.
 #
 # `from` must occur EXACTLY once in the file it names. An anchor matching twice names a set rather than a site,
-# and `scripts/check_pin_bites.sh` refuses to judge rather than substituting the first occurrence.
+# and `crates/kanhe/tests/pin_bites.rs` refuses to judge rather than substituting the first occurrence.
 #
 # A record is added only after it has been RUN and seen to kill the pin it names. A mutation that fails to
 # perturb the pinned point reports a biting pin as a dead one — the safe direction, but it is noise, and the

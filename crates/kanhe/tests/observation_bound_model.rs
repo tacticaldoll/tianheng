@@ -37,10 +37,10 @@ fn workspace_root() -> Option<PathBuf> {
 /// The slug rule the register derives an id with: lowercased, each run of non-alphanumerics collapsed to one
 /// hyphen, ends trimmed.
 ///
-/// A second implementation of one rule is the divergence `check_bound_register.sh` has already paid for — its
-/// own comment records a review round lost to two matchers whose character classes differed. So this one is not
-/// trusted on its own: [`derived_ids_agree_with_the_register_projection`] asserts the set it produces equals the
-/// set the shell wrote, which catches a drifted rule and a stale projection in the same assertion.
+/// A second implementation of one rule is the divergence `crates/kanhe/tests/bound_register.rs` has already paid
+/// for — its own comment records a review round lost to two matchers whose character classes differed. So this
+/// one is not trusted on its own: [`derived_ids_agree_with_the_register_projection`] asserts the set it produces
+/// equals the set the register wrote, which catches a drifted rule and a stale projection in the same assertion.
 fn slug_of(heading: &str) -> String {
     let mut out = String::with_capacity(heading.len());
     let mut pending_hyphen = false;

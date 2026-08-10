@@ -1,7 +1,7 @@
 # Standalone adoption of 渾儀 (hunyi) — the semantic (public-API exposure) dimension.
 #
 # Its own workspace (`[workspace]` below) so its *deliberate* API leak is never swept by
-# Tianheng's workspace-wide gates; CI runs it in isolation via `scripts/test_examples.sh`,
+# Tianheng's workspace-wide gates; CI runs it in isolation through `crates/shengmo/tests/examples_suite.rs`,
 # patching the family crates to local source while preserving the manifest requirement.
 #
 # Unlike 圭表, this footprint is NOT light: 渾儀 is the semantic instrument, so it carries the

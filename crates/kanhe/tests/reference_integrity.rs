@@ -1,4 +1,5 @@
-//! Self-governance reaction: every in-repository path a document or comment points at must exist.
+//! Self-governance reaction: every in-repository path named by tracked Markdown document text, or by a
+//! Rust, TOML, or `.gitignore` line whose first non-whitespace token is its comment marker, must exist.
 //!
 //! This class was hand-swept twice — once for `.md` only — and a module split landing after that sweep
 //! reintroduced it in nine places. A reader who greps for a named path and finds nothing cannot tell stale
@@ -11,6 +12,7 @@
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The top-level directories a bare reference may name, and the extensions a bare basename may carry.
 const PATH_PREFIXES: [&str; 6] = [
@@ -42,6 +44,40 @@ fn workspace_root() -> Option<PathBuf> {
         |root| root.join("Cargo.toml").is_file(),
         shengmo::workspace::marker_set(),
     )
+}
+
+fn scratch(label: &str) -> PathBuf {
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    loop {
+        let candidate = std::env::temp_dir().join(format!(
+            "tianheng-reference-integrity-{label}-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        match std::fs::create_dir(&candidate) {
+            Ok(()) => return candidate,
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(err) => panic!("cannot acquire reference-integrity fixture root: {err}"),
+        }
+    }
+}
+
+fn is_inspected_source(path: &str) -> bool {
+    path.ends_with(".md")
+        || path.ends_with(".rs")
+        || path.ends_with(".toml")
+        || Path::new(path).file_name() == Some(std::ffi::OsStr::new(".gitignore"))
+}
+
+fn is_inspected_line(path: &str, line: &str) -> bool {
+    if path.ends_with(".md") {
+        return true;
+    }
+    let trimmed = line.trim_start();
+    if path.ends_with(".rs") {
+        return trimmed.starts_with("//");
+    }
+    trimmed.starts_with('#')
 }
 
 fn tracked(root: &Path) -> Vec<String> {
@@ -257,7 +293,7 @@ fn offences_in(
     let mut inspected = 0usize;
 
     for rel_path in corpus {
-        if !rel_path.ends_with(".md") && !rel_path.ends_with(".rs") {
+        if !is_inspected_source(rel_path) {
             continue;
         }
         // Counted before the exclusion below, because the guard downstream asks whether the **enumeration**
@@ -278,7 +314,6 @@ fn offences_in(
                  have been read"
             );
         };
-        inspected += 1;
         let is_test_source = rel_path.contains("/tests/");
         // A record names what was true then. `docs/history/` is one by definition, and a DATED changelog
         // section is one by construction — `release-coherence` refuses to rewrite them for exactly this
@@ -292,10 +327,12 @@ fn offences_in(
             if rel_path == "CHANGELOG.md" && line.starts_with("## [") {
                 in_dated_section = line.contains("] - ");
             }
-            // A record names what was true then; test code names the shapes it judges and builds. Neither
-            // is a claim about the tree as it stands, and holding either to today's paths is the
-            // falsification `release-coherence` refuses for dated sections.
-            if is_record_document || in_dated_section || is_test_source {
+            if !is_inspected_line(rel_path, line) {
+                continue;
+            }
+            // A record names what was true then. Holding it to today's paths is the falsification
+            // `release-coherence` refuses for dated sections.
+            if is_record_document || in_dated_section {
                 continue;
             }
             for reference in extract(line) {
@@ -427,9 +464,7 @@ fn offences_in(
                 match basename_count.get(raw) {
                     Some(_) => {}
                     None => {
-                        // Test code names the shapes it judges, including ones this repository deleted —
-                        // the same exemption the qualified branch carries, for the same reason.
-                        if !is_test_source && deleted_outside_changes.contains(raw) {
+                        if deleted_outside_changes.contains(raw) {
                             offences.insert(format!(
                                 "{rel_path}: references '{raw}', which this repository deleted — point it at \
                                  what replaced it, or drop the reference"
@@ -443,8 +478,8 @@ fn offences_in(
 
     assert!(
         inspected > 0,
-        "inspected 0 files — no tracked *.md or *.rs, so this reaction would report clean without having \
-         read anything"
+        "inspected 0 files — no tracked Markdown, Rust, TOML, or .gitignore source, so this reaction would \
+         report clean without having read anything"
     );
     offences
 }
@@ -514,6 +549,61 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
         unseen.is_empty(),
         "an extraction form names something absent and the reaction says nothing:\n{}",
         unseen.join("\n")
+    );
+}
+
+#[test]
+fn comment_bearing_sources_and_live_test_claims_are_inspected() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let tracked_paths = tracked(&root);
+    let fixture = scratch("comment-corpus");
+    std::fs::write(fixture.join("anchor.md"), "No repository reference here.\n")
+        .expect("write inspected anchor");
+    let probes = [
+        (
+            "TOML comment",
+            "probe.toml",
+            "# See `scripts/zzz_absent_reference_probe.sh`.\n",
+        ),
+        (
+            ".gitignore comment",
+            ".gitignore",
+            "# See `scripts/zzz_absent_reference_probe.sh`.\n",
+        ),
+        (
+            "Rust test comment",
+            "crates/kanhe/tests/probe.rs",
+            "// `scripts/check_reference_integrity.sh` holds this.\n",
+        ),
+    ];
+    for (_, path, body) in probes {
+        let full = fixture.join(path);
+        std::fs::create_dir_all(full.parent().expect("a fixture parent"))
+            .expect("create fixture parent");
+        std::fs::write(full, body).expect("write fixture source");
+    }
+
+    let unseen: Vec<&str> = probes
+        .iter()
+        .filter_map(|(direction, path, _)| {
+            offences_in(
+                &root,
+                &fixture,
+                &tracked_paths,
+                &["anchor.md".to_string(), path.to_string()],
+            )
+            .is_empty()
+            .then_some(*direction)
+        })
+        .collect();
+    let _ = std::fs::remove_dir_all(&fixture);
+
+    assert!(
+        unseen.is_empty(),
+        "recognized stale references were inspected by nothing: {}",
+        unseen.join(", ")
     );
 }
 

@@ -1,7 +1,7 @@
 # A crate OUTSIDE the family joining a governance run as its own observation participant.
 #
 # Its own workspace (`[workspace]` below) so its deliberate faults are never swept by Tianheng's
-# workspace-wide gates; CI runs it in isolation via `scripts/test_examples.sh`, patching the family
+# workspace-wide gates; CI runs it in isolation through `crates/shengmo/tests/examples_suite.rs`, patching the family
 # crates to local source while preserving the manifest's adopter-facing requirement.
 #
 # One dependency, and deliberately nothing else. The participant is written against the public

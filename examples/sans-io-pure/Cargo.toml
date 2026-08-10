@@ -1,7 +1,7 @@
 # Standalone adoption of the 天衡 (tianheng) shell's **`sans_io_pure`** composed profile.
 #
 # Its own workspace (`[workspace]` below) so its *deliberate* clock read and async leak are never
-# swept by Tianheng's workspace-wide gates; CI runs it in isolation via `scripts/test_examples.sh`,
+# swept by Tianheng's workspace-wide gates; CI runs it in isolation through `crates/shengmo/tests/examples_suite.rs`,
 # patching the family crates to local source while preserving the manifest requirement.
 #
 # It depends on `tianheng` (not a single dimension) because `sans_io_pure` is a SHELL profile: it

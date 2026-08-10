@@ -773,6 +773,13 @@ no adopter runs. They are here rather than under the adopter headings above beca
   misconfiguring that action therefore stayed green. The reaction now projects the action's declared
   `with.command` into the same command set as `run:` lines, while deliberately interpreting no other action.
 
+- **Reference integrity now reads the comment-bearing corpus it names.** Tracked TOML and `.gitignore`
+  comments were outside the reader, and every Rust test source was skipped wholesale, so current pointers to
+  deleted workflow scripts survived. Markdown document text and admitted line-comment regions now share one
+  tracked corpus; fixture strings remain code rather than repository claims, and each inspected file is counted
+  once. The capability also drops process exit and stdout promises a cargo-test check cannot provide, retaining
+  read-only pass/fail behavior and fail-loud observation errors.
+
 - **Four judgements answered about something other than what they read.** The publish gate asked
   `check-ignore` about git's **quoted** spelling of a path — measured, a file named `ignored-普通` ignored by
   a *tracked* `.gitignore` is listed as `"ignored-\346\231\256\351\200\232"`, that literal matches

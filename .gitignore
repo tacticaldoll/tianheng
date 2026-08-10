@@ -16,7 +16,8 @@
 # shell-to-metadata edge the self-law fixture exists to violate. The reaction reads them with
 # `cargo metadata --no-deps`, which resolves nothing and writes no lock, but any ordinary command that
 # does resolve (`cargo build`, `cargo tree`, a bare `cargo metadata`) leaves one behind. Untracked and
-# unignored, that file makes `check_publish_source.sh` refuse: it reads `--untracked-files=all` and a
+# unignored, that file makes `crates/kanhe/tests/publish_source.rs` refuse: it reads
+# `--untracked-files=all` and a
 # dirty worktree means `HEAD` no longer describes what would be packaged — so a test artifact would
 # block an irreversible act. Committing one is not the alternative; a fixture's resolved lock is local
 # only, exactly as an example's is.
