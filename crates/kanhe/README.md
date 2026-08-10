@@ -1,6 +1,6 @@
 # 勘合 / kanhe
 
-**若合符節。** — *As when the two halves of a tally fit.* (孟子·離婁下)
+**剖符相勘,不合即見。** — *Split the tally and lay the halves together; where they do not fit, it shows.*
 
 **This repository's record, held against itself.** Not product. Ships in no package.
 
