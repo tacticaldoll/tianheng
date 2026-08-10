@@ -5,7 +5,7 @@
 **This repository's record, held against itself.** Not product. Ships in no package.
 
 A 勘合 is one document made in two halves, kept apart, and proven genuine by fitting them back
-together. Every reaction here does that: it lays two texts side by side and reports where they
+together. Every repository check here does that: it lays two texts side by side and reports where they
 disagree.
 
 - `AGENTS.md`'s Definition of Done against `.github/workflows/ci.yml`.
@@ -25,7 +25,7 @@ to neither vocabulary: it measures nothing, so it is no 儀, and it administers 
 司.
 
 Its sibling [`shengmo`](../shengmo/README.md) (繩墨) holds the other half: the law 天衡 declares
-over itself, and the reactions that run the delivered product against this workspace. Keeping the
+over itself, and the dogfood gates that run the delivered product's reactions against this workspace. Keeping the
 two apart is the point — a claim about one was read as a claim about both for as long as they shared
 a directory.
 
@@ -34,7 +34,7 @@ a directory.
 - `src/` — the judgements: what a squash message must be, what a release section must say, where a
   refusal may be constructed, and the bounds declared by Kanhe-owned checks.
 - `src/tests/` — their failure matrices, beside what they test.
-- `tests/` — the reactions that run against the real repository.
+- `tests/` — the repository checks that run against the real repository.
 
 ## License
 

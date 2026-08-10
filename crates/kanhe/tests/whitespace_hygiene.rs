@@ -1,4 +1,4 @@
-//! Self-governance reaction: whitespace hygiene across every tracked text file.
+//! Repository check: whitespace hygiene across every tracked text file.
 //!
 //! Asserts that tracked text files carry no trailing whitespace on any line,
 //! no blank line at end of file, and end with a single newline character.

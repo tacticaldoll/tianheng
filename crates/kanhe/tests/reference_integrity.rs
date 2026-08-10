@@ -1,4 +1,4 @@
-//! Self-governance reaction: every in-repository path named by tracked Markdown document text, or by a
+//! Repository check: every in-repository path named by tracked Markdown document text, or by a
 //! Rust, TOML, or `.gitignore` line whose first non-whitespace token is its comment marker, must exist.
 //!
 //! This class was hand-swept twice — once for `.md` only — and a module split landing after that sweep
@@ -224,9 +224,9 @@ fn in_repository_references_resolve() {
 
 /// Every stale reference `corpus` carries, judged against the paths `tracked` names.
 ///
-/// Split from the reaction so a NEGATIVE fixture can call it. Asserting `offences.is_empty()` over a clean
+/// Split from the check so a NEGATIVE fixture can call it. Asserting `offences.is_empty()` over a clean
 /// tree is a verdict that deleting a detector can only make emptier: measured, all four extraction forms were
-/// disabled one at a time and the reaction stayed green every time. A reaction whose only assertion is that
+/// disabled one at a time and the check stayed green every time. A check whose only assertion is that
 /// it found nothing cannot be shown to find anything.
 fn offences_in(
     root: &Path,
@@ -302,15 +302,15 @@ fn offences_in(
         inspected += 1;
         // An active plan names what it intends to create, so judging it for existence refuses a proposal for
         // describing its own deliverable. The requirement states this exclusion and carries a scenario for it;
-        // nothing held either until a plan first named a path that did not exist yet, and the reaction then
+        // nothing held either until a plan first named a path that did not exist yet, and the check then
         // reported five offences against the change proposing them. Filtered here rather than at the caller,
-        // so the fixture below exercises the same judgement the reaction runs.
+        // so the fixture below exercises the same judgement the check runs.
         if rel_path.starts_with("openspec/changes/") {
             continue;
         }
         let Ok(content) = std::fs::read_to_string(corpus_root.join(rel_path)) else {
             panic!(
-                "cannot read tracked file '{rel_path}' — a file this reaction claims to have inspected must \
+                "cannot read tracked file '{rel_path}' — a file this check claims to have inspected must \
                  have been read"
             );
         };
@@ -478,7 +478,7 @@ fn offences_in(
 
     assert!(
         inspected > 0,
-        "inspected 0 files — no tracked Markdown, Rust, TOML, or .gitignore source, so this reaction would \
+        "inspected 0 files — no tracked Markdown, Rust, TOML, or .gitignore source, so this check would \
          report clean without having read anything"
     );
     offences
@@ -486,7 +486,7 @@ fn offences_in(
 
 /// Each extraction form, planted and required to be seen.
 ///
-/// This is the direction the reaction had none of. Its verdict is that it found nothing, and a verdict of
+/// This is the direction the check had none of. Its verdict is that it found nothing, and a verdict of
 /// that shape survives every detector being deleted — measured on all four forms, each disabled in turn,
 /// green every time. The claim that they had been "disabled in turn" was therefore unfalsifiable, and one of
 /// the four was in fact inert: the bare-basename branch extracted its references and discarded them, which is
@@ -547,7 +547,7 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
     let _ = std::fs::remove_dir_all(&scratch);
     assert!(
         unseen.is_empty(),
-        "an extraction form names something absent and the reaction says nothing:\n{}",
+        "an extraction form names something absent and the check says nothing:\n{}",
         unseen.join("\n")
     );
 }

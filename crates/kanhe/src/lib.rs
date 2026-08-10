@@ -1,7 +1,7 @@
 //! 勘合 (Kānhé) — the split tally.
 //!
 //! A 勘合 is one document made in two halves, kept apart, and proven genuine by fitting them back
-//! together. Every reaction in this crate does that:
+//! together. Every repository check in this crate does that:
 //! `AGENTS.md` against `.github/workflows/ci.yml`, `CHANGELOG.md` against the tree it describes, a
 //! spec's declared bound against the test that defends it, a generated document against the
 //! generator its own header names.
@@ -10,8 +10,8 @@
 //! flow* — the steward routing, the OpenSpec lifecycle — while this crate collates a record. A first
 //! draft of this crate took the name anyway, which is the misnaming its own siblings exist to end.
 //!
-//! It is **not** self-governance either. 繩墨 holds the law 天衡 declares over itself and the reactions that
-//! run the delivered product against this workspace; what lives here judges the repository's
+//! It is **not** self-governance either. 繩墨 holds the law 天衡 declares over itself and the dogfood gates that
+//! run the delivered product's reactions against this workspace; what lives here judges the repository's
 //! *record*, and reaches no product contract at all. Keeping the two apart is the point: a claim
 //! about one was read as a claim about both for as long as they shared a directory.
 //!
@@ -22,7 +22,7 @@
 //! - **`src/`** — the judgements: what a squash message must be, what a release section must say,
 //!   where a refusal may be constructed.
 //! - **`src/tests/`** — their failure matrices, as unit tests beside what they test.
-//! - **`tests/`** — the reactions: what runs against the real repository.
+//! - **`tests/`** — the repository checks: what runs against the real repository.
 
 #![forbid(unsafe_code)]
 

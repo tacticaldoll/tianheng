@@ -510,10 +510,10 @@ consumer for an undemonstrated deduplication.
   three times and rejected. The reachable direction is to make more of what the file asserts **citable**, so
   that restating is the strictly worse-looking option at the moment of writing.
 
-- **WATCH: four limits of the mutual-independence reaction, each measured and each declared.** *Observed
+- **WATCH: four limits of the mutual-independence check, each measured and each declared.** *Observed
   pressure:* closing the membership half of `三儀 ⊥ 三儀` exposed four more, all reproduced by writing them into
-  the tree rather than argued about. **Wording, over-reacting:** paraphrasing `guibiao`'s clause makes the
-  reaction fire — it refuses a reason that genuinely states the law. **Wording, under-reacting:** a `because`
+  the tree rather than argued about. **Wording, false refusal:** paraphrasing `guibiao`'s clause makes the
+  check fire — it refuses a reason that genuinely states the law. **Wording, false negative:** a `because`
   carrying the literal clause while *negating* it passes, and `AGENTS.self-law.md` then teaches the negation to
   every agent that loads it. **Enumeration, the dimension list:** `DIMENSIONS` is a hand-kept literal beside an
   enumerable set, and the set-coverage assertion cannot notice an omission because `found` is produced by
@@ -521,12 +521,12 @@ consumer for an undemonstrated deduplication.
   green. **Enumeration, the rule variant:** the filter admits only `RestrictDependenciesTo`, so a second
   boundary using `restrict_workspace_dependencies_to` — the more natural rule for this law — is never examined.
   *Observation source:* those four perturbations, run during review of
-  `change/mutual-independence-reacts-to-membership`. *Current reaction or bound:* none of the four; the
-  reaction's doc comment and `self-law-projection` state them where a reader meets them. *Risk:* the second is
+  `change/mutual-independence-reacts-to-membership`. *Current check or bound:* none of the four; the
+  check's doc comment and `self-law-projection` state them where a reader meets them. *Risk:* the second is
   the serious one — the agent-facing projection can teach the negation of the law it quotes. *Promotion
-  trigger:* fired for the second; the others are recorded with it because they are one reaction's limits and
-  closing them separately would re-open the same file four times. *Version class:* patch; a `tests/` reaction of
-  this repository. *Authority:* `self-law-projection`. *Shape:* **pinning** any of them needs the reaction run over a
+  trigger:* fired for the second; the others are recorded with it because they are one check's limits and
+  closing them separately would re-open the same file four times. *Version class:* patch; a `tests/` check of
+  this repository. *Authority:* `self-law-projection`. *Shape:* **pinning** any of them needs the check run over a
   supplied declaration rather than its predicate over a string, which means factoring the assertion loop to take
   a `Constitution` — that is what this entry owns. **Declaring** them needed none of that, and an earlier draft
   of this entry said it did: it read the pin requirement as a declaration requirement and withheld all four,
@@ -659,13 +659,13 @@ consumer for an undemonstrated deduplication.
   or the published source escapes the gate that stands in front of it. *Next trigger:* an act reaching either
   without the wrapper. *Authority:* engine. *Compatibility:* none — reaching further means observing the
   operator's shell or GitHub's servers rather than this repository.
-- **WATCH: which governance member a reaction belongs to is unobserved.** *Observed pressure:* the split
+- **WATCH: which governance member a check belongs to is unobserved.** *Observed pressure:* the split
   between 繩墨 (the law and the delivered product) and 勘合 (this repository's record) is a judgement about
-  what a reaction judges, and two mechanical rules were each measured unreliable — a text scan reads a comment
-  naming `AGENTS.md` as governance while a reaction scanning every tracked file names nothing, and
+  what a check judges, and two mechanical rules were each measured unreliable — a text scan reads a comment
+  naming `AGENTS.md` as governance while a check scanning every tracked file names nothing, and
   `TIANHENG_WORKSPACE_TESTS` means both "this needs the repository as its subject" and "this needs a fixture".
-  *Risk:* a reaction lands in the wrong member and the two identities blur again, which is the failure the
-  split was built to end. *Next trigger:* a third member, or a reaction whose placement two readers disagree
+  *Risk:* a check lands in the wrong member and the two identities blur again, which is the failure the
+  split was built to end. *Next trigger:* a third member, or a check whose placement two readers disagree
   about. *Authority:* engine. *Compatibility:* none — neither member ships.
   - **A `#[path]`-shared test module's `allow(dead_code)` cannot distinguish "used by no binary" from "used by
     some".** *Observed pressure:* `crates/tianheng/tests/support/` is compiled fresh into each `*_conformance.rs`

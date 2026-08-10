@@ -47,7 +47,7 @@ fn every_gate_a_wrapper_cites_is_a_test_that_exists() {
         .collect();
     assert!(
         !scripts.is_empty(),
-        "no tracked shell script was enumerated, so this reaction would report clean over nothing"
+        "no tracked shell script was enumerated, so this check would report clean over nothing"
     );
 
     let mut cited = Vec::new();
@@ -58,8 +58,8 @@ fn every_gate_a_wrapper_cites_is_a_test_that_exists() {
     }
     assert!(
         !cited.is_empty(),
-        "no tracked script cites a gate by `--exact`, so this reaction holds nothing — if the wrappers stopped \
-         asking for their gates that way, this reaction should be retired rather than left asserting an empty \
+        "no tracked script cites a gate by `--exact`, so this check holds nothing — if the wrappers stopped \
+         asking for their gates that way, this check should be retired rather than left asserting an empty \
          set"
     );
 

@@ -102,7 +102,7 @@ pub fn offences(
         let (Some(package), Some(target)) = (&citation.package, &citation.target) else {
             offences.push(cannot_judge(format!(
                 "{}: `--exact {}` names no `--test <target>` in its invocation, so the identifier cannot be \
-                 bound to the harness that would register it — an identifier this reaction cannot resolve is \
+                 bound to the harness that would register it — an identifier this check cannot resolve is \
                  not one it resolved as fine",
                 citation.script, citation.identifier
             )));

@@ -2,7 +2,7 @@
 //!
 //! Which capability a requirement belongs to is decided once, in a proposal, and was checked by nothing. It
 //! went wrong twice in one window — a requirement about `scripts/publish.sh` filed under a capability whose
-//! subject is Rust reactions, and a member filled by the one criterion that says where a reaction must *not*
+//! subject is repository checks, and a member filled by the one criterion that says where a check must *not*
 //! live — and a reader caught both.
 //!
 //! The touched set is **produced**: the change's diff against its base. Reading it from the change's own
@@ -61,7 +61,7 @@ fn specs(root: &Path) -> BTreeMap<String, String> {
     }
     assert!(
         !specs.is_empty(),
-        "no capability spec was enumerated, so every property of this reaction holds while proving nothing"
+        "no capability spec was enumerated, so every property of this check holds while proving nothing"
     );
     specs
 }
@@ -104,7 +104,7 @@ fn every_capability_declares_the_subject_it_governs() {
 /// The base this branch's change is measured against.
 ///
 /// Unresolvable is a **cannot-judge**, never an empty diff: reading it as "nothing was touched" would report
-/// clean over every change, which is the direction this reaction exists to close.
+/// clean over every change, which is the direction this check exists to close.
 fn base(root: &Path) -> Result<String, Refusal> {
     let mut candidates = vec![];
     if let Ok(upstream) = git(root, &["rev-parse", "--abbrev-ref", "@{upstream}"]) {
@@ -159,7 +159,7 @@ fn a_change_names_every_capability_whose_subject_it_touches() {
         .expect("the active changes are enumerable");
     let changes = lines(&changes);
     if changes.is_empty() {
-        // No filing decision is in front of this reaction. An ordinary checkout is asking no such question,
+        // No filing decision is in front of this check. An ordinary checkout is asking no such question,
         // and refusing one would be noise rather than governance.
         return;
     }
@@ -207,7 +207,7 @@ fn a_change_names_every_capability_whose_subject_it_touches() {
     );
 }
 
-/// `rust-repository-reactions/a-tracked-file-no-capability-claims-is-not-judged-a-stated-bound`
+/// `repository-checks/a-tracked-file-no-capability-claims-is-not-judged-a-stated-bound`
 ///
 /// Subjects are declared where a capability has something to say, and requiring them to tile the repository
 /// would buy coverage with thirty-six claims nobody could defend. The blindness is declared so a clean report
@@ -287,7 +287,7 @@ fn a_branch_with_no_resolvable_base_cannot_be_judged() {
 ///
 /// The unit matrix exercises the rule; this exercises the rule *on this repository*. Both are needed, and
 /// only this one can say whether the claim "it would have caught that filing" is true — measured, under the
-/// first rule it was false, because `rust-repository-reactions` claims `scripts/*.sh` and naming one claimant
+/// first rule it was false, because `repository-checks` claims `scripts/*.sh` and naming one claimant
 /// was enough.
 #[test]
 fn the_parked_misfiling_is_refused_against_the_declared_subjects() {
@@ -307,15 +307,13 @@ fn the_parked_misfiling_is_refused_against_the_declared_subjects() {
          one claimant it would pass for a reason unrelated to the rule"
     );
 
-    let named: BTreeSet<String> = ["rust-repository-reactions".to_string()]
-        .into_iter()
-        .collect();
+    let named: BTreeSet<String> = ["repository-checks".to_string()].into_iter().collect();
     let offences = join_offences("a-gate-that-matched-no-test", &[wrapper], &named, &claimed);
     assert!(
         offences
             .iter()
             .any(|refusal| refusal.message.contains("publish-source-integrity")),
-        "a change touching the publish wrapper while naming only the Rust-reaction capability must be \
+        "a change touching the publish wrapper while naming only the repository-check capability must be \
          refused, and named for the capability it failed to account for; got: {:?}",
         offences.iter().map(|r| &r.message).collect::<Vec<_>>()
     );

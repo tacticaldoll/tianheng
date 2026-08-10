@@ -1,14 +1,14 @@
 //! The law 天衡 declares over its own repository.
 //!
 //! Written with the product's own declaration API: the capability applied to its author. This is
-//! code, not a test — what runs it is a reaction, and what reads it is the projection.
+//! code, not a test — a dogfood gate runs its product reaction, and a generator reads its projection.
 
 use tianheng::prelude::*;
 use tianheng::{Boundary, Rule};
 
 /// **Tianheng's self-constitution — the law it enforces on itself.**
 ///
-/// Declared in the same Rust DSL adopters use. `tianheng_governs_itself` runs it as a
+/// Declared in the same Rust DSL adopters use. `tianheng_governs_itself` runs the product's
 /// real reaction against the workspace, so the dogfooding is a non-bypassable gate, not
 /// a hope. Each boundary below carries its own `because` — its target, allowlist, and reason
 /// — and those project (target · rule · reason) into the generated, byte-checked
@@ -29,7 +29,7 @@ use tianheng::{Boundary, Rule};
 /// `dimension_boundaries_declare_the_mutual_independence_law` — asserts both that every
 /// dimension boundary carries the clause and that its allowlist **obeys** it, so the claim is
 /// *self-observed* rather than a hand-maintained pointer that could drift (the
-/// declaration-integrity pattern: replace a prose index with a reaction). The second half was
+/// declaration-integrity pattern: replace a prose index with a check). The second half was
 /// added after a widened allowlist naming a sibling was measured green everywhere.
 /// A constitution reader and the 垂象 report both see the intent. It adds **no separate
 /// boundary on purpose: a dimension's `restrict_dependencies_to` allowlist names no sibling
@@ -216,7 +216,7 @@ pub fn shell_dependency_boundary() -> Boundary {
     assert_eq!(
         shell_boundaries.len(),
         1,
-        "the self-constitution must declare exactly one tianheng dependency allowlist; a repository reaction \
+        "the self-constitution must declare exactly one tianheng dependency allowlist; a repository check \
          must not choose an arbitrary duplicate or silently stop observing a renamed boundary"
     );
     shell_boundaries.pop().expect("the unique shell boundary")

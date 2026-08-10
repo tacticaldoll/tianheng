@@ -100,8 +100,8 @@ pub fn declaration_offences(
 ///
 /// **Every** claimant, not one of them. Naming one was the first rule and it was measured unable to catch the
 /// defect it was written from: `scripts/publish.sh` is claimed both by the capability governing what must be
-/// true before a publish and by the capability governing this repository's reactions, so a change naming only
-/// the second passed while filing a wrapper's requirement under a Rust-reaction subject.
+/// true before a publish and by the capability governing this repository's checks, so a change naming only
+/// the second passed while filing a wrapper's requirement under a repository-check subject.
 ///
 /// Requiring all of them does not refuse an honest proposal, because *accounting for* a capability is not
 /// *listing it as modified*: a Capabilities section that names it while saying why its requirements do not

@@ -1,6 +1,6 @@
 //! Reading the observation-bound register out of the tracked specs.
 //!
-//! Shared by the register reaction and by the census sweep, because a census is produced by the reaction that
+//! Shared by the register check and by the census sweep, because a census is produced by the check that
 //! enumerates the set — a second parse would let the two disagree, which is the drift the census rule exists
 //! to end.
 
@@ -107,7 +107,7 @@ pub enum Citation {
     /// Every test cited. Several are legal: `observation-bound-model` declares that one bound may be
     /// defended by more than one test, and `BoundDecl::pinned_by_many` is its typed counterpart. The
     /// register's "exactly one citation" is about the two exclusive FORMS — pinned or tracked — not about
-    /// how many tests a defence names. A first draft of this reaction read it as a bullet count, refused
+    /// how many tests a defence names. A first draft of this check read it as a bullet count, refused
     /// the one live instance, and split the scenario in two; the model's own bijection caught it.
     PinnedBy(Vec<String>),
     /// The whole remainder of the `UNPINNED` line, which names the tracker and says what it owns.
@@ -151,7 +151,7 @@ pub fn tracked_specs(root: &Path) -> Vec<(String, String)> {
         .collect();
     assert!(
         !specs.is_empty(),
-        "`git ls-files` matched no openspec/specs/*/spec.md — this reaction would report clean without \
+        "`git ls-files` matched no openspec/specs/*/spec.md — this check would report clean without \
          reading anything, which is the vacuity direction"
     );
     specs
@@ -227,7 +227,7 @@ pub fn bounds_in(capability: &str, spec: &str, text: &str) -> Vec<Bound> {
 
         // A scenario carrying two citations declares two bounds behind one heading, so the register
         // holds one of them and the other is defended by a test nothing points at. The old shell gate
-        // projected the FIRST and moved on; rebuilding this reaction surfaced the one live instance.
+        // projected the FIRST and moved on; rebuilding this check surfaced the one live instance.
         let tracked = !unpinned.is_empty() || unpinned_bare;
         let citation = if !pinned.is_empty() && tracked {
             Citation::Both
@@ -261,7 +261,7 @@ pub fn parse_bounds(root: &Path) -> Vec<Bound> {
     for (capability, spec) in tracked_specs(root) {
         let text = std::fs::read_to_string(root.join(&spec)).unwrap_or_else(|err| {
             panic!(
-                "could not read the declared bounds from {spec}: {err} — a spec this reaction cannot parse \
+                "could not read the declared bounds from {spec}: {err} — a spec this check cannot parse \
                  leaves the register undecided rather than clean"
             )
         });
@@ -270,7 +270,7 @@ pub fn parse_bounds(root: &Path) -> Vec<Bound> {
 
     assert!(
         !bounds.is_empty(),
-        "parsed 0 declared bounds across the tracked specs — the heading form changed, so this reaction \
+        "parsed 0 declared bounds across the tracked specs — the heading form changed, so this check \
          cannot judge rather than reporting a register of nothing as clean"
     );
     bounds

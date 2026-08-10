@@ -14,8 +14,8 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound` — owner: engine
-- `observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound` — owner: engine
-- `observation-bound-register/which-member-holds-a-reaction-is-a-judgement-a-stated-bound` — owner: engine
+- `observation-bound-register/whether-a-record-perturbs-the-check-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound` — owner: engine
+- `observation-bound-register/which-member-holds-a-check-is-a-judgement-a-stated-bound` — owner: engine
 - `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound` — owner: engine
 - `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound` — owner: adopter
 - `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound` — owner: engine
@@ -28,12 +28,12 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `release-coherence/a-name-reached-only-through-a-url-a-stated-bound` — owner: engine
 - `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound` — owner: engine
 - `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound` — owner: engine
+- `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
+- `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
+- `repository-checks/files-no-capability-claims-a-stated-bound` — owner: engine
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
 - `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound` — owner: engine
-- `rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
-- `rust-repository-reactions/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
-- `rust-repository-reactions/files-no-capability-claims-a-stated-bound` — owner: engine
-- `self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound` — owner: engine
+- `self-law-projection/a-dimension-absent-from-the-check-s-own-list-is-not-examined-a-stated-bound` — owner: engine
 - `self-law-projection/a-reason-carrying-the-clause-while-negating-the-law-is-not-observed-a-stated-bound` — owner: engine
 - `self-law-projection/a-workspace-dependency-allowlist-is-not-examined-a-stated-bound` — owner: engine
 - `semantic-reexport-exposure/a-facade-hop-re-exporting-a-privately-used-bare-name-is-a-stated-bound` — owner: engine
@@ -196,9 +196,17 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > a generated document whose header names a command that no longer regenerates it
 
-- **because**: the header is read and never evaluated; running the command would mean re-entering the `cargo test` harness already running, or — for the shell mechanism — writing the projection into the tree the reaction is judging, which every gate in this family is forbidden from doing
+- **because**: the header is read and never evaluated; running the command would mean re-entering the `cargo test` harness already running, or — for the shell mechanism — writing the projection into the tree the check is judging, which every gate in this family is forbidden from doing
 - **its defence must show**: does not react
 - **pinned by**: `a_regeneration_command_is_registered_and_never_run`
+
+### `repository-checks/a-hook-is-proposed-for-this-rule-a-stated-bound`
+
+> a squash merge made anywhere but through the sanctioned wrapper
+
+- **because**: a squash merge runs on GitHub's servers, so no local commit exists and no hook runs, and both values of the repository's squash-title setting append the serial; the check guards the sanctioned path to a merge, and a browser reaches no wrapper
+- **its defence must show**: does not react
+- **pinned by**: `a_merge_made_outside_the_wrapper_is_not_observed`
 
 ### `runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-bound`
 
@@ -207,14 +215,6 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the audit's corpus is the member's library and binary targets, so it never reads those files at all
 - **its defence must show**: does not react
 - **pinned by**: `source_outside_lib_or_bin_target_subtree_is_out_of_scope_corpus_bound`
-
-### `rust-repository-reactions/a-hook-is-proposed-for-this-rule-a-stated-bound`
-
-> a squash merge made anywhere but through the sanctioned wrapper
-
-- **because**: a squash merge runs on GitHub's servers, so no local commit exists and no hook runs, and both values of the repository's squash-title setting append the serial; the reaction guards the sanctioned path to a merge, and a browser reaches no wrapper
-- **its defence must show**: does not react
-- **pinned by**: `a_merge_made_outside_the_wrapper_is_not_observed`
 
 ### `semantic-dyn-trait-boundary/a-macro-generated-dyn-is-a-documented-bound`
 
@@ -390,9 +390,9 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > a dimension's `because` stating the mutual-independence law in different words, without the literal clause
 
-- **because**: the check reads the `because` for the literal clause, so a reason that genuinely states the law in other words is refused; the direction is the safe one and closing it needs the reaction to decide two wordings state one law
+- **because**: the check reads the `because` for the literal clause, so a reason that genuinely states the law in other words is refused; the direction is the safe one and closing it needs the check to decide two wordings state one law
 - **its defence must show**: reacts on a harmless shape
-- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
+- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence check*
 
 ### `semantic-visibility-boundary/a-pub-in-narrow-path-item-may-over-react-under-a-tight-ceiling-a-stated-bound`
 
@@ -446,7 +446,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 ### `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound`
 
-> code run inside the checkout writing outside it, or replacing a checked path so the reaction's own write lands elsewhere
+> code run inside the checkout writing outside it, or replacing a checked path so the check's own write lands elsewhere
 
 - **because**: running the cited test is the whole method, so code execution inside the checkout is granted unconditionally; the shared common directory is what makes a git-reading citation reachable at all, and re-checking a resolved path after the build would re-check the window that defeated it
 - **its defence must show**: does not react
@@ -464,7 +464,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > a cited test passing and failing by a period the fixed run sequence does not break
 
-- **because**: the reaction runs the test a fixed number of times and the number is readable in its own source, so a matching period escapes; closing it needs each run unable to observe how many times the test has run, whose cost grows with the coverage this capability exists to grow
+- **because**: the check runs the test a fixed number of times and the number is readable in its own source, so a matching period escapes; closing it needs each run unable to observe how many times the test has run, whose cost grows with the coverage this capability exists to grow
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
@@ -476,7 +476,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
-### `observation-bound-register/whether-a-record-perturbs-the-reaction-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound`
+### `observation-bound-register/whether-a-record-perturbs-the-check-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound`
 
 > a record naming the file its pin lives in and neutralising one of that pin's assertions
 
@@ -484,13 +484,13 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
 
-### `observation-bound-register/which-member-holds-a-reaction-is-a-judgement-a-stated-bound`
+### `observation-bound-register/which-member-holds-a-check-is-a-judgement-a-stated-bound`
 
-> which governance member a newly added reaction belongs to
+> which governance member a newly added check belongs to
 
-- **because**: the split is by what a reaction judges, and two mechanical rules were each measured unreliable: a text scan reads a comment naming a governance document as governance while a reaction scanning every tracked file names nothing, and the workspace marker means both `this needs the repository as its subject` and `this needs a fixture`. Position is the declaration
+- **because**: the split is by what a check judges, and two mechanical rules were each measured unreliable: a text scan reads a comment naming a governance document as governance while a check scanning every tracked file names nothing, and the workspace marker means both `this needs the repository as its subject` and `this needs a fixture`. Position is the declaration
 - **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *which governance member a reaction belongs to is unobserved*
+- **unpinned**, tracked by: `BACKLOG.md` — *which governance member a check belongs to is unobserved*
 
 ### `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`
 
@@ -552,7 +552,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > an adopter-facing entry naming a directory under `scripts/` without its trailing slash
 
-- **because**: directories are derived slash-terminated, and stripping that slash leaves a word indistinguishable from ordinary prose — `scripts` is an English plural this document already uses as one. Admitting the unslashed form for deeper names only, where the collision is less likely, would make the reaction judge which of its own keys read as English
+- **because**: directories are derived slash-terminated, and stripping that slash leaves a word indistinguishable from ordinary prose — `scripts` is an English plural this document already uses as one. Admitting the unslashed form for deeper names only, where the collision is less likely, would make the check judge which of its own keys read as English
 - **its defence must show**: does not react
 - **pinned by**: `a_directory_named_without_its_slash_is_a_stated_bound`
 
@@ -560,7 +560,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > a `### ` line inside a fenced code block, followed by entries that name machinery
 
-- **because**: the reaction walks the document's line grammar and does not track fences, so such a line sets the heading in force and can name the one exempt heading; it is latent rather than live — this repository's changelog carries no fenced block — and closing it means a second, stateful reading of a document this gate reads once
+- **because**: the check walks the document's line grammar and does not track fences, so such a line sets the heading in force and can name the one exempt heading; it is latent rather than live — this repository's changelog carries no fenced block — and closing it means a second, stateful reading of a document this gate reads once
 - **its defence must show**: does not react
 - **pinned by**: `a_heading_inside_a_fenced_block_is_a_stated_bound`
 
@@ -568,7 +568,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > an adopter-facing entry naming machinery only inside a URL
 
-- **because**: a word is a maximal run of path characters, so a scheme and host fuse with the path into one run that equals no tracked name; splitting a URL into its path would make the reaction judge a foreign host's layout as though it were this repository's
+- **because**: a word is a maximal run of path characters, so a scheme and host fuse with the path into one run that equals no tracked name; splitting a URL into its path would make the check judge a foreign host's layout as though it were this repository's
 - **its defence must show**: does not react
 - **pinned by**: `a_name_reached_only_through_a_url_is_a_stated_bound`
 
@@ -588,6 +588,30 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `machinery_tracked_by_nothing_is_a_stated_bound`
 
+### `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
+
+> a figure about an enumerable set, written in a phrasing no census declares
+
+- **because**: the declaration is the coverage — a census names the one sentence its figures are written in, and a count outside that sentence is unheld. Reaching it needs a judgement over prose, the instrument this repository designed, measured three times and rejected; `AGENTS.md` carries the other half as a rule with no check
+- **its defence must show**: does not react
+- **pinned by**: `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
+
+### `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound`
+
+> an act reaching cargo publish or a merge without going through its wrapper
+
+- **because**: both assertions guard the sanctioned path -- the wrapper requiring its gate to report one passing test, and the check pinning the identifier it cites. Reaching further would mean observing the operator's shell or GitHub's servers rather than this repository
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
+
+### `repository-checks/files-no-capability-claims-a-stated-bound`
+
+> a tracked file no capability's declared subject claims
+
+- **because**: subjects are declared where a capability has something to say, and requiring them to tile the repository would buy coverage with a claim per capability that nobody could defend. The join reports how many tracked paths went unclaimed, so a clean verdict is not read as a complete one
+- **its defence must show**: does not react
+- **pinned by**: `files_no_capability_claims_are_reported_rather_than_implied_judged`
+
 ### `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound`
 
 > a seam whose only probe sits in a module reached by `#[path]` into a symlinked directory
@@ -604,37 +628,13 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `production_probe_behind_non_production_cfg_is_counted_as_coverage`
 
-### `rust-repository-reactions/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
+### `self-law-projection/a-dimension-absent-from-the-check-s-own-list-is-not-examined-a-stated-bound`
 
-> a figure about an enumerable set, written in a phrasing no census declares
-
-- **because**: the declaration is the coverage — a census names the one sentence its figures are written in, and a count outside that sentence is unheld. Reaching it needs a judgement over prose, the instrument this repository designed, measured three times and rejected; `AGENTS.md` carries the other half as a rule with no reaction
-- **its defence must show**: does not react
-- **pinned by**: `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
-
-### `rust-repository-reactions/a-gate-reached-without-the-wrapper-a-stated-bound`
-
-> an act reaching cargo publish or a merge without going through its wrapper
-
-- **because**: both assertions guard the sanctioned path -- the wrapper requiring its gate to report one passing test, and the reaction pinning the identifier it cites. Reaching further would mean observing the operator's shell or GitHub's servers rather than this repository
-- **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
-
-### `rust-repository-reactions/files-no-capability-claims-a-stated-bound`
-
-> a tracked file no capability's declared subject claims
-
-- **because**: subjects are declared where a capability has something to say, and requiring them to tile the repository would buy coverage with a claim per capability that nobody could defend. The join reports how many tracked paths went unclaimed, so a clean verdict is not read as a complete one
-- **its defence must show**: does not react
-- **pinned by**: `files_no_capability_claims_are_reported_rather_than_implied_judged`
-
-### `self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound`
-
-> a dimension crate whose package name is not in the reaction's hand-kept list
+> a dimension crate whose package name is not in the check's hand-kept list
 
 - **because**: the list is typed beside a set that enumerates itself, and the set-coverage assertion compares a set produced by filtering on that same list, so an omission is invisible to both halves
 - **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
+- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence check*
 
 ### `self-law-projection/a-reason-carrying-the-clause-while-negating-the-law-is-not-observed-a-stated-bound`
 
@@ -642,7 +642,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 - **because**: the check looks for the clause and not for what the sentence does with it, so the agent-loaded projection can carry the law's opposite while satisfying the check that exists to keep the law taught
 - **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
+- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence check*
 
 ### `self-law-projection/a-workspace-dependency-allowlist-is-not-examined-a-stated-bound`
 
@@ -650,7 +650,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 - **because**: the filter admits one rule variant, while the variant it omits governs workspace-member edges specifically and is the more natural one for this law
 - **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence reaction*
+- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence check*
 
 ### `semantic-reexport-exposure/a-facade-hop-re-exporting-a-privately-used-bare-name-is-a-stated-bound`
 

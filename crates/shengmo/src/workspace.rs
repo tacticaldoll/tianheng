@@ -1,14 +1,14 @@
-//! Where the repository is, for the law and every reaction that reads it.
+//! Where the repository is, for the law and every gate that reads it.
 //!
-//! One definition of the **scaffolding**; the *prerequisite* stays with each reaction, because that part
-//! genuinely differs — the changelog reaction needs `CHANGELOG.md`, the register needs `openspec/specs/`,
+//! One definition of the **scaffolding**; the *prerequisite* stays with each gate, because that part
+//! genuinely differs — the changelog check needs `CHANGELOG.md`, the register needs `openspec/specs/`,
 //! the examples suite needs `examples/`. Measured before merging them: the fourteen copies this replaces
 //! agreed on every line except that one, so collapsing further would have erased a real distinction while
 //! collapsing less leaves `TIANHENG_WORKSPACE_TESTS` meaning whatever each copy decided.
 //!
-//! The discipline the scaffolding carries: a reaction that cannot find its subject **skips** outside a
+//! The discipline the scaffolding carries: a gate that cannot find its subject **skips** outside a
 //! checkout — a packaged tarball has no workspace root, and failing there would be wrong — and **fails
-//! loudly** when the marker says a repository was expected. A governance reaction that quietly does nothing
+//! loudly** when the marker says a repository was expected. A governance gate that quietly does nothing
 //! in CI is the shape this family argues against.
 
 use std::path::{Path, PathBuf};
@@ -32,7 +32,7 @@ pub fn locate(root: PathBuf, present: impl Fn(&Path) -> bool, marker_set: bool) 
     assert!(
         !marker_set,
         "the repository layout expected under {root:?} is absent while {MARKER} is set — a governance \
-         reaction that quietly does nothing in CI is the shape this family argues against"
+         gate that quietly does nothing in CI is the shape this family argues against"
     );
     None
 }
@@ -68,7 +68,7 @@ mod tests {
                 false
             )
             .is_none(),
-            "outside a checkout a reaction must skip: a packaged tarball has no workspace root"
+            "outside a checkout a gate must skip: a packaged tarball has no workspace root"
         );
         assert!(
             std::panic::catch_unwind(|| locate(

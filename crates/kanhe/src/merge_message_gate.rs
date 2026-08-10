@@ -1,7 +1,7 @@
 //! The squash-message judgement, shared by the gate and by its failure matrix.
 //!
 //! `AGENTS.md` states these rules and nothing held them: **9** subjects in this repository's history carry a
-//! trailing `(#N)`, the most recent on the commit that landed a reaction for a requirement enforced by
+//! trailing `(#N)`, the most recent on the commit that landed a check for a requirement enforced by
 //! nothing. The rule cannot be held where rules are usually held here — a squash merge runs on GitHub's
 //! servers, so no local commit exists and no `commit-msg` hook runs, and both values of
 //! `squash_merge_commit_title` append the serial. What remains is one string passed at merge time.
@@ -152,7 +152,7 @@ pub fn judge(
         return Err(cannot_judge(
             "the pull request's commit subjects are unavailable, so whether this body is the default \
              concatenation of them cannot be decided — falling back to refusing every bulleted body is the \
-             over-reaction this reads them to avoid",
+             false refusal this reads them to avoid",
         ));
     }
     if is_a_bare_commit_list(body, commits) {

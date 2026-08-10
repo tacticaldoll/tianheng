@@ -1,4 +1,4 @@
-//! Self-governance reaction: every example reacts as its documentation declares.
+//! Dogfood gate: every example's product reaction behaves as its documentation declares.
 //!
 //! An example is a claim about what an adopter gets, and the claim is the **exit code**: a demo that reacts
 //! exits 1, a run-mode that only reports events exits 0. Checking that an example merely builds says nothing
@@ -91,7 +91,7 @@ fn workspace_root() -> Option<PathBuf> {
         |root| root.join("examples").is_dir(),
         shengmo::workspace::marker_set(),
     )
-    // Canonicalised, because this reaction COMPARES paths: `cargo metadata` prints a resolved manifest
+    // Canonicalised, because this gate COMPARES paths: `cargo metadata` prints a resolved manifest
     // path, and the manifest directory's grandparent is the same directory written differently. Measured —
     // without it every example read as unpatched. The one place a caller's answer differs from the shared
     // locator's, so it stays here rather than becoming an option nobody else would pass.

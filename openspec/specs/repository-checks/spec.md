@@ -1,15 +1,15 @@
-# rust-repository-reactions Specification
+# repository-checks Specification
 
 ## Purpose
 
-Hold this repository's reactions **on itself** to the shape that makes them reactions rather than
-conventions: each is a Rust integration test under `crates/tianheng/tests/`, each has been seen to fail,
-each says what it deliberately does not reach, and none of them is product.
+Hold this repository's checks **on itself** to the shape that makes them checks rather than conventions: each
+is a Rust integration test in unpublished Kanhe or Shengmo, each has been seen to fail, each says what it
+deliberately does not reach, and none of them is product.
 
 This capability replaces `gate-shape-contract`, which specified the pairing of a `scripts/check_*.sh` gate
 with a `scripts/test_*.sh` twin and the exit contract between them. That subject no longer exists —
 `git ls-files scripts/` names one unit, `publish.sh`, which is a wrapper rather than a gate — and its
-reaction had reached the vacuity its own bounds warned about, enumerating **zero** gates, projecting
+check had reached the vacuity its own bounds warned about, enumerating **zero** gates, projecting
 `0 gates, 11 properties each`, and reporting clean over all of it.
 
 ## Subject
@@ -22,44 +22,78 @@ reaction had reached the vacuity its own bounds warned about, enumerating **zero
 
 ## Requirements
 
-### Requirement: A self-governance reaction SHALL be a Rust test that has been seen to fail
+### Requirement: Repository governance vocabulary SHALL preserve product ownership
 
-Every reaction judging this repository SHALL be a `#[test]` living **outside every published package**, and
+Live project prose and self-descriptive source comments SHALL use **product** only for crates whose manifests
+permit publication. **Reaction** SHALL name observable boundary behavior implemented by those product crates:
+observation, structured outcome or report, process exit class, or runtime event.
+
+An unpublished Rust judgement or test over this repository SHALL be called a **repository check** or **gate**.
+A Shengmo gate MAY invoke product reactions as dogfood, but the gate itself SHALL NOT be described as a separate
+reaction. Shell scripts and CI SHALL be described as **workflow orchestration** that invokes gates or
+irreversible commands and SHALL NOT be assigned a verdict of their own.
+
+#### Scenario: A Kanhe test judges repository records
+
+- **WHEN** prose describes a Kanhe integration test comparing this repository's documents, code, or workflow
+  registration
+- **THEN** it calls that executable a repository check or gate, not a product reaction
+
+#### Scenario: Shengmo runs the delivered product against this workspace
+
+- **WHEN** a Shengmo test invokes Tianheng's published observation and outcome path against this repository
+- **THEN** prose calls the test a dogfood gate and calls the behavior it invokes the product reaction
+
+#### Scenario: A shell wrapper invokes a Rust judgement
+
+- **WHEN** a shell script sequences a Kanhe gate before merge or publish
+- **THEN** prose assigns the judgement and verdict to the Rust gate and calls the shell wrapper workflow
+  orchestration
+
+#### Scenario: Product specifications describe boundary behavior
+
+- **WHEN** a publishable crate observes a governed shape and produces an outcome, report, exit class, or runtime
+  event
+- **THEN** its specification retains reaction vocabulary
+
+### Requirement: A self-governance check SHALL be a Rust test that has been seen to fail
+
+Every check judging this repository SHALL be a `#[test]` living **outside every published package**, and
 every refusal it holds SHALL have been run against a tree carrying the shape it refuses, with that failure
 recorded in the change that introduced it.
 
 Shipping in zero packages is what this capability already gives as the criterion separating governance from
-product — the reason `scripts/` and `docs/` count as governance. Measured before this change, the reactions
+product — the reason `scripts/` and `docs/` count as governance. Measured before this change, the checks
 themselves failed it: `cargo package --list -p tianheng` carried all 50 files under `tests/`, so every
-reaction judging this repository's changelog, specs, scripts and documents reached every adopter, where it
+check judging this repository's changelog, specs, scripts and documents reached every adopter, where it
 could only detect no workspace and return.
 
-Outside every published package is a floor, not the whole answer: it says where a reaction must **not** live
-and nothing about where it belongs. Reactions SHALL therefore be held apart by **what they judge** — the law
-this repository declares over itself and the reactions that run the delivered product against this workspace
-in one member, the reactions that collate its record against itself in another. Measured when only the floor
-was applied: 13 of 17 targets in a member whose stated identity was the law judged neither a product contract
-nor an architecture, which is the dilution the move set out to end.
+Outside every published package is a floor, not the whole answer: it says where a check must **not** live and
+nothing about where it belongs. Checks SHALL therefore be held apart by **what they judge** — the law this
+repository declares over itself and the dogfood gates that run the delivered product's reactions against this
+workspace in one member, the checks that collate its record against itself in another. Measured when only the
+floor was applied: 13 of 17 targets in a member whose stated identity was the law judged neither a product
+contract nor an architecture, which is the dilution the move set out to end.
 
 The location is not cosmetic. A repository's own law living under a published package's `tests/` lends its
-name to everything beside it, and a governance document came to state that twenty reactions reaching no
-shipped API "run Tianheng's own reactions against the workspace". Position is what makes the two populations
+name to everything beside it, and a governance document came to state that twenty checks reaching no
+shipped API "run Tianheng's product reactions against the workspace". Position is what makes the two populations
 separable at all.
 
 A Rust test's failure mode is asserted **inline** — the expected value sits beside the observation — so a
-reaction needs no separate failure matrix to be defended. That is what the twin obligation bought when a gate
+check needs no separate failure matrix to be defended. That is what the twin obligation bought when a gate
 was a shell script and its refusal was an exit code, and it is why retiring the pairing loses no coverage.
 
-#### Scenario: A reaction inside a published package
+#### Scenario: A check inside a published package
 
-- **WHEN** a reaction judging this repository lives under a package that `cargo publish` would ship
+- **WHEN** a check judging this repository lives under a package that `cargo publish` would ship
 - **THEN** it reaches adopters who cannot run it, and it is filed as governance while its location makes it
   product — the two answers this criterion exists to keep from disagreeing
 
 #### Scenario: The packaged self-test's subject
 
 - **WHEN** the packaged crate's tests are run from its tarball
-- **THEN** what runs exercises the packaged code, rather than governance reactions detecting no workspace and
+- **THEN** what runs exercises the packaged code, rather than governance checks detecting no workspace and
   returning — a skip proves a skip is real, and a tarball of mostly skips proves little else
 
 ### Requirement: The three-way contract SHALL survive as a type, not an exit code
@@ -128,19 +162,19 @@ by `run:` SHALL be compared directly after the existing normalization. The repos
 value. A DoD command SHALL NOT be exempted merely because CI normally expresses it through an action.
 
 The action projection is intentionally limited to the cargo-deny action whose command semantics this repository
-uses; the reaction SHALL NOT claim to interpret arbitrary GitHub Actions.
+uses; the check SHALL NOT claim to interpret arbitrary GitHub Actions.
 
 #### Scenario: Cargo deny is supplied by its action
 
 - **WHEN** the DoD contains `cargo deny check` and CI contains an `EmbarkStudios/cargo-deny-action` step whose
   `with.command` is `check`
-- **THEN** the coherence reaction recognizes the effective command and does not report it missing
+- **THEN** the coherence check recognizes the effective command and does not report it missing
 
 #### Scenario: The supply-chain step is absent or misconfigured
 
 - **WHEN** the DoD contains `cargo deny check` and CI omits the cargo-deny action or gives it a different or
   absent command
-- **THEN** the coherence reaction fails and names `cargo deny check` as missing from CI
+- **THEN** the coherence check fails and names `cargo deny check` as missing from CI
 
 ### Requirement: A generated projection SHALL be generated, and its freshness SHALL be falsifiable
 
@@ -165,12 +199,12 @@ lets the document be deleted with nothing noticing.
 #### Scenario: A projection is deleted
 
 - **WHEN** a generated document is removed from the tree
-- **THEN** its freshness reaction fails rather than skipping
+- **THEN** its freshness check fails rather than skipping
 
-### Requirement: A projection is not a reaction and ships in nothing
+### Requirement: A projection is not a check and ships in nothing
 
 A generated document SHALL be a derived view: it governs nothing on its own, and no crate ships it. What
-governs is the reaction that produces it and the source that reaction reads.
+governs is the check that produces it and the source that check reads.
 
 `scripts/` and `docs/` alike ship in **zero** packages, which is what makes them self-governance rather than
 product. `CHANGELOG.md`'s `### Self-governance` heading exists for the same reason, and `release-coherence`
@@ -180,12 +214,12 @@ holds an adopter-facing entry to naming none of this repository's own machinery.
 
 - **WHEN** a reader treats a generated document as the authority
 - **THEN** they are reading a view; the specification the projection derives from is what a change must
-  satisfy, and the projection's freshness reaction is what keeps the two together
+  satisfy, and the projection's freshness check is what keeps the two together
 
-### Requirement: A census SHALL be declared by the reaction that produces it
+### Requirement: A census SHALL be declared by the check that produces it
 
 A figure a document states about a set this repository enumerates SHALL be **declared as a census**: the
-reaction that enumerates the set names the one sentence the figures are written in and produces them, and one
+check that enumerates the set names the one sentence the figures are written in and produces them, and one
 sweep holds every tracked document to that declaration.
 
 A census phrase SHALL be specific enough to name its own set, and SHALL be matchable — a phrase spanning lines
@@ -200,7 +234,7 @@ detector `AGENTS.md` records as designed, measured three times and rejected.
 
 #### Scenario: A declared census disagrees with what produces it
 
-- **WHEN** a tracked document writes a declared census's phrase with figures the enumerating reaction does not
+- **WHEN** a tracked document writes a declared census's phrase with figures the enumerating check does not
   produce
 - **THEN** the sweep fails, naming the document, the line, both figures and the subject
 
@@ -214,22 +248,22 @@ detector `AGENTS.md` records as designed, measured three times and rejected.
 #### Scenario: A count written in a sentence no census declares — a stated bound
 
 - **WHEN** a document writes a figure about an enumerable set in a phrasing no census names
-- **THEN** nothing reacts. The declaration is the coverage; reaching further needs a judgement over prose,
+- **THEN** no repository check fires. The declaration is the coverage; reaching further needs a judgement over prose,
   which is the instrument measured three times and rejected. `AGENTS.md` carries the other half as a rule with
-  no reaction: a count of something this repository does not produce is not written
+  no check: a count of something this repository does not produce is not written
 - **PINNED-BY** `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
 
 ### Requirement: A squash message SHALL be judged before the merge that records it
 
-A proposed squash subject and body SHALL be judged by a reaction before `gh pr merge` runs, and the sanctioned
+A proposed squash subject and body SHALL be judged by a check before `gh pr merge` runs, and the sanctioned
 path to that merge SHALL be a wrapper that cannot be reached without the judgement.
 
 The subject SHALL equal the pull request's title exactly, and SHALL NOT carry a trailing `(#N)`. The rule is
 already written; what is new is that something holds it. Measured over this repository's history, **9**
-subjects carry that serial, the most recent on the commit that landed a reaction for a requirement enforced by
+subjects carry that serial, the most recent on the commit that landed a check for a requirement enforced by
 nothing.
 
-The judgement SHALL be a Rust reaction returning the shared kinded refusal, so that a title that could not be
+The judgement SHALL be a Rust check returning the shared kinded refusal, so that a title that could not be
 read is separated from a subject that disagrees, and so that its own construction sites are swept like every
 other. Only the wrapper SHALL be shell, and it SHALL carry no verdict.
 
@@ -251,7 +285,7 @@ to compare two strings that differ by exactly the thing the rule names.
 #### Scenario: The pull request's title cannot be read
 
 - **WHEN** the title is unavailable
-- **THEN** the reaction refuses as a cannot-judge rather than as a disagreement, because an unread title is not
+- **THEN** the check refuses as a cannot-judge rather than as a disagreement, because an unread title is not
   a wrong subject
 
 #### Scenario: A hook is proposed for this rule — a stated bound
@@ -259,7 +293,7 @@ to compare two strings that differ by exactly the thing the rule names.
 - **WHEN** someone reaches for a `commit-msg` hook, or for the repository's squash-title setting
 - **THEN** neither holds it: a squash merge runs on GitHub's servers so no local commit exists and no hook
   runs, and both values of that setting append the serial. Nor can a merge made in the browser be reached by a
-  wrapper. The compliance point is one string passed at merge time, and this reaction guards the sanctioned
+  wrapper. The compliance point is one string passed at merge time, and this check guards the sanctioned
   path to it rather than every path
 - **PINNED-BY** `a_merge_made_outside_the_wrapper_is_not_observed`
 
@@ -306,38 +340,38 @@ wrapper came to be filed under a capability whose subject is Rust test files.
 Membership SHALL be resolved by `git ls-files -- <glob>`. Git's pathspec is both the matcher and the meaning of
 *tracked*, so no glob matcher is written here: a subject is a produced set, not a text model of one.
 
-A capability whose subject is this repository's own reactions SHALL name the members holding them rather than
+A capability whose subject is this repository's own checks SHALL name the members holding them rather than
 a package's `tests/` directory, since the apparatus lives outside every published package.
 
 Every declared glob SHALL match at least one tracked path. A glob matching nothing is a claim about nothing,
 and it reads as coverage while providing none.
 
 The subject SHALL NOT be assumed to tile the repository. A tracked file no capability claims is not judged by
-the join below, and the reaction SHALL say so rather than imply a coverage it does not have.
+the join below, and the check SHALL say so rather than imply a coverage it does not have.
 
 #### Scenario: A capability declares no subject
 
 - **WHEN** a capability spec carries no `## Subject` section
-- **THEN** the reaction fails, naming the capability — an undeclared subject makes every filing decision about
+- **THEN** the check fails, naming the capability — an undeclared subject makes every filing decision about
   it unfalsifiable
 
 #### Scenario: A declared glob matches no tracked path
 
 - **WHEN** a `## Subject` glob resolves to no tracked file
-- **THEN** the reaction fails, naming the capability and the glob
+- **THEN** the check fails, naming the capability and the glob
 
 #### Scenario: The tracked-path enumeration fails
 
 - **WHEN** `git ls-files` fails while resolving a subject
-- **THEN** the reaction refuses as a cannot-judge naming the capability and the glob, never as an empty subject
+- **THEN** the check refuses as a cannot-judge naming the capability and the glob, never as an empty subject
   — a failed enumeration returns exactly what a glob matching nothing returns
 
 #### Scenario: Files no capability claims — a stated bound
 
 - **WHEN** a tracked file is claimed by no capability's subject
-- **THEN** nothing reacts to it. Subjects are declared where a capability has something to say, and requiring
+- **THEN** no repository check fires. Subjects are declared where a capability has something to say, and requiring
   them to tile the tree would buy coverage with thirty-six claims nobody could defend. The blindness is
-  declared so that a clean report is not read as a complete one, and the reaction prints how many tracked
+  declared so that a clean report is not read as a complete one, and the check prints how many tracked
   paths went unclaimed rather than leaving the reader to assume none did
 - **PINNED-BY** `files_no_capability_claims_are_reported_rather_than_implied_judged`
 
@@ -351,8 +385,8 @@ and comparing them is a comparison of a value with itself.
 **Every** capability claiming a touched file SHALL be accounted for, not one of them. Naming one was measured
 unable to catch the defect this requirement was written from: the publish wrapper is claimed both by the
 capability governing what must be true before a publish and by the capability governing this repository's
-reactions, so a change naming only the second passed while filing a wrapper's requirement under a
-Rust-reaction subject.
+checks, so a change naming only the second passed while filing a wrapper's requirement under a
+repository-check subject.
 
 Accounting for a capability is **not** listing it as modified: a Capabilities section naming it while stating
 why its requirements do not change satisfies this. So requiring all of them refuses no honest proposal — it
@@ -362,36 +396,36 @@ The base SHALL be resolved, and a base that cannot be resolved SHALL be a cannot
 unresolvable base as *nothing was touched* would report clean over every change, which is the direction this
 requirement exists to close.
 
-Where no change is active, the reaction SHALL be clean. An ordinary checkout is asking no filing question, and
-a reaction that refuses one is noise rather than governance.
+Where no change is active, the check SHALL be clean. An ordinary checkout is asking no filing question, and
+a check that refuses one is noise rather than governance.
 
 #### Scenario: A change touches a file whose capability it did not name
 
 - **WHEN** a change modifies a file claimed by some capability's subject, and its proposal's Capabilities
   section names no capability claiming that file
-- **THEN** the reaction fails, naming the file, the capability that claims it, and the capabilities the
+- **THEN** the check fails, naming the file, the capability that claims it, and the capabilities the
   proposal did name
 
-#### Scenario: A shell wrapper filed under a Rust-reaction capability
+#### Scenario: A shell wrapper filed under a repository-check capability
 
 - **WHEN** a change modifies `scripts/publish.sh` and names only a capability whose subject is
-  `crates/tianheng/tests/**/*.rs`
-- **THEN** the reaction fails. This is the defect the requirement was written from, and it is the direction the
-  reaction is held to
+  `crates/kanhe/tests/**/*.rs`
+- **THEN** the check fails. This is the defect the requirement was written from, and it is the direction the
+  check is held to
 
 #### Scenario: The change's base cannot be resolved
 
 - **WHEN** the branch's base cannot be determined from its upstream or from the tracked release and main refs
-- **THEN** the reaction refuses as a cannot-judge naming the branch, never reporting clean
+- **THEN** the check refuses as a cannot-judge naming the branch, never reporting clean
 
 #### Scenario: No change is active
 
 - **WHEN** `openspec/changes/` holds no active change
-- **THEN** the reaction is clean, having no filing decision in front of it
+- **THEN** the check is clean, having no filing decision in front of it
 
 ### Requirement: A gate a wrapper asks for SHALL be observed to have run, and the name it is asked for by SHALL be pinned
 
-A wrapper that asks for a reaction by test name SHALL treat *the filter matched nothing* as a failure of the
+A wrapper that asks for a check by test name SHALL treat *the filter matched nothing* as a failure of the
 wrapper, and the identifier it cites SHALL be held against the test that carries it. Being named where the run
 is decided is not being run there.
 
@@ -405,14 +439,14 @@ require the run to report exactly one passing test, and SHALL surface what it sa
 A renamed or `#[ignore]`d test cannot report that it did not run, so a guard the disarming disables is not a
 guard.
 
-**The cited identity SHALL be pinned by a reaction.** For every tracked shell script, each `--exact <ident>`
+**The cited identity SHALL be pinned by a check.** For every tracked shell script, each `--exact <ident>`
 SHALL be joined to the `--test <target>` of the same invocation, and that target SHALL register `<ident>`
 exactly once. A test identifier is a reference into this repository exactly as a path is, and the reference
 gate matches paths only.
 
 **Both SHALL hold, and neither substitutes for the other.** Measured rather than reasoned: `--list` includes an
-`#[ignore]`d test, so the reaction cannot see a silenced gate, while `--exact` on one reports `0 passed; 1
-ignored` and exits `0`, so the wrapper can. The reaction runs where the suite runs and a wrapper is run
+`#[ignore]`d test, so the check cannot see a silenced gate, while `--exact` on one reports `0 passed; 1
+ignored` and exits `0`, so the wrapper can. The check runs where the suite runs and a wrapper is run
 locally; the wrapper's assertion runs when a wrapper is invoked and a rename lands in a pull request long
 before that.
 
@@ -433,34 +467,34 @@ before that.
 
 - **WHEN** a test a tracked script names by `--exact` is renamed, moved to another `--test` target, or
   registered twice
-- **THEN** the pinning reaction fails in an ordinary run, naming the script, the identifier, and the target it
+- **THEN** the pinning check fails in an ordinary run, naming the script, the identifier, and the target it
   was cited against — before any wrapper is invoked
 
 #### Scenario: An invocation whose identifier cannot be bound to a target
 
 - **WHEN** a tracked script writes `--exact <ident>` with no `--test <target>` in the same invocation
-- **THEN** the reaction refuses as a cannot-judge naming the script and the identifier: an identifier it
+- **THEN** the check refuses as a cannot-judge naming the script and the identifier: an identifier it
   cannot bind to a target is one it could not resolve, not one it resolved as fine
 
 #### Scenario: The script enumeration fails
 
 - **WHEN** the tracked-script enumeration fails
-- **THEN** the reaction refuses as a cannot-judge rather than reporting clean over an empty list, since a
+- **THEN** the check refuses as a cannot-judge rather than reporting clean over an empty list, since a
   failed enumeration returns exactly what a repository holding no scripts returns
 
 #### Scenario: A gate reached without the wrapper — a stated bound
 
 - **WHEN** someone runs `cargo publish` directly, or merges in the browser
-- **THEN** nothing reacts. Both assertions guard the sanctioned path; reaching further would mean observing
-  the operator's shell or GitHub's servers rather than this repository. The pinning reaction narrows this
+- **THEN** no repository check fires. Both assertions guard the sanctioned path; reaching further would mean observing
+  the operator's shell or GitHub's servers rather than this repository. The pinning check narrows this
   without closing it: it keeps the sanctioned path sanctioned, so what is left is choosing not to use it
   rather than using it unguarded
 - **UNPINNED** `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
 
 ### Requirement: The squash-message gate SHALL refuse a shape by what it is, not by what it resembles
 
-The gate SHALL refuse a message for what it is rather than for what it resembles: a refusal at the merge is an
-over-reaction as costly as a miss, blocking a legal record at the one moment nothing can be undone. Two of its
+The gate SHALL refuse a message for what it is rather than for what it resembles: a refusal at the merge is a
+false refusal as costly as a miss, blocking a legal record at the one moment nothing can be undone. Two of its
 checks read a resemblance rather than the thing.
 
 The **breaking marker** SHALL be read from the Conventional Commit head — the text before `": "` — never from
@@ -476,7 +510,7 @@ every commit in this repository is conventional, so it would refuse a hand-writt
 while a branch carrying one non-conventional subject slipped through.
 
 Where the commit subjects cannot be read, the judgement SHALL refuse as a cannot-judge rather than fall back
-to the shape, because falling back is the over-reaction being removed.
+to the shape, because falling back is the false refusal being removed.
 
 #### Scenario: A summary containing an exclamation mark
 

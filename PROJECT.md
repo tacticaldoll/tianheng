@@ -170,8 +170,8 @@ This says nothing about `xuanji` or `tianheng`, which are crates and are not ins
 says a surface with no boundary earns no crate.
 
 **Two names are crates and are neither 儀 nor 司.** 繩墨 (the inked line) holds the law this repository
-declares over itself and the reactions that run the delivered product against this workspace; 勘合 (the split
-tally) holds the reactions that fit its record against itself. Both ship in **zero** packages, which is what
+declares over itself and the dogfood gates that run the delivered product's reactions against this workspace;
+勘合 (the split tally) holds the repository checks that fit its record against itself. Both ship in **zero** packages, which is what
 separates governance from product here, and both are deliberately outside the observatory vocabulary: they
 measure nothing and administer nothing. 勘合 was first drafted as 校讎 — a word already spent above, on the
 amendment flow — and taking a name that already has a referent is the misnaming these crates exist to end.
@@ -251,7 +251,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   One macro is carved out of that stripping in **all three** dimensions: `cfg_if!`, whose
   arms wrap human-authored items without transforming their identities, so its contents
   are real code (圭表 0.2.3, 渾儀 and 漏刻 0.4.0 — each hand-written, 三儀 ⊥ 三儀, with
-  `cfg_if_transparency_conformance.rs` as the drift reaction). Gating that carve-out on the
+  `cfg_if_transparency_conformance.rs` as the drift check). Gating that carve-out on the
   macro **name** is soundness, not caution: an arbitrary macro's nested blocks are not arms,
   and reading them as such invents items the macro may never emit.
   Adopting a real parser (`syn`) would resolve all of this for free but would break the
@@ -276,24 +276,24 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   result separating a disagreement from an input it cannot judge, and focused matrices assert the kind and
   actionable message at operator-facing boundaries. Constructor locations are implementation detail: they do
   not carry runtime mutation, reach recording, exemptions, or product-visible observation bounds.
-- **Repository observation-bound catalogs stay with their unpublished reaction owner.** Kanhe returns bounds
+- **Repository observation-bound catalogs stay with their unpublished check owner.** Kanhe returns bounds
   for its record and coherence checks, Shengmo returns bounds for its self-law dogfood, and the repository model
   composes both with the product dimensions. Tianheng exposes no repository catalog: the shell composes product
   observers rather than claiming unpublished governance as product capability.
 - **Governance is driven by an audit cycle against an enumerated surface, not by invented hypotheses.**
   A sweep that invents its own scope cannot be dry, only tired: it reports the shapes someone happened to
   think of, and "the audit was thorough" is then unfalsifiable. So the standing direction is to enumerate a
-  claim surface, react over it, and audit against that enumeration. `observation-bound-register` is the
+  claim surface, check it, and audit against that enumeration. `observation-bound-register` is the
   first instance and the proof of the shape — assembling it retired two bounds that had outlived their
   behaviour and added six tests for bounds nothing defended, after twenty pull requests, ten review rounds
   and a three-slice hypothesis-driven sweep had missed all eight. The same three-part test applies to any
   future instance: the surface must be enumerable, the enumeration must be **generated and
   staleness-checked** rather than hand-maintained, and the projection must state what it does not claim.
   A register that implied completeness would mislead exactly where it is most trusted. `observation-bound-model`
-  is the second instance: it enumerates the same surface the register does and reacts over what each bound's
+  is the second instance: it enumerates the same surface the register does and checks what each bound's
   stop actually *is*, which the register never governed — a slot that had accumulated many phrasings, one of
   them used by two capabilities for bounds on opposite sides of the false-negative line. `gate-shape-contract`
-  is the third, and the first to turn the cycle on **this repository's own reaction surface** rather than on the
+  is the third, and the first to turn the cycle on **this repository's own check surface** rather than on the
   specs: the `check_*` gates and their twins, enumerated from tracked content, with the properties that cannot be
   mechanically checked declared as bounds. It also supplies the cycle's sharpest evidence so far that a
   hand-written table is not an enumeration — the backlog entry proposing it described the surface as uniform, and
@@ -301,7 +301,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   actually observed rather than counted. `projection-register` is the fourth and turns the cycle on the
   repository's own **generated documents**: the set of them was prose in `AGENTS.md`, so the mechanism whose whole
   purpose is to stop documents drifting was described by a document that drifted. Its lesson is narrower and
-  sharper than the others' — when a reaction's subject is *text*, the reaction's own text is part of the corpus,
+  sharper than the others' — when a check's subject is *text*, the check's own text is part of the corpus,
   and it hit that three times in one apply (its specification quoting the marker it requires, its own source
   naming the signature it excludes, and its projection having to be blessed twice to include itself). The fix each
   time was to recognize by position or shape and never by the bare string. Larger surfaces are
@@ -311,7 +311,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   once named two such figures, and by 2026-08-05 both had drifted by dozens — measured, not noticed — so a
   promotion estimate read off them would have been drawn from a surface that had already moved. That is
   stated in the past tense on purpose: a count is only ever true of the moment it was taken, so it belongs
-  to the measurement made when a surface is promoted, beside the reaction that will keep it honest, never to
+  to the measurement made when a surface is promoted, beside the check that will keep it honest, never to
   prose. Writing one here would be the claim class this very decision exists to end.
 - **An observation participant declares its limits by construction.** `xuanji::Observer` has two methods and
   no default body on either, so a participant cannot be composed into a run without declaring what it does not

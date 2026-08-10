@@ -2,7 +2,7 @@
 
 **彈繩正木,枉直自形。** — *Snap the line true against the wood; crooked and straight take their own shape.*
 
-**This repository's own law, and the reactions that run [Tianheng](https://github.com/tacticaldoll/tianheng)'s delivered product against this workspace.** Not product. Ships in no package.
+**This repository's own law, and the dogfood gates that run [Tianheng](https://github.com/tacticaldoll/tianheng)'s delivered reactions against this workspace.** Not product. Ships in no package.
 
 繩墨 (the carpenter's inked line) is snapped across the work to mark true. Everything is judged
 against it, and the line is not part of the furniture — which is the property this crate exists to
@@ -13,10 +13,10 @@ It holds two things:
 
 - **The law.** `src/law.rs` declares 天衡's self-constitution through the same published surface an
   adopter uses — `Constitution`, `CrateBoundary`, `SansIoPure` — so the repository's own governance
-  exercises exactly the API it ships. A declaration is code, not a test: what runs it is a reaction,
+  exercises exactly the API it ships. A declaration is code, not a test: what runs it is a dogfood gate,
   and what reads it is the generated projection [`AGENTS.self-law.md`](../../AGENTS.self-law.md).
-- **The reactions that run it.** `tests/self_governance.rs` evaluates that constitution against this
-  workspace as a `cargo test` gate, and `tests/examples_suite.rs` asserts each example's **exit
+- **The dogfood gates that run it.** `tests/self_governance.rs` evaluates that constitution against this
+  workspace through the product reaction as a `cargo test` gate, and `tests/examples_suite.rs` asserts each example's **exit
   code** — a demo that reacts exits 1, a run-mode that only reports exits 0 — so an example is held
   to what its documentation claims rather than to compiling.
 
@@ -33,9 +33,9 @@ governance: not the law, but whether the repository's own record agrees with its
 
 ## Layout
 
-- `src/` — the law, its declared observation bounds, and the locator every reaction reads the repository through.
+- `src/` — the law, its declared observation bounds, and the locator every gate reads the repository through.
 - `src/tests/` — failure matrices, beside the judgements they test.
-- `tests/` — the reactions themselves.
+- `tests/` — the dogfood gates themselves.
 
 ## License
 

@@ -1,4 +1,4 @@
-//! Self-governance reaction: the release commit spine, the version-bearing surfaces, and the changelog.
+//! Repository check: the release commit spine, the version-bearing surfaces, and the changelog.
 //!
 //! The judgement lives in `support/release_coherence_gate.rs`, shared by this gate and by the fixtures below,
 //! because two constructions of "a repository with a changelog" is the twin-drift class this repository keeps
@@ -421,11 +421,11 @@ fn a_basename_the_enumerator_does_not_resolve_is_coherent() {
 
 // --- declared bounds ----------------------------------------------------------------------------------------
 
-/// Refuse to accept silence from a reaction that is not reacting at all.
+/// Refuse to accept silence from a check that is not running at all.
 ///
 /// Every bound below asserts SILENCE, and silence has more than one cause. Adversarial review found the sharp
 /// case by widening a scope AND blinding an enumerator at once: a bound was then plainly false and its pin
-/// stayed green, because a dead reaction is silent about everything. Only a live control reaches that.
+/// stayed green, because a dead check is silent about everything. Only a live control reaches that.
 fn assert_reaction_is_live(root: &Path) {
     let fixture = build_fixture(root, "live-control", "0.2.0");
     development_changelog(&fixture.repo, "0.2.0", true);
@@ -438,7 +438,7 @@ fn assert_reaction_is_live(root: &Path) {
     let verdict = judge(&fixture.repo);
     assert!(
         verdict.is_err(),
-        "the control must be refused, or the silence a pin is about to assert says nothing — a reaction that \
+        "the control must be refused, or the silence a pin is about to assert says nothing — a check that \
          refuses nothing is silent about every bound at once"
     );
 }
@@ -473,7 +473,7 @@ fn a_dated_section_naming_a_gate_is_a_stated_bound() {
     let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
-        "the reaction must stay silent about a dated section naming machinery — that is the declared bound. \
+        "the check must stay silent about a dated section naming machinery — that is the declared bound. \
          Got: {:?}",
         verdict.err()
     );
@@ -500,7 +500,7 @@ fn machinery_tracked_by_nothing_is_a_stated_bound() {
     let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
-        "the reaction must stay silent about machinery no commit tracks. Got: {:?}",
+        "the check must stay silent about machinery no commit tracks. Got: {:?}",
         verdict.err()
     );
 }
@@ -532,7 +532,7 @@ fn a_colliding_basename_is_a_stated_bound() {
     let verdict = judge(&fixture.repo);
     let _ = std::fs::remove_dir_all(&root);
     let refusal =
-        verdict.expect_err("the over-reaction is the declared bound; silence would close it");
+        verdict.expect_err("the false refusal is the declared bound; silence would close it");
     assert!(
         refusal.message.contains("publish.sh"),
         "the refusal must name the colliding word: {}",
@@ -560,7 +560,7 @@ fn a_directory_named_without_its_slash_is_a_stated_bound() {
     let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
-        "the reaction must stay silent about a directory named without its trailing slash. Got: {:?}",
+        "the check must stay silent about a directory named without its trailing slash. Got: {:?}",
         verdict.err()
     );
 }
@@ -568,7 +568,7 @@ fn a_directory_named_without_its_slash_is_a_stated_bound() {
 /// `release-coherence/a-name-reached-only-through-a-url-a-stated-bound`
 ///
 /// `UnderReacts`, owned by the engine. A word is a maximal run of path characters, so a scheme and host fuse
-/// with the path into one run that equals no tracked name; splitting a URL would make the reaction judge a
+/// with the path into one run that equals no tracked name; splitting a URL would make the check judge a
 /// foreign host's layout as though it were this repository's.
 #[test]
 fn a_name_reached_only_through_a_url_is_a_stated_bound() {
@@ -586,14 +586,14 @@ fn a_name_reached_only_through_a_url_is_a_stated_bound() {
     let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
-        "the reaction must stay silent about a name reached only through a URL. Got: {:?}",
+        "the check must stay silent about a name reached only through a URL. Got: {:?}",
         verdict.err()
     );
 }
 
 /// `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound`
 ///
-/// `UnderReacts`, owned by the engine. The reaction walks the document's line grammar and does not track
+/// `UnderReacts`, owned by the engine. The check walks the document's line grammar and does not track
 /// fences, so a `### ` line inside a fenced block sets the heading in force — and can name the one exempt
 /// heading. Latent rather than live: this repository's changelog carries no fenced block at all.
 #[test]
@@ -612,7 +612,7 @@ fn a_heading_inside_a_fenced_block_is_a_stated_bound() {
     let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
-        "the reaction must stay silent when a fenced heading reattributes a later entry. Got: {:?}",
+        "the check must stay silent when a fenced heading reattributes a later entry. Got: {:?}",
         verdict.err()
     );
 }

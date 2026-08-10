@@ -1,4 +1,4 @@
-//! Self-governance reaction: the source a `cargo publish` runs from.
+//! Repository check: the source a `cargo publish` runs from.
 //!
 //! It stands before an **irreversible act**. `cargo publish` records the commit it ran on in every tarball's
 //! `.cargo_vcs_info.json`, and a version can never be re-uploaded — the `0.4.0` family recorded a release

@@ -1,9 +1,9 @@
-//! Self-governance reaction: a pinning citation is held to **biting**, not only to running.
+//! Repository check: a pinning citation is held to **biting**, not only to running.
 //!
 //! `bound_register.rs` decides that a `PINNED-BY` citation names a test the harness registers. It cannot
-//! decide that the test would fail if the reaction it defends changed — measured rather than argued: replacing
+//! decide that the test would fail if the behavior it defends changed — measured rather than argued: replacing
 //! a cited pin's entire body with a binding that asserts nothing left the suite green and the register
-//! reporting its citation count clean. This reaction runs each cited test against a tree where the reaction
+//! reporting its citation count clean. This check runs each cited test against a tree where the defended behavior
 //! has been perturbed and requires it to fail, because whether a test bites is a question about running a
 //! program and no reading of text answers it.
 //!
@@ -18,7 +18,7 @@
 //!
 //! **The three-way exit contract does not survive the move to Rust.** A shell gate separated a violation (1)
 //! from a gate that cannot decide (2); a test passes or fails. Every cannot-judge condition here therefore
-//! **fails**, loudly and saying so — the safe direction, because the alternative is a reaction that reports
+//! **fails**, loudly and saying so — the safe direction, because the alternative is a check that reports
 //! clean over a perturbation it never applied.
 
 use std::path::{Path, PathBuf};
@@ -422,7 +422,7 @@ fn every_declared_mutation_kills_the_pin_it_names() {
         assert!(
             !survived,
             "`{name}` passes against the mutation declared for it, so the citation defends nothing: the \
-             reaction can change at that point and the pin will not notice"
+             defended behavior can change at that point and the pin will not notice"
         );
 
         // Where the mutated run failed, the control runs AGAIN after the restore. One control rules out a

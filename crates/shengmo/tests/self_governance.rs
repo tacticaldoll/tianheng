@@ -1,5 +1,5 @@
-//! 天衡 governs itself with its own reaction — the strongest robustness statement a governance
-//! tool can make. The law it reacts against is [`shengmo::law::constitution`], declared in this
+//! Tianheng's self-governance dogfood gate invokes its delivered reaction against this workspace — the
+//! strongest robustness statement a governance tool can make. The law it reacts against is [`shengmo::law::constitution`], declared in this
 //! crate's `src/` because a declaration is code; what lives here is only what *runs* it.
 //!
 //! This is the crate-level upgrade of modou's module-level self-law: where modou could only
@@ -33,7 +33,7 @@ fn self_law_projection_is_fresh() {
         );
 }
 
-/// Contract C — the **declaration-integrity** reaction (the 潛移/校讎-adjacent shape: its
+/// Contract C — the **declaration-integrity** check (the 潛移/校讎-adjacent shape: its
 /// observation source is the *declaration itself*, not governed code). A structural property of
 /// `constitution()` is asserted, so a hand-written pointer to that property can be
 /// *deleted* rather than kept correct by hand. Here: the cross-cutting 三儀 ⊥ 三儀 law is carried
@@ -48,9 +48,9 @@ fn self_law_projection_is_fresh() {
 ///
 /// The text half has two limits, both measured by writing them into the tree rather than argued about, and
 /// **neither is a declared bound**; `BACKLOG.md` carries them. Paraphrasing `guibiao`'s clause makes this
-/// reaction **fire** — an over-reaction, a refusal of a reason that genuinely states the law. A `because` that
+/// check **fire** — a false refusal of a reason that genuinely states the law. A `because` that
 /// carries the literal clause while *negating* it passes, and the projection then teaches the negation — the
-/// under-reaction. A draft of this change declared the first as a false NEGATIVE, which one run of its own WHEN
+/// false negative. A draft of this change declared the first as a false NEGATIVE, which one run of its own WHEN
 /// falsified: a bound's extent is read off that run, never off the argument for it. Widening
 /// `guibiao`'s allowlist to name `hunyi` left every test binary in this workspace green, with
 /// `AGENTS.self-law.md` printing the sibling directly beneath the reason that forbids it. Freshness pinned the
@@ -135,7 +135,7 @@ fn dimension_boundaries_declare_the_mutual_independence_law() {
     }
 }
 
-/// Contract D — the **declaration-integrity coverage** reaction (again the 潛移/校讎-adjacent
+/// Contract D — the **declaration-integrity coverage** check (again the 潛移/校讎-adjacent
 /// shape: its observation source is the *declaration and the workspace metadata*, not governed
 /// code). Every workspace member must be the target of at least one boundary in
 /// `constitution()`.
@@ -148,7 +148,7 @@ fn dimension_boundaries_declare_the_mutual_independence_law() {
 /// governed" coverage claim that today is hand-restated across the docs
 /// (`PROJECT.md`, `README.md`, `AGENTS.md`) rather than observed. Here the property is asserted
 /// on the live `Constitution` + `cargo metadata`, so that claim need not be hand-counted — the
-/// same move as Contract C (a prose index → a reaction), applied to coverage.
+/// same move as Contract C (a prose index → a check), applied to coverage.
 ///
 /// The `total > 0` guard forecloses a **vacuous** pass: if the metadata read ever returned zero
 /// members, `uncovered` would be empty and the assertion would hold for the wrong reason. A

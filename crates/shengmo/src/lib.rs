@@ -2,12 +2,12 @@
 //!
 //! A carpenter snaps it to mark true. Everything is judged against it, and the line is not part of
 //! the furniture. This crate is that line for its own repository: the **law** 天衡 declares over
-//! itself, and the reactions that hold the repository to what it has written down.
+//! itself, and the dogfood gates that run the delivered product's reactions against this workspace.
 //!
 //! It ships in **no package**. That is not incidental — it is the criterion the governance
 //! capability gives for machinery being governance rather than product, and until this crate
 //! existed the apparatus failed it: `cargo package --list -p tianheng` carried all 50 files under
-//! `tests/`, so every reaction judging this repository's changelog, specs and scripts reached every
+//! `tests/`, so every repository check judging this repository's changelog, specs and scripts reached every
 //! adopter, where it could only detect no workspace and return.
 //!
 //! # What lives where
@@ -17,7 +17,7 @@
 //! - **`src/`** — the law, its declared observation bounds and the judgements. A judgement is implementation,
 //!   not a test.
 //! - **`src/tests/`** — the failure matrices, as unit tests beside what they test.
-//! - **`tests/`** — the reactions: what runs against the real repository.
+//! - **`tests/`** — the dogfood gates: what runs the product reactions against the real repository.
 //!
 //! # Not one of the 三儀
 //!

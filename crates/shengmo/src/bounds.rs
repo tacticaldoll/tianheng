@@ -1,4 +1,4 @@
-//! Observation bounds declared by Shengmo's self-governance reactions.
+//! Observation bounds declared by Shengmo's self-governance dogfood and declaration checks.
 //!
 //! The declarations qualify this repository's dogfood and are consumed only by its combined bound-model gate.
 //! Shengmo ships in no package, so they do not enter the published Tianheng surface.
@@ -21,10 +21,10 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_doc_example_of_the_dependency_dsl_is_refused",
         ),
-        // --- self-law-projection: the mutual-independence reaction's four limits ---
+        // --- self-law-projection: the mutual-independence check's limits ---
         //
         // Each extent is read off a run of that limit's own WHEN, never off the argument for it: a draft
-        // declared the first as a false NEGATIVE and one run showed the reaction fires there.
+        // declared the first as a false NEGATIVE and one run showed the check fires there.
         BoundDecl::unpinned(
             BoundId::new(
                 "self-law-projection/a-reason-that-paraphrases-the-law-is-refused-a-stated-bound",
@@ -33,10 +33,10 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::Reached(Reached::OverReacts {
                 because: "the check reads the `because` for the literal clause, so a reason that genuinely \
                           states the law in other words is refused; the direction is the safe one and closing \
-                          it needs the reaction to decide two wordings state one law"
+                          it needs the check to decide two wordings state one law"
                     .into(),
             }),
-            "`BACKLOG.md` — *four limits of the mutual-independence reaction*",
+            "`BACKLOG.md` — *four limits of the mutual-independence check*",
         ),
         BoundDecl::unpinned(
             BoundId::new(
@@ -50,13 +50,13 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                     .into(),
                 owner: Owner::Engine,
             }),
-            "`BACKLOG.md` — *four limits of the mutual-independence reaction*",
+            "`BACKLOG.md` — *four limits of the mutual-independence check*",
         ),
         BoundDecl::unpinned(
             BoundId::new(
-                "self-law-projection/a-dimension-absent-from-the-reaction-s-own-list-is-not-examined-a-stated-bound",
+                "self-law-projection/a-dimension-absent-from-the-check-s-own-list-is-not-examined-a-stated-bound",
             ),
-            "a dimension crate whose package name is not in the reaction's hand-kept list",
+            "a dimension crate whose package name is not in the check's hand-kept list",
             Extent::Reached(Reached::UnderReacts {
                 because: "the list is typed beside a set that enumerates itself, and the set-coverage \
                           assertion compares a set produced by filtering on that same list, so an omission \
@@ -64,7 +64,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                     .into(),
                 owner: Owner::Engine,
             }),
-            "`BACKLOG.md` — *four limits of the mutual-independence reaction*",
+            "`BACKLOG.md` — *four limits of the mutual-independence check*",
         ),
         BoundDecl::unpinned(
             BoundId::new(
@@ -77,7 +77,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                     .into(),
             owner: Owner::Engine,
             }),
-            "`BACKLOG.md` — *four limits of the mutual-independence reaction*",
+            "`BACKLOG.md` — *four limits of the mutual-independence check*",
         ),
         BoundDecl::pinned(
             BoundId::new(
