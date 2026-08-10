@@ -66,6 +66,42 @@ fn a_forbidden_dependency_feature_reacts() {
     );
 }
 
+/// The footprint boundary in `governance()` is the one that **holds**, and a boundary that holds needs
+/// different evidence from one that reacts: its silence today proves nothing on its own, because a
+/// boundary reading the wrong thing is equally silent.
+///
+/// So the same rule shape is pointed at the same real manifest with an allowlist that excludes the
+/// dependency the manifest declares. It must name `guibiao` and exit 1 — which is what establishes that
+/// the passing declaration is passing because the footprint is what it says, not because nothing is
+/// being read. The declared crate allowlist is the shape this project governs *itself* with, and until
+/// now no example carried it: an adopter running the dogfood met every other rule and not this one.
+#[test]
+fn the_footprint_allowlist_reads_the_real_declared_edge() {
+    let narrowed = Constitution::new("hexagonal_demo").boundary(
+        CrateBoundary::crate_("hexagonal_demo")
+            .restrict_dependencies_to([] as [&str; 0])
+            .because("nothing is allowed, so the one real dependency must be reported"),
+    );
+    let report = report_of(check(&narrowed, &manifest()));
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|violation| violation.finding == "guibiao"),
+        "the allowlist must name the dependency the manifest actually declares, got {:?}",
+        report
+            .violations
+            .iter()
+            .map(|violation| &violation.finding)
+            .collect::<Vec<_>>(),
+    );
+    assert_eq!(
+        Outcome::Violations(report).exit_code(),
+        1,
+        "a dependency outside the allowlist gates",
+    );
+}
+
 /// Adoption ladder, axis 1 — severity. The same boundary at `.warn()` is *reported* but does
 /// not gate: exit 0. Warn is the gentle entry point.
 #[test]

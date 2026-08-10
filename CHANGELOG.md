@@ -827,6 +827,22 @@ no adopter runs. They are here rather than under the adopter headings above beca
   judgement over text this repository has designed, measured and rejected, and what makes a mention bite is the
   compiler.
 
+- **The rule shape this project governs itself with most is finally one an adopter meets by running an
+  example.** A crate-level dependency allowlist carries more of `AGENTS.self-law.md` than any other rule, and it
+  appeared nowhere under `examples/` — so an adopter working through the dogfood met every other shape and not
+  that one. `examples/guibiao-standalone` now declares one beside its module boundary.
+
+  The landing site was not a free choice. That example's manifest already claimed its one-dependency footprint
+  **is** the 圭表 pitch, "demonstrated here rather than asserted" — a claim living in a comment with no reaction,
+  which is the open loop this whole project exists to close. Declaring it as an allowlist makes the pitch react:
+  a second dependency added to that manifest now names itself and gates.
+
+  **A boundary that holds needs different evidence from one that reacts**, and the example says so rather than
+  leaving it implied. A passing allowlist is indistinguishable from one reading the wrong thing, so
+  `tests/reaction.rs` points the same shape at the same real manifest with the dependency excluded and requires
+  it to name that dependency and exit 1. The example now teaches both granularities 圭表 observes — a module
+  boundary that reacts by design, and a crate boundary that holds for a demonstrated reason.
+
 - **`### Removed` is gone, because neither thing it announced ever existed in a release.** One was
   `tianheng::observation_bounds()`, retired before its first published appearance; the other was Kanhe's
   refusal instrumentation, which ships in no package at all. Both were built and retired inside this same
