@@ -18,10 +18,10 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Run the ownership guard, bound register/model, self-governance, and adopter-surface gates.
-- [ ] 4.2 Run the complete Definition of Done.
+- [x] 4.1 Run the ownership guard, bound register/model, self-governance, and adopter-surface gates.
+- [x] 4.2 Run the complete Definition of Done.
 
 ## 5. Lifecycle
 
-- [ ] 5.1 Sync delta specs into the main specs.
+- [x] 5.1 Sync delta specs into the main specs.
 - [ ] 5.2 Archive the change, remove its dated archive, and retain only `archive/.gitkeep`.

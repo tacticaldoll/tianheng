@@ -251,27 +251,34 @@ this requirement closes.
 - **THEN** the bijection fails, naming every id left unclassified, because the register reads the answer rather
   than reading past it
 
-### Requirement: The published shell bound catalog SHALL exclude Kanhe-owned declarations
+### Requirement: Repository-governance bound catalogs SHALL be owned outside the product shell
 
-The public `tianheng::observation_bounds()` catalog SHALL contain no bound id under the
-`rust-repository-reactions/` capability. Surviving declarations for that capability SHALL be returned by a
-Kanhe-owned catalog that the repository model gate consumes separately. That capability governs this
-repository's unpublished checks, so emitting its declarations from a published crate crosses repository test
-support into the product surface.
+Every observation-bound declaration qualifying an unpublished repository-governance reaction SHALL be
+returned by the unpublished crate that owns that reaction: Kanhe for repository record and coherence checks,
+and Shengmo for self-law dogfood. The repository observation-bound model SHALL compose those catalogs
+explicitly with each product dimension's observer catalog and SHALL hold the combined declarations in the
+existing id and specification bijection.
 
-#### Scenario: A Kanhe-owned bound enters the published catalog
+The published Tianheng shell SHALL NOT define an `observation_bounds` catalog entrypoint for repository
+declarations. Its product dimensions already declare their bounds through their observers, and an empty shell
+catalog would preserve a capability with no reaction.
 
-- **WHEN** `tianheng::observation_bounds()` returns a bound whose id begins
-  `rust-repository-reactions/`
-- **THEN** the repository's observation-bound model gate fails and names the leaked id, even if Kanhe also
-  returns the same declaration
+#### Scenario: A repository declaration remains in the product shell
 
-#### Scenario: The capability catalog moves to Kanhe
+- **WHEN** Tianheng's tracked Rust source defines the exact `observation_bounds` catalog vocabulary
+- **THEN** the repository ownership guard fails, because that entrypoint has no product-shell reaction to
+  qualify
 
-- **WHEN** the mutation sweep and its declarations are retired and the surviving capability declarations move
-  to Kanhe
-- **THEN** the published catalog omits the capability, Kanhe returns only its surviving declarations, and the
-  combined spec and typed declaration sets stay in bijection
+#### Scenario: A declaration is lost or duplicated during relocation
+
+- **WHEN** a moved declaration appears in neither owner catalog or in both catalogs
+- **THEN** the combined repository model fails its spec bijection or duplicate-id check
+
+#### Scenario: Product dimension declarations are composed
+
+- **WHEN** the repository model enumerates every declaration
+- **THEN** it consumes each product dimension through its observer and consumes Kanhe and Shengmo through their
+  unpublished catalogs, so the shell does not restate dimension membership
 
 ### Requirement: The extents SHALL be projected into a generated, staleness-checked document
 
