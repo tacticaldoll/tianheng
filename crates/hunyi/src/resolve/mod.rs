@@ -390,7 +390,8 @@ pub(crate) fn renames_shadowed(
 /// requirement (the crate-wide-closure paragraph, which names this function) for the full
 /// child-module shadow and cfg-aware carve-out rationale, applied here via
 /// [`reexport_externs_for`] / [`reexport_renames_for`], computed **per re-export item** rather
-/// than once for all of `items` (round-9 finding, `exposure.rs:157`'s sibling: a facade reaching
+/// than once for all of `items` (round-9 finding, the sibling of the branch-union defect in
+/// [`crate::exposure`]'s `build_file_scopes`: a facade reaching
 /// such a re-export through this closure was suppressed the same cfg-blind way; the rename-alias
 /// half was found missing on an independent adversarial review of that fix). A **leading-`::`**
 /// head (`pub use ::dep::X;`) keeps the raw sets: `collect_use_tree` walks `use_item.tree`, which

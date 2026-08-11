@@ -905,6 +905,21 @@ no adopter runs. They are here rather than under the adopter headings above beca
   names collapsing. **No live verdict moves**: the real citations are unqualified, which is exactly why nothing
   had noticed.
 
+- **Line-number citations are gone from tracked content, and the reason is that nothing was checking them.** A
+  path is held by the reference gate; an intra-doc link is held by the documentation pass; a path with a line
+  number is held by nothing, and rots on any edit above it. Three existed. One had rotted twice over — the line
+  it named holds an unrelated statement, and the comment it attributed to that file no longer exists anywhere in
+  the code, surviving only in the documents about it. The other two still resolved, which is the honest result
+  rather than a tidy one: the class is not uniformly rotten, it is uniformly unwatched.
+
+  Each moved up as far as the tooling allows. The doc comment now links the module, which `rustdoc` resolves
+  under `-D warnings`, and names the function in prose — the function itself was tried first and rustdoc declines
+  a link to a private one. The plain comment keeps its path, which the reference gate does hold, and gains the
+  function's name in place of the coordinate. And the backlog entry stops citing a file for a record that file no
+  longer carries: the rejection it describes was written in the check's own comments, and those comments did not
+  survive the change that overturned them — which is that entry's own argument for a durable record, made by the
+  disappearance rather than by assertion.
+
 - **A repair of an unverifiable claim was itself unverifiable, and the second attempt is measured.** The census
   reader's word-parsing reason said *"two of the four censuses declared here"*; the repair that followed implied
   the declared set had once held four and shrunk. Measured across the whole history of the declaring test, it has
