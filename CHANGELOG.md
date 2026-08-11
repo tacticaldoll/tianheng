@@ -815,6 +815,18 @@ them.
 
 ### Self-governance
 
+- **The positional-reference rule kept a second extension list, one change after the declaration that ended
+  them.** It swept `.rs` and `.sh` by extension while its sibling path check derived its corpus from the format
+  declaration — so `.toml`, `.yml`, `Cargo.lock`, `CODEOWNERS` and `.gitignore` went unswept, every one of them
+  source where a positional phrase rots exactly as it does in Rust, and nothing in the Markdown reasoning reached
+  any of them. The floor was clean, so it read as covered.
+
+  The scope now derives from the same declaration: a format admitted to the corpus is swept for **both**
+  properties or for neither. Markdown stays out **by construction** rather than by omission — it is the format
+  classified as whole-document prose, so it is not a line-comment format and no exclusion has to be written for
+  it. The fixture direction gained a `.toml` comment beside the Rust one, so the corpus is shown to be derived
+  rather than to be the two extensions it listed before.
+
 - **The allowlists asked whether an argument moves what the gate judged, and never whether the tool honours
   it.** Both wrappers had an instance, and the publish one had already shipped inside this window.
 

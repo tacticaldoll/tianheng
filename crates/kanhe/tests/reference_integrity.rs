@@ -844,7 +844,15 @@ fn an_active_plan_may_name_a_path_it_intends_to_create() {
 // reference, and nothing can hide a comment inside one. It also settles the corpus question the same way for
 // both properties in this file.
 //
-// **Tracked Rust and shell only, deliberately.** In a Markdown record — a `CHANGELOG.md` entry, a `BACKLOG.md`
+// **Every line-comment format, derived from [`FORMATS`] rather than listed again.** This filtered `.rs` and
+// `.sh` by extension — a second list beside the declaration, which is the defect the declaration was introduced
+// one change earlier to end. It left `.toml`, `.yml`, `Cargo.lock`, `CODEOWNERS` and `.gitignore` unswept, each
+// of them source where a positional phrase rots exactly as it does in Rust, and nothing about the Markdown
+// reasoning below reached any of them. Deriving the scope means a format admitted to the corpus is swept for
+// both properties or for neither.
+//
+// Markdown stays out, and now by CONSTRUCTION rather than by omission: it is the one format classified as
+// `Prose::Whole`, so it cannot be a line-comment format. In a record — a `CHANGELOG.md` entry, a `BACKLOG.md`
 // history — a positional phrase legitimately narrates a past state, and telling that from a live reference is a
 // judgement over prose, the instrument this repository designed, measured three times and rejected. In source
 // there is no such reading: a comment describes the file it is in, so the reference is either live and rotting
@@ -907,12 +915,15 @@ fn positional_reference(line: &str) -> Option<String> {
 ///
 /// Split from the check so a negative fixture can call it, for the reason the sibling sweep states: a check
 /// whose only assertion is that it found nothing cannot be shown to find anything.
+///
+/// The corpus is every format [`FORMATS`] classifies as carrying line comments — not a second extension list.
+/// `Prose::Whole` is excluded by not being `LineComment`, which is how Markdown stays out by construction.
 fn positional_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSet<String> {
     let mut offences = BTreeSet::new();
     let mut read = 0usize;
     for path in corpus
         .iter()
-        .filter(|p| p.ends_with(".rs") || p.ends_with(".sh"))
+        .filter(|p| matches!(prose_of(p), Some(Prose::LineComment(_))))
     {
         let Ok(text) = std::fs::read_to_string(corpus_root.join(path)) else {
             continue;
@@ -1005,30 +1016,42 @@ fn a_positional_reference_reacts_only_from_a_comment() {
     let fixture = scratch("positional-corpus");
     let commented = "crates/probe/src/lib.rs";
     let executed = "crates/probe/src/other.rs";
+    // A non-Rust line-comment format, so the corpus is shown to be derived rather than the two extensions this
+    // filtered before. `.toml` was outside the sweep while being exactly the source the reasoning covers.
+    let manifest = "crates/probe/Cargo.toml";
     for (path, body) in [
         (commented, "// The guard four lines above holds it.\n"),
         (
             executed,
             "const SPECIMEN: &str = \"the guard four lines above holds it\";\n",
         ),
+        (manifest, "# The dependency two lines below needs it.\n"),
     ] {
         let full = fixture.join(path);
         std::fs::create_dir_all(full.parent().expect("a fixture parent"))
             .expect("create fixture parent");
         std::fs::write(full, body).expect("write fixture source");
     }
-    let offences = positional_offences_in(&fixture, &[commented.to_string(), executed.to_string()]);
+    let offences = positional_offences_in(
+        &fixture,
+        &[
+            commented.to_string(),
+            executed.to_string(),
+            manifest.to_string(),
+        ],
+    );
     let _ = std::fs::remove_dir_all(&fixture);
 
+    let listed = offences.iter().cloned().collect::<Vec<_>>().join("\n");
     assert_eq!(
         offences.len(),
-        1,
-        "the comment must react and the executed line must not:\n{}",
-        offences.iter().cloned().collect::<Vec<_>>().join("\n")
+        2,
+        "both comments must react and the executed line must not:\n{listed}"
     );
-    assert!(
-        offences.iter().any(|o| o.contains(commented)),
-        "the reacting offence must be the commented fixture:\n{}",
-        offences.iter().cloned().collect::<Vec<_>>().join("\n")
-    );
+    for reacting in [commented, manifest] {
+        assert!(
+            offences.iter().any(|o| o.contains(reacting)),
+            "`{reacting}` must react:\n{listed}"
+        );
+    }
 }
