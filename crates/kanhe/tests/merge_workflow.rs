@@ -76,6 +76,14 @@ fn run_wrapper(root: &Path, mode: &str, extra: &[&str]) -> Run {
         "Why this change exists and what contract it preserves.\n",
     )
     .expect("write merge body");
+    if mode == "unreadable-body" {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = std::fs::metadata(&body)
+            .expect("read merge body metadata")
+            .permissions();
+        permissions.set_mode(0o000);
+        std::fs::set_permissions(&body, permissions).expect("make the merge body unreadable");
+    }
 
     write_executable(
         &bin.join("gh"),
@@ -107,7 +115,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head)
+    subjects | invalid-number | unreadable-head | unreadable-body)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -587,3 +595,75 @@ fn an_unreadable_head_stops_before_the_gate_and_merge() {
         run.cargo_log
     );
 }
+
+/// A body file that cannot be READ is unjudgeable, not a body that disagrees.
+///
+/// `-f` says a regular file is there; it does not say this process may read it. The read used to sit inside the
+/// gate's own invocation as `TIANHENG_MERGE_BODY=$(cat …)`, unguarded, so an unreadable file made the variable
+/// empty — and the gate refuses an empty body as a violation, *the squash body is empty*. The operator was told
+/// they had written the record wrongly about a file nobody could open.
+#[test]
+fn an_unreadable_body_file_is_unjudgeable_rather_than_an_empty_body() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    // Whether an unreadable file can be produced at all is asked of a probe of this direction's own, NEVER of
+    // the wrapper's behaviour. Skipping on `run.status.success()` was the first draft and it swallowed the
+    // defect exactly: a wrapper that merged with an empty body succeeds, so the escape hatch read the failure
+    // as "this user ignores the mode" and the direction passed. Measured — reverting the guard produced no
+    // failure at all.
+    if !mode_is_enforced() {
+        return;
+    }
+    let run = run_wrapper(&root, "unreadable-body", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a body file this wrapper could not read is the unjudged class, not a gate's disagreement; stderr was \
+         {:?}",
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("cannot read the body file")
+            && run
+                .stderr
+                .contains("not the same fact as a body that disagrees"),
+        "the refusal must name the read it could not make, got {:?}",
+        run.stderr
+    );
+    assert!(
+        run.cargo_log.is_empty(),
+        "the gate must not be asked to judge a body that was never read:\n{}",
+        run.cargo_log
+    );
+}
+
+/// Whether a `0o000` file is unreadable to this process — root, and some filesystems, ignore the mode.
+///
+/// Asked of a file this function makes and removes, so the answer cannot come from the subject under test.
+fn mode_is_enforced() -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    let probe = std::env::temp_dir().join(format!(
+        "tianheng-mode-probe-{}-{}",
+        std::process::id(),
+        MODE_PROBE.fetch_add(1, Ordering::Relaxed)
+    ));
+    if std::fs::write(&probe, b"probe").is_err() {
+        return false;
+    }
+    let mut permissions = match std::fs::metadata(&probe) {
+        Ok(metadata) => metadata.permissions(),
+        Err(_) => return false,
+    };
+    permissions.set_mode(0o000);
+    if std::fs::set_permissions(&probe, permissions).is_err() {
+        let _ = std::fs::remove_file(&probe);
+        return false;
+    }
+    let enforced = std::fs::read_to_string(&probe).is_err();
+    let _ = std::fs::remove_file(&probe);
+    enforced
+}
+
+static MODE_PROBE: AtomicUsize = AtomicUsize::new(0);

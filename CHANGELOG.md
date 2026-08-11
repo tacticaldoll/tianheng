@@ -815,6 +815,36 @@ them.
 
 ### Self-governance
 
+- **A gate's verdict class now travels on a channel of its own, and the check that was supposed to hold it was
+  green over the hole.** The wrappers grepped the gate's output for `(Violation)`, which put the parentheses in
+  the shell and the variant name in Rust — two owners for one token. The check pinned the rendering's *arguments*
+  and never the rendering: measured, changing a gate's format string to `merge message: {:?} — {}` left all five
+  directions green while the wrapper's pattern matched nothing, so **every violation would have reported as the
+  unjudged class**. That is verbatim the failure the check's own prose said it existed to prevent.
+
+  The gate now writes its class to a file the wrapper names, and the wrapper reads that file. Nothing is spelled
+  twice — the variable name and the class are `kanhe::verdict_channel`'s, compared against both wrappers — and a
+  run that reached no verdict writes nothing, so *absent* means unjudged by construction. That also closes a
+  latent second hole in the old channel: the stream it searched carries arbitrary tooling output, where a class
+  could be read from text no judgement wrote. Recorded as latent rather than live, because inducing a compile
+  error on the rendering line produced no match — the difference between a defect and a shape.
+
+  **An unreadable body file was reported as a body the operator had written wrongly.** `-f` says a regular file is
+  there; it does not say this process may read it. The read sat inside the gate's own invocation as
+  `TIANHENG_MERGE_BODY=$(cat …)`, unguarded, so an unreadable file made the variable empty — and the gate refuses
+  an empty body as a disagreement, *the squash body is empty*. Measured against the controlled harness the
+  pre-change wrapper exits `0` there, reaching the merge with an empty body and only `cat`'s stderr to show for
+  it. The body is now read once, guarded, before the gate, and the gate is handed the value rather than the path.
+
+  Two guards were narrower than the rules they held. The violation-class count matched only lines whose trimmed
+  text was exactly `exit 1`, so `if …; then exit 1; fi` escaped both it and the window check — which itself only
+  examined the first site found. Both widened: the statement is matched at word boundaries, and every site must
+  sit inside the branch that read the verdict.
+
+  And a direction that skipped on the wrapper's own success swallowed the very defect it was written for: a
+  wrapper that merges with an empty body succeeds, so the escape hatch for a root user read it as an environment
+  that could not fail. Whether the condition is producible is now asked of a probe of the direction's own.
+
 - **The wrappers reported as disagreements the very facts their own gates call unjudgeable.** Five
   could-not-read conditions in `scripts/merge-pr.sh` were split across both exit classes with no stated rule: an
   unresolvable repository exited `2` while an unreadable body file, an unreadable head, an unresolvable

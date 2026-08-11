@@ -139,10 +139,24 @@ while (($#)); do
     esac
 done
 
-# The token the gate renders for a disagreement, as opposed to an input it could not judge. Pinned against
-# `refusal::Kind`'s own `Debug` rendering by a repository check, because a wrapper grepping for a string the
-# gate prints is two places that must agree.
-GATE_VIOLATION_TOKEN=Violation
+# The channel the gate reports its refusal class on, and the class that means a disagreement.
+#
+# Both are held against `kanhe::verdict_channel` by `crates/kanhe/tests/gate_exit_classes.rs`, so neither the
+# variable name nor the class spelling can drift from the gate's side.
+#
+# **This replaced grepping the gate's output.** Searching stdout for `(Violation)` put the parentheses in this
+# script and the variant name in Rust — two owners for one token — and measured, changing the gate's format
+# string left every direction green while this pattern matched nothing, so every violation would have reported as
+# unjudged. It also searched a stream carrying arbitrary tooling output, where a class could be read from text no
+# judgement wrote. A file the gate writes only when it has a verdict makes *absent* mean unjudged by
+# construction.
+GATE_VERDICT_ENV=TIANHENG_GATE_VERDICT
+GATE_VIOLATION_CLASS=Violation
+
+verdict_file=$(mktemp) || cannot_judge \
+    "cannot open a file for the gate to report its refusal class on, so a failing gate could not be told from \
+an input it could not read"
+trap 'rm -f "$verdict_file"' EXIT
 
 # The source gate. It lives in Rust with the other repository gates and does not run in
 # development — no development checkout is a release snapshot — so it is asked for explicitly here, the one
@@ -163,13 +177,18 @@ require_one_pass() {
     fi
 }
 
-gate_output=$(TIANHENG_PUBLISH_SOURCE=1 TIANHENG_WORKSPACE_TESTS=1 \
+gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
+    TIANHENG_PUBLISH_SOURCE=1 TIANHENG_WORKSPACE_TESTS=1 \
     cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test publish_source \
     -- --exact the_publish_source_is_the_signed_release_snapshot 2>&1) || {
     printf '%s\n' "$gate_output" >&2
-    # The gate prints its own class — `publish source (Violation): …` or `(CannotJudge): …`. Anything else
-    # reached no verdict, a compile error included, and that is not a disagreement.
-    if printf '%s' "$gate_output" | grep -q "($GATE_VIOLATION_TOKEN)"; then
+    # The class the gate reported, on the channel it was given. Absent, empty or anything else is a run that
+    # reached no verdict — a compile error included — and that is not a disagreement.
+    verdict=""
+    if [[ -f $verdict_file ]]; then
+        verdict=$(cat -- "$verdict_file") || verdict=""
+    fi
+    if [[ $verdict == "$GATE_VIOLATION_CLASS" ]]; then
         exit 1
     fi
     exit 2

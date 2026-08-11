@@ -38,6 +38,7 @@ pub mod refusal;
 pub mod region;
 pub mod release_coherence_gate;
 pub mod restatement;
+pub mod verdict_channel;
 
 #[cfg(test)]
 mod tests;

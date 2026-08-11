@@ -68,7 +68,12 @@ fn the_publish_source_is_the_signed_release_snapshot() {
     }
     match judge(&root, "origin") {
         Ok(report) => eprintln!("{report}"),
-        Err(refusal) => panic!("publish source ({:?}): {}", refusal.kind, refusal.message),
+        Err(refusal) => {
+            // The class travels on its own channel, written before this fails, so a wrapper reads a verdict
+            // rather than searching this message for one. See `kanhe::verdict_channel`.
+            kanhe::verdict_channel::report(refusal.kind);
+            panic!("publish source ({:?}): {}", refusal.kind, refusal.message)
+        }
     }
 }
 
