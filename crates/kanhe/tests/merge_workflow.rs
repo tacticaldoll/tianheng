@@ -92,6 +92,12 @@ elif [[ $1 == pr && $2 == view && $* == *"--json number"* ]]; then
     else
         printf '%s\n' '42'
     fi
+elif [[ $1 == pr && $2 == view && $* == *"--json headRefOid"* ]]; then
+    if [[ $FAKE_GH_MODE == unreadable-head ]]; then
+        printf '%s\n' ''
+    else
+        printf '%s\n' '81c9ef062fafee9fafe2ebfaacf68288f5554747'
+    fi
 elif [[ $1 == api ]]; then
     case $FAKE_GH_MODE in
     api-failure)
@@ -101,7 +107,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number)
+    subjects | invalid-number | unreadable-head)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -441,6 +447,9 @@ fn only_an_allowlisted_flag_reaches_the_merge() {
         // validation — measured against a pull-request number that does not exist, so nothing could merge.
         "--auto",
         "--disable-auto",
+        // Supplied by the wrapper itself now, so a caller's would replace the head the gate read from.
+        "--match-head-commit",
+        "--match-head-commit=abc123",
         // And one nobody classified: an argument the wrapper does not know is refused, not passed on.
         "--some-flag-a-future-gh-adds",
     ] {
@@ -468,11 +477,7 @@ fn only_an_allowlisted_flag_reaches_the_merge() {
     // The other half: EVERY flag that changes whether the merge may proceed — never what it records, and never
     // when it happens relative to the evidence — still arrives. Without this the assertions above are satisfied
     // by a wrapper that refuses its own arguments, and asserting one of the three would leave the rest unheld.
-    for admitted in [
-        vec!["--delete-branch"],
-        vec!["--admin"],
-        vec!["--match-head-commit", "81c9ef06"],
-    ] {
+    for admitted in [vec!["--delete-branch"], vec!["--admin"]] {
         let forwarded = run_wrapper(&root, "subjects", &admitted);
         assert!(
             forwarded.status.success(),
@@ -492,4 +497,84 @@ fn only_an_allowlisted_flag_reaches_the_merge() {
             );
         }
     }
+}
+
+/// The merge is pinned to the head the gate read its evidence from.
+///
+/// The race this closes: the gate judges the body against the pull request's commit subjects as they are while it
+/// runs, and the merge happens afterwards. A commit pushed in between changes the set the body must equal, and
+/// before this nothing noticed — `gh pr merge` would record the approved body over a commit set that had moved.
+///
+/// **The head is read BEFORE the commit set, and the order is the guard.** Captured first, a push in between
+/// leaves the commit set ahead of the pinned head and gh refuses: fails closed. Captured after, the pinned head
+/// would include the new commit while the gate judged the older set, so the merge would proceed and record a body
+/// missing it: fails open. This direction asserts the order in the log, not only the presence of the flag.
+#[test]
+fn the_merge_is_pinned_to_the_head_the_gate_read() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "subjects", &[]);
+    assert!(
+        run.status.success(),
+        "controlled workflow failed:\nstdout:\n{}\nstderr:\n{}",
+        run.stdout,
+        run.stderr
+    );
+    let merge = run
+        .gh_log
+        .lines()
+        .find(|line| line.starts_with("pr merge"))
+        .unwrap_or_else(|| panic!("the merge must be reached:\n{}", run.gh_log));
+    assert!(
+        merge.contains("--match-head-commit 81c9ef062fafee9fafe2ebfaacf68288f5554747"),
+        "the merge must pin the head the evidence came from, got {merge}"
+    );
+
+    let head_at = run
+        .gh_log
+        .lines()
+        .position(|line| line.contains("--json headRefOid"))
+        .expect("the head must be read");
+    let commits_at = run
+        .gh_log
+        .lines()
+        .position(|line| line.starts_with("api "))
+        .expect("the commit set must be read");
+    assert!(
+        head_at < commits_at,
+        "the head must be read BEFORE the commit set, or the pin fails open; gh log was:\n{}",
+        run.gh_log
+    );
+}
+
+/// A head that cannot be read stops before the gate and the merge.
+///
+/// An unreadable head is not a head that has not moved. Merging unpinned because the pin could not be built is
+/// the vacuity direction every check here owes a refusal to — and this one stands in front of a record that
+/// cannot be amended.
+#[test]
+fn an_unreadable_head_stops_before_the_gate_and_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "unreadable-head", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(1),
+        "an unreadable head must stop the wrapper; got {:?} with stderr {:?}",
+        run.status.code(),
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("could not be pinned"),
+        "the refusal must say the merge could not be pinned, got {:?}",
+        run.stderr
+    );
+    assert!(
+        run.cargo_log.is_empty() && !run.gh_log.lines().any(|line| line.starts_with("pr merge")),
+        "neither the gate nor the merge may be reached:\ngh:\n{}\ncargo:\n{}",
+        run.gh_log,
+        run.cargo_log
+    );
 }
