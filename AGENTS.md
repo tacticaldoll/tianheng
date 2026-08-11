@@ -295,10 +295,13 @@ workspace version; `vX.Y.Z` annotated, signed, and pointing at it; `HEAD` the li
 `cargo publish --workspace`. The gate is a `cargo test`, so it distinguishes a **violation** — the source
 disagrees — from a **cannot-judge** in its own result type rather than in a process status; either stops the
 wrapper before `cargo publish` is reached. The
-wrapper forwards extra arguments to cargo but **refuses `--manifest-path`** (either spelling) before
-the gate runs: it would move cargo's workspace root away from the tree the gate judged, which is the
-wrapper's whole claim undone by one argument. The registry-side arguments (`--registry`, `--index`,
-`--token`) change the destination rather than the source and stay forwarded.
+wrapper forwards **only the arguments it names**, refusing everything else — including a spelling of a
+named flag and a flag a future cargo adds — before the gate runs. Both wrappers work this way, by one
+question: does the argument move what the gate judged, or what the act records? So `--manifest-path`,
+`--exclude`, `--no-verify`, `--allow-dirty` and `--config` are refused, while `--dry-run`,
+`--package`, `--locked` and the destination-side `--registry` and `--index` are forwarded — the last
+two changing where the result goes rather than what it is. Values go in the argument after the flag;
+one spelling each.
 
 **A published release snapshot is immutable.** Once a version is on crates.io, its `release: X.Y.Z`
 commit must never be amended or force-pushed away: the published artifact points at that sha1

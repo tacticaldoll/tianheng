@@ -305,8 +305,13 @@ fn a_value_taking_flag_with_no_value_is_named_and_refused() {
 ///
 /// **The exit code is the weaker half of this assertion.** What matters is the ORDER, so the controlled `gh`
 /// logs every invocation and the log must be empty: a refusal printed after the title had already been fetched
-/// would still exit 2 while having read the wrong repository's evidence. All three spellings are covered,
-/// because a guard catching one is a guard catching neither.
+/// would still exit 2 while having read the wrong repository's evidence.
+///
+/// **What this direction holds is the reason, not the spelling class.** It once claimed to cover every
+/// spelling and named the three its arms had been written for, which left `gh`'s glued and equals forms of the
+/// same flag open — a claim about a class, made by enumerating a sample of it. The class is
+/// [`only_an_allowlisted_flag_reaches_the_merge`]'s to hold, by refusing anything unlisted rather than by
+/// listing; what this one adds is that the refusal an operator reads names the repository problem.
 #[test]
 fn a_repository_selector_is_refused_before_any_evidence_is_read() {
     let Some(root) = workspace_root() else {
