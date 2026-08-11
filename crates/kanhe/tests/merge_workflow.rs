@@ -393,3 +393,84 @@ fn every_call_names_one_repository_and_another_one_is_refused() {
         );
     }
 }
+
+/// Only an allowlisted flag reaches the merge; every other spelling is refused before anything runs.
+///
+/// **The property is not "these six are refused" — it is that an unlisted flag is refused by default.** This
+/// guard was a denylist and leaked three times: a `--repo` flag, a positional URL, and every short spelling of
+/// the flags its long-form arms named. `gh` accepts `-t` for `--subject` and `-F` for `--body-file`, the
+/// passthrough is spliced after this wrapper's own flags, and `gh` reads the **last** occurrence of a repeated
+/// flag — so one unlisted spelling replaced the message the gate had just approved.
+///
+/// The refused set below is therefore a sample of a rule, not the rule. What makes it hold for a spelling
+/// nobody thought of is the catch-all, and the second half of this direction is what shows the allowlist did
+/// not simply refuse everything.
+#[test]
+fn only_an_allowlisted_flag_reaches_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+
+    // Every spelling `gh` accepts for a flag that moves what the gate judged — long, short, glued, equals.
+    for spelling in [
+        "-t",
+        "-t=x",
+        "-tx",
+        "-F",
+        "-Fx",
+        "--subject=x",
+        "--body-file=x",
+        "--body",
+        "-b",
+        "-R",
+        "-Rowner/repo",
+        "-R=x",
+        "--repo=x",
+        "-m",
+        "-r",
+        "-s",
+        "-A",
+        "--author-email",
+        // And one nobody classified: an argument the wrapper does not know is refused, not passed on.
+        "--some-flag-a-future-gh-adds",
+    ] {
+        let run = run_wrapper(&root, "subjects", &[spelling]);
+        assert_eq!(
+            run.status.code(),
+            Some(2),
+            "`{spelling}` must be refused; got {:?} with stderr {:?}",
+            run.status.code(),
+            run.stderr
+        );
+        assert!(
+            run.stderr.contains("merge message:"),
+            "`{spelling}` must be refused in this script's own diagnostic form, got {:?}",
+            run.stderr
+        );
+        assert!(
+            run.gh_log.is_empty() && run.cargo_log.is_empty(),
+            "`{spelling}` must be refused before anything runs, but gh log was {:?} and cargo log {:?}",
+            run.gh_log,
+            run.cargo_log
+        );
+    }
+
+    // The other half: a flag that changes whether the merge may proceed, never what it records, still arrives.
+    // Without this the assertions above are satisfied by a wrapper that refuses its own arguments.
+    let forwarded = run_wrapper(&root, "subjects", &["--delete-branch"]);
+    assert!(
+        forwarded.status.success(),
+        "an allowlisted flag must not be refused, got {:?} with stderr {:?}",
+        forwarded.status.code(),
+        forwarded.stderr
+    );
+    let merge = forwarded
+        .gh_log
+        .lines()
+        .find(|line| line.starts_with("pr merge"))
+        .unwrap_or_else(|| panic!("the merge must be reached:\n{}", forwarded.gh_log));
+    assert!(
+        merge.contains("--delete-branch"),
+        "the allowlisted flag must reach the merge, got {merge}"
+    );
+}

@@ -54,8 +54,8 @@ passthrough=()
 require_value() {
     if (($1 < 2)); then
         printf 'merge message: %s\n' \
-            "refusing \`$2\` with no value: pass the value as the next argument, or drop the flag and let the \
-subject default to the pull request title" >&2
+            "refusing \`$2\` with no value: this wrapper reads every value as the argument after its flag, so \
+pass it that way or drop the flag" >&2
         usage
         exit 2
     fi
@@ -73,40 +73,68 @@ while (($#)); do
         body_file=$2
         shift 2
         ;;
-    # Both spellings, because `--subject=TEXT` and `--subject TEXT` reach `gh` identically and a guard
-    # catching one would be a guard catching neither.
-    --subject=* | --body-file=*)
-        printf 'merge message: %s\n' \
-            "refusing \`${1%%=*}=…\`: pass it as two arguments so this wrapper reads the same value \`gh\` would" >&2
-        exit 1
-        ;;
-    # A repository selector reaches only the final `gh pr merge`, while the title, the canonical number, the
-    # live commit subjects and the gate are all read from the AMBIENT repository. Accepting one would let this
-    # wrapper judge pull request N here and merge pull request N somewhere else — the gate's whole claim undone
-    # by one argument, which is the sentence `scripts/publish.sh` already carries about `--manifest-path`. The
-    # same distinction decides it: an argument that moves the judged SUBJECT is refused, while one that changes
-    # where the result goes stays forwarded. Refusing beats threading the selector through every read, because
-    # a refusal cannot be got subtly wrong and three reads agreeing by maintenance can.
-    --repo | --repo=* | -R)
-        printf 'merge message: %s\n' \
-            "refusing \`${1%%=*}\`: this wrapper reads the title, the pull request number, the live commit \
-subjects and the gate from the repository it is run in, so a repository selector would judge one pull request \
-and merge another. Run it from a checkout of the repository whose pull request you are merging" >&2
-        exit 2
-        ;;
-    --body | --body=*)
-        printf 'merge message: %s\n' \
-            "refusing \`--body\`: the body is judged before the merge, so it is read from a file this wrapper can hand to the gate" >&2
-        exit 1
-        ;;
-    --merge | --rebase)
-        printf 'merge message: %s\n' \
-            "refusing \`$1\`: a development pull request lands on a release branch as one squash, and this gate judges that squash's message" >&2
-        exit 1
-        ;;
-    *)
+    # --- What may reach `gh pr merge`, and nothing else -------------------------------------------------
+    #
+    # This was a DENYLIST and it leaked three times: a `--repo` flag, a positional pull-request URL, and every
+    # SHORT spelling of the flags the long-form arms named. `gh` accepts `-t` for `--subject` and `-F` for
+    # `--body-file`, this wrapper splices the passthrough AFTER its own flags, and `gh` takes the LAST
+    # occurrence of a repeated flag — measured on gh 2.95.0, where `--body-file A -F B` and `-F A --body-file B`
+    # both read B. So one unlisted spelling replaced the very message the gate had just approved.
+    #
+    # Enumerating what to forbid is the shape that failed. This enumerates what may pass, so a flag the wrapper
+    # does not know — including one a future `gh` adds — is refused by default, which is the property a
+    # denylist cannot have. This family already argues it in its own law: an allowlist is always stricter than
+    # a denylist.
+    #
+    # Classified against `gh pr merge --help` on gh 2.95.0 by one question: does it move what the gate judged?
+    # Forwarded are the flags that change whether the merge may proceed, never what it would record.
+    #
+    # ONE spelling each, values as separate arguments. Parsing gh's glued and equals forms is what let the
+    # short forms through; refusing those costs an argument's worth of typing and removes the parsing question.
+    --admin | --auto | --disable-auto | --delete-branch)
         passthrough+=("$1")
         shift
+        ;;
+    --match-head-commit)
+        require_value "$#" "$1"
+        passthrough+=("$1" "$2")
+        shift 2
+        ;;
+    # The arms below decide nothing the catch-all would not — every one of these is unlisted, so it is refused
+    # either way. They exist to say WHY, because a refusal an operator cannot act on is a refusal they work
+    # around. Each pattern covers gh's glued and equals forms too: `-t`, `-t=x` and `-tx` are one flag.
+    --subject=* | --body-file=* | --body | --body=* | -t* | -F* | -b*)
+        printf 'merge message: %s\n' \
+            "refusing \`$1\`: the message this wrapper hands to the gate is the message the merge records, and \
+gh takes the last spelling of a repeated flag — so this would have the gate judge one message and the merge \
+write another. Pass the subject as \`--subject <text>\` and the body as \`--body-file <path>\`" >&2
+        exit 2
+        ;;
+    --repo | --repo=* | -R*)
+        printf 'merge message: %s\n' \
+            "refusing \`$1\`: this wrapper reads the title, the pull request number, the live commit subjects \
+and the gate from the repository it is run in, so a repository selector would judge one pull request and merge \
+another. Run it from a checkout of the repository whose pull request you are merging" >&2
+        exit 2
+        ;;
+    --merge | --rebase | --squash | -m* | -r* | -s*)
+        printf 'merge message: %s\n' \
+            "refusing \`$1\`: a development pull request lands on a release branch as one squash, and this \
+gate judges that squash's message" >&2
+        exit 2
+        ;;
+    --author-email | --author-email=* | -A*)
+        printf 'merge message: %s\n' \
+            "refusing \`$1\`: this wrapper holds what the merge is about to record, and the author it records \
+is part of that" >&2
+        exit 2
+        ;;
+    *)
+        printf 'merge message: %s\n' \
+            "refusing \`$1\`: this wrapper forwards only the flags that change whether the merge may proceed, \
+never what it would record, and this is not one of them. An argument it does not know is refused rather than \
+passed on, because the record it stands in front of cannot be repaired" >&2
+        exit 2
         ;;
     esac
 done

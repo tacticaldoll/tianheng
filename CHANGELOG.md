@@ -815,6 +815,29 @@ them.
 
 ### Self-governance
 
+- **What may reach the merge is now an allowlist, and the three leaks are one defect.** The sanctioned merge
+  wrapper forwarded any argument it did not recognise. Three separate holes came out of that one shape: a
+  `--repo` flag, a positional pull-request URL, and every short spelling of the flags its long-form arms named.
+  The last is the sharpest — `gh` accepts `-t` for `--subject` and `-F` for `--body-file`, the wrapper splices
+  forwarded arguments after its own, and `gh` reads the **last** occurrence of a repeated flag (measured on gh
+  2.95.0: `--body-file A -F B` and `-F A --body-file B` both take B). One unlisted spelling would have replaced
+  the very message the gate had just approved, at the one moment nothing can be undone.
+
+  Patching a fourth spelling would have bought the fourth spelling. The wrapper now forwards only what it names,
+  so an argument it does not know — including one a future `gh` adds — is refused by default. The admitted set is
+  decided by one question: does the argument move what the gate judged? A flag that changes whether the merge may
+  proceed may pass; a flag that changes the message, the strategy, the repository, or the author it records may
+  not. Each is accepted in one spelling with its value as a separate argument, because parsing a tool's glued and
+  equals forms is exactly what a denylist has to get exhaustively right and an allowlist does not. This family
+  already argued it in its own law — an allowlist is always stricter than a denylist — and the wrapper was the
+  place still taking the other side.
+
+  Held by a direction that runs both ways against a controlled `gh`: a sample of spellings is refused with
+  nothing executed, and an admitted flag still arrives at the merge — without that second half the first is satisfied by
+  a wrapper that refuses everything. The property under test is the default, not the list, so the refused set
+  includes a flag no `gh` has: on the tree before this change, the known spellings were still caught by the arms
+  that name them while the unknown one ran the merge to completion and exited 0.
+
 Changes to this repository's own governance machinery, which ships in no package and which
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
@@ -970,11 +993,12 @@ no adopter runs. They are here rather than under the adopter headings above beca
   request N somewhere else, at the one moment nothing can be undone. Measured rather than reasoned: with the
   selector passed through, the wrapper ran to completion and **exited 0**.
 
-  All three spellings are refused before any evidence is read, and the direction that holds it asserts the
-  **order** rather than the exit code — the controlled `gh` logs every invocation and the log must be empty,
-  because a refusal printed after the title had already been fetched would still exit 2 while having read the
-  wrong repository's evidence. The distinction is the one the publish wrapper already draws: an argument that
-  moves the judged **subject** is refused, while one that changes where the result goes stays forwarded.
+  Refused before any evidence is read, and the direction that holds it asserts the **order** rather than the
+  exit code — the controlled `gh` logs every invocation and the log must be empty, because a refusal printed
+  after the title had already been fetched would still exit 2 while having read the wrong repository's evidence.
+  What the refusal covers is no longer this entry's to state: it named the long spellings it had added arms for,
+  which left gh's glued and equals forms of the same flag open, and the allowlist entry above is what settles
+  the question by not asking it per spelling.
 
 - **The same migration, finished — and the sweep that declared it done was the reason it was not.** The pattern
   used to find retired exit-code prose required the word *exit* and a digit **adjacent**, and the vocabulary had

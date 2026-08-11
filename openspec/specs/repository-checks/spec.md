@@ -308,6 +308,37 @@ to compare two strings that differ by exactly the thing the rule names.
   path to it rather than every path
 - **PINNED-BY** `a_merge_made_outside_the_wrapper_is_not_observed`
 
+### Requirement: What reaches the merge SHALL be an allowlist, not a denylist
+
+The sanctioned merge wrapper SHALL forward only arguments it names. An argument it does not name — including a
+spelling of a known flag, and a flag a future `gh` adds — SHALL be refused before any evidence is read, rather
+than passed on to the merge.
+
+The admitted set SHALL be decided by one question: **does the argument move what the gate judged?** A flag that
+changes the message, the strategy, the repository, or anything else the merge records SHALL be refused; a flag
+that changes only whether the merge may proceed MAY be forwarded. Each admitted flag SHALL be accepted in one
+spelling, with its value as a separate argument, because parsing a tool's glued and equals forms is what a
+denylist has to get exhaustively right and an allowlist does not.
+
+**Enumerating what to forbid is the shape that failed, three times.** A `--repo` flag, a positional
+pull-request URL, and every short spelling of the flags the long-form arms named each reached the merge in turn.
+The last is the sharpest: `gh` accepts `-t` for `--subject` and `-F` for `--body-file`, the wrapper splices
+forwarded arguments after its own, and `gh` reads the last occurrence of a repeated flag — so one unlisted
+spelling replaced the message the gate had just approved. Refusing arms MAY remain for the diagnostics they
+carry, but they SHALL decide nothing the default refusal would not.
+
+#### Scenario: A flag the wrapper does not name
+
+- **WHEN** the wrapper is given any argument outside its admitted set, in any spelling
+- **THEN** it refuses before reading evidence or running the gate, and says that it forwards only what cannot
+  change the record
+
+#### Scenario: An admitted flag reaches the merge
+
+- **WHEN** the wrapper is given a flag that changes only whether the merge may proceed
+- **THEN** it is forwarded, so the refusal above is a rule about what moves the record rather than a wrapper
+  that refuses its own arguments
+
 ### Requirement: The squash wrapper SHALL judge the complete live pull-request commit set
 
 Before invoking the squash-message gate, the sanctioned merge wrapper SHALL resolve the accepted pull-request
