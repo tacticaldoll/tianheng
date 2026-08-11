@@ -172,8 +172,9 @@ them.
   `FactGranularity`, `Observer`, `Owner`, and `Reached` — beside `Outcome`, which each root already
   re-exported. A standalone-dimension adopter
   no longer needs a direct `xuanji` dependency merely to name the protocol its dimension exposes.
-- **Every crates.io publish is now made only from the signed, annotated-tagged `release: X.Y.Z`
-  commit at the live tip of `main`**, refused at the source rather than audited afterwards.
+- **A publish made through this repository's sanctioned path is refused at the source unless it runs on the
+  signed, annotated-tagged `release: X.Y.Z` commit at the live tip of `main`** — refused before `cargo publish`
+  is reached, rather than audited afterwards.
   `cargo publish` records the commit it ran on in each tarball's `.cargo_vcs_info.json`, a version can
   never be re-uploaded, and the `0.4.0` family recorded `f1dba52` — the tip of the since-archived
   `release/0.4.0` branch — rather than `e645a549`, the `release: 0.4.0` commit that `v0.4.0` tags.
@@ -181,6 +182,12 @@ them.
   six `0.4.0` tarballs matches `main`, and nothing needs re-fetching or re-resolving. Adopters
   verifying a `0.4.0` tarball against this repository should expect its recorded commit to name that
   release branch's tip rather than the tag.
+
+  **The guarantee is over that path, and its edge is stated rather than implied.** A `cargo publish` invoked
+  outside it meets no check at all; this repository declares that as an observation bound of its own, since
+  reaching further would mean observing an operator's shell rather than this repository. Taking the sanctioned
+  path stays a human's act, as an irreversible publish requires — what changed is that the path now refuses a
+  wrong source instead of trusting the operator to have checked.
 - `docs/history/published-artifact-provenance.md` inventories what commit **every** published version
   records, audited across all 96 published tarballs. Two versions disagree with their tag for two
   different reasons — `0.4.0` was published from the release branch, and `0.2.2` was published from
@@ -826,6 +833,17 @@ no adopter runs. They are here rather than under the adopter headings above beca
   *mentioned*, so a mention that compiles nothing counts. Deciding that a mention is load-bearing is the
   judgement over text this repository has designed, measured and rejected, and what makes a mention bite is the
   compiler.
+
+- **A publish claim promised more than any mechanism delivers.** It read *"Every crates.io publish is now made
+  only from the signed, annotated-tagged commit at the live tip of `main`"* — but a bare `cargo publish` invoked
+  outside the sanctioned path meets no check at all, and this repository declares exactly that as an observation
+  bound. The entry now claims what the mechanism does: a publish **made through that path** is refused at the
+  source unless it runs on the right commit, and the edge is stated beside it rather than left for a reader to
+  discover.
+
+  Repairing it tripped the reaction that reads adopter-facing entries for this repository's own machinery, whose
+  advice was the right one — *state the guarantee and drop the filename*. An adopter never runs the wrapper; what
+  they need is which commit a published tarball records, and that survives naming nothing internal.
 
 - **Two specifications and `AGENTS.md` still stated a gate's contract in exit codes it no longer has.** Both the
   publish-source gate and the bound register run as `cargo test`, so their process status is libtest's; the
