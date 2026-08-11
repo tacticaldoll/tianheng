@@ -70,15 +70,20 @@ fn match_from(rest: &str, parts: &[&str]) -> Option<Vec<usize>> {
 
 /// The count written at the front of `rest`, in digits **or in words**, and how many bytes it took.
 ///
-/// Reading digits only was the first draft, and it left two of the four censuses declared here **at the time**
-/// silent against the very documents they are for. Both of those declarations have since been retired, so the
-/// phrases they matched are not in the live set and the count is a record of that moment rather than a claim
-/// about now — the sibling reason below carries the same qualifier for the same reason.
+/// Reading digits only was the first draft, and it left censuses **then declared** silent against the very
+/// documents they are for. No count of them is written here: how many were declared at that moment is a figure
+/// about a past state that nothing produces, and two attempts at it have already been wrong — the first said
+/// four, and its repair implied the set had once held four and shrunk. Measured across the whole history of the
+/// declaring test, the live set has never held more than three.
 ///
-/// The need survives the instances. This repository's prose writes counts as words, so a document stating
-/// `{} bounds across {} capabilities` in words is invisible to a digit-only matcher while being exactly the
-/// sentence that census declares. Measured, not reasoned about: changing a spelled-out count to digits made the
-/// same census fire.
+/// **The example a reader can still follow.** `{} of them in` was declared here and retired for matching an
+/// unrelated sentence — the phrase-specificity assertion in [`sweep`] records that retirement — and it was one
+/// of the phrasings that stayed silent. The document sentence it was for survives: `BACKLOG.md` and
+/// `CHANGELOG.md` both write *twenty entries named that machinery*, a count spelled as a word, which a
+/// digit-only matcher cannot see.
+///
+/// The need outlives every instance. This repository's prose writes counts as words, so a document stating a
+/// declared census that way is invisible to a digit reader while being exactly the sentence it declares.
 fn number_at(rest: &str) -> Option<(usize, usize)> {
     let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
     if !digits.is_empty() {
