@@ -12,6 +12,9 @@ signature this gate deliberately does not judge.
 - `crates/kanhe/tests/publish_source_integrity.rs`
 - `crates/kanhe/src/publish_source_gate.rs`
 
+The gate runs as `cargo test -p kanhe --test publish_source`, invoked by `scripts/publish.sh`, so *violation*
+and *cannot-judge* below name values of its result type rather than process statuses.
+
 ## Requirements
 ### Requirement: A publish SHALL run only from the tagged release commit on the remote's main
 
@@ -72,10 +75,10 @@ a false refusal introduced by the hardening itself. Suffix removal keeps a quote
 it belongs.
 
 The extracted signature SHALL be proven to be the exact suffix of the tag object before payload reconstruction.
-A mismatch SHALL exit `2` cannot-judge; it SHALL NOT reach cryptographic verification as an exit-`1` invalid
-signature.
+A mismatch SHALL be a **cannot-judge**; it SHALL NOT reach cryptographic verification and be reported as a
+**violation** — an invalid signature.
 
-A signature this gate cannot read SHALL be cannot-judge (`2`), never a violation. A non-SSH signature is the live
+A signature this gate cannot read SHALL be a **cannot-judge**, never a violation. A non-SSH signature is the live
 case. Reporting it as a wrong source would be a false refusal before an irreversible act.
 
 A failure to read the tag object SHALL likewise be `2`, not `1`.
@@ -83,7 +86,8 @@ A failure to read the tag object SHALL likewise be `2`, not `1`.
 #### Scenario: An unsigned tag quotes a signature block in its message
 
 - **WHEN** `vX.Y.Z` is annotated, unsigned, and its message contains a `-----BEGIN SSH SIGNATURE-----` line
-- **THEN** the gate exits `1`, because the tag carries no signature and a quoted one is text
+- **THEN** the gate refuses it as a **violation**, because the tag carries no signature and a quoted one is
+  text
 
 #### Scenario: A genuinely signed tag is accepted with no allowed-signers configuration
 
@@ -94,7 +98,7 @@ A failure to read the tag object SHALL likewise be `2`, not `1`.
 #### Scenario: Signature workspace acquisition fails after creating a directory
 
 - **WHEN** temporary-workspace acquisition creates and reports its directory but returns failure
-- **THEN** the gate exits `2` cannot-judge and removes the partially acquired directory
+- **THEN** the gate refuses as a **cannot-judge** and removes the partially acquired directory
 
 #### Scenario: A signed tag whose message also quotes a signature block
 
@@ -106,12 +110,12 @@ A failure to read the tag object SHALL likewise be `2`, not `1`.
 #### Scenario: Extracted signature and tag object disagree
 
 - **WHEN** Git's extracted non-empty SSH signature is not the exact suffix of the tag object read by the gate
-- **THEN** the gate exits `2` because it cannot reconstruct the signed payload reliably
+- **THEN** the gate refuses as a **cannot-judge**, because it cannot reconstruct the signed payload reliably
 
 #### Scenario: A signature the gate cannot read
 
 - **WHEN** `vX.Y.Z` carries a signature this mechanism cannot verify — a non-SSH one
-- **THEN** the gate exits `2` naming what it could not read, never `1`
+- **THEN** the gate refuses as a **cannot-judge** naming what it could not read, never as a violation
 
 ### Requirement: Observation bounds
 

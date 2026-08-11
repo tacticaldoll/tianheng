@@ -292,7 +292,9 @@ branch the ritual archives. `bash scripts/publish.sh` is that path — it runs
 `crates/kanhe/tests/publish_source.rs` (worktree clean; `HEAD` the `release: X.Y.Z` snapshot for the
 workspace version; `vX.Y.Z` annotated, signed, and pointing at it; `HEAD` the live tip of
 `origin/main`, read from the remote rather than a possibly-stale `refs/remotes/`) and only then
-`cargo publish --workspace`. The gate reads `0` publishable, `1` wrong source, `2` cannot judge. The
+`cargo publish --workspace`. The gate is a `cargo test`, so it distinguishes a **violation** — the source
+disagrees — from a **cannot-judge** in its own result type rather than in a process status; either stops the
+wrapper before `cargo publish` is reached. The
 wrapper forwards extra arguments to cargo but **refuses `--manifest-path`** (either spelling) before
 the gate runs: it would move cargo's workspace root away from the tree the gate judged, which is the
 wrapper's whole claim undone by one argument. The registry-side arguments (`--registry`, `--index`,
