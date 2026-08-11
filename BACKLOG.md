@@ -207,7 +207,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **81 bounds across 23 capabilities** — a live figure rather than part of the measurement
+  currently holds **82 bounds across 23 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -661,6 +661,25 @@ consumer for an undemonstrated deduplication.
 
 
 - **WATCH:**
+- **WATCH: a pin may defend a direction its bound does not declare.** *Observed pressure:* one live instance,
+  found by review rather than by any reaction. `whether-a-mention-compiles-anything-is-not-observed` declares
+  `UnderReacts` — the check counts a comment-only mention as named — and cited a test containing no comment at
+  all, asserting instead that a substring is not a mention. That is a *reacting* distinction, so the citation
+  ran, bit, and demonstrated the opposite of what the bound predicts. *Observation source:* that comparison,
+  run against the declaration, its spec scenario and the cited test's body. *Current reaction or bound:*
+  declared unpinned as
+  `observation-bound-register/whether-a-citation-demonstrates-the-direction-its-bound-declares-a-stated-bound`;
+  `Extent::demonstrates()` reaches the projection label and the contradiction classification, and nothing
+  compares it with what the cited test asserts. *Risk:* the register's leading figure counts a bound as defended
+  when its defence is about something else — which is the register's own failure mode, one level in. *Promotion
+  trigger:* a **second** instance, or a derivation that decides the direction a test demonstrates without
+  reading its source as prose. *Why not simply built:* deciding what a test demonstrates from its body is a
+  judgement over code of the kind this repository has designed, measured three times and rejected over prose,
+  and unlike a citation that never runs or never bites there is no reaction whose gap a fixture could exhibit —
+  which is why this is declared rather than pinned. *Version class:* patch; repository-internal, shipping in no
+  crate. *Authority:* `observation-bound-register`, and `observation-bound-model`'s sibling bound that a
+  rationale contradicting its extent is accepted — the prose beside an extent was already free to disagree with
+  it, and so, until this was found, was the test beneath it.
 - **WATCH: a merge or publish made outside the wrapper is not observed.** *Observed pressure:* both
   assertions guard the sanctioned path — the wrapper's `1 passed` and the reaction pinning the identifier it
   cites. A `cargo publish` run directly, or a merge made in the browser, reaches neither. *Risk:* the record

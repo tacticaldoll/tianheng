@@ -827,6 +827,26 @@ no adopter runs. They are here rather than under the adopter headings above beca
   judgement over text this repository has designed, measured and rejected, and what makes a mention bite is the
   compiler.
 
+- **A declared bound was pinned by a test that defends a different direction, and nothing could have said so.**
+  The bound says a promised member named **only in a comment** counts as named — `UnderReacts`, whose
+  `demonstrates()` is `DoesNotReact`, a direction whose evidence is *silence*. Its citation named a test with no
+  comment anywhere in it, asserting that a substring of an identifier is not a mention: a **reacting**
+  distinction, true and useful and about something else. One perturbation separates them — making the check
+  strip comments, the behaviour the bound says it does not have, kills only the new pin while the old one passes
+  untouched.
+
+  The citation now names a test that puts a promised member in a comment and nothing else, with a control
+  showing the same contract without the comment is reported. The tokenizer test stays, as what it always was: the
+  contract test for identifier extraction.
+
+  **The blind spot that allowed it is declared rather than left for the next one.** `Extent::demonstrates()`
+  names the direction a defence must show and reaches the projection label and the contradiction classification
+  beside it; nothing compares that prediction with what the cited test asserts. Deciding what a test demonstrates
+  from its source is a judgement over code of the kind measured and rejected over prose — and unlike a citation
+  that never runs or never bites, there is no reaction here whose gap a fixture could exhibit, so it is declared
+  unpinned with a tracker. It is the sibling of *a rationale that contradicts its extent*, one step over: the
+  prose beside an extent was already free to disagree with it, and so, silently, was the test beneath it.
+
 - **Two observation limits were real and undeclared, and each is now declared instead of removed.** The census
   sweep reads tracked **Markdown**, while its requirement said "every tracked document" — the requirement was the
   outlier, since the register spec and this changelog both already said Markdown. Widening the corpus was measured

@@ -561,4 +561,4 @@ parses to nothing or the contract yields no identifier, since both make every di
   judgement over text, the instrument this repository has designed, measured and rejected, and what makes a
   mention bite is the compiler rather than this check. A comment-only mention still fails the reviewer reading
   the diff, which is the layer that owns it
-- **PINNED-BY** `a_longer_identifier_containing_a_promised_name_is_not_a_mention`
+- **PINNED-BY** `a_member_named_only_in_a_comment_is_counted_as_named`
