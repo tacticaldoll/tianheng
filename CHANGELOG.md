@@ -905,6 +905,22 @@ no adopter runs. They are here rather than under the adopter headings above beca
   names collapsing. **No live verdict moves**: the real citations are unqualified, which is exactly why nothing
   had noticed.
 
+- **A repair of an unverifiable claim was itself unverifiable, and the second attempt is measured.** The census
+  reader's word-parsing reason said *"two of the four censuses declared here"*; the repair that followed implied
+  the declared set had once held four and shrunk. Measured across the whole history of the declaring test, it has
+  **never held more than three** — so the correction replaced one figure a reader cannot check with another.
+
+  No count replaces it. How many were declared at that moment is a figure about a past state that nothing
+  produces, and it has now been wrong twice; the sentence says what happened without it. What the reason cites
+  instead is evidence still in the tree: `{} of them in` **was** declared here and retired for matching an
+  unrelated sentence — the phrase-specificity assertion in the sweep records that retirement, three lines of code
+  away from the reason that had lost track of it — and the document sentence it existed for survives verbatim in
+  two tracked documents.
+
+  The one positional reference the draft carried is gone too, replaced by a link the compiler resolves. There is
+  a ladder here: an intra-doc link is checked by the documentation pass, a path by the reference gate, and a line
+  number by nothing at all.
+
 - **Two guards over one condition, and only one of them could ever fire.** The self-law's shell-boundary
   selector asserted that exactly one allowlist matched, then extracted it with an `expect` standing over the
   state the assertion six lines above had just made unreachable. Two messages for one fact, one of them dead —
