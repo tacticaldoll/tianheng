@@ -148,8 +148,8 @@ there the attribute-run walk decides test-ness, and the reaction SHALL say on it
 gate that silently drops its strongest direction reports a weaker clean than the one it claims.
 
 Where the enumeration itself cannot be produced — no `cargo`, or a workspace that does not build — the
-reaction SHALL exit **cannot judge** rather than fall back silently, because a citation's test-ness is then
-undecided rather than decided weakly.
+reaction SHALL refuse as a **cannot-judge** rather than fall back silently, because a citation's test-ness is
+then undecided rather than decided weakly.
 
 The reaction SHALL verify that each `PINNED-BY` name resolves to exactly one Rust function **definition**
 under `crates/`. Resolving to none SHALL fail: a test that was renamed or deleted leaves a citation that reads
@@ -221,7 +221,8 @@ its being an identifier.
 #### Scenario: The enumeration cannot be produced at all
 
 - **WHEN** a root manifest exists but the enumeration fails — no `cargo`, or a workspace that does not build
-- **THEN** the reaction exits cannot-judge, because test-ness is undecided rather than weakly decided
+- **THEN** the reaction refuses as a **cannot-judge**, because test-ness is undecided rather than weakly
+  decided
 
 #### Scenario: A citation naming a test defined twice
 
@@ -340,7 +341,7 @@ unmutated build simply rebuilds and reports correctly — so no false-clean dire
 and the matrix has no direction for this requirement. Requiring it on the premise rather than on an observed
 outcome is the honest form: the guarantee claimed is exactly the one held.
 
-A `from` that occurs zero times or more than once in the named file SHALL be **cannot judge**, not a violation.
+A `from` that occurs zero times or more than once in the named file SHALL be a **cannot-judge**, not a violation.
 The mutation could not be applied, which is a different fact from the pin not biting, and reporting the second
 for the first lets a mutation whose anchor has rotted read as a pin that has been exercised. Requiring the
 anchor to be unique is the rule the observer protocol's body reader reached by the expensive route in the same
@@ -376,7 +377,7 @@ from one the mutation killed.
 
 The package and target the cited test runs in SHALL be **derived from where that test is defined**, not from the
 file the mutation edits and not declared beside the mutation. The mappings from a definition path to a target SHALL be an
-**allowlist**, and a path matching none of them SHALL be cannot judge. Assuming a library test for whatever did
+**allowlist**, and a path matching none of them SHALL be a cannot-judge. Assuming a library test for whatever did
 not match ran a *different* test of the same name and reported that one's death as the citation's, while the
 cited pin never ran at all — measured twice, first for a module of an integration target and then, after a
 denylist closed that instance, for a binary target the denylist did not name. Refusing what cannot be mapped is
@@ -384,7 +385,7 @@ what closes the class rather than its instances. A record routinely perturbs a r
 while the pin defending it sits in another, and deriving from the edited file then runs a target the citation is
 not registered in — measured here, where a recognizer in a crate's library and its pin in an integration target
 selected the library. A fifth field would be a second spelling of a fact the tree already carries, and would rot.
-A name whose definition the scan finds zero or several times SHALL be cannot judge, because a target cannot be
+A name whose definition the scan finds zero or several times SHALL be a cannot-judge, because a target cannot be
 derived from a set.
 
 An enumeration of citations that yields none SHALL fail loudly rather than report every mutation valid against
@@ -393,11 +394,11 @@ by the **read**, which refuses a match of nothing as a failed read, rather than 
 afterwards: with the read refusing first, such a comparison can never fire, and a guard that cannot fire reads
 as protection while being none.
 
-A mutation whose tree does not **compile** SHALL be cannot judge, for the same reason as a rotted anchor: the
+A mutation whose tree does not **compile** SHALL be a cannot-judge, for the same reason as a rotted anchor: the
 perturbation was never exercised. `cargo test` exits non-zero for a compile error as well as for a failing
 assertion, so a reaction distinguishing them by status alone would read a broken build as a biting pin.
 
-A cited name the harness registers **more than once** in the selected target SHALL be cannot judge before any
+A cited name the harness registers **more than once** in the selected target SHALL be a cannot-judge before any
 run, for the same reason the definition scan refuses a name found in several files: a filter matching several
 does not name the citation. A run SHALL also be required to have executed **exactly one** test. A filter matching nothing exits 0 having run
 nothing, which by status is indistinguishable from a pin that survived its mutation — measured here, where a lib
@@ -459,7 +460,7 @@ is coverage, which grows one authored record at a time.
 - **THEN** the reaction reports clean over a file holding nothing to run — a records file whose only remaining
   line was a TAB-indented comment counted as a declared mutation and was skipped as prose, exiting 0. The
   records SHALL therefore be parsed **once**, and a line that is neither prose nor four TAB-separated fields
-  SHALL be cannot judge rather than skipped
+  SHALL be a cannot-judge rather than skipped
 
 #### Scenario: A mutation that does not compile
 
@@ -816,17 +817,17 @@ coverage claim that has not been observed failing is a restatement of the regist
 The reaction SHALL be read-only: it SHALL NOT edit a spec, declare a bound, or rewrite the projection
 except when explicitly asked to regenerate it.
 
-Regeneration SHALL be bound by the same exit contract as judgment — 0 clean, 1 violation, 2 cannot judge.
+Regeneration SHALL be bound by the same verdict contract as judgment — clean, violation, or cannot-judge.
 Regenerating over a register that has offenses SHALL write the projection and then **fail**, because "the
-document was rewritten" and "the register it describes is valid" are different claims and one exit code
-cannot carry both. A register the reaction cannot judge at all SHALL fail **before** the projection is
+document was rewritten" and "the register it describes is valid" are different claims and one verdict cannot
+carry both. A register the reaction cannot judge at all SHALL fail **before** the projection is
 written, so a register whose declarations it could not find cannot leave behind a document that reads as a
 complete one.
 
-The exit contract SHALL bind **every** path out of the reaction, including a failure nobody anticipated.
-A command that fails without its own handling SHALL surface as cannot-judge naming where it failed, never as
-the failing utility's own status: a status outside `0`/`1`/`2` is one the contract does not define, so a
-consumer cannot act on it and an operator is given no reason. Holding this per-command is not equivalent to
+The verdict contract SHALL bind **every** path out of the reaction, including a failure nobody anticipated.
+A command that fails without its own handling SHALL surface as a **cannot-judge** naming where it failed, never
+as the failing utility's own status, which carries no verdict this contract defines — so a consumer cannot act
+on it and an operator is given no reason. Holding this per-command is not equivalent to
 holding it structurally — the paths that break the contract are the ones nobody thought to wrap.
 
 The reaction's **package enumeration** SHALL come from tracked content like every other read, and SHALL be
@@ -911,7 +912,7 @@ ordinary exit-1 no-match result.
   a partial tree would otherwise produce a projection describing a partial register while agreeing with
   the verdicts drawn from the same partial read
 
-#### Scenario: An unanticipated failure still reports within the exit contract
+#### Scenario: An unanticipated failure still reports within the verdict contract
 
 - **WHEN** a command the reaction runs fails with no handling of its own — a text utility reading a spec, a
   temp file that cannot be created

@@ -845,6 +845,24 @@ no adopter runs. They are here rather than under the adopter headings above beca
   advice was the right one — *state the guarantee and drop the filename*. An adopter never runs the wrapper; what
   they need is which commit a published tarball records, and that survives naming nothing internal.
 
+- **The same migration, finished — and the sweep that declared it done was the reason it was not.** The pattern
+  used to find retired exit-code prose required the word *exit* and a digit **adjacent**, and the vocabulary had
+  already half-migrated: statements saying `SHALL exit cannot-judge` carry no digit, and one saying `SHALL
+  likewise be` `2`, `not` `1` carries no *exit*. Every such statement escaped, in both directions, and the
+  residual grep that reported zero was reporting on the wrong instrument.
+
+  Swept again by each half **independently** rather than by their co-occurrence: six retired statements, four of
+  them in a file the previous pass had already edited — including a whole requirement binding regeneration to
+  "the same exit contract as judgment — 0 clean, 1 violation, 2 cannot judge", and another binding "the exit
+  contract" to every path out of the reaction. Those are the verdict contract, and they now say so.
+
+  **The spelling was split, and that is part of why the miss happened.** The same verdict appeared as both
+  `cannot-judge` and `cannot judge`, so a sweep written against one form was blind to the other; the noun is now
+  spelled one way throughout, while the ordinary verb phrase — *the reaction cannot judge* — is left alone,
+  because it is a sentence rather than a value. Kept for the same reason as before: `libtest`'s own `0`, the
+  product's live `0`/`1`/`2`, and the historical sentence explaining why a shell gate's status had to move into
+  a type at all.
+
 - **Two specifications and `AGENTS.md` still stated a gate's contract in exit codes it no longer has.** Both the
   publish-source gate and the bound register run as `cargo test`, so their process status is libtest's; the
   distinction they actually carry — a source that **disagrees** versus one that **cannot be judged** — lives in
