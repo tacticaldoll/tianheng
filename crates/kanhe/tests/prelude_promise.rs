@@ -99,6 +99,38 @@ fn an_input_that_cannot_be_read_is_refused_rather_than_reported_clean() {
     }
 }
 
+/// The bound: a promised member named **only in a comment** is counted as named.
+///
+/// `repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound`, `UnderReacts`, owned
+/// by the engine. The check asks whether the promise was noticed at all; deciding that a mention is
+/// load-bearing is a judgement over text this repository has designed, measured and rejected, and what makes a
+/// mention bite is the compiler.
+///
+/// Both directions on one contract, differing only by the comment line. Without the control the silence is
+/// satisfiable by a judgement that never reports anything, and the direction this bound declares is *silence* —
+/// which is exactly the shape that cannot be pinned by a test that reacts.
+#[test]
+fn a_member_named_only_in_a_comment_is_counted_as_named() {
+    let promise = "pub mod prelude {\n    pub use super::{Alpha, Beta};\n}\n";
+
+    // The control: with `Beta` nowhere in the contract, the promise is not kept.
+    assert_eq!(
+        judge(promise, "fn t() { let _ = Alpha; }\n"),
+        Promise::Unnamed(vec!["Beta".to_string()]),
+        "a promised member the contract never mentions must be reported, or the bound below proves nothing"
+    );
+
+    // The bound: the only thing added is a comment, and the promise now reads as kept.
+    assert_eq!(
+        judge(
+            promise,
+            "fn t() { let _ = Alpha; }\n// Beta is named here and nowhere else.\n"
+        ),
+        Promise::Kept,
+        "a mention inside a comment counts as named, which is the declared stop"
+    );
+}
+
 /// A mention is an identifier, so a substring of one is not a mention.
 ///
 /// The promise carries both `Run` and `RuntimeObserver`, and the shorter sits inside the longer — so a

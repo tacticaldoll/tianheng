@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**15 of 81 declared bounds have no pinning test.** That figure is the register's
+**16 of 82 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -146,6 +146,12 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing observes whether it landed in the right one. The split is by what a check judges — the law and the delivered product on one side, this repository's record on the other — and two mechanical rules were each measured unreliable: a text scan reads a comment naming `AGENTS.md` as governance while a check scanning every tracked file names nothing, and the workspace marker means both "this needs the repository as its subject" and "this needs a fixture". Position is the declaration; the join below catches a **capability** named wrongly, never a member chosen wrongly
 
 - **unpinned**, tracked by: `BACKLOG.md` — *which governance member a check belongs to is unobserved*
+
+### `observation-bound-register/whether-a-citation-demonstrates-the-direction-its-bound-declares-a-stated-bound`
+
+> nothing reacts. `Extent::demonstrates()` names the direction a defence must show, and it reaches the projection's label and the contradiction classification beside it; no reader compares that prediction with what the cited test asserts. Reaching further means deciding what a test demonstrates from its source, which is a judgement over code of the same kind this repository has designed, measured and rejected over prose — and unlike a citation that never runs or never bites, there is no reaction here whose gap a fixture could exhibit. This is the sibling of *a rationale that contradicts its extent*, one step over: the prose beside an extent is already declared free to disagree with it, and so, until now silently, was the test beneath it
+
+- **unpinned**, tracked by: `BACKLOG.md` — *a pin may defend a direction its bound does not declare*
 
 ### `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound`
 
@@ -329,7 +335,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 > the check counts it as named, a stated bound: deciding that a mention is load-bearing is a judgement over text, the instrument this repository has designed, measured and rejected, and what makes a mention bite is the compiler rather than this check. A comment-only mention still fails the reviewer reading the diff, which is the layer that owns it
 
-- **pinned by**: `a_longer_identifier_containing_a_promised_name_is_not_a_mention`
+- **pinned by**: `a_member_named_only_in_a_comment_is_counted_as_named`
 
 ## runtime-origin-assertion
 

@@ -9,6 +9,24 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
     vec![
         BoundDecl::unpinned(
             BoundId::new(
+                "observation-bound-register/whether-a-citation-demonstrates-the-direction-its-bound-declares-a-stated-bound",
+            ),
+            "a declared bound citing a test that bites, while demonstrating a different direction from the one \
+             its extent predicts",
+            Extent::Reached(Reached::UnderReacts {
+                because: "`demonstrates()` names the direction a defence must show and reaches the projection \
+                          label and the contradiction classification, while no reader compares that prediction \
+                          with what the cited test asserts. Deciding what a test demonstrates from its source is \
+                          a judgement over code of the kind measured and rejected over prose, and unlike a \
+                          citation that never runs or never bites there is no reaction here whose gap a fixture \
+                          could exhibit"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *a pin may defend a direction its bound does not declare*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
                 "repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound",
             ),
             "an act reaching cargo publish or a merge without going through its wrapper",
@@ -51,7 +69,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                     .into(),
                 owner: Owner::Engine,
             }),
-            "a_longer_identifier_containing_a_promised_name_is_not_a_mention",
+            "a_member_named_only_in_a_comment_is_counted_as_named",
         ),
         BoundDecl::pinned(
             BoundId::new("repository-checks/files-no-capability-claims-a-stated-bound"),

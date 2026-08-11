@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**37 of 81 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**38 of 82 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -12,6 +12,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default` — owner: adopter
 - `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound` — owner: engine
+- `observation-bound-register/whether-a-citation-demonstrates-the-direction-its-bound-declares-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-record-perturbs-the-check-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound` — owner: engine
@@ -412,7 +413,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (37)
+## under-reacts (38)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -469,6 +470,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the gate runs the mutations it is given and nothing else, so a citation with no record is neither exercised nor refused; authoring a record that genuinely perturbs the pinned point is per-bound work, which is why coverage is disclosed on every clean run rather than implied
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *most pinning citations have never been seen to fail*
+
+### `observation-bound-register/whether-a-citation-demonstrates-the-direction-its-bound-declares-a-stated-bound`
+
+> a declared bound citing a test that bites, while demonstrating a different direction from the one its extent predicts
+
+- **because**: `demonstrates()` names the direction a defence must show and reaches the projection label and the contradiction classification, while no reader compares that prediction with what the cited test asserts. Deciding what a test demonstrates from its source is a judgement over code of the kind measured and rejected over prose, and unlike a citation that never runs or never bites there is no reaction here whose gap a fixture could exhibit
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *a pin may defend a direction its bound does not declare*
 
 ### `observation-bound-register/whether-a-cited-test-s-outcome-depends-on-its-run-count-is-not-observed-beyond-one-period-a-stated-bound`
 
@@ -636,7 +645,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 - **because**: the check asks whether the promise was noticed at all, and deciding that a mention is load-bearing is a judgement over text this repository has designed, measured and rejected. What makes a mention bite is the compiler; a comment-only mention still fails the reviewer reading the diff, which is the layer that owns it
 - **its defence must show**: does not react
-- **pinned by**: `a_longer_identifier_containing_a_promised_name_is_not_a_mention`
+- **pinned by**: `a_member_named_only_in_a_comment_is_counted_as_named`
 
 ### `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound`
 

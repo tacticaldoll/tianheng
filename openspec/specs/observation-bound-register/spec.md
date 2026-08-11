@@ -77,6 +77,19 @@ NOT declare a bound.
   named wrongly, never a member chosen wrongly
 - **UNPINNED** `BACKLOG.md` — *which governance member a check belongs to is unobserved*
 
+#### Scenario: Whether a citation demonstrates the direction its bound declares — a stated bound
+
+- **WHEN** a declared bound cites a test that runs, bites, and demonstrates a **different** direction from the
+  one its extent predicts — a reacting distinction cited by a bound whose extent says the reaction stays silent
+- **THEN** nothing reacts. `Extent::demonstrates()` names the direction a defence must show, and it reaches the
+  projection's label and the contradiction classification beside it; no reader compares that prediction with what
+  the cited test asserts. Reaching further means deciding what a test demonstrates from its source, which is a
+  judgement over code of the same kind this repository has designed, measured and rejected over prose — and
+  unlike a citation that never runs or never bites, there is no reaction here whose gap a fixture could exhibit.
+  This is the sibling of *a rationale that contradicts its extent*, one step over: the prose beside an extent is
+  already declared free to disagree with it, and so, until now silently, was the test beneath it
+- **UNPINNED** `BACKLOG.md` — *a pin may defend a direction its bound does not declare*
+
 ### Requirement: A declared bound SHALL carry exactly one citation naming its defence
 
 A declared bound SHALL carry exactly one citation bullet beside its WHEN/THEN: either
