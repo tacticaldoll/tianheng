@@ -11,6 +11,41 @@ fn executed_regions_respect_the_source_language() {
     assert!(shell.shell().contains("// data"));
 }
 
+/// A comment is not executed text **wherever it sits**, and a marker that begins no token is not a comment.
+///
+/// Both directions, because either alone is satisfiable by a degenerate reader — one that cuts everything, or
+/// one that cuts nothing. The second direction is the load-bearing one: cutting at the first marker was measured
+/// against this repository and corrupts constants holding a URL, a string carrying a doc marker, and the region
+/// helper's own `comment` field.
+#[test]
+fn a_tail_comment_is_not_executed_text_and_a_glued_marker_is_not_a_comment() {
+    let tail = Source::of("let n = 1; // hidden\nlet m = 2;\n");
+    assert!(
+        tail.rust().contains("let n = 1;"),
+        "the executed head of the line survives"
+    );
+    assert!(
+        !tail.rust().contains("hidden"),
+        "a tail comment is a comment, so its text is not executed"
+    );
+
+    let glued = Source::of("let u = \"https://example.invalid/x\";\n");
+    assert!(
+        glued.rust().contains("https://example.invalid/x"),
+        "a marker glued to what precedes it begins no token and is not a comment"
+    );
+
+    let shell_tail = Source::of("printf '%s' one # hidden\n");
+    assert!(
+        shell_tail.shell().contains("printf '%s' one"),
+        "the same rule in the shell region"
+    );
+    assert!(
+        !shell_tail.shell().contains("hidden"),
+        "a shell tail comment is not executed text either"
+    );
+}
+
 /// Prose excludes the comment SPAN, not the line carrying it.
 ///
 /// `projection-register`'s requirement is that a path appearing **only** inside an HTML comment is not a

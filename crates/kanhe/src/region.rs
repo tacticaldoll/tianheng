@@ -126,13 +126,33 @@ impl<'a> Executed<'a> {
     }
 
     /// Executed lines with their one-based position in the original source.
+    ///
+    /// A **whole-line** comment is dropped and a **tail** comment is cut, because a comment is not executed
+    /// text wherever it sits. Filtering whole lines alone made placement decide the verdict: a bare marker
+    /// line naming a document did not satisfy "this holder names its document" while the same name written
+    /// after `let n = 1;` did — the same text answering opposite ways. One site noticed and stripped tails by hand; this is that rule with one
+    /// implementation.
+    ///
+    /// The marker is recognised **preceded by whitespace or at line start**, never bare — measured against
+    /// this repository rather than reasoned about. Cutting at the first marker corrupts 26 lines here,
+    /// including `"https://…"` constants, a string carrying `"/// …"`, and this file's own `comment: "//"`.
+    /// Requiring the head to keep non-space content was measured too and separates nothing today, so it is
+    /// not adopted.
+    ///
+    /// **Residue, declared rather than approximated:** a marker preceded by whitespace *inside* a string
+    /// literal is cut, because telling one from the other needs the string-literal lexing this tree has
+    /// defeated repeatedly. `observer-protocol` already declares that direction. It sits beside this region's
+    /// other residues — a fence inside an open HTML comment span, and a comment span opened inside a fence.
     pub fn numbered_lines(&self) -> impl Iterator<Item = (usize, &'a str)> + use<'a> {
         let comment = self.comment;
         self.text
             .lines()
             .enumerate()
             .filter_map(move |(index, line)| {
-                (!line.trim_start().starts_with(comment)).then_some((index + 1, line))
+                if line.trim_start().starts_with(comment) {
+                    return None;
+                }
+                Some((index + 1, cut_tail_comment(line, comment)))
             })
     }
 
@@ -146,6 +166,28 @@ impl<'a> Executed<'a> {
         self.lines()
             .any(|line| line.trim_start().starts_with(prefix))
     }
+}
+
+/// The executed head of `line`: everything before a comment marker that begins a token.
+///
+/// "Begins a token" means at line start or after whitespace. A marker glued to the character before it is part
+/// of something else — `https://`, `"//"`, `"/// …"` — and cutting there would delete executed text, which is
+/// the direction the Core Contract forbids.
+fn cut_tail_comment<'a>(line: &'a str, comment: &str) -> &'a str {
+    let mut from = 0;
+    while let Some(offset) = line[from..].find(comment) {
+        let at = from + offset;
+        let begins_a_token = at == 0
+            || line[..at]
+                .chars()
+                .next_back()
+                .is_some_and(char::is_whitespace);
+        if begins_a_token {
+            return &line[..at];
+        }
+        from = at + comment.len();
+    }
+    line
 }
 
 /// A document's header: everything above its first `##` heading.

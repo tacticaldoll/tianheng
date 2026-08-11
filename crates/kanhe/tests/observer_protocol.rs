@@ -575,13 +575,9 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
             .map(str::trim)
             .filter(|line| !line.is_empty())
             .map(|line| {
-                // A trailing comment is PROSE, not a second list. `Executed` filters comment lines and not
-                // comment tails, so without this `observation_bounds() // why` compares unequal and the check
-                // reports an offence — measured.
-                let code = match line.find("//") {
-                    Some(index) => &line[..index],
-                    None => line,
-                };
+                // A trailing comment is PROSE, not a second list — and `Executed` now cuts one, so the strip
+                // that stood here is gone. It was this rule's second implementation; the reader owns it.
+                let code = line;
                 // Written as a tail expression today; a `return …;` says the same thing and must read the same.
                 code.trim()
                     .trim_start_matches("return ")
