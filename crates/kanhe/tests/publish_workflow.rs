@@ -47,6 +47,14 @@ fn read_if_present(path: &Path) -> std::io::Result<String> {
 
 /// Run the wrapper with `extra` appended, against a `cargo` that logs and never uploads.
 fn run_wrapper(root: &Path, extra: &[&str]) -> Run {
+    run_wrapper_with_env(root, extra, &[])
+}
+
+/// The same, with `env` set in the wrapper's own environment.
+///
+/// Separate because what the wrapper reads from its ENVIRONMENT is a different surface from what it reads from
+/// its arguments, and this repository declares a bound about exactly that difference.
+fn run_wrapper_with_env(root: &Path, extra: &[&str], env: &[(&str, &str)]) -> Run {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     let scratch = loop {
         let candidate = std::env::temp_dir().join(format!(
@@ -73,20 +81,27 @@ fn run_wrapper(root: &Path, extra: &[&str]) -> Run {
         &bin.join("cargo"),
         r##"#!/usr/bin/env bash
 set -eu
-printf '%s\n' "$*" >> "$FAKE_CARGO_LOG"
+# ONE line per invocation, carrying the arguments AND the environment. Two lines let a direction match an
+# environment value against the wrong invocation: the gate's own `cargo test` runs first and inherits the same
+# environment, so a bare `contains` for the value passed while the publish had been scrubbed — measured, the
+# negative run for the environment bound did not fire until this became one line.
+printf '%s |env CARGO_BUILD_TARGET=[%s]\n' "$*" "${CARGO_BUILD_TARGET-}" >> "$FAKE_CARGO_LOG"
 printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'
 "##,
     );
 
     let old_path = std::env::var_os("PATH").unwrap_or_default();
     let path = format!("{}:{}", bin.display(), old_path.to_string_lossy());
-    let output = Command::new("bash")
+    let mut command = Command::new("bash");
+    command
         .arg(root.join("scripts/publish.sh"))
         .args(extra)
         .env("PATH", path)
-        .env("FAKE_CARGO_LOG", &cargo_log)
-        .output()
-        .expect("run controlled publish workflow");
+        .env("FAKE_CARGO_LOG", &cargo_log);
+    for (name, value) in env {
+        command.env(name, value);
+    }
+    let output = command.output().expect("run controlled publish workflow");
 
     let run = Run {
         status: output.status,
@@ -99,7 +114,10 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
 
 /// The line the wrapper's final `exec` produces, if it got there.
 fn publish_invocation(cargo_log: &str) -> Option<&str> {
-    cargo_log.lines().find(|line| line.starts_with("publish "))
+    cargo_log
+        .lines()
+        .find(|line| line.starts_with("publish "))
+        .and_then(|line| line.split_once(" |env").map(|(arguments, _)| arguments))
 }
 
 /// Only an allowlisted argument reaches `cargo publish`; everything else is refused before the gate runs.
@@ -270,4 +288,57 @@ fn a_value_taking_argument_with_no_value_is_named_and_refused() {
             run.cargo_log
         );
     }
+}
+
+/// `repository-checks`'s bound *a tool configuration set in the environment is not observed*, demonstrated.
+///
+/// `UnderReacts`, owned by the engine. The allowlist classifies ARGUMENTS, and cargo takes the same configuration
+/// from the environment: measured on cargo 1.96.0, `--target not-a-real-triple` and
+/// `CARGO_BUILD_TARGET=not-a-real-triple` produce the identical `failed to run \`rustc\` to learn about
+/// target-specific information`. So a value this wrapper refuses as an argument reaches cargo unexamined when it
+/// is exported instead.
+///
+/// **Both directions on one configuration key**, because a bound whose silence is not contrasted with a reaction
+/// is indistinguishable from a wrapper that refuses nothing. The argument is refused; the environment passes and
+/// arrives.
+///
+/// Closing it is ordinary work here rather than another layer's — the wrapper could scrub the environment before
+/// invoking cargo. It is not closed because doing so needs an allowlist over the environment, and legitimate
+/// setups export `CARGO_HOME`, `CARGO_TARGET_DIR` and more; choosing that set is a decision this bound records
+/// instead of guessing.
+#[test]
+fn a_tool_configuration_set_in_the_environment_is_a_stated_bound() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+
+    // The reaction: as an argument, refused before the gate.
+    let refused = run_wrapper(&root, &["--target", "not-a-real-triple"]);
+    assert_eq!(
+        refused.status.code(),
+        Some(2),
+        "`--target` must be refused as an argument, or this bound has nothing to contrast with; stderr {:?}",
+        refused.stderr
+    );
+
+    // The silence: the same configuration, exported, is neither seen nor refused — and it arrives.
+    let passed = run_wrapper_with_env(&root, &[], &[("CARGO_BUILD_TARGET", "not-a-real-triple")]);
+    assert!(
+        passed.status.success(),
+        "the bound says the environment is not observed; a refusal here would mean it is closed and this \
+         declaration is stale: {:?}",
+        passed.stderr
+    );
+    // Matched on the PUBLISH's own line, not anywhere in the log. The gate's `cargo test` runs first and
+    // inherits the same environment, so a bare search passed even with the publish scrubbed — the negative run
+    // for this bound did not fire until the harness recorded arguments and environment together.
+    let publish = passed
+        .cargo_log
+        .lines()
+        .find(|line| line.starts_with("publish "))
+        .unwrap_or_else(|| panic!("the publish must be reached:\n{}", passed.cargo_log));
+    assert!(
+        publish.contains("|env CARGO_BUILD_TARGET=[not-a-real-triple]"),
+        "the exported configuration must be shown to reach THE PUBLISH, not merely to go unrefused: {publish}"
+    );
 }
