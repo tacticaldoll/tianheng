@@ -198,8 +198,17 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 ";
 
 /// The unique live dependency allowlist governing the shell.
+///
+/// **One check over one condition.** The arity was asserted and then asserted again by an `expect` on the
+/// extraction — two guards, two messages, and only the first could ever fire, so the second stood over a state
+/// the line above had made unreachable. That is the defensive over-foolproofing of an impossible state the
+/// minimalism bound forbids, and the same shape this window retired from the baseline writer's temp-file guard.
+///
+/// Converting into `[Boundary; 1]` makes the arity the **type's** obligation rather than a second reader's, so
+/// the extraction and the guard can no longer disagree — and the count is still available for the diagnostic,
+/// because the failed conversion hands the vector back.
 pub fn shell_dependency_boundary() -> Boundary {
-    let mut shell_boundaries: Vec<Boundary> = constitution()
+    let shell_boundaries: Vec<Boundary> = constitution()
         .static_boundaries()
         .boundaries()
         .iter()
@@ -213,13 +222,15 @@ pub fn shell_dependency_boundary() -> Boundary {
         })
         .cloned()
         .collect();
-    assert_eq!(
-        shell_boundaries.len(),
-        1,
-        "the self-constitution must declare exactly one tianheng dependency allowlist; a repository check \
-         must not choose an arbitrary duplicate or silently stop observing a renamed boundary"
-    );
-    shell_boundaries.pop().expect("the unique shell boundary")
+    match <[Boundary; 1]>::try_from(shell_boundaries) {
+        Ok([boundary]) => boundary,
+        Err(found) => panic!(
+            "the self-constitution must declare exactly one tianheng dependency allowlist and declares {}; \
+             a repository check must not choose an arbitrary duplicate or silently stop observing a renamed \
+             boundary",
+            found.len()
+        ),
+    }
 }
 
 pub fn shell_dependency_allowlist(boundary: &Boundary) -> &[String] {
