@@ -416,6 +416,14 @@ unreadable body file left the gate's body variable empty, and the gate refuses a
 disagreement — so a file the wrapper could not open was reported to the operator as a record they had written
 wrongly. Reading once and handing the gate the value also closes the window between the test and the use.
 
+**A wrapper SHALL leave no temporary file behind, on the path that completes the act as well as on the paths that
+do not.** Cleanup SHALL NOT rest on an EXIT trap alone: a trap does not run when `exec` replaces the shell image,
+so the one path that completes the act is the one path a trap never cleans. The trap SHALL remain, because it is
+what covers the failure paths, and `exec` SHALL remain, because the tool's exit status becoming the script's is
+deliberate — so the removal belongs immediately before the `exec`, where the file's purpose is spent. A direction
+holding this SHALL observe an isolated temporary directory as a whole rather than one known name, so a temporary
+file added later is covered without the direction being touched.
+
 A direction holding any of these SHALL NOT skip on the subject's own behaviour. A skip for an environment that
 cannot produce the condition SHALL be decided by a probe of the direction's own; deciding it from the wrapper's
 exit status swallowed exactly the defect, since a wrapper that wrongly succeeds looks like an environment that
@@ -457,6 +465,11 @@ every direction covering them passed.
 - **WHEN** a file a wrapper was given is present and unreadable
 - **THEN** the wrapper exits `2` naming the read it could not make, and the gate is never asked to judge a value
   that was never read
+
+#### Scenario: The act completes
+
+- **WHEN** a wrapper reaches the irreversible command and it succeeds
+- **THEN** no temporary file it created remains, even though an EXIT trap would not have run
 
 #### Scenario: An acquisition fails
 

@@ -815,6 +815,23 @@ them.
 
 ### Self-governance
 
+- **Both wrappers cleaned up on every path except the one that finishes the job.** The verdict file added this
+  window was removed by `trap 'rm -f …' EXIT`, and an EXIT trap does not run when `exec` replaces the shell
+  image — measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while the same script without `exec`
+  prints `T`. So the trap fired wherever nothing had happened and was skipped wherever the merge or the publish
+  actually completed: against an isolated `TMPDIR`, three successful runs left three empty files and a failing run
+  left none.
+
+  Removed immediately before each `exec`, where the file's purpose is spent. The trap stays — it is what covers the
+  failure paths — and `exec` stays, because the tool's exit status becoming the script's is deliberate. The cost was
+  hygiene rather than disclosure: the file is written only when the gate has a refusal, and a refusal exits through
+  the trap, so every leaked file was empty.
+
+  Held by a direction per wrapper that observes an **isolated temporary directory as a whole** rather than one
+  known name, so a temporary file added later is covered without the direction being touched. Both halves, since
+  dropping the trap would satisfy the completing path while reopening every failing one — and the two negative runs
+  are exactly that pair.
+
 - **What the wrappers cannot see in the environment is now a declared bound rather than an aside.** The
   allowlists classify **arguments**, and cargo takes the same configuration from the environment: measured on
   cargo 1.96.0, `--target not-a-real-triple` and `CARGO_BUILD_TARGET=not-a-real-triple` produce the identical

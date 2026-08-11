@@ -16,6 +16,8 @@ fn workspace_root() -> Option<PathBuf> {
 }
 
 struct Run {
+    /// Anything the wrapper left in the isolated `TMPDIR` it was given.
+    leftover: Vec<String>,
     status: ExitStatus,
     stdout: String,
     stderr: String,
@@ -66,6 +68,10 @@ fn run_wrapper(root: &Path, mode: &str, extra: &[&str]) -> Run {
     };
     let bin = scratch.join("bin");
     std::fs::create_dir(&bin).expect("create controlled PATH");
+    // The wrapper's own `TMPDIR`, so what it leaves behind is observable and lands in the fixture rather than in
+    // the developer's `/tmp`.
+    let tmp = scratch.join("tmp");
+    std::fs::create_dir(&tmp).expect("create the wrapper's temporary directory");
 
     let gh_log = scratch.join("gh.log");
     let cargo_log = scratch.join("cargo.log");
@@ -160,10 +166,21 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
         .env("FAKE_GH_LOG", &gh_log)
         .env("FAKE_CARGO_LOG", &cargo_log)
         .env("FAKE_COMMITS", &commits)
+        .env("TMPDIR", &tmp)
         .output()
         .expect("run controlled merge workflow");
 
     let run = Run {
+        leftover: std::fs::read_dir(&tmp)
+            .expect("read the wrapper's temporary directory")
+            .map(|entry| {
+                entry
+                    .expect("a temporary directory entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect(),
         status: output.status,
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -667,3 +684,43 @@ fn mode_is_enforced() -> bool {
 }
 
 static MODE_PROBE: AtomicUsize = AtomicUsize::new(0);
+
+/// The wrapper leaves no temporary file behind, on the path that completes the act as well as on the paths that
+/// do not.
+///
+/// **The successful path was the one not cleaned.** Cleanup was left to `trap 'rm -f …' EXIT`, and an EXIT trap
+/// does not run when `exec` replaces the shell image — measured, `bash -c 'trap "echo T" EXIT; exec true'` prints
+/// nothing while the same script without `exec` prints `T`. So the trap fired on every path where nothing
+/// happened and was skipped on the one path that merges: three successful runs left three empty files.
+///
+/// Asserted over the whole of an isolated `TMPDIR` rather than over one known name, so a temporary file added
+/// later is covered without this direction being touched. Both halves, because removing the trap would satisfy
+/// the successful path while reopening every failing one.
+#[test]
+fn no_temporary_file_survives_the_wrapper() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let completed = run_wrapper(&root, "subjects", &[]);
+    assert!(
+        completed.status.success(),
+        "the controlled workflow must complete for this to be about the successful path:\n{}",
+        completed.stderr
+    );
+    assert!(
+        completed.leftover.is_empty(),
+        "the path that completes the merge left {:?} behind — an `exec` never reaches an EXIT trap",
+        completed.leftover
+    );
+
+    let refused = run_wrapper(&root, "empty", &[]);
+    assert!(
+        !refused.status.success(),
+        "the refusing run must refuse for this half to be about a failure path"
+    );
+    assert!(
+        refused.leftover.is_empty(),
+        "a path that stops before the merge left {:?} behind",
+        refused.leftover
+    );
+}
