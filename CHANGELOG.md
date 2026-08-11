@@ -206,7 +206,7 @@ them.
   re-exported through `tianheng` and its prelude. `RuntimeObserver` is behind 漏刻's **`audit` feature** — the
   `tianheng` shell enables it, so it is always present there, and a crate depending on `louke` directly must ask
   for the feature. Each dimension also exports **`observation_bounds()`** as a plain library item — `guibiao`,
-  `hunyi`, `louke` and the `tianheng` shell — so an adopter can read a dimension's declared bounds directly,
+  `hunyi` and `louke` — so an adopter can read a dimension's declared bounds directly,
   without implementing the protocol or composing a run. That is what `observation-bound-model`'s requirement *A
   dimension SHALL export its declarations as library items* obliges, and 漏刻's set depends on its `audit` feature
   for the reason recorded below. **Nothing to migrate**: `check_constitution`, `run` and the CLI keep
@@ -655,8 +655,8 @@ them.
   *only* inside one is not a mention — so a path a reader plainly sees was discarded and a conforming document
   refused. The comment **span** is now excised and the visible text kept. Each is pinned by the direction that
   fails without it, and the first two were confirmed against the unrepaired code. Adopter-facing effect: none —
-  all three are this repository's own governance reactions, and `tianheng::observation_bounds()` returns an
-  additional entry, an additive read-only surface no baseline or verdict depends on.
+  all three are this repository's own governance reactions, and what they change is an additive read-only
+  surface no baseline or verdict depends on.
 - What the brace count still cannot separate is now a **declared bound** of `observer-protocol` rather than an
   unwritten limit: a `{` or `}` inside a block comment or a string literal still moves the body extent, because
   telling one from the other needs the string-literal lexing this tree defeats, its own lexer suites putting
@@ -844,6 +844,19 @@ no adopter runs. They are here rather than under the adopter headings above beca
   Repairing it tripped the reaction that reads adopter-facing entries for this repository's own machinery, whose
   advice was the right one — *state the guarantee and drop the filename*. An adopter never runs the wrapper; what
   they need is which commit a published tarball records, and that survives naming nothing internal.
+
+- **Three claims a reader could not follow to their evidence.** The census reader justified reading counts as
+  words with *"two of the four censuses declared here"* and cited two example phrases — and the live declared set
+  holds **two** censuses, carrying **neither** phrase, so a reader following the comment to the declaration finds
+  nothing it describes. The count was true when written and both declarations it counted have since been retired;
+  it now carries the historical qualifier its own sibling reason two screens down already had, and cites the
+  phrase the live set does carry. The *need* is unchanged, and it survives the instances.
+
+  Two entries elsewhere described `tianheng::observation_bounds()` as present — one listing the shell beside the
+  three dimensions that export it, one saying it returns an additional entry. It was retired before its first
+  published appearance, and the two entries that say so are accurate and untouched; these two now say what the
+  tree holds. Measured before editing: `guibiao`, `hunyi` and `louke` each define it, `crates/tianheng/src/`
+  neither defines nor re-exports it.
 
 - **A set was computed on every run and read by nothing, and `-D warnings` could not see it.** The
   release-coherence gate's document grammar collected the release-section names beside the headings and the

@@ -70,10 +70,15 @@ fn match_from(rest: &str, parts: &[&str]) -> Option<Vec<usize>> {
 
 /// The count written at the front of `rest`, in digits **or in words**, and how many bytes it took.
 ///
-/// Reading digits only was the first draft, and it left two of the four censuses declared here silent against
-/// the very documents they are for: this repository's prose writes counts as words — *twenty entries name*,
-/// *eleven of them in* — and a matcher that cannot read them is declared, enumerable and inert. Measured, not
-/// reasoned about: changing `twenty` to `44` made the same census fire.
+/// Reading digits only was the first draft, and it left two of the four censuses declared here **at the time**
+/// silent against the very documents they are for. Both of those declarations have since been retired, so the
+/// phrases they matched are not in the live set and the count is a record of that moment rather than a claim
+/// about now — the sibling reason below carries the same qualifier for the same reason.
+///
+/// The need survives the instances. This repository's prose writes counts as words, so a document stating
+/// `{} bounds across {} capabilities` in words is invisible to a digit-only matcher while being exactly the
+/// sentence that census declares. Measured, not reasoned about: changing a spelled-out count to digits made the
+/// same census fire.
 fn number_at(rest: &str) -> Option<(usize, usize)> {
     let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
     if !digits.is_empty() {
