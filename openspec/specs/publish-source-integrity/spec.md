@@ -66,7 +66,8 @@ unsigned one alike, so a gate built on it would always report cannot-judge in CI
 appearing strengthened.
 
 Temporary signature material SHALL be owned by cleanup before its directory is acquired. If acquisition creates
-and reports a directory before failing, the gate SHALL exit cannot-judge and SHALL remove that directory.
+and reports a directory before failing, the gate SHALL refuse as a **cannot-judge** and SHALL remove that
+directory.
 
 The payload SHALL be reconstructed by removing the signature block as a **suffix** of the tag object, never by
 stripping from the first line resembling a signature header. Measured on a genuinely signed tag whose message also
@@ -81,7 +82,7 @@ A mismatch SHALL be a **cannot-judge**; it SHALL NOT reach cryptographic verific
 A signature this gate cannot read SHALL be a **cannot-judge**, never a violation. A non-SSH signature is the live
 case. Reporting it as a wrong source would be a false refusal before an irreversible act.
 
-A failure to read the tag object SHALL likewise be `2`, not `1`.
+A failure to read the tag object SHALL likewise be a **cannot-judge**, never a violation.
 
 #### Scenario: An unsigned tag quotes a signature block in its message
 
