@@ -845,6 +845,24 @@ no adopter runs. They are here rather than under the adopter headings above beca
   advice was the right one — *state the guarantee and drop the filename*. An adopter never runs the wrapper; what
   they need is which commit a published tarball records, and that survives naming nothing internal.
 
+- **A tail comment was executed text, in the reader whose whole subject is that a comment is not.** `Executed`
+  dropped a line only when the comment marker was its **first** token, so placement decided the verdict: a bare
+  marker line naming a document did not satisfy *this holder names its document*, while the same name written
+  after `let n = 1;` did. The region reader's own module doc opens by naming that class, and one call site had
+  already noticed and stripped tails **by hand** — one rule, two implementations, the absent one in the file that
+  names the defect.
+
+  **The obvious repair was measured and refused.** Cutting at the first marker corrupts twenty-six lines here,
+  among them `"https://…"` constants, a string carrying `"/// …"`, and the region reader's own `comment: "//"`
+  field — a false negative in the direction the Core Contract forbids, bought to close a false positive. The
+  marker is recognised **preceded by whitespace or at line start** instead, so a marker glued to what precedes it
+  begins no token and is not a comment. A third candidate, requiring the surviving head to carry non-space
+  content, was measured too and separates nothing here, so it is not adopted.
+
+  The hand-rolled strip is deleted, and the residue is declared beside the region's others: a marker preceded by
+  whitespace **inside a string literal** is cut, because telling one from the other needs the string-literal
+  lexing this tree has defeated repeatedly — a direction `observer-protocol` already declares.
+
 - **The gate-identity join compared a name `libtest` never compares.** The check reads a target's registered
   tests from `--list` and asks whether the wrapper's `--exact <ident>` names exactly one of them — but it
   truncated each listed name to its last `::` segment, while `--exact` matches the **whole** path. Inexact in
