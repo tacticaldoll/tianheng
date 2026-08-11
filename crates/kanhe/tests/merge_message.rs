@@ -61,7 +61,12 @@ fn the_squash_message_is_the_pull_request_it_records() {
         .collect();
     match judge(&subject, &body, &title, &supplied) {
         Ok(report) => eprintln!("{report}"),
-        Err(refusal) => panic!("merge message ({:?}): {}", refusal.kind, refusal.message),
+        Err(refusal) => {
+            // The class travels on its own channel, written before this fails, so a wrapper reads a verdict
+            // rather than searching this message for one. See `kanhe::verdict_channel`.
+            kanhe::verdict_channel::report(refusal.kind);
+            panic!("merge message ({:?}): {}", refusal.kind, refusal.message)
+        }
     }
 }
 

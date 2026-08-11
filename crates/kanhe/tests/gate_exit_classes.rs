@@ -15,6 +15,7 @@
 use std::path::{Path, PathBuf};
 
 use kanhe::refusal::Kind;
+use kanhe::verdict_channel;
 
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
@@ -36,43 +37,62 @@ fn read(root: &Path, path: &str) -> String {
     })
 }
 
-/// The token each wrapper matches on is the one `Kind` actually renders for a disagreement.
+/// Both scalars the wrappers use for the verdict channel are the ones `kanhe::verdict_channel` defines.
 ///
-/// The wrappers grep the gate's own output for the class it printed. `merge_message.rs` and
-/// `publish_source.rs` both render it as `{:?}` on `Kind`, so renaming the variant would silently turn every
-/// violation into the unjudged class — the wrapper would still exit non-zero, still print the gate's output, and
-/// still be wrong about which fact it found. Nothing else would notice.
+/// **The pin this replaces held the argument list and not the rendering.** The wrappers used to grep the gate's
+/// output for `(Violation)`, with the parentheses in the shell and the variant name in Rust; this file asserted
+/// the token equalled `Kind`'s rendering and that each gate contained the substring `refusal.kind,
+/// refusal.message`. Neither mentioned the delimiter. Measured: changing a gate's format string to `merge
+/// message: {:?} — {}` left all five directions green while `grep -q "(Violation)"` matched nothing, so every
+/// violation would have reported as the unjudged class — verbatim the failure the replaced direction's own doc
+/// comment said it existed to prevent.
+///
+/// A channel has no delimiter to forget. Two scalars travel: the variable name and the class spelling, and both
+/// are compared here against the module the gates call.
 #[test]
-fn each_wrapper_matches_the_token_the_gate_renders() {
+fn each_wrapper_uses_the_channel_the_gates_report_on() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let rendered = format!("{:?}", Kind::Violation);
     for wrapper in WRAPPERS {
         let text = read(&root, wrapper);
-        let declared = text
-            .lines()
-            .find_map(|line| line.trim().strip_prefix("GATE_VIOLATION_TOKEN="))
-            .unwrap_or_else(|| {
-                panic!(
-                    "{wrapper} declares no `GATE_VIOLATION_TOKEN`, so the class it reports for a failing gate \
-                     rests on nothing this check can compare"
-                )
-            });
-        assert_eq!(
-            declared, rendered,
-            "{wrapper} matches on `{declared}` while `refusal::Kind` renders a disagreement as `{rendered}` — \
-             every violation would be reported as an input the gate could not judge"
+        for (name, expected) in [
+            ("GATE_VERDICT_ENV", verdict_channel::ENV.to_string()),
+            (
+                "GATE_VIOLATION_CLASS",
+                verdict_channel::rendered(Kind::Violation),
+            ),
+        ] {
+            let declared = text
+                .lines()
+                .find_map(|line| line.trim().strip_prefix(&format!("{name}=")))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{wrapper} declares no `{name}`, so the class it reports for a failing gate rests on \
+                         nothing this check can compare"
+                    )
+                });
+            assert_eq!(
+                declared, expected,
+                "{wrapper} uses `{declared}` for {name} while `kanhe::verdict_channel` defines `{expected}`"
+            );
+        }
+        // The variable must actually be handed to the gate, not merely declared. Declared and unused would make
+        // the file absent for every run, so every violation would report as unjudged.
+        assert!(
+            text.contains(&format!("{}=$verdict_file", verdict_channel::ENV)),
+            "{wrapper} declares the channel and never opens it for the gate, so no verdict could ever arrive"
         );
     }
 }
 
-/// Both gates render the class in the form the wrappers read.
+/// Each gate reports on the channel before it fails.
 ///
-/// The other half of the same agreement. The token could match `Kind`'s rendering exactly while no gate ever
-/// printed it, which would make every failing gate read as unjudged — and the direction above would still pass.
+/// The other half. The scalars could match perfectly while no gate ever wrote the file, which would make every
+/// failing gate read as unjudged — and the direction above would still pass. Held by position, not by the bare
+/// call: the report must sit in the arm that has a refusal, above the failure.
 #[test]
-fn each_gate_renders_its_class_where_the_wrapper_reads_it() {
+fn each_gate_reports_its_class_before_it_fails() {
     let Some(root) = workspace_root() else {
         return;
     };
@@ -81,10 +101,19 @@ fn each_gate_renders_its_class_where_the_wrapper_reads_it() {
         "crates/kanhe/tests/publish_source.rs",
     ] {
         let text = read(&root, gate);
+        let arm = text.find("Err(refusal) => {").unwrap_or_else(|| {
+            panic!("{gate} has no refusal arm for a wrapper to read a class from")
+        });
+        let rest = &text[arm..];
+        let reported = rest
+            .find("verdict_channel::report(refusal.kind)")
+            .unwrap_or_else(|| panic!("{gate} does not report its refusal class on the channel"));
+        let failed = rest
+            .find("panic!")
+            .unwrap_or_else(|| panic!("{gate}'s refusal arm does not fail"));
         assert!(
-            text.contains("refusal.kind, refusal.message"),
-            "{gate} does not render its refusal's kind beside its message, so a wrapper reading the class out \
-             of this gate's output has nothing to read"
+            reported < failed,
+            "{gate} fails before reporting its class, so the wrapper would find no verdict"
         );
     }
 }
@@ -102,10 +131,22 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
     };
     for wrapper in WRAPPERS {
         let text = read(&root, wrapper);
+        // Matched as a STATEMENT, not as a whole line. Requiring the trimmed line to equal `exit 1` missed
+        // `… || exit 1`, `exit 1;` and `[[ … ]] && exit 1` — measured, adding `if [[ ! -f $x ]]; then exit 1; fi`
+        // left the count at one and the new site escaped both this and the window check below. Tightening the
+        // detector while the requirement says *any* violation-class exit is the false negative this file is for.
         let sites: Vec<(usize, &str)> = text
             .lines()
             .enumerate()
-            .filter(|(_, line)| line.trim() == "exit 1")
+            .filter(|(_, line)| !line.trim_start().starts_with('#'))
+            .filter(|(_, line)| {
+                line.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                    .zip(
+                        line.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                            .skip(1),
+                    )
+                    .any(|(a, b)| a == "exit" && b == "1")
+            })
             .map(|(index, line)| (index + 1, line))
             .collect();
         assert_eq!(
@@ -116,19 +157,22 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
             sites.len(),
             sites.iter().map(|(line, _)| line).collect::<Vec<_>>()
         );
-        // And that one site must be inside the branch that read the gate's class, not merely somewhere after it.
-        let line = sites[0].0;
-        let window: String = text
-            .lines()
-            .skip(line.saturating_sub(4))
-            .take(4)
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(
-            window.contains("GATE_VIOLATION_TOKEN"),
-            "{wrapper}'s only `exit 1` is not guarded by the token the gate renders, so it reports a \
-             disagreement without having read one:\n{window}"
-        );
+        // EVERY site must sit inside the branch that read the gate's verdict, not merely somewhere after it.
+        // Checking `sites[0]` alone was a second way for a new site to escape: the count would have to fail
+        // first, and it did not.
+        for (line, _) in &sites {
+            let window: String = text
+                .lines()
+                .skip(line.saturating_sub(6))
+                .take(6)
+                .collect::<Vec<_>>()
+                .join("\n");
+            assert!(
+                window.contains("GATE_VIOLATION_CLASS"),
+                "{wrapper}:{line} exits the violation class without having read the gate's verdict, so it \
+                 reports a disagreement no judgement formed:\n{window}"
+            );
+        }
     }
 }
 

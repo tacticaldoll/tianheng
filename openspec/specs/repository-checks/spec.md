@@ -397,10 +397,29 @@ subjects — *which is not the same fact as a subject that disagrees*. A wrapper
 operator to go looking for a disagreement that does not exist, which is the collapse the sibling publish gate
 already refuses.
 
-Where a wrapper reports the class of a failing gate, it SHALL read the class the gate rendered rather than assume
-one, and SHALL treat anything it does not recognise — a compile failure included — as the unjudged class. The
-token it matches on SHALL be held against the judgement's own rendering by a repository check, because a wrapper
-grepping a string a gate prints is two places that must agree.
+**The class SHALL travel on a channel of its own, not in the gate's prose.** The wrapper SHALL name a file for
+the gate to report its class on; the gate SHALL write it at the moment it has a verdict and before it fails; and
+the wrapper SHALL read that file rather than searching the gate's output. An absent, empty or unrecognised value
+SHALL be the unjudged class, so a run that reached no verdict — a compile failure included — is unjudged by
+construction rather than by a default. The variable name and the class spelling SHALL each be defined once and
+compared against the wrappers by a repository check, and a direction SHALL hold that each gate reports before it
+fails — the scalars can agree while no gate ever writes, which leaves every failing gate reading as unjudged.
+
+Reading the class out of the gate's output was the first attempt and it was the wrong channel twice over. It put
+the delimiter in the shell and the variant name in Rust, so a check pinning the rendering's *arguments* stayed
+green while a changed format string made the pattern match nothing — every violation then reporting as unjudged,
+verbatim the failure that check's own prose said it prevented. And the stream searched carries arbitrary tooling
+output, in which a class could be read from text no judgement wrote.
+
+**Every input SHALL be read once, guarded, before the gate.** A test that a file exists is not a read: an
+unreadable body file left the gate's body variable empty, and the gate refuses an empty body as a
+disagreement — so a file the wrapper could not open was reported to the operator as a record they had written
+wrongly. Reading once and handing the gate the value also closes the window between the test and the use.
+
+A direction holding any of these SHALL NOT skip on the subject's own behaviour. A skip for an environment that
+cannot produce the condition SHALL be decided by a probe of the direction's own; deciding it from the wrapper's
+exit status swallowed exactly the defect, since a wrapper that wrongly succeeds looks like an environment that
+could not fail.
 
 **Every acquisition SHALL be guarded.** An unguarded command substitution under `set -e` exits with the *tool's*
 status and only the tool's stderr, so the class reported is neither of the two the wrapper defines and the
@@ -427,10 +446,17 @@ every direction covering them passed.
 - **WHEN** the gate renders a disagreement
 - **THEN** the wrapper exits `1`, and that is the only site in the wrapper that may
 
-#### Scenario: The rendered class and the matched token disagree
+#### Scenario: The channel a wrapper reads and the one a gate writes disagree
 
-- **WHEN** the judgement's rendering of its violation class differs from the token a wrapper matches on
-- **THEN** a repository check fails naming both, because every violation would otherwise be reported as unjudged
+- **WHEN** a wrapper's variable name or class spelling differs from the judgement's, or a gate fails without
+  reporting on the channel it was given
+- **THEN** a repository check fails naming which, because every violation would otherwise be reported as unjudged
+
+#### Scenario: An input that exists and cannot be read
+
+- **WHEN** a file a wrapper was given is present and unreadable
+- **THEN** the wrapper exits `2` naming the read it could not make, and the gate is never asked to judge a value
+  that was never read
 
 #### Scenario: An acquisition fails
 

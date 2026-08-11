@@ -195,6 +195,17 @@ fi
 if [[ ! -f $body_file ]]; then
     cannot_judge "cannot read the body file $body_file"
 fi
+# Read ONCE, here, guarded — and hand the value to the gate rather than the path.
+#
+# `-f` says a regular file is there; it does not say this process may read it. The read used to happen inside the
+# gate's own invocation as `TIANHENG_MERGE_BODY=$(cat -- "$body_file")`, unguarded: measured, an unreadable file
+# left that variable EMPTY and the gate then judged an empty body, which it refuses as a violation — *the squash
+# body is empty*. So a file this wrapper could not read was reported to the operator as a body they had written
+# wrongly. Reading once also closes the window between the check and the use, in which the file could have gone.
+body=$(cat -- "$body_file") || cannot_judge \
+    "cannot read the body file $body_file, so whether this body is the record the merge should carry cannot be \
+decided — which is not the same fact as a body that disagrees"
+
 
 # ONE repository identity, resolved once and passed to every call below.
 #
@@ -241,10 +252,24 @@ fi
 
 # The gate. A failure aborts before the merge, which is the point: the record below cannot be amended.
 
-# The token the gate renders for a disagreement, as opposed to an input it could not judge. Pinned against
-# `refusal::Kind`'s own `Debug` rendering by a repository check, because a wrapper grepping for a string the
-# gate prints is two places that must agree.
-GATE_VIOLATION_TOKEN=Violation
+# The channel the gate reports its refusal class on, and the class that means a disagreement.
+#
+# Both are held against `kanhe::verdict_channel` by `crates/kanhe/tests/gate_exit_classes.rs`, so neither the
+# variable name nor the class spelling can drift from the gate's side.
+#
+# **This replaced grepping the gate's output.** Searching stdout for `(Violation)` put the parentheses in this
+# script and the variant name in Rust — two owners for one token — and measured, changing the gate's format
+# string left every direction green while this pattern matched nothing, so every violation would have reported as
+# unjudged. It also searched a stream carrying arbitrary tooling output, where a class could be read from text no
+# judgement wrote. A file the gate writes only when it has a verdict makes *absent* mean unjudged by
+# construction.
+GATE_VERDICT_ENV=TIANHENG_GATE_VERDICT
+GATE_VIOLATION_CLASS=Violation
+
+verdict_file=$(mktemp) || cannot_judge \
+    "cannot open a file for the gate to report its refusal class on, so a failing gate could not be told from \
+an input it could not read"
+trap 'rm -f "$verdict_file"' EXIT
 
 # `libtest` exits 0 when `--exact` selects no test — measured, an unknown name reports `0 passed` and exits 0,
 # and an `#[ignore]`d one reports `0 passed; 1 ignored` and exits 0 too. So the exit status answers *did the
@@ -279,21 +304,21 @@ if [[ -z ${commits//[[:space:]]/} ]]; then
         "cannot read any commit subjects from pull request $pr_number; an empty live set is not evidence about its body"
 fi
 
-gate_output=$(TIANHENG_MERGE_SUBJECT=$subject \
+gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
+    TIANHENG_MERGE_SUBJECT=$subject \
     TIANHENG_MERGE_TITLE=$title \
     TIANHENG_MERGE_COMMITS=$commits \
-    TIANHENG_MERGE_BODY=$(cat -- "$body_file") \
+    TIANHENG_MERGE_BODY=$body \
     cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test merge_message \
     -- --exact the_squash_message_is_the_pull_request_it_records 2>&1) || {
     printf '%s\n' "$gate_output" >&2
-    # The gate prints its own class — `merge message (Violation): …` or `(CannotJudge): …` — so the wrapper
-    # reads it rather than guessing. Anything else is a run that reached no verdict at all, a compile error
-    # included, and that is not a disagreement: the default is the unjudged class, which errs toward telling
-    # the operator to look at the output rather than at their message.
-    #
-    # `GATE_VIOLATION_TOKEN` is held against `refusal::Kind`'s own rendering by
-    # `crates/kanhe/tests/gate_exit_classes.rs`, so this matcher and the gate cannot drift apart.
-    if printf '%s' "$gate_output" | grep -q "($GATE_VIOLATION_TOKEN)"; then
+    # The class the gate reported, on the channel it was given. Absent, empty or anything else is a run that
+    # reached no verdict — a compile error included — and that is not a disagreement.
+    verdict=""
+    if [[ -f $verdict_file ]]; then
+        verdict=$(cat -- "$verdict_file") || verdict=""
+    fi
+    if [[ $verdict == "$GATE_VIOLATION_CLASS" ]]; then
         exit 1
     fi
     exit 2
