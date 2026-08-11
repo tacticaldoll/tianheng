@@ -384,6 +384,59 @@ for the diagnostics they carry, but they SHALL decide nothing the default refusa
 - **THEN** the wrapper names that argument and refuses, rather than exiting on the shift arithmetic with no
   diagnostic at all
 
+### Requirement: A wrapper's exit class SHALL agree with the gate it fronts
+
+A sanctioned wrapper SHALL exit `1` — the violation class — **only** where a gate ran and reported a
+disagreement. Every other stop SHALL exit `2`: a misconfigured invocation, an input the wrapper could not read,
+and a gate that did not run. The classification SHALL be chosen in one place per wrapper rather than at each site.
+
+**A gate that did not run belongs to the unjudged class, however loudly its message says so.** The distinction is
+already typed where the judgement lives: `refusal::Kind` separates a source that disagrees from one that could
+not be read, and the merge gate returns cannot-judge for an unavailable title and for unavailable commit
+subjects — *which is not the same fact as a subject that disagrees*. A wrapper reporting those as `1` tells an
+operator to go looking for a disagreement that does not exist, which is the collapse the sibling publish gate
+already refuses.
+
+Where a wrapper reports the class of a failing gate, it SHALL read the class the gate rendered rather than assume
+one, and SHALL treat anything it does not recognise — a compile failure included — as the unjudged class. The
+token it matches on SHALL be held against the judgement's own rendering by a repository check, because a wrapper
+grepping a string a gate prints is two places that must agree.
+
+**Every acquisition SHALL be guarded.** An unguarded command substitution under `set -e` exits with the *tool's*
+status and only the tool's stderr, so the class reported is neither of the two the wrapper defines and the
+operator receives the tool's words for a fact about the wrapper. Measured: a failing commits read left the merge
+wrapper exiting `91` in silence.
+
+A direction holding any of these stops SHALL assert the **class**, not merely that the wrapper failed. Asserting
+non-zero cannot see `1` from `2`, which is how five could-not-read conditions were split across both classes while
+every direction covering them passed.
+
+#### Scenario: An input the wrapper could not read
+
+- **WHEN** a wrapper cannot read its body file, the repository identity, the pull request's number, head, or
+  commit subjects
+- **THEN** it exits `2` with its own diagnostic, because an input that could not be read is not a disagreement
+
+#### Scenario: A gate that did not run
+
+- **WHEN** a wrapper's gate invocation selects no passing test, or fails without rendering a verdict
+- **THEN** it exits `2`, since no judgement formed and there is no disagreement to report
+
+#### Scenario: A gate that ran and refused
+
+- **WHEN** the gate renders a disagreement
+- **THEN** the wrapper exits `1`, and that is the only site in the wrapper that may
+
+#### Scenario: The rendered class and the matched token disagree
+
+- **WHEN** the judgement's rendering of its violation class differs from the token a wrapper matches on
+- **THEN** a repository check fails naming both, because every violation would otherwise be reported as unjudged
+
+#### Scenario: An acquisition fails
+
+- **WHEN** an external tool a wrapper reads evidence from exits non-zero
+- **THEN** the wrapper reports it in its own words and its own class, rather than exiting with the tool's status
+
 ### Requirement: The merge SHALL be pinned to the head the gate read its evidence from
 
 The squash wrapper SHALL obtain the pull request's head commit and require the merge to match it, so a pull

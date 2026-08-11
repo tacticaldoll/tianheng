@@ -815,6 +815,34 @@ them.
 
 ### Self-governance
 
+- **The wrappers reported as disagreements the very facts their own gates call unjudgeable.** Five
+  could-not-read conditions in `scripts/merge-pr.sh` were split across both exit classes with no stated rule: an
+  unresolvable repository exited `2` while an unreadable body file, an unreadable head, an unresolvable
+  pull-request number and an unreadable commit set exited `1`. Two of those are facts `merge_message_gate::judge`
+  types the other way — cannot-judge for an unavailable title and for unavailable commit subjects, *which is not
+  the same fact as a subject that disagrees*. The contract was stated twice in the tree, in `law.rs`'s outcomes
+  and in the sibling wrapper's own header, and neither reached the sites.
+
+  One rule now, chosen in one place per wrapper: `1` only where a gate ran and reported a disagreement,
+  `2` for everything else — a misconfigured invocation, an input that could not be read, and **a gate that did not
+  run**, which is the sharpest case of the class since its own message says so in as many words.
+
+  Where a wrapper reports the class of a failing gate it now reads the class the gate rendered, and treats
+  anything unrecognised — a compile failure included — as unjudged. The token it matches on is held against
+  `refusal::Kind`'s own rendering by a new check, because a wrapper grepping a string a gate prints is two places
+  that must agree.
+
+  **Two further defects came out of making the verification able to see the class.** The helper covering three of
+  those sites asserted only that the wrapper failed, which cannot see `1` from `2` — the split survived by being
+  invisible to its own guards. With the class pinned, a failing commits read turned out to exit **91**: an
+  unguarded `var=$(gh …)` under `set -e` exits with the *tool's* status and only the tool's stderr, so the class
+  reported was neither of the wrapper's two and the operator got gh's words for a fact about the wrapper. Four
+  acquisitions were unguarded; all four now report in the wrapper's own words and class.
+
+  The new check found one more on its first run: an unused helper carrying an `exit 1` that the author had just
+  added. Negative runs against the previous tree name all six mis-split sites and all four unguarded
+  acquisitions.
+
 - **The merge is now pinned to the head the gate read its evidence from.** The gate judges the squash body
   against the pull request's live commit subjects as they are while it runs; the merge happens afterwards. A
   commit pushed in between changed the set the body had to equal, and nothing noticed — `gh pr merge` would
