@@ -827,6 +827,19 @@ no adopter runs. They are here rather than under the adopter headings above beca
   judgement over text this repository has designed, measured and rejected, and what makes a mention bite is the
   compiler.
 
+- **The promise reader dropped a member it could not parse, which narrowed the promise by exactly what it failed
+  to read.** Measured on a mixed list: `{Alpha, runner::Format, Foo as Bar, a::{B, C}, Beta}` parsed to
+  `{Alpha, Beta}` — three of five members gone. And dropping does not merely lose a member: with the survivors
+  both mentioned, the check reports the promise **kept**, so a would-be disagreement becomes a clean verdict. The
+  prelude is a flat list of identifiers today, so nothing was wrong; what was wrong is that nothing would have
+  said so, in the check whose whole subject is a promise narrowing unobserved.
+
+  Neither declared as a bound nor closed by widening. Declaring would put a false negative in that check;
+  widening means new extraction rules — last path segment, post-`as` name — in a hand-rolled reader, with no
+  pressure asking for them. The member is **refused** instead, named in a cannot-judge: no new rule, nothing that
+  can narrow, and an author who adds such a form meets a refusal rather than silence. That is the same repair
+  this window already applied to three other reads, arriving at a fourth that was written after them.
+
 - **A declared bound was pinned by a test that defends a different direction, and nothing could have said so.**
   The bound says a promised member named **only in a comment** counts as named — `UnderReacts`, whose
   `demonstrates()` is `DoesNotReact`, a direction whose evidence is *silence*. Its citation named a test with no

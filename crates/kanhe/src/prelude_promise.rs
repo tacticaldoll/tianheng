@@ -47,23 +47,35 @@ pub enum Promise {
 /// correctness that depends on the absence of something is the shape this family declines. Measured when this
 /// was written: no sibling existed, which is precisely why the looser reader could not have been caught by
 /// running it.
-pub fn promised_members(lib_rs: &str) -> BTreeSet<String> {
+///
+/// **A member this reader cannot understand is refused, never dropped.** The forms it reads are plain
+/// identifiers; a path (`runner::Format`), a rename (`Foo as Bar`) or a nested group (`a::{B, C}`) is not one,
+/// and dropping such an entry would narrow the promise by exactly the amount the reader failed to parse —
+/// silently, in the check whose subject is a promise narrowing unobserved. Measured on a mixed list before this
+/// was written: three of five members vanished. Refusing costs no new extraction rule and cannot narrow
+/// anything; if the prelude grows one of these forms, its author meets a refusal naming the member.
+pub fn promised_members(lib_rs: &str) -> Result<BTreeSet<String>, String> {
     let Some(module) = lib_rs.split_once("pub mod prelude {") else {
-        return BTreeSet::new();
+        return Ok(BTreeSet::new());
     };
     let Some(block) = module.1.split_once("pub use super::{") else {
-        return BTreeSet::new();
+        return Ok(BTreeSet::new());
     };
     let Some((list, _)) = block.1.split_once("};") else {
-        return BTreeSet::new();
+        return Ok(BTreeSet::new());
     };
-    list.split(',')
-        .map(|name| name.trim().trim_end_matches("::*"))
-        .filter(|name| {
-            !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-        })
-        .map(str::to_string)
-        .collect()
+    let mut members = BTreeSet::new();
+    for entry in list.split(',') {
+        let entry = entry.trim().trim_end_matches("::*");
+        if entry.is_empty() {
+            continue;
+        }
+        if !entry.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            return Err(entry.to_string());
+        }
+        members.insert(entry.to_string());
+    }
+    Ok(members)
 }
 
 /// Every identifier the contract mentions, wherever it mentions it.
@@ -91,7 +103,17 @@ pub fn mentioned_identifiers(contract_rs: &str) -> BTreeSet<String> {
 
 /// Judge the promise against the contract.
 pub fn judge(lib_rs: &str, contract_rs: &str) -> Promise {
-    let promised = promised_members(lib_rs);
+    let promised = match promised_members(lib_rs) {
+        Ok(promised) => promised,
+        Err(entry) => {
+            return Promise::CannotJudge(format!(
+                "the prelude promises `{entry}`, which this check cannot read as a member name. A promised \
+                 member written as a path, a rename, or a nested group is not a member this check may drop: \
+                 dropping it narrows the promise silently, and a promise that shrinks without saying so is \
+                 the failure this whole check exists to catch"
+            ));
+        }
+    };
     if promised.is_empty() {
         return Promise::CannotJudge(
             "the prelude promise parsed to no member — `pub mod prelude {` with its `pub use super::{ … };` \

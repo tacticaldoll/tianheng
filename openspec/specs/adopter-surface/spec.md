@@ -131,9 +131,11 @@ happening to exist.
 
 #### Scenario: An input that cannot be read is refused rather than reported clean
 
-- **WHEN** the prelude block parses to no member, or the reaction yields no identifier at all
+- **WHEN** the prelude block parses to no member, the reaction yields no identifier at all, or the promise
+  names a member the reader cannot read as one
 - **THEN** the check refuses as cannot-judge, because a promise of nothing and an unread contract both make
-  every direction hold vacuously
+  every direction hold vacuously — and a member dropped for being unreadable would narrow the promise by
+  exactly what the reader failed to parse, in the check whose subject is a promise narrowing unobserved
 
 Where the holding check's own observation stops is `repository-checks`'s to declare, since the limit belongs
 to the check rather than to the promise.
