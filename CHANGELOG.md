@@ -815,6 +815,19 @@ them.
 
 ### Self-governance
 
+- **The reference gate read every format but the one the wrappers are written in.** It inspected Markdown text
+  and the comment lines of Rust, TOML and `.gitignore`; shell was outside the corpus entirely. The two files that
+  left out are `scripts/merge-pr.sh` and `scripts/publish.sh`, whose comments cite the Rust gates they sequence
+  **by path** — and a renamed test target is exactly what rots such a citation. `scripts/*.sh` is named in
+  `repository-checks`'s own subject, so the scripts were governed for what they do while nothing read what they
+  name.
+
+  The gap was one line: `is_inspected_line` already admitted a `#`-prefixed line for every non-Rust,
+  non-Markdown source, so only the file-extension filter had to learn `.sh`. A shebang reaches the reader and
+  names `/usr/bin/env`, an absolute path outside every prefix this gate recognizes, so it is not a reference and
+  the fixture probe carries one to say so. Measured when it was closed: no shell comment named an absent path, so
+  this was a silence rather than a backlog — the kind that only reports clean because nobody looked.
+
 - **The publish wrapper had the same denylist, no direction holding it, and real arguments walking past.** One
   window after the merge wrapper's argument handling was rebuilt as an allowlist, `scripts/publish.sh` still
   forwarded everything except `--manifest-path` — and carried the same sentence, *a guard catching one would be a

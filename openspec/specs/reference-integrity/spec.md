@@ -49,16 +49,22 @@ The reference-integrity gate SHALL judge repository paths against Git-tracked co
 directories, never untracked filesystem state. Its workspace-member classification SHALL be derived from tracked
 `crates/<name>/Cargo.toml` paths, so an untracked crate manifest cannot make an illustrative crate reference
 enforceable. Outside active `openspec/changes/` plans, it SHALL inspect tracked Markdown document text and every
-Rust, TOML, or `.gitignore` line whose first non-whitespace token is that format's line-comment marker, including
-Rust rustdoc forms. A Rust test source SHALL NOT be excluded wholesale; its admitted comment lines are judged
-through the same region rule as other Rust. Before judging references it SHALL require the repository's
+Rust, TOML, shell, or `.gitignore` line whose first non-whitespace token is that format's line-comment marker,
+including Rust rustdoc forms. A Rust test source SHALL NOT be excluded wholesale; its admitted comment lines are
+judged through the same region rule as other Rust.
+
+**Shell is in the corpus because the sanctioned wrappers are shell and they cite by path.** Both name the Rust
+gate they sequence, and a renamed test target is exactly what rots such a citation — while `scripts/*.sh` is
+named in `repository-checks`'s own subject, so the scripts are governed for what they do and were silent about
+what they name. A tracked script's shebang SHALL NOT be a reference: it names an absolute path outside every
+prefix this gate recognizes. Before judging references it SHALL require the repository's
 governance-document surface, at least one tracked workspace member under `crates/`, and at least one inspected
 source; absence of any prerequisite SHALL fail loudly rather than read as clean.
 
 #### Scenario: A complete tracked checkout is inspectable
 
 - **WHEN** the repository contains the required governance documents, a tracked workspace member, and a tracked
-  Markdown document or an admitted Rust, TOML, or `.gitignore` line-comment source
+  Markdown document or an admitted Rust, TOML, shell, or `.gitignore` line-comment source
 - **THEN** the gate builds its tracked-path evidence and evaluates the corpus without consulting untracked files
 
 #### Scenario: Required evidence is absent
@@ -75,6 +81,11 @@ source; absence of any prerequisite SHALL fail loudly rather than read as clean.
 
 - **WHEN** a tracked file under `openspec/changes/` references a path the plan intends to create
 - **THEN** that transient plan is excluded from the inspected corpus and does not produce a stale-reference verdict
+
+#### Scenario: A shell comment names an absent path
+
+- **WHEN** a tracked shell script's comment names a repository path no commit holds
+- **THEN** the reaction fails and names it, rather than leaving every script's citations unread
 
 #### Scenario: A test source names a deleted live path
 
