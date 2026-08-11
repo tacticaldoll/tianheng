@@ -949,7 +949,7 @@ pub(super) fn a_cfg_split_module_with_two_inline_siblings_child_module_does_not_
 
 #[test]
 pub(super) fn a_bare_cfg_negated_sibling_child_module_does_not_shadow_the_others_extern_reexport() {
-    // Round-9 finding (audit `crates/hunyi/src/exposure.rs:157`): rounds 6-8 fixed child_mods
+    // Round-9 finding, in `build_file_scopes` of `crates/hunyi/src/exposure.rs`: rounds 6-8 fixed child_mods
     // being computed once over the UNION of every #[cfg]-*branch*'s items (a branch = a distinct
     // candidate resolution of the governed MODULE ITSELF, produced by `descend()`'s per-occurrence
     // splitting). This finding is one level finer: `#[cfg(unix)] mod serde;` and

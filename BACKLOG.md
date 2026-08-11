@@ -614,10 +614,12 @@ consumer for an undemonstrated deduplication.
   One instance in a projection is the pattern existing without being enumerated, not the gap being closed.
   *Risk:* a rejection is re-proposed, re-measured and re-rejected; the reverse risk is equally real and is why
   this is WATCH rather than READY — see the trigger. *Promotion trigger:* **not fired.** The candidate evidence
-  points both ways. `crates/kanhe/tests/bound_register.rs:399` records that the harness enumeration "was rejected
-  TWICE in this file's own comments, on an unmeasured premise", then measured at 107ms cold and adopted — a
-  rejection that a later reader *did* consult and correctly overturn, which argues that a durable, projected
-  register would have entrenched a wrong answer twice. The trigger is a rejection demonstrably **re-proposed and
+  points both ways. The harness enumeration was rejected twice on an unmeasured premise, then measured at 107ms
+  cold and adopted — a rejection a later reader *did* consult and correctly overturn, which argues that a
+  durable, projected register would have entrenched a wrong answer twice. **Where that record now lives is the
+  sharper half:** the rejection was written in the check's own comments and those comments did not survive the
+  change that overturned them, so the account is here and in `CHANGELOG.md` and nowhere in the code it was about
+  — which is the entry's own case for a durable record, made by the disappearance rather than by argument. The trigger is a rejection demonstrably **re-proposed and
   re-measured** by someone who could not find the record, evidenced by a tree artefact rather than by a report
   from inside the work. *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
   `observation-bound-register`, whose spec records two rejections in this shape — "declaring once was rejected"
