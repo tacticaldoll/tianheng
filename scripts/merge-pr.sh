@@ -30,6 +30,17 @@ if [[ -z $pr || $pr == -* ]]; then
     usage
     exit 2
 fi
+# A URL names its own repository, and this wrapper reads its evidence from several places. `gh pr view` and
+# `gh pr merge` would follow the URL while the live-commits endpoint is built from a repository reference of its
+# own — so a cross-repository URL has the gate judge one pull request and the merge record another, which is the
+# same hole a `--repo` flag opened and this positional selector reopens. A number or a branch name names no
+# repository and resolves against the one being pinned below, so both stay accepted.
+if [[ $pr == http://* || $pr == https://* ]]; then
+    printf 'merge message: %s\n' \
+        "refusing a pull-request URL: it names its own repository, while this wrapper reads the live commit \
+set from the repository it is run in. Pass the number, or run it from a checkout of that repository" >&2
+    exit 2
+fi
 shift
 
 subject=""
@@ -109,9 +120,23 @@ if [[ ! -f $body_file ]]; then
     exit 1
 fi
 
-title=$(gh pr view "$pr" --json title --jq .title)
+# ONE repository identity, resolved once and passed to every call below.
+#
+# The endpoint already named a repository — implicitly, through a placeholder gh expands from the working
+# directory — while the three `gh pr` calls named whichever the selector resolved to. Four references defaulting
+# to the same place is agreement by circumstance; naming it once is agreement by construction, and it is the
+# shape this wrapper's own contract asks for: the accepted selector, the live commit set and the merge must be
+# one pull request.
+repository=$(gh repo view --json nameWithOwner --jq .nameWithOwner) || {
+    printf 'merge message: %s\n' \
+        "cannot resolve which repository this checkout is, so the selector, the live commit set and the merge \
+cannot be shown to name one pull request" >&2
+    exit 2
+}
+
+title=$(gh pr view "$pr" --repo "$repository" --json title --jq .title)
 : "${subject:=$title}"
-pr_number=$(gh pr view "$pr" --json number --jq .number)
+pr_number=$(gh pr view "$pr" --repo "$repository" --json number --jq .number)
 if [[ ! $pr_number =~ ^[1-9][0-9]*$ ]]; then
     printf 'merge message: %s\n' \
         "cannot resolve $pr to one pull request number; the live commits endpoint requires its canonical identity" >&2
@@ -141,7 +166,7 @@ require_one_pass() {
 # head at all, and a stale subset makes a default body containing the missing subjects look unrelated and pass.
 # The commits endpoint returns the full message; take its first line rather than `messageHeadline`, which
 # truncates long subjects. `--paginate` keeps a large pull request one set rather than its first page.
-commits=$(gh api --paginate "repos/{owner}/{repo}/pulls/$pr_number/commits" \
+commits=$(gh api --paginate "repos/$repository/pulls/$pr_number/commits" \
     --jq '.[].commit.message | split("\n")[0]')
 if [[ -z ${commits//[[:space:]]/} ]]; then
     printf 'merge message: %s\n' \
@@ -160,4 +185,5 @@ gate_output=$(TIANHENG_MERGE_SUBJECT=$subject \
 }
 require_one_pass 'merge message' "$gate_output"
 
-exec gh pr merge "$pr" --squash --subject "$subject" --body-file "$body_file" "${passthrough[@]}"
+exec gh pr merge "$pr" --repo "$repository" --squash --subject "$subject" --body-file "$body_file" \
+    "${passthrough[@]}"

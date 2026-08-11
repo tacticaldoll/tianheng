@@ -82,7 +82,9 @@ fn run_wrapper(root: &Path, mode: &str, extra: &[&str]) -> Run {
         r##"#!/usr/bin/env bash
 set -eu
 printf '%s\n' "$*" >> "$FAKE_GH_LOG"
-if [[ $1 == pr && $2 == view && $* == *"--json title"* ]]; then
+if [[ $1 == repo && $2 == view ]]; then
+    printf '%s\n' 'tacticaldoll/tianheng'
+elif [[ $1 == pr && $2 == view && $* == *"--json title"* ]]; then
     printf '%s\n' 'fix(kanhe): harden workflow evidence'
 elif [[ $1 == pr && $2 == view && $* == *"--json number"* ]]; then
     if [[ $FAKE_GH_MODE == invalid-number ]]; then
@@ -333,6 +335,61 @@ fn a_repository_selector_is_refused_before_any_evidence_is_read() {
             run.cargo_log.is_empty(),
             "`{selector}` must be refused before the gate runs, but cargo was invoked:\n{}",
             run.cargo_log
+        );
+    }
+}
+
+/// Every `gh` call names the **same** repository, and a selector naming another one is refused first.
+///
+/// The hole: `gh pr view` and `gh pr merge` follow a pull-request URL to its own repository, while the
+/// live-commits endpoint was built from a placeholder `gh` expands from the working directory. A
+/// cross-repository URL therefore had the gate judge one pull request and the merge record another — the same
+/// hole a `--repo` flag opened, reopened through the positional selector.
+///
+/// Two assertions, because they answer different questions. The refusal is what closes it and is decidable
+/// offline: a URL names a repository and this wrapper reads its evidence from the one it runs in. The identity
+/// pin is what keeps the calls from diverging **again**: four references defaulting to the same place is
+/// agreement by circumstance, and a fifth call added later would inherit the circumstance rather than the rule.
+#[test]
+fn every_call_names_one_repository_and_another_one_is_refused() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+
+    // Refused before anything is read: a URL names a repository this wrapper does not read its evidence from.
+    let url = run_wrapper(&root, "subjects", &[]);
+    let refused = std::process::Command::new("bash")
+        .arg(root.join("scripts/merge-pr.sh"))
+        .args(["https://github.com/other/thing/pull/42", "--body-file"])
+        .arg(root.join("README.md"))
+        .output()
+        .expect("run the wrapper with a cross-repository URL");
+    assert_eq!(
+        refused.status.code(),
+        Some(2),
+        "a pull-request URL must be refused as a usage error"
+    );
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains("merge message:") && stderr.contains("names its own repository"),
+        "the refusal must say why, got {stderr:?}"
+    );
+
+    // And on the accepted path, every invocation carries the one identity this checkout resolved.
+    let invocations: Vec<&str> = url
+        .gh_log
+        .lines()
+        .filter(|line| !line.starts_with("repo view"))
+        .collect();
+    assert!(
+        !invocations.is_empty(),
+        "the accepted path must reach gh, or the assertion below holds vacuously:\n{}",
+        url.gh_log
+    );
+    for invocation in invocations {
+        assert!(
+            invocation.contains("tacticaldoll/tianheng"),
+            "every gh call must name the resolved repository, but this one does not: {invocation}"
         );
     }
 }

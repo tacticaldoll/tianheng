@@ -905,6 +905,22 @@ no adopter runs. They are here rather than under the adopter headings above beca
   names collapsing. **No live verdict moves**: the real citations are unqualified, which is exactly why nothing
   had noticed.
 
+- **The same hole, through the positional selector this time.** Refusing a `--repo` flag did not close it: the
+  wrapper's first argument was checked only for being non-empty and not flag-shaped, so a **pull-request URL**
+  passed — and `gh pr view` and `gh pr merge` follow a URL to its own repository while the live-commits endpoint
+  was built from a placeholder `gh` expands from the working directory. The gate would judge one pull request's
+  commits and the merge would record another's.
+
+  A URL is refused, and a number or a branch name still is not: neither names a repository, so both resolve
+  against the one this checkout is. Requiring the selector to be numeric was declined — the wrapper's own
+  contract says it *resolves an accepted selector* to a canonical identity, and a branch name is one it can
+  resolve without moving what is judged.
+
+  **And the four references now name one repository explicitly.** The endpoint always named one, implicitly;
+  the three `gh pr` calls named whichever the selector resolved to. Four references defaulting to the same place
+  is agreement by circumstance, and a fifth call added later would inherit the circumstance rather than the rule.
+  The identity is resolved once and passed to every call, so the wrapper owns it and a caller cannot supply one.
+
 - **The merge wrapper could have judged one repository and merged another.** A repository selector — `--repo`,
   `--repo=…` or `-R` — fell through to the passthrough array, which reaches only the final `gh pr merge`, while
   the title, the canonical pull-request number, the live commit subjects and the gate are all read from the
