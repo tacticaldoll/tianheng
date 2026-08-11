@@ -69,6 +69,20 @@ while (($#)); do
             "refusing \`${1%%=*}=…\`: pass it as two arguments so this wrapper reads the same value \`gh\` would" >&2
         exit 1
         ;;
+    # A repository selector reaches only the final `gh pr merge`, while the title, the canonical number, the
+    # live commit subjects and the gate are all read from the AMBIENT repository. Accepting one would let this
+    # wrapper judge pull request N here and merge pull request N somewhere else — the gate's whole claim undone
+    # by one argument, which is the sentence `scripts/publish.sh` already carries about `--manifest-path`. The
+    # same distinction decides it: an argument that moves the judged SUBJECT is refused, while one that changes
+    # where the result goes stays forwarded. Refusing beats threading the selector through every read, because
+    # a refusal cannot be got subtly wrong and three reads agreeing by maintenance can.
+    --repo | --repo=* | -R)
+        printf 'merge message: %s\n' \
+            "refusing \`${1%%=*}\`: this wrapper reads the title, the pull request number, the live commit \
+subjects and the gate from the repository it is run in, so a repository selector would judge one pull request \
+and merge another. Run it from a checkout of the repository whose pull request you are merging" >&2
+        exit 2
+        ;;
     --body | --body=*)
         printf 'merge message: %s\n' \
             "refusing \`--body\`: the body is judged before the merge, so it is read from a file this wrapper can hand to the gate" >&2

@@ -43,7 +43,7 @@ fn read_if_present(path: &Path) -> std::io::Result<String> {
     }
 }
 
-fn run_wrapper(root: &Path, mode: &str) -> Run {
+fn run_wrapper(root: &Path, mode: &str, extra: &[&str]) -> Run {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     let scratch = loop {
         let candidate = std::env::temp_dir().join(format!(
@@ -138,6 +138,7 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
         .arg(root.join("scripts/merge-pr.sh"))
         .args(["42", "--body-file"])
         .arg(&body)
+        .args(extra)
         .env("PATH", path)
         .env("FAKE_GH_MODE", mode)
         .env("FAKE_GH_LOG", &gh_log)
@@ -163,7 +164,7 @@ fn live_pull_request_commits_reach_the_gate_without_local_refs() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let run = run_wrapper(&root, "subjects");
+    let run = run_wrapper(&root, "subjects", &[]);
     assert!(
         run.status.success(),
         "controlled workflow failed:\nstdout:\n{}\nstderr:\n{}",
@@ -210,7 +211,7 @@ fn a_failed_live_commit_read_stops_before_the_gate_and_merge() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let run = run_wrapper(&root, "api-failure");
+    let run = run_wrapper(&root, "api-failure", &[]);
     assert_stopped_before_gate_and_merge(&run);
     assert!(
         run.stderr.contains("controlled API failure"),
@@ -224,7 +225,7 @@ fn an_empty_live_commit_set_stops_before_the_gate_and_merge() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let run = run_wrapper(&root, "empty");
+    let run = run_wrapper(&root, "empty", &[]);
     assert_stopped_before_gate_and_merge(&run);
     assert!(
         run.stderr.contains("cannot read any commit subjects"),
@@ -238,7 +239,7 @@ fn an_unresolved_canonical_pull_request_number_stops_before_live_acquisition() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let run = run_wrapper(&root, "invalid-number");
+    let run = run_wrapper(&root, "invalid-number", &[]);
     assert_stopped_before_gate_and_merge(&run);
     assert!(
         run.stderr
@@ -288,6 +289,50 @@ fn a_value_taking_flag_with_no_value_is_named_and_refused() {
         assert!(
             stderr.contains("usage:"),
             "the refusal must show the usage the operator needs, got {stderr:?}"
+        );
+    }
+}
+
+/// A repository selector is refused **before** any evidence is read.
+///
+/// The hole it closes: the title, the canonical pull-request number, the live commit subjects and the gate are
+/// all read from the ambient repository, while a repository selector reaches only the final `gh pr merge`. One
+/// argument would therefore have this wrapper judge pull request N here and merge pull request N somewhere
+/// else — the gate's whole claim undone by an argument, which is what `scripts/publish.sh` already refuses
+/// `--manifest-path` for.
+///
+/// **The exit code is the weaker half of this assertion.** What matters is the ORDER, so the controlled `gh`
+/// logs every invocation and the log must be empty: a refusal printed after the title had already been fetched
+/// would still exit 2 while having read the wrong repository's evidence. All three spellings are covered,
+/// because a guard catching one is a guard catching neither.
+#[test]
+fn a_repository_selector_is_refused_before_any_evidence_is_read() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    for selector in ["--repo", "--repo=other/thing", "-R"] {
+        let run = run_wrapper(&root, "subjects", &[selector, "other/thing"]);
+        assert_eq!(
+            run.status.code(),
+            Some(2),
+            "`{selector}` must be refused as a usage error; got {:?} with stderr {:?}",
+            run.status.code(),
+            run.stderr
+        );
+        assert!(
+            run.stderr.contains("merge message:") && run.stderr.contains("judge one pull request"),
+            "the refusal must say why in this script's own diagnostic form, got {:?}",
+            run.stderr
+        );
+        assert!(
+            run.gh_log.is_empty(),
+            "`{selector}` must be refused before any evidence is read, but gh was invoked:\n{}",
+            run.gh_log
+        );
+        assert!(
+            run.cargo_log.is_empty(),
+            "`{selector}` must be refused before the gate runs, but cargo was invoked:\n{}",
+            run.cargo_log
         );
     }
 }
