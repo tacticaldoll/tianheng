@@ -730,3 +730,214 @@ fn an_active_plan_may_name_a_path_it_intends_to_create() {
         seen_inside.iter().cloned().collect::<Vec<_>>().join("\n")
     );
 }
+
+// --- a reference nothing can check ------------------------------------------------------------------------
+//
+// The rest of this file asks whether a named path exists. This asks whether a reference was written in a form
+// anything could ask that about.
+//
+// There is a ladder, and this repository has been down it. An intra-doc link is checked by the compiler; a
+// path is checked by the sweep above; a path with a line number is checked by nothing; and a reference naming
+// only a position is not even a name. Measured here: one such reference was off by 86 lines and another by 98,
+// and the second was written by someone who had just been corrected about the first — which is the criterion
+// `scripts/publish.sh` states for itself, that a rule stated and then missed needs a check rather than another
+// sentence.
+//
+// **Every shape this refuses, and every reading it must leave alone, is a string in
+// `every_positional_shape_reacts_and_a_named_thing_does_not`.** Named there and not described here, because
+// this comment is inside the corpus: prose about the rule, written in the shapes the rule refuses, is the
+// self-reading trap this repository has met before. The specimens live where they can be executed.
+//
+// **Comment lines only, through the same `is_inspected_line` rule as the sibling sweep.** That is a position,
+// not a marker: a specimen written as a string literal is on an executed line and cannot be mistaken for a
+// reference, and nothing can hide a comment inside one. It also settles the corpus question the same way for
+// both properties in this file.
+//
+// **Tracked Rust and shell only, deliberately.** In a Markdown record — a `CHANGELOG.md` entry, a `BACKLOG.md`
+// history — a positional phrase legitimately narrates a past state, and telling that from a live reference is a
+// judgement over prose, the instrument this repository designed, measured three times and rejected. In source
+// there is no such reading: a comment describes the file it is in, so the reference is either live and rotting
+// or narration that could have named the construct instead. Rephrasing costs a word.
+
+/// The number words a positional reference is actually written with. A digit run counts too.
+///
+/// One array rather than a rule about spelling, because the alternative is a matcher that reads a count of
+/// thirty-one and not one of thirty. This is the vocabulary prose uses; a count large enough to fall outside it
+/// is a reference no reader was going to follow.
+const POSITIONAL_COUNTS: [&str; 12] = [
+    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven",
+    "twelve",
+];
+
+/// The unit words that carry a position instead of a name.
+const POSITIONAL_UNITS: [&str; 4] = ["lines", "line", "paragraph", "sentence"];
+
+/// The adverbs that stand in for the thing a reference should have named.
+const POSITIONAL_ADVERBS: [&str; 4] = ["just", "immediately", "directly", "right"];
+
+/// The positional reference `line` carries, if it carries one.
+///
+/// Three shapes, because prose writes it three ways: a counted unit, a definite article naming no thing, and an
+/// adverb standing in for one. A bare direction word is none of them — a construct plus a direction to find it
+/// is a reference to a thing, and the quiet half of this rule's direction asserts that.
+///
+/// The article case takes the plural too. The hand sweep that preceded this check wrote its pattern with the
+/// singular only, and this check's first tree-wide run found the instance it had missed.
+fn positional_reference(line: &str) -> Option<String> {
+    let lower = line.to_ascii_lowercase();
+    for direction in ["above", "below"] {
+        for (index, _) in lower.match_indices(direction) {
+            let before = lower[..index].trim_end();
+            for unit in POSITIONAL_UNITS {
+                if let Some(head) = before.strip_suffix(unit) {
+                    let head = head.trim_end();
+                    let last = head.rsplit(|c: char| !c.is_ascii_alphanumeric()).next();
+                    let counted = last.is_some_and(|token| {
+                        !token.is_empty()
+                            && (token.chars().all(|c| c.is_ascii_digit())
+                                || POSITIONAL_COUNTS.contains(&token))
+                    });
+                    if counted || head.ends_with("the") {
+                        return Some(format!("{unit} {direction}"));
+                    }
+                }
+            }
+            for adverb in POSITIONAL_ADVERBS {
+                if before.ends_with(adverb) {
+                    return Some(format!("{adverb} {direction}"));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Every positional reference the comment lines of `corpus` carry, in `corpus_root`.
+///
+/// Split from the check so a negative fixture can call it, for the reason the sibling sweep states: a check
+/// whose only assertion is that it found nothing cannot be shown to find anything.
+fn positional_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSet<String> {
+    let mut offences = BTreeSet::new();
+    let mut read = 0usize;
+    for path in corpus
+        .iter()
+        .filter(|p| p.ends_with(".rs") || p.ends_with(".sh"))
+    {
+        let Ok(text) = std::fs::read_to_string(corpus_root.join(path)) else {
+            continue;
+        };
+        read += 1;
+        for (index, line) in text.lines().enumerate() {
+            if !is_inspected_line(path, line) {
+                continue;
+            }
+            if let Some(shape) = positional_reference(line) {
+                offences.insert(format!(
+                    "  {path}:{} writes `{shape}`, which names a position rather than a thing — nothing can \
+                     check it and it rots on the next edit. Name the item instead: an intra-doc link if the \
+                     docs can reach it, otherwise the identifier",
+                    index + 1
+                ));
+            }
+        }
+    }
+    assert!(
+        read > 0,
+        "no Rust or shell source was read, so this sweep would report clean over a corpus it never opened"
+    );
+    offences
+}
+
+/// `reference-integrity`'s scenario *A reference names a position rather than a thing*, held tree-wide.
+#[test]
+fn no_tracked_source_names_a_position_instead_of_a_thing() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let all = tracked(&root);
+    let offences = positional_offences_in(&root, &all);
+    assert!(
+        offences.is_empty(),
+        "{} positional reference(s) in tracked source:\n{}",
+        offences.len(),
+        offences.iter().cloned().collect::<Vec<_>>().join("\n")
+    );
+}
+
+/// Each shape is seen, and the readings that must NOT react are not.
+///
+/// The quiet half is the load-bearing one. A matcher keyed on the direction word alone would refuse a construct
+/// followed by a direction to find it — which is a reference to a thing — and asserting only that the shapes
+/// react would be satisfied by a matcher that refuses every occurrence of the word.
+///
+/// These strings are the specimens the section comment declines to write, and they are here so they sit on
+/// executed lines rather than in the corpus.
+#[test]
+fn every_positional_shape_reacts_and_a_named_thing_does_not() {
+    for reacting in [
+        "// The signing probe seven lines below checks its own write.",
+        "# `--workspace` written three lines below, so the invocation reads as the whole",
+        "/// stood over a state the line above had made unreachable.",
+        "// the `inline_only` decision just below (a false negative)",
+        "# the gate immediately above this one",
+        "/// says so two lines above the allowlist",
+        "// listed in `ALL` on the lines below it",
+        "// the 12 lines below",
+        "/// the paragraph above states it",
+    ] {
+        assert!(
+            positional_reference(reacting).is_some(),
+            "this shape must be seen: {reacting}"
+        );
+    }
+    for quiet in [
+        "// a bare-`#[cfg]`-tolerated declaration (tolerated below) can resolve to nothing",
+        "// The classification is written above the loop it governs.",
+        "/// See [`sign_probe`], which checks its own write.",
+        "// above",
+        "// nine of them",
+    ] {
+        assert!(
+            positional_reference(quiet).is_none(),
+            "this must not react: {quiet}"
+        );
+    }
+}
+
+/// A positional reference in a fixture source is found, and one in a fixture's executed line is not.
+///
+/// The tree-wide direction asserts a clean tree, which deleting the matcher can only make cleaner. This shows
+/// it finding something — and shows the position rule doing the work, since the two fixture files carry the
+/// same phrase in a comment and in a string literal.
+#[test]
+fn a_positional_reference_reacts_only_from_a_comment() {
+    let fixture = scratch("positional-corpus");
+    let commented = "crates/probe/src/lib.rs";
+    let executed = "crates/probe/src/other.rs";
+    for (path, body) in [
+        (commented, "// The guard four lines above holds it.\n"),
+        (
+            executed,
+            "const SPECIMEN: &str = \"the guard four lines above holds it\";\n",
+        ),
+    ] {
+        let full = fixture.join(path);
+        std::fs::create_dir_all(full.parent().expect("a fixture parent"))
+            .expect("create fixture parent");
+        std::fs::write(full, body).expect("write fixture source");
+    }
+    let offences = positional_offences_in(&fixture, &[commented.to_string(), executed.to_string()]);
+    let _ = std::fs::remove_dir_all(&fixture);
+
+    assert_eq!(
+        offences.len(),
+        1,
+        "the comment must react and the executed line must not:\n{}",
+        offences.iter().cloned().collect::<Vec<_>>().join("\n")
+    );
+    assert!(
+        offences.iter().any(|o| o.contains(commented)),
+        "the reacting offence must be the commented fixture:\n{}",
+        offences.iter().cloned().collect::<Vec<_>>().join("\n")
+    );
+}

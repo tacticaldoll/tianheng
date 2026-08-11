@@ -458,8 +458,8 @@ impl Drop for Scratch {
 ///
 /// **The write outcome is part of the answer, not a side effect.** A discarded write lets a short or failed
 /// delivery reach `wait()` as if the payload had arrived: the child then judges something other than what it
-/// was given, and its verdict is reported as the verdict about the payload. Seven lines below, the signing
-/// probe already checks its own write and says why — an unnoticed empty payload makes `ssh-keygen` sign
+/// was given, and its verdict is reported as the verdict about the payload. [`sign_probe`] already checks its
+/// own write and says why — an unnoticed empty payload makes `ssh-keygen` sign
 /// nothing and the round trip fail, "reporting the mechanism broken when only the harness was". This function
 /// sits under release-tag signature verification, in front of the one irreversible act, where a refusal
 /// invented by the harness is exactly as costly as a miss.

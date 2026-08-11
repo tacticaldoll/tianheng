@@ -815,6 +815,26 @@ them.
 
 ### Self-governance
 
+- **A reference that names a position is now refused in tracked source, and the sweep that found them was
+  narrower than the rule.** There is a ladder: an intra-doc link is checked by the compiler, a path by the
+  reference gate, a path with a line number by nothing — and a reference naming only a position is not even a
+  name. Two were measured in this window off by 86 and 98 lines, the second written after the first had been
+  corrected, which is the criterion `scripts/publish.sh` states for itself: a rule stated and then missed needs a
+  check rather than another sentence.
+
+  Seven instances were found by hand and repaired — a signing-probe citation now an intra-doc link, and six
+  rephrased to name the construct. The check's first tree-wide run then found an eighth the hand sweep had
+  missed, because that pattern was written with the singular article only while the instance used the plural.
+  **The instrument that declared the class handled was the one thing not measured**, which is how this class
+  keeps returning.
+
+  The corpus is comment lines, decided by the same rule as the sibling path sweep. That settles the check's own
+  self-reading: every shape it refuses lives as a string literal in its directions, on an executed line, where it
+  cannot be read as a reference — a position rather than an exemption, since nothing can hide a comment inside an
+  executed line. Markdown stays outside, stated in the requirement: in a record a positional phrase narrates a
+  past state, and separating that from a live reference is a judgement over prose this repository has measured
+  and declined.
+
 - **The reference gate read every format but the one the wrappers are written in.** It inspected Markdown text
   and the comment lines of Rust, TOML and `.gitignore`; shell was outside the corpus entirely. The two files that
   left out are `scripts/merge-pr.sh` and `scripts/publish.sh`, whose comments cite the Rust gates they sequence

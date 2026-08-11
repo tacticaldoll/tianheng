@@ -134,6 +134,44 @@ fixture name this repository's prose invents.
   explanation of a shape
 - **THEN** the reaction is silent, because such a name describes a shape rather than naming a file
 
+### Requirement: A reference SHALL name a thing, not a position
+
+Tracked Rust and shell comment lines SHALL NOT reference an item by its position — a counted offset, a definite
+article naming no thing, or an adverb standing in for one. A reference SHALL name the item: an intra-doc link
+where the documentation can reach it, otherwise the identifier or the path. A direction word following a named
+construct is a reference to a thing and SHALL NOT react.
+
+**The ladder this sits at the bottom of.** An intra-doc link is checked by the compiler; a path is checked by the
+sweep above; a path with a line number is checked by nothing; a position is not even a name. Measured on this
+repository, two such references were off by 86 and 98 lines, and the second was written after the first had been
+corrected — the criterion `scripts/publish.sh` states for itself, that a rule stated and then missed needs a
+check rather than another sentence.
+
+The corpus SHALL be comment lines, by the same rule that decides the sibling sweep's corpus, so a specimen
+written as a string literal sits on an executed line and cannot be read as a reference. That is a position rather
+than a marker: nothing can hide a comment inside an executed line, and the check's own explanation of the shapes
+it refuses would otherwise be the corpus it judges.
+
+Markdown SHALL be outside this requirement. In a record — a `CHANGELOG.md` entry, a `BACKLOG.md` history — a
+positional phrase narrates a past state, and separating that from a live reference is a judgement over prose,
+which this repository has designed, measured, and declined. In source there is no such reading: a comment
+describes the file it is in.
+
+#### Scenario: A comment names a position rather than a thing
+
+- **WHEN** a tracked Rust or shell comment references an item by counted offset, bare article, or adverb
+- **THEN** the reaction fails, naming the file, the line, and the shape, and says to name the item instead
+
+#### Scenario: A named construct followed by a direction
+
+- **WHEN** a comment names a construct and gives a direction to find it
+- **THEN** nothing reacts, because the reference is to a thing
+
+#### Scenario: A specimen of a refused shape
+
+- **WHEN** the check's own directions carry the shapes they refuse, as string literals on executed lines
+- **THEN** they are outside the corpus by position, not by an exemption the corpus could also claim
+
 ### Requirement: Deliberate absence does not become a stale-reference finding
 
 The gate SHALL skip a recognized target when Git reports that target ignored, because prose may
