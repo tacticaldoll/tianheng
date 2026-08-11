@@ -105,12 +105,6 @@ while (($#)); do
         passthrough+=("$1")
         shift
         ;;
-    # The one admitted flag that STRENGTHENS the claim: it refuses the merge if the head moved since.
-    --match-head-commit)
-        require_value "$#" "$1"
-        passthrough+=("$1" "$2")
-        shift 2
-        ;;
     # The arms below decide nothing the catch-all would not — every one of these is unlisted, so it is refused
     # either way. They exist to say WHY, because a refusal an operator cannot act on is a refusal they work
     # around. Each pattern covers gh's glued and equals forms too: `-t`, `-t=x` and `-tx` are one flag.
@@ -148,6 +142,13 @@ are met, and this wrapper will judge the set that exists then" >&2
             "refusing \`$1\`: it is not a merge — it turns auto-merge off and returns. This wrapper would run \
 the gate, reach gh, and exit 0 having merged nothing, reporting success for an act that did not happen. Run \
 \`gh pr merge --disable-auto\` directly; there is no record for a gate to hold" >&2
+        exit 2
+        ;;
+    --match-head-commit | --match-head-commit=*)
+        printf 'merge message: %s\n' \
+            "refusing \`$1\`: this wrapper supplies it itself, pinning the head the gate actually read its \
+evidence from, and gh takes the last spelling of a repeated flag — so a caller-supplied SHA would replace \
+exactly the link this guard exists to make" >&2
         exit 2
         ;;
     --author-email | --author-email=* | -A*)
@@ -192,6 +193,25 @@ cannot be shown to name one pull request" >&2
 title=$(gh pr view "$pr" --repo "$repository" --json title --jq .title)
 : "${subject:=$title}"
 pr_number=$(gh pr view "$pr" --repo "$repository" --json number --jq .number)
+# The head the gate is about to read its evidence from, captured BEFORE the commit set — the order is the guard.
+#
+# What this closes: the gate judges the body against the pull request's commit subjects as they are while it
+# runs, and the merge happens afterwards. A commit pushed in between changes the set the body must equal, and
+# nothing noticed. `--match-head-commit` is gh's answer — the merge is refused unless the head still matches —
+# and this wrapper now supplies it rather than admitting it, so what gets pinned is the head the evidence came
+# from and not a SHA a caller chose.
+#
+# **Read before the commits, not after.** Capture the head first and a push in between leaves the commit set
+# ahead of the pinned head, so gh refuses: fails closed. Capture it after and the pinned head would include the
+# new commit while the gate judged the older set, so the merge would proceed and record a body missing it: fails
+# open. Same two calls, opposite guarantees.
+head=$(gh pr view "$pr" --repo "$repository" --json headRefOid --jq .headRefOid)
+if [[ ! $head =~ ^[0-9a-f]{7,40}$ ]]; then
+    printf 'merge message: %s\n' \
+        "cannot read the pull request's head commit, so the merge could not be pinned to the head this gate \
+read its evidence from — and an unpinned merge may record a body that no longer matches the commits" >&2
+    exit 1
+fi
 if [[ ! $pr_number =~ ^[1-9][0-9]*$ ]]; then
     printf 'merge message: %s\n' \
         "cannot resolve $pr to one pull request number; the live commits endpoint requires its canonical identity" >&2
@@ -241,4 +261,4 @@ gate_output=$(TIANHENG_MERGE_SUBJECT=$subject \
 require_one_pass 'merge message' "$gate_output"
 
 exec gh pr merge "$pr" --repo "$repository" --squash --subject "$subject" --body-file "$body_file" \
-    "${passthrough[@]}"
+    --match-head-commit "$head" "${passthrough[@]}"

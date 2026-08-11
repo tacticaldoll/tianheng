@@ -384,6 +384,39 @@ for the diagnostics they carry, but they SHALL decide nothing the default refusa
 - **THEN** the wrapper names that argument and refuses, rather than exiting on the shift arithmetic with no
   diagnostic at all
 
+### Requirement: The merge SHALL be pinned to the head the gate read its evidence from
+
+The squash wrapper SHALL obtain the pull request's head commit and require the merge to match it, so a pull
+request that moved between the gate's verdict and the merge is refused rather than merged against a body that no
+longer states its commits. The wrapper SHALL supply that pin itself; a caller-supplied one SHALL be refused,
+because the tool takes the last spelling of a repeated flag and a chosen SHA would replace exactly the link the
+pin exists to make.
+
+**The head SHALL be read before the commit set.** Read first, a commit pushed in between leaves the commit set
+ahead of the pinned head and the merge is refused — it fails closed. Read after, the pin would carry the new
+commit while the gate judged the older set, so the merge would proceed and record a body missing it — it fails
+open. The two orders are the same two calls and opposite guarantees, so the order is part of the requirement
+rather than of the implementation.
+
+A head that cannot be read SHALL stop the wrapper before the gate and the merge. An unreadable head is not a head
+that has not moved, and merging unpinned because the pin could not be built is the vacuity direction in front of a
+record that cannot be amended.
+
+#### Scenario: The pull request moves between the gate and the merge
+
+- **WHEN** a commit is pushed to the pull request after the gate has read its commit subjects
+- **THEN** the merge is refused, because the head no longer matches the one the evidence came from
+
+#### Scenario: A caller supplies the pin
+
+- **WHEN** the wrapper is given a head-matching argument of its own
+- **THEN** it is refused, naming that the wrapper supplies the head the gate read and a caller's would replace it
+
+#### Scenario: The head cannot be read
+
+- **WHEN** the pull request's head commit cannot be obtained
+- **THEN** the wrapper stops before the gate and the merge, saying the merge could not be pinned
+
 ### Requirement: The squash wrapper SHALL judge the complete live pull-request commit set
 
 Before invoking the squash-message gate, the sanctioned merge wrapper SHALL resolve the accepted pull-request

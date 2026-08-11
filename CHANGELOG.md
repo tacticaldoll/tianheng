@@ -815,6 +815,30 @@ them.
 
 ### Self-governance
 
+- **The merge is now pinned to the head the gate read its evidence from.** The gate judges the squash body
+  against the pull request's live commit subjects as they are while it runs; the merge happens afterwards. A
+  commit pushed in between changed the set the body had to equal, and nothing noticed — `gh pr merge` would
+  record the approved body over a commit set that had moved. The window was small and the consequence permanent,
+  which is the same trade every other guard in front of this act was written for.
+
+  The wrapper obtains the head and supplies `--match-head-commit` itself. A caller's is refused: gh takes the last
+  spelling of a repeated flag, so a chosen SHA would replace exactly the link the pin exists to make. That is the
+  same reasoning that refuses a caller's subject and body.
+
+  **The head is read before the commit set, and the order is the guarantee.** Read first, a push in between
+  leaves the commit set ahead of the pinned head and the merge is refused — it fails closed. Read after, the pin
+  would carry the new commit while the gate judged the older set, so the merge would proceed and record a body
+  missing it — it fails open. Two calls, either order, opposite guarantees; the direction asserts the order in the
+  log rather than only the presence of the flag.
+
+  A head that cannot be read stops the wrapper before the gate and the merge. An unreadable head is not a head
+  that has not moved.
+
+  Three negative runs, and the third one's own fixture was the first thing it found: dropping the flag, reversing
+  the read order, and removing the unreadable-head refusal each fail their direction — but the last initially
+  failed because the controlled `gh` did not know that mode and exited 92, which is a fixture reporting a guard it
+  never exercised. Corrected, it reports the wrapper running to a successful merge with no head read at all.
+
 - **The positional-reference rule kept a second extension list, one change after the declaration that ended
   them.** It swept `.rs` and `.sh` by extension while its sibling path check derived its corpus from the format
   declaration — so `.toml`, `.yml`, `Cargo.lock`, `CODEOWNERS` and `.gitignore` went unswept, every one of them
