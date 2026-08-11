@@ -64,6 +64,14 @@ refuse() {
     exit 2
 }
 
+# The same two classes its sibling `scripts/merge-pr.sh` states, for the same reason: `2` is everything this
+# script could not judge — a misconfigured invocation, and an input it could not read — and `1` is a gate that
+# ran and refused. A gate that did NOT run belongs to the first class, however loudly its own message says so.
+cannot_judge() {
+    printf 'publish source: %s\n' "$1" >&2
+    exit 2
+}
+
 # The package selection, held separately from everything else forwarded.
 #
 # `--workspace` is this script's DEFAULT selection, not a constant it writes over whatever the caller asked
@@ -131,6 +139,11 @@ while (($#)); do
     esac
 done
 
+# The token the gate renders for a disagreement, as opposed to an input it could not judge. Pinned against
+# `refusal::Kind`'s own `Debug` rendering by a repository check, because a wrapper grepping for a string the
+# gate prints is two places that must agree.
+GATE_VIOLATION_TOKEN=Violation
+
 # The source gate. It lives in Rust with the other repository gates and does not run in
 # development — no development checkout is a release snapshot — so it is asked for explicitly here, the one
 # moment it can answer. A failure aborts before `cargo publish`, which is the point: the act below is
@@ -142,12 +155,11 @@ done
 #
 # Asserted here rather than inside the gate: a renamed or silenced test cannot report that it did not run.
 require_one_pass() {
-    local what=$1 output=$2
+    local output=$1
     if ! printf '%s' "$output" | grep -qE 'test result: ok\. 1 passed'; then
         printf '%s\n' "$output" >&2
-        printf '%s: %s\n' "$what" \
-            "the gate did not run — its invocation selected no passing test, so the name in this script no longer names one. libtest exits 0 for a filter that matches nothing, which is why this is checked rather than trusted" >&2
-        exit 1
+        cannot_judge \
+            "the gate did not run — its invocation selected no passing test, so the name in this script no longer names one. libtest exits 0 for a filter that matches nothing, which is why this is checked rather than trusted"
     fi
 }
 
@@ -155,9 +167,14 @@ gate_output=$(TIANHENG_PUBLISH_SOURCE=1 TIANHENG_WORKSPACE_TESTS=1 \
     cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test publish_source \
     -- --exact the_publish_source_is_the_signed_release_snapshot 2>&1) || {
     printf '%s\n' "$gate_output" >&2
-    exit 1
+    # The gate prints its own class — `publish source (Violation): …` or `(CannotJudge): …`. Anything else
+    # reached no verdict, a compile error included, and that is not a disagreement.
+    if printf '%s' "$gate_output" | grep -q "($GATE_VIOLATION_TOKEN)"; then
+        exit 1
+    fi
+    exit 2
 }
-require_one_pass 'publish source' "$gate_output"
+require_one_pass "$gate_output"
 
 cd "$repo"
 exec cargo publish "${selection[@]}" "${forwarded[@]}"

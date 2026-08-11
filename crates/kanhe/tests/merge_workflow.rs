@@ -197,10 +197,19 @@ fn live_pull_request_commits_reach_the_gate_without_local_refs() {
     );
 }
 
+/// An input this wrapper could not read stopped it, in the class that says so.
+///
+/// **This asserted only `!success()` and was blind to the class.** Five could-not-read conditions were split
+/// across both exit classes with no rule, and two of them are facts `merge_message_gate::judge` types as
+/// cannot-judge — so the wrapper reported a disagreement its own gate calls unjudgeable, and every direction
+/// covering those sites passed. A helper that cannot see `1` from `2` is why the split survived being written
+/// five times.
 fn assert_stopped_before_gate_and_merge(run: &Run) {
-    assert!(
-        !run.status.success(),
-        "incomplete live pull-request evidence must fail"
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "an input this wrapper could not read is the unjudged class, not a gate's disagreement; stderr was {:?}",
+        run.stderr
     );
     assert!(
         run.cargo_log.is_empty(),
@@ -561,7 +570,7 @@ fn an_unreadable_head_stops_before_the_gate_and_merge() {
     let run = run_wrapper(&root, "unreadable-head", &[]);
     assert_eq!(
         run.status.code(),
-        Some(1),
+        Some(2),
         "an unreadable head must stop the wrapper; got {:?} with stderr {:?}",
         run.status.code(),
         run.stderr
