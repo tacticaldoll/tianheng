@@ -86,15 +86,26 @@ while (($#)); do
     # denylist cannot have. This family already argues it in its own law: an allowlist is always stricter than
     # a denylist.
     #
-    # Classified against `gh pr merge --help` on gh 2.95.0 by one question: does it move what the gate judged?
-    # Forwarded are the flags that change whether the merge may proceed, never what it would record.
+    # Classified against `gh pr merge --help` on gh 2.95.0 by TWO questions. First: does it move what the gate
+    # judged? Second: does gh honour it as this wrapper composes the invocation — beside the `--squash`,
+    # `--subject` and `--body-file` written below? The second question was missing for a window, and the sibling
+    # publish wrapper paid for it: it admitted `--package` beside an unconditional `--workspace`, which cargo
+    # silently maps to *all packages*. Here the same question refuses `--auto` and `--disable-auto`: one defers
+    # the merge past the evidence the gate read, the other is not a merge at all.
+    #
+    # Forwarded are the flags that change whether the merge may proceed, never what it would record, and never
+    # WHEN it happens relative to the evidence.
     #
     # ONE spelling each, values as separate arguments. Parsing gh's glued and equals forms is what let the
     # short forms through; refusing those costs an argument's worth of typing and removes the parsing question.
-    --admin | --auto | --disable-auto | --delete-branch)
+    # `--admin` bypasses the branch's required checks. That is consistent with what this wrapper already
+    # declares: WHETHER to merge, and whether CI is green, stay a human's call — this holds only what the
+    # merge is about to record.
+    --admin | --delete-branch)
         passthrough+=("$1")
         shift
         ;;
+    # The one admitted flag that STRENGTHENS the claim: it refuses the merge if the head moved since.
     --match-head-commit)
         require_value "$#" "$1"
         passthrough+=("$1" "$2")
@@ -121,6 +132,22 @@ another. Run it from a checkout of the repository whose pull request you are mer
         printf 'merge message: %s\n' \
             "refusing \`$1\`: a development pull request lands on a release branch as one squash, and this \
 gate judges that squash's message" >&2
+        exit 2
+        ;;
+    --auto)
+        printf 'merge message: %s\n' \
+            "refusing \`$1\`: it does not merge now, it merges LATER — gh: \"Automatically merge only after \
+necessary requirements are met\". The gate judged this body against the pull request's live commit subjects as \
+they are at this moment; a commit pushed before the deferred merge lands changes that set while the captured \
+subject and body do not, so what gets recorded would no longer be what was judged. Merge when the requirements \
+are met, and this wrapper will judge the set that exists then" >&2
+        exit 2
+        ;;
+    --disable-auto)
+        printf 'merge message: %s\n' \
+            "refusing \`$1\`: it is not a merge — it turns auto-merge off and returns. This wrapper would run \
+the gate, reach gh, and exit 0 having merged nothing, reporting success for an act that did not happen. Run \
+\`gh pr merge --disable-auto\` directly; there is no record for a gate to hold" >&2
         exit 2
         ;;
     --author-email | --author-email=* | -A*)

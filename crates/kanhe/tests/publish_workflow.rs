@@ -170,13 +170,26 @@ fn only_an_allowlisted_argument_reaches_the_publish() {
     }
 }
 
-/// An admitted argument still reaches the publish, and the wrapper always names the whole workspace.
+/// An admitted argument reaches the publish as the SELECTION cargo would honour, not as the string the wrapper
+/// typed.
 ///
 /// Without this direction the one above is satisfied by a wrapper that refuses everything, and the release flow
 /// genuinely needs some of these — `--dry-run` is the rehearsal the discipline requires before any real upload,
 /// and `--package` is how a partly completed publish resumes when crates.io has already accepted some of the six.
+///
+/// **This direction asserted the typed string, and pinned a flag cargo discards.** It expected `publish
+/// --workspace --package xuanji` against a controlled `cargo` that only logs its arguments, so it could not see
+/// that cargo maps that combination to *all packages*: measured on cargo 1.96.0 with the identical selection
+/// flags, `--workspace --package xuanji` selects 8 and `--package xuanji` selects 1, with no warning. The
+/// expectation was the defect, and its name — *the workspace is always named* — stated the reason the flag was
+/// inert.
+///
+/// A controlled executable cannot answer what the real tool does; that measurement belongs beside the
+/// classification, in the script's own comment, against a named version. What this direction can hold is that
+/// the wrapper composes a selection cargo would honour, so the two cases below that carry `--package` assert the
+/// absence of `--workspace` as much as the presence of the selector.
 #[test]
-fn an_admitted_argument_reaches_the_publish_and_the_workspace_is_always_named() {
+fn an_admitted_argument_reaches_the_publish_as_cargo_would_honour_it() {
     let Some(root) = workspace_root() else {
         return;
     };
@@ -184,9 +197,15 @@ fn an_admitted_argument_reaches_the_publish_and_the_workspace_is_always_named() 
     for (extra, expected) in [
         (vec![], "publish --workspace"),
         (vec!["--dry-run"], "publish --workspace --dry-run"),
+        // `--package` REPLACES the default selection. With `--workspace` beside it, cargo publishes everything.
+        (vec!["--package", "xuanji"], "publish --package xuanji"),
         (
-            vec!["--package", "xuanji"],
-            "publish --workspace --package xuanji",
+            vec!["--package", "xuanji", "--package", "xingbiao"],
+            "publish --package xuanji --package xingbiao",
+        ),
+        (
+            vec!["--package", "xuanji", "--dry-run"],
+            "publish --package xuanji --dry-run",
         ),
         (
             vec!["--locked", "--offline"],

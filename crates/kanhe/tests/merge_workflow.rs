@@ -436,6 +436,11 @@ fn only_an_allowlisted_flag_reaches_the_merge() {
         "-s",
         "-A",
         "--author-email",
+        // Flags gh accepts here and does NOT honour as a merge of the judged evidence: one defers the merge
+        // past the commit set the gate read, the other is not a merge at all. Both pass gh's own argument
+        // validation — measured against a pull-request number that does not exist, so nothing could merge.
+        "--auto",
+        "--disable-auto",
         // And one nobody classified: an argument the wrapper does not know is refused, not passed on.
         "--some-flag-a-future-gh-adds",
     ] {
@@ -460,22 +465,31 @@ fn only_an_allowlisted_flag_reaches_the_merge() {
         );
     }
 
-    // The other half: a flag that changes whether the merge may proceed, never what it records, still arrives.
-    // Without this the assertions above are satisfied by a wrapper that refuses its own arguments.
-    let forwarded = run_wrapper(&root, "subjects", &["--delete-branch"]);
-    assert!(
-        forwarded.status.success(),
-        "an allowlisted flag must not be refused, got {:?} with stderr {:?}",
-        forwarded.status.code(),
-        forwarded.stderr
-    );
-    let merge = forwarded
-        .gh_log
-        .lines()
-        .find(|line| line.starts_with("pr merge"))
-        .unwrap_or_else(|| panic!("the merge must be reached:\n{}", forwarded.gh_log));
-    assert!(
-        merge.contains("--delete-branch"),
-        "the allowlisted flag must reach the merge, got {merge}"
-    );
+    // The other half: EVERY flag that changes whether the merge may proceed — never what it records, and never
+    // when it happens relative to the evidence — still arrives. Without this the assertions above are satisfied
+    // by a wrapper that refuses its own arguments, and asserting one of the three would leave the rest unheld.
+    for admitted in [
+        vec!["--delete-branch"],
+        vec!["--admin"],
+        vec!["--match-head-commit", "81c9ef06"],
+    ] {
+        let forwarded = run_wrapper(&root, "subjects", &admitted);
+        assert!(
+            forwarded.status.success(),
+            "{admitted:?} must not be refused, got {:?} with stderr {:?}",
+            forwarded.status.code(),
+            forwarded.stderr
+        );
+        let merge = forwarded
+            .gh_log
+            .lines()
+            .find(|line| line.starts_with("pr merge"))
+            .unwrap_or_else(|| panic!("the merge must be reached:\n{}", forwarded.gh_log));
+        for token in &admitted {
+            assert!(
+                merge.contains(token),
+                "the admitted flag `{token}` must reach the merge, got {merge}"
+            );
+        }
+    }
 }

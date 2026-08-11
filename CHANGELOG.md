@@ -815,6 +815,37 @@ them.
 
 ### Self-governance
 
+- **The allowlists asked whether an argument moves what the gate judged, and never whether the tool honours
+  it.** Both wrappers had an instance, and the publish one had already shipped inside this window.
+
+  `scripts/publish.sh` admitted `--package` while writing `--workspace` unconditionally. Cargo maps that
+  combination to *all packages* and emits no warning: measured on cargo 1.96.0 with the identical selection
+  flags, `--workspace --package xuanji` selects **8** and `--package xuanji` selects **1**. So the selector
+  admitted precisely so a partly completed publish could resume — crates.io accepts the six one at a time —
+  instead re-attempted the whole workspace, in front of the one act that cannot be undone. `--workspace` is now
+  the **default** selection rather than a constant written over the caller's, and `--package` replaces it and may
+  be repeated.
+
+  `scripts/merge-pr.sh` admitted `--auto` and `--disable-auto`, both of which pass gh's own argument validation.
+  `--auto` merges *after* the gate has read the evidence — gh: "Automatically merge only after necessary
+  requirements are met" — so a commit pushed before the deferred merge lands changes the pull request's commit
+  set while the captured subject and body do not, and what gets recorded is no longer what was judged.
+  `--disable-auto` is not a merge at all: the wrapper would run its gate, reach gh, and exit `0` having recorded
+  nothing. Both refused. What stays admitted is `--admin`, `--delete-branch`, and `--match-head-commit` — the
+  last being the only one that *strengthens* the claim, since it refuses the merge if the head moved.
+
+  **The direction guarding the publish selector was itself the defect.** It asserted the string the wrapper typed
+  — `publish --workspace --package xuanji` — against a controlled `cargo` that only logs its arguments, so it
+  could not see what cargo discards, and it pinned as intended the exact invocation that voided the flag. Its
+  name said the reason out loud: *the workspace is always named*. It now asserts the selection cargo would
+  honour, and the absence of `--workspace` as much as the presence of the selector. The measurement a controlled
+  executable cannot make lives beside the classification instead, against a named tool version.
+
+  Admitting an argument now takes two questions, and the specification carries the second: does the tool honour
+  it as the wrapper composes the invocation, and does it perform the act at the moment the gate read its
+  evidence. Both directions were widened to assert that **every** admitted argument arrives rather than one of
+  them.
+
 - **A reference that names a position is now refused in tracked source, and the sweep that found them was
   narrower than the rule.** There is a ladder: an intra-doc link is checked by the compiler, a path by the
   reference gate, a path with a line number by nothing — and a reference naming only a position is not even a
