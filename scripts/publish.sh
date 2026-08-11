@@ -29,10 +29,15 @@
 # (`--allow-dirty`), and `--config`, which can become any of those and can name a whole configuration
 # file besides.
 #
+# **Admitting an argument takes TWO questions, not one.** The first is above. The second is whether cargo
+# actually HONOURS it beside what this script supplies itself — and `--package` failed that one silently for a
+# window: written after an unconditional `--workspace`, cargo discarded it and published everything. Classify
+# against the tool's real behaviour at a named version, not against its `--help` alone.
+#
 # Two classifications are worth their sentence. `--package` narrows by NAMING, which a partly
 # completed publish genuinely needs — crates.io accepts the six one at a time and a resumed run must
 # say which — and the command then records what it did; `--exclude` narrows by SUBTRACTION under the
-# `--workspace` this script writes itself, so the invocation reads as the whole workspace while
+# `--workspace` this script would otherwise supply, so the invocation reads as the whole workspace while
 # publishing less. And `--allow-dirty` was forwarded before, on the ground that the source gate
 # refuses a dirty tree upstream anyway: that makes it inert rather than safe, and inert-by-someone-
 # else is not how this script holds anything.
@@ -59,6 +64,16 @@ refuse() {
     exit 2
 }
 
+# The package selection, held separately from everything else forwarded.
+#
+# `--workspace` is this script's DEFAULT selection, not a constant it writes over whatever the caller asked
+# for. Written unconditionally it silently voided the one selector this script admits: measured on cargo 1.96.0
+# with the identical selection flags, `--workspace --package xuanji` selects 8 packages and `--package xuanji`
+# selects 1, and cargo says nothing — it maps (`--workspace`, no `--exclude`, any `--package`) to *all*. So
+# `publish.sh --package xuanji` published the entire workspace while the comment beside the arm explained that
+# `--package` is how a partly completed publish resumes, in front of the one act that cannot be undone.
+selection=(--workspace)
+
 forwarded=()
 while (($#)); do
     case $1 in
@@ -67,7 +82,19 @@ while (($#)); do
         forwarded+=("$1")
         shift
         ;;
-    --package | --jobs | --color | --target-dir | --registry | --index)
+    # The one admitted selector. It REPLACES the default rather than joining it, and may be repeated —
+    # measured, two `--package` flags select two packages.
+    --package)
+        if (($# < 2)); then
+            refuse "$1" "this script reads every value as the argument after its flag, so pass it that way or drop the flag"
+        fi
+        if [[ ${selection[0]} == --workspace ]]; then
+            selection=()
+        fi
+        selection+=("$1" "$2")
+        shift 2
+        ;;
+    --jobs | --color | --target-dir | --registry | --index)
         if (($# < 2)); then
             refuse "$1" "this script reads every value as the argument after its flag, so pass it that way or drop the flag"
         fi
@@ -133,4 +160,4 @@ gate_output=$(TIANHENG_PUBLISH_SOURCE=1 TIANHENG_WORKSPACE_TESTS=1 \
 require_one_pass 'publish source' "$gate_output"
 
 cd "$repo"
-exec cargo publish --workspace "${forwarded[@]}"
+exec cargo publish "${selection[@]}" "${forwarded[@]}"

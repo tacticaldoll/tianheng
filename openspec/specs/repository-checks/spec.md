@@ -315,13 +315,33 @@ forward only arguments it names. An argument it does not name, including a spell
 future version of the tool adds, SHALL be refused before any evidence is read or gate is run, rather than passed
 on to the act.
 
-The admitted set SHALL be decided by one question: **does the argument move what the gate judged, or what the
-act records?** An argument that changes the message, the strategy, the repository, the source tree, the set of
-crates, what the tool verifies, or what gets packaged SHALL be refused; one that changes only whether and how
-the act proceeds MAY be forwarded. Each admitted argument SHALL be accepted in one spelling, with its value as a
-separate argument, because parsing a tool's short, glued and equals forms is what a denylist has to get
-exhaustively right and an allowlist does not. A misconfigured invocation SHALL exit `2`, the usage-error class,
-rather than `1`, which is what a gate that ran and refused exits.
+The admitted set SHALL be decided by **two** questions.
+
+First: **does the argument move what the gate judged, or what the act records?** An argument that changes the
+message, the strategy, the repository, the source tree, the set of crates, what the tool verifies, or what gets
+packaged SHALL be refused; one that changes only whether and how the act proceeds MAY be forwarded.
+
+Second: **does the tool honour it as the wrapper composes the invocation** — beside the arguments the wrapper
+supplies itself? An argument the tool discards, or honours as something other than the judged act, SHALL be
+refused or the composition corrected, because a forwarded argument that changes nothing is a promise the wrapper
+does not keep. Neither may an argument defer the act past the evidence: the gate judges what exists when it runs,
+so an argument that performs the act **later** SHALL be refused, since the record it produces need not be the one
+that was judged. This classification SHALL be measured against the tool at a **named version** and that version
+recorded beside the classification, since a tool's combination behaviour is not readable from its `--help`.
+
+Each admitted argument SHALL be accepted in one spelling, with its value as a separate argument, because parsing
+a tool's short, glued and equals forms is what a denylist has to get exhaustively right and an allowlist does
+not. A misconfigured invocation SHALL exit `2`, the usage-error class, rather than `1`, which is what a gate that
+ran and refused exits.
+
+**The second question was missing, and both wrappers had an instance.** The publish wrapper admitted `--package`
+while writing `--workspace` unconditionally; cargo maps that combination to *all packages* and says nothing, so
+the selector this wrapper admitted precisely so a partly completed publish could resume instead published the
+whole workspace. The merge wrapper admitted `--auto` and `--disable-auto`: the first merges after the gate has
+read the evidence, so a commit pushed in between changes the set while the captured subject and body do not; the
+second is not a merge, so the wrapper would run its gate, reach the tool, and exit `0` having recorded nothing.
+An argument the wrapper supplies as a default SHALL be supplied as a default and not written over an argument the
+caller gave.
 
 **Enumerating what to forbid is the shape that failed, four times across both wrappers.** At the merge: a
 `--repo` flag, a positional pull-request URL, and every short spelling of the flags the long-form arms named —
@@ -343,7 +363,20 @@ for the diagnostics they carry, but they SHALL decide nothing the default refusa
 
 - **WHEN** a sanctioned wrapper is given an argument that changes only whether and how the act proceeds
 - **THEN** it is forwarded, so the refusal above is a rule about what moves the record rather than a wrapper
-  that refuses its own arguments
+  that refuses its own arguments. Every admitted argument SHALL be shown to arrive, not one of them
+
+#### Scenario: An argument the tool would discard
+
+- **WHEN** an admitted argument would be voided or overridden by one the wrapper supplies itself
+- **THEN** the composition names the caller's argument instead of the wrapper's default, and the direction
+  holding it asserts the **selection the tool would honour** rather than the string the wrapper typed — a
+  controlled executable logs arguments and cannot see a flag the real tool discards
+
+#### Scenario: An argument that performs the act later
+
+- **WHEN** an argument would defer the act past the moment the gate read its evidence
+- **THEN** it is refused, because the gate's verdict covers the evidence that existed when it ran and not the
+  record a later act would produce
 
 #### Scenario: An admitted argument given no value
 
