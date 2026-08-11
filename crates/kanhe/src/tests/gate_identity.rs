@@ -3,7 +3,13 @@
 use crate::gate_identity::{citations, logical_lines, offences, registered_names};
 use crate::refusal::Kind;
 
-const LISTING: &str = "module::ident: test\nthe_gate: test\nother::the_gate: test\n";
+/// A listing carrying every shape the join has to tell apart:
+///
+/// * `module::ident` — a test **inside a module**, which `--exact ident` does not select;
+/// * `the_gate` and `other::the_gate` — one leaf under two paths, which `--exact the_gate` resolves to
+///   exactly one;
+/// * `twice::same` appearing twice — a genuine duplicate, the only shape that is really registered twice.
+const LISTING: &str = "module::ident: test\nthe_gate: test\nother::the_gate: test\ntwice::same: test\ntwice::same: test\n";
 
 fn lists(_pkg: &str, _target: &str) -> Result<String, String> {
     Ok("the_gate: test\nsomething_else: test\n".to_string())
@@ -41,11 +47,53 @@ fn a_commented_invocation_cites_nothing() {
     );
 }
 
+/// The listed name is carried whole, because that is the string `--exact` compares against.
 #[test]
-fn a_registered_name_is_its_last_segment() {
+fn a_registered_name_is_the_whole_listed_path() {
     assert_eq!(
         registered_names(LISTING),
-        vec!["ident", "the_gate", "the_gate"]
+        vec![
+            "module::ident",
+            "the_gate",
+            "other::the_gate",
+            "twice::same",
+            "twice::same"
+        ]
+    );
+}
+
+/// A citation naming a leaf whose test lives in a module is a **violation**.
+///
+/// The false negative the requirement exists to close: the target lists `module::ident`, so
+/// `--exact ident` selects nothing and `libtest` exits 0 over it. Truncating the listed name to its last
+/// segment made this read clean.
+#[test]
+fn a_citation_naming_a_leaf_inside_a_module_is_a_violation() {
+    let refusals = offences(&citations("scripts/w.sh", &invocation("ident")), |_, _| {
+        Ok(LISTING.to_string())
+    });
+    assert_eq!(refusals.len(), 1, "{refusals:?}");
+    assert_eq!(refusals[0].kind, Kind::Violation);
+    assert!(
+        refusals[0].message.contains("does not register"),
+        "{}",
+        refusals[0].message
+    );
+}
+
+/// One leaf under two module paths is **not** a citation naming a set.
+///
+/// `--exact the_gate` resolves to exactly one test — the one at file scope — so refusing this citation was a
+/// false refusal invented by the truncation rather than a fact about the target.
+#[test]
+fn a_leaf_shared_by_two_module_paths_is_not_a_duplicate() {
+    let refusals = offences(
+        &citations("scripts/w.sh", &invocation("the_gate")),
+        |_, _| Ok(LISTING.to_string()),
+    );
+    assert!(
+        refusals.is_empty(),
+        "a citation `--exact` resolves to one test must not be refused, got {refusals:?}"
     );
 }
 
@@ -63,7 +111,7 @@ fn a_gate_the_target_does_not_register_is_a_violation() {
 #[test]
 fn a_gate_registered_twice_is_a_violation() {
     let refusals = offences(
-        &citations("scripts/w.sh", &invocation("the_gate")),
+        &citations("scripts/w.sh", &invocation("twice::same")),
         |_, _| Ok(LISTING.to_string()),
     );
     assert_eq!(refusals.len(), 1);

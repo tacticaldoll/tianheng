@@ -845,6 +845,24 @@ no adopter runs. They are here rather than under the adopter headings above beca
   advice was the right one — *state the guarantee and drop the filename*. An adopter never runs the wrapper; what
   they need is which commit a published tarball records, and that survives naming nothing internal.
 
+- **The gate-identity join compared a name `libtest` never compares.** The check reads a target's registered
+  tests from `--list` and asks whether the wrapper's `--exact <ident>` names exactly one of them — but it
+  truncated each listed name to its last `::` segment, while `--exact` matches the **whole** path. Inexact in
+  both directions: a gate moved into a module lists as `inner::the_gate`, truncated to `the_gate`, matched the
+  citation and read as registered — while `--exact the_gate` selects nothing and `libtest` exits 0 over it,
+  which is the condition the check exists to catch. And a leaf shared by two modules truncated to one name twice,
+  refusing a citation `--exact` resolves to exactly one test.
+
+  The doc above it asserted the opposite — *"`--list` is the set `--exact` filters against, which makes the join
+  exact"* — and a unit test named `a_registered_name_is_its_last_segment` **pinned the truncation as intended
+  behaviour**. It read clean because both live citations sit at file scope, where truncation is the identity
+  function and the comparison is `f() == f()`.
+
+  The listed name is now carried whole, both directions have a direction of their own, and the shared fixture
+  gained a genuine duplicate so *registered twice* is tested by a name really registered twice rather than by two
+  names collapsing. **No live verdict moves**: the real citations are unqualified, which is exactly why nothing
+  had noticed.
+
 - **The merge wrapper could have judged one repository and merged another.** A repository selector — `--repo`,
   `--repo=…` or `-R` — fell through to the passthrough array, which reaches only the final `gh pr merge`, while
   the title, the canonical pull-request number, the live commit subjects and the gate are all read from the
