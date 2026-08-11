@@ -76,13 +76,23 @@ pub fn citations(script_path: &str, script: &str) -> Vec<Citation> {
     found
 }
 
-/// The last `::` segment of each name a target's harness registers.
+/// Each name a target's harness registers, **exactly as `--list` prints it**.
+///
+/// The full path, module qualification and all, because that is the string `--exact` compares against. Taking
+/// the last `::` segment was the first shape and it is inexact in **both** directions: a test moved into a
+/// module lists as `inner::the_gate`, truncates to `the_gate`, matches a citation of `the_gate` and reports the
+/// gate registered — while `--exact the_gate` selects nothing, which is the condition this whole check exists
+/// to catch. And a leaf shared by two modules truncates to one name twice, so a citation that `--exact` resolves
+/// to exactly one test is refused for naming a set.
+///
+/// It read clean because both live citations sit at file scope, where the truncation is the identity function —
+/// the comparison was `f() == f()`.
 pub fn registered_names(listing: &str) -> Vec<String> {
     listing
         .lines()
         .filter_map(|line| line.split_once(": "))
         .filter(|(_, kind)| kind.trim() == "test")
-        .map(|(name, _)| name.rsplit("::").next().unwrap_or(name).to_string())
+        .map(|(name, _)| name.to_string())
         .collect()
 }
 
@@ -91,8 +101,9 @@ pub fn registered_names(listing: &str) -> Vec<String> {
 /// The identifier is resolved through the **harness** — `cargo test -p <pkg> --test <target> -- --list` — not
 /// by mapping the target to a source path. That mapping would reimplement cargo's target resolution in string
 /// form, and this repository has already shipped a false negative from mimicking a compiler's resolution by
-/// reasoning instead of measuring. `--list` *is* the set `--exact` filters against, which makes the join exact
-/// and settles a name registered twice for free.
+/// reasoning instead of measuring. `--list` *is* the set `--exact` filters against, so the join is exact only
+/// while both sides carry the **same** name — which is why the listed name is compared whole rather than by its
+/// last segment, and why a name registered twice is settled for free.
 pub fn offences(
     citations: &[Citation],
     list: impl Fn(&str, &str) -> Result<String, String>,
