@@ -827,6 +827,19 @@ no adopter runs. They are here rather than under the adopter headings above beca
   judgement over text this repository has designed, measured and rejected, and what makes a mention bite is the
   compiler.
 
+- **Two specifications and `AGENTS.md` still stated a gate's contract in exit codes it no longer has.** Both the
+  publish-source gate and the bound register run as `cargo test`, so their process status is libtest's; the
+  distinction they actually carry — a source that **disagrees** versus one that **cannot be judged** — lives in
+  their shared result type. The normative prose said `exits 1` and `exits 2` anyway, which tells a reader to look
+  for a status the run does not produce. Seven statements now name the two verdicts, and each specification's
+  Subject says how its gate is invoked, so the vocabulary has somewhere to be anchored rather than inferred.
+
+  **What was deliberately left alone**, because a blanket rewrite would have broken it: a nearby sentence
+  describing `check-ignore`'s exit 1, and another describing `grep`'s ordinary no-match exit — those *are* process
+  statuses, of other programs, and correct. One line held both kinds and only its first half moved. The product
+  specifications keep every exit code they state: `tianheng check` really does answer `0` clean, `1` violation,
+  `2` constitution error, and that is the adopter's contract rather than a retired one.
+
 - **The promise reader dropped a member it could not parse, which narrowed the promise by exactly what it failed
   to read.** Measured on a mixed list: `{Alpha, runner::Format, Foo as Bar, a::{B, C}, Beta}` parsed to
   `{Alpha, Beta}` — three of five members gone. And dropping does not merely lose a member: with the survivors

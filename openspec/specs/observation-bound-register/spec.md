@@ -25,6 +25,9 @@ trusted — and would be committing the failure it exists to end.
 - `crates/kanhe/src/bound_register_parse.rs`
 - `docs/observation-bounds.md`
 
+The reaction runs as `cargo test -p kanhe --test bound_register`, so *violation* and *cannot-judge* below name
+values of its result type rather than process statuses.
+
 ## Requirements
 ### Requirement: An observation bound is declared as a scenario that names itself one
 
@@ -847,8 +850,8 @@ the same projection; entering the repository for the tracked-Markdown census SHA
 to that repository a second time.
 
 Before scanning tracked Markdown for a written census, the reaction SHALL enter the judged repository in a
-separately checked step. Failure to enter SHALL exit 2 cannot-judge and SHALL NOT be interpreted as grep's ordinary
-exit 1 no-match result.
+separately checked step. Failure to enter SHALL be a **cannot-judge** and SHALL NOT be interpreted as grep's
+ordinary exit-1 no-match result.
 
 #### Scenario: Every failure direction is proven
 
@@ -897,7 +900,8 @@ exit 1 no-match result.
 #### Scenario: The repository disappears before the written-census scan
 
 - **WHEN** tracked Markdown enumeration succeeds and the judged repository cannot then be entered for the census scan
-- **THEN** the reaction exits 2 naming the directory transition, rather than reporting that no census was written
+- **THEN** the reaction refuses as a **cannot-judge** naming the directory transition, rather than reporting
+  that no census was written
 
 #### Scenario: A tracked spec absent from the worktree is refused before the projection is written
 
@@ -911,9 +915,9 @@ exit 1 no-match result.
 
 - **WHEN** a command the reaction runs fails with no handling of its own — a text utility reading a spec, a
   temp file that cannot be created
-- **THEN** the reaction reports that it cannot judge, naming where the failure occurred, and exits `2`
-  rather than the failing utility's status, because a status the contract does not define is one no consumer
-  can act on and no operator can read
+- **THEN** the reaction refuses as a **cannot-judge**, naming where the failure occurred, rather than
+  surfacing the failing utility's own status — a refusal the contract does not define is one no consumer can act
+  on and no operator can read
 
 #### Scenario: A partial package enumeration is refused, not judged
 
