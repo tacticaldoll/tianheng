@@ -845,6 +845,19 @@ no adopter runs. They are here rather than under the adopter headings above beca
   advice was the right one — *state the guarantee and drop the filename*. An adopter never runs the wrapper; what
   they need is which commit a published tarball records, and that survives naming nothing internal.
 
+- **The merge wrapper could have judged one repository and merged another.** A repository selector — `--repo`,
+  `--repo=…` or `-R` — fell through to the passthrough array, which reaches only the final `gh pr merge`, while
+  the title, the canonical pull-request number, the live commit subjects and the gate are all read from the
+  repository the wrapper runs in. One argument would therefore have it judge pull request N here and merge pull
+  request N somewhere else, at the one moment nothing can be undone. Measured rather than reasoned: with the
+  selector passed through, the wrapper ran to completion and **exited 0**.
+
+  All three spellings are refused before any evidence is read, and the direction that holds it asserts the
+  **order** rather than the exit code — the controlled `gh` logs every invocation and the log must be empty,
+  because a refusal printed after the title had already been fetched would still exit 2 while having read the
+  wrong repository's evidence. The distinction is the one the publish wrapper already draws: an argument that
+  moves the judged **subject** is refused, while one that changes where the result goes stays forwarded.
+
 - **The same migration, finished — and the sweep that declared it done was the reason it was not.** The pattern
   used to find retired exit-code prose required the word *exit* and a digit **adjacent**, and the vocabulary had
   already half-migrated: statements saying `SHALL exit cannot-judge` carry no digit, and one saying `SHALL
