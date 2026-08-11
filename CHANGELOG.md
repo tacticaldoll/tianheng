@@ -835,18 +835,25 @@ them.
   past state, and separating that from a live reference is a judgement over prose this repository has measured
   and declined.
 
-- **The reference gate read every format but the one the wrappers are written in.** It inspected Markdown text
-  and the comment lines of Rust, TOML and `.gitignore`; shell was outside the corpus entirely. The two files that
-  left out are `scripts/merge-pr.sh` and `scripts/publish.sh`, whose comments cite the Rust gates they sequence
-  **by path** — and a renamed test target is exactly what rots such a citation. `scripts/*.sh` is named in
-  `repository-checks`'s own subject, so the scripts were governed for what they do while nothing read what they
-  name.
+- **The reference gate read every format but the ones the wrappers and CI are written in — because it kept two
+  lists.** An extension filter decided which files to open; a marker rule decided which of their lines to read.
+  A format could sit in one and not the other, and shell did: the marker rule had known `#` all along while the
+  extension filter never admitted `.sh`. The files that left unread are `scripts/merge-pr.sh` and
+  `scripts/publish.sh`, whose comments cite the Rust gates they sequence **by path**, where a renamed test target
+  is exactly what rots a citation. `.yml` was unread the same way, and CI is where this repository's own gate list
+  is duplicated.
 
-  The gap was one line: `is_inspected_line` already admitted a `#`-prefixed line for every non-Rust,
-  non-Markdown source, so only the file-extension filter had to learn `.sh`. A shebang reaches the reader and
-  names `/usr/bin/env`, an absolute path outside every prefix this gate recognizes, so it is not a reference and
-  the fixture probe carries one to say so. Measured when it was closed: no shell comment named an absent path, so
-  this was a silence rather than a backlog — the kind that only reports clean because nobody looked.
+  Adding one extension per discovery would have been the third turn of the same handle — this window replaced two
+  argument denylists with allowlists for exactly this reason. So there is now **one declaration**: every format
+  the repository tracks is named as whole-document prose, as prose behind a stated line-comment marker, or as
+  carrying no prose at all, and both the corpus and which lines get read derive from it. A format the repository
+  holds and the declaration does not name **fails**, naming that format. Defaulting either way is the trap: a
+  silent *no prose* reads a new format as having none, and a guessed marker asserts one it may not have.
+
+  A shebang reaches the reader and names `/usr/bin/env`, an absolute path outside every prefix this gate
+  recognizes, so it is not a reference — the shell probe carries one to say so. Measured when this landed:
+  neither shell nor YAML named an absent path, so both were silences rather than backlogs — the kind that only
+  report clean because nobody looked.
 
 - **The publish wrapper had the same denylist, no direction holding it, and real arguments walking past.** One
   window after the merge wrapper's argument handling was rebuilt as an allowlist, `scripts/publish.sh` still

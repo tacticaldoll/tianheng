@@ -48,23 +48,31 @@ and an unreadable or incomplete input SHALL fail, naming what could not be read.
 The reference-integrity gate SHALL judge repository paths against Git-tracked content and tracked ancestor
 directories, never untracked filesystem state. Its workspace-member classification SHALL be derived from tracked
 `crates/<name>/Cargo.toml` paths, so an untracked crate manifest cannot make an illustrative crate reference
-enforceable. Outside active `openspec/changes/` plans, it SHALL inspect tracked Markdown document text and every
-Rust, TOML, shell, or `.gitignore` line whose first non-whitespace token is that format's line-comment marker,
-including Rust rustdoc forms. A Rust test source SHALL NOT be excluded wholesale; its admitted comment lines are
-judged through the same region rule as other Rust.
+enforceable.
 
-**Shell is in the corpus because the sanctioned wrappers are shell and they cite by path.** Both name the Rust
-gate they sequence, and a renamed test target is exactly what rots such a citation — while `scripts/*.sh` is
-named in `repository-checks`'s own subject, so the scripts are governed for what they do and were silent about
-what they name. A tracked script's shebang SHALL NOT be a reference: it names an absolute path outside every
-prefix this gate recognizes. Before judging references it SHALL require the repository's
+**Which formats carry prose SHALL be one declaration, and every tracked format SHALL be classified.** Each format
+this repository tracks SHALL be named as whole-document prose, as prose on the lines whose first non-whitespace
+token is a stated line-comment marker, or as carrying no prose at all. A format the repository holds and the
+declaration does not name SHALL fail, naming that format — not default either way, since a silent *no prose*
+reads a new format as having none and a guessed marker asserts one it may not have. The corpus, and which of a
+file's lines are read, SHALL both derive from that one declaration. Outside active `openspec/changes/` plans, the
+gate SHALL inspect every classified format's prose, including Rust rustdoc forms. A Rust test source SHALL NOT be
+excluded wholesale; its admitted comment lines are judged through the same region rule as other Rust.
+
+**Two lists is the shape that failed.** An extension filter decided what to open while a marker rule decided
+which lines to read, so a format could sit in one and not the other — and shell did, for a whole window, while
+the marker rule had known `#` all along. The files that left unread are the sanctioned merge and publish
+wrappers, which cite the Rust gate they sequence *by path*, where a renamed test target is exactly what rots a
+citation; YAML, where this repository's own gate list is duplicated, was unread the same way. Adding one
+extension per discovery is the denylist shape this window replaced twice elsewhere. A tracked script's shebang
+SHALL NOT be a reference: it names an absolute path outside every prefix this gate recognizes. Before judging references it SHALL require the repository's
 governance-document surface, at least one tracked workspace member under `crates/`, and at least one inspected
 source; absence of any prerequisite SHALL fail loudly rather than read as clean.
 
 #### Scenario: A complete tracked checkout is inspectable
 
 - **WHEN** the repository contains the required governance documents, a tracked workspace member, and a tracked
-  Markdown document or an admitted Rust, TOML, shell, or `.gitignore` line-comment source
+  source of any format the declaration classifies as carrying prose
 - **THEN** the gate builds its tracked-path evidence and evaluates the corpus without consulting untracked files
 
 #### Scenario: Required evidence is absent
@@ -82,10 +90,16 @@ source; absence of any prerequisite SHALL fail loudly rather than read as clean.
 - **WHEN** a tracked file under `openspec/changes/` references a path the plan intends to create
 - **THEN** that transient plan is excluded from the inspected corpus and does not produce a stale-reference verdict
 
-#### Scenario: A shell comment names an absent path
+#### Scenario: A comment names an absent path, in any classified format
 
-- **WHEN** a tracked shell script's comment names a repository path no commit holds
-- **THEN** the reaction fails and names it, rather than leaving every script's citations unread
+- **WHEN** a tracked shell script's or CI workflow's comment names a repository path no commit holds
+- **THEN** the reaction fails and names it, rather than leaving that format's citations unread
+
+#### Scenario: The repository holds an unclassified format
+
+- **WHEN** a tracked file's format is not named by the declaration
+- **THEN** the reaction fails naming that format, because a format read by nothing leaves every sweep here
+  reporting clean over prose it never opened
 
 #### Scenario: A test source names a deleted live path
 

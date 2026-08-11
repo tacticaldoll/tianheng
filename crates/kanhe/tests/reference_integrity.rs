@@ -1,16 +1,21 @@
-//! Repository check: every in-repository path named by tracked Markdown document text, or by a
-//! Rust, TOML, shell, or `.gitignore` line whose first non-whitespace token is its comment marker, must exist.
+//! Repository check: every in-repository path named by tracked prose must exist.
 //!
 //! This class was hand-swept twice — once for `.md` only — and a module split landing after that sweep
 //! reintroduced it in nine places. A reader who greps for a named path and finds nothing cannot tell stale
 //! prose from a bad checkout.
 //!
-//! **Shell was outside the inspected set until it was measured for.** `is_inspected_line` already read a
-//! `#`-prefixed line for every non-Rust, non-Markdown source, so the gap was one extension in
-//! `is_inspected_source` — and the two files it left out are the sanctioned merge and publish wrappers, whose
-//! comments cite the Rust gates they sequence *by path*. A renamed test target is exactly what rots such a
-//! citation, and `scripts/*.sh` is named in `repository-checks`'s own subject. Measured when it was closed: no
-//! shell comment named an absent path, so the floor was clean and the gap was a silence rather than a backlog.
+//! **Which formats carry prose is declared once, and every tracked format must be classified.** Before that it
+//! was two lists: an extension filter deciding what to open, and a marker rule deciding which of its lines to
+//! read. A format could sit in one and not the other, which is how shell — the two sanctioned wrappers, whose
+//! comments cite the Rust gates they sequence *by path* — went unread while the marker rule had known `#` all
+//! along. Closing that by adding one extension would have been the third turn of the same handle: the same
+//! window replaced two argument denylists with allowlists for exactly this reason, and an extension list beside
+//! a marker rule is the shape where a format is admitted with no marker or given a marker and never opened.
+//!
+//! So [`FORMATS`] is the single declaration, and [`every_tracked_format_is_classified`] fails on a format the
+//! repository holds and it does not name. A new file type arrives as one row, or as a failure — not as a
+//! silence. Measured when this landed: shell and YAML were the formats it had been reading nothing from, and
+//! neither named an absent path, so both were silences rather than backlogs.
 //!
 //! It judges **tracked content**, never the worktree. A path present on disk and in no commit satisfies a
 //! reference for the author who created it and nobody else, which is the direction this repository's gates are
@@ -69,29 +74,109 @@ fn scratch(label: &str) -> PathBuf {
     }
 }
 
-fn is_inspected_source(path: &str) -> bool {
-    path.ends_with(".md")
-        || path.ends_with(".rs")
-        || path.ends_with(".toml")
-        || path.ends_with(".sh")
-        || Path::new(path).file_name() == Some(std::ffi::OsStr::new(".gitignore"))
+/// How a tracked format carries prose.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Prose {
+    /// Every line is prose — a Markdown document.
+    Whole,
+    /// Prose lives on the lines whose first non-whitespace token is this marker.
+    LineComment(&'static str),
+    /// The format carries no prose a reader would follow a path from: a licence text, a data table, a
+    /// placeholder. Classified rather than omitted, so *unclassified* stays a failure.
+    None,
 }
 
-/// A line worth reading for the paths it names: all of a Markdown document, and elsewhere the lines whose
-/// first non-whitespace token is that language's comment marker.
+/// Every format this repository tracks, and how it carries prose. **The one declaration.**
 ///
-/// The `#` case covers TOML, `.gitignore` and shell alike, which is why admitting shell to
-/// [`is_inspected_source`] needed nothing here. A shell shebang reaches it and names `/usr/bin/env`, an
-/// absolute path outside every prefix this check recognizes, so it is not a reference and not a false positive.
+/// Keyed by extension, or by whole file name where the format has none. `Cargo.lock` and `CODEOWNERS` carry `#`
+/// comments and are read for the same reason every other comment is: a path named there rots the same way.
+///
+/// A format the repository holds and this array does not name is a failure, not a default — see
+/// [`every_tracked_format_is_classified`]. Defaulting either way is the trap: `None` would read a new format's
+/// prose as absent, and a marker would guess one it may not have.
+const FORMATS: [(&str, Prose); 13] = [
+    (".md", Prose::Whole),
+    (".rs", Prose::LineComment("//")),
+    (".toml", Prose::LineComment("#")),
+    (".sh", Prose::LineComment("#")),
+    (".yml", Prose::LineComment("#")),
+    (".yaml", Prose::LineComment("#")),
+    (".gitignore", Prose::LineComment("#")),
+    (".lock", Prose::LineComment("#")),
+    ("CODEOWNERS", Prose::LineComment("#")),
+    (".txt", Prose::None),
+    (".tsv", Prose::None),
+    (".gitkeep", Prose::None),
+    ("LICENSE", Prose::None),
+];
+
+/// How `path`'s format carries prose, or `None` if this repository has never classified it.
+///
+/// Matched on the whole file name first, then on the extension, so `CODEOWNERS` and `.gitignore` resolve without
+/// an extension and `LICENSE-MIT` resolves by prefix — the licence files carry a variant suffix rather than an
+/// extension.
+fn prose_of(path: &str) -> Option<Prose> {
+    let name = Path::new(path).file_name()?.to_str()?;
+    if name.starts_with("LICENSE") {
+        return Some(Prose::None);
+    }
+    FORMATS
+        .iter()
+        .find(|(key, _)| name == *key || name.ends_with(*key))
+        .map(|(_, prose)| *prose)
+}
+
+fn is_inspected_source(path: &str) -> bool {
+    !matches!(prose_of(path), None | Some(Prose::None))
+}
+
+/// A line worth reading for the paths it names, decided by the same declaration that decided the file.
+///
+/// A shell shebang reaches this and names `/usr/bin/env`, an absolute path outside every prefix this check
+/// recognizes, so it is not a reference and not a false positive.
 fn is_inspected_line(path: &str, line: &str) -> bool {
-    if path.ends_with(".md") {
-        return true;
+    match prose_of(path) {
+        Some(Prose::Whole) => true,
+        Some(Prose::LineComment(marker)) => line.trim_start().starts_with(marker),
+        None | Some(Prose::None) => false,
     }
-    let trimmed = line.trim_start();
-    if path.ends_with(".rs") {
-        return trimmed.starts_with("//");
-    }
-    trimmed.starts_with('#')
+}
+
+/// Every format this repository tracks is named by [`FORMATS`].
+///
+/// The direction that makes the declaration single. Without it, a new file type is read by nothing and the whole
+/// sweep still reports clean — which is exactly what happened to shell and to YAML, each for a different window.
+#[test]
+fn every_tracked_format_is_classified() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let all = tracked(&root);
+    assert!(
+        !all.is_empty(),
+        "no tracked path was enumerated, so this direction would hold over nothing"
+    );
+    // Keyed by FORMAT, not by file, so one unclassified type reads as one entry rather than as every file
+    // carrying it — the diagnostic says `format(s)` and must show formats.
+    let unclassified: BTreeSet<String> = all
+        .iter()
+        .filter(|path| prose_of(path).is_none())
+        .filter_map(|path| {
+            let name = Path::new(path).file_name()?.to_str()?;
+            Some(match name.rsplit_once('.') {
+                Some((_, extension)) => format!(".{extension}"),
+                None => name.to_string(),
+            })
+        })
+        .collect();
+    assert!(
+        unclassified.is_empty(),
+        "this repository tracks {} format(s) `FORMATS` does not classify: {}\nAdd each with the marker its \
+         comments use, or `Prose::None` if it carries no prose — an unclassified format is read by nothing \
+         while every sweep here still reports clean",
+        unclassified.len(),
+        unclassified.into_iter().collect::<Vec<_>>().join(", ")
+    );
 }
 
 fn tracked(root: &Path) -> Vec<String> {
@@ -657,6 +742,12 @@ fn comment_bearing_sources_and_live_test_claims_are_inspected() {
             "shell comment",
             "scripts/probe.sh",
             "#!/usr/bin/env bash\n# The gate is `crates/kanhe/tests/zzz_absent_gate_probe.rs`.\n",
+        ),
+        // CI is where this repository's own gate list is duplicated, so its comments cite gates by path too.
+        (
+            "YAML comment",
+            ".github/workflows/probe.yml",
+            "jobs:\n  # Runs `crates/kanhe/tests/zzz_absent_gate_probe.rs`.\n  probe:\n",
         ),
     ];
     for (_, path, body) in probes {
