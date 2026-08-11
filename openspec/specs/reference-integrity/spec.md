@@ -150,10 +150,15 @@ fixture name this repository's prose invents.
 
 ### Requirement: A reference SHALL name a thing, not a position
 
-Tracked Rust and shell comment lines SHALL NOT reference an item by its position — a counted offset, a definite
-article naming no thing, or an adverb standing in for one. A reference SHALL name the item: an intra-doc link
-where the documentation can reach it, otherwise the identifier or the path. A direction word following a named
-construct is a reference to a thing and SHALL NOT react.
+The comment lines of every format the declaration classifies as carrying line comments SHALL NOT reference an
+item by its position — a counted offset, a definite article naming no thing, or an adverb standing in for one. A
+reference SHALL name the item: an intra-doc link where the documentation can reach it, otherwise the identifier
+or the path. A direction word following a named construct is a reference to a thing and SHALL NOT react.
+
+**The scope SHALL be derived from that one declaration, not listed again.** This rule was written over `.rs` and
+`.sh` by extension — a second list beside the declaration, which is the defect the declaration was introduced to
+end, and it left `.toml`, `.yml`, `Cargo.lock`, `CODEOWNERS` and `.gitignore` unswept while the reasoning here
+covers every one of them. A format admitted to the corpus SHALL be swept for both properties or for neither.
 
 **The ladder this sits at the bottom of.** An intra-doc link is checked by the compiler; a path is checked by the
 sweep above; a path with a line number is checked by nothing; a position is not even a name. Measured on this
@@ -166,14 +171,15 @@ written as a string literal sits on an executed line and cannot be read as a ref
 than a marker: nothing can hide a comment inside an executed line, and the check's own explanation of the shapes
 it refuses would otherwise be the corpus it judges.
 
-Markdown SHALL be outside this requirement. In a record — a `CHANGELOG.md` entry, a `BACKLOG.md` history — a
-positional phrase narrates a past state, and separating that from a live reference is a judgement over prose,
-which this repository has designed, measured, and declined. In source there is no such reading: a comment
-describes the file it is in.
+Markdown SHALL be outside this requirement, **by construction rather than by omission**: it is the format
+classified as whole-document prose, so it is not a line-comment format and no exclusion has to be written for it.
+In a record — a `CHANGELOG.md` entry, a `BACKLOG.md` history — a positional phrase narrates a past state, and
+separating that from a live reference is a judgement over prose, which this repository has designed, measured,
+and declined. In source there is no such reading: a comment describes the file it is in.
 
 #### Scenario: A comment names a position rather than a thing
 
-- **WHEN** a tracked Rust or shell comment references an item by counted offset, bare article, or adverb
+- **WHEN** a comment in any line-comment format references an item by counted offset, bare article, or adverb
 - **THEN** the reaction fails, naming the file, the line, and the shape, and says to name the item instead
 
 #### Scenario: A named construct followed by a direction
