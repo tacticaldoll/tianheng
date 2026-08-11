@@ -159,19 +159,62 @@ fn a_breaking_subject_with_no_migration_footer_is_a_violation() {
     assert!(judge(subject, &with_footer, subject, &commits()).is_ok());
 }
 
+/// A line that *is* an attribution mark is refused, whatever its case.
+///
+/// The exact-case `contains` this replaced let the canonical spellings straight through — git writes the trailer
+/// `Co-authored-by:` and GitHub renders it that way, so the one form most likely to appear was the one form not
+/// caught. Measured before the widening: `co-authored-by: Claude` and `generated with Claude Code` were both
+/// accepted.
 #[test]
-fn agent_attribution_anywhere_in_the_message_is_a_violation() {
-    for body in [
-        format!("{OK_BODY}\nCo-Authored-By: Someone <a@b.invalid>\n"),
-        format!("{OK_BODY}\nGenerated with a tool\n"),
-        format!("{OK_BODY}\n🤖 made this\n"),
+fn a_line_that_is_an_agent_attribution_is_a_violation() {
+    for line in [
+        // The form the old check caught, and the three it did not.
+        "Co-Authored-By: Someone <a@b.invalid>",
+        "Co-authored-by: Someone <a@b.invalid>",
+        "co-authored-by: someone <a@b.invalid>",
+        "CO-AUTHORED-BY: SOMEONE",
+        // Indented, because a trailer git honours may carry leading space and a reader would still read it as one.
+        "   Co-authored-by: Someone <a@b.invalid>",
+        "Generated with a tool",
+        "generated with a tool",
+        "🤖 made this",
     ] {
         refuse(
             OK_SUBJECT,
-            &body,
+            &format!("{OK_BODY}\n{line}\n"),
             OK_SUBJECT,
             Kind::Violation,
-            "carries the agent attribution",
+            "is the agent attribution",
+        );
+    }
+    // The glyph is refused wherever it sits, including mid-subject: it has no legitimate use here, and reading it
+    // by position would have let this exact shape through — the false negative the first draft opened.
+    refuse(
+        "fix(kanhe): 🤖 wrote this",
+        OK_BODY,
+        "fix(kanhe): 🤖 wrote this",
+        Kind::Violation,
+        "is the agent attribution",
+    );
+}
+
+/// A body that NAMES a mark inside a sentence is not a body that carries one.
+///
+/// The load-bearing half. `repository-checks` forbids this gate to refuse a shape for what it resembles, and a
+/// bare substring refuses the commit message of any change about this rule — including the one that widened it,
+/// whose own body names every form. Widening the case without narrowing to the line would have traded one defect
+/// for the other, so they are one change.
+#[test]
+fn a_sentence_naming_an_attribution_mark_is_not_carrying_one() {
+    for line in [
+        "This change removes the `co-authored-by: Claude` trailer the old rule missed.",
+        "The forms are Co-Authored-By, Generated with, and the robot glyph.",
+        "The third form is the robot glyph, named in words here because pasting it would be carrying it.",
+    ] {
+        let body = format!("{OK_BODY}\n{line}\n");
+        assert!(
+            judge(OK_SUBJECT, &body, OK_SUBJECT, &commits()).is_ok(),
+            "naming a mark in prose must not be refused: {line}"
         );
     }
 }
