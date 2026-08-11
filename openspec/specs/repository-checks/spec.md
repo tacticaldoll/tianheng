@@ -308,36 +308,48 @@ to compare two strings that differ by exactly the thing the rule names.
   path to it rather than every path
 - **PINNED-BY** `a_merge_made_outside_the_wrapper_is_not_observed`
 
-### Requirement: What reaches the merge SHALL be an allowlist, not a denylist
+### Requirement: What reaches a sanctioned irreversible act SHALL be an allowlist, not a denylist
 
-The sanctioned merge wrapper SHALL forward only arguments it names. An argument it does not name — including a
-spelling of a known flag, and a flag a future `gh` adds — SHALL be refused before any evidence is read, rather
-than passed on to the merge.
+Every wrapper standing in front of an irreversible act — the squash merge and the registry publish — SHALL
+forward only arguments it names. An argument it does not name, including a spelling of a known flag and a flag a
+future version of the tool adds, SHALL be refused before any evidence is read or gate is run, rather than passed
+on to the act.
 
-The admitted set SHALL be decided by one question: **does the argument move what the gate judged?** A flag that
-changes the message, the strategy, the repository, or anything else the merge records SHALL be refused; a flag
-that changes only whether the merge may proceed MAY be forwarded. Each admitted flag SHALL be accepted in one
-spelling, with its value as a separate argument, because parsing a tool's glued and equals forms is what a
-denylist has to get exhaustively right and an allowlist does not.
+The admitted set SHALL be decided by one question: **does the argument move what the gate judged, or what the
+act records?** An argument that changes the message, the strategy, the repository, the source tree, the set of
+crates, what the tool verifies, or what gets packaged SHALL be refused; one that changes only whether and how
+the act proceeds MAY be forwarded. Each admitted argument SHALL be accepted in one spelling, with its value as a
+separate argument, because parsing a tool's short, glued and equals forms is what a denylist has to get
+exhaustively right and an allowlist does not. A misconfigured invocation SHALL exit `2`, the usage-error class,
+rather than `1`, which is what a gate that ran and refused exits.
 
-**Enumerating what to forbid is the shape that failed, three times.** A `--repo` flag, a positional
-pull-request URL, and every short spelling of the flags the long-form arms named each reached the merge in turn.
-The last is the sharpest: `gh` accepts `-t` for `--subject` and `-F` for `--body-file`, the wrapper splices
-forwarded arguments after its own, and `gh` reads the last occurrence of a repeated flag — so one unlisted
-spelling replaced the message the gate had just approved. Refusing arms MAY remain for the diagnostics they
-carry, but they SHALL decide nothing the default refusal would not.
+**Enumerating what to forbid is the shape that failed, four times across both wrappers.** At the merge: a
+`--repo` flag, a positional pull-request URL, and every short spelling of the flags the long-form arms named —
+the last the sharpest, since `gh` accepts `-t` for `--subject` and `-F` for `--body-file`, the wrapper splices
+forwarded arguments after its own, and `gh` reads the last occurrence of a repeated flag, so one unlisted
+spelling replaced the message the gate had just approved. At the publish: everything but `--manifest-path` was
+forwarded, so `--no-verify`, `--allow-dirty`, `--exclude`, `--config` naming a whole configuration file, and a
+flag no cargo has all reached `cargo publish` with the wrapper exiting `0`. Both scripts carried the sentence *a
+guard catching one would be a guard catching neither* while arguments walked past them. Refusing arms MAY remain
+for the diagnostics they carry, but they SHALL decide nothing the default refusal would not.
 
-#### Scenario: A flag the wrapper does not name
+#### Scenario: An argument the wrapper does not name
 
-- **WHEN** the wrapper is given any argument outside its admitted set, in any spelling
-- **THEN** it refuses before reading evidence or running the gate, and says that it forwards only what cannot
-  change the record
+- **WHEN** a sanctioned wrapper is given any argument outside its admitted set, in any spelling
+- **THEN** it refuses with a usage error before reading evidence or running its gate, and says that it forwards
+  only what cannot change what the act records
 
-#### Scenario: An admitted flag reaches the merge
+#### Scenario: An admitted argument reaches the act
 
-- **WHEN** the wrapper is given a flag that changes only whether the merge may proceed
+- **WHEN** a sanctioned wrapper is given an argument that changes only whether and how the act proceeds
 - **THEN** it is forwarded, so the refusal above is a rule about what moves the record rather than a wrapper
   that refuses its own arguments
+
+#### Scenario: An admitted argument given no value
+
+- **WHEN** a value-taking argument is passed with nothing after it
+- **THEN** the wrapper names that argument and refuses, rather than exiting on the shift arithmetic with no
+  diagnostic at all
 
 ### Requirement: The squash wrapper SHALL judge the complete live pull-request commit set
 

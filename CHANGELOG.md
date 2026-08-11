@@ -815,6 +815,45 @@ them.
 
 ### Self-governance
 
+- **The publish wrapper had the same denylist, no direction holding it, and real arguments walking past.** One
+  window after the merge wrapper's argument handling was rebuilt as an allowlist, `scripts/publish.sh` still
+  forwarded everything except `--manifest-path` — and carried the same sentence, *a guard catching one would be a
+  guard catching neither*, while arguments walked past it. Measured against a controlled `cargo` on the tree
+  before this change, each of these reached `cargo publish --workspace` with the wrapper exiting `0`:
+
+  - `--no-verify`, dropping cargo's own build of the packaged tarballs at the one moment nothing can be undone;
+  - `--allow-dirty`, packaging content no commit holds while `.cargo_vcs_info.json` still names a commit that
+    does not contain it;
+  - `--exclude <spec>`, spliced after the `--workspace` the script writes itself, so the invocation reads as the
+    whole workspace while publishing less;
+  - `--config <KEY=VALUE|PATH>`, an arbitrary configuration override that can name a whole file and reach every
+    other refusal here — while the script's own comment claimed every destination-changing argument was *written
+    down rather than implied*;
+  - `-Z`, the feature and target selectors, and a flag no cargo has.
+
+  Now an allowlist, by the same question its sibling asks: does the argument move what the gate judged, or what
+  the act records? Admitted are the arguments that change only whether and how the publish proceeds — `--dry-run`,
+  `--package` (how a partly completed publish resumes, and it records which crates it named), `--locked`,
+  `--offline`, `--frozen`, `--keep-going`, `--jobs`, `--color`, `--target-dir`, `--verbose`, `--quiet`, and the
+  destination-side `--registry` and `--index`, keeping the reasoning that admitted those two. One spelling each,
+  values as the argument after the flag. Two decisions changed rather than carried: `--allow-dirty` was forwarded
+  on the ground that the source gate refuses a dirty tree upstream anyway, which makes it inert rather than safe;
+  and `--token` is refused pointing where cargo 1.96.0 points, having deprecated it in favour of `cargo login` and
+  environment variables. A misconfigured invocation now exits `2`, the usage-error class, rather than `1` — which
+  is what a gate that ran and refused exits.
+
+  **And the refusal it did have was held by nothing.** No test had ever run this script. The new controlled
+  direction replaces `cargo` on `PATH`, so no upload and no build can occur, and runs both ways: a sample of
+  arguments is refused with the cargo log empty — before the gate, since the gate is itself a `cargo` invocation
+  that would appear there — and an admitted argument still reaches the publish with `--workspace` always named.
+  The specification's allowlist requirement now covers both wrappers as one law rather than being restated per
+  script.
+
+  A doc comment carrying the corrected claim was found by the same sweep: the merge wrapper's
+  repository-selector direction said all three spellings were covered *because a guard catching one is a guard
+  catching neither*, which is a claim about a class made by enumerating a sample of it. What that direction holds
+  is the diagnostic an operator reads; the class belongs to the allowlist.
+
 - **What may reach the merge is now an allowlist, and the three leaks are one defect.** The sanctioned merge
   wrapper forwarded any argument it did not recognise. Three separate holes came out of that one shape: a
   `--repo` flag, a positional pull-request URL, and every short spelling of the flags its long-form arms named.
