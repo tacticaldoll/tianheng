@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**16 of 82 declared bounds have no pinning test.** That figure is the register's
+**16 of 83 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -324,6 +324,12 @@ fallback used where no manifest exists, which the register spec describes.
 > no repository check fires. Subjects are declared where a capability has something to say, and requiring them to tile the tree would buy coverage with a claim per capability nobody could defend. The blindness is declared so that a clean report is not read as a complete one, and the check prints how many tracked paths went unclaimed rather than leaving the reader to assume none did
 
 - **pinned by**: `files_no_capability_claims_are_reported_rather_than_implied_judged`
+
+### `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound`
+
+> the wrapper does not see it, a stated bound: the allowlist classifies **arguments**, and cargo takes the same configuration from the environment — measured on cargo 1.96.0, `--target not-a-real-triple` and `CARGO_BUILD_TARGET=not-a-real-triple` produce the identical rustc-probe failure. Closing it is ordinary work here rather than another layer's, since the wrapper could scrub the environment before invoking the tool; it needs an allowlist **over the environment**, and legitimate setups export `CARGO_HOME` and `CARGO_TARGET_DIR`, so which set to admit is a decision this bound records instead of guessing
+
+- **pinned by**: `a_tool_configuration_set_in_the_environment_is_a_stated_bound`
 
 ### `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound`
 

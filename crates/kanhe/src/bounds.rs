@@ -42,6 +42,24 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
+                "repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound",
+            ),
+            "a value a sanctioned wrapper refuses as an argument, exported into its environment instead",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the allowlist classifies ARGUMENTS, and cargo takes the same configuration from the \
+                          environment -- measured on cargo 1.96.0, `--target not-a-real-triple` and \
+                          `CARGO_BUILD_TARGET=not-a-real-triple` produce the identical rustc-probe failure. \
+                          Closing it is ordinary work here rather than another layer's, since the wrapper could \
+                          scrub the environment before invoking cargo; it needs an allowlist over the \
+                          environment, and legitimate setups export CARGO_HOME and CARGO_TARGET_DIR, so which \
+                          set to admit is a decision this bound records instead of guessing"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_tool_configuration_set_in_the_environment_is_a_stated_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound",
             ),
             "a declared census written with the wrong figures in a tracked file that is not Markdown",

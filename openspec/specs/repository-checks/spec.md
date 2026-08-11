@@ -681,6 +681,17 @@ before that.
 - **THEN** the check refuses as a cannot-judge rather than reporting clean over an empty list, since a
   failed enumeration returns exactly what a repository holding no scripts returns
 
+#### Scenario: A tool configuration set in the environment is not observed — a stated bound
+
+- **WHEN** a value a sanctioned wrapper refuses as an argument is exported into its environment instead
+- **THEN** the wrapper does not see it, a stated bound: the allowlist classifies **arguments**, and cargo takes
+  the same configuration from the environment — measured on cargo 1.96.0, `--target not-a-real-triple` and
+  `CARGO_BUILD_TARGET=not-a-real-triple` produce the identical rustc-probe failure. Closing it is ordinary work
+  here rather than another layer's, since the wrapper could scrub the environment before invoking the tool; it
+  needs an allowlist **over the environment**, and legitimate setups export `CARGO_HOME` and `CARGO_TARGET_DIR`,
+  so which set to admit is a decision this bound records instead of guessing
+- **PINNED-BY** `a_tool_configuration_set_in_the_environment_is_a_stated_bound`
+
 #### Scenario: A gate reached without the wrapper — a stated bound
 
 - **WHEN** someone runs `cargo publish` directly, or merges in the browser

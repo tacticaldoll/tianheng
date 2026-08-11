@@ -815,6 +815,24 @@ them.
 
 ### Self-governance
 
+- **What the wrappers cannot see in the environment is now a declared bound rather than an aside.** The
+  allowlists classify **arguments**, and cargo takes the same configuration from the environment: measured on
+  cargo 1.96.0, `--target not-a-real-triple` and `CARGO_BUILD_TARGET=not-a-real-triple` produce the identical
+  `failed to run cargo's rustc probe` failure. So a value the publish wrapper refuses as an argument reaches cargo
+  unexamined when it is exported instead.
+
+  Declared as an under-reaction owned by the engine, not inherited: the wrapper *could* scrub the environment
+  before invoking cargo. It does not, because doing so needs an allowlist **over the environment** and legitimate
+  setups export `CARGO_HOME` and `CARGO_TARGET_DIR` — which set to admit is a decision the bound records instead
+  of guessing. Pinned by a direction carrying both halves on one configuration key: the argument is refused, and
+  the exported value passes *and arrives*, because a bound whose silence is not contrasted with a reaction is
+  indistinguishable from a wrapper that refuses nothing.
+
+  **The pin's own harness hid the second half at first.** It logged each invocation's arguments and environment on
+  separate lines, and the gate's `cargo test` runs before the publish and inherits the same environment — so a
+  search for the exported value matched the gate's line and passed even with the publish scrubbed. The negative
+  run did not fire until arguments and environment were recorded together, per invocation.
+
 - **The attribution rule missed the spelling the tools actually write.** `AGENTS.md` forbids a co-authored
   trailer, a generated-with footer, and a robot glyph — and the gate implemented that as three case-**sensitive**
   substrings. Git writes the trailer with only its first letter capitalised and GitHub renders it that way, so the
