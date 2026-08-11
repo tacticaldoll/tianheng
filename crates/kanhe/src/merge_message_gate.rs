@@ -21,8 +21,59 @@ const TYPES: [&str; 9] = [
     "feat", "fix", "refactor", "docs", "test", "build", "ci", "perf", "chore",
 ];
 
-/// Marks an agent wrote it, in any of the forms `AGENTS.md` names.
-const ATTRIBUTION: [&str; 3] = ["Co-Authored-By", "Generated with", "🤖"];
+/// The tool-authorship marks `AGENTS.md` names, matched **case-insensitively** and **by position**.
+///
+/// Three forms, and the rule they serve is wider than three: `AGENTS.md` forbids these "or any other
+/// tool-authorship mark". That clause is not enumerable, so this check holds the named forms and the open one
+/// stays a reviewer's obligation — stated here rather than implied by a list that looks complete.
+///
+/// **Case-insensitively, because the canonical spelling is not the one this listed.** Git writes the trailer
+/// `Co-authored-by:` and GitHub renders it that way; the exact-case `contains` this replaced let
+/// `co-authored-by: Claude` and `generated with Claude Code` straight through — measured, both were accepted.
+///
+/// **By position where the mark is a trailer, because a body that DISCUSSES one does not carry it.** A trailer is
+/// a line of its own beginning with the key; prose naming it is inline, and GitHub honours only the line form.
+/// Matching a bare substring refuses the commit message of any change about this rule — including the one that
+/// widened it — which is the false refusal `repository-checks` already forbids this gate: refuse a shape for what
+/// it is, not for what it resembles. Widening the case and narrowing to the line are one change, because either
+/// alone trades one defect for the other.
+///
+/// **And not by position where it is a glyph.** Reading all three by position was the first draft and it would
+/// have opened a false negative: `fix(x): 🤖 wrote this` was refused by the substring and would have passed,
+/// because the glyph sits mid-line. [`Shape`] carries that difference beside each mark.
+///
+/// The subject arm matters only for the glyph. A subject that begins with a trailer key is already refused for not
+/// being a Conventional Commit, one check earlier — measured, which is why no direction here asserts otherwise.
+const ATTRIBUTION: [(&str, Shape); 3] = [
+    ("co-authored-by", Shape::Trailer),
+    ("generated with", Shape::Trailer),
+    ("🤖", Shape::Glyph),
+];
+
+/// How a mark is recognized. **Not every mark is the same kind of thing.**
+///
+/// A first draft read all three by position and would have introduced a false negative: `fix(x): 🤖 wrote this`
+/// was refused by the substring it replaced and would have passed, because the glyph sits mid-line. The two kinds
+/// need different recognition, so the recognition travels in the same array as the mark rather than in a second
+/// rule beside it.
+#[derive(Clone, Copy)]
+enum Shape {
+    /// A key on a line of its own. Prose naming it is not it, and GitHub honours only the line form.
+    Trailer,
+    /// A glyph with no legitimate use in this repository's commit messages, wherever it appears. Prose about the
+    /// rule names it in words instead — which is what this repository's own prose does.
+    Glyph,
+}
+
+/// Whether `text` carries `mark` in the way its shape defines.
+fn carries(text: &str, mark: &str, shape: Shape) -> bool {
+    match shape {
+        Shape::Trailer => text
+            .lines()
+            .any(|line| line.trim().to_ascii_lowercase().starts_with(mark)),
+        Shape::Glyph => text.contains(mark),
+    }
+}
 
 /// Whether a subject ends in a pull request serial, in the form GitHub appends.
 fn carries_a_serial(subject: &str) -> bool {
@@ -132,11 +183,12 @@ pub fn judge(
              record announces a migration it does not describe",
         ));
     }
-    for mark in ATTRIBUTION {
-        if subject.contains(mark) || body.contains(mark) {
+    for (mark, shape) in ATTRIBUTION {
+        if carries(subject, mark, shape) || carries(body, mark, shape) {
             return Err(violation(format!(
-                "the squash message carries the agent attribution {mark:?}, which this repository's commit \
-                 messages and pull request descriptions do not"
+                "a line of the squash message is the agent attribution {mark:?}, which this repository's commit \
+                 messages and pull request descriptions do not carry. Naming the mark inside a sentence is not \
+                 carrying it; a line that begins with it is"
             )));
         }
     }

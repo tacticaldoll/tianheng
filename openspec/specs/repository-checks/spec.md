@@ -708,6 +708,41 @@ Tightening the recogniser instead — requiring a bullet to look like a Conventi
 every commit in this repository is conventional, so it would refuse a hand-written body of `- fix: …` bullets
 while a branch carrying one non-conventional subject slipped through.
 
+An **agent attribution mark** SHALL be matched without regard to ASCII case, and by the shape the mark has. The
+recognition SHALL travel beside each mark rather than as one rule applied to all of them, because they are not the
+same kind of thing:
+
+- a **trailer** — a `Key: Value` mark such as the co-authored trailer or the generated-with footer — SHALL be
+  recognised at the start of a line, so a body that *names* one inside a sentence is not carrying it. This gate
+  would otherwise refuse the commit message of any change about this rule, which is the false refusal this
+  requirement forbids;
+- a **glyph** with no legitimate use in this repository's messages SHALL be recognised wherever it appears.
+  Reading it by position would let a subject carrying it mid-line pass, which is a miss rather than a false
+  refusal. Prose about the rule names such a glyph in words.
+
+The gate holds the marks `AGENTS.md` names. That document also forbids "any other tool-authorship mark", which is
+not enumerable, so the open clause SHALL remain a reviewer's obligation and SHALL be stated as such rather than
+implied by a list that reads as complete.
+
+Case-sensitivity was the live defect: the canonical spellings are not the ones the check listed — git writes the
+trailer with only its first letter capitalised and GitHub renders it that way — so the form most likely to appear
+was the form not caught. Measured before the widening, two canonical spellings were accepted.
+
+#### Scenario: An attribution mark in the case the tool actually writes
+
+- **WHEN** a squash message carries a line that is an attribution trailer in any ASCII case
+- **THEN** the gate refuses it as a violation
+
+#### Scenario: A sentence naming an attribution mark
+
+- **WHEN** a body names a trailer mark inside a sentence, as prose about the rule
+- **THEN** the gate accepts it, because naming a mark is not carrying one
+
+#### Scenario: A glyph mid-line
+
+- **WHEN** a subject or body carries the forbidden glyph anywhere, not at the start of a line
+- **THEN** the gate refuses it, because reading that mark by position would be a miss
+
 Where the commit subjects cannot be read, the judgement SHALL refuse as a cannot-judge rather than fall back
 to the shape, because falling back is the false refusal being removed.
 

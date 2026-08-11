@@ -815,6 +815,27 @@ them.
 
 ### Self-governance
 
+- **The attribution rule missed the spelling the tools actually write.** `AGENTS.md` forbids a co-authored
+  trailer, a generated-with footer, and a robot glyph — and the gate implemented that as three case-**sensitive**
+  substrings. Git writes the trailer with only its first letter capitalised and GitHub renders it that way, so the
+  one form most likely to appear was the one form not caught. Measured: both canonical lowercase spellings were
+  accepted.
+
+  Matched without regard to ASCII case now, and **by the shape each mark has** — with the recognition travelling
+  beside the mark rather than as one rule over all three, because they are not the same kind of thing. A trailer is
+  recognised at the start of a line, so a body that *names* one inside a sentence is not carrying it; without that,
+  the gate would refuse the commit message of any change about this rule, which is the false refusal
+  `repository-checks` already forbids it. A glyph is recognised wherever it appears, because reading it by position
+  would let a subject carrying it mid-line through.
+
+  **The first draft read all three by position and would have opened a miss** — a subject with the glyph after its
+  Conventional Commit head was refused by the substring it replaced and would have passed. Caught by writing that
+  case into the failure matrix before trusting the reading, and it is one of the two recorded negative runs.
+
+  The gate holds the marks `AGENTS.md` names. That document also forbids "any other tool-authorship mark", which is
+  not enumerable, so the open clause is stated as a reviewer's obligation rather than implied by a list that reads
+  as complete.
+
 - **A gate's verdict class now travels on a channel of its own, and the check that was supposed to hold it was
   green over the hole.** The wrappers grepped the gate's output for `(Violation)`, which put the parentheses in
   the shell and the variant name in Rust — two owners for one token. The check pinned the rendering's *arguments*
