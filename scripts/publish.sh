@@ -196,4 +196,12 @@ gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
 require_one_pass "$gate_output"
 
 cd "$repo"
+# Removed here, not left to the trap. An EXIT trap does not run when `exec` replaces the shell image —
+# measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while the same script without `exec` prints
+# `T`. So the trap fired on every path where nothing happened and was skipped on the one path that completes the
+# act: three successful runs left three empty files in `$TMPDIR`, measured against an isolated one. The trap
+# stays, because it is what covers the failure paths; `exec` stays, because the tool's exit status becoming this
+# script's is deliberate.
+rm -f "$verdict_file"
+
 exec cargo publish "${selection[@]}" "${forwarded[@]}"

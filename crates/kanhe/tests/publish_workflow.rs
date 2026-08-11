@@ -21,6 +21,8 @@ fn workspace_root() -> Option<PathBuf> {
 }
 
 struct Run {
+    /// Anything the wrapper left in the isolated `TMPDIR` it was given.
+    leftover: Vec<String>,
     status: ExitStatus,
     stderr: String,
     cargo_log: String,
@@ -73,6 +75,10 @@ fn run_wrapper_with_env(root: &Path, extra: &[&str], env: &[(&str, &str)]) -> Ru
     };
     let bin = scratch.join("bin");
     std::fs::create_dir(&bin).expect("create controlled PATH");
+    // The wrapper's own `TMPDIR`, so what it leaves behind is observable and lands in the fixture rather than in
+    // the developer's `/tmp`.
+    let tmp = scratch.join("tmp");
+    std::fs::create_dir(&tmp).expect("create the wrapper's temporary directory");
     let cargo_log = scratch.join("cargo.log");
 
     // The gate's own invocation must appear to pass, so that a refusal reaching this far is the argument's and
@@ -97,13 +103,24 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
         .arg(root.join("scripts/publish.sh"))
         .args(extra)
         .env("PATH", path)
-        .env("FAKE_CARGO_LOG", &cargo_log);
+        .env("FAKE_CARGO_LOG", &cargo_log)
+        .env("TMPDIR", &tmp);
     for (name, value) in env {
         command.env(name, value);
     }
     let output = command.output().expect("run controlled publish workflow");
 
     let run = Run {
+        leftover: std::fs::read_dir(&tmp)
+            .expect("read the wrapper's temporary directory")
+            .map(|entry| {
+                entry
+                    .expect("a temporary directory entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect(),
         status: output.status,
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         cargo_log: read_if_present(&cargo_log).expect("read controlled cargo log"),
@@ -340,5 +357,41 @@ fn a_tool_configuration_set_in_the_environment_is_a_stated_bound() {
     assert!(
         publish.contains("|env CARGO_BUILD_TARGET=[not-a-real-triple]"),
         "the exported configuration must be shown to reach THE PUBLISH, not merely to go unrefused: {publish}"
+    );
+}
+
+/// The wrapper leaves no temporary file behind, on the path that completes the act as well as on the paths that
+/// do not.
+///
+/// The same defect as its sibling's, from the same line: cleanup left to an EXIT trap that `exec` never reaches,
+/// so the publishing path was the one path not cleaned. Asserted over the whole of an isolated `TMPDIR` rather
+/// than over one known name, so a temporary file added later is covered for free.
+#[test]
+fn no_temporary_file_survives_the_wrapper() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let completed = run_wrapper(&root, &[]);
+    assert!(
+        completed.status.success(),
+        "the controlled workflow must complete for this to be about the successful path:\n{}",
+        completed.stderr
+    );
+    assert!(
+        completed.leftover.is_empty(),
+        "the path that completes the publish left {:?} behind — an `exec` never reaches an EXIT trap",
+        completed.leftover
+    );
+
+    let refused = run_wrapper(&root, &["--no-verify"]);
+    assert_eq!(
+        refused.status.code(),
+        Some(2),
+        "the refusing run must refuse for this half to be about a failure path"
+    );
+    assert!(
+        refused.leftover.is_empty(),
+        "a path that stops before the publish left {:?} behind",
+        refused.leftover
     );
 }
