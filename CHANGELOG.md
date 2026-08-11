@@ -905,6 +905,17 @@ no adopter runs. They are here rather than under the adopter headings above beca
   names collapsing. **No live verdict moves**: the real citations are unqualified, which is exactly why nothing
   had noticed.
 
+- **Two guards over one condition, and only one of them could ever fire.** The self-law's shell-boundary
+  selector asserted that exactly one allowlist matched, then extracted it with an `expect` standing over the
+  state the assertion six lines above had just made unreachable. Two messages for one fact, one of them dead —
+  the defensive over-foolproofing of an impossible state the minimalism bound forbids, and the shape this window
+  already retired from the baseline writer's temp-file guard.
+
+  They are one check now, and the arity is the **type's** obligation rather than a second reader's: converting
+  the matches into a one-element array makes the extraction and the guard structurally incapable of disagreeing.
+  The diagnostic got better rather than merely shorter — the failed conversion hands the vector back, so the
+  refusal says how many were declared, which neither of the two it replaces could.
+
 - **The same hole, through the positional selector this time.** Refusing a `--repo` flag did not close it: the
   wrapper's first argument was checked only for being non-empty and not flag-shaped, so a **pull-request URL**
   passed — and `gh pr view` and `gh pr merge` follow a URL to its own repository while the live-commits endpoint
