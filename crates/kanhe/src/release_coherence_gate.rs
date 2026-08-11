@@ -590,19 +590,21 @@ fn unreleased_has_item(changelog: &str) -> bool {
 }
 
 struct Shape {
-    sections: BTreeSet<String>,
     headings: BTreeMap<(String, String), usize>,
     breaking: BTreeSet<String>,
 }
 
-/// The document's grammar — which sections exist, which headings each carries, which mark a break.
+/// The document's grammar — which headings each release section carries, and which sections mark a break.
+///
+/// It once also collected the section names themselves. Nothing read them: `judge` consumes the headings and
+/// the breaking set, so the collection was computed and discarded. `dead_code` cannot see that — `insert` counts
+/// as a use of the field — which is why a `-D warnings` workspace passed over it.
 ///
 /// The line between this and an entry's *content* is where the decidable stops: whether an entry is accurate,
 /// whether "no adopter action" is true, whether a named symbol exists are judgements over prose, and the
 /// detector they would need is the one this repository measured three times and rejected.
 fn section_shape(changelog: &str) -> Shape {
     let mut shape = Shape {
-        sections: BTreeSet::new(),
         headings: BTreeMap::new(),
         breaking: BTreeSet::new(),
     };
@@ -615,7 +617,8 @@ fn section_shape(changelog: &str) -> Shape {
                 .unwrap_or(line)
                 .trim_end()
                 .to_string();
-            shape.sections.insert(section.clone());
+            // The `continue` stands on its own: a section heading carries no `### …` and marks no break, so
+            // the arms below must not see it.
             continue;
         }
         if section.is_empty() {

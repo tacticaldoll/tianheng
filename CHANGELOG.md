@@ -845,6 +845,17 @@ no adopter runs. They are here rather than under the adopter headings above beca
   advice was the right one — *state the guarantee and drop the filename*. An adopter never runs the wrapper; what
   they need is which commit a published tarball records, and that survives naming nothing internal.
 
+- **A set was computed on every run and read by nothing, and `-D warnings` could not see it.** The
+  release-coherence gate's document grammar collected the release-section names beside the headings and the
+  breaking set; `judge` consumes the latter two and never the first. `dead_code` does not fire, because
+  `insert` counts as a use of the field — so a workspace that refuses every warning passed over a collection
+  built and discarded. It is deleted, with the `continue` beside it kept and its own reason written down: a
+  section heading carries no `### …` and marks no break, so the arms below must not see it.
+
+  This is the same class as the five module-level `allow(dead_code)` retired earlier in this window, reached the
+  other way round: there the suppression was explicit and inert; here nothing was suppressed and the lint was
+  simply blind.
+
 - **A tail comment was executed text, in the reader whose whole subject is that a comment is not.** `Executed`
   dropped a line only when the comment marker was its **first** token, so placement decided the verdict: a bare
   marker line naming a document did not satisfy *this holder names its document*, while the same name written
