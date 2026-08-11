@@ -552,7 +552,7 @@ where
     // `--write-baseline` records a snapshot; it emits no report at all, so a flag whose only effect
     // is on a report has nothing to act on here. `list` already rejects a check-only flag rather
     // than accepting it as a silent no-op, and `--disallow-stale` without `--baseline` is rejected
-    // just above for the same reason — this is that same rule applied WITHIN `check`, between its
+    // for the same reason — this is that same rule applied WITHIN `check`, between its
     // two actions, which was the one place it did not hold: `check --write-baseline out.json
     // --warn-uncovered --format sarif` recorded the baseline, exited 0, and dropped both flags with
     // no diagnostic, so an adopter could believe they had coverage advisories or a SARIF document

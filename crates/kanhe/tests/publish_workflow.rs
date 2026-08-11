@@ -68,7 +68,7 @@ fn run_wrapper(root: &Path, extra: &[&str]) -> Run {
     let cargo_log = scratch.join("cargo.log");
 
     // The gate's own invocation must appear to pass, so that a refusal reaching this far is the argument's and
-    // not the gate's. `require_one_pass` reads the line below.
+    // not the gate's. The wrapper's `require_one_pass` reads the `test result: ok. 1 passed` line.
     write_executable(
         &bin.join("cargo"),
         r##"#!/usr/bin/env bash

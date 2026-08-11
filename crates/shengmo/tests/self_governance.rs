@@ -130,7 +130,7 @@ fn dimension_boundaries_declare_the_mutual_independence_law() {
             siblings.is_empty(),
             "`{target}`'s allowlist names sibling dimension(s) {siblings:?}, so the boundary permits \
              exactly what `{CLAUSE}` forbids — a dimension must never learn from a sibling, and its \
-             own `because` says so two lines above the allowlist that now allows it"
+             own `because` clause says so while the allowlist beside it allows it"
         );
     }
 }

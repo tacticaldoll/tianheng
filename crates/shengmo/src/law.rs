@@ -201,7 +201,7 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 ///
 /// **One check over one condition.** The arity was asserted and then asserted again by an `expect` on the
 /// extraction — two guards, two messages, and only the first could ever fire, so the second stood over a state
-/// the line above had made unreachable. That is the defensive over-foolproofing of an impossible state the
+/// the arity assertion had already made unreachable. That is the defensive over-foolproofing of an impossible state the
 /// minimalism bound forbids, and the same shape this window retired from the baseline writer's temp-file guard.
 ///
 /// Converting into `[Boundary; 1]` makes the arity the **type's** obligation rather than a second reader's, so

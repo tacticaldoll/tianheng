@@ -32,7 +32,7 @@
 # Two classifications are worth their sentence. `--package` narrows by NAMING, which a partly
 # completed publish genuinely needs — crates.io accepts the six one at a time and a resumed run must
 # say which — and the command then records what it did; `--exclude` narrows by SUBTRACTION under the
-# `--workspace` written three lines below, so the invocation reads as the whole workspace while
+# `--workspace` this script writes itself, so the invocation reads as the whole workspace while
 # publishing less. And `--allow-dirty` was forwarded before, on the ground that the source gate
 # refuses a dirty tree upstream anyway: that makes it inert rather than safe, and inert-by-someone-
 # else is not how this script holds anything.
