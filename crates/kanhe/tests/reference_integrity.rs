@@ -1,9 +1,16 @@
 //! Repository check: every in-repository path named by tracked Markdown document text, or by a
-//! Rust, TOML, or `.gitignore` line whose first non-whitespace token is its comment marker, must exist.
+//! Rust, TOML, shell, or `.gitignore` line whose first non-whitespace token is its comment marker, must exist.
 //!
 //! This class was hand-swept twice — once for `.md` only — and a module split landing after that sweep
 //! reintroduced it in nine places. A reader who greps for a named path and finds nothing cannot tell stale
 //! prose from a bad checkout.
+//!
+//! **Shell was outside the inspected set until it was measured for.** `is_inspected_line` already read a
+//! `#`-prefixed line for every non-Rust, non-Markdown source, so the gap was one extension in
+//! `is_inspected_source` — and the two files it left out are the sanctioned merge and publish wrappers, whose
+//! comments cite the Rust gates they sequence *by path*. A renamed test target is exactly what rots such a
+//! citation, and `scripts/*.sh` is named in `repository-checks`'s own subject. Measured when it was closed: no
+//! shell comment named an absent path, so the floor was clean and the gap was a silence rather than a backlog.
 //!
 //! It judges **tracked content**, never the worktree. A path present on disk and in no commit satisfies a
 //! reference for the author who created it and nobody else, which is the direction this repository's gates are
@@ -66,9 +73,16 @@ fn is_inspected_source(path: &str) -> bool {
     path.ends_with(".md")
         || path.ends_with(".rs")
         || path.ends_with(".toml")
+        || path.ends_with(".sh")
         || Path::new(path).file_name() == Some(std::ffi::OsStr::new(".gitignore"))
 }
 
+/// A line worth reading for the paths it names: all of a Markdown document, and elsewhere the lines whose
+/// first non-whitespace token is that language's comment marker.
+///
+/// The `#` case covers TOML, `.gitignore` and shell alike, which is why admitting shell to
+/// [`is_inspected_source`] needed nothing here. A shell shebang reaches it and names `/usr/bin/env`, an
+/// absolute path outside every prefix this check recognizes, so it is not a reference and not a false positive.
 fn is_inspected_line(path: &str, line: &str) -> bool {
     if path.ends_with(".md") {
         return true;
@@ -635,6 +649,14 @@ fn comment_bearing_sources_and_live_test_claims_are_inspected() {
             "Rust test comment",
             "crates/kanhe/tests/probe.rs",
             "// `scripts/check_reference_integrity.sh` holds this.\n",
+        ),
+        // The wrappers are shell, and they cite the Rust gates they sequence by path. A shebang above the
+        // comment, because that is the shape every tracked script actually has and the line must not be read
+        // as a reference to `/usr/bin/env`.
+        (
+            "shell comment",
+            "scripts/probe.sh",
+            "#!/usr/bin/env bash\n# The gate is `crates/kanhe/tests/zzz_absent_gate_probe.rs`.\n",
         ),
     ];
     for (_, path, body) in probes {
