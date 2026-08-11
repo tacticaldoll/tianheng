@@ -57,7 +57,7 @@ fn every_prelude_member_is_named_by_the_external_contract() {
 fn the_promise_is_the_prelude_block_and_not_a_sibling_reexport() {
     let elsewhere =
         "pub use super::{NotPromised};\n\npub mod prelude {\n    pub use super::{Promised};\n}\n";
-    let members = promised_members(elsewhere);
+    let members = promised_members(elsewhere).expect("both members are plain identifiers");
     assert!(
         members.contains("Promised"),
         "the prelude block's own member must be read, got {members:?}"
@@ -128,6 +128,43 @@ fn a_member_named_only_in_a_comment_is_counted_as_named() {
         ),
         Promise::Kept,
         "a mention inside a comment counts as named, which is the declared stop"
+    );
+}
+
+/// A promised member this check cannot read is **refused**, not dropped.
+///
+/// Measured before the repair, on a mixed list: `{Alpha, runner::Format, Foo as Bar, a::{B, C}, Beta}` parsed
+/// to `{Alpha, Beta}` — three of five members gone, silently, and the promise narrowed to whatever the parser
+/// happened to understand. The prelude is a flat list of identifiers today, so nothing was wrong; what was
+/// wrong is that nothing would have said so.
+///
+/// Neither declared as a bound nor closed by widening. Declaring it would put a **false negative** in a check
+/// whose whole subject is a promise narrowing unobserved, and widening means new extraction rules — last path
+/// segment, post-`as` name — in a hand-rolled reader, with no pressure asking for them. Refusing needs no rule
+/// at all and cannot narrow anything: if the prelude ever grows one of these forms, its author meets a refusal
+/// naming the member instead of silence.
+#[test]
+fn a_promised_member_the_parser_cannot_read_is_refused() {
+    let contract = "fn t() { let _ = (Alpha, Beta); }";
+    for form in ["runner::Format", "Foo as Bar", "a::{B", "C}"] {
+        let promise =
+            format!("pub mod prelude {{\n    pub use super::{{Alpha, {form}, Beta}};\n}}\n");
+        match judge(&promise, contract) {
+            Promise::CannotJudge(why) => assert!(
+                why.contains(form),
+                "the refusal must name the member it could not read, got {why:?}"
+            ),
+            other => panic!("`{form}` must be refused rather than dropped, got {other:?}"),
+        }
+    }
+
+    // The control: a promise this check can read is still judged, so the refusals above are about the member
+    // rather than about a parser that has stopped answering.
+    let plain = "pub mod prelude {\n    pub use super::{Alpha, Beta};\n}\n";
+    assert_eq!(
+        judge(plain, contract),
+        Promise::Kept,
+        "a flat identifier list must still be judged"
     );
 }
 
