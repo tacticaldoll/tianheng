@@ -120,10 +120,20 @@ fn dimension_crates() -> BTreeSet<String> {
         if name == "xuanji" {
             continue;
         }
+        // The **normal** table only. Cargo reports `kind` as null for a normal dependency and as `dev` or
+        // `build` for the others, and this family treats those as different observation surfaces —
+        // `crate-dependency-boundary` says a boundary observes exactly one table and that dev and build are
+        // ignored by default. A dimension is defined by the architectural edge, which is the normal one.
+        //
+        // Matching every kind was a false positive rather than the false negatives the four revisions before
+        // this one carried: a published crate using 璇璣 only in `[dev-dependencies]` — a test reaching the
+        // reaction model, which is an ordinary thing to write — entered the set and turned the dogfood gate
+        // red for a reason unrelated to 三儀 ⊥ 三儀.
         let depends_on_model = package["dependencies"]
             .as_array()
             .into_iter()
             .flatten()
+            .filter(|dependency| dependency["kind"].is_null())
             .any(|dependency| dependency["name"].as_str() == Some("xuanji"));
         if depends_on_model {
             found.insert(name.to_string());

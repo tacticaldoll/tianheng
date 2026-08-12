@@ -842,6 +842,21 @@ them.
 
 ### Self-governance
 
+- **The dimension enumerator matched a dependency in any table, and this family treats the tables as different
+  observation surfaces.** Cargo reports `kind` as null for a normal dependency and as `dev` or `build` for the
+  others; `crate-dependency-boundary` says a boundary observes exactly one table and that dev and build are
+  ignored by default. A dimension is defined by the architectural edge, which is the normal one.
+
+  Matching every kind meant a published crate reaching 璇璣 only from `[dev-dependencies]` — a test using the
+  reaction model, an ordinary thing to write — entered the set and turned the dogfood gate red for a reason
+  unrelated to 三儀 ⊥ 三儀. The normal table only, now.
+
+  **This one is a false positive, and the direction is the news.** The four revisions before it were false
+  negatives: a hand-kept literal, a pathspec whose `*` crossed the separator, a dependency matched by manifest
+  text rather than identity, and a `publish` array read as though every array meant unpublishable. One
+  enumerator has now been wrong in both directions, which says the fault was never the direction — it was
+  answering a question about *identity* with whatever evidence was nearest.
+
 - **Every `publish` array was read as unpublishable, and one of them means the opposite.** Cargo reports the
   field as null when it is absent or `true`, as the empty array for `publish = false`, and as a **non-empty
   list** for `publish = ["registry"]` — a crate that publishes, to a named registry. Excluding every array
