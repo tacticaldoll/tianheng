@@ -146,12 +146,13 @@ declaration compiled only when its own crate is under test is invisible to every
 reaction could hold the specs and the code in bijection — and the protocol that follows this change requires an
 observer to declare its bounds as part of joining a run, which a test-only item cannot satisfy.
 
-The crates owning declared bounds are the three dimensions **and the shell**, which owns the bounds of the
-capabilities whose reactions live in it — this capability's among them, since a capability that exempted itself from
-its own bijection would count everyone else's unclassified bounds while hiding its own. Their number is deliberately
-not written here: a census belongs to whatever enumerates the set, and `crates/kanhe/tests/bound_register.rs` prints it on every
-clean run. A crate with no declared bound SHALL gain no export: an empty accessor would be a name with nothing
-behind it.
+The crates owning declared bounds are the three dimensions, **and the unpublished crate that owns each
+repository-governance reaction** — Kanhe for the record and coherence checks, Shengmo for the self-law dogfood.
+A capability's bounds live with the reaction they qualify, this capability's among them, since a capability that
+exempted itself from its own bijection would count everyone else's unclassified bounds while hiding its own.
+Their number is deliberately not written here: a census belongs to whatever enumerates the set, and
+`crates/kanhe/tests/bound_register.rs` prints it on every clean run. A crate with no declared bound SHALL gain no
+export: an empty accessor would be a name with nothing behind it.
 
 **Where a reaction is behind a Cargo feature, the declarations describing it SHALL be gated with it.** A bound is a
 property of a *reaction*; a build that compiles none of that reaction and still exports its bounds tells a reader a
@@ -212,9 +213,10 @@ answered into a void: measured, `bounds()` had no call site anywhere outside a c
 answered anything without moving a verdict. Reading the bijection through it makes the register the method's
 consumer, and a dimension returning the wrong set now fails here.
 
-The **shell's** own declarations SHALL keep coming from its free function, because the shell composes dimensions
-rather than being one and implements no observer. That asymmetry is stated so it does not read as the same gap
-this requirement closes.
+**The repository-governance catalogs SHALL keep coming from their owners' free functions**, because Kanhe and
+Shengmo compose no dimension and implement no observer. That asymmetry is stated so it does not read as the same
+gap this requirement closes. The published shell is not among them and holds no catalog at all — the requirement
+below says why, and a guard fails if one ever appears there.
 
 #### Scenario: The model consumes the register's declaration grammar
 
