@@ -250,6 +250,26 @@ fn an_admitted_argument_reaches_the_publish_as_cargo_would_honour_it() {
             vec!["--registry", "crates-io"],
             "publish --workspace --registry crates-io",
         ),
+        // The remaining forwarded arguments. Every one the parser admits is proven to arrive, because the
+        // specification requires each admitted argument to be measured against the tool rather than reasoned
+        // about — and eight of the thirteen had never been.
+        (vec!["--keep-going"], "publish --workspace --keep-going"),
+        (vec!["--frozen"], "publish --workspace --frozen"),
+        (vec!["--verbose"], "publish --workspace --verbose"),
+        (vec!["--quiet"], "publish --workspace --quiet"),
+        (vec!["--jobs", "2"], "publish --workspace --jobs 2"),
+        (
+            vec!["--color", "never"],
+            "publish --workspace --color never",
+        ),
+        (
+            vec!["--target-dir", "/tmp/tianheng-probe-target"],
+            "publish --workspace --target-dir /tmp/tianheng-probe-target",
+        ),
+        (
+            vec!["--index", "https://example.invalid/index"],
+            "publish --workspace --index https://example.invalid/index",
+        ),
     ] {
         let run = run_wrapper(&root, &extra);
         assert!(
@@ -393,5 +413,81 @@ fn no_temporary_file_survives_the_wrapper() {
         refused.leftover.is_empty(),
         "a path that stops before the publish left {:?} behind",
         refused.leftover
+    );
+}
+
+/// Every argument the wrapper's parser forwards is proven to arrive, with none left unmeasured.
+///
+/// The specification requires each admitted argument to be classified **against the tool at a named version**
+/// rather than read off its help, and the arrival matrix above is where that measurement lives. Five of the
+/// thirteen the parser admits were covered; the other eight were admitted on reasoning alone.
+///
+/// The parser is the allowlist — the specification says so, and `AGENTS.md` was corrected this window to point
+/// at it instead of half-listing it. So the parser is the enumerator here and the matrix is held against it,
+/// never the reverse: a flag the parser stops accepting must leave the matrix too, or the matrix would assert
+/// the arrival of something that can no longer be passed.
+///
+/// **An arm this cannot read is a refusal, not a skip.** Silently ignoring an unparsed arm would shrink the
+/// enumerator to whatever happened to parse, and a subset is satisfied by anything.
+#[test]
+fn the_arrival_matrix_covers_every_argument_the_parser_forwards() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let script = std::fs::read_to_string(root.join("scripts/publish.sh"))
+        .expect("the wrapper whose parser is the allowlist must be readable");
+    let matrix = std::fs::read_to_string(root.join("crates/kanhe/tests/publish_workflow.rs"))
+        .expect("this file carries the matrix and must be readable");
+
+    // A `case` arm that appends to a forwarding array is an admitted argument; its pattern names the spellings.
+    let mut forwarded: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let lines: Vec<&str> = script.lines().collect();
+    for (index, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') || !trimmed.ends_with(')') || !trimmed.contains("--") {
+            continue;
+        }
+        let admits = lines[index + 1..]
+            .iter()
+            .take_while(|body| !body.trim().starts_with(";;"))
+            .any(|body| body.contains("forwarded+=") || body.contains("selection+="));
+        if !admits {
+            continue;
+        }
+        for token in trimmed.trim_end_matches(')').split('|') {
+            let flag = token.trim();
+            // `--workspace` is supplied by the script itself and refused from a caller, so it is not admitted.
+            if flag.starts_with("--") && !flag.contains('*') && flag != "--workspace" {
+                forwarded.insert(flag.to_string());
+            }
+        }
+    }
+    assert!(
+        !forwarded.is_empty(),
+        "no forwarded argument was read from the wrapper's parser — an arm shape this cannot parse would \
+         shrink the enumerator to nothing, and a subset of nothing is satisfied by anything"
+    );
+
+    // The flags the matrix actually passes, read out of its `vec![…]` spans rather than searched for as bare
+    // text — a flag named only in a comment proves nothing about arrival.
+    let mut measured: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut rest = matrix.as_str();
+    while let Some(open) = rest.find("vec![") {
+        rest = &rest[open + "vec![".len()..];
+        let Some(close) = rest.find(']') else { break };
+        let span = &rest[..close];
+        for token in span.split('"').skip(1).step_by(2) {
+            if token.starts_with("--") {
+                measured.insert(token.to_string());
+            }
+        }
+        rest = &rest[close..];
+    }
+
+    let unmeasured: Vec<&String> = forwarded.difference(&measured).collect();
+    assert!(
+        unmeasured.is_empty(),
+        "the parser admits these arguments and the arrival matrix never proves they reach cargo: \
+         {unmeasured:?}"
     );
 }

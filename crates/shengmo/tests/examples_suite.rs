@@ -252,3 +252,63 @@ fn every_example_passes_its_isolated_quality_gates() {
         }
     }
 }
+
+/// The declared example set equals the tracked example directories, in both directions.
+///
+/// A directory present under `examples/` and absent from [`EXAMPLES`] is exercised by **neither** of this
+/// suite's directions nor by the workflow job that runs them. That is a false negative in the gate that runs
+/// the product against itself — the one gate whose silence is least likely to be questioned, because a green
+/// dogfood reads as the strongest evidence there is.
+///
+/// The reverse matters too and is not symmetry for its own sake: an entry naming a directory the tree no longer
+/// carries reads as coverage while defending nothing, which is the shape this repository's register refuses for
+/// citations.
+///
+/// Enumerated from **tracked** content, so an untracked scratch directory is neither a failure nor an example
+/// — the rule every sibling direction here follows.
+///
+/// This is the same guard `every_gate_running_wrapper_is_named` already applies to the wrapper constant. That
+/// one direction existing while three sibling constants had none is what made this a class rather than an
+/// oversight.
+#[test]
+fn every_tracked_example_is_declared_and_every_declaration_exists() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let out = Command::new("git")
+        .args(["ls-files", "examples"])
+        .current_dir(&root)
+        .output()
+        .expect("run git ls-files examples");
+    assert!(
+        out.status.success(),
+        "`git ls-files examples` failed, and a failed enumeration is not a repository with no examples"
+    );
+    let tracked: std::collections::BTreeSet<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter(|path| path.ends_with("/Cargo.toml"))
+        .filter_map(|path| path.strip_prefix("examples/"))
+        .filter_map(|rest| rest.split_once('/'))
+        .map(|(directory, _)| directory.to_string())
+        .collect();
+    assert!(
+        !tracked.is_empty(),
+        "no tracked example was enumerated, so this direction would hold over nothing"
+    );
+
+    let declared: std::collections::BTreeSet<String> =
+        EXAMPLES.iter().map(|e| e.name.to_string()).collect();
+
+    let undeclared: Vec<&String> = tracked.difference(&declared).collect();
+    assert!(
+        undeclared.is_empty(),
+        "these tracked examples are declared by nothing, so neither direction of this suite nor the workflow \
+         job that runs it exercises them: {undeclared:?}"
+    );
+    let absent: Vec<&String> = declared.difference(&tracked).collect();
+    assert!(
+        absent.is_empty(),
+        "these declarations name no tracked example directory, so they read as coverage while defending \
+         nothing: {absent:?}"
+    );
+}

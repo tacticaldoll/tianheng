@@ -213,3 +213,31 @@ pub fn judge(
     }
     Ok(format!("ok merge message ({subject})"))
 }
+
+/// The Conventional Commit types `AGENTS.md` admits, read from the contract rather than copied from it.
+///
+/// The gate carries its own list, and the contract states the same set in prose. Two lists that must agree
+/// is the shape this repository closes wherever an enumerator exists — and here one does: the sentence naming
+/// the narrowest honest type carries every admitted type as a backticked run.
+///
+/// **Refuses loudly when the anchor is gone.** A parse that silently found nothing would make the comparison
+/// vacuous in the direction that matters: an empty contract set is a subset of anything, so the gate would keep
+/// admitting whatever it already admits while reporting agreement. Returning `None` lets the caller say the
+/// contract could not be read, which is a different fact from the two sides disagreeing.
+pub fn admitted_types(agents: &str) -> Option<Vec<String>> {
+    let clause = agents.split("Use the narrowest honest type:").nth(1)?;
+    // The run ends at the sentence's period, so a later backticked word — `!`, `BREAKING CHANGE:` — is outside.
+    let run = clause.split(". ").next()?;
+    let types: Vec<String> = run
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect();
+    if types.is_empty() { None } else { Some(types) }
+}
+
+/// The types this gate judges by, for a direction that holds them against the contract.
+pub fn gate_types() -> Vec<String> {
+    TYPES.iter().map(|t| (*t).to_string()).collect()
+}

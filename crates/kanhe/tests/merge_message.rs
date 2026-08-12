@@ -309,3 +309,50 @@ fn a_merge_made_outside_the_wrapper_is_not_observed() {
          about a merge made outside the wrapper"
     );
 }
+
+/// The types this gate judges by are the types the contract admits, in both directions.
+///
+/// `TYPES` was documented as *"the Conventional Commit types `AGENTS.md` admits"* — a second copy of a list the
+/// contract states in prose, with nothing holding them equal. Diverge them and the gate refuses a subject the
+/// contract admits, or admits one it forbids, and either way the wrapper standing in front of an unamendable
+/// record enforces something other than the rule.
+///
+/// Both directions, because the two failures differ: a type in the contract and not the gate is a subject
+/// wrongly refused, and a type in the gate and not the contract is one wrongly admitted.
+///
+/// A contract that cannot be parsed is a **cannot-judge**, not an empty set. An empty set is a subset of
+/// anything, so a silent parse failure would report agreement while the gate went on admitting whatever it
+/// already admits.
+#[test]
+fn the_gate_admits_exactly_the_types_the_contract_does() {
+    let Some(root) = shengmo::workspace::locate(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+        |root| root.join("AGENTS.md").is_file(),
+        shengmo::workspace::marker_set(),
+    ) else {
+        return;
+    };
+    let agents = std::fs::read_to_string(root.join("AGENTS.md"))
+        .expect("AGENTS.md is the contract this gate answers to and must be readable");
+    let contract = kanhe::merge_message_gate::admitted_types(&agents).unwrap_or_else(|| {
+        panic!(
+            "cannot read the admitted Conventional Commit types from AGENTS.md — the clause naming the \
+             narrowest honest type is the anchor, and an unparsed contract is not an empty one"
+        )
+    });
+    let contract: std::collections::BTreeSet<String> = contract.into_iter().collect();
+    let gate: std::collections::BTreeSet<String> = kanhe::merge_message_gate::gate_types()
+        .into_iter()
+        .collect();
+
+    let refused_but_admitted: Vec<&String> = contract.difference(&gate).collect();
+    assert!(
+        refused_but_admitted.is_empty(),
+        "AGENTS.md admits these types and the gate would refuse a subject using them: {refused_but_admitted:?}"
+    );
+    let admitted_but_unstated: Vec<&String> = gate.difference(&contract).collect();
+    assert!(
+        admitted_but_unstated.is_empty(),
+        "the gate admits these types and AGENTS.md does not state them: {admitted_but_unstated:?}"
+    );
+}

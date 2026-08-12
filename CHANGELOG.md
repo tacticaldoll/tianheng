@@ -842,6 +842,32 @@ them.
 
 ### Self-governance
 
+- **Three constants sat beside something this repository already enumerates, with nothing holding them equal.**
+  All three agreed, which is what made them worth closing before one drifted rather than after.
+
+  The squash gate's Conventional Commit types were a second copy of the list `AGENTS.md` states in prose;
+  diverge them and the wrapper standing in front of an unamendable record refuses a subject the contract admits,
+  or admits one it forbids. The dogfood suite's example list was a second copy of `examples/`, and a directory
+  absent from it is exercised by **neither** of that suite's directions nor by the workflow job that runs them —
+  a false negative in the gate that runs the product against itself, which is the gate whose silence is least
+  likely to be questioned. The publish wrapper's arrival matrix proved five of the thirteen arguments its parser
+  forwards actually reach cargo, while the specification requires each admitted argument to be measured against
+  the tool rather than reasoned about.
+
+  Each is now held against its enumerator **in both directions**, because the two failures differ: a member the
+  enumerator has and the list does not is something unexercised, and a member the list has and the enumerator
+  does not is a declaration that outlived its subject and reads as coverage while defending nothing.
+
+  The rule is stated once rather than as three guards. The identical shape was already held for one list — the
+  wrappers — by a direction whose own documentation names this exact risk, which made these the third, fourth
+  and fifth instance rather than three coincidences. Where a constant genuinely has no enumerator it now says
+  so, as the attribution list beside the types already did; a silence that is written is not the same as one
+  nobody considered.
+
+  Two readers refuse rather than shrink: an unparsed contract clause is a cannot-judge instead of an empty set,
+  and an unreadable parser arm stops the comparison instead of narrowing the enumerator — because an empty or
+  shortened enumerator is a subset of anything, and would report agreement while holding nothing.
+
 - **The coordinate reader missed the spelling every compiler prints, and skipped a file it could not read.**
   Both are corrections to the direction added one commit earlier, and both are the shapes that direction was
   written to refuse.
