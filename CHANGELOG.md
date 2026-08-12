@@ -815,6 +815,33 @@ them.
 
 ### Self-governance
 
+- **The squash wrapper judged a body it held and merged a body it re-read.** It reads the body once, guarded,
+  and hands that value to the gate; its final invocation handed the merge the *path* instead, so the two were
+  the same only while nothing touched the file in between. What sits between them is a whole `cargo test` run —
+  minutes of it on a cold target directory — and what lands cannot be repaired: a squash commit's hash is cited
+  by the pull request's merge record, so amending the commit afterwards decouples the two. An editor autosave or
+  a typo fix started after the wrapper was launched would have been recorded by a merge that judged something
+  else.
+
+  The value now travels to the merge, and the obligation is stated over **every** judged input rather than as a
+  repair to this one. Three of the four already satisfied it — the subject travelled as a value, the repository
+  was resolved once and named on every call, the head was captured before the commit set and pinned, and the
+  live commit subjects were pinned through that head — and nothing said they were one set, which is how the
+  fourth sat there through the rounds that built the wrapper. It is the local half of a pin the requirement
+  already made remotely: a pull request that moved is refused, and now an input that moved on disk is never read
+  a second time.
+
+  A wrapper-owned temporary file would close the same race and is refused for a reason this window already paid
+  for: it must outlive the `exec` for the tool to read it, so it could not be removed beforehand and no `EXIT`
+  trap survives an `exec` — the leak fixed one commit earlier, reintroduced to fix something else. A value in
+  `argv` carries an `ARG_MAX` ceiling a path does not, and that ceiling fails loud before the merge rather than
+  recording the wrong thing.
+
+  The guard asserts the body the merge would **record**, never which flag was spelled: a wrapper spelling
+  `--body "$(cat …)"` at merge time re-reads and must still fail. Its controlled tool resolves a body the way
+  the real one does, and its fixture body is deliberately multi-line, so the newline a curated body actually
+  carries is exercised rather than assumed away.
+
 - **Both wrappers cleaned up on every path except the one that finishes the job.** The verdict file added this
   window was removed by `trap 'rm -f …' EXIT`, and an EXIT trap does not run when `exec` replaces the shell
   image — measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while the same script without `exec`
