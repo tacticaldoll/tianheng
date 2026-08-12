@@ -2,7 +2,7 @@
 //!
 //! It stands before a record. A merged squash on a release branch cannot be repaired: amending it changes its
 //! hash, and the pull request's merge record cites that hash, so the two would name different things. The
-//! nine subjects already carrying a serial stay as they are for exactly that reason.
+//! the subjects already carrying a serial when this gate was written stay as they are for exactly that reason.
 //!
 //! **The gate itself does not run in development.** There is no proposed message to judge until a merge is
 //! being made, so `scripts/merge-pr.sh` supplies one and asks for the verdict at the one moment it can
@@ -283,7 +283,7 @@ fn a_body_that_is_a_bare_commit_list_is_a_violation() {
 /// the second because both of its values append the serial.
 ///
 /// Measured rather than reasoned: this repository's settings report `squash_merge_commit_title` as
-/// `COMMIT_OR_PR_TITLE`, and nine subjects in its history carry the serial that setting produced.
+/// `COMMIT_OR_PR_TITLE`, and subjects in its history carry the serial that setting produced.
 #[test]
 fn a_merge_made_outside_the_wrapper_is_not_observed() {
     // What the check does hold: a message handed to it.

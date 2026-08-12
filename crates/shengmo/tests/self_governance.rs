@@ -6,6 +6,8 @@
 //! enforce `engine ⊥ runner` *within* one crate, 天衡 enforces the functional-core ⊥
 //! imperative-shell split across *crate* boundaries.
 
+use std::collections::BTreeSet;
+
 use shengmo::law::{PREAMBLE, constitution, shell_dependency_boundary};
 use shengmo::workspace::{manifest as workspace_manifest, root as workspace_root};
 use tianheng::prelude::*;
@@ -55,15 +57,72 @@ fn self_law_projection_is_fresh() {
 /// `guibiao`'s allowlist to name `hunyi` left every test binary in this workspace green, with
 /// `AGENTS.self-law.md` printing the sibling directly beneath the reason that forbids it. Freshness pinned the
 /// projection against the declaration; nothing pinned the declaration against its own law.
+/// The dimension crates, enumerated from the workspace rather than listed.
+///
+/// A dimension is a **published** crate that depends directly on 璇璣: the reaction model every dimension sits
+/// above, which `PROJECT.md` states as the architecture and which a new dimension cannot avoid — a crate that
+/// expressed findings in some other vocabulary would not be one. 璇璣 itself depends on no workspace member,
+/// 星表 is the substrate beneath the dimensions and reaches the model through none, the shell composes them
+/// and deliberately holds no direct edge to the model, and the two unpublished crates are governance rather
+/// than product.
+///
+/// Read from tracked manifests, so an untracked scratch crate is neither a dimension nor a failure.
+fn dimension_crates() -> BTreeSet<&'static str> {
+    let root = workspace_root().expect("the workspace root this gate already located");
+    let listing = std::process::Command::new("git")
+        .args(["ls-files", "crates/*/Cargo.toml"])
+        .current_dir(&root)
+        .output()
+        .expect("run git ls-files over the crate manifests");
+    assert!(
+        listing.status.success(),
+        "`git ls-files` failed enumerating crate manifests, and a failed enumeration is not a workspace with \
+         no crates"
+    );
+    let mut found = BTreeSet::new();
+    for manifest in String::from_utf8_lossy(&listing.stdout).lines() {
+        let text = std::fs::read_to_string(root.join(manifest))
+            .unwrap_or_else(|error| panic!("cannot read tracked manifest {manifest}: {error}"));
+        if text.contains("publish = false") {
+            continue;
+        }
+        let deps = match text.split_once("\n[dependencies]\n") {
+            Some((_, rest)) => rest.split("\n[").next().unwrap_or(rest),
+            None => continue,
+        };
+        if !deps.lines().any(|line| line.starts_with("xuanji")) {
+            continue;
+        }
+        let name = manifest
+            .strip_prefix("crates/")
+            .and_then(|rest| rest.strip_suffix("/Cargo.toml"))
+            .expect("a crate manifest path names its crate");
+        found.insert(Box::leak(name.to_string().into_boxed_str()) as &'static str);
+    }
+    assert!(
+        !found.is_empty(),
+        "no dimension crate was enumerated, so this comparison would hold over nothing"
+    );
+    found
+}
+
 #[test]
 fn dimension_boundaries_declare_the_mutual_independence_law() {
     const CLAUSE: &str = "三儀 ⊥ 三儀";
-    // A hand-kept list beside an enumerable set: a dimension born and not added here has its allowlist
-    // unchecked, and the set-coverage assertion below cannot notice, because `found` is produced by filtering
-    // on `expected`. Measured — removing `guibiao` from this literal leaves a `guibiao` allowlist naming
-    // `hunyi` green. Nor does the filter reach `restrict_workspace_dependencies_to`, which is the more natural
-    // rule for this law. `BACKLOG.md` carries both; neither is a declared bound.
+    // Held against an enumerator rather than kept by hand. A dimension born and not added here would have its
+    // allowlist unchecked while this gate stayed green, and the set-coverage assertion below cannot notice
+    // because `found` is produced by filtering on `expected` — measured, removing `guibiao` from the literal
+    // left a `guibiao` allowlist naming `hunyi` green. The comparison below closes that.
+    //
+    // What still is not reached: `restrict_workspace_dependencies_to`, the more natural rule for this law.
+    // `BACKLOG.md` carries that half.
     const DIMENSIONS: [&str; 3] = ["guibiao", "hunyi", "louke"];
+    assert_eq!(
+        DIMENSIONS.iter().copied().collect::<BTreeSet<&str>>(),
+        dimension_crates(),
+        "the dimensions this test judges are not the dimensions this workspace has — a 三儀 crate born and \
+         not named here has its allowlist unchecked while the gate stays green"
+    );
 
     let constitution = constitution();
     let dimension_allowlists: Vec<_> = constitution

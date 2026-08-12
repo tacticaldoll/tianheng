@@ -842,6 +842,35 @@ them.
 
 ### Self-governance
 
+- **The dogfood gate's dimension list is held against the workspace, and it was the fourth of that class — left
+  behind when three siblings were closed.** A dimension born and not added to that literal has its dependency
+  allowlist unchecked while the gate stays green, so 三儀 ⊥ 三儀 goes unenforced in the one gate `PROJECT.md`
+  calls the product running on itself. The check's own comment carried the measurement — removing `guibiao`
+  from the literal leaves a `guibiao` allowlist naming `hunyi` green — and ended by saying it was neither held
+  nor declared. It sat in `BACKLOG.md` and not in the register, which are different places: the register is
+  where a deliberate stop lives.
+
+  A dimension is now **enumerated**: a published crate depending directly on 璇璣, which is the architecture
+  `PROJECT.md` already states — the reaction model every dimension sits above, and one a new dimension cannot
+  avoid, since a crate expressing findings in some other vocabulary would not be a dimension. The comparison
+  runs both ways.
+
+  It was not left open as a declared bound, and the reason is that the choice was already made: the requirement
+  added days earlier says a list a check judges by is held against its enumerator **wherever such an enumerator
+  exists**. One exists here. Declaring a bound would have been exempting a requirement from itself.
+
+- **The count of subjects carrying a merge serial is anchored to when it was taken.** Six live places — a
+  wrapper comment, a gate's module documentation, two directions, `AGENTS.md`, and a specification — stated
+  *nine* in the present tense for a set nothing produces and that can still grow through a declared bound,
+  where a merge made outside the wrapper is not observed. `AGENTS.md`'s own rule is that such a figure is
+  produced, or anchored to a past moment so a reader cannot mistake it for current.
+
+  Anchored rather than declared as a census, deliberately: the number's whole job is *this happened repeatedly
+  before the gate existed*, which is a claim about a moment. Making it track a live set would point it at
+  something that should never grow — and if it ever did, the right response is a defect report, not an updated
+  figure. The specification now says that outright, in the wording its sibling requirement already uses for a
+  record.
+
 - **A scenario stated a classification where a reader would take it for an observation.** The region
   requirement carried *two scans of one file disagreeing about comments* as a scenario whose `THEN` said the
   disagreement **is a defect** — a definition, not something anything looks for. Nothing detects it, and nothing
