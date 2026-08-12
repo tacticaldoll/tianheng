@@ -842,6 +842,24 @@ them.
 
 ### Self-governance
 
+- **The dimension enumerator's corpus was every manifest beneath `crates/`, not the crate manifests.** git's
+  default pathspec is `fnmatch` **without** `FNM_PATHNAME`, so `crates/*/Cargo.toml` crosses the separator —
+  measured, 14 tracked paths where 8 are crate manifests and the other six are test fixtures. It returned the
+  right set only because no fixture happened to name 璇璣.
+
+  That is one edit away, and the precedent is already in the tree: a fixture carries a workspace-member
+  dependency written precisely so it violates the edge under test. The next fixture needing 璇璣 for the same
+  reason would have turned the dogfood gate red naming a fixture path, for a reason unrelated to 三儀 ⊥ 三儀 —
+  reproduced by adding that dependency and watching the comparison gain a fourth "dimension" whose name was a
+  fixture path.
+
+  `:(glob)` makes `*` stop at the separator, and the enumerated set is unchanged. A crate name carrying no
+  separator is now asserted as well, so loosening the pathspec again fails loudly on the shape rather than
+  admitting a fixture as a dimension.
+
+- A doubled article introduced by the previous commit, where an old sentence's article survived the edit that
+  rewrote what followed it.
+
 - **The dogfood gate's dimension list is held against the workspace, and it was the fourth of that class — left
   behind when three siblings were closed.** A dimension born and not added to that literal has its dependency
   allowlist unchecked while the gate stays green, so 三儀 ⊥ 三儀 goes unenforced in the one gate `PROJECT.md`
