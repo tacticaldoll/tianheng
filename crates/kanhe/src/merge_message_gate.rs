@@ -1,6 +1,6 @@
 //! The squash-message judgement, shared by the gate and by its failure matrix.
 //!
-//! `AGENTS.md` states these rules and nothing held them: **9** subjects in this repository's history carry a
+//! `AGENTS.md` states these rules and nothing held them: nine subjects, counted when this gate was written, carry a
 //! trailing `(#N)`, the most recent on the commit that landed a check for a requirement enforced by
 //! nothing. The rule cannot be held where rules are usually held here — a squash merge runs on GitHub's
 //! servers, so no local commit exists and no `commit-msg` hook runs, and both values of

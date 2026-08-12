@@ -241,7 +241,7 @@ itself an undetected drift, invisible to a diff-only read (the 0.3.0 `finding_ke
 - **Curated squash message, through `scripts/merge-pr.sh`.** For a development PR into a release branch, set
   the squash subject exactly to the PR title with no auto-appended `(#N)`. That is the sanctioned path: the
   wrapper reads the PR title, runs `crates/kanhe/tests/merge_message.rs` over the proposed message, and
-  only then reaches `gh pr merge --squash`. This rule was stated here and missed anyway — nine subjects in
+  only then reaches `gh pr merge --squash`. This rule was stated here and missed anyway — nine subjects, counted when the gate below was written, in
   this repository's history carry the serial — and a merged squash cannot be repaired, because amending it
   changes the hash the pull request's merge record cites. Replace GitHub's concatenated commit list
   with a self-contained body distilled from the PR's why, verification evidence, and compatibility result;

@@ -270,9 +270,11 @@ A proposed squash subject and body SHALL be judged by a check before `gh pr merg
 path to that merge SHALL be a wrapper that cannot be reached without the judgement.
 
 The subject SHALL equal the pull request's title exactly, and SHALL NOT carry a trailing `(#N)`. The rule is
-already written; what is new is that something holds it. Measured over this repository's history, **9**
-subjects carry that serial, the most recent on the commit that landed a check for a requirement enforced by
-nothing.
+already written; what is new is that something holds it. Measured **when this requirement was written**, nine
+subjects carried that serial, the most recent on the commit that landed a check for a requirement enforced by
+nothing. That figure is a record of the moment it was taken rather than a census: nothing produces it, and the
+set it counts can still grow through the declared bound below, where a merge made outside the wrapper is not
+observed.
 
 The judgement SHALL be a Rust check returning the shared kinded refusal, so that a title that could not be
 read is separated from a subject that disagrees, and so that its own construction sites are swept like every

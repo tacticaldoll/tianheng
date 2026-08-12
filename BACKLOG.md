@@ -558,15 +558,16 @@ consumer for an undemonstrated deduplication.
   three times and rejected. The reachable direction is to make more of what the file asserts **citable**, so
   that restating is the strictly worse-looking option at the moment of writing.
 
-- **WATCH: four limits of the mutual-independence check, each measured and each declared.** *Observed
+- **WATCH: four limits of the mutual-independence check, each measured and each declared; one now closed.** *Observed
   pressure:* closing the membership half of `三儀 ⊥ 三儀` exposed four more, all reproduced by writing them into
   the tree rather than argued about. **Wording, false refusal:** paraphrasing `guibiao`'s clause makes the
   check fire — it refuses a reason that genuinely states the law. **Wording, false negative:** a `because`
   carrying the literal clause while *negating* it passes, and `AGENTS.self-law.md` then teaches the negation to
-  every agent that loads it. **Enumeration, the dimension list:** `DIMENSIONS` is a hand-kept literal beside an
-  enumerable set, and the set-coverage assertion cannot notice an omission because `found` is produced by
-  filtering on `expected` — removing `guibiao` from the literal leaves a `guibiao` allowlist naming `hunyi`
-  green. **Enumeration, the rule variant:** the filter admits only `RestrictDependenciesTo`, so a second
+  every agent that loads it. **Enumeration, the dimension list:** *closed* — the literal is now held
+  against the workspace's own dimension crates in both directions, so the omission that left a `guibiao`
+  allowlist naming `hunyi` green is refused. It is retained here as the third of the four because the entry's
+  own point is that these are one check's limits, and a closed one is what tells a reader the others are not.
+  **Enumeration, the rule variant:** the filter admits only `RestrictDependenciesTo`, so a second
   boundary using `restrict_workspace_dependencies_to` — the more natural rule for this law — is never examined.
   *Observation source:* those four perturbations, run during review of
   `change/mutual-independence-reacts-to-membership`. *Current check or bound:* none of the four; the

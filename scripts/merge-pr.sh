@@ -3,7 +3,7 @@
 # The sanctioned merge path: the squash-message gate, then `gh pr merge --squash`.
 #
 # Why a wrapper rather than a documented rule. `AGENTS.md` already says the squash subject is the pull
-# request's title with no auto-appended `(#N)`; nine subjects in this repository's history carry that serial
+# request's title with no auto-appended `(#N)`; nine subjects, counted when this wrapper was written, carry that serial
 # anyway, the most recent on the commit that landed a check for a requirement enforced by nothing. The
 # failure mode is not disagreement about the rule — it is one string typed at the one moment nothing can be
 # undone. A merged squash cannot be repaired: amending it changes its hash, and the pull request's merge
