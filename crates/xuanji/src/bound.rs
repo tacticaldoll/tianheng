@@ -179,6 +179,12 @@ impl BoundDecl {
     /// The matches below are **exhaustive in-crate**, so a variant added with a new string of its own fails to
     /// compile here rather than being silently unmeasured — the one place `#[non_exhaustive]` helps rather than
     /// hinders, since the guard and the enum live in the same crate.
+    ///
+    /// **Exhaustive over fields as well as variants, which is a separate obligation.** A new *variant* breaks
+    /// this match on its own; a new *field* on an existing variant does not, and `..` would swallow it — so the
+    /// one arm carrying a second field names it as `bounded: _` rather than eliding it. The distinction is not
+    /// pedantry: the field would be the string this measure exists to reach, escaping the measure that exists
+    /// because the borrowed-form claim was previously made with nothing measuring it.
     pub fn borrows_every_string(&self) -> bool {
         borrowed(&self.id.0) && borrowed(&self.shape) && self.defence.borrows() && {
             match &self.extent {
@@ -188,7 +194,10 @@ impl BoundDecl {
                     | Reached::DeclinesToRefuse { because }
                     | Reached::OverReacts { because }
                     | Reached::NotAViolation { because }
-                    | Reached::AsIntended { because, .. } => borrowed(because),
+                    | Reached::AsIntended {
+                        because,
+                        bounded: _,
+                    } => borrowed(because),
                     Reached::UnderReacts { because, owner } => {
                         borrowed(because)
                             && match owner {
