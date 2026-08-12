@@ -57,61 +57,70 @@ fn self_law_projection_is_fresh() {
 /// `guibiao`'s allowlist to name `hunyi` left every test binary in this workspace green, with
 /// `AGENTS.self-law.md` printing the sibling directly beneath the reason that forbids it. Freshness pinned the
 /// projection against the declaration; nothing pinned the declaration against its own law.
-/// The dimension crates, enumerated from the workspace rather than listed.
+/// The dimension crates, enumerated from cargo rather than from manifest text.
 ///
-/// A dimension is a **published** crate that depends directly on 璇璣: the reaction model every dimension sits
-/// above, which `PROJECT.md` states as the architecture and which a new dimension cannot avoid — a crate that
-/// expressed findings in some other vocabulary would not be one. 璇璣 itself depends on no workspace member,
-/// 星表 is the substrate beneath the dimensions and reaches the model through none, the shell composes them
-/// and deliberately holds no direct edge to the model, and the two unpublished crates are governance rather
-/// than product.
+/// A dimension is a **published** workspace member that depends on 璇璣: the reaction model every dimension
+/// sits above, which `PROJECT.md` states as the architecture and which a new dimension cannot avoid, since a
+/// crate expressing findings in some other vocabulary would not be one. 璇璣 itself depends on no workspace
+/// member, 星表 is the substrate and reaches the model through none, the shell composes the dimensions and
+/// deliberately holds no direct edge to the model, and the unpublished crates are governance rather than
+/// product.
 ///
-/// Read from tracked manifests, so an untracked scratch crate is neither a dimension nor a failure.
-fn dimension_crates() -> BTreeSet<&'static str> {
+/// **Read from `cargo metadata`, because the question is dependency *identity* and manifest text is not
+/// identity.** A first version tested whether a line began with the package name, which a legal rename
+/// defeats: `model = { package = "xuanji", … }` declares the same edge and starts with `model`. Measured — a
+/// crate written that way vanished from this set, the comparison below passed, and its allowlist went
+/// unchecked, which is the exact false negative this enumeration exists to close. Cargo reports the dependency
+/// under its real `name` with the alias in `rename`, so identity is read rather than inferred.
+///
+/// `publish` is read the same way and for the same reason: cargo carries it as structured state, where the
+/// manifest carries it as one of several spellings.
+///
+/// `--no-deps` restricts the answer to workspace members, which is what a dimension must be to be built and
+/// governed at all.
+fn dimension_crates() -> BTreeSet<String> {
     let root = workspace_root().expect("the workspace root this gate already located");
-    let listing = std::process::Command::new("git")
-        // `:(glob)` so `*` stops at the separator. git's default pathspec is fnmatch **without**
-        // `FNM_PATHNAME`, so a bare `crates/*/Cargo.toml` crosses `/` and matches every manifest anywhere
-        // beneath `crates/` — measured, 14 paths where 8 are crate manifests, the other six being test
-        // fixtures. It returned the right answer only because no fixture happened to name 璇璣, and one
-        // already names 星表 deliberately: `shell_metadata_edge` carries a workspace-member dependency
-        // written so the fixture violates the edge under test. The next fixture that needs 璇璣 for the same
-        // reason would have turned this gate red naming a fixture path.
-        .args(["ls-files", ":(glob)crates/*/Cargo.toml"])
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["metadata", "--no-deps", "--format-version", "1"])
         .current_dir(&root)
         .output()
-        .expect("run git ls-files over the crate manifests");
+        .expect("run cargo metadata over this workspace");
     assert!(
-        listing.status.success(),
-        "`git ls-files` failed enumerating crate manifests, and a failed enumeration is not a workspace with \
-         no crates"
+        output.status.success(),
+        "`cargo metadata` failed, and a failed read is not a workspace with no members: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
+    let metadata: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("cargo metadata emits JSON");
+    let packages = metadata["packages"]
+        .as_array()
+        .expect("cargo metadata carries a package array");
+    assert!(
+        !packages.is_empty(),
+        "no workspace member was enumerated, so this comparison would hold over nothing"
+    );
+
     let mut found = BTreeSet::new();
-    for manifest in String::from_utf8_lossy(&listing.stdout).lines() {
-        let text = std::fs::read_to_string(root.join(manifest))
-            .unwrap_or_else(|error| panic!("cannot read tracked manifest {manifest}: {error}"));
-        if text.contains("publish = false") {
+    for package in packages {
+        // `publish` is absent (or null) for a publishable crate and an array for a restricted one; `publish =
+        // false` arrives as the empty array.
+        if package["publish"].as_array().is_some() {
             continue;
         }
-        let deps = match text.split_once("\n[dependencies]\n") {
-            Some((_, rest)) => rest.split("\n[").next().unwrap_or(rest),
-            None => continue,
+        let Some(name) = package["name"].as_str() else {
+            continue;
         };
-        if !deps.lines().any(|line| line.starts_with("xuanji")) {
+        if name == "xuanji" {
             continue;
         }
-        let name = manifest
-            .strip_prefix("crates/")
-            .and_then(|rest| rest.strip_suffix("/Cargo.toml"))
-            .expect("a crate manifest path names its crate");
-        // A crate name carries no separator. The glob above already guarantees it; this refuses loudly if the
-        // pathspec is ever loosened again, rather than letting a fixture path enter the set as a "dimension".
-        assert!(
-            !name.contains('/'),
-            "the manifest enumeration reached {manifest}, which is not a crate manifest — the pathspec has \
-             widened past the crate directories and a fixture would enter this comparison as a dimension"
-        );
-        found.insert(Box::leak(name.to_string().into_boxed_str()) as &'static str);
+        let depends_on_model = package["dependencies"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|dependency| dependency["name"].as_str() == Some("xuanji"));
+        if depends_on_model {
+            found.insert(name.to_string());
+        }
     }
     assert!(
         !found.is_empty(),
@@ -132,7 +141,10 @@ fn dimension_boundaries_declare_the_mutual_independence_law() {
     // `BACKLOG.md` carries that half.
     const DIMENSIONS: [&str; 3] = ["guibiao", "hunyi", "louke"];
     assert_eq!(
-        DIMENSIONS.iter().copied().collect::<BTreeSet<&str>>(),
+        DIMENSIONS
+            .iter()
+            .map(|d| (*d).to_string())
+            .collect::<BTreeSet<String>>(),
         dimension_crates(),
         "the dimensions this test judges are not the dimensions this workspace has — a 三儀 crate born and \
          not named here has its allowlist unchecked while the gate stays green"
