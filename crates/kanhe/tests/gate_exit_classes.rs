@@ -15,6 +15,7 @@
 use std::path::{Path, PathBuf};
 
 use kanhe::refusal::Kind;
+use kanhe::region::Source;
 use kanhe::verdict_channel;
 
 fn workspace_root() -> Option<PathBuf> {
@@ -135,10 +136,13 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
         // `… || exit 1`, `exit 1;` and `[[ … ]] && exit 1` — measured, adding `if [[ ! -f $x ]]; then exit 1; fi`
         // left the count at one and the new site escaped both this and the window check below. Tightening the
         // detector while the requirement says *any* violation-class exit is the false negative this file is for.
-        let sites: Vec<(usize, &str)> = text
-            .lines()
-            .enumerate()
-            .filter(|(_, line)| !line.trim_start().starts_with('#'))
+        // ONE region, read once and shared by the scan and the window below. Two scans re-deciding it is the
+        // shape `kanhe::region` was written to end, and it had already cost this file a disagreement: the scan
+        // excluded comments while the window five lines down did not.
+        let source = Source::of(text.clone());
+        let executed = source.shell();
+        let sites: Vec<(usize, String)> = executed
+            .numbered_lines()
             .filter(|(_, line)| {
                 line.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
                     .zip(
@@ -147,7 +151,7 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
                     )
                     .any(|(a, b)| a == "exit" && b == "1")
             })
-            .map(|(index, line)| (index + 1, line))
+            .map(|(number, line)| (number, line.to_string()))
             .collect();
         assert_eq!(
             sites.len(),
@@ -161,10 +165,12 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
         // Checking `sites[0]` alone was a second way for a new site to escape: the count would have to fail
         // first, and it did not.
         for (line, _) in &sites {
-            let window: String = text
-                .lines()
-                .skip(line.saturating_sub(6))
-                .take(6)
+            // From the SAME region as the scan above, so the two cannot disagree about what counts. A comment
+            // naming the class within five lines of a misplaced exit used to satisfy this.
+            let window: String = executed
+                .numbered_lines()
+                .filter(|(number, _)| *number < *line && *number + 6 > *line)
+                .map(|(_, text)| text)
                 .collect::<Vec<_>>()
                 .join("\n");
             assert!(
@@ -173,6 +179,31 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
                  reports a disagreement no judgement formed:\n{window}"
             );
         }
+    }
+}
+
+/// The text after a command substitution opens, past any `NAME=value` assignments in front of the tool.
+///
+/// A shell assignment prefix is part of the *invocation*, not of what is invoked, and the property this file
+/// judges is about the tool. Testing the text immediately after the opener left every environment-prefixed
+/// acquisition outside the corpus — including `var=$(NAME=value cargo test …)`, which is the shape the gate
+/// invocation takes in both sanctioned wrappers. The one acquisition those scripts exist for was the one the
+/// sweep never saw.
+fn strip_environment_prefix(rest: &str) -> &str {
+    let mut rest = rest.trim_start();
+    loop {
+        let Some((head, tail)) = rest.split_once(char::is_whitespace) else {
+            return rest;
+        };
+        // An assignment is a bare `NAME=value` word: no quoting to unpick, because a tool name never carries
+        // `=` before its first space and an assignment always does.
+        let is_assignment = head.split_once('=').is_some_and(|(name, _)| {
+            !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        });
+        if !is_assignment {
+            return rest;
+        }
+        rest = tail.trim_start();
     }
 }
 
@@ -191,15 +222,19 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
         let text = read(&root, wrapper);
         let mut unguarded = Vec::new();
         let lines: Vec<&str> = text.lines().collect();
-        for (index, line) in lines.iter().enumerate() {
-            let trimmed = line.trim_start();
-            if trimmed.starts_with('#') {
-                continue;
-            }
+        let source = Source::of(text.clone());
+        let executed: Vec<(usize, &str)> = source.shell().numbered_lines().collect();
+        for (number, line) in &executed {
+            let index = number - 1;
             // An assignment whose value is a command substitution of an external tool.
-            let Some((_, rest)) = trimmed.split_once("=$(") else {
+            let Some((_, rest)) = line.trim_start().split_once("=$(") else {
                 continue;
             };
+            // Past the environment prefix, because the TOOL is what this property is about. Testing the text
+            // immediately after the opener left every `var=$(NAME=value tool …)` outside the corpus — which is
+            // the shape the central gate invocation takes in BOTH wrappers, so the one acquisition these
+            // scripts exist for was the one this sweep never saw.
+            let rest = strip_environment_prefix(rest);
             if !rest.starts_with("gh ") && !rest.starts_with("cargo ") {
                 continue;
             }

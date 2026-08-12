@@ -297,11 +297,14 @@ disagrees — from a **cannot-judge** in its own result type rather than in a pr
 wrapper before `cargo publish` is reached. The
 wrapper forwards **only the arguments it names**, refusing everything else — including a spelling of a
 named flag and a flag a future cargo adds — before the gate runs. Both wrappers work this way, by one
-question: does the argument move what the gate judged, or what the act records? So `--manifest-path`,
-`--exclude`, `--no-verify`, `--allow-dirty` and `--config` are refused, while `--dry-run`,
-`--package`, `--locked` and the destination-side `--registry` and `--index` are forwarded — the last
-two changing where the result goes rather than what it is. Values go in the argument after the flag;
-one spelling each.
+question: does the argument move what the gate judged, or what the act records? **The allowlist itself is the
+wrapper's parser, which is where it is read from and the only place it is complete**; the arms below are
+examples of each side, not the set. So `--manifest-path`, `--exclude`, `--no-verify`, `--allow-dirty` and
+`--config` are among those refused, while `--dry-run`, `--package`, `--locked` and the destination-side
+`--registry` and `--index` are among those forwarded — the last two changing where the result goes rather than
+what it is. Naming the parser rather than restating it is deliberate: a second list here would have to agree
+with the first, which is the shape an allowlist exists to avoid, and it had already fallen behind. Values go in
+the argument after the flag; one spelling each.
 
 **A published release snapshot is immutable.** Once a version is on crates.io, its `release: X.Y.Z`
 commit must never be amended or force-pushed away: the published artifact points at that sha1

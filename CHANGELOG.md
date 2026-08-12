@@ -842,6 +842,36 @@ them.
 
 ### Self-governance
 
+- **Two scans of one file disagreed about what counts, and the sweep meant to watch every acquisition never saw
+  the one the wrappers exist for.** The exit-class check excluded comment lines when finding a violation-class
+  exit and did **not** when assembling the window proving that exit sits inside the verdict branch — five lines
+  apart, the same file, the same question. And its acquisition sweep tested the text immediately after a command
+  substitution opens, so `var=$(NAME=value tool …)` fell outside its corpus entirely; that is the shape the gate
+  invocation takes in **both** sanctioned wrappers, so the central acquisition was the unwatched one. Both
+  guarded today, so neither was a live defect — the check's stated subject simply did not reach them.
+
+  Both now read one classified region from `kanhe::region`, so a future third scan inherits the decision instead
+  of re-making it, and the acquisition test looks past the environment prefix because the tool is what the
+  property is about.
+
+  **The mechanization was designed and rejected, which is recorded rather than deferred.** Refusing the inline
+  comment marker inside the checks would refuse more legitimate sites than defects: some select commentary on
+  purpose — a check asserting a doc comment directs its reader somewhere must recognize comment lines — and
+  others parse a data format whose own syntax marks comments. So the requirement carries the rule, the
+  classifier carries the adoption, and what is left is declared: a check that never wrote a region decision at
+  all is invisible, because nothing can scan for an absence.
+
+  **A third reported defect was refuted by measurement and no code changed for it.** A Definition-of-Done
+  comparison was reported as satisfiable by a command sitting only in a workflow comment. It is not — the
+  comparison is exact equality and a comment keeps its marker, so no comment can equal a command. Measured by
+  commenting a real Definition-of-Done line out and running the unmodified check, which refused. Filtering there
+  would have been defensive over-foolproofing of an unreachable state.
+
+- **The publish wrapper's allowlist is named by its parser, not half-listed in prose.** `AGENTS.md` enumerated
+  five forwarded arguments and five refused ones as though they were the sets; the parser admits more on both
+  sides, and a second list that must agree with the first is the shape an allowlist exists to avoid. The
+  document now points at the owner and marks its arms as examples.
+
 - **A coordinate is refused wherever it is written now, not only in source.** The rule that a reference names a
   thing rather than a position reacted over every line-comment format, and whole-document prose sat outside it
   by construction — a positional *phrase* in a record narrates a past state, and separating that from a live

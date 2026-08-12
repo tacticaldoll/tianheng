@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**16 of 83 declared bounds have no pinning test.** That figure is the register's
+**17 of 84 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -324,6 +324,12 @@ fallback used where no manifest exists, which the register spec describes.
 > no repository check fires. Subjects are declared where a capability has something to say, and requiring them to tile the tree would buy coverage with a claim per capability nobody could defend. The blindness is declared so that a clean report is not read as a complete one, and the check prints how many tracked paths went unclaimed rather than leaving the reader to assume none did
 
 - **pinned by**: `files_no_capability_claims_are_reported_rather_than_implied_judged`
+
+### `repository-checks/a-check-that-should-distinguish-a-region-and-does-not-a-stated-bound`
+
+> no reaction sees it. An absence is not a shape, and nothing can scan for a filter that was never written. A reaction refusing an inline region decision was designed and measured against this repository: of the sites carrying the marker, only some are this class — the rest select commentary deliberately or parse a data format whose syntax marks comments — so it would refuse more legitimate sites than defects, which is how a gate earns being turned off. The classifier's adoption is what narrows this, and the narrowing is not a closure. The bound is declared on the construction rather than on an instance: a candidate one was reported and **refuted by measurement**, and a bound resting on a refuted instance would be worse than none
+
+- **unpinned**, tracked by: `BACKLOG.md` — *a check that never wrote a region decision is invisible*
 
 ### `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound`
 

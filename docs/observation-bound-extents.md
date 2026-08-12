@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**39 of 83 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**39 of 84 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -138,7 +138,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_plain_fn_directly_in_a_const_body_stays_a_stated_bound`
 
-## out of reach (24)
+## out of reach (25)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
@@ -203,6 +203,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the header is read and never evaluated; running the command would mean re-entering the `cargo test` harness already running, or — for the shell mechanism — writing the projection into the tree the check is judging, which every gate in this family is forbidden from doing
 - **its defence must show**: does not react
 - **pinned by**: `a_regeneration_command_is_registered_and_never_run`
+
+### `repository-checks/a-check-that-should-distinguish-a-region-and-does-not-a-stated-bound`
+
+> a check judging a property over executed text on unclassified text, having written no region decision at all
+
+- **because**: an absence is not a shape: nothing can scan for a filter that was never written, and a reaction refusing the inline marker was measured against this repository and would refuse more legitimate sites than defects
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *a check that never wrote a region decision is invisible*
 
 ### `repository-checks/a-hook-is-proposed-for-this-rule-a-stated-bound`
 
