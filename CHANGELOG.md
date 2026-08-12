@@ -24,6 +24,20 @@ them.
 
 ### Documentation
 
+- **A standalone-dimension adopter can now read a dimension's declared bounds through the contract that
+  enumerates the promise.** `observation_bounds()` reached the public surface of `guibiao`, `hunyi` and `louke`
+  in this window, advertised as the way to read what a dimension deliberately does not observe **without**
+  implementing the protocol or composing a run — and no external compilation contract named it. Each dimension's
+  `adopter_surface.rs` is a separate crate compiled against that surface, and each now calls it and uses what it
+  returns, so the promise and the file that enumerates it are held together for this member as they already were
+  for the protocol's other thirteen.
+
+  Recorded because the cause is structural rather than an oversight: the three dimension contracts are tracked
+  files that **no capability's declared subject claims**, so the filing join that would otherwise have raised it
+  never had them in scope. That is a declared false negative of the repository checks, with an owner, and this is
+  the first time it was observed costing anything — filed in `BACKLOG.md` with its trigger rather than closed
+  here, since its stated reason has not moved.
+
 - **Every vocabulary type the observation protocol publishes was ruled on before it ships, by asking what a
   third party can own.** `0.5.0` is the first release in which an outside `Observer` can exist, so it is the
   last moment a vocabulary decision is free. The question applied to each: does an outsider occupy one of the

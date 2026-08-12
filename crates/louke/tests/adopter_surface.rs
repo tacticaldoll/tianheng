@@ -52,3 +52,19 @@ fn standalone_runtime_audit_exposes_a_pure_reaction() {
     fn accepts_observer<T: Observer>() {}
     accepts_observer::<louke::RuntimeObserver>();
 }
+
+/// `observation_bounds()` is a plain library item an adopter can call without composing a run.
+///
+/// Named here because this file is the contract that enumerates the promise, and this member reached the
+/// public surface in the same window that closed exactly this gap for the protocol's other thirteen — the
+/// enumeration grew and the file naming it stood still. Reading a dimension's declared bounds without
+/// implementing `Observer` is what `observation-bound-model` obliges, and until this nothing outside the
+/// crate compiled against it.
+#[test]
+fn declared_bounds_are_readable_without_composing_a_run() {
+    let declared: Vec<BoundDecl> = louke::observation_bounds();
+    for bound in &declared {
+        let _: &BoundId = bound.id();
+        let _: &Extent = bound.extent();
+    }
+}
