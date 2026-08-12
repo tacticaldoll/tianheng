@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**17 of 84 declared bounds have no pinning test.** That figure is the register's
+**16 of 83 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -410,12 +410,6 @@ fallback used where no manifest exists, which the register spec describes.
 ### `self-law-projection/a-reason-carrying-the-clause-while-negating-the-law-is-not-observed-a-stated-bound`
 
 > nothing reacts, and `AGENTS.self-law.md` projects the negation to every agent that loads it. This is the serious direction of the pair: the teaching surface can carry the law's opposite while satisfying the check that exists to keep the law taught. Measured, with the projection blessed and the whole suite green
-
-- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence check*
-
-### `self-law-projection/a-dimension-absent-from-the-check-s-own-list-is-not-examined-a-stated-bound`
-
-> its allowlist is never examined, and the set-coverage assertion cannot notice, because the set it compares is produced by filtering on that same list. Measured: removing `guibiao` from the literal leaves a `guibiao` allowlist naming `hunyi` green. Closing it needs the dimension set derived from something that enumerates it rather than typed beside it
 
 - **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence check*
 

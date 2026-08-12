@@ -147,10 +147,17 @@ produces no violation. So this assertion is the sole guard, which is why it is a
 implementation detail.
 
 The clause check SHALL remain, and every limit of this reaction SHALL be **declared**, with each extent read off
-a run of that limit's own WHEN rather than off an argument for it. Four are declared below. Two belong to the
+a run of that limit's own WHEN rather than off an argument for it. Three are declared below. Two belong to the
 wording half and go in **opposite directions**: paraphrasing the clause makes the reaction *fire*, and a
-`because` carrying the literal clause while *negating* the law passes. Two belong to the membership half's
-enumeration: a hand-kept dimension list, and a rule variant the filter does not reach.
+`because` carrying the literal clause while *negating* the law passes. One belongs to the membership half's
+enumeration: a rule variant the filter does not reach.
+
+A fourth was declared here and is **retired**, which is recorded rather than quietly dropped: the hand-kept
+dimension list. Its own text named its closing condition — *the dimension set derived from something that
+enumerates it rather than typed beside it* — and that is what the reaction now does, reading workspace members
+from cargo and comparing both ways. Retired against a run of its own WHEN on the post-change tree, not against
+the argument that it should be: a dimension removed from the literal, and a dimension crate the literal never
+named, are both refused now.
 
 Declaring SHALL NOT be deferred for want of a pin. A bound may be declared **unpinned** against a tracker, and
 that is the right form here: what a pin of these would need — the reaction run over a supplied declaration
@@ -177,15 +184,6 @@ Membership is the structural half; wording is the half that is not.
 - **THEN** nothing reacts, and `AGENTS.self-law.md` projects the negation to every agent that loads it. This is
   the serious direction of the pair: the teaching surface can carry the law's opposite while satisfying the
   check that exists to keep the law taught. Measured, with the projection blessed and the whole suite green
-- **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence check*
-
-#### Scenario: A dimension absent from the check's own list is not examined — a stated bound
-
-- **WHEN** a dimension crate exists and its package name is not in the reaction's hand-kept list
-- **THEN** its allowlist is never examined, and the set-coverage assertion cannot notice, because the set it
-  compares is produced by filtering on that same list. Measured: removing `guibiao` from the literal leaves a
-  `guibiao` allowlist naming `hunyi` green. Closing it needs the dimension set derived from something that
-  enumerates it rather than typed beside it
 - **UNPINNED** `BACKLOG.md` — *four limits of the mutual-independence check*
 
 #### Scenario: A workspace-dependency allowlist is not examined — a stated bound
