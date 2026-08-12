@@ -618,9 +618,12 @@ to the register's bound count, and cannot be the only mention of a bound anywher
 **A bound id written bare SHALL resolve too, wherever tracked Rust or Markdown carries it.** The `(bound: …)`
 form is what *clears prose*; resolution belongs to the **id**, and an id is no less a reference for being
 written without the wrapper. Measured before this was proposed: three occurrences across the tree did not
-resolve, every one of them a stale citation of a bound that does exist, and two of the three sat in a doc
-comment above the very test defending it. One was in a published crate. The bijection cannot see them — it
-compares the two *declaration* sides, and a doc comment is neither.
+resolve, every one of them naming a bound that does exist under an id it does not have. They sat in the two
+places the bijection cannot look — a doc comment citing a bound, and a unit-test fixture constructing a
+`BoundDecl` that mirrors one, together with the assertion round-tripping it. Neither is a *declaration*, and
+the bijection compares the two declaration sides. The fixture is the sharper case: its pin name and its shape
+string both carried the full wording while its id carried an abbreviated one, so a declaration had drifted from
+itself inside a single constructor with nothing able to say so.
 
 **Recognition SHALL be by shape against the enumerated capability set, never by a list written beside it.** A
 reference is a **maximal run of path characters** that is exactly `<capability>/<slug>`, where `<capability>`
@@ -629,6 +632,13 @@ from being mistaken for a reference: a spec's own path is one run carrying three
 `<capability>/<slug>` pair — the same word-reading rule the adopter-narrative reaction already applies for the
 same reason. Enumerating the capabilities rather than listing them is the register's own prohibition: a
 capability added later must be recognized without this reaction being touched.
+
+**That last property is held by construction, and is stated here rather than given a scenario.** The capability
+set is a *parameter* of the recognizer, filled by the reaction from the tracked spec directories, so a
+capability added later is covered because there is no second list to fall behind. A scenario for it would have
+to assert that the reaction passes the set it passes, which is one function compared with itself — the shape
+this repository refuses. What a case table *can* show is that the set governs the answer, and one does: a
+recognizer shown a capability the tree does not declare finds references under it.
 
 **This is reference resolution, not a judgement over prose.** The distinction is the one this repository has
 drawn three times when rejecting a detector over sentences: a bound id has a recognizable shape and the set it
@@ -655,12 +665,6 @@ the id names a declared bound, never that the prose around it describes that bou
 - **WHEN** tracked content carries a path whose characters include a capability name followed by a slash
 - **THEN** it is not read as a reference, because a reference is a maximal run of path characters that is
   exactly `<capability>/<slug>` and such a path is neither
-
-#### Scenario: A capability added later
-
-- **WHEN** a new capability directory appears under `openspec/specs/` and prose cites one of its bounds bare
-- **THEN** the citation is recognized and resolved without this reaction being edited, because the capability
-  set is enumerated rather than listed beside the recognizer
 
 #### Scenario: Prose referencing a declared bound is cleared
 
