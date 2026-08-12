@@ -842,6 +842,20 @@ them.
 
 ### Self-governance
 
+- **A scenario stated a classification where a reader would take it for an observation.** The region
+  requirement carried *two scans of one file disagreeing about comments* as a scenario whose `THEN` said the
+  disagreement **is a defect** — a definition, not something anything looks for. Nothing detects it, and nothing
+  can: seeing it needs the reaction that same requirement records as designed, measured and rejected.
+
+  It is requirement prose now, beside the rule it defines, and the declared bound widens to name both shapes:
+  a region decision never written and one a neighbouring scan contradicts are invisible for the same reason,
+  so declaring one while giving the other a scenario said two different things about one silence.
+
+  Found by re-running this window's own scenario-to-reaction sweep on the final tree rather than by reading —
+  which is the point of the sweep. It is the second instance of this class in this window, and both were the
+  same mistake in the same direction: a scenario is a claim that something looks, and a property nothing can
+  look at belongs in the prose that says so.
+
 - **Three constants sat beside something this repository already enumerates, with nothing holding them equal.**
   All three agreed, which is what made them worth closing before one drifted rather than after.
 

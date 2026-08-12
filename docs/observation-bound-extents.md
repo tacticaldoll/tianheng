@@ -206,9 +206,9 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 ### `repository-checks/a-check-that-should-distinguish-a-region-and-does-not-a-stated-bound`
 
-> a check judging a property over executed text on unclassified text, having written no region decision at all
+> a check judging a property over executed text on unclassified text — no region decision written, or one a neighbouring scan of the same file contradicts
 
-- **because**: an absence is not a shape: nothing can scan for a filter that was never written, and a reaction refusing the inline marker was measured against this repository and would refuse more legitimate sites than defects
+- **because**: an absence is not a shape and nothing can scan for a filter never written, while a disagreement between two scans is visible only to something that can already recognize a region decision — the reaction measured against this repository and rejected for refusing more legitimate sites than defects
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a check that never wrote a region decision is invisible*
 

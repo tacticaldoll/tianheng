@@ -674,6 +674,12 @@ immediately after a command substitution opens is blind to an environment-prefix
 form the central gate invocation takes in both sanctioned wrappers. The tool is what the property is about; the
 assignments in front of it are not.
 
+**Two scans of one file that disagree about the region are a defect regardless of whether either currently
+admits a wrong answer**, because the region is a property of the format and not of the scan. That is stated
+here as a definition rather than given a scenario: it is as invisible as the absence declared below, and for
+the same reason — seeing it would need the reaction this requirement records as measured and rejected. A
+scenario would read as a claim that something looks.
+
 **Selecting comments is not re-deciding a region, and SHALL NOT be read as a violation of this.** A check whose
 subject *is* the commentary — that a doc comment directs a reader somewhere — necessarily recognizes comment
 lines, and so does a check parsing a data format whose own syntax marks comments. The rule is about a property
@@ -685,12 +691,6 @@ over executed text being decided on unclassified text, not about the marker appe
 - **THEN** the sweep recognizes it as an acquisition of `tool`, because what precedes the tool name is not what
   the property is about
 
-#### Scenario: Two scans of one file disagree about comments
-
-- **WHEN** one scan of a file excludes comment lines and a neighbouring scan of the same file does not
-- **THEN** the disagreement is a defect regardless of whether either currently admits a wrong answer, because
-  the region is a property of the format and not of the scan
-
 #### Scenario: A check whose subject is the commentary
 
 - **WHEN** a check recognizes comment lines in order to judge what a comment says, or to parse a data format
@@ -699,10 +699,11 @@ over executed text being decided on unclassified text, not about the marker appe
 
 #### Scenario: A check that should distinguish a region and does not — a stated bound
 
-- **WHEN** a check judges a property over executed text on unclassified text, having written no region decision
-  at all
-- **THEN** no reaction sees it. An absence is not a shape, and nothing can scan for a filter that was never
-  written. A reaction refusing an inline region decision was designed and measured against this repository:
+- **WHEN** a check judges a property over executed text on unclassified text — having written no region
+  decision at all, or having written one that a neighbouring scan of the same file contradicts
+- **THEN** no reaction sees either. An absence is not a shape, and nothing can scan for a filter that was never
+  written; a disagreement between two scans is visible only to something that can already recognize what a
+  region decision is, which is the same reaction. A reaction refusing an inline region decision was designed and measured against this repository:
   of the sites carrying the marker, only some are this class — the rest select commentary deliberately or parse
   a data format whose syntax marks comments — so it would refuse more legitimate sites than defects, which is
   how a gate earns being turned off. The classifier's adoption is what narrows this, and the narrowing is not a
