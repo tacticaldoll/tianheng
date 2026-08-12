@@ -558,7 +558,8 @@ consumer for an undemonstrated deduplication.
   three times and rejected. The reachable direction is to make more of what the file asserts **citable**, so
   that restating is the strictly worse-looking option at the moment of writing.
 
-- **WATCH: four limits of the mutual-independence check, each measured and each declared; one now closed.** *Observed
+- **WATCH: four limits of the mutual-independence check, each measured; three still declared, one closed and
+  retired.** *Observed
   pressure:* closing the membership half of `三儀 ⊥ 三儀` exposed four more, all reproduced by writing them into
   the tree rather than argued about. **Wording, false refusal:** paraphrasing `guibiao`'s clause makes the
   check fire — it refuses a reason that genuinely states the law. **Wording, false negative:** a `because`
@@ -572,8 +573,9 @@ consumer for an undemonstrated deduplication.
   **Enumeration, the rule variant:** the filter admits only `RestrictDependenciesTo`, so a second
   boundary using `restrict_workspace_dependencies_to` — the more natural rule for this law — is never examined.
   *Observation source:* those four perturbations, run during review of
-  `change/mutual-independence-reacts-to-membership`. *Current check or bound:* none of the four; the
-  check's doc comment and `self-law-projection` state them where a reader meets them. *Risk:* the second is
+  `change/mutual-independence-reacts-to-membership`. *Current check or bound:* a check for the third, which
+  closed it; none for the other three, whose statement lives in the check's doc comment and
+  `self-law-projection` where a reader meets them. *Risk:* the second is
   the serious one — the agent-facing projection can teach the negation of the law it quotes. *Promotion
   trigger:* fired for the second; the others are recorded with it because they are one check's limits and
   closing them separately would re-open the same file four times. *Version class:* patch; a `tests/` check of
@@ -582,7 +584,9 @@ consumer for an undemonstrated deduplication.
   a `Constitution` — that is what this entry owns. **Declaring** them needed none of that, and an earlier draft
   of this entry said it did: it read the pin requirement as a declaration requirement and withheld all four,
   which kept a measured false negative out of the register a reader is told to consult before calling a
-  behaviour a defect. All four are declared unpinned against this entry now.
+  behaviour a defect. The three that remain are declared unpinned against this entry; the fourth's
+  declaration was retired with the limit, against a run of its own WHEN rather than against the argument that
+  the code now looked right.
 
 - **ACCEPTED: capabilities whose subject is this repository are indistinguishable from those describing what
   adopters get, and nothing can tell them apart.** *Observed pressure:* the census that motivated
