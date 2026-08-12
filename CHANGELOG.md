@@ -842,6 +842,26 @@ them.
 
 ### Self-governance
 
+- **The sweep meant to watch every acquisition reported clean over a wrapper it read nothing from.** The repair
+  that widened it one commit earlier was inert: it stripped environment assignments from the physical line the
+  command substitution opens, and both wrappers put the tool three lines further down, so what remained was the
+  continuation backslash and the tool test failed exactly as before. The continuation walk that would have
+  reached the tool already existed in the same function — it ran *after* the corpus decision it needed to inform.
+
+  The consequence was worse than the miss. `publish.sh` contributed **no** acquisition at all, and the direction
+  asserted only that the unguarded list was empty — which an empty corpus satisfies exactly as a clean one does.
+  Those are opposite facts, and one of the two wrappers standing in front of an irreversible act was being judged
+  by an empty reading.
+
+  Lines are now joined into one logical statement before the corpus decision, and each wrapper asserts that it
+  contributed at least one acquisition. Both gate invocations — the one thing these scripts exist to run — are
+  examined for the first time, and both are guarded.
+
+  **The earlier repair shipped because its negative run used the wrong shape.** The probe was a single-line
+  acquisition, which the broken reader handles correctly; the defect lives in the multi-line form, and nothing
+  exercised it. A guard seen to fail against a shape the defect does not take has not been seen to fail. The
+  negative run now takes the shape the wrappers actually use.
+
 - **Two scans of one file disagreed about what counts, and the sweep meant to watch every acquisition never saw
   the one the wrappers exist for.** The exit-class check excluded comment lines when finding a violation-class
   exit and did **not** when assembling the window proving that exit sits inside the verdict branch — five lines
