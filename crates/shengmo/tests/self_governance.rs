@@ -102,9 +102,16 @@ fn dimension_crates() -> BTreeSet<String> {
 
     let mut found = BTreeSet::new();
     for package in packages {
-        // `publish` is absent (or null) for a publishable crate and an array for a restricted one; `publish =
-        // false` arrives as the empty array.
-        if package["publish"].as_array().is_some() {
+        // Only the EMPTY array means unpublishable. Cargo reports `publish` as null when it is absent or
+        // `true`, as `[]` for `publish = false`, and as a non-empty list for `publish = ["registry"]` — which
+        // is a crate that publishes, to a named registry. Excluding every array excluded that third case, so a
+        // dimension restricted to a private registry left this set and its allowlist went unchecked: the same
+        // false negative as the two revisions before this one, now through the field's *semantics* rather than
+        // through its text.
+        if package["publish"]
+            .as_array()
+            .is_some_and(|registries| registries.is_empty())
+        {
             continue;
         }
         let Some(name) = package["name"].as_str() else {

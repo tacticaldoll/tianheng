@@ -842,6 +842,22 @@ them.
 
 ### Self-governance
 
+- **Every `publish` array was read as unpublishable, and one of them means the opposite.** Cargo reports the
+  field as null when it is absent or `true`, as the empty array for `publish = false`, and as a **non-empty
+  list** for `publish = ["registry"]` — a crate that publishes, to a named registry. Excluding every array
+  excluded that third case, so a dimension restricted to a private registry left the enumerated set and its
+  allowlist went unchecked.
+
+  Only the empty array excludes now. Measured across all four states: a private-registry dimension is caught,
+  `publish = false` is still correctly excluded, an ordinary publishable dimension is still caught, and the
+  aliased dependency the previous revision closed is still caught.
+
+  This is the fourth revision of one enumerator and the fourth time in the same direction. The first kept a
+  literal by hand; the second read a pathspec whose `*` crossed the separator; the third matched a dependency
+  by manifest text rather than identity; this one read the right field and got its **semantics** wrong. Each
+  returned the correct set for this workspace while resting on evidence that did not support it — which is
+  what makes a green result no evidence at all about a corpus.
+
 - **The dimension enumerator judged manifest text where the question is dependency identity.** It tested
   whether a line began with the model crate's name, which a legal rename defeats: a dependency written
   `model = { package = "xuanji", … }` declares the same edge and begins with `model`. Measured — a crate
