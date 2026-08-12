@@ -282,6 +282,22 @@ The refusals SHALL be ordered from most specific to least: a subject carrying a 
 title and is also still conventional-shaped, and reporting the general fact for the specific one sends a reader
 to compare two strings that differ by exactly the thing the rule names.
 
+**What the gate judged SHALL be what the act records, for every judged input and not for the message alone.**
+An input the gate received as a **value** SHALL reach `gh pr merge` as that value, never as a path or other
+reference the tool re-resolves after the gate has run. The interval between the two holds a whole `cargo test`
+run, and what lands cannot be amended — a squash commit's hash is cited by the pull request's merge record, so
+correcting the commit afterwards decouples the two. This is the local half of the pin the head requirement
+makes remotely: a pull request that moved is refused, and an input that moved on disk is never read a second
+time.
+
+The obligation is stated over the whole set because three of the four inputs already satisfied it while the
+fourth did not, and nothing said they were one set: the subject travelled as a value, the repository was
+resolved once and named on every call, the head was captured before the commit set and supplied as
+`--match-head-commit`, and the live commit subjects were pinned through that head — while the body was handed
+over as the path it had been read from. The wrapper's own allowlist already refuses a **caller's** body flag
+in every spelling, naming this same split as its reason, which is what makes the wrapper composing one itself
+a defect rather than a gap.
+
 #### Scenario: A squash subject carries the pull request's number
 
 - **WHEN** a proposed subject ends in `(#N)`
@@ -298,6 +314,12 @@ to compare two strings that differ by exactly the thing the rule names.
 - **WHEN** the title is unavailable
 - **THEN** the check refuses as a cannot-judge rather than as a disagreement, because an unread title is not
   a wrong subject
+
+#### Scenario: The body file changes between the gate and the merge
+
+- **WHEN** the file a body was read from is modified after the gate judged that body and before the merge runs
+- **THEN** the merge records the value the gate judged, because the wrapper hands the tool that value and never
+  the path it came from
 
 #### Scenario: A hook is proposed for this rule — a stated bound
 

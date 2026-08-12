@@ -333,5 +333,26 @@ require_one_pass "$gate_output"
 # script's is deliberate.
 rm -f "$verdict_file"
 
-exec gh pr merge "$pr" --repo "$repository" --squash --subject "$subject" --body-file "$body_file" \
+# The body travels as the VALUE the gate judged, never as the path it was read from.
+#
+# `--body-file` would have gh open the file again, after the gate has run — and what sits between the two is a
+# whole `cargo test`, minutes of it on a cold target directory. A rewrite in that window is recorded by a merge
+# that judged something else, permanently: the pull request's merge record cites the squash commit's hash, so
+# amending it afterwards decouples the two.
+#
+# The other three judged inputs already travelled this way and nothing said they were one set: the subject is a
+# value, the repository is resolved once and named on every call, the head is captured before the commit set and
+# pinned with `--match-head-commit`, through which the live subjects are pinned too. This is the local half of
+# that pin — a pull request that moved is refused, and an input that moved on disk is never read a second time.
+#
+# Safe against a later occurrence only because the allowlist refuses a CALLER's body flag in every spelling, so
+# `passthrough` can never carry one: gh takes the last spelling of a repeated flag, and this argument is spliced
+# before it. That safety belongs to the allowlist rather than to the order these are written in.
+#
+# `--body` over a wrapper-owned temporary file, which would close the same race: such a file must outlive the
+# `exec` for gh to read it, so it could not be removed beforehand and no EXIT trap survives an `exec` — which is
+# the leak this repository closed one commit ago, reintroduced to fix a different defect. A value in `argv` has
+# an `ARG_MAX` ceiling a path does not, and that ceiling fails loud with `E2BIG` before the merge rather than
+# recording something wrong.
+exec gh pr merge "$pr" --repo "$repository" --squash --subject "$subject" --body "$body" \
     --match-head-commit "$head" "${passthrough[@]}"

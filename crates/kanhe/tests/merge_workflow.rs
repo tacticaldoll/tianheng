@@ -15,6 +15,22 @@ fn workspace_root() -> Option<PathBuf> {
     )
 }
 
+/// The body written to the fixture file, and therefore the body the gate judges.
+const JUDGED_BODY: &str = "Why this change exists and what contract it preserves.\n\
+                           \n\
+                           A second paragraph, so the value carries a newline of its own.\n";
+
+/// What the controlled `cargo` writes over the body file while standing where the gate runs.
+const REWRITTEN_BODY: &str = "A body nobody judged, written while the gate was running.\n";
+
+/// The body a merge should record: the judged file's content as the wrapper's `$(cat …)` yields it.
+///
+/// Command substitution strips trailing newlines, and the controlled `gh` normalises the `--body-file` path
+/// the same way, so the two arms differ only in **which content** they carry — never in how it was trimmed.
+fn judged_value() -> &'static str {
+    JUDGED_BODY.trim_end_matches('\n')
+}
+
 struct Run {
     /// Anything the wrapper left in the isolated `TMPDIR` it was given.
     leftover: Vec<String>,
@@ -22,6 +38,13 @@ struct Run {
     stdout: String,
     stderr: String,
     gh_log: String,
+    /// The body the merge would **record**, resolved by the controlled `gh` the way the real tool resolves it.
+    ///
+    /// Separate from [`Run::gh_log`] because the question it answers is different: the log says which
+    /// arguments were spelled, this says what the act would write. A direction asserting the flag name would
+    /// pass for a wrapper spelling `--body "$(cat "$body_file")"` at merge time, which re-reads and is the
+    /// defect.
+    gh_body: String,
     cargo_log: String,
     commits: String,
 }
@@ -74,14 +97,14 @@ fn run_wrapper(root: &Path, mode: &str, extra: &[&str]) -> Run {
     std::fs::create_dir(&tmp).expect("create the wrapper's temporary directory");
 
     let gh_log = scratch.join("gh.log");
+    let gh_body = scratch.join("gh.body");
     let cargo_log = scratch.join("cargo.log");
     let commits = scratch.join("commits");
     let body = scratch.join("body.md");
-    std::fs::write(
-        &body,
-        "Why this change exists and what contract it preserves.\n",
-    )
-    .expect("write merge body");
+    // Deliberately **multi-line**, which is what a curated squash body actually is. A single-line fixture
+    // would let the value travel through `argv` without ever exercising the newline the controlled `gh` has
+    // to log safely, so every direction here would pass while the shape they all read stayed fragile.
+    std::fs::write(&body, JUDGED_BODY).expect("write merge body");
     if mode == "unreadable-body" {
         use std::os::unix::fs::PermissionsExt;
         let mut permissions = std::fs::metadata(&body)
@@ -95,7 +118,12 @@ fn run_wrapper(root: &Path, mode: &str, extra: &[&str]) -> Run {
         &bin.join("gh"),
         r##"#!/usr/bin/env bash
 set -eu
-printf '%s\n' "$*" >> "$FAKE_GH_LOG"
+# Logged with newlines escaped, so ONE invocation stays ONE log line even when an argument carries them — a
+# curated body travelling in `argv` does. Directions locate the merge with `starts_with("pr merge")` and then
+# read later arguments off that same line; a split invocation would leave those reading a line that no longer
+# holds what they assert, silently and for a reason unrelated to what they test.
+argv=$*
+printf '%s\n' "${argv//$'\n'/\\n}" >> "$FAKE_GH_LOG"
 if [[ $1 == repo && $2 == view ]]; then
     printf '%s\n' 'tacticaldoll/tianheng'
 elif [[ $1 == pr && $2 == view && $* == *"--json title"* ]]; then
@@ -121,7 +149,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head | unreadable-body)
+    subjects | invalid-number | unreadable-head | unreadable-body | body-moved)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -137,7 +165,27 @@ elif [[ $1 == api ]]; then
         ;;
     esac
 elif [[ $1 == pr && $2 == merge ]]; then
-    :
+    # Resolve the body the way the real tool does — `--body` by value, `--body-file` by reading the path —
+    # and record what would be written. The question a direction must be able to ask is what the merge
+    # RECORDS, not which flag was spelled: asserting the flag name would pass for a wrapper spelling
+    # `--body "$(cat "$body_file")"` at merge time, which re-reads the file and is the defect itself.
+    merge_body=""
+    while (($#)); do
+        case $1 in
+        --body)
+            merge_body=${2-}
+            shift $(($# >= 2 ? 2 : 1))
+            ;;
+        --body-file)
+            merge_body=$(cat -- "${2-}")
+            shift $(($# >= 2 ? 2 : 1))
+            ;;
+        *)
+            shift
+            ;;
+        esac
+    done
+    printf '%s' "$merge_body" > "$FAKE_GH_BODY"
 else
     printf 'unexpected gh invocation: %s\n' "$*" >&2
     exit 97
@@ -150,13 +198,20 @@ fi
 set -eu
 printf '%s\n' "$*" >> "$FAKE_CARGO_LOG"
 printf '%s' "${TIANHENG_MERGE_COMMITS-}" > "$FAKE_COMMITS"
+# The gate's own interval, made reproducible. This executable stands exactly where the judgement runs, so a
+# rewrite here lands between the read and the merge — which is when an editor autosave or a "quick typo fix"
+# started after the wrapper was launched actually arrives.
+if [[ -n ${FAKE_BODY_REWRITE-} ]]; then
+    printf '%s' "$FAKE_BODY_REWRITE_TEXT" > "$FAKE_BODY_REWRITE"
+fi
 printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'
 "##,
     );
 
     let old_path = std::env::var_os("PATH").unwrap_or_default();
     let path = format!("{}:{}", bin.display(), old_path.to_string_lossy());
-    let output = Command::new("bash")
+    let mut command = Command::new("bash");
+    command
         .arg(root.join("scripts/merge-pr.sh"))
         .args(["42", "--body-file"])
         .arg(&body)
@@ -164,11 +219,16 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
         .env("PATH", path)
         .env("FAKE_GH_MODE", mode)
         .env("FAKE_GH_LOG", &gh_log)
+        .env("FAKE_GH_BODY", &gh_body)
         .env("FAKE_CARGO_LOG", &cargo_log)
         .env("FAKE_COMMITS", &commits)
-        .env("TMPDIR", &tmp)
-        .output()
-        .expect("run controlled merge workflow");
+        .env("TMPDIR", &tmp);
+    if mode == "body-moved" {
+        command
+            .env("FAKE_BODY_REWRITE", &body)
+            .env("FAKE_BODY_REWRITE_TEXT", REWRITTEN_BODY);
+    }
+    let output = command.output().expect("run controlled merge workflow");
 
     let run = Run {
         leftover: std::fs::read_dir(&tmp)
@@ -185,6 +245,8 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         gh_log: read_if_present(&gh_log).expect("read controlled gh log"),
+        gh_body: read_if_present(&gh_body)
+            .expect("read the body the controlled merge would record"),
         cargo_log: read_if_present(&cargo_log).expect("read controlled cargo log"),
         commits: read_if_present(&commits).expect("read commits received by controlled gate"),
     };
@@ -722,5 +784,59 @@ fn no_temporary_file_survives_the_wrapper() {
         refused.leftover.is_empty(),
         "a path that stops before the merge left {:?} behind",
         refused.leftover
+    );
+}
+
+/// What the gate judged is what the merge records, even when the file it was read from moves in between.
+///
+/// The interval is real rather than theoretical: between the read and the merge sits a whole `cargo test` run,
+/// minutes of it on a cold target directory. Anything that rewrites the file in that window — an editor
+/// autosave, a "quick typo fix" started after the wrapper was launched — was judged by nothing and is recorded
+/// permanently, because a squash commit's hash is cited by the pull request's merge record and amending it
+/// decouples the two.
+///
+/// **The assertion is on the recorded body, never on which flag was spelled.** A direction checking for
+/// `--body` would pass for a wrapper spelling `--body "$(cat "$body_file")"` at merge time, which re-reads the
+/// file and is the defect wearing the fix's clothes. So the controlled `gh` resolves its body the way the real
+/// tool does and records what would be written, and this reads that.
+///
+/// Three of the four judged inputs already held this property — the subject travels as a value, the repository
+/// is resolved once, the head is pinned with `--match-head-commit` and the commit set through it — and nothing
+/// said they were one set, which is how the fourth sat here through the rounds that built this wrapper.
+#[test]
+fn the_merge_records_the_body_the_gate_judged_not_the_file_it_came_from() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+
+    let run = run_wrapper(&root, "body-moved", &[]);
+    assert!(
+        run.status.success(),
+        "the controlled workflow must reach the merge, got {:?} with stderr {:?}",
+        run.status.code(),
+        run.stderr
+    );
+
+    // Not vacuous: the rewrite has to have actually happened, or this direction would hold over a file nobody
+    // touched and pass for either wrapper.
+    let after = std::fs::read_to_string(root.join("scripts/merge-pr.sh"));
+    assert!(
+        after.is_ok(),
+        "the wrapper must still be readable after the run"
+    );
+    assert_ne!(
+        judged_value(),
+        REWRITTEN_BODY.trim_end_matches('\n'),
+        "the judged and rewritten bodies must differ, or this direction compares a value with itself"
+    );
+
+    assert_eq!(
+        run.gh_body,
+        judged_value(),
+        "the merge recorded a body the gate never judged.\n  recorded: {:?}\n  judged:   {:?}\nThe wrapper \
+         must hand the tool the value it gave the gate, never the path it read that value from — the file can \
+         move while the gate runs, and the record cannot be amended afterwards",
+        run.gh_body,
+        judged_value()
     );
 }
