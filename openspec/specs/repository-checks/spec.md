@@ -678,6 +678,19 @@ SHALL be joined to the `--test <target>` of the same invocation, and that target
 exactly once. A test identifier is a reference into this repository exactly as a path is, and the reference
 gate matches paths only.
 
+**Every tracked script SHALL carry at least one such citation, and that SHALL be held per script.** A script
+citing no gate renders its own verdict, which is the shape this capability's Purpose refuses and the shape its
+retired predecessor described in full: `check_*.sh` gates paired with `test_*.sh` twins over a shared shell
+library, 1562 lines of it. The direction that enumerates the scripts folded every citation into one list and
+asserted that **list** was non-empty, so a script contributing nothing was invisible while any sibling
+contributed something — the whole way back was open, and the enumeration that would have seen it was already
+running.
+
+**The consequence is stated rather than discovered: `scripts/` becomes a closed category.** A tracked script
+that is not a wrapper cannot be added there while this holds, which is what the capability already claims when
+it says `git ls-files scripts/` names only wrappers. Making that claim hold is the point; a convenience script
+belongs somewhere this requirement does not reach, or the requirement is amended deliberately.
+
 **Both SHALL hold, and neither substitutes for the other.** Measured rather than reasoned: `--list` includes an
 `#[ignore]`d test, so the check cannot see a silenced gate, while `--exact` on one reports `0 passed; 1
 ignored` and exits `0`, so the wrapper can. The check runs where the suite runs and a wrapper is run
@@ -703,6 +716,12 @@ before that.
   registered twice
 - **THEN** the pinning check fails in an ordinary run, naming the script, the identifier, and the target it
   was cited against — before any wrapper is invoked
+
+#### Scenario: A tracked script cites no gate at all
+
+- **WHEN** a tracked shell script carries no `--exact <ident>` citation anywhere, while its siblings do
+- **THEN** the check fails naming that script, because a script that defers its verdict to nothing is rendering
+  one itself; the aggregate being non-empty says only that some script cites a gate, never that this one does
 
 #### Scenario: An invocation whose identifier cannot be bound to a target
 

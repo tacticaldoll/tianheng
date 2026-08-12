@@ -1,6 +1,6 @@
 //! The gate-identity judgement's failure matrix.
 
-use crate::gate_identity::{citations, logical_lines, offences, registered_names};
+use crate::gate_identity::{citations, logical_lines, offences, registered_names, uncited_scripts};
 use crate::refusal::Kind;
 
 /// A listing carrying every shape the join has to tell apart:
@@ -144,4 +144,60 @@ fn a_listing_that_cannot_be_read_cannot_be_judged() {
 #[test]
 fn a_gate_registered_once_is_clean() {
     assert!(offences(&citations("scripts/w.sh", &invocation("the_gate")), lists).is_empty());
+}
+
+/// A script that defers its verdict to a named gate is what a wrapper is.
+#[test]
+fn a_script_citing_a_gate_is_a_wrapper() {
+    assert!(uncited_scripts([("scripts/merge-pr.sh", invocation("the_gate").as_str())]).is_empty());
+}
+
+/// A script citing nothing renders its own verdict, and is named.
+#[test]
+fn a_script_citing_no_gate_is_named() {
+    let refusals = uncited_scripts([(
+        "scripts/check_something.sh",
+        "#!/usr/bin/env bash\nset -eu\nif grep -q bad tracked; then exit 1; fi\n",
+    )]);
+    assert_eq!(refusals.len(), 1);
+    assert_eq!(refusals[0].kind, Kind::Violation);
+    assert!(refusals[0].message.contains("scripts/check_something.sh"));
+    assert!(refusals[0].message.contains("`--exact`"));
+}
+
+/// **One script citing twice does not excuse a sibling citing none.**
+///
+/// This is the whole reason the question is asked per script. Asserting that the citation total reaches the
+/// script count passes here — two citations, two scripts — while one of them defers to nothing, which is the
+/// aggregate reading the direction above this replaced.
+#[test]
+fn a_sibling_citing_twice_does_not_cover_a_script_citing_none() {
+    let citing_twice = format!("{}{}", invocation("first_gate"), invocation("second_gate"));
+    let refusals = uncited_scripts([
+        ("scripts/publish.sh", citing_twice.as_str()),
+        ("scripts/lib/helper.sh", "#!/usr/bin/env bash\nset -eu\n"),
+    ]);
+    assert_eq!(refusals.len(), 1);
+    assert!(refusals[0].message.contains("scripts/lib/helper.sh"));
+}
+
+/// A citation that is commented out is not a citation, so the script carrying only one is named.
+///
+/// Composes with `a_commented_invocation_cites_nothing` rather than restating it: that row says the extractor
+/// ignores a commented invocation, this says what follows for the script it sat in.
+#[test]
+fn a_script_whose_only_invocation_is_commented_out_is_named() {
+    let commented = format!("# {}", invocation("the_gate"));
+    let refusals = uncited_scripts([("scripts/probe.sh", commented.as_str())]);
+    assert_eq!(refusals.len(), 1);
+    assert!(refusals[0].message.contains("scripts/probe.sh"));
+}
+
+/// An empty corpus yields no refusal here, and refusing it is the caller's job.
+///
+/// Stated as a row rather than left implicit: a set that never arrived is not a set in which every member cites
+/// a gate, and the repository direction keeps its own enumeration guard for exactly that.
+#[test]
+fn an_empty_corpus_is_not_this_judgement_s_refusal() {
+    assert!(uncited_scripts([]).is_empty());
 }
