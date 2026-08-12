@@ -615,6 +615,53 @@ and the drift it produces is already recorded as a live `BACKLOG.md` item.
 A reference SHALL NOT be treated as a declaration: it carries no citation of its own, contributes nothing
 to the register's bound count, and cannot be the only mention of a bound anywhere.
 
+**A bound id written bare SHALL resolve too, wherever tracked Rust or Markdown carries it.** The `(bound: …)`
+form is what *clears prose*; resolution belongs to the **id**, and an id is no less a reference for being
+written without the wrapper. Measured before this was proposed: three occurrences across the tree did not
+resolve, every one of them a stale citation of a bound that does exist, and two of the three sat in a doc
+comment above the very test defending it. One was in a published crate. The bijection cannot see them — it
+compares the two *declaration* sides, and a doc comment is neither.
+
+**Recognition SHALL be by shape against the enumerated capability set, never by a list written beside it.** A
+reference is a **maximal run of path characters** that is exactly `<capability>/<slug>`, where `<capability>`
+is a directory under `openspec/specs/` and `<slug>` is kebab-case. Reading maximal runs is what keeps a path
+from being mistaken for a reference: a spec's own path is one run carrying three slashes, so it is not a
+`<capability>/<slug>` pair — the same word-reading rule the adopter-narrative reaction already applies for the
+same reason. Enumerating the capabilities rather than listing them is the register's own prohibition: a
+capability added later must be recognized without this reaction being touched.
+
+**This is reference resolution, not a judgement over prose.** The distinction is the one this repository has
+drawn three times when rejecting a detector over sentences: a bound id has a recognizable shape and the set it
+must land in is *produced* by the declarations, exactly as a path, an `--exact` identifier and a `(bound: …)`
+reference already are. Nothing here decides what a sentence means.
+
+**A reaction over tracked text reads its own text, and a fixture SHALL be written for that.** A row needing an
+invented slug SHALL hang it off a capability no spec directory carries, and prose explaining that SHALL
+describe the shape rather than spelling an offending token — both were observed here, one after the other,
+within this reaction's own first two runs.
+
+What it does **not** establish is the same as for the wrapped form and SHALL be stated with it: resolving says
+the id names a declared bound, never that the prose around it describes that bound.
+
+#### Scenario: A bare id in a doc comment names no declared bound
+
+- **WHEN** tracked Rust or Markdown carries `<capability>/<slug>` with no `(bound: …)` wrapper, and no declared
+  bound produces that id
+- **THEN** the reaction fails, naming the file, the line and the unresolved id — the same refusal the wrapped
+  form gets, because resolution belongs to the id rather than to the syntax around it
+
+#### Scenario: A path that merely contains a capability name
+
+- **WHEN** tracked content carries a path whose characters include a capability name followed by a slash
+- **THEN** it is not read as a reference, because a reference is a maximal run of path characters that is
+  exactly `<capability>/<slug>` and such a path is neither
+
+#### Scenario: A capability added later
+
+- **WHEN** a new capability directory appears under `openspec/specs/` and prose cites one of its bounds bare
+- **THEN** the citation is recognized and resolved without this reaction being edited, because the capability
+  set is enumerated rather than listed beside the recognizer
+
 #### Scenario: Prose referencing a declared bound is cleared
 
 - **WHEN** a sentence mentions a bound and carries `(bound: <capability>/<slug>)` naming a declared bound
