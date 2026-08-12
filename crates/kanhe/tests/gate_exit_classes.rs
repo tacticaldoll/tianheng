@@ -182,6 +182,30 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
     }
 }
 
+/// One acquisition as a single logical line: the physical line at `index` with every continuation appended.
+///
+/// The shell's own rule, applied before the corpus decision rather than after it. A trailing backslash means
+/// the statement is unfinished, so reading only the opening line answers a question about the tool with text
+/// that does not contain the tool.
+fn join_continuations(lines: &[&str], index: usize) -> String {
+    let mut joined = String::new();
+    let mut cursor = index;
+    loop {
+        let current = lines[cursor];
+        match current.trim_end().strip_suffix('\\') {
+            Some(head) if cursor + 1 < lines.len() => {
+                joined.push_str(head.trim_end());
+                joined.push(' ');
+                cursor += 1;
+            }
+            _ => {
+                joined.push_str(current.trim_end());
+                return joined;
+            }
+        }
+    }
+}
+
 /// The text after a command substitution opens, past any `NAME=value` assignments in front of the tool.
 ///
 /// A shell assignment prefix is part of the *invocation*, not of what is invoked, and the property this file
@@ -221,19 +245,30 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
     for wrapper in WRAPPERS {
         let text = read(&root, wrapper);
         let mut unguarded = Vec::new();
+        let mut examined = 0usize;
         let lines: Vec<&str> = text.lines().collect();
         let source = Source::of(text.clone());
         let executed: Vec<(usize, &str)> = source.shell().numbered_lines().collect();
         for (number, line) in &executed {
             let index = number - 1;
-            // An assignment whose value is a command substitution of an external tool.
-            let Some((_, rest)) = line.trim_start().split_once("=$(") else {
+            // An assignment whose value is a command substitution — recognized on the opening line, because
+            // that is where the substitution opens; what it *invokes* is read from the joined line below.
+            if !line.trim_start().contains("=$(") {
+                continue;
+            }
+            // **Joined first, then read.** The tool name need not be on the physical line the substitution
+            // opens: both wrappers spread the gate invocation across three lines, with the environment
+            // assignments on the first and the tool on the last. Deciding the corpus on the opening line alone
+            // left `rest` as the continuation backslash, so the tool test failed and the acquisition these
+            // scripts exist for stayed outside the corpus — while the sweep reported clean over `publish.sh`,
+            // which contributed nothing at all. The continuation walk already existed for the guard below; it
+            // simply ran after the decision it needed to inform.
+            let joined = join_continuations(&lines, index);
+            let Some((_, rest)) = joined.split_once("=$(") else {
                 continue;
             };
-            // Past the environment prefix, because the TOOL is what this property is about. Testing the text
-            // immediately after the opener left every `var=$(NAME=value tool …)` outside the corpus — which is
-            // the shape the central gate invocation takes in BOTH wrappers, so the one acquisition these
-            // scripts exist for was the one this sweep never saw.
+            // Past the environment prefix, because the TOOL is what this property is about, and an assignment
+            // in front of it is part of the invocation rather than of what is invoked.
             let rest = strip_environment_prefix(rest);
             if !rest.starts_with("gh ") && !rest.starts_with("cargo ") {
                 continue;
@@ -252,10 +287,19 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
                 }
                 cursor += 1;
             }
+            examined += 1;
             if !guarded {
                 unguarded.push(format!("{wrapper}:{}", index + 1));
             }
         }
+        // **Per wrapper, before the verdict.** `unguarded.is_empty()` is satisfied by a corpus that collapsed
+        // to nothing exactly as it is by one that is clean, and the two are opposite facts. Every sibling
+        // direction here already guards its own corpus this way; this one asserted only the finding.
+        assert!(
+            examined > 0,
+            "{wrapper}: no acquisition entered the corpus, so this direction would report clean over nothing \
+             — a wrapper standing in front of an irreversible act must not be judged by an empty reading"
+        );
         assert!(
             unguarded.is_empty(),
             "these acquisitions are unguarded, so a failing tool exits with its own status and its own stderr \
