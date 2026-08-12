@@ -89,6 +89,20 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_member_named_only_in_a_comment_is_counted_as_named",
         ),
+        BoundDecl::unpinned(
+            BoundId::new(
+                "repository-checks/a-check-that-should-distinguish-a-region-and-does-not-a-stated-bound",
+            ),
+            "a check judging a property over executed text on unclassified text, having written no region \
+             decision at all",
+            Extent::OutOfReach {
+                because: "an absence is not a shape: nothing can scan for a filter that was never written, \
+                          and a reaction refusing the inline marker was measured against this repository and \
+                          would refuse more legitimate sites than defects"
+                    .into(),
+            },
+            "`BACKLOG.md` — *a check that never wrote a region decision is invisible*",
+        ),
         BoundDecl::pinned(
             BoundId::new("repository-checks/files-no-capability-claims-a-stated-bound"),
             "a tracked file no capability's declared subject claims",

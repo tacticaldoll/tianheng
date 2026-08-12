@@ -58,6 +58,27 @@ under WATCH — its promotion trigger (a second standalone instrument consumer d
 projection/run need) has not fired, and acting on it speculatively would break the proven standalone 圭表
 consumer for an undemonstrated deduplication.
 
+### ACCEPTED DEBT
+
+- **A check that never wrote a region decision is invisible.** *Class:* ACCEPTED DEBT. *Observed pressure:* the
+  region classifier exists because six defects were one shape, and two more were found afterwards in a check
+  that never adopted it. Those two were *wrong* decisions and a reaction can see a wrong decision; a check that
+  simply never distinguished executed text from commentary has written nothing to see. *Observation source:*
+  none, which is the entry. *Current reaction or bound:* declared as
+  `repository-checks/a-check-that-should-distinguish-a-region-and-does-not-a-stated-bound`; the requirement
+  obliges the classifier and the classifier's adoption is what narrows the class. *Risk:* low and bounded — a
+  check in this class reads a wider corpus than its property, so it errs toward reporting more, and this
+  repository's checks fail loud rather than passing quietly. *Promotion trigger:* a defect of this class
+  observed in the wild — a check reported clean over text its property did not cover. Note that a candidate was
+  reported during the `0.5.0` review and **refuted by measurement**, so the trigger asks for a confirmed one.
+  *Compatibility class:* patch; the checks ship in zero packages. *Authority:*
+  `openspec/specs/repository-checks/spec.md`'s requirement on the region a check judges.
+
+  The mechanization was designed and rejected rather than deferred: refusing the inline comment marker inside
+  the checks would refuse more legitimate sites than defects, because some select commentary on purpose and
+  others parse a data format whose syntax marks comments. That measurement is the reason this is debt rather
+  than a gap someone forgot.
+
 ### READY-PATCH
 
 - **A capability's declared subject does not reach every file whose change it should file, and the one
@@ -234,7 +255,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **83 bounds across 23 capabilities** — a live figure rather than part of the measurement
+  currently holds **84 bounds across 23 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
