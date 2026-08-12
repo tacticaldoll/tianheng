@@ -815,6 +815,27 @@ them.
 
 ### Self-governance
 
+- **A tracked script that deferred its verdict to nothing was invisible.** The direction enumerating this
+  repository's scripts folded every `--exact` gate citation into one list and asserted that *list* was
+  non-empty, so a script citing nothing passed as long as any sibling cited something. A script that names no
+  gate is a script rendering its own verdict — the shape this window deleted 1562 lines of, `check_*.sh` gates
+  paired with `test_*.sh` twins over a shared shell library, which once had a whole capability describing it.
+  The way back was open and the enumeration that would have seen it was already running.
+
+  Each enumerated script is now asked its own question and named in its own refusal. Per script rather than by
+  counting, deliberately: asserting that the citation total reaches the script count passes for two scripts
+  where one cites twice and the other not at all, which is the aggregate reading that failed one level up.
+
+  **The consequence is stated rather than discovered: `scripts/` is now a closed category.** A tracked script
+  that is not a wrapper cannot be added there while this holds — which is exactly what the capability already
+  claimed about itself when it said `git ls-files scripts/` names only wrappers. The claim is held now instead
+  of written. A convenience script belongs elsewhere, or the requirement is amended deliberately.
+
+  What it buys is the **shape**, and the limit is written down beside it: citing a gate is necessary, not
+  sufficient. A script could cite one and still judge afterwards. Closing that needs a judgement over source
+  prose, the instrument this repository has designed, measured three times and rejected — while citing a gate
+  is a *reference*, and reference resolution here is already mechanical.
+
 - **The squash wrapper judged a body it held and merged a body it re-read.** It reads the body once, guarded,
   and hands that value to the gate; its final invocation handed the merge the *path* instead, so the two were
   the same only while nothing touched the file in between. What sits between them is a whole `cargo test` run —

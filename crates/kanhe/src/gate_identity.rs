@@ -150,3 +150,37 @@ pub fn offences(
     }
     offences
 }
+
+/// Which of the enumerated scripts defer their verdict to no gate at all.
+///
+/// [`offences`] asks whether each citation resolves; this asks whether a script made one. The two are the same
+/// question at different granularity, and only the second sees a script that cites **nothing** — which is a
+/// script rendering its own verdict, the shape this repository deleted 1562 lines of and once had a whole
+/// capability describing.
+///
+/// **Per script, never by counting.** Asserting that the citation total reaches the script count passes for two
+/// scripts where one cites twice and the other not at all. Counting over the aggregate is exactly what the
+/// direction above this did before, and it is what let the gap stand: every citation went into one list and the
+/// list was asserted non-empty, so any single citing sibling covered for all the rest.
+///
+/// **A violation, not a cannot-judge.** The script was read and carries none; that is a source disagreeing with
+/// the requirement rather than one this check could not read. An empty corpus is the different fact, and it is
+/// the caller's to refuse — a set that never arrived is not a set in which every member cites a gate.
+///
+/// What this buys is the **shape**: a script deferring to nothing cannot exist. It is not a proof that a script
+/// which does defer does nothing else afterwards, and it does not try to be — deciding that from source text is
+/// the judgement over prose this repository has designed, measured three times and rejected.
+pub fn uncited_scripts<'a>(scripts: impl IntoIterator<Item = (&'a str, &'a str)>) -> Vec<Refusal> {
+    scripts
+        .into_iter()
+        .filter(|(path, text)| citations(path, text).is_empty())
+        .map(|(path, _)| {
+            violation(format!(
+                "{path}: names no gate by `--exact`, so it renders its own verdict rather than deferring to a \
+                 Rust check. Every tracked script here is a wrapper: it gathers evidence and orders the act, \
+                 and the judgement lives in `crates/kanhe`. A script that is not a wrapper belongs outside \
+                 `scripts/`, or this requirement is amended deliberately"
+            ))
+        })
+        .collect()
+}
