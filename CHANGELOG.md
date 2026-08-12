@@ -842,6 +842,22 @@ them.
 
 ### Self-governance
 
+- **The coordinate reader missed the spelling every compiler prints, and skipped a file it could not read.**
+  Both are corrections to the direction added one commit earlier, and both are the shapes that direction was
+  written to refuse.
+
+  It split on the **last** colon, so `path:line:column` left `path:line` on the left — neither empty nor a
+  tracked path, so nothing matched. That is what `rustc` and `clippy` print, which makes it the form most
+  likely to be pasted into a document. Splitting on the **first** colon and requiring everything after it to be
+  digits, optionally separated by further colons, makes `path:N`, `path:N:M` and the elided `:N` one shape
+  rather than three cases.
+
+  And an unreadable tracked file was skipped silently while **another direction in the same file** refuses one
+  outright, saying that a file a check claims to have inspected must have been read. Two sites in one file
+  disagreeing about one question is the shape a requirement written in this same window names as a defect
+  regardless of whether either currently admits a wrong answer. It refuses now, and the count of files actually
+  read is asserted non-zero, so clean-over-nothing cannot pass as clean.
+
 - **The sweep meant to watch every acquisition reported clean over a wrapper it read nothing from.** The repair
   that widened it one commit earlier was inert: it stripped environment assignments from the physical line the
   command substitution opens, and both wrappers put the tool three lines further down, so what remained was the
