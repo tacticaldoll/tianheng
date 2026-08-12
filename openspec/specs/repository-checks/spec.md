@@ -681,7 +681,9 @@ gate matches paths only.
 **Every tracked script SHALL carry at least one such citation, and that SHALL be held per script.** A script
 citing no gate renders its own verdict, which is the shape this capability's Purpose refuses and the shape its
 retired predecessor described in full: `check_*.sh` gates paired with `test_*.sh` twins over a shared shell
-library, 1562 lines of it. The direction that enumerates the scripts folded every citation into one list and
+library, 1562 lines of it — a figure measured when that shell was deleted and standing as a record of that
+moment, not a census: no reaction produces it, and the set it counted no longer exists. The direction that
+enumerates the scripts folded every citation into one list and
 asserted that **list** was non-empty, so a script contributing nothing was invisible while any sibling
 contributed something — the whole way back was open, and the enumeration that would have seen it was already
 running.

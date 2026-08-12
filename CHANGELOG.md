@@ -829,11 +829,15 @@ them.
 
 ### Self-governance
 
-- **A bound id resolved inside a `(bound: …)` wrapper and nowhere else.** Written bare — in a Rust doc comment
-  above the very test that defends it — it resolved against nothing, and two had been wrong for some time.
-  Both were derived from a requirement's prose rather than from the declaring scenario's heading: the same
-  mistake twice, in two different crates, one of them published. The bijection cannot see them, because it
-  compares the two *declaration* sides and a doc comment is neither.
+- **A bound id resolved inside a `(bound: …)` wrapper and nowhere else.** Written bare it resolved against
+  nothing, and three occurrences across two crates — one of them published — had been naming a bound that
+  exists under an id it does not have. They sat in the two places the bijection cannot look: a doc comment
+  citing a bound, and a unit-test fixture constructing a `BoundDecl` that mirrors one, with the assertion
+  round-tripping it. Neither is a *declaration*, and the bijection compares the two declaration sides.
+
+  The fixture is the sharper case. Its pin name and its shape string both carried the bound's full wording
+  while its id carried an abbreviated one, so a declaration had drifted from itself **inside a single
+  constructor** — three fields describing one bound, one of them disagreeing, and nothing able to say so.
 
   The register now resolves a bare `<capability>/<slug>` wherever tracked Rust or Markdown carries it.
   Recognition is by **shape against the enumerated capability set** — a maximal run of path characters that is
