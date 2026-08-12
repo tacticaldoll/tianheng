@@ -606,8 +606,9 @@ consumer for an undemonstrated deduplication.
   across `### Added`, `### Changed`, `### Fixed` and `### Documentation`. The rule that now refuses them reads an entry's
   **references** — a word equal to a path under `scripts/`, or to a basename `git ls-files scripts/` resolves
   — and an entry describing this repository's own governance while naming no such word stays invisible to it. *Observation source:* two live instances, not a hypothetical: after this
-  window's move, `CHANGELOG.md:173` and `:337` both sit under adopter headings, both describe the bound
-  register's own behaviour, and both name nothing the enumerator resolves. *Current reaction or bound:*
+  window's move, the entries *The bound register refuses a restatement* and *The bound register's own citations
+  can no longer read as coverage while defending nothing* both sit under adopter headings, both describe the
+  bound register's own behaviour, and both name nothing the enumerator resolves. *Current reaction or bound:*
   declared unpinned as
   `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound`; the five limits
   that *do* have a mechanical WHEN are pinned in `tests/release_coherence.rs`. *Risk:* low and
