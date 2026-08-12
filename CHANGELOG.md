@@ -568,6 +568,19 @@ them.
 
 ### Fixed
 
+- **A field added to `Reached::AsIntended` would have escaped `borrows_every_string` silently.** That measure
+  reaches every string a declaration carries, and its own documentation rested the guarantee on in-crate
+  exhaustiveness — *"a variant added with a new string of its own fails to compile here rather than being
+  silently unmeasured"*. True for a **variant**; the one arm carrying a second field elided it as `..`, and a
+  **field** is not a variant. Measured both ways: with `..`, adding a string-carrying field to that variant
+  compiles clean and the string is never reached; naming it `bounded: _` makes the same addition
+  `error[E0027]: pattern does not mention field`.
+
+  Nothing observable moves — `bounded` is a `Copy` enum carrying no string, so every answer this measure gives
+  is the answer it gave before. What changes is that the next field cannot be added without answering for it,
+  which is the guarantee the documentation already claimed. The doc now separates the two obligations rather
+  than letting the variant case stand for both.
+
 - **A dimension's dependency allowlist could name a sibling and nothing reacted** — 三儀 ⊥ 三儀 quoted in the
   `because` while the allowlist beneath it permitted the opposite. Reproduced: widening `guibiao`'s allowlist to
   name `hunyi` left **every** test binary in this workspace green, and `AGENTS.self-law.md` regenerated to print
