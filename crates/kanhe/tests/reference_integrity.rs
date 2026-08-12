@@ -1089,16 +1089,36 @@ fn no_reference_names_a_line_number() {
     let known: std::collections::BTreeSet<&str> = paths.iter().map(String::as_str).collect();
 
     let mut coordinates = Vec::new();
+    let mut read = 0usize;
     for path in &paths {
-        let Ok(text) = std::fs::read_to_string(root.join(path)) else {
-            continue;
-        };
+        // A file this direction claims to have inspected must have been read. Skipping an unreadable one is
+        // the vacuity this file already refuses elsewhere for exactly the same reason: with every tracked file
+        // unreadable the verdict would be clean over nothing examined, and clean-over-nothing is
+        // indistinguishable from clean.
+        let text = std::fs::read_to_string(root.join(path)).unwrap_or_else(|error| {
+            panic!(
+                "cannot read tracked file '{path}' — a file this check claims to have inspected must have \
+                 been read: {error}"
+            )
+        });
+        read += 1;
         for (index, line) in text.lines().enumerate() {
             for span in line.split('`').skip(1).step_by(2) {
-                let Some((left, right)) = span.rsplit_once(':') else {
+                // Split on the FIRST colon, and require everything after it to be digits, optionally
+                // separated by further colons. `path:N`, `path:N:M` and the elided `:N` are then one shape.
+                //
+                // Taking the LAST colon let a `path:line:column` escape: the left side became `path:line`,
+                // which is neither empty nor a tracked path, so nothing matched — and that is the spelling
+                // every rustc and clippy diagnostic prints, which makes it the form most likely to be pasted
+                // into a document.
+                let Some((left, right)) = span.split_once(':') else {
                     continue;
                 };
-                if right.is_empty() || !right.chars().all(|c| c.is_ascii_digit()) {
+                let positional = !right.is_empty()
+                    && right
+                        .split(':')
+                        .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()));
+                if !positional {
                     continue;
                 }
                 // The left side must be a tracked path, OR empty — the elided form, which cites the file
@@ -1112,6 +1132,10 @@ fn no_reference_names_a_line_number() {
             }
         }
     }
+    assert!(
+        read > 0,
+        "no tracked file was read, so this direction would report clean having examined none"
+    );
     assert!(
         coordinates.is_empty(),
         "a reference names a position rather than a thing:\n{}\nA line number is valid while naming nothing \
