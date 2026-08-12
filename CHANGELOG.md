@@ -842,6 +842,33 @@ them.
 
 ### Self-governance
 
+- **A coordinate is refused wherever it is written now, not only in source.** The rule that a reference names a
+  thing rather than a position reacted over every line-comment format, and whole-document prose sat outside it
+  by construction — a positional *phrase* in a record narrates a past state, and separating that from a live
+  reference is a judgement over prose this repository has designed, measured and declined.
+
+  That reasoning covers phrases and stops there. A backticked path with a line number is not a phrase: it is
+  decidable by **shape**, exactly as a bound id is, so refusing it reads nothing around it and reopens no
+  declined judgement. And the argument against a coordinate never depended on the format — a position is not a
+  name, and it is not one in any tense, so a record citing one serves its reader no better than a live clause
+  does. Neither can be checked; both rot on any edit above them.
+
+  It is **refused rather than resolved**, which is the difference from the other reference kinds. Those land on
+  an identity and fail when the identity is absent. A coordinate cannot fail that way: a path with a line number
+  is *valid* — the file does have such a line — while naming nothing anyone meant. Validity is the trap.
+
+  Two existed, both in one backlog clause, both correct when written and both since landed mid-paragraph in
+  unrelated entries; one was displaced by the very window that repaired the source-side instances. They now name
+  the entries they meant. A claim in this same window that such citations were gone from *tracked content* is
+  narrowed to *tracked source*, which is the scope that reaction actually held — the two in prose are exactly
+  what the wider word walked past.
+
+  Two shapes are worth recording. The elided form — a colon and a number, citing whatever file was named before
+  it — escaped the first draft, which required a tracked path on the left; it is a coordinate whose reader has to
+  carry the file in their head as well as the position, and it is matched now. And the direction reported its own
+  explanation twice before the explanation stopped spelling a real coordinate, which is the rule this window
+  already wrote for a reaction whose subject is text.
+
 - **A bound id resolved inside a `(bound: …)` wrapper and nowhere else.** Written bare it resolved against
   nothing, and three occurrences across two crates — one of them published — had been naming a bound that
   exists under an id it does not have. They sat in the two places the bijection cannot look: a doc comment
@@ -1297,7 +1324,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   names collapsing. **No live verdict moves**: the real citations are unqualified, which is exactly why nothing
   had noticed.
 
-- **Line-number citations are gone from tracked content, and the reason is that nothing was checking them.** A
+- **Line-number citations are gone from tracked source, and the reason is that nothing was checking them.** A
   path is held by the reference gate; an intra-doc link is held by the documentation pass; a path with a line
   number is held by nothing, and rots on any edit above it. Three existed. One had rotted twice over — the line
   it named holds an unrelated statement, and the comment it attributed to that file no longer exists anywhere in

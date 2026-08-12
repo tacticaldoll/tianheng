@@ -1055,3 +1055,68 @@ fn a_positional_reference_reacts_only_from_a_comment() {
         );
     }
 }
+
+/// A backticked coordinate — `` `path:NNN` `` — is refused wherever it is written.
+///
+/// The sibling sweep above refuses a positional reference in every **line-comment** format, and Markdown sits
+/// outside it by construction: a positional *phrase* in a record narrates a past state, and separating that from
+/// a live reference is a judgement over prose this repository has designed, measured and declined. That reasoning
+/// covers phrases and stops there.
+///
+/// A structured coordinate is not a phrase. It is decidable by **shape**, exactly as a bound id is, so refusing
+/// it reads nothing around it and reopens no declined judgement. And the ladder's own argument reaches it without
+/// help: a position is not a name, and it is not one in any tense — a record citing a coordinate serves its reader
+/// no better than a live clause does, because neither can be checked and both rot on any edit above them.
+///
+/// **Refused, not resolved.** The other reference kinds resolve to an identity and fail when it is absent. A
+/// coordinate cannot: a changelog path with a line number is *valid* while naming nothing anyone
+/// meant, because the file does have such a line. Validity is the trap, so refusal is the only answer
+/// that bites.
+///
+/// **The left side must be a tracked path**, produced by the enumeration this file already uses. That is what
+/// keeps `1:1`, `note:5` and a clock time out of the corpus, and it is the same construction that made bare
+/// bound ids precise: require the left side to name something the repository enumerates.
+#[test]
+fn no_reference_names_a_line_number() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let paths = tracked(&root);
+    assert!(
+        !paths.is_empty(),
+        "no tracked path was enumerated, so this direction would report clean over nothing"
+    );
+    let known: std::collections::BTreeSet<&str> = paths.iter().map(String::as_str).collect();
+
+    let mut coordinates = Vec::new();
+    for path in &paths {
+        let Ok(text) = std::fs::read_to_string(root.join(path)) else {
+            continue;
+        };
+        for (index, line) in text.lines().enumerate() {
+            for span in line.split('`').skip(1).step_by(2) {
+                let Some((left, right)) = span.rsplit_once(':') else {
+                    continue;
+                };
+                if right.is_empty() || !right.chars().all(|c| c.is_ascii_digit()) {
+                    continue;
+                }
+                // The left side must be a tracked path, OR empty — the elided form, which cites the file
+                // named just before it. Requiring a path missed exactly that shape: of the two live
+                // coordinates, the second wrote only the colon and the number and escaped the first draft
+                // of this direction. An elided reference is not a weaker coordinate, it is a coordinate
+                // whose reader has to carry the file in their head as well as the position.
+                if left.is_empty() || known.contains(left) {
+                    coordinates.push(format!("{path}:{}: `{span}`", index + 1));
+                }
+            }
+        }
+    }
+    assert!(
+        coordinates.is_empty(),
+        "a reference names a position rather than a thing:\n{}\nA line number is valid while naming nothing \
+         anyone meant, and it rots on any edit above it. Name the item — the entry, the requirement, the \
+         function — which costs a clause and cannot go stale.",
+        coordinates.join("\n")
+    );
+}
