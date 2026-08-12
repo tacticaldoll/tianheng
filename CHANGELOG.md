@@ -842,6 +842,22 @@ them.
 
 ### Self-governance
 
+- **The dimension enumerator judged manifest text where the question is dependency identity.** It tested
+  whether a line began with the model crate's name, which a legal rename defeats: a dependency written
+  `model = { package = "xuanji", … }` declares the same edge and begins with `model`. Measured — a crate
+  written that way vanished from the enumerated set, the comparison passed, and its allowlist went unchecked.
+  That is the exact false negative the enumeration was added to close, reintroduced one layer down.
+
+  It reads `cargo metadata` now. Cargo reports a dependency under its real `name` with the alias in `rename`,
+  so identity is read rather than inferred, and `publish` arrives as structured state instead of one of several
+  manifest spellings. `--no-deps` restricts the answer to workspace members, which is what a dimension must be
+  to be built and governed at all.
+
+  The crate's own manifest comment already said this, beside the dependency that makes it possible: *a
+  reaction's corpus comes from the build, never from a list anyone maintains*. Two revisions of this enumerator
+  read text instead — first a pathspec that crossed the separator, then a name that was not an identity — and
+  both returned the right answer while resting on the wrong evidence.
+
 - **The dimension enumerator's corpus was every manifest beneath `crates/`, not the crate manifests.** git's
   default pathspec is `fnmatch` **without** `FNM_PATHNAME`, so `crates/*/Cargo.toml` crosses the separator —
   measured, 14 tracked paths where 8 are crate manifests and the other six are test fixtures. It returned the
