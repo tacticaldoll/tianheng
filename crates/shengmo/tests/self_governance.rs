@@ -70,7 +70,14 @@ fn self_law_projection_is_fresh() {
 fn dimension_crates() -> BTreeSet<&'static str> {
     let root = workspace_root().expect("the workspace root this gate already located");
     let listing = std::process::Command::new("git")
-        .args(["ls-files", "crates/*/Cargo.toml"])
+        // `:(glob)` so `*` stops at the separator. git's default pathspec is fnmatch **without**
+        // `FNM_PATHNAME`, so a bare `crates/*/Cargo.toml` crosses `/` and matches every manifest anywhere
+        // beneath `crates/` — measured, 14 paths where 8 are crate manifests, the other six being test
+        // fixtures. It returned the right answer only because no fixture happened to name 璇璣, and one
+        // already names 星表 deliberately: `shell_metadata_edge` carries a workspace-member dependency
+        // written so the fixture violates the edge under test. The next fixture that needs 璇璣 for the same
+        // reason would have turned this gate red naming a fixture path.
+        .args(["ls-files", ":(glob)crates/*/Cargo.toml"])
         .current_dir(&root)
         .output()
         .expect("run git ls-files over the crate manifests");
@@ -97,6 +104,13 @@ fn dimension_crates() -> BTreeSet<&'static str> {
             .strip_prefix("crates/")
             .and_then(|rest| rest.strip_suffix("/Cargo.toml"))
             .expect("a crate manifest path names its crate");
+        // A crate name carries no separator. The glob above already guarantees it; this refuses loudly if the
+        // pathspec is ever loosened again, rather than letting a fixture path enter the set as a "dimension".
+        assert!(
+            !name.contains('/'),
+            "the manifest enumeration reached {manifest}, which is not a crate manifest — the pathspec has \
+             widened past the crate directories and a fixture would enter this comparison as a dimension"
+        );
         found.insert(Box::leak(name.to_string().into_boxed_str()) as &'static str);
     }
     assert!(

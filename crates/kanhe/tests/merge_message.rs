@@ -2,7 +2,7 @@
 //!
 //! It stands before a record. A merged squash on a release branch cannot be repaired: amending it changes its
 //! hash, and the pull request's merge record cites that hash, so the two would name different things. The
-//! the subjects already carrying a serial when this gate was written stay as they are for exactly that reason.
+//! subjects already carrying a serial when this gate was written stay as they are for exactly that reason.
 //!
 //! **The gate itself does not run in development.** There is no proposed message to judge until a merge is
 //! being made, so `scripts/merge-pr.sh` supplies one and asks for the verdict at the one moment it can
