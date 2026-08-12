@@ -223,7 +223,7 @@ fn a_change_names_every_capability_whose_subject_it_touches() {
     );
 }
 
-/// `repository-checks/a-tracked-file-no-capability-claims-is-not-judged-a-stated-bound`
+/// `repository-checks/files-no-capability-claims-a-stated-bound`
 ///
 /// Subjects are declared where a capability has something to say, and requiring them to tile the repository
 /// would buy coverage with a claim per capability nobody could defend. The blindness is declared so a clean report

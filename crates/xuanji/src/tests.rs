@@ -681,7 +681,7 @@ fn a_fixed_violation_leaves_a_stale_baseline_entry() {
 fn out_of_reach_bound() -> BoundDecl {
     BoundDecl::pinned(
         BoundId::new(
-            "external-crate-confinement/a-confined-crate-use-inside-a-string-is-a-stated-bound",
+            "external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound",
         ),
         "a `use` inside a string literal or macro body",
         Extent::OutOfReach {
@@ -798,7 +798,7 @@ fn a_declaration_reports_the_id_shape_extent_and_pin_it_was_given() {
     let bound = out_of_reach_bound();
     assert_eq!(
         bound.id().as_str(),
-        "external-crate-confinement/a-confined-crate-use-inside-a-string-is-a-stated-bound"
+        "external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound"
     );
     assert_eq!(
         bound.shape(),

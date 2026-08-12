@@ -462,3 +462,65 @@ fn a_citation_answered_twice_fails_whichever_answer_is_repeated() {
         Citation::Unpinned("BACKLOG: the one owner".into())
     );
 }
+
+/// Every **bare** bound id in tracked Rust and Markdown resolves to a declared bound.
+///
+/// The `(bound: …)` form clears prose; this resolves the **id**, which is no less a reference for being
+/// written without the wrapper. Both defects that motivated it sat in a doc comment above the very test
+/// defending the bound — where the bijection cannot look, since it compares the two *declaration* sides and a
+/// doc comment is neither — and each had been derived from a requirement's prose rather than from the
+/// declaring scenario's heading.
+///
+/// This is reference resolution and not the detector over prose this repository has designed, measured three
+/// times and rejected: a bound id has a fixed shape, and the set it must land in is *produced* by the
+/// declarations. Nothing here decides what a sentence means.
+///
+/// The capability set is enumerated from the tracked specs, so a capability added later is recognized without
+/// this direction being edited.
+#[test]
+fn every_bare_bound_reference_resolves_to_a_declared_bound() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let capabilities: BTreeSet<String> = parse::tracked_specs(&root)
+        .into_iter()
+        .map(|(capability, _)| capability)
+        .collect();
+    let declared: BTreeSet<String> = parse_bounds(&root)
+        .into_iter()
+        .map(|bound| bound.id)
+        .collect();
+    assert!(
+        !declared.is_empty(),
+        "no declared bound was read, so every reference would fail for a reason that is not about the \
+         reference — a corpus that never arrived is not one in which nothing resolves"
+    );
+
+    let listing = must(&root, "`git ls-files`", &["git", "ls-files"]);
+    let corpus: Vec<&str> = listing
+        .lines()
+        .filter(|path| path.ends_with(".rs") || path.ends_with(".md"))
+        .collect();
+    assert!(
+        !corpus.is_empty(),
+        "no tracked Rust or Markdown was enumerated, so this direction would report clean over nothing"
+    );
+
+    let mut dangling = Vec::new();
+    for path in corpus {
+        let Ok(text) = std::fs::read_to_string(root.join(path)) else {
+            continue;
+        };
+        for (line, id) in parse::bare_references(&capabilities, &text) {
+            if !declared.contains(&id) {
+                dangling.push(format!("{path}:{line}: `{id}` names no declared bound"));
+            }
+        }
+    }
+    assert!(
+        dangling.is_empty(),
+        "a bare bound reference resolves to nothing:\n{}\nAn id that points nowhere is indistinguishable \
+         from an undeclared bound, and resolution belongs to the id rather than to the syntax around it.",
+        dangling.join("\n")
+    );
+}

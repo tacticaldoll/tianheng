@@ -815,6 +815,36 @@ them.
 
 ### Self-governance
 
+- **A bound id resolved inside a `(bound: …)` wrapper and nowhere else.** Written bare — in a Rust doc comment
+  above the very test that defends it — it resolved against nothing, and two had been wrong for some time.
+  Both were derived from a requirement's prose rather than from the declaring scenario's heading: the same
+  mistake twice, in two different crates, one of them published. The bijection cannot see them, because it
+  compares the two *declaration* sides and a doc comment is neither.
+
+  The register now resolves a bare `<capability>/<slug>` wherever tracked Rust or Markdown carries it.
+  Recognition is by **shape against the enumerated capability set** — a maximal run of path characters that is
+  exactly that pair, with the capability read from the tracked spec directories — so a capability added later
+  is covered without the reaction being edited, and a path is excluded by construction rather than by an
+  exception list: read whole, `openspec/specs/<capability>/spec.md` is one run carrying three slashes and is
+  not the pair at all.
+
+  This is the fourth kind of reference in this repository and the only one nothing resolved; paths, `--exact`
+  identifiers and wrapped bound references already did. It is **not** the detector over prose designed,
+  measured three times and rejected: a bound id has a fixed shape and the set it must land in is *produced* by
+  the declarations, so nothing here decides what a sentence means.
+
+  Two things are worth recording because they cost a round each. The direction's first run reported this
+  repository's own **test fixtures** as dangling references, since a fixture needing an invented slug had hung
+  it off a real capability name; the fixtures now name a capability no spec directory carries. Its second run
+  then reported the **doc comment explaining that fix**, which had spelled the offending token. Both are the
+  class this repository already records — a text reaction reading its own text — and both were closed the way
+  it settled on: recognize by shape, and describe the shape rather than quoting it.
+
+  A typed census rode along: the bound-model reaction's doc comment said it read *the family's four sets* while
+  it composes five. Four was right before the repository catalogs moved out of the shell. It carries no
+  reaction of its own — the census direction reads tracked Markdown and this is a Rust doc comment — so it is
+  repaired as prose and the number is gone rather than corrected.
+
 - **A tracked script that deferred its verdict to nothing was invisible.** The direction enumerating this
   repository's scripts folded every `--exact` gate citation into one list and asserted that *list* was
   non-empty, so a script citing nothing passed as long as any sibling cited something. A script that names no

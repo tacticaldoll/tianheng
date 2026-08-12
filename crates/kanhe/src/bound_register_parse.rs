@@ -4,6 +4,7 @@
 //! enumerates the set — a second parse would let the two disagree, which is the drift the census rule exists
 //! to end.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -272,4 +273,61 @@ pub fn parse_bounds(root: &Path) -> Vec<Bound> {
          cannot judge rather than reporting a register of nothing as clean"
     );
     bounds
+}
+
+/// Whether a character can appear inside a path-like word.
+///
+/// The run is what makes a path safe from being mistaken for a reference: reading maximal runs, the token in
+/// `openspec/specs/repository-checks/spec.md` is the whole path and carries three slashes, so it is not a
+/// `<capability>/<slug>` pair and is excluded by construction rather than by an exception list. A substring
+/// search would find `repository-checks/spec.md` inside it and refuse a path for resembling a reference — the
+/// false refusal this repository forbids its gates.
+fn is_word_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-')
+}
+
+/// Whether `slug` is the kebab-case form a derived bound id carries.
+fn is_kebab(slug: &str) -> bool {
+    !slug.is_empty()
+        && slug.split('-').all(|part| {
+            !part.is_empty()
+                && part
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        })
+}
+
+/// Every **bare** `<capability>/<slug>` this text carries, as `(line number, id)`.
+///
+/// The `(bound: …)` form clears prose; this resolves the **id**, which is no less a reference for being
+/// written without the wrapper. Both defects that motivated it sat in a doc comment above the very test
+/// defending the bound, where the bijection cannot look — it compares the two declaration sides and a doc
+/// comment is neither.
+///
+/// `capabilities` is **enumerated by the caller** from the tracked specs, never listed here: a capability
+/// added later must be recognized without this function being touched, which is the register's own
+/// prohibition against a hand-kept membership beside its enumerator.
+///
+/// This resolves nothing by itself — it reports what looks like a reference, and the caller holds those
+/// against the produced id set. Recognition and resolution are kept apart so the bare form cannot grow a
+/// second opinion about which ids exist.
+pub fn bare_references(capabilities: &BTreeSet<String>, text: &str) -> Vec<(usize, String)> {
+    let mut found = Vec::new();
+    for (index, line) in text.lines().enumerate() {
+        let mut rest = line;
+        while let Some(start) = rest.find(is_word_char) {
+            let tail = &rest[start..];
+            let end = tail.find(|c| !is_word_char(c)).unwrap_or(tail.len());
+            let (word, remainder) = tail.split_at(end);
+            rest = remainder;
+            let Some((capability, slug)) = word.split_once('/') else {
+                continue;
+            };
+            if slug.contains('/') || !capabilities.contains(capability) || !is_kebab(slug) {
+                continue;
+            }
+            found.push((index + 1, word.to_string()));
+        }
+    }
+    found
 }

@@ -315,7 +315,7 @@ fn the_published_shell_defines_no_repository_bound_catalog() {
 ///
 /// The counter-example is deliberate and lives outside this workspace — `examples/observer-participant`'s
 /// declarations are computed on purpose, which is what the form is for. This check is about *these*
-/// declarations, so it reads the family's four sets and nothing else.
+/// declarations, so it reads what `declared_bounds` composes and nothing else.
 #[test]
 fn every_declaration_of_this_family_borrows_every_string_it_carries() {
     let declarations = declared_bounds();
