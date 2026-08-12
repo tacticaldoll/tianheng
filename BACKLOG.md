@@ -255,7 +255,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **84 bounds across 23 capabilities** — a live figure rather than part of the measurement
+  currently holds **83 bounds across 23 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -563,10 +563,12 @@ consumer for an undemonstrated deduplication.
   the tree rather than argued about. **Wording, false refusal:** paraphrasing `guibiao`'s clause makes the
   check fire — it refuses a reason that genuinely states the law. **Wording, false negative:** a `because`
   carrying the literal clause while *negating* it passes, and `AGENTS.self-law.md` then teaches the negation to
-  every agent that loads it. **Enumeration, the dimension list:** *closed* — the literal is now held
-  against the workspace's own dimension crates in both directions, so the omission that left a `guibiao`
-  allowlist naming `hunyi` green is refused. It is retained here as the third of the four because the entry's
-  own point is that these are one check's limits, and a closed one is what tells a reader the others are not.
+  every agent that loads it. **Enumeration, the dimension list:** *closed, and its declared bound retired* — the
+  literal is held against the workspace's own dimension crates, read from cargo and compared both ways, so the
+  omission that left a `guibiao` allowlist naming `hunyi` green is refused. The bound was retired against a run
+  of its own WHEN on the post-change tree rather than against the argument that it should be. It is retained
+  here as the third of the four because the entry's own point is that these are one check's limits, and a
+  closed one is what tells a reader the others are not.
   **Enumeration, the rule variant:** the filter admits only `RestrictDependenciesTo`, so a second
   boundary using `restrict_workspace_dependencies_to` — the more natural rule for this law — is never examined.
   *Observation source:* those four perturbations, run during review of

@@ -842,6 +842,25 @@ them.
 
 ### Self-governance
 
+- **A declared bound outlived the behaviour it described, and the register said so to anyone who consulted it.**
+  The dimension list's false negative — *a dimension absent from the check's own list is not examined* — was
+  closed days earlier when that list began being read from cargo and compared both ways. The scenario, the typed
+  declaration and both generated projections still carried it, and every check passed: the bijection compares
+  the spec side with the code side, and both were stale together, so they agreed.
+
+  That is the failure this register exists to end, committed inside it. A reader is told to consult the register
+  **before** reporting a behaviour as a defect, so a retired bound left standing reads as permission for
+  something that is now refused.
+
+  Retired against a run of its **own WHEN** on the post-change tree rather than against the argument that it
+  should be: a dimension removed from the literal, and a dimension crate the literal never named, are both
+  refused now. Its own text had named its closing condition — *the dimension set derived from something that
+  enumerates it rather than typed beside it* — and that is what the reaction does.
+
+  The sibling bound stays: the rule variant the filter does not reach is still open, and the requirement's
+  count of what it declares moves from four to three with the retirement recorded rather than the number
+  quietly edited. The census direction caught that count in the same run.
+
 - **The dimension enumerator matched a dependency in any table, and this family treats the tables as different
   observation surfaces.** Cargo reports `kind` as null for a normal dependency and as `dev` or `build` for the
   others; `crate-dependency-boundary` says a boundary observes exactly one table and that dev and build are

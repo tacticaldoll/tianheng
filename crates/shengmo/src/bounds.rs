@@ -54,20 +54,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::unpinned(
             BoundId::new(
-                "self-law-projection/a-dimension-absent-from-the-check-s-own-list-is-not-examined-a-stated-bound",
-            ),
-            "a dimension crate whose package name is not in the check's hand-kept list",
-            Extent::Reached(Reached::UnderReacts {
-                because: "the list is typed beside a set that enumerates itself, and the set-coverage \
-                          assertion compares a set produced by filtering on that same list, so an omission \
-                          is invisible to both halves"
-                    .into(),
-                owner: Owner::Engine,
-            }),
-            "`BACKLOG.md` — *four limits of the mutual-independence check*",
-        ),
-        BoundDecl::unpinned(
-            BoundId::new(
                 "self-law-projection/a-workspace-dependency-allowlist-is-not-examined-a-stated-bound",
             ),
             "a dimension declaring the law through `restrict_workspace_dependencies_to` instead",

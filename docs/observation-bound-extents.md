@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**39 of 84 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**38 of 83 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -37,7 +37,6 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound` — owner: engine
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
 - `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound` — owner: engine
-- `self-law-projection/a-dimension-absent-from-the-check-s-own-list-is-not-examined-a-stated-bound` — owner: engine
 - `self-law-projection/a-reason-carrying-the-clause-while-negating-the-law-is-not-observed-a-stated-bound` — owner: engine
 - `self-law-projection/a-workspace-dependency-allowlist-is-not-examined-a-stated-bound` — owner: engine
 - `semantic-reexport-exposure/a-facade-hop-re-exporting-a-privately-used-bare-name-is-a-stated-bound` — owner: engine
@@ -422,7 +421,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (39)
+## under-reacts (38)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -679,14 +678,6 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the audit is cfg-blind and counts the probe as coverage, so a seam with no production probe reads as probed
 - **its defence must show**: does not react
 - **pinned by**: `production_probe_behind_non_production_cfg_is_counted_as_coverage`
-
-### `self-law-projection/a-dimension-absent-from-the-check-s-own-list-is-not-examined-a-stated-bound`
-
-> a dimension crate whose package name is not in the check's hand-kept list
-
-- **because**: the list is typed beside a set that enumerates itself, and the set-coverage assertion compares a set produced by filtering on that same list, so an omission is invisible to both halves
-- **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence check*
 
 ### `self-law-projection/a-reason-carrying-the-clause-while-negating-the-law-is-not-observed-a-stated-bound`
 
