@@ -68,7 +68,16 @@ fn read_if_present(path: &Path) -> std::io::Result<String> {
     }
 }
 
+/// The wrapper run from the workspace it lives in, which is how every direction but one exercises it.
 fn run_wrapper(root: &Path, mode: &str, extra: &[&str]) -> Run {
+    run_wrapper_in(root, mode, extra, None)
+}
+
+/// The wrapper run from `cwd`, or from this process's own directory when it is `None`.
+///
+/// Split because the wrapper reads its gate from its own tree and its evidence from the working directory,
+/// and a harness that never varies the second cannot construct the case where they differ.
+fn run_wrapper_in(root: &Path, mode: &str, extra: &[&str], cwd: Option<&Path>) -> Run {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     let scratch = loop {
         let candidate = std::env::temp_dir().join(format!(
@@ -223,6 +232,9 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
         .env("FAKE_CARGO_LOG", &cargo_log)
         .env("FAKE_COMMITS", &commits)
         .env("TMPDIR", &tmp);
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
     if mode == "body-moved" {
         command
             .env("FAKE_BODY_REWRITE", &body)
@@ -252,6 +264,65 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
     };
     let _ = std::fs::remove_dir_all(&scratch);
     run
+}
+
+/// A gate from one repository never judges another repository's pull request.
+///
+/// The wrapper loads its gate from its own tree and resolves every input from the working directory. Run the
+/// way its own refusals say to run it those are one tree, and its `--repo` refusal enumerated them as one set
+/// — while nothing held them together. Invoked by absolute path from another checkout they come apart in
+/// silence, and the wrapper would apply this repository's law to a stranger's pull request and then merge it.
+///
+/// Asserted on the two logs as much as on the exit class: the refusal must land before any evidence is read
+/// and before the gate runs, because a wrapper that discovers this after `gh pr view` has already asked the
+/// wrong repository a question.
+#[test]
+fn a_pull_request_from_another_worktree_is_refused_before_any_evidence_is_read() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let elsewhere = std::env::temp_dir().join(format!(
+        "tianheng-merge-workflow-elsewhere-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&elsewhere);
+    std::fs::create_dir_all(&elsewhere).expect("create an unrelated worktree");
+    let init = Command::new("git")
+        .args(["init", "-q", "-b", "main"])
+        .current_dir(&elsewhere)
+        .output()
+        .expect("run git init");
+    assert!(
+        init.status.success(),
+        "the unrelated worktree is a git repository"
+    );
+
+    let run = run_wrapper_in(&root, "subjects", &[], Some(&elsewhere));
+    let _ = std::fs::remove_dir_all(&elsewhere);
+
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a wrapper that cannot say whose law applies has not judged anything, so it owes the cannot-judge \
+         class rather than the one that means a gate ran and refused: {}",
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("is one repository's law"),
+        "the refusal must say which two trees it found, so an operator can see the mismatch rather than \
+         guess at it: {}",
+        run.stderr
+    );
+    assert!(
+        run.gh_log.trim().is_empty(),
+        "the wrapper asked the wrong repository a question before refusing: {}",
+        run.gh_log
+    );
+    assert!(
+        run.cargo_log.trim().is_empty(),
+        "the gate ran before the wrapper knew whose pull request it was judging: {}",
+        run.cargo_log
+    );
 }
 
 #[test]
