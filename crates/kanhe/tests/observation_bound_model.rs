@@ -19,7 +19,7 @@ use tianheng::prelude::*;
 use tianheng::testing::assert_projection_matches;
 use tianheng::{BoundDecl, Defence, Extent, Owner, Reached};
 
-use kanhe::bound_register_parse::marks_a_bound;
+use kanhe::bound_register_parse::{marks_a_bound, slug_of};
 
 /// The projection this check holds fresh.
 const EXTENT_PROJECTION: &str = "docs/observation-bound-extents.md";
@@ -35,30 +35,6 @@ fn workspace_root() -> Option<PathBuf> {
         |root| root.join("openspec/specs").is_dir(),
         shengmo::workspace::marker_set(),
     )
-}
-
-/// The slug rule the register derives an id with: lowercased, each run of non-alphanumerics collapsed to one
-/// hyphen, ends trimmed.
-///
-/// A second implementation of one rule is the divergence `crates/kanhe/tests/bound_register.rs` has already paid
-/// for — its own comment records a review round lost to two matchers whose character classes differed. So this
-/// one is not trusted on its own: [`derived_ids_agree_with_the_register_projection`] asserts the set it produces
-/// equals the set the register wrote, which catches a drifted rule and a stale projection in the same assertion.
-fn slug_of(heading: &str) -> String {
-    let mut out = String::with_capacity(heading.len());
-    let mut pending_hyphen = false;
-    for ch in heading.chars() {
-        if ch.is_ascii_alphanumeric() {
-            if pending_hyphen && !out.is_empty() {
-                out.push('-');
-            }
-            pending_hyphen = false;
-            out.push(ch.to_ascii_lowercase());
-        } else {
-            pending_hyphen = true;
-        }
-    }
-    out
 }
 
 /// One bound as the specs declare it: where it sits, and the test it cites.
@@ -400,10 +376,16 @@ fn derived_ids_agree_with_the_register_projection() {
     let Some(root) = workspace_root() else {
         return;
     };
-    // The shell gate derives these ids too, and this is the only guard against the two rules drifting. It
-    // catches a stale projection in the same assertion, which is why reading the projection INSTEAD of deriving
-    // was rejected: `cargo test` runs before that gate in the Definition of Done, so a stale projection would
-    // let the bijection pass while the specs and the code disagreed.
+    // **What this catches after the slug rule was unified: a stale projection.** It used to be justified as
+    // the guard against two `slug_of` implementations drifting — but the two were byte-identical, so they
+    // could only catch drift between themselves, a risk that existed solely because there were two. The
+    // comparison here is derived-set against a **tracked file**, not against a second computation, so one
+    // shared rule leaves it exactly as sharp: measured, deleting a heading from the projection turns this red
+    // both before and after the unification.
+    //
+    // Reading the projection INSTEAD of deriving is still rejected: `cargo test` runs before the register
+    // gate in the Definition of Done, so a stale projection would let the bijection pass while the specs and
+    // the code disagreed.
     let projection = root.join("docs/observation-bounds.md");
     let text = std::fs::read_to_string(&projection)
         .unwrap_or_else(|err| panic!("cannot read {projection:?}: {err}"));
@@ -423,10 +405,9 @@ fn derived_ids_agree_with_the_register_projection() {
     assert_eq!(
         derived, projected,
         "the ids this check derives differ from the ids `crates/kanhe/tests/bound_register.rs` wrote into \
-         {projection:?} — either the slug rule has drifted between the two implementations, or the projection \
-         is stale. Regenerate with \
-         `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register` and, if the difference \
-         survives, the two derivations disagree."
+         {projection:?}, so the projection is stale. The slug rule is one implementation, shared with the \
+         register, so the two sides cannot disagree about the rule itself. Regenerate with \
+         `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register`."
     );
 }
 
