@@ -34,7 +34,8 @@ fn standalone_semantic_surface_exposes_the_shared_reaction_model() {
 /// `observation_bounds()` is a plain library item an adopter can call without composing a run.
 ///
 /// Named here because this file is the contract that enumerates the promise, and this member reached the
-/// public surface in the same window that closed exactly this gap for the protocol's other thirteen — the
+/// public surface in the same window that closed exactly this gap for the protocol's other prelude
+/// members — the
 /// enumeration grew and the file naming it stood still. Reading a dimension's declared bounds without
 /// implementing `Observer` is what `observation-bound-model` obliges, and until this nothing outside the
 /// crate compiled against it.

@@ -30,7 +30,7 @@ them.
   implementing the protocol or composing a run — and no external compilation contract named it. Each dimension's
   `adopter_surface.rs` is a separate crate compiled against that surface, and each now calls it and uses what it
   returns, so the promise and the file that enumerates it are held together for this member as they already were
-  for the protocol's other thirteen.
+  for the protocol's other prelude members.
 
   Recorded because the cause is structural rather than an oversight: the three dimension contracts are tracked
   files that **no capability's declared subject claims**, so the filing join that would otherwise have raised it
