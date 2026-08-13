@@ -234,11 +234,15 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
             let Some((left, _)) = statement.split_once("=$(") else {
                 continue;
             };
+            // The assigned name: the last whitespace-separated word before `=$(`, so `local x=$(…)` names
+            // `x` rather than `local x`. `rsplit` always yields at least one piece — measured, `""` and `" "`
+            // both give `Some("")` — so the fallback names no state any input can reach, and dressing it as
+            // `left.trim()` claimed otherwise while evaluating the trim twice.
             let variable = left
                 .trim()
                 .rsplit(char::is_whitespace)
                 .next()
-                .unwrap_or(left.trim());
+                .unwrap_or_default();
             let guarded = statement.contains("cannot_judge")
                 || statement.contains("|| {")
                 || statement.contains(&format!("|| {variable}="));
