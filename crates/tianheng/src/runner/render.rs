@@ -20,7 +20,14 @@ pub(crate) fn disallow_stale_message(count: usize) -> String {
 /// and `clippy` keep diagnostics on stderr and leave stdout for consumable data.)
 pub(crate) fn report(outcome: &Outcome) {
     match outcome {
-        Outcome::Clean(_) => eprintln!("Tianheng: clean — no boundary violated"),
+        // The subject, not only the verdict. `clean` alone tells a reader — and an agent reading a CI log
+        // as context — nothing about whether their change was even in what was observed; a workspace found
+        // sound and one never reached printed the same sentence.
+        Outcome::Clean(subject) => eprintln!(
+            "Tianheng: clean — no boundary violated ({} declared, {} reached)",
+            subject.declared(),
+            subject.reached()
+        ),
         Outcome::Violations(report) => report_violations(report),
         Outcome::ConstitutionError(message) => {
             // The exit-2 diagnostic voice, distinct from a violation (exit 1). Presentation only.

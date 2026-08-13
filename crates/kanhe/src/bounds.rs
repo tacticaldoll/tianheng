@@ -201,6 +201,21 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
+                "observer-protocol/what-a-subject-does-not-establish-a-stated-bound",
+            ),
+            "a participant reporting a subject larger than what it observed",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the constructor is public because an implementor must be able to return the \
+                          outcome, so the type converts an omission into a commission and stops there; \
+                          telling a reported subject from an observed one would need the engine to walk each \
+                          dimension's corpus itself, which is the shared scanner 三儀 ⊥ 三儀 forbids"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_subject_is_declared_by_the_participant_and_not_verified",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound",
             ),
             "a composed observer returning an outcome that misjudges the workspace it read",

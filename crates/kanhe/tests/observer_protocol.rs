@@ -1112,3 +1112,46 @@ fn a_trait_object_on_a_continuation_line_is_not_recognized() {
         "and its continuation carries the trait object without the `pub ` the recognizer needs — the stated bound"
     );
 }
+
+/// The subject is what a participant **declares**, and nothing verifies it.
+///
+/// The bound this capability now carries. A participant can report a subject larger than it observed, and the
+/// engine cannot tell: the constructor is public because an implementor must be able to return the outcome,
+/// and separating a reported subject from an observed one would need the engine to walk each dimension's
+/// corpus itself — the shared scanner 三儀 ⊥ 三儀 forbids.
+///
+/// A bound whose pin asserts a **silence** needs a control, or it is satisfied by a type that refuses nothing.
+/// So the same direction shows the one combination the constructor does refuse: what the type buys is that
+/// forgetting is impossible, not that lying is.
+#[test]
+fn a_subject_is_declared_by_the_participant_and_not_verified() {
+    struct Overclaiming;
+    impl Observer for Overclaiming {
+        fn observe(&self, _manifest_path: &Path) -> Outcome {
+            // Nothing was read. The subject says otherwise, and it is constructible.
+            Outcome::Clean(Subject::of(9, 99).expect("declared and reached is constructible"))
+        }
+        fn bounds(&self) -> Vec<BoundDecl> {
+            Vec::new()
+        }
+    }
+
+    let outcome = Overclaiming.observe(Path::new("Cargo.toml"));
+    match outcome {
+        Outcome::Clean(subject) => assert_eq!(
+            (subject.declared(), subject.reached()),
+            (9, 99),
+            "the bound: a reported subject is carried as reported, because nothing walks the participant's \
+             corpus to check it"
+        ),
+        other => panic!("the participant reported clean, got {other:?}"),
+    }
+
+    // The control: the constructor refuses the combination it exists to refuse, so the silence above is a
+    // bound rather than a type that checks nothing at all.
+    assert!(
+        Subject::of(1, 0).is_none(),
+        "declared-without-reached must remain unconstructible, or this bound would be describing a type that \
+         refuses nothing"
+    );
+}
