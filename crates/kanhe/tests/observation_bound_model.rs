@@ -424,7 +424,8 @@ fn derived_ids_agree_with_the_register_projection() {
         derived, projected,
         "the ids this check derives differ from the ids `crates/kanhe/tests/bound_register.rs` wrote into \
          {projection:?} — either the slug rule has drifted between the two implementations, or the projection \
-         is stale. Regenerate with `BLESS=1 bash crates/kanhe/tests/bound_register.rs` and, if the difference \
+         is stale. Regenerate with \
+         `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register` and, if the difference \
          survives, the two derivations disagree."
     );
 }
