@@ -437,6 +437,31 @@ fn a_citation_answered_twice_fails_whichever_answer_is_repeated() {
         "two trackers were reduced to one, so the bound records whichever line came last"
     );
 
+    // **The two shapes a count catches and a flag does not.** The rule is *more than one `UNPINNED`*, and
+    // the classification used to ask it of the tracker-bearing lines alone, with the bare ones behind a
+    // boolean. So a mixed pair fell through to the single-tracker arm and read as a well-formed citation —
+    // silently dropping the bare line — and two bare ones collapsed to one flag and read as a single
+    // tracker-less citation. Neither is *more than one*, which is what the variant's own doc says it is.
+    for (name, citations) in [
+        (
+            "one bare and one with a tracker",
+            "- **UNPINNED**\n- **UNPINNED** BACKLOG: an owner\n",
+        ),
+        ("two bare", "- **UNPINNED**\n- **UNPINNED**\n"),
+    ] {
+        let mixed = bounds_in(
+            "some-capability",
+            "openspec/specs/some-capability/spec.md",
+            &scenario(citations),
+        );
+        assert_eq!(mixed.len(), 1, "{name}: {mixed:?}");
+        assert_eq!(
+            mixed[0].citation,
+            Citation::RepeatedUnpinned,
+            "{name}: two UNPINNED lines are two owners of one gap, whichever form each takes"
+        );
+    }
+
     // The control. Flattening the two would break a live declaration: `observation-bound-model` states that
     // several `PINNED-BY` lines are all retained, and a first draft of this check read the rule as a
     // bullet count and split the one live instance in two.

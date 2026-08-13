@@ -178,7 +178,11 @@ pub fn bounds_in(capability: &str, spec: &str, text: &str) -> Vec<Bound> {
         let mut body = String::new();
         let mut pinned: Vec<String> = Vec::new();
         let mut unpinned: Vec<String> = Vec::new();
-        let mut unpinned_bare = false;
+        // A **count**, not a flag. The classification below asks whether more than one `UNPINNED`
+        // appears, and a flag cannot answer that: two bare ones collapse to `true` exactly as one
+        // does. That is the same narrowing as counting only the tracker-bearing lines, one variable
+        // along.
+        let mut unpinned_bare = 0usize;
         let mut in_then = false;
 
         for line in lines.iter().skip(index + 1) {
@@ -200,14 +204,14 @@ pub fn bounds_in(capability: &str, spec: &str, text: &str) -> Vec<Bound> {
                 continue;
             }
             if trimmed == "- **UNPINNED**" {
-                unpinned_bare = true;
+                unpinned_bare += 1;
                 in_then = false;
                 continue;
             }
             if let Some(rest) = trimmed.strip_prefix("- **UNPINNED** ") {
                 let rest = rest.trim();
                 if rest.is_empty() {
-                    unpinned_bare = true;
+                    unpinned_bare += 1;
                 } else {
                     unpinned.push(rest.to_string());
                 }
@@ -227,16 +231,21 @@ pub fn bounds_in(capability: &str, spec: &str, text: &str) -> Vec<Bound> {
         // A scenario carrying two citations declares two bounds behind one heading, so the register
         // holds one of them and the other is defended by a test nothing points at. The old shell gate
         // projected the FIRST and moved on; rebuilding this check surfaced the one live instance.
-        let tracked = !unpinned.is_empty() || unpinned_bare;
+        let tracked = !unpinned.is_empty() || unpinned_bare > 0;
         let citation = if !pinned.is_empty() && tracked {
             Citation::Both
         } else if !pinned.is_empty() {
             Citation::PinnedBy(pinned)
-        } else if unpinned.len() > 1 {
+        // **Every `UNPINNED` line counts, whichever form it takes.** Counting only the
+        // tracker-bearing ones let a scenario carrying one bare `UNPINNED` and one with a tracker
+        // fall through to the single-tracker arm and read as a well-formed citation, silently
+        // dropping the bare one — and counting the bare ones with a flag let two of them do the
+        // same. The variant's own doc says *more than one `UNPINNED`*, which is this sum.
+        } else if unpinned.len() + unpinned_bare > 1 {
             Citation::RepeatedUnpinned
         } else if let Some(tracker) = unpinned.pop() {
             Citation::Unpinned(tracker)
-        } else if unpinned_bare {
+        } else if unpinned_bare > 0 {
             Citation::UnpinnedWithoutTracker
         } else {
             Citation::Neither
