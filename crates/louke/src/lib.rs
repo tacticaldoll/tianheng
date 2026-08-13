@@ -19,7 +19,7 @@
 pub use xuanji::{
     BoundDecl, BoundId, BoundaryKind, Defence, Demonstrates, Extent, FactGranularity, Finding,
     Observer, Outcome, Owner, Polarity, Reached, Report, RuleKey, ScanDepth, Severity,
-    StructuredFactIdentity, Violation, ViolationId,
+    StructuredFactIdentity, Subject, Violation, ViolationId,
 };
 
 mod bounds;

@@ -11,7 +11,11 @@ fn main() -> ExitCode {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let outcome = check(&constitution(), &manifest);
     match &outcome {
-        Outcome::Clean => println!("✓ clean — no boundary drifted"),
+        Outcome::Clean(subject) => println!(
+            "✓ clean — no boundary drifted ({} boundary/boundaries over {} member(s))",
+            subject.declared(),
+            subject.reached()
+        ),
         Outcome::Violations(report) => {
             for v in &report.violations {
                 println!(

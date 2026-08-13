@@ -557,6 +557,11 @@ bolting a second gate beside 天衡 with its own reporting.*
 Implement `Observer`. Both methods are required: observe a workspace, and **declare what you do not
 observe** — a participant that says nothing about its limits cannot be written.
 
+A clean verdict carries its **subject**: what you were asked to enforce, and how much you reached.
+`Subject::of` refuses the one combination that is a lie — *declared something, reached nothing* — so
+you cannot report clean over a walk that read no file. Reaching nothing is fine on its own; a
+participant configured with no rule at all says so with `Subject::nothing_declared()`.
+
 ```rust
 use std::path::Path;
 use tianheng::prelude::*;
@@ -574,7 +579,16 @@ impl Observer for ModuleHeaderObserver {
         // A subtree you were told to read and could NOT is `Outcome::ConstitutionError` — exit 2,
         // never a quiet clean. Reporting clean because the look failed is the one forbidden bug,
         // and joining a run does not exempt you from it.
-        Outcome::Clean
+        let files_read = 0; // … however many your walk actually opened
+        match Subject::of(self.subtrees.len(), files_read) {
+            Some(subject) => Outcome::Clean(subject),
+            // Not a clean workspace: subtrees were declared and the walk read nothing, so there is
+            // no observation for a verdict to rest on. The type is what stops this being reported
+            // as cleanliness.
+            None => Outcome::ConstitutionError(format!(
+                "{} subtree(s) declared and no file read", self.subtrees.len()
+            )),
+        }
     }
 
     fn bounds(&self) -> Vec<BoundDecl> {

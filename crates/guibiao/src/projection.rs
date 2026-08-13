@@ -24,8 +24,11 @@ pub fn report_json_with_stale_policy(
 ) -> String {
     let policy = stale_policy(outcome, stale, disallow_stale);
     let has_disallowed_stale = policy.stale_disallowed;
-    let (label, violations, error) = match outcome {
-        Outcome::Clean => (
+    // The subject travels beside the label, so a machine reading this document can tell a workspace that was
+    // observed and found sound from one that was never reached — the distinction the outcome now carries and
+    // this projection would otherwise drop on its way out.
+    let (label, violations, error, subject) = match outcome {
+        Outcome::Clean(subject) => (
             if has_disallowed_stale {
                 "violations"
             } else {
@@ -33,18 +36,21 @@ pub fn report_json_with_stale_policy(
             },
             Vec::new(),
             Value::Null,
+            Some(*subject),
         ),
         Outcome::Violations(report) => (
             "violations",
             report.violations.iter().map(Violation::to_json).collect(),
             Value::Null,
+            None,
         ),
         Outcome::ConstitutionError(message) => (
             "constitution_error",
             Vec::new(),
             Value::String(message.clone()),
+            None,
         ),
-        _ => ("unknown", Vec::new(), Value::Null),
+        _ => ("unknown", Vec::new(), Value::Null, None),
     };
     let stale_baseline: Vec<Value> = stale
         .iter()
@@ -66,6 +72,12 @@ pub fn report_json_with_stale_policy(
         "stale_disallowed": has_disallowed_stale,
         "error": error,
     });
+    if let Some(subject) = subject {
+        document["subject"] = serde_json::json!({
+            "declared": subject.declared(),
+            "reached": subject.reached(),
+        });
+    }
     if let Some(coverage) = coverage {
         document["coverage"] = serde_json::json!({
             "workspace_crates": coverage.total,

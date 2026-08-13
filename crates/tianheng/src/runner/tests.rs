@@ -7,6 +7,7 @@ use super::{
     semantic_text, trait_impl_text, visibility_text,
 };
 use crate::prelude::*;
+use guibiao::Subject;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -97,8 +98,11 @@ fn merge_combines_violations_from_both_dimensions() {
 #[test]
 fn merge_is_clean_only_when_both_are_clean() {
     assert_eq!(
-        merge_outcomes(Outcome::Clean, Outcome::Clean),
-        Outcome::Clean
+        merge_outcomes(
+            Outcome::Clean(Subject::nothing_declared()),
+            Outcome::Clean(Subject::nothing_declared())
+        ),
+        Outcome::Clean(Subject::nothing_declared())
     );
 }
 
@@ -861,9 +865,11 @@ fn an_orphan_probe_reacts_with_no_declared_boundary() {
         0,
         "a probe-free workspace under an empty constitution stays clean"
     );
-    assert_eq!(
-        check_constitution(&Constitution::new("empty"), &PathBuf::from(clean_manifest),),
-        Outcome::Clean,
+    assert!(
+        matches!(
+            check_constitution(&Constitution::new("empty"), &PathBuf::from(clean_manifest),),
+            Outcome::Clean(_)
+        ),
         "the library check keeps an empty constitution clean on a probe-free workspace",
     );
 }
@@ -1628,7 +1634,8 @@ fn semantic_violation_projects_its_file_in_json_and_sarif() {
 
 #[test]
 fn sarif_clean_is_empty_and_constitution_error_marks_execution_unsuccessful() {
-    let clean: serde_json::Value = serde_json::from_str(&report_sarif(&Outcome::Clean)).unwrap();
+    let clean: serde_json::Value =
+        serde_json::from_str(&report_sarif(&Outcome::Clean(Subject::nothing_declared()))).unwrap();
     assert!(
         clean["runs"][0]["results"].as_array().unwrap().is_empty(),
         "clean → empty results"

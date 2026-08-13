@@ -52,6 +52,9 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     assert_public_type::<RuleKey>();
     assert_public_type::<StructuredFactIdentity>();
     assert_public_type::<Outcome>();
+    // The evidence a clean verdict carries. Named here because an adopter that can read a violation's
+    // structure but nothing from a clean run cannot tell an observed workspace from an unreached one.
+    assert_public_type::<Subject>();
     assert_public_type::<Polarity>();
     assert_public_type::<Report>();
     assert_public_type::<Violation>();

@@ -105,7 +105,7 @@ impl GovernanceTest {
 
         let outcome = check_constitution(&self.constitution, &manifest);
         assert!(
-            matches!(outcome, Outcome::Clean),
+            matches!(outcome, Outcome::Clean(_)),
             "architectural violations or errors detected:\n{outcome:?}"
         );
         self

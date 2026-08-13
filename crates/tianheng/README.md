@@ -65,7 +65,11 @@ match outcome {
         assert!(!violation.rule_key().rule_type().is_empty());
         assert!(!violation.fact().fact_type().is_empty());
     }
-    Outcome::Clean => {}
+    Outcome::Clean(subject) => {
+        // A clean verdict names what it was reached over, so a sound workspace is distinguishable
+        // from one that was never observed.
+        assert!(subject.declared() == 0 || subject.reached() > 0);
+    }
     Outcome::ConstitutionError(message) => panic!("cannot evaluate the law: {message}"),
     _ => unreachable!("Outcome is non-exhaustive"),
 }

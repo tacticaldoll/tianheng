@@ -39,7 +39,7 @@ pub use testing::GovernanceTest;
 pub use guibiao::{
     Baseline, BaselineEntry, Boundary, BoundaryKind, CrateBoundary, CrateTarget, DependencyKind,
     Finding, ModuleBoundary, ModuleRule, Outcome, Polarity, Report, Rule, RuleKey, ScanDepth,
-    Severity, SourceKind, StructuredFactIdentity, Violation, ViolationId, check,
+    Severity, SourceKind, StructuredFactIdentity, Subject, Violation, ViolationId, check,
     workspace_member_src_dirs,
 };
 // The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
@@ -265,7 +265,8 @@ pub mod prelude {
         ImplTraitBoundary, ModuleBoundary, ModuleRule, NoExistentialLeak, Observer, Outcome, Owner,
         Polarity, Reached, Report, Rule, RuleKey, Run, RuntimeBoundary, RuntimeObserver,
         SansIoPure, ScanDepth, SemanticObserver, Severity, SignatureBoundary, SourceKind,
-        StaticObserver, StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary, Violation,
-        ViolationId, VisibilityBoundary, VisibilityCeiling, check, check_constitution, run,
+        StaticObserver, StructuredFactIdentity, Subject, TraitImplBoundary, UnsafeBoundary,
+        Violation, ViolationId, VisibilityBoundary, VisibilityCeiling, check, check_constitution,
+        run,
     };
 }

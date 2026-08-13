@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**16 of 84 declared bounds have no pinning test.** That figure is the register's
+**16 of 85 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -226,6 +226,12 @@ fallback used where no manifest exists, which the register spec describes.
 > the fold merges it as given, a stated bound: it composes verdicts and does not adjudicate them, and a protocol that second-guessed each participant would need a second implementation of every dimension
 
 - **pinned by**: `the_fold_does_not_adjudicate_a_participant_s_verdict`
+
+### `observer-protocol/what-a-subject-does-not-establish-a-stated-bound`
+
+> nothing reacts. The constructor is public because an implementor must be able to return the outcome, so the type converts an omission into a commission and stops there; distinguishing a reported subject from an observed one would need the engine to walk each dimension's corpus itself, which is the shared scanner 三儀 ⊥ 三儀 forbids. The engine owns this narrowing: it is a limit of what a protocol can ask of its participants, not a limit an adopter chose
+
+- **pinned by**: `a_subject_is_declared_by_the_participant_and_not_verified`
 
 ## projection-register
 

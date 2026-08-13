@@ -63,7 +63,7 @@ pub use model::*;
 pub use xuanji::{
     Baseline, BaselineEntry, BoundDecl, BoundId, BoundaryKind, Defence, Demonstrates, Extent,
     FactGranularity, Finding, Observer, Outcome, Owner, Polarity, Reached, Report, RuleKey,
-    ScanDepth, Severity, StructuredFactIdentity, Violation, ViolationId, apply_baseline,
+    ScanDepth, Severity, StructuredFactIdentity, Subject, Violation, ViolationId, apply_baseline,
 };
 
 /// Run the constitution's boundaries against the Cargo workspace at `manifest_path`.
@@ -130,7 +130,17 @@ fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
     violations = deduped;
 
     if violations.is_empty() {
-        Outcome::Clean
+        // The subject this dimension reached, from the two figures this function already holds: the
+        // boundaries it was given, and the workspace members it read. `None` is not a clean workspace — it
+        // is boundaries declared over a workspace with no member to observe, which is a misconfiguration.
+        match Subject::of(constitution.boundaries().len(), workspace.len()) {
+            Some(subject) => Outcome::Clean(subject),
+            None => Outcome::ConstitutionError(format!(
+                "{} static boundary/boundaries are declared and this workspace has no member to observe \
+                 them over, so nothing was judged — which is not a clean workspace",
+                constitution.boundaries().len()
+            )),
+        }
     } else {
         Outcome::Violations(Report::new(violations))
     }

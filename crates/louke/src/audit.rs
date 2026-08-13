@@ -12,7 +12,9 @@ use xuanji::RuleKey;
 
 use crate::finding::RuntimeFact;
 use crate::registry::UNDECLARED_SEAM_REPAIR_HINT;
-use crate::{BoundaryKind, Outcome, Report, RuntimeBoundary, Severity, Violation, ViolationId};
+use crate::{
+    BoundaryKind, Outcome, Report, RuntimeBoundary, Severity, Subject, Violation, ViolationId,
+};
 
 mod scan;
 use scan::{DEFAULT_MARKERS, Probe, collect_probes_with_markers};
@@ -176,7 +178,17 @@ pub fn audit_probe_coverage_with_markers(
     violations.extend(undeclared_probe_violations(&probes, &declared_set));
     violations.extend(unauditable_probe_violations(&probes));
     if violations.is_empty() {
-        Outcome::Clean
+        // The two figures this function already holds: the seams it was asked to cover, and the source
+        // inputs it was given to look for probes in. `None` is seams declared with no source to audit them
+        // against — nothing was judged, which is a misconfiguration rather than a covered workspace.
+        match Subject::of(declared.len(), source_inputs.len()) {
+            Some(subject) => Outcome::Clean(subject),
+            None => Outcome::ConstitutionError(format!(
+                "{} runtime seam(s) are declared and no source input was given to audit them against, so \
+                 nothing was judged — which is not a covered workspace",
+                declared.len()
+            )),
+        }
     } else {
         Outcome::Violations(Report::new(violations))
     }

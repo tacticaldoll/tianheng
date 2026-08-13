@@ -656,8 +656,12 @@ pub(super) fn report_json_projects_a_violation_with_its_kind() {
 
 #[test]
 pub(super) fn report_json_renders_clean_and_constitution_error() {
-    let clean: serde_json::Value =
-        serde_json::from_str(&report_json(&Outcome::Clean, &[], None)).unwrap();
+    let clean: serde_json::Value = serde_json::from_str(&report_json(
+        &Outcome::Clean(Subject::nothing_declared()),
+        &[],
+        None,
+    ))
+    .unwrap();
     assert_eq!(clean["outcome"], "clean");
     assert_eq!(clean["exit_code"], 0);
     assert_eq!(clean["violations"].as_array().unwrap().len(), 0);
@@ -714,7 +718,7 @@ pub(super) fn stale_policy_is_one_pure_exit_code_source_for_runner_and_projectio
     let stale: Vec<BaselineEntry> = baseline.entries().cloned().collect();
 
     assert_eq!(
-        stale_policy(&Outcome::Clean, &stale, true),
+        stale_policy(&Outcome::Clean(Subject::nothing_declared()), &stale, true),
         StalePolicy {
             stale_disallowed: true,
             exit_code: 1,
@@ -730,7 +734,10 @@ pub(super) fn stale_policy_is_one_pure_exit_code_source_for_runner_and_projectio
         2,
         "stale policy never masks a constitution error"
     );
-    assert_eq!(stale_policy(&Outcome::Clean, &stale, false).exit_code, 0);
+    assert_eq!(
+        stale_policy(&Outcome::Clean(Subject::nothing_declared()), &stale, false).exit_code,
+        0
+    );
 }
 
 #[test]
@@ -739,8 +746,12 @@ pub(super) fn report_json_includes_coverage_when_present() {
         total: 3,
         uncovered: vec!["memory".to_string()],
     };
-    let doc: serde_json::Value =
-        serde_json::from_str(&report_json(&Outcome::Clean, &[], Some(&coverage))).unwrap();
+    let doc: serde_json::Value = serde_json::from_str(&report_json(
+        &Outcome::Clean(Subject::nothing_declared()),
+        &[],
+        Some(&coverage),
+    ))
+    .unwrap();
     assert_eq!(doc["coverage"]["workspace_crates"], 3);
     assert_eq!(doc["coverage"]["uncovered"][0], "memory");
 }

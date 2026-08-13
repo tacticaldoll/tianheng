@@ -36,9 +36,15 @@ external consumer SHALL be able to compose boundaries from all three instruments
 `tianheng::prelude::*` SHALL expose the existing boundary, rule, baseline, report, violation, and
 Outcome inspection surface, plus the vocabulary-neutral `RuleKey` and `StructuredFactIdentity`
 types used by live `ViolationId`. The obsolete public `FindingKey` SHALL be removed as an
-intentional 0.3.0 break. These names SHALL form an inspection tier, not a second construction path around validated
-identity or builder-owned rules. Standalone instrument APIs SHALL expose the same reaction model
+intentional 0.3.0 break. These names SHALL form an inspection tier, not a second construction path around
+validated identity or builder-owned rules. Standalone instrument APIs SHALL expose the same reaction model
 without requiring the composed facade.
+
+**A clean outcome SHALL be inspectable for the subject it was reached over.** The Outcome inspection surface
+therefore includes the `Subject` a clean verdict carries, and `Subject` SHALL be a promised prelude member like
+the outcome that carries it. A consumer that can read a violation's target, rule key and structured fact but
+can read nothing at all from a clean verdict cannot tell a workspace that was observed and found sound from one
+that was never reached — and this surface exists so that judgement never requires decoding CLI text.
 
 The public surface SHALL NOT promise a `Dimension`/`ObservedFact` plugin trait or runtime plugin
 loading. Rust architecture tests MAY use the promised `GovernanceTest` harness or invoke the
@@ -49,20 +55,11 @@ existing pure standalone/composed checks and inspect structured `Outcome` values
 - **WHEN** an external crate checks a unified `Constitution`
 - **THEN** it can inspect target, rule key, structured fact, presentation, metadata, and outcome without decoding CLI text
 
-#### Scenario: A consumer inspects a standalone reaction
+#### Scenario: A consumer inspects a clean reaction
 
-- **WHEN** an external crate calls an instrument's public check directly
-- **THEN** it can inspect the same vocabulary-neutral reaction identity without importing `tianheng`
-
-#### Scenario: Rule inspection remains builder-owned
-
-- **WHEN** an external crate inspects a builder-produced rule and its emitted reaction
-- **THEN** it can read rule presentation and semantic key without directly constructing an invalid rule or identity
-
-#### Scenario: Architecture tests use the reaction model
-
-- **WHEN** an adopter wants a Rust test for an architectural boundary
-- **THEN** it uses `GovernanceTest` or invokes an existing pure check and asserts against structured Outcome data
+- **WHEN** an external crate checks a workspace and the reaction is clean
+- **THEN** it can read what was declared and how much of the workspace was reached, so a sound workspace is
+  distinguishable from an unreached one without decoding CLI text
 
 ### Requirement: The adopter surface has an external compilation reaction
 

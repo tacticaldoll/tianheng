@@ -62,7 +62,7 @@ fn findings(manifest: &Path) -> Vec<String> {
             .iter()
             .map(|v| v.finding.clone())
             .collect(),
-        Outcome::Clean => Vec::new(),
+        Outcome::Clean(_) => Vec::new(),
         other => panic!("expected a judgement, got {other:?}"),
     }
 }

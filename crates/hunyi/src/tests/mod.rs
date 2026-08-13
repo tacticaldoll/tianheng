@@ -20,6 +20,6 @@ fn empty_composition_is_clean_without_reading_a_manifest() {
 
     assert!(matches!(
         crate::check_all(&crate::SemanticBoundaries::default(), &absent),
-        xuanji::Outcome::Clean
+        xuanji::Outcome::Clean(_)
     ));
 }

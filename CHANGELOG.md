@@ -302,6 +302,19 @@ them.
 
 ### Changed
 
+- **BREAKING** — **a clean verdict now carries the subject it was reached over.** `Outcome::Clean` gained a
+  `Subject`: what the observation was asked to enforce, and how much of its own corpus it reached.
+  `Subject::of` refuses the one combination that is a lie — *declared something, reached nothing* — so a
+  participant can no longer report a sound workspace over an observation that never happened. Reaching nothing
+  stays legitimate on its own: an empty semantic bundle is a static-only adoption, and
+  `Subject::nothing_declared()` names that shape. Every other outcome already carried its evidence — a
+  violation names eleven things about itself, a constitution error names a reason, a bound declaration names
+  what a reaction does not see — and `Clean` was the one public value in the family that asserted the result
+  of work while carrying none of it. It was also the missing dual of `Observer::bounds`, which has no default
+  body precisely so a participant must declare what it does not observe. The text rendering and the JSON
+  projection now carry the figures, so a reader — or an agent reading a CI log as context — can tell a
+  workspace found sound from one that was never reached.
+
 - **The bounds-method reader's anchor rule is one typed decision, and its behaviour is a table that runs.**
   Two callers each re-derived the rule and drifted twice — once counting trimmed-start lines against
   occurrences, once when a line-start condition reached the reader and not its diagnostic. They match on one
@@ -553,6 +566,14 @@ them.
   performs.*
 
 ### Migration
+- **Match `Outcome::Clean(_)` rather than `Outcome::Clean`.** The compiler names every site; the pattern gains
+  a binding and nothing else. Where a test asserted equality against `Outcome::Clean`, assert
+  `matches!(outcome, Outcome::Clean(_))` instead — pinning a specific subject asserts more than the test
+  meant. An `Observer` implementation returns `Outcome::Clean(subject)`, building it from the two figures it
+  already holds: `Subject::of(declared, reached)` where `declared` is what it was asked to enforce and
+  `reached` is how much of its corpus it opened, or `Subject::nothing_declared()` where it was configured with
+  nothing to enforce. `Subject::of` returning `None` is not a clean workspace — it is boundaries declared over
+  a corpus that was never reached, which is a constitution error.
 - **Regenerate any recorded baseline.** The operand-scoped `dyn`/`impl Trait` boundaries now resolve a **bare**
   principal trait the governed module itself declares, which closes a false negative and therefore adds
   findings: run `tianheng check --write-baseline <file>` wherever a baseline is kept, and re-apply any

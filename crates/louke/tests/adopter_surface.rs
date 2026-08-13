@@ -2,14 +2,16 @@ use std::path::Path;
 
 use louke::{
     BoundDecl, BoundId, Defence, Demonstrates, Extent, FactGranularity, Observer, Outcome, Owner,
-    Reached, RuleKey, StructuredFactIdentity, Violation, ViolationId,
+    Reached, RuleKey, StructuredFactIdentity, Subject, Violation, ViolationId,
 };
 
 struct ExternalObserver;
 
 impl Observer for ExternalObserver {
     fn observe(&self, _manifest_path: &Path) -> Outcome {
-        Outcome::Clean
+        // A third party with nothing declared says so by name, from the public surface alone — no reach into
+        // any dimension's internals, which is what this fixture exists to demonstrate.
+        Outcome::Clean(Subject::nothing_declared())
     }
 
     fn bounds(&self) -> Vec<BoundDecl> {
@@ -30,7 +32,7 @@ fn standalone_runtime_surface_exposes_the_shared_reaction_model() {
     let _ = louke::set_sink::<fn(&Violation)>;
     assert!(matches!(
         ExternalObserver.observe(Path::new("Cargo.toml")),
-        Outcome::Clean
+        Outcome::Clean(_)
     ));
     assert!(ExternalObserver.bounds().is_empty());
     let _ = std::mem::size_of::<(

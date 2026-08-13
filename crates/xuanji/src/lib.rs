@@ -47,7 +47,7 @@ pub use bound::{
 };
 pub use finding::Finding;
 pub use identity::{RuleKey, StructuredFactIdentity};
-pub use model::{BoundaryKind, Outcome, Polarity, ScanDepth, Severity};
+pub use model::{BoundaryKind, Outcome, Polarity, ScanDepth, Severity, Subject};
 pub use observer::Observer;
 pub use util::pretty_json;
 pub use violation::{Report, Violation};
