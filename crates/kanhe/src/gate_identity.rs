@@ -57,10 +57,10 @@ fn value_after(words: &[&str], flag: &str) -> Option<String> {
 /// executes, and a narrower one: a **tail** comment was never cut, so `--exact` written after a `#` on an
 /// invocation line would have been read as a citation.
 ///
-/// Through [`Executed::positioned_lines`] rather than [`Executed::lines`], because the rule applied below is
-/// the shell's continuation rule and **position is part of it**. The first repair joined the compacted lines,
-/// which makes a comment's neighbours adjacent and lets a trailing backslash continue across the very line
-/// bash uses to end the command.
+/// Through [`crate::region::Executed::positioned_lines`] rather than [`crate::region::Executed::lines`],
+/// because the rule applied below is the shell's continuation rule and **position is part of it**. The first
+/// repair joined the compacted lines, which makes a comment's neighbours adjacent and lets a trailing
+/// backslash continue across the very line bash uses to end the command.
 pub fn citations(script_path: &str, script: &str) -> Vec<Citation> {
     let mut found = Vec::new();
     let source = Source::of(script);
