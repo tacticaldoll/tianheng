@@ -155,6 +155,27 @@ consumer for an undemonstrated deduplication.
   mutated checkout, so the machinery exists; what it does not yet do is carry a declaration whose subject is a
   spec sentence rather than a pinning citation.
 
+- **Fixture scratch roots are claimed with `create_dir_all`, which adopts a pre-existing symlink.** *Class:*
+  READY-PATCH. *Observed pressure:* the Gate 8 review of the 0.5.0 window found it in
+  `publish_source_gate::verify_tag_signature`, where the scratch holds `tag.sig` and `check_novalidate` reads
+  it back — so a redirected directory let someone substitute a signature over the same payload made with their
+  own key, in front of `cargo publish`. That site is closed by `claim_scratch`. *Observation source:* a sweep
+  of every `create_dir_all` in `crates/`, run when that fix landed: three harnesses already claim their roots
+  with `create_dir` and an `AlreadyExists` arm — `merge_workflow.rs`, `publish_workflow.rs`,
+  `reference_integrity.rs`, which are the ones that put a controlled `bin/` on `PATH` — and roughly forty
+  fixture roots across `guibiao`, `hunyi`, `louke`, `tianheng` and the remaining `kanhe` directions do not.
+  *Current reaction or bound:* none; nothing holds the shape, and the closed site is closed by hand.
+  *Risk:* bounded and unlike the closed one. A redirected **fixture** root corrupts a test run on a developer's
+  machine; it reaches no release artefact and no irreversible act, because the gate's own scratch no longer
+  takes this route. Measured on this machine: `create_dir_all` on a symlink-to-directory returns `Ok(())` and
+  the writes land in the link's target, `create_dir` returns `AlreadyExists`, and `remove_dir_all` removes the
+  link rather than following it — so every one of these is a race in a window, not a plant-and-wait.
+  *Promotion trigger:* a second site where the redirected directory feeds something a verdict or an artefact
+  depends on, rather than a fixture a test reads back itself. *Version class:* patch; repository-internal,
+  shipping in no crate. *Authority:* `publish-source-integrity`, which paid for the first instance.
+  *Shape:* one claim helper the fixture roots share, refusing a path the process did not create — not a
+  per-site edit, since forty hand-changed call sites is the shape that drifts back.
+
 - **`observation-bound-model`'s projection discloses its own bounds by a typed list; its sibling requires a
   derived one.** *Class:* READY-PATCH. *Observed pressure:* `gate-shape-contract` hit this and wrote the
   requirement — *"That disclosure SHALL be **derived from the specification, not typed into the generator**,

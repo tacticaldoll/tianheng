@@ -439,6 +439,44 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
     ))
 }
 
+/// Take `path` as a directory this process created, or refuse.
+///
+/// **`create_dir_all` accepts a pre-existing symlink to a directory.** Measured: `create_dir_all` on such a
+/// link returns `Ok(())` and every subsequent write lands in the link's *target*, while `create_dir` returns
+/// `AlreadyExists` — a `mkdir` cannot follow a symlink, which is the whole reason to use the narrow call.
+///
+/// What that costs here. The scratch directory holds the throwaway signing key, the probe signature, and
+/// `tag.sig` — which the signature check then reads **back**. Redirect the directory and someone else owns
+/// both ends of that write-then-read: they can substitute a signature they made over the same payload with
+/// their own key, and `ssh-keygen -Y check-novalidate` answers *this signature is valid over this payload*
+/// without asking whose key made it. The check that would then pass is the one whose entire point is that
+/// "a signature block quoted in a tag message is text, not a signature" — so a release tag whose signature
+/// does **not** verify over the tag object would verify, in front of an act that cannot be undone.
+///
+/// The path is `temp_dir()`-relative and predictable — process id and a counter — so it is guessable by
+/// anyone on the machine. It is not plant-and-wait: `remove_dir_all` **does** remove a symlink at the path
+/// rather than following it (measured), so the window is between that removal and this call, and an attacker
+/// must win a race rather than leave something lying around. This closes the window rather than narrowing it.
+///
+/// **The removal is the caller's**, so a direction can supply exactly the state that appears in that window.
+/// The same split as [`hidden_by_the_checkout_with`], for the same reason: the failing arm is not a state a
+/// fixture can be left in, because the removal it follows would undo it.
+///
+/// Three harnesses in this repository already claim their scratch roots this way — the two controlled
+/// workflow directions and the reference gate — and it was this one, standing in front of `cargo publish`,
+/// that did not.
+pub fn claim_scratch(path: &Path) -> Result<(), Refusal> {
+    std::fs::create_dir(path).map_err(|err| {
+        cannot_judge(format!(
+            "could not claim a signature scratch directory at {} ({err}). After `remove_dir_all` an existing \
+             path is an anomaly rather than a leftover, and `mkdir` refuses a symlink instead of writing \
+             through it — so a signature verdict is declined rather than reached somewhere another user \
+             controls",
+            path.display()
+        ))
+    })
+}
+
 /// The tag must carry an SSH signature that verifies **over the tag object**.
 ///
 /// A signature block quoted in a tag *message* is text; only the payload the object actually signs decides.
@@ -458,8 +496,7 @@ fn verify_tag_signature(repo: &Path, tag: &str, tag_object: &str) -> Result<(), 
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&scratch);
-    std::fs::create_dir_all(&scratch)
-        .map_err(|err| cannot_judge(format!("could not create a signature scratch dir: {err}")))?;
+    claim_scratch(&scratch)?;
     let guard = Scratch(scratch.clone());
 
     // The mechanism proves itself before it is trusted to judge: a round trip over a throwaway key. Without

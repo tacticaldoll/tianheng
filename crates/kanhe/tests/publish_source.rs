@@ -810,6 +810,54 @@ fn the_tracked_question_is_asked_once_per_source_not_once_per_path() {
     );
 }
 
+// --- the scratch directory the signature verdict is reached in ---------------------------------------------
+
+/// A scratch path someone else already owns is refused, not written through.
+///
+/// The window this models: the gate removes the path and then creates it, and `remove_dir_all` **does**
+/// remove a symlink rather than follow it — measured — so an attacker cannot leave one lying around. They can
+/// re-create one in the gap, which is why the claim itself has to refuse rather than the removal.
+///
+/// What it buys, measured on this machine: `create_dir_all` on a symlink-to-directory returns `Ok(())` and
+/// the writes land in the link's target. The scratch holds `tag.sig`, which `check_novalidate` reads back, and
+/// `ssh-keygen -Y check-novalidate` asks *is this signature valid over this payload* without asking whose key
+/// made it. So whoever owns that directory owns both ends of the write-then-read and can substitute a
+/// signature over the same payload made with their own key — and a release tag whose signature does not
+/// verify over the tag object would verify.
+#[test]
+fn a_scratch_path_another_user_could_own_is_refused_rather_than_written_through() {
+    let root = scratch("claimed-scratch");
+    let elsewhere = root.join("someone-elses-directory");
+    std::fs::create_dir_all(&elsewhere).expect("create the directory the link would redirect to");
+    let claimed = root.join("scratch");
+    std::os::unix::fs::symlink(&elsewhere, &claimed).expect("plant the redirect");
+
+    let refusal = gate::claim_scratch(&claimed)
+        .expect_err("a path this process did not create must not be adopted as its scratch");
+    assert_eq!(
+        refusal.kind,
+        Kind::CannotJudge,
+        "a scratch it could not claim is a verdict not reached, not a source that disagrees: {}",
+        refusal.message
+    );
+    assert!(refusal.message.contains("scratch"), "{}", refusal.message);
+    assert!(
+        std::fs::read_dir(&elsewhere)
+            .expect("the redirect target is readable")
+            .next()
+            .is_none(),
+        "the refusal must happen before anything is written, or the signature material has already been \
+         handed to whoever owns that directory"
+    );
+
+    // The control: the same call on a path nobody holds succeeds, so the refusal above is about the
+    // pre-existing path rather than about a claim that never works.
+    let fresh = root.join("unclaimed");
+    gate::claim_scratch(&fresh).expect("a path nobody holds is claimable");
+    assert!(fresh.is_dir());
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// The same shape through the whole judgement, so the classifier is known to be wired to a verdict.
 #[test]
 fn a_worktree_the_checkout_hides_is_a_violation() {
