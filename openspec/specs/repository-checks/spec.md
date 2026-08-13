@@ -300,6 +300,20 @@ over as the path it had been read from. The wrapper's own allowlist already refu
 in every spelling, naming this same split as its reason, which is what makes the wrapper composing one itself
 a defect rather than a gap.
 
+**The law applied SHALL be the judged repository's own.** The gate is loaded from the wrapper's own tree while
+every input is resolved from the working directory. Those are one tree whenever the wrapper is run the way its
+own refusals say to run it, and its refusal of a `--repo` selector enumerated the gate among the things read
+"from the repository it is run in" — while nothing held them together. Invoked by absolute path from another
+checkout they come apart in silence, and the wrapper would judge one repository's pull request by another
+repository's law and then merge it. The two worktrees SHALL be compared before any evidence is read.
+
+#### Scenario: The gate and the evidence would come from different repositories
+
+- **WHEN** the wrapper is invoked from a checkout other than the one holding it, so its gate would be loaded
+  from one worktree while the pull request resolves from another
+- **THEN** it refuses as a cannot-judge before reading any evidence, naming both trees: applying one
+  repository's law to another repository's pull request is a judgement about neither
+
 #### Scenario: A squash subject carries the pull request's number
 
 - **WHEN** a proposed subject ends in `(#N)`
