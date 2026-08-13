@@ -24,7 +24,29 @@ fn invocation(identifier: &str) -> String {
 #[test]
 fn a_wrapped_invocation_is_one_logical_line() {
     let joined = logical_lines("a \\\n  b \\\n  c\nnext\n");
-    assert_eq!(joined, vec!["a    b    c".to_string(), "next".to_string()]);
+    assert_eq!(
+        joined,
+        vec![(1, "a    b    c".to_string()), (4, "next".to_string())],
+        "each logical line carries the one-based physical line it starts on, so a caller reporting a \
+         position does not need a second copy of this rule to find it"
+    );
+}
+
+/// A backslash followed by whitespace escapes the **space**, not the newline, so the statement ends there.
+///
+/// Measured rather than reasoned about: `printf 'echo A \\ \necho B\n' > s.sh; bash s.sh` prints `A  ` and
+/// then `B` — two commands. This is the row the two implementations of this rule disagreed on. The other one
+/// joined with `trim_end().strip_suffix('\\')`, which continues here, and it lived in the sweep deciding
+/// whether every acquisition in the two irreversible-act wrappers is guarded — where over-joining reports an
+/// unguarded acquisition as guarded, because the pulled-in text can carry the token the guard is recognised
+/// by. There is one implementation now, and this row is what keeps a second from being written back.
+#[test]
+fn a_backslash_before_whitespace_ends_the_statement() {
+    assert_eq!(
+        logical_lines("echo A \\ \necho B\n"),
+        vec![(1, "echo A \\ ".to_string()), (2, "echo B".to_string())],
+        "bash runs these as two commands, so joining them is a statement this script never had"
+    );
 }
 
 #[test]

@@ -182,30 +182,6 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
     }
 }
 
-/// One acquisition as a single logical line: the physical line at `index` with every continuation appended.
-///
-/// The shell's own rule, applied before the corpus decision rather than after it. A trailing backslash means
-/// the statement is unfinished, so reading only the opening line answers a question about the tool with text
-/// that does not contain the tool.
-fn join_continuations(lines: &[&str], index: usize) -> String {
-    let mut joined = String::new();
-    let mut cursor = index;
-    loop {
-        let current = lines[cursor];
-        match current.trim_end().strip_suffix('\\') {
-            Some(head) if cursor + 1 < lines.len() => {
-                joined.push_str(head.trim_end());
-                joined.push(' ');
-                cursor += 1;
-            }
-            _ => {
-                joined.push_str(current.trim_end());
-                return joined;
-            }
-        }
-    }
-}
-
 /// Every acquisition a wrapper makes is guarded, so a failing tool cannot choose the exit class.
 ///
 /// `var=$(tool …)` under `set -e` exits with the TOOL's status and only the tool's stderr. Measured, a failing
@@ -235,7 +211,6 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
         let mut unguarded = Vec::new();
         let mut examined = 0usize;
         let source = Source::of(text.clone());
-        let executed: Vec<(usize, &str)> = source.shell().numbered_lines().collect();
         // **One region, laid back out at its own positions.** The corpus came from `shell()` while the
         // continuation walk read `text.lines()` — two scans of one file disagreeing about what counts as
         // executed. A tail comment mentioning `cannot_judge` on an acquisition line would have marked it
@@ -244,31 +219,32 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
         // continuation, so the walk stops there and the acquisition reports unguarded — loud, and the safe
         // direction for a wrapper standing in front of an irreversible act.
         //
-        // Through `positioned_lines` rather than built here: this was hand-rolled at both sites that need it
-        // and the two disagreed, so the layout now has one implementation.
+        // Through `positioned_lines` rather than built here, and joined by `gate_identity::logical_lines`
+        // rather than by a second copy of the shell's continuation rule. Both halves were hand-rolled at the
+        // two sites that need them and both pairs disagreed: the layout half was unified first, and this —
+        // the join — kept a `trim_end().strip_suffix('\\')` that continues a line ending in
+        // backslash-then-whitespace. Measured, bash does not: `echo A \\ ` then `echo B` runs **two**
+        // commands. Over-joining here reports an unguarded acquisition as guarded, because the pulled-in text
+        // can carry the very token the guard is recognised by.
         let lines = source.shell().positioned_lines();
-        for (number, line) in &executed {
-            let index = number - 1;
-            // An assignment whose value is a command substitution — recognized on the opening line, because
-            // that is where the substitution opens; what it *invokes* is read from the joined line below.
-            if !line.trim_start().contains("=$(") {
-                continue;
-            }
-            // **The whole statement, because the guard is part of it.** A trailing backslash means the
-            // statement is unfinished, and both wrappers spread the gate acquisition across seven lines with
-            // its `|| {` on the last. Reading the opening line alone answers a question about a statement with
-            // text that is not the statement.
-            let joined = join_continuations(&lines, index);
-            let Some((left, _)) = joined.split_once("=$(") else {
+        for (number, statement) in kanhe::gate_identity::logical_lines(&lines.join("\n")) {
+            // An assignment whose value is a command substitution. Read on the whole statement, because the
+            // guard is part of it: both wrappers spread the gate acquisition across seven lines with its
+            // `|| {` on the last.
+            let Some((left, _)) = statement.split_once("=$(") else {
                 continue;
             };
-            let variable = left.trim();
-            let guarded = joined.contains("cannot_judge")
-                || joined.contains("|| {")
-                || joined.contains(&format!("|| {variable}="));
+            let variable = left
+                .trim()
+                .rsplit(char::is_whitespace)
+                .next()
+                .unwrap_or(left.trim());
+            let guarded = statement.contains("cannot_judge")
+                || statement.contains("|| {")
+                || statement.contains(&format!("|| {variable}="));
             examined += 1;
             if !guarded {
-                unguarded.push(format!("{wrapper}:{}", index + 1));
+                unguarded.push(format!("{wrapper}:{number}"));
             }
         }
         // **Per wrapper, before the verdict.** `unguarded.is_empty()` is satisfied by a corpus that collapsed
