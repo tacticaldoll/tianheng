@@ -489,7 +489,7 @@ to gate against it, both exiting `2` rather than silently upgrading or reinterpr
 desired `owner`/`tracker` annotations by hand, move or delete the unsupported file, then regenerate
 with `--write-baseline`. The runnable
 `examples/guibiao-standalone/tests/reaction.rs` proves identity stability and the new-violation
-gate; `cargo test -p tianheng --test examples_suite` drives the real CLI write/gate path.
+gate; `cargo test -p shengmo --test examples_suite` drives the real CLI write/gate path.
 
 ### Test that a boundary actually reacts
 
