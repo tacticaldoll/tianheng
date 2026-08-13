@@ -133,6 +133,15 @@ binding available when the claim lives in a sentence. It stays stated on its own
 with a working instrument and a measured cost, and because a general principle nobody can check is the shape
 this repository dissolves rather than keeps.
 
+**This rule has no repository check, and that is stated rather than left to be discovered.** Its text branch
+does — `crates/kanhe/tests/census.rs` holds every declared census — but the rule *above* that branch asks
+which binding a carrier admits, and answering it means reading what a value is a claim **about**. Nothing can
+see that: a check would have to know that `Outcome::Clean` asserts the result of work while `Severity::Warn`
+names a category, and the difference is intent rather than shape. What the rule is instead is the question to
+ask when a new check is written or a review names a corpus defect — and where it is answered by construction,
+the compiler enforces it afterwards rather than this paragraph. `BACKLOG.md` carries it as the un-reacted-SHALL
+class requires.
+
 ## A census is produced, never typed
 
 A figure saying **how many members a set in this repository currently has** is produced by whatever enumerates

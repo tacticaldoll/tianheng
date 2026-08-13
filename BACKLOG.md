@@ -176,6 +176,25 @@ consumer for an undemonstrated deduplication.
   *Shape:* one claim helper the fixture roots share, refusing a path the process did not create — not a
   per-site edit, since forty hand-changed call sites is the shape that drifts back.
 
+- **`Bind a claim to its measurement` is a governing rule with no reaction.** *Class:* WATCH. *Observed
+  pressure:* nine review rounds in the 0.5.0 window, whose largest class by far was *the corpus was wrong or
+  its narrowing was undeclared* — nine of roughly twenty findings. The rule was written from that sweep and
+  names three bindings: derive it, declare it and hold it both ways, or compare it after the fact where the
+  carrier is text. *Observation source:* the sweep itself, plus the refutation inside it — `WRAPPERS` was
+  proposed as a derivation candidate and `self_governance`'s own comment defeated it, because removing
+  `guibiao` from that literal left a `guibiao` allowlist naming `hunyi` green. *Current reaction or bound:*
+  the **text branch** is enforced by `crates/kanhe/tests/census.rs`; the rule above it is enforced by nothing.
+  *Risk:* bounded and of a particular kind — the rule tells an author which instrument to reach for, so its
+  failure mode is a check built with the weak binding where the strong one was available, which is a defect a
+  reviewer finds rather than one that ships. Every instance found so far was found that way. *Promotion
+  trigger:* an instance where the wrong binding was chosen **after** this rule was written — the rule being
+  the control, so the nine that produced it cannot stand as evidence for themselves. *Version class:* patch;
+  repository-internal, shipping in no crate. *Authority:* `repository-checks`, which owns the shape of a
+  check. *Shape:* not a prose detector — answering it needs to know that a value is a claim *about* something,
+  which is intent rather than shape, and the measured-and-rejected class here is exactly judgements over text.
+  If it is ever reacted, the reaction is more likely to be a **type** that makes the weak binding harder to
+  reach than a scan that recognises it.
+
 - **`observation-bound-model`'s projection discloses its own bounds by a typed list; its sibling requires a
   derived one.** *Class:* READY-PATCH. *Observed pressure:* `gate-shape-contract` hit this and wrote the
   requirement — *"That disclosure SHALL be **derived from the specification, not typed into the generator**,
