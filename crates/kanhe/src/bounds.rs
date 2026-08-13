@@ -390,10 +390,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
         ),
-        //
-        // Its check is `the retired gate-shape check`, so this crate owns these too. The four are read out
-        // of each scenario's WHEN and THEN rather than out of a shared adjective: three name shapes the
-        // check never looks at, and one names a shape it looks straight at and declines to judge.
         // --- publish-source-integrity ---
         //
         // Its check is a Rust gate invoked by shell, and `PINNED-BY` resolves only a harness-registered Rust function — so
