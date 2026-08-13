@@ -139,6 +139,23 @@ impl<'a> Executed<'a> {
     /// Requiring the head to keep non-space content was measured too and separates nothing today, so it is
     /// not adopted.
     ///
+    /// **Residue: a Rust `/* … */` span is executed text to this region.** `rust()` cuts the line-comment
+    /// marker and nothing else, so a `use`, a path, or a census phrase written inside a block comment counts
+    /// as executed — which is verbatim the first defect this module's own header says it exists to end, *a
+    /// comment made a file count as holding a projection*. It errs toward **over-including**: a property over
+    /// executed text can be satisfied by commentary, never the reverse, so no file is judged on less than it
+    /// carries.
+    ///
+    /// Measured rather than assumed, and the first measurement was wrong: a `/\* … \*/` regex matched `/*`
+    /// inside string literals such as `"crates/*/Cargo.toml"` and spanned to a later `*/`, reporting a live
+    /// instance that does not exist. Counting line-initial delimiters instead: this repository's tracked Rust
+    /// carries **three**, all inside one raw-string fixture feeding the module scanner, and **none** names a
+    /// projection document. So the residue is latent, and it is declared rather than closed because closing it
+    /// needs nested-span lexing for a case with no instance.
+    ///
+    /// The instrument exists if it ever does: `guibiao::module_scan` already scans nested block comments, with
+    /// a direction proving an inner `*/` does not re-expose the rest as live code.
+    ///
     /// **Residue, declared rather than approximated:** a marker preceded by whitespace *inside* a string
     /// literal is cut, because telling one from the other needs the string-literal lexing this tree has
     /// defeated repeatedly. `observer-protocol` already declares that direction. It sits beside this region's
