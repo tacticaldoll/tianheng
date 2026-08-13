@@ -431,6 +431,14 @@ fn a_gate_named_in_any_word_form_is_a_violation() {
             "a-crates-resident-basename",
             "### Fixed\n- A repair naming `fixture_gate.rs`.",
         ),
+        // **A member whose directory is not its package name.** The row the fixture could not carry while
+        // both sides agreed by construction: every member sat at `crates/<name>/`, so a corpus deriving the
+        // directory from the package name passed every row above while being wrong about any workspace that
+        // does not. `crates/renamed-dir/` holds `machinery-under-another-name`, which publishes nothing.
+        (
+            "a-member-whose-directory-is-not-its-name",
+            "### Fixed\n- A repair naming `crates/renamed-dir/tests/renamed_gate.rs`.",
+        ),
     ] {
         let root = scratch(name);
         let fixture = build_fixture(&root, name, "0.2.0");

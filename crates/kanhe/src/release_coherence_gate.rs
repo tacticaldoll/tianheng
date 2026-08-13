@@ -670,12 +670,26 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
     let mut machinery: Vec<String> = Vec::new();
     let mut published: BTreeSet<String> = BTreeSet::new();
     for package in metadata["packages"].as_array().into_iter().flatten() {
-        let Some(name) = package["name"].as_str() else {
+        // **The directory comes from the manifest, not from the package name.** Deriving it as
+        // `crates/<name>/` was the residual location assumption inside a repair whose own thesis was
+        // *produced from the manifests, not from a location*: a member whose directory differs from its
+        // package name contributes to neither set, so it is machinery nothing refuses (silent), or published
+        // source whose basenames then enter the machinery set and refuse honest adopter prose.
+        // `cargo metadata` answers this exactly — `manifest_path` is the member's own `Cargo.toml`.
+        let Some(manifest) = package["manifest_path"].as_str() else {
+            continue;
+        };
+        let Some(directory) = manifest
+            .strip_prefix(&format!("{}/", repo.display()))
+            .and_then(|rest| rest.strip_suffix("Cargo.toml"))
+        else {
+            // A manifest outside the repository this gate is judging is not a member of it. Skipping is the
+            // only honest answer: enumerating it would attribute another tree's files to this one.
             continue;
         };
         let unpublished = package["publish"].as_array().is_some_and(|r| r.is_empty());
-        let listing = git(repo, &["ls-files", &format!("crates/{name}/")])
-            .map_err(|err| cannot_judge(format!("could not enumerate crates/{name}/: {err}")))?;
+        let listing = git(repo, &["ls-files", directory])
+            .map_err(|err| cannot_judge(format!("could not enumerate {directory}: {err}")))?;
         for path in listing.lines().filter(|l| !l.is_empty()) {
             if unpublished {
                 machinery.push(path.to_string());
@@ -832,7 +846,7 @@ pub fn workspace_files(repo: &Path, version: &str) {
     write(
         repo.join("Cargo.toml"),
         &format!(
-            "[workspace]\nmembers = [\"crates/xuanji\", \"crates/tianheng\"]\n\n\
+            "[workspace]\nmembers = [\"crates/xuanji\", \"crates/tianheng\", \"crates/renamed-dir\"]\n\n\
              [workspace.package]\nversion = \"{version}\"\n\n\
              [workspace.dependencies]\nxuanji = {{ path = \"crates/xuanji\", version = \"{version}\" }}\n"
         ),
@@ -851,6 +865,21 @@ pub fn workspace_files(repo: &Path, version: &str) {
         );
         write(repo.join(format!("crates/{package}/src/lib.rs")), "");
     }
+    // **A member whose directory is not its package name.** Without it, the fixture's two sides agree by
+    // construction — every member sits at `crates/<name>/` — so a corpus that derived the directory from the
+    // package name would pass every row here while being wrong about any workspace that does not. It is
+    // unpublished, so its files must reach the machinery set: if the derivation regresses, this member
+    // contributes nothing and a changelog naming its gate reports clean.
+    write(
+        repo.join("crates/renamed-dir/Cargo.toml"),
+        "[package]\nname = \"machinery-under-another-name\"\nversion.workspace = true\n\
+         edition = \"2024\"\npublish = false\n",
+    );
+    write(repo.join("crates/renamed-dir/src/lib.rs"), "");
+    write(
+        repo.join("crates/renamed-dir/tests/renamed_gate.rs"),
+        "#[test]\nfn t() {}\n",
+    );
     let minor = version.rsplit_once('.').map(|(h, _)| h).unwrap_or(version);
     // The example package the fixture carries, named through a binding like the members above rather than
     // as one path literal: a literal here reads as a reference into *this* repository, which the reference
@@ -867,7 +896,8 @@ pub fn workspace_files(repo: &Path, version: &str) {
         repo.join("Cargo.lock"),
         &format!(
             "version = 4\n\n[[package]]\nname = \"tianheng\"\nversion = \"{version}\"\n\n\
-             [[package]]\nname = \"xuanji\"\nversion = \"{version}\"\n"
+             [[package]]\nname = \"xuanji\"\nversion = \"{version}\"\n\n\
+             [[package]]\nname = \"machinery-under-another-name\"\nversion = \"{version}\"\n"
         ),
     );
 }
