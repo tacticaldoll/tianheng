@@ -605,10 +605,26 @@ the join below, and the check SHALL say so rather than imply a coverage it does 
 - **THEN** the check fails, naming the capability — an undeclared subject makes every filing decision about
   it unfalsifiable
 
+**A bullet the reader cannot understand SHALL be refused, never dropped.** The form read is one backticked
+glob and nothing else. A `- ` bullet the reader cannot parse used to fall out of a `filter_map`, so the
+capability's declared subject shrank by exactly the bullets that failed to parse and the filing join then
+missed every file those globs claimed — a capability quietly governing less than it says, which is the
+condition this requirement exists to make falsifiable, produced by the reader enforcing it. This is the same
+obligation `adopter-surface` states for the prelude's members, for the same reason: a reader that narrows a
+claim by the amount it failed to read reports the narrowed claim as the whole one.
+
 #### Scenario: A declared glob matches no tracked path
 
 - **WHEN** a `## Subject` glob resolves to no tracked file
 - **THEN** the check fails, naming the capability and the glob
+
+#### Scenario: A subject bullet the reader cannot parse
+
+- **WHEN** a `## Subject` bullet is not one backticked glob — prose after the closing backtick, no backticks,
+  an unterminated one
+- **THEN** the check refuses as a **cannot-judge** naming the bullet, rather than reading past it: the section
+  may claim exactly the right files and this reader cannot say, while a shorter glob list would be the silent
+  narrowing itself
 
 #### Scenario: The tracked-path enumeration fails
 

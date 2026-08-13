@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use kanhe::capability_subjects::{
-    declaration_offences, join_offences, proposal_capabilities, subject_globs,
+    Declared, declaration_offences, join_offences, proposal_capabilities, subject_globs,
 };
 use kanhe::refusal::{Kind, Refusal, cannot_judge};
 
@@ -80,7 +80,24 @@ fn claimed(
     let mut claimed = BTreeMap::new();
     for (capability, spec) in specs {
         let mut paths = BTreeSet::new();
-        for glob in subject_globs(spec).unwrap_or_default() {
+        // The same rule this function's own comment states, one step earlier: a bullet that cannot be read
+        // is not a bullet claiming nothing. `unwrap_or_default()` collapsed *both* of the reader's non-glob
+        // answers into an empty claim, so an unparseable bullet shrank the claimed set exactly as an
+        // unresolved glob would have — the case `claimed` already refuses, arrived at one line sooner.
+        let globs = match subject_globs(spec) {
+            Declared::Globs(globs) => globs,
+            // A capability with no `## Subject` claims nothing *here* and is reported by the sibling
+            // direction, which is where that fact belongs.
+            Declared::Absent => Vec::new(),
+            Declared::Unreadable(bullet) => {
+                return Err(cannot_judge(format!(
+                    "`{capability}` lists the subject bullet `{bullet}`, which cannot be read as one \
+                     backticked glob; reading past it would shrink the claimed set by exactly that bullet \
+                     and let a change touching this capability's subject read as filed"
+                )));
+            }
+        };
+        for glob in globs {
             let listing = git(root, &["ls-files", "--", &glob]).map_err(|err| {
                 cannot_judge(format!(
                     "`{capability}` declares the subject glob `{glob}` and it could not be resolved ({err}); \

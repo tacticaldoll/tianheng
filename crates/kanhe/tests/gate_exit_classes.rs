@@ -234,9 +234,19 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
         let text = read(&root, wrapper);
         let mut unguarded = Vec::new();
         let mut examined = 0usize;
-        let lines: Vec<&str> = text.lines().collect();
         let source = Source::of(text.clone());
         let executed: Vec<(usize, &str)> = source.shell().numbered_lines().collect();
+        // **One region, laid back out at its own positions.** The corpus came from `shell()` while the
+        // continuation walk read `text.lines()` — two scans of one file disagreeing about what counts as
+        // executed. A tail comment mentioning `cannot_judge` on an acquisition line would have marked it
+        // guarded, which is the region confusion `repository-checks` names a defect whether or not either
+        // scan currently admits a wrong answer. A dropped comment line becomes `""`, which ends no
+        // continuation, so the walk stops there and the acquisition reports unguarded — loud, and the safe
+        // direction for a wrapper standing in front of an irreversible act.
+        let mut lines: Vec<&str> = vec![""; text.lines().count()];
+        for (number, line) in &executed {
+            lines[number - 1] = line;
+        }
         for (number, line) in &executed {
             let index = number - 1;
             // An assignment whose value is a command substitution — recognized on the opening line, because

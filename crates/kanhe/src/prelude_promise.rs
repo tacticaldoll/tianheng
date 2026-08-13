@@ -49,11 +49,19 @@ pub enum Promise {
 /// running it.
 ///
 /// **A member this reader cannot understand is refused, never dropped.** The forms it reads are plain
-/// identifiers; a path (`runner::Format`), a rename (`Foo as Bar`) or a nested group (`a::{B, C}`) is not one,
-/// and dropping such an entry would narrow the promise by exactly the amount the reader failed to parse —
-/// silently, in the check whose subject is a promise narrowing unobserved. Measured on a mixed list before this
-/// was written: three of five members vanished. Refusing costs no new extraction rule and cannot narrow
-/// anything; if the prelude grows one of these forms, its author meets a refusal naming the member.
+/// identifiers; a path (`runner::Format`), a rename (`Foo as Bar`), a nested group (`a::{B, C}`) or a glob
+/// (`runner::*`) is not one, and dropping such an entry would narrow the promise by exactly the amount the
+/// reader failed to parse — silently, in the check whose subject is a promise narrowing unobserved. Measured
+/// on a mixed list before this was written: three of five members vanished. Refusing costs no new extraction
+/// rule and cannot narrow anything; if the prelude grows one of these forms, its author meets a refusal
+/// naming the member.
+///
+/// **The glob was the one form this rule carved an exception for**, and it was the worst one to carve.
+/// `trim_end_matches("::*")` turned `runner::*` into the identifier `runner`, which passes the test below and
+/// enters the promise as a single member — so every name the glob re-exports went unchecked while the set
+/// read as complete. One re-export could have silently emptied this check of most of its subject, in the file
+/// whose entire purpose is catching a promise that narrowed without anyone noticing. The special case is
+/// gone: a glob is a form this reader does not read, and it is refused like the rest.
 pub fn promised_members(lib_rs: &str) -> Result<BTreeSet<String>, String> {
     let Some(module) = lib_rs.split_once("pub mod prelude {") else {
         return Ok(BTreeSet::new());
@@ -66,7 +74,7 @@ pub fn promised_members(lib_rs: &str) -> Result<BTreeSet<String>, String> {
     };
     let mut members = BTreeSet::new();
     for entry in list.split(',') {
-        let entry = entry.trim().trim_end_matches("::*");
+        let entry = entry.trim();
         if entry.is_empty() {
             continue;
         }
@@ -108,7 +116,8 @@ pub fn judge(lib_rs: &str, contract_rs: &str) -> Promise {
         Err(entry) => {
             return Promise::CannotJudge(format!(
                 "the prelude promises `{entry}`, which this check cannot read as a member name. A promised \
-                 member written as a path, a rename, or a nested group is not a member this check may drop: \
+                 member written as a path, a rename, a nested group or a glob is not a member this check may \
+                 drop: \
                  dropping it narrows the promise silently, and a promise that shrinks without saying so is \
                  the failure this whole check exists to catch"
             ));
