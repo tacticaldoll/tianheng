@@ -203,7 +203,12 @@ gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
 }
 require_one_pass "$gate_output"
 
-cd "$repo"
+# Guarded like every acquisition, and for the sharper reason: this one runs **after** the gate has passed. A
+# failed `cd` under `set -e` exits 1 — the class that means a gate ran and refused — so a wrapper that could
+# not enter the tree would report a disagreement the gate never found, one line before `cargo publish`.
+cd "$repo" || cannot_judge \
+    "cannot enter $repo, the tree \`cargo publish\` would package, after the source gate had already passed \
+— which is not the same fact as a gate that ran and refused"
 # Removed here, not left to the trap. An EXIT trap does not run when `exec` replaces the shell image —
 # measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while the same script without `exec` prints
 # `T`. So the trap fired on every path where nothing happened and was skipped on the one path that completes the
