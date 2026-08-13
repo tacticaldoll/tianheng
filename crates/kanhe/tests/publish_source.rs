@@ -623,11 +623,15 @@ fn an_exclusion_classifier_that_cannot_run_cannot_be_judged() {
         &[(".gitignore", "stray.txt\n")],
         "stray.txt",
     );
-    let refusal = hidden_by_the_checkout_with(&repo, |_, _| {
-        Err(NoClassification::Failed(
-            "check-ignore exploded".to_string(),
-        ))
-    })
+    let refusal = hidden_by_the_checkout_with(
+        &repo,
+        |_, _| {
+            Err(NoClassification::Failed(
+                "check-ignore exploded".to_string(),
+            ))
+        },
+        |_, _| true,
+    )
     .expect_err("a classifier that could not run must refuse rather than answer");
     let _ = std::fs::remove_dir_all(&root);
     assert_eq!(refusal.kind, Kind::CannotJudge);
@@ -647,8 +651,12 @@ fn an_exclusion_classifier_that_matched_nothing_still_answers() {
         &[(".gitignore", "stray.txt\n")],
         "stray.txt",
     );
-    let hidden = hidden_by_the_checkout_with(&repo, |_, _| Err(NoClassification::MatchedNothing))
-        .expect("matching nothing is an answer, not a failure to read");
+    let hidden = hidden_by_the_checkout_with(
+        &repo,
+        |_, _| Err(NoClassification::MatchedNothing),
+        |_, _| true,
+    )
+    .expect("matching nothing is an answer, not a failure to read");
     let _ = std::fs::remove_dir_all(&root);
     assert!(
         hidden.iter().any(|line| line.contains("<unshown>")),
@@ -700,6 +708,90 @@ fn a_file_hidden_by_this_clones_exclude_file_is_not_clean() {
         hidden.iter().any(|line| line.contains("info/exclude")),
         "a file hidden by this clone's exclude file was accepted, so the same commit would be judged \
          differently elsewhere: {hidden:?}"
+    );
+}
+
+// --- the size of the conversation, which every fixture above leaves unexercised -----------------------------
+//
+// Each fixture above hides a handful of files, so "the excluded set is small" held in all of them and was
+// never a claim anything made. On this repository the set is 73,670 paths — `/target/` alone — and the two
+// directions below are the only place that number's consequences are constructed.
+
+/// A repository whose `.gitignore` hides `count` files with long names.
+///
+/// Long deliberately: the deadlock needs the conversation to exceed the kernel's pipe buffers in **bytes**,
+/// so bytes-per-file is the cheap axis and files-created is the expensive one.
+fn crowded(name: &str, count: usize) -> (PathBuf, PathBuf) {
+    let (root, repo) = hiding(name, &[(".gitignore", "/ignored/\n")], "kept.txt");
+    let ignored = repo.join("ignored");
+    std::fs::create_dir_all(&ignored).expect("create the ignored directory");
+    for index in 0..count {
+        let stem = "a".repeat(180);
+        std::fs::write(ignored.join(format!("{stem}-{index:06}")), "x").expect("write");
+    }
+    (root, repo)
+}
+
+/// The gate reaches a verdict on a repository whose ignored set does not fit in a pipe.
+///
+/// The negative run: against the write-everything-then-read shape this replaced, this direction does not
+/// fail — it *hangs*, `git check-ignore` blocked in `pipe_wait` on a full 64 KB stdout while the judgement
+/// blocks on a full 64 KB stdin. So the bound is enforced here rather than left to the harness: a test that
+/// never returns reports nothing, and reporting nothing is exactly how this reached a release branch.
+#[test]
+fn a_repository_whose_ignored_set_outgrows_a_pipe_is_still_answered() {
+    // 2,000 × ~190 bytes ≈ 380 KB in and ≈ 400 KB out, against 64 KB each way. The old shape blocks after
+    // roughly the first 117 KB — one pipe's worth buffered plus one pipe's worth consumed — so this clears
+    // the threshold by more than three times rather than sitting near it.
+    let (root, repo) = crowded("crowded-pipe", 2_000);
+    let (tx, rx) = std::sync::mpsc::channel();
+    let judging = repo.clone();
+    std::thread::spawn(move || {
+        let _ = tx.send(hidden_by_the_checkout(&judging).map_err(|refusal| refusal.message));
+    });
+    let answered = rx.recv_timeout(std::time::Duration::from_secs(60));
+    let _ = std::fs::remove_dir_all(&root);
+    let hidden = match answered {
+        Ok(hidden) => hidden.expect("the classifier reads this repository"),
+        Err(_) => panic!(
+            "the publish gate reached no verdict in 60s on a repository with 2,000 ignored files. It does \
+             not refuse and it does not accept — it never returns, so `scripts/publish.sh` hangs at the one \
+             moment nothing can be undone"
+        ),
+    };
+    assert!(
+        hidden.is_empty(),
+        "every one of these files is hidden by a tracked `.gitignore`, so none is the checkout's: {:?}",
+        &hidden[..hidden.len().min(3)]
+    );
+}
+
+/// The tracked-source question is asked once per **source**, not once per path.
+///
+/// Counted rather than timed. A wall-clock assertion over process spawns is a flake on a loaded machine and
+/// says nothing about the shape; the count says the shape directly. Measured on this repository before the
+/// repair: 73,670 paths, 73,670 spawns, **one** distinct source — 147 seconds spent asking one question.
+#[test]
+fn the_tracked_question_is_asked_once_per_source_not_once_per_path() {
+    let (root, repo) = crowded("crowded-sources", 400);
+    let asked = std::sync::atomic::AtomicUsize::new(0);
+    let hidden = hidden_by_the_checkout_with(&repo, gate::classify, |repo, source| {
+        asked.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        gate::hermetic("git")
+            .args(["ls-files", "--error-unmatch", "-z", "--", source])
+            .current_dir(repo)
+            .output()
+            .is_ok_and(|out| out.status.success())
+    })
+    .expect("the classifier reads this repository");
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(hidden.is_empty(), "{hidden:?}");
+    let asked = asked.load(std::sync::atomic::Ordering::Relaxed);
+    assert_eq!(
+        asked, 1,
+        "400 excluded paths named one source, `.gitignore`, and the tracked question was asked {asked} \
+         times. Asked per path it is one process spawn each, which on this repository's 73,670 is 147 \
+         seconds of process creation to answer a single question"
     );
 }
 
