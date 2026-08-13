@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**16 of 83 declared bounds have no pinning test.** That figure is the register's
+**16 of 84 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -248,6 +248,14 @@ fallback used where no manifest exists, which the register spec describes.
 > the gate accepts it, a stated bound: validity is verifiable without configuration and **attribution is not**, needing an allowed-signers file that exists on a maintainer's machine and not in CI. The ownership is inherited from the verification environment rather than held by this engine, because no change to this gate closes it — giving CI an allowed-signers file is what would
 
 - **pinned by**: `a_valid_signature_from_an_unauthorized_key_is_accepted`
+
+## reference-integrity
+
+### `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound`
+
+> nothing reacts, and nothing ever will. The exemption is by section, not by whether the path was once right, and distinguishing the two needs the tree as it stood at that date — a per-section historical checkout this check does not make and whose cost is not proportionate to a mistyped path in a frozen record. The engine owns the narrowing: it is this check's rule that declines to look, not a limit an adopter chose
+
+- **pinned by**: `a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not`
 
 ## release-coherence
 
