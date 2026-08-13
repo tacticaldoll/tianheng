@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::capability_subjects::{
-    declaration_offences, join_offences, proposal_capabilities, subject_globs,
+    Declared, declaration_offences, join_offences, proposal_capabilities, subject_globs,
 };
 use crate::refusal::Kind;
 
@@ -174,9 +174,52 @@ fn a_proposal_naming_nothing_says_so_rather_than_naming_an_empty_list() {
 fn a_subject_block_ends_at_the_next_section() {
     assert_eq!(
         subject_globs(WITH_SUBJECT),
-        Some(vec!["crates/a/src/*.rs".to_string()])
+        Declared::Globs(vec!["crates/a/src/*.rs".to_string()])
     );
-    assert_eq!(subject_globs("# c\n\n## Purpose\n\np\n"), None);
+    assert_eq!(subject_globs("# c\n\n## Purpose\n\np\n"), Declared::Absent);
+}
+
+/// A bullet the reader cannot parse is refused, not quietly left out of the claim.
+///
+/// The three shapes that used to fall out of a `filter_map`: prose after the closing backtick, no backticks
+/// at all, and an unterminated one. Each would have shrunk the capability's declared subject by exactly
+/// itself — so `join_offences` would stop seeing every file that bullet claimed, and the capability would
+/// govern less than it says while reading as a complete declaration.
+#[test]
+fn a_subject_bullet_that_does_not_parse_is_refused_rather_than_dropped() {
+    for bullet in [
+        "- `crates/a/src/*.rs` and everything under it",
+        "- crates/a/src/*.rs",
+        "- `crates/a/src/*.rs",
+    ] {
+        let spec = format!("# c\n\n## Subject\n\n{bullet}\n");
+        assert_eq!(
+            subject_globs(&spec),
+            Declared::Unreadable(bullet.to_string()),
+            "this bullet was read past instead of refused, which narrows the claim silently"
+        );
+    }
+}
+
+/// The refusal reaches the verdict as a **cannot-judge**, not as a disagreement.
+///
+/// The section may well claim exactly the right files; this reader cannot say. Reporting it as a violation
+/// would send someone to fix a declaration that may be correct, and reporting a shorter glob list would be
+/// the silent narrowing itself.
+#[test]
+fn an_unreadable_subject_bullet_is_a_cannot_judge() {
+    let specs = BTreeMap::from([(
+        "c".to_string(),
+        "# c\n\n## Subject\n\n- `crates/a/*.rs` and more\n".to_string(),
+    )]);
+    let offences = declaration_offences(&specs, |_| Ok(vec!["crates/a/src/lib.rs".to_string()]));
+    assert_eq!(offences.len(), 1, "{offences:?}");
+    assert_eq!(offences[0].kind, Kind::CannotJudge);
+    assert!(
+        offences[0].message.contains("does not understand"),
+        "{}",
+        offences[0].message
+    );
 }
 
 #[test]

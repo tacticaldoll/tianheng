@@ -185,12 +185,40 @@ fn a_sibling_citing_twice_does_not_cover_a_script_citing_none() {
 ///
 /// Composes with `a_commented_invocation_cites_nothing` rather than restating it: that row says the extractor
 /// ignores a commented invocation, this says what follows for the script it sat in.
+///
+/// **Every line carries the marker**, which is what commenting out a block actually is. This fixture used to
+/// prefix one `#` to a two-line invocation and call the whole thing commented — see
+/// [`a_marker_on_the_first_line_does_not_comment_the_continuation`] for why that is not what bash does.
 #[test]
 fn a_script_whose_only_invocation_is_commented_out_is_named() {
-    let commented = format!("# {}", invocation("the_gate"));
+    let commented: String = invocation("the_gate")
+        .lines()
+        .map(|line| format!("# {line}\n"))
+        .collect();
     let refusals = uncited_scripts([("scripts/probe.sh", commented.as_str())]);
     assert_eq!(refusals.len(), 1);
     assert!(refusals[0].message.contains("scripts/probe.sh"));
+}
+
+/// A `#` on the first line of a continued invocation comments **that line**, not the continuation.
+///
+/// Measured, not reasoned about — `bash -c` on `# echo COMMENTED \` followed by `  echo THIS_RAN` prints
+/// `THIS_RAN`. A comment runs to end of line and a backslash inside one continues nothing.
+///
+/// The reader used to join raw physical lines *first* and then drop the joined line if it began with `#`, so
+/// it modelled the continuation as commented too. That is a **false negative** in a gate-identity check: an
+/// `--exact` naming a test that does not exist, written on the continuation of a commented line, executes and
+/// went unreported. Deciding the region once — with `Source::shell`, which cuts comments per physical line
+/// before anything is joined — is what surfaced it.
+#[test]
+fn a_marker_on_the_first_line_does_not_comment_the_continuation() {
+    let found = citations("scripts/w.sh", &format!("# {}", invocation("ghost")));
+    assert_eq!(
+        found.len(),
+        1,
+        "the continuation of a commented line executes, so the citation on it is a citation: {found:?}"
+    );
+    assert_eq!(found[0].identifier, "ghost");
 }
 
 /// An empty corpus yields no refusal here, and refusing it is the caller's job.

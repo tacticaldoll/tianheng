@@ -6,6 +6,7 @@
 //! repository exactly as a path is, and the reference gate matches paths only.
 
 use crate::refusal::{Refusal, cannot_judge, violation};
+use crate::region::Source;
 
 /// One `--exact` citation found in a script: the identifier, and the invocation it belongs to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,13 +51,16 @@ fn value_after(words: &[&str], flag: &str) -> Option<String> {
 }
 
 /// Every `--exact <ident>` a script cites, with the invocation each belongs to.
+///
+/// **The region is decided once, by [`Source::shell`], and the continuation walk reads that.** This used to
+/// join raw lines and then skip the ones *beginning* with `#` — its own second opinion about what a script
+/// executes, and a narrower one: a **tail** comment was never cut, so `--exact` written after a `#` on an
+/// invocation line would have been read as a citation. `Source` exists so this decision is made in one place.
 pub fn citations(script_path: &str, script: &str) -> Vec<Citation> {
     let mut found = Vec::new();
-    for line in logical_lines(script) {
-        // A comment names no invocation; the `#` is the shell's own rule for that.
-        if line.trim_start().starts_with('#') {
-            continue;
-        }
+    let source = Source::of(script);
+    let executed: Vec<&str> = source.shell().lines().collect();
+    for line in logical_lines(&executed.join("\n")) {
         let words: Vec<&str> = line.split_whitespace().collect();
         for (at, word) in words.iter().enumerate() {
             if *word != "--exact" {

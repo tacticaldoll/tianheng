@@ -11,21 +11,50 @@ use crate::refusal::{Refusal, cannot_judge, violation};
 /// The globs one capability declares, in the order it declares them.
 pub type Subjects = BTreeMap<String, Vec<String>>;
 
-/// The globs a spec's `## Subject` section lists, or `None` where it carries no such section.
-pub fn subject_globs(spec: &str) -> Option<Vec<String>> {
-    let block = spec.split("\n## Subject\n").nth(1)?;
+/// What a spec's `## Subject` section declares.
+///
+/// Three outcomes, because two of them used to be one. A bullet this reader cannot parse is not a section
+/// listing fewer globs — see [`subject_globs`].
+#[derive(Debug, PartialEq, Eq)]
+pub enum Declared {
+    /// The spec carries no `## Subject` section.
+    Absent,
+    /// The globs the section lists, in the order it lists them.
+    Globs(Vec<String>),
+    /// A bullet this reader cannot understand, quoted as written.
+    Unreadable(String),
+}
+
+/// What a spec's `## Subject` section declares, refusing a bullet it cannot read.
+///
+/// **A bullet this reader cannot understand is refused, never dropped.** The form it reads is one backticked
+/// glob and nothing else. A `- ` bullet with prose after the closing backtick, or with no backticks at all,
+/// used to fall out of a `filter_map` — so the capability's declared subject silently shrank by exactly the
+/// bullets the reader failed to parse, and [`join_offences`] then missed every file those globs claimed. That
+/// is a capability quietly governing less than it says, which is the condition this whole module exists to
+/// make falsifiable, performed by the module.
+///
+/// Measured when this was written: 87 subject bullets across the specs, none of them unparseable — so the
+/// silent narrowing was latent, and running the check could not have found it.
+pub fn subject_globs(spec: &str) -> Declared {
+    let Some(block) = spec.split("\n## Subject\n").nth(1) else {
+        return Declared::Absent;
+    };
     let block = block.split("\n## ").next().unwrap_or(block);
-    Some(
-        block
-            .lines()
-            .filter_map(|line| {
-                let rest = line.trim().strip_prefix("- ")?;
-                rest.strip_prefix('`')?
-                    .strip_suffix('`')
-                    .map(str::to_string)
-            })
-            .collect(),
-    )
+    let mut globs = Vec::new();
+    for line in block.lines() {
+        let Some(rest) = line.trim().strip_prefix("- ") else {
+            continue;
+        };
+        match rest
+            .strip_prefix('`')
+            .and_then(|rest| rest.strip_suffix('`'))
+        {
+            Some(glob) if !glob.contains('`') => globs.push(glob.to_string()),
+            _ => return Declared::Unreadable(line.trim().to_string()),
+        }
+    }
+    Declared::Globs(globs)
 }
 
 /// The capability names a proposal's `## Capabilities` section mentions.
@@ -66,12 +95,26 @@ pub fn declaration_offences(
 ) -> Vec<Refusal> {
     let mut offences = Vec::new();
     for (capability, spec) in specs {
-        let Some(globs) = subject_globs(spec) else {
-            offences.push(violation(format!(
-                "`{capability}` declares no `## Subject`, so which files it governs is unfalsifiable and \
-                 every requirement filed under it is filed by a name read loosely"
-            )));
-            continue;
+        let globs = match subject_globs(spec) {
+            Declared::Absent => {
+                offences.push(violation(format!(
+                    "`{capability}` declares no `## Subject`, so which files it governs is unfalsifiable and \
+                     every requirement filed under it is filed by a name read loosely"
+                )));
+                continue;
+            }
+            // A cannot-judge, not a violation: the section may well claim exactly the right files, and this
+            // reader cannot say. Reporting it as a shorter list would be the silent narrowing itself.
+            Declared::Unreadable(bullet) => {
+                offences.push(cannot_judge(format!(
+                    "`{capability}` lists the subject bullet `{bullet}`, which this reader does not \
+                     understand — the form it reads is one backticked glob and nothing else. Until it parses, \
+                     what this capability governs cannot be decided, and reading past it would shrink the \
+                     claim by exactly the bullet that could not be read"
+                )));
+                continue;
+            }
+            Declared::Globs(globs) => globs,
         };
         if globs.is_empty() {
             offences.push(violation(format!(

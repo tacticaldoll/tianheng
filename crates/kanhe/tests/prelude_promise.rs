@@ -99,6 +99,40 @@ fn an_input_that_cannot_be_read_is_refused_rather_than_reported_clean() {
     }
 }
 
+/// Each unreadable member form, refused rather than read as something smaller.
+///
+/// The **glob** is the row that was missing, and it was the one that mattered. A `trim_end_matches("::*")`
+/// turned `runner::*` into the plain identifier `runner`, which passes the member test and enters the promise
+/// as one member — so every name behind the glob went unchecked while the promised set read as complete. One
+/// glob re-export could have emptied this check of most of its subject, in the file whose entire purpose is
+/// catching a promise that narrowed unobserved.
+///
+/// The three forms the doc already named are here as controls: without them this row would pass for a reader
+/// that refuses everything, which is a different defect in the same place.
+#[test]
+fn a_member_form_this_reader_cannot_understand_is_refused_rather_than_narrowed() {
+    for (form, member) in [
+        ("runner::*", "a glob"),
+        ("runner::Format", "a path"),
+        ("Foo as Bar", "a rename"),
+    ] {
+        let promise = format!("pub mod prelude {{\n    pub use super::{{Alpha, {form}}};\n}}\n");
+        match judge(
+            &promise,
+            "fn t() { let _ = (Alpha, runner, Format, Foo, Bar); }",
+        ) {
+            Promise::CannotJudge(why) => assert!(
+                why.contains(form),
+                "{member} must be refused by name so its author can act on it, got: {why}"
+            ),
+            other => panic!(
+                "{member} `{form}` was read as a member instead of refused, which narrows the promise by \
+                 exactly what the reader could not parse: {other:?}"
+            ),
+        }
+    }
+}
+
 /// The bound: a promised member named **only in a comment** is counted as named.
 ///
 /// `repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound`, `UnderReacts`, owned
