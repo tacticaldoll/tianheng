@@ -714,8 +714,26 @@ fn a_file_hidden_by_this_clones_exclude_file_is_not_clean() {
 // --- the size of the conversation, which every fixture above leaves unexercised -----------------------------
 //
 // Each fixture above hides a handful of files, so "the excluded set is small" held in all of them and was
-// never a claim anything made. On this repository the set is 73,670 paths — `/target/` alone — and the two
-// directions below are the only place that number's consequences are constructed.
+// never a claim anything made. Measured on this repository when these were written, the set was 73,670 paths
+// — `/target/` alone — and the two directions below are the only place that number's consequences are
+// constructed.
+//
+// **Every figure either sizes a fixture or is read back from one.** The first draft typed the fixture size
+// into the assertion message beside the literal that built it, twice, which is the two-lists shape this
+// repository keeps closing: change the fixture and the message reports a count nothing had.
+
+/// Enough ignored files that the classification cannot fit in the kernel's pipe buffers.
+///
+/// At ~190 bytes of name each that is roughly 380 KB in and 400 KB out against 64 KB each way. The old shape
+/// blocks after about the first 117 KB — one pipe's worth buffered plus one pipe's worth consumed — so this
+/// clears the threshold by more than three times rather than sitting near it.
+const OUTGROWS_A_PIPE: usize = 2_000;
+
+/// Enough excluded paths that asking per path rather than per source is visible in a count.
+///
+/// Smaller than [`OUTGROWS_A_PIPE`] because this one spawns a process per ask in the shape it refuses, and
+/// the property is a ratio rather than a volume.
+const MANY_PATHS_ONE_SOURCE: usize = 400;
 
 /// A repository whose `.gitignore` hides `count` files with long names.
 ///
@@ -740,10 +758,7 @@ fn crowded(name: &str, count: usize) -> (PathBuf, PathBuf) {
 /// never returns reports nothing, and reporting nothing is exactly how this reached a release branch.
 #[test]
 fn a_repository_whose_ignored_set_outgrows_a_pipe_is_still_answered() {
-    // 2,000 × ~190 bytes ≈ 380 KB in and ≈ 400 KB out, against 64 KB each way. The old shape blocks after
-    // roughly the first 117 KB — one pipe's worth buffered plus one pipe's worth consumed — so this clears
-    // the threshold by more than three times rather than sitting near it.
-    let (root, repo) = crowded("crowded-pipe", 2_000);
+    let (root, repo) = crowded("crowded-pipe", OUTGROWS_A_PIPE);
     let (tx, rx) = std::sync::mpsc::channel();
     let judging = repo.clone();
     std::thread::spawn(move || {
@@ -754,9 +769,9 @@ fn a_repository_whose_ignored_set_outgrows_a_pipe_is_still_answered() {
     let hidden = match answered {
         Ok(hidden) => hidden.expect("the classifier reads this repository"),
         Err(_) => panic!(
-            "the publish gate reached no verdict in 60s on a repository with 2,000 ignored files. It does \
-             not refuse and it does not accept — it never returns, so `scripts/publish.sh` hangs at the one \
-             moment nothing can be undone"
+            "the publish gate reached no verdict in 60s on a repository with {OUTGROWS_A_PIPE} ignored \
+             files. It does not refuse and it does not accept — it never returns, so `scripts/publish.sh` \
+             hangs at the one moment nothing can be undone"
         ),
     };
     assert!(
@@ -773,7 +788,7 @@ fn a_repository_whose_ignored_set_outgrows_a_pipe_is_still_answered() {
 /// repair: 73,670 paths, 73,670 spawns, **one** distinct source — 147 seconds spent asking one question.
 #[test]
 fn the_tracked_question_is_asked_once_per_source_not_once_per_path() {
-    let (root, repo) = crowded("crowded-sources", 400);
+    let (root, repo) = crowded("crowded-sources", MANY_PATHS_ONE_SOURCE);
     let asked = std::sync::atomic::AtomicUsize::new(0);
     let hidden = hidden_by_the_checkout_with(&repo, gate::classify, |repo, source| {
         asked.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -789,9 +804,9 @@ fn the_tracked_question_is_asked_once_per_source_not_once_per_path() {
     let asked = asked.load(std::sync::atomic::Ordering::Relaxed);
     assert_eq!(
         asked, 1,
-        "400 excluded paths named one source, `.gitignore`, and the tracked question was asked {asked} \
-         times. Asked per path it is one process spawn each, which on this repository's 73,670 is 147 \
-         seconds of process creation to answer a single question"
+        "{MANY_PATHS_ONE_SOURCE} excluded paths named one source, `.gitignore`, and the tracked question \
+         was asked {asked} times. Asked per path it is one process spawn each, which on the 73,670 measured \
+         on this repository was 147 seconds of process creation to answer a single question"
     );
 }
 
