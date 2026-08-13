@@ -390,6 +390,27 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *most pinning citations have never been seen to fail*",
         ),
+        // --- reference-integrity ---
+        //
+        // Its check is `tests/reference_integrity.rs`, so this crate owns it. The capability declared no bound
+        // at all until this one, while carrying a blanket exemption for `docs/history/` that no specification
+        // mentioned — and that exemption was hiding a live defect rather than a limit. Narrowing it to the
+        // dated sections it was actually for leaves exactly one thing unobserved, and this is it.
+        BoundDecl::pinned(
+            BoundId::new(
+                "reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound",
+            ),
+            "a path inside a dated CHANGELOG section that resolved to nothing at the moment it was written",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the exemption is by section rather than by whether the path was once right, and \
+                          separating the two needs the tree as it stood at that date — a per-section \
+                          historical checkout, whose cost is not proportionate to a mistyped path in a \
+                          record no one may rewrite"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not",
+        ),
         // --- publish-source-integrity ---
         //
         // Its check is a Rust gate invoked by shell, and `PINNED-BY` resolves only a harness-registered Rust function — so

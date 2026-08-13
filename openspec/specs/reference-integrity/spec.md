@@ -266,3 +266,45 @@ untracked, or commit state in the repository being judged.
 
 - **WHEN** the gate evaluates a fixture it has not previously inspected
 - **THEN** the fixture's tracked tree, untracked state, and HEAD remain unchanged
+
+### Requirement: A dated record SHALL keep the paths it named then
+
+A **dated** CHANGELOG section — one whose heading carries `] - <date>` — SHALL NOT be held to today's tree.
+Its paths are part of a record of what was true when it was written, and requiring them to name what is true
+now is the falsification `release-coherence` refuses for the same sections. Measured the hard way: a sweep
+that did not know this rewrote eight hunks inside the released `[0.4.0]`, leaving it saying a Rust test
+"normalizes a link target with portable shell". Measured again when the exemption was narrowed: those
+sections carry eight unresolved paths, and every one is a shell gate that genuinely existed at `0.4.0` and
+was deleted when it migrated to Rust.
+
+**The exemption SHALL be exactly this, and SHALL NOT extend to a document because of where it lives.**
+`docs/history/` was exempt as a whole directory, and the exemption was declared nowhere — not in this
+specification, not as a scenario, not as a bound. Measured, it hid exactly one reference: a present-tense
+pointer at a gate that had moved crates inside the `0.5.0` window, in the document the CHANGELOG advertises
+to adopters as the provenance authority for verifying published tarballs. Fourteen of that directory's
+fifteen path references already resolved. The facts a record must keep are shas, dates, versions and counts,
+and none of those is a path — so a record document is judged like any other, and only a dated section within
+one is not.
+
+Both directions SHALL be held by one reaction. A reaction asserting only the silence is satisfied by a check
+that reads no CHANGELOG at all.
+
+#### Scenario: A stale path inside a dated section
+
+- **WHEN** a dated `## [X.Y.Z] - <date>` section names a path this repository no longer tracks
+- **THEN** nothing reacts, because the section records what was true then
+
+#### Scenario: The same path in an undated section
+
+- **WHEN** an undated section — `## [Unreleased]` — names that same path
+- **THEN** it reacts, because an undated section is not yet a record and claims what is true now
+
+#### Scenario: A path already wrong when a dated record was written is not observed — a stated bound
+
+- **WHEN** a dated section names a path that resolved to nothing at the moment it was written
+- **THEN** nothing reacts, and nothing ever will. The exemption is by section, not by whether the path was
+  once right, and distinguishing the two needs the tree as it stood at that date — a per-section historical
+  checkout this check does not make and whose cost is not proportionate to a mistyped path in a frozen
+  record. The engine owns the narrowing: it is this check's rule that declines to look, not a limit an
+  adopter chose
+- **PINNED-BY** `a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not`

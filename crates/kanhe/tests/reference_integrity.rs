@@ -414,12 +414,6 @@ fn offences_in(
             );
         };
         let is_test_source = rel_path.contains("/tests/");
-        // A record names what was true then. `docs/history/` is one by definition, and a DATED changelog
-        // section is one by construction — `release-coherence` refuses to rewrite them for exactly this
-        // reason, and requiring them to name what is true now is the falsification that rule forbids.
-        // Measured the hard way: a sweep that did not know this rewrote eight hunks inside the released
-        // `[0.4.0]`, leaving it saying a Rust test "normalizes a link target with portable shell".
-        let is_record_document = rel_path.starts_with("docs/history/");
         let mut in_dated_section = false;
 
         for line in content.lines() {
@@ -429,9 +423,20 @@ fn offences_in(
             if !is_inspected_line(rel_path, line) {
                 continue;
             }
-            // A record names what was true then. Holding it to today's paths is the falsification
-            // `release-coherence` refuses for dated sections.
-            if is_record_document || in_dated_section {
+            // **A dated section names what was true then**, and holding it to today's paths is the
+            // falsification `release-coherence` refuses. Measured the hard way: a sweep that did not know
+            // this rewrote eight hunks inside the released `[0.4.0]`, leaving it saying a Rust test
+            // "normalizes a link target with portable shell". Measured again when this exemption was
+            // narrowed: the dated sections carry eight unresolved paths and every one is a shell gate that
+            // genuinely existed at `0.4.0` and was deleted when it migrated to Rust.
+            //
+            // `docs/history/` used to be exempt the same way, as a whole directory. It is not any more. The
+            // facts a record must keep are shas, dates, versions and counts — **not paths** — and measured,
+            // the exemption hid exactly one reference: a present-tense pointer at a gate that had moved
+            // crates inside this window, in the document the CHANGELOG advertises to adopters as the
+            // provenance authority. Fourteen of the directory's fifteen path references already resolved,
+            // so the blindness protected nothing and cost the one thing it was covering.
+            if in_dated_section {
                 continue;
             }
             for reference in extract(line) {
@@ -658,6 +663,63 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
         "an extraction form names something absent and the check says nothing:\n{}",
         unseen.join("\n")
     );
+}
+
+/// A **dated** CHANGELOG section keeps the paths it named then; everything else is held to today's tree.
+///
+/// The one place this check is deliberately blind, and until now it was blind by comment rather than by
+/// anything that looks. Both directions on one body, differing only in whether the section heading carries a
+/// date — without the control, the silence is satisfiable by a check that reads no CHANGELOG at all.
+///
+/// Why the blindness is right where it is: measured, this repository's dated sections carry eight unresolved
+/// paths and every one is a shell gate that genuinely existed at `0.4.0` and was deleted when it migrated to
+/// Rust. A sweep that did not know this rewrote eight hunks inside the released `[0.4.0]`, leaving it saying a
+/// Rust test "normalizes a link target with portable shell" — a human falsifying a record to satisfy a check.
+///
+/// Why it stops there. `docs/history/` was exempt the same way, as a whole directory, and measured, that hid
+/// exactly one reference: a present-tense pointer at a gate that had moved crates inside this window, in the
+/// document the CHANGELOG advertises to adopters as the provenance authority. Fourteen of the directory's
+/// fifteen path references already resolved. The facts a record must keep are shas, dates, versions and
+/// counts, and none of those is a path.
+#[test]
+fn a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let tracked_paths = tracked(&root);
+    let scratch = scratch("dated-section");
+    let stale = "scripts/zzz_absent_reference_probe.sh";
+
+    for (name, heading) in [
+        ("dated", "## [0.4.0] - 2026-08-04"),
+        ("undated", "## [Unreleased]"),
+    ] {
+        std::fs::write(
+            scratch.join("CHANGELOG.md"),
+            format!("# Changelog\n\n{heading}\n\n- it names `{stale}`.\n"),
+        )
+        .expect("write the probe changelog");
+        let offences = offences_in(
+            &root,
+            &scratch,
+            &tracked_paths,
+            &["CHANGELOG.md".to_string()],
+        );
+        let named = offences.iter().any(|o| o.contains(stale));
+        match name {
+            "dated" => assert!(
+                !named,
+                "a dated section names what was true then, and holding it to today's tree is the \
+                 falsification `release-coherence` refuses: {offences:?}"
+            ),
+            _ => assert!(
+                named,
+                "an undated section is not a record, so a stale path in it must react — without this the \
+                 exemption above is satisfiable by a check that reads no CHANGELOG at all: {offences:?}"
+            ),
+        }
+    }
+    let _ = std::fs::remove_dir_all(&scratch);
 }
 
 /// The bare Rust form reacts for a name this repository DELETED, and stays silent for one it never tracked.

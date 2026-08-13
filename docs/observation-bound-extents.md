@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**38 of 83 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**39 of 84 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -23,6 +23,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound` — owner: engine
 - `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound` — owner: engine
 - `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound` — owner: inherited from the verification environment
+- `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound` — owner: engine
 - `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound` — owner: engine
 - `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound` — owner: engine
@@ -421,7 +422,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (38)
+## under-reacts (39)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -566,6 +567,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: validity is verifiable with no configuration and attribution is not — it needs an allowed-signers file that exists on a maintainer's machine and not in CI, so requiring it would make the same tag judged differently by where the gate ran
 - **its defence must show**: does not react
 - **pinned by**: `a_valid_signature_from_an_unauthorized_key_is_accepted`
+
+### `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound`
+
+> a path inside a dated CHANGELOG section that resolved to nothing at the moment it was written
+
+- **because**: the exemption is by section rather than by whether the path was once right, and separating the two needs the tree as it stood at that date — a per-section historical checkout, whose cost is not proportionate to a mistyped path in a record no one may rewrite
+- **its defence must show**: does not react
+- **pinned by**: `a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not`
 
 ### `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
 

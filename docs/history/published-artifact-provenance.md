@@ -7,7 +7,7 @@ Nothing here is repairable — it is inventoried so a reader verifying a publish
 repository is not left to rediscover it, and so the two mechanisms that produced it are named rather
 than re-learned.
 
-`main` as the only publish source is now a reaction — `crates/tianheng/tests/publish_source.rs`, reached
+`main` as the only publish source is now a reaction — `crates/kanhe/tests/publish_source.rs`, reached
 through `scripts/publish.sh` (see *Branching and release* in `AGENTS.md`). This record is the state
 that reaction was written against.
 
@@ -60,7 +60,7 @@ tip an acceptable source.
 to `release/0.2.0` is. It is anchored by no tag, deliberately: enshrining a permanent ref outside
 protected `main` would contradict the rule this record exists to support.
 
-This is the class `crates/tianheng/tests/publish_source.rs` refuses. Run against a worktree at `f1dba52` it
+This is the class `crates/kanhe/tests/publish_source.rs` refuses. Run against a worktree at `f1dba52` it
 exits `1`; against `main` it exits `0`.
 
 ### A published release snapshot amended afterwards — `0.2.2`
