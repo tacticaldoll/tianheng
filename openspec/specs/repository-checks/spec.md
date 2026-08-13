@@ -972,3 +972,52 @@ parses to nothing or the contract yields no identifier, since both make every di
   mention bite is the compiler rather than this check. A comment-only mention still fails the reviewer reading
   the diff, which is the layer that owns it
 - **PINNED-BY** `a_member_named_only_in_a_comment_is_counted_as_named`
+
+### Requirement: Whitespace hygiene SHALL be held over every tracked text file, and hold itself to this family's contract
+
+No tracked text file SHALL carry trailing whitespace on a line, end with a blank line, or lack its final
+newline. Membership SHALL be produced by `git ls-files --eol`, and what counts as binary SHALL be git's own
+classification rather than a rule written here — the same deference the subject requirement makes to git's
+pathspec.
+
+**This requirement is written late, and that is the finding.** The check existed, ran in the Definition of
+Done and in CI, and was described by no requirement in any capability — the one reaction in this family
+without one, while its file sat inside this capability's declared subject. Nothing catches that: subjects
+claim files, not the requirements those files hold, and *reactions without requirements* is the sweep this
+repository runs by hand.
+
+The check SHALL answer with the shared kinded refusal, so that **a file it could not read is separated from a
+file that disagrees**. It had collapsed the two in the direction that reports clean: an unreadable tracked
+file was passed over, so a file nobody could open counted as hygienic — the identical condition
+`census::sweep` refuses, in its own words, because *an unread document is not a document without one*.
+
+The check SHALL assert that it inspected at least one file, before reaching its verdict. Every path that
+leaves a file uninspected drops it into a silence indistinguishable from cleanliness, and one such path
+depends on `git ls-files --eol` writing exactly one tab before the path. Measured with that separator changed
+and the parse failure passed over: 389 tracked files, **zero** inspected, and the check reported clean.
+
+#### Scenario: A tracked file cannot be read
+
+- **WHEN** a file `git ls-files` names cannot be opened
+- **THEN** the check refuses as a cannot-judge naming the path and the error, because an unread file is not a
+  file without offences
+- **PINNED-BY** `an_unreadable_tracked_file_is_refused_rather_than_skipped`
+
+#### Scenario: A listing line the reader cannot parse
+
+- **WHEN** a `git ls-files --eol` line carries no tab before its path
+- **THEN** the check refuses as a cannot-judge, rather than passing over it — a line it cannot parse is a
+  tracked file it did not inspect
+- **PINNED-BY** `a_listing_line_without_a_path_separator_is_refused`
+
+#### Scenario: No file was inspected
+
+- **WHEN** every listing line takes a path that leaves its file uninspected
+- **THEN** the check fails on the vacuity, naming how many listing lines it read, rather than reporting the
+  empty offence set as cleanliness
+
+#### Scenario: A file carries whitespace this repository does not keep
+
+- **WHEN** a tracked text file has trailing whitespace, a blank line at its end, or no final newline
+- **THEN** the check reports it as a violation naming the path, and the line for trailing whitespace
+- **PINNED-BY** `each_offence_shape_is_named_when_it_is_shown`
