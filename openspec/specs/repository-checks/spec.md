@@ -348,6 +348,23 @@ repository's law and then merge it. The two worktrees SHALL be compared before a
 
 ### Requirement: What reaches a sanctioned irreversible act SHALL be an allowlist, not a denylist
 
+**Only the gate's own verdict SHALL be able to exit the violation class, and that SHALL hold by construction
+rather than by a sweep.** Under `set -e` any unguarded failure exits with the tool's status, so requiring
+every statement to be guarded makes the obligation as large as the script. Two sweeps were widened trying to
+hold it — first by tool name, then by command substitution — and a bare `cd` walked through both, because the
+axis was never which shape a statement has. A wrapper SHALL therefore install an `ERR` trap reporting the
+unjudged class, with `set -E` so it reaches failures inside functions, leaving exactly one statement able to
+exit `1`: the arm carrying the gate's verdict. Measured on bash 5: a bare failure traps, a `||`-guarded
+command does not, a failure in an `if`/`while`/`!`/`&&` condition does not, and an explicit `exit 1` is not
+intercepted.
+
+#### Scenario: An unguarded command fails
+
+- **WHEN** any command a wrapper runs without a guard fails
+- **THEN** the wrapper exits the unjudged class naming what happened in its own voice, rather than exiting the
+  class that means a gate ran and refused — which, unguarded, it does with no output at all
+- **PINNED-BY** `an_unguarded_failure_exits_the_unjudged_class`
+
 Every wrapper standing in front of an irreversible act — the squash merge and the registry publish — SHALL
 forward only arguments it names. An argument it does not name, including a spelling of a known flag and a flag a
 future version of the tool adds, SHALL be refused before any evidence is read or gate is run, rather than passed
