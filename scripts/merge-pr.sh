@@ -150,7 +150,12 @@ while (($#)); do
     # `--admin` bypasses the branch's required checks. That is consistent with what this wrapper already
     # declares: WHETHER to merge, and whether CI is green, stay a human's call — this holds only what the
     # merge is about to record.
-    --admin | --delete-branch)
+    #
+    # It is the only flag admitted here, and the criterion above is why. `--delete-branch` shared this arm
+    # with no sentence of its own: it changes neither whether the merge proceeds, nor what it records, nor
+    # when it happens — it is a **post-merge act**, and the one admitted argument with an irreversible side
+    # effect. It is refused below.
+    --admin)
         passthrough+=("$1")
         shift
         ;;
@@ -177,6 +182,16 @@ checkout of the repository whose pull request you are merging" >&2
         printf 'merge message: %s\n' \
             "refusing \`$1\`: a development pull request lands on a release branch as one squash, and this \
 gate judges that squash's message" >&2
+        exit 2
+        ;;
+    --delete-branch)
+        printf 'merge message: %s\n' \
+            "refusing \`$1\`: it is not part of the merge, it is an act **after** it — and the one with an \
+effect no rerun undoes. Deleting a branch another pull request targets auto-closes that pull request, and \
+GitHub refuses to reopen it once the branch is gone and the head has moved; this repository has paid for that \
+already. Every other admitted argument changes whether the merge proceeds; none changes what happens \
+afterwards, which is the criterion this allowlist states. Delete the branch yourself once you can see nothing \
+was stacked on it" >&2
         exit 2
         ;;
     --auto)
