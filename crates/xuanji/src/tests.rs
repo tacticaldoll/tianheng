@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::{
     Baseline, BaselineEntry, BoundDecl, BoundId, BoundaryKind, Demonstrates, Extent,
     FactGranularity, Finding, Owner, Polarity, Reached, Report, RuleKey, ScanDepth, Severity,
-    StructuredFactIdentity, Violation, ViolationId,
+    StructuredFactIdentity, Subject, Violation, ViolationId,
 };
 
 fn test_finding(text: &str) -> Finding {
@@ -1110,4 +1110,42 @@ fn a_computed_string_in_any_position_is_not_a_borrowing_declaration() {
         all_literal.borrows_every_string(),
         "a fully literal declaration borrows every string, however deeply nested"
     );
+}
+
+/// A subject refuses the one combination that is a lie, and admits the two that are not.
+///
+/// The whole type is this invariant. Reaching nothing is legitimate — an empty semantic bundle is a
+/// static-only adoption, and a non-zero count would refuse it on every run — so what cannot be constructed
+/// is **declared something, reached nothing**: a verdict of clean resting on an observation that never
+/// happened.
+///
+/// All three rows together, because either half alone is satisfiable by a degenerate constructor: one that
+/// refuses everything passes the refusal row, and one that refuses nothing passes the two admissions.
+#[test]
+fn a_subject_refuses_only_declared_without_reached() {
+    assert!(
+        Subject::of(0, 0).is_some(),
+        "a participant with nothing to enforce reached nothing because there was nothing to reach — \
+         refusing this would make a static-only adoption exit 2 on every run"
+    );
+    assert!(
+        Subject::of(3, 7).is_some(),
+        "boundaries declared and members reached is the ordinary clean verdict"
+    );
+    assert!(
+        Subject::of(1, 0).is_none(),
+        "boundaries were declared and nothing was observed, so there is no observation for a clean verdict \
+         to rest on — this is the combination the type exists to make unconstructible"
+    );
+}
+
+/// The named constructor and the accessors agree with what was asked for.
+///
+/// Without this the row above is satisfied by a constructor that returns the same value for every input.
+#[test]
+fn a_subject_reports_the_figures_it_was_built_from() {
+    let subject = Subject::of(3, 7).expect("declared and reached is constructible");
+    assert_eq!((subject.declared(), subject.reached()), (3, 7));
+    let nothing = Subject::nothing_declared();
+    assert_eq!((nothing.declared(), nothing.reached()), (0, 0));
 }

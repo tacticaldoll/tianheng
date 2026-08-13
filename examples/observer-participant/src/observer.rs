@@ -52,6 +52,9 @@ impl Observer for ModuleHeaderObserver {
             ));
         };
         let mut violations = Vec::new();
+        // Counted where the read happens, so the figure is what this walk actually opened rather than what
+        // it hoped to.
+        let mut files_read = 0usize;
         for subtree in &self.subtrees {
             let directory = root.join(subtree);
             let entries = match std::fs::read_dir(&directory) {
@@ -77,7 +80,10 @@ impl Observer for ModuleHeaderObserver {
                     continue;
                 }
                 let text = match std::fs::read_to_string(&path) {
-                    Ok(text) => text,
+                    Ok(text) => {
+                        files_read += 1;
+                        text
+                    }
                     Err(error) => {
                         return Outcome::ConstitutionError(format!(
                             "cannot read '{}': {error}",
@@ -126,7 +132,16 @@ impl Observer for ModuleHeaderObserver {
             }
         }
         if violations.is_empty() {
-            Outcome::Clean
+            // The subject this participant reached: the subtrees it was configured with, and the files it
+            // actually opened. `Subject::of` refuses to call it clean if subtrees were declared and the
+            // walk read nothing — which is what stops a failed walk being reported as a sound workspace.
+            match Subject::of(self.subtrees.len(), files_read) {
+                Some(subject) => Outcome::Clean(subject),
+                None => Outcome::ConstitutionError(format!(
+                    "{} subtree(s) declared and no file was read, so nothing was judged",
+                    self.subtrees.len()
+                )),
+            }
         } else {
             Outcome::Violations(Report::new(violations))
         }

@@ -28,7 +28,7 @@ use serde_json::Value;
 pub use xuanji::{
     Baseline, BoundDecl, BoundId, BoundaryKind, Defence, Demonstrates, Extent, FactGranularity,
     Finding, Observer, Outcome, Owner, Polarity, Reached, Report, RuleKey, ScanDepth, Severity,
-    StructuredFactIdentity, Violation, ViolationId, apply_baseline,
+    StructuredFactIdentity, Subject, Violation, ViolationId, apply_baseline,
 };
 
 mod bounds;
@@ -148,6 +148,7 @@ pub struct SemanticBoundaries {
 /// not one).
 trait CapabilitySet<'a> {
     fn is_empty(&self) -> bool;
+    fn len(&self) -> usize;
     fn crate_packages(&self) -> Vec<&'a str>;
     fn eval(&self, metadata: &Value, violations: &mut Vec<Violation>) -> Result<(), String>;
 }
@@ -173,6 +174,10 @@ impl<'a, B> CapabilitySet<'a> for Capability<'a, B> {
             .iter()
             .map(|boundary| (self.crate_package)(boundary))
             .collect()
+    }
+
+    fn len(&self) -> usize {
+        self.boundaries.len()
     }
 
     fn eval(&self, metadata: &Value, violations: &mut Vec<Violation>) -> Result<(), String> {
@@ -234,6 +239,15 @@ impl SemanticBoundaries {
         self.capability_sets().iter().all(|set| set.is_empty())
     }
 
+    /// How many semantic boundaries are declared, across all capabilities.
+    ///
+    /// Through `capability_sets` like its neighbours, so a capability added later is counted by the same
+    /// enumeration that decides emptiness — two ways of counting one set is the drift this list exists to
+    /// prevent.
+    pub fn declared(&self) -> usize {
+        self.capability_sets().iter().map(|set| set.len()).sum()
+    }
+
     /// The target crate package of every declared semantic boundary, across all capabilities.
     ///
     /// Centralizes crate-target enumeration for composed consumers such as workspace coverage, so
@@ -276,7 +290,13 @@ fn eval_all(
 /// `observer-protocol` states the asymmetry and why unifying it fails in both directions.
 pub fn check_all(boundaries: &SemanticBoundaries, manifest_path: &Path) -> Outcome {
     if boundaries.is_empty() {
-        return Outcome::Clean;
+        // Declared nothing, reached nothing — and the subject says so, which is the whole reason the
+        // invariant is relational. A non-zero count would refuse this shape, and this shape is a
+        // static-only adoption: refusing it would make that adoption's every run exit 2.
+        //
+        // Still returned **before** the manifest is read: the subject is constructed from what this
+        // function already knows, not from an observation added to satisfy it.
+        return Outcome::Clean(Subject::nothing_declared());
     }
     let metadata = match read_metadata(manifest_path) {
         Ok(metadata) => metadata,
@@ -284,7 +304,11 @@ pub fn check_all(boundaries: &SemanticBoundaries, manifest_path: &Path) -> Outco
     };
     let mut violations = Vec::new();
     match eval_all(&metadata, boundaries, &mut violations) {
-        Ok(()) => outcome_from(violations),
+        Ok(()) => outcome_from(
+            violations,
+            boundaries.declared(),
+            xingbiao::member_root_files(&metadata).len(),
+        ),
         Err(error) => Outcome::ConstitutionError(error),
     }
 }

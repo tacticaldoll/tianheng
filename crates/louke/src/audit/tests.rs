@@ -285,7 +285,10 @@ fn root_aware_audit_does_not_follow_a_mod_token_inside_a_macro_body() {
         "macro_rules! generated { () => { mod phantom; } } fn live() {}",
     );
     let outcome = tb.audit(&[], &[root]);
-    assert_eq!(outcome, Outcome::Clean, "macro tokens are not live modules");
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
+        "macro tokens are not live modules"
+    );
 }
 
 #[test]
@@ -1737,9 +1740,8 @@ fn root_aware_audit_does_not_hang_on_a_symlinked_directory_cycle() {
     );
     tb.symlink(tb.path(), "loop_mod");
     let outcome = tb.audit(&[boundary("a", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a real, declared, and probed seam must be covered, not hang or error: {outcome:?}"
     );
 }
@@ -1754,9 +1756,8 @@ fn directory_audit_does_not_hang_on_a_symlinked_directory_cycle() {
         &[boundary("a", Severity::Enforce)],
         &[tb.path().to_path_buf()],
     );
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "directory scan on a cyclic symlinked dir must be covered without hanging or looping: {outcome:?}"
     );
 }
@@ -1773,9 +1774,8 @@ fn custom_marker_list_recognizes_user_probe_wrapper() {
         &[root],
         &["assert_boundary", "my_custom_seam"],
     );
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "custom registered probe macro wrapper must cover the seam: {outcome:?}"
     );
 }
@@ -2047,9 +2047,8 @@ fn a_seam_probed_only_inside_a_cfg_if_arm_is_covered() {
         "cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f(o: u8) { assert_boundary!(\"seam\", o); } } }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a seam probed only inside an arm must be covered, not reported unprobed: {outcome:?}"
     );
 }
@@ -2125,9 +2124,8 @@ fn a_module_declared_inside_a_cfg_if_arm_covers_a_seam() {
         "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "an arm-declared module's probe must count: {outcome:?}"
     );
 }
@@ -2156,9 +2154,8 @@ fn a_module_declared_after_a_cfg_if_body_is_still_reached() {
         ],
         &[root],
     );
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a module declared after a transparent body must still be reached: {outcome:?}"
     );
 }
@@ -2177,9 +2174,8 @@ fn an_arm_declared_module_with_no_file_is_tolerated() {
         "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a fileless arm declaration must be tolerated, not a constitution error: {outcome:?}"
     );
 }
@@ -2247,9 +2243,8 @@ fn a_clean_cfg_if_arm_stays_clean() {
          pub fn g(o: u8) { assert_boundary!(\"seam\", o); }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a clean cfg_if arm must stay clean: {outcome:?}"
     );
 }
@@ -2276,9 +2271,8 @@ fn a_spaced_transparent_invocation_is_transparent_in_both_passes() {
         "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a module declared inside a spaced transparent invocation's arm must be reached: {outcome:?}"
     );
 }
@@ -2315,9 +2309,8 @@ fn a_module_declared_inside_a_nested_cfg_if_arm_is_reached() {
         "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a module declared inside a nested cfg_if arm must be reached: {outcome:?}"
     );
 }
@@ -2361,9 +2354,8 @@ fn an_absent_path_remap_target_inside_a_cfg_if_arm_is_tolerated() {
          pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "an absent unconditional #[path] target inside an arm must be tolerated: {outcome:?}"
     );
 }
@@ -2499,9 +2491,8 @@ fn two_cfg_attr_path_declarations_covering_every_platform_are_clean_when_probes_
     tb.source("u.rs", "pub fn q(o: u8) { assert_boundary!(\"seam\", o); }");
     tb.source("w.rs", "pub fn r(o: u8) { assert_boundary!(\"seam\", o); }");
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "source compiling cleanly on every platform, with every probe matching the declared seam, \
          must be Clean: {outcome:?}"
     );
@@ -3077,7 +3068,7 @@ fn a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directo
 
     let from_root = tb.audit(&declared, &[root]);
     assert!(
-        matches!(from_root, Outcome::Clean),
+        matches!(from_root, Outcome::Clean(_)),
         "the module graph reaches the file through the symlink — reading a file follows symlinks, so \
          the root-aware corpus has no bound here: {from_root:?}"
     );
@@ -3137,7 +3128,7 @@ fn production_probe_behind_non_production_cfg_is_counted_as_coverage() {
     let outcome = tb.audit(&declared, &[root]);
 
     assert!(
-        matches!(outcome, Outcome::Clean),
+        matches!(outcome, Outcome::Clean(_)),
         "cfg(test) probe must be counted as coverage: {outcome:?}"
     );
 }

@@ -43,6 +43,6 @@ mod tests {
             std::process::id()
         ));
 
-        assert!(matches!(observer.observe(&absent), Outcome::Clean));
+        assert!(matches!(observer.observe(&absent), Outcome::Clean(_)));
     }
 }

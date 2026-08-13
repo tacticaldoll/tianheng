@@ -11,7 +11,11 @@ fn main() -> ExitCode {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let outcome = check_unsafe_confinement(&constitution(), &manifest);
     match &outcome {
-        Outcome::Clean => println!("✓ clean — all unsafe is confined to crate::ffi"),
+        Outcome::Clean(subject) => println!(
+            "✓ clean — all unsafe is confined to crate::ffi ({} boundary/boundaries over {} member(s))",
+            subject.declared(),
+            subject.reached()
+        ),
         Outcome::Violations(report) => {
             for v in &report.violations {
                 println!(

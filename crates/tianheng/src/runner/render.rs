@@ -20,7 +20,7 @@ pub(crate) fn disallow_stale_message(count: usize) -> String {
 /// and `clippy` keep diagnostics on stderr and leave stdout for consumable data.)
 pub(crate) fn report(outcome: &Outcome) {
     match outcome {
-        Outcome::Clean => eprintln!("Tianheng: clean — no boundary violated"),
+        Outcome::Clean(_) => eprintln!("Tianheng: clean — no boundary violated"),
         Outcome::Violations(report) => report_violations(report),
         Outcome::ConstitutionError(message) => {
             // The exit-2 diagnostic voice, distinct from a violation (exit 1). Presentation only.

@@ -27,7 +27,7 @@ use std::process::ExitCode;
 use std::{fs::OpenOptions, io::Write};
 
 use guibiao::{
-    Baseline, BaselineEntry, Coverage, Outcome, Report, apply_baseline, check_and_cover,
+    Baseline, BaselineEntry, Coverage, Outcome, Report, Subject, apply_baseline, check_and_cover,
     constitution_text, report_json, report_json_with_stale_policy, stale_policy,
 };
 use hunyi::{Observer, SemanticObserver};
@@ -1187,9 +1187,37 @@ fn merge_outcomes(first: Outcome, second: Outcome) -> Outcome {
         violations.extend(report.violations.iter().cloned());
     }
     if violations.is_empty() {
-        Outcome::Clean
+        // The composed subject is the sum of what the participants declared and reached. Summing rather
+        // than picking one is what keeps a fold of two clean verdicts from silently reporting only the
+        // second's subject; summing rather than intersecting is right because the figures are each
+        // dimension's own unit, and the composed claim is *these participants, together, reached this
+        // much*. The sum of two constructible subjects is constructible: if either declared something it
+        // also reached something, so the total cannot be declared-without-reached.
+        let declared = subject_of(&first).declared() + subject_of(&second).declared();
+        let reached = subject_of(&first).reached() + subject_of(&second).reached();
+        match Subject::of(declared, reached) {
+            Some(subject) => Outcome::Clean(subject),
+            // Unreachable by the argument above, and constructed rather than asserted: a fold that could
+            // not name its own subject has not found a clean workspace.
+            None => Outcome::ConstitutionError(
+                "the composed run declared boundaries and reached nothing, so nothing was judged"
+                    .to_string(),
+            ),
+        }
     } else {
         Outcome::Violations(Report::new(violations))
+    }
+}
+
+/// The subject a participant's outcome carries, or an empty one where it carried none.
+///
+/// A violation or a constitution error names no subject: the first proves it had one by finding
+/// something, and the second never reached a verdict. Neither contributes to a fold that is only
+/// reached when every participant was clean.
+fn subject_of(outcome: &Outcome) -> Subject {
+    match outcome {
+        Outcome::Clean(subject) => *subject,
+        _ => Subject::nothing_declared(),
     }
 }
 

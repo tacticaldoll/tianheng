@@ -914,14 +914,14 @@ fn a_run_that_composed_no_observer_cannot_judge() {
 
 #[test]
 fn every_clean_observer_folds_to_one_clean_outcome() {
-    let a = Stub::new(Outcome::Clean);
-    let b = Stub::new(Outcome::Clean);
+    let a = Stub::new(Outcome::Clean(Subject::nothing_declared()));
+    let b = Stub::new(Outcome::Clean(Subject::nothing_declared()));
     assert!(matches!(
         Run::over(Path::new("Cargo.toml"))
             .observe(&a)
             .observe(&b)
             .verdict(),
-        Outcome::Clean
+        Outcome::Clean(_)
     ));
 }
 
@@ -933,12 +933,12 @@ fn every_clean_observer_folds_to_one_clean_outcome() {
 /// did not write, so an observer declaring one of its two limits composes without complaint.
 #[test]
 fn an_observer_may_under_declare_its_bounds() {
-    let under_declaring = Stub::new(Outcome::Clean);
+    let under_declaring = Stub::new(Outcome::Clean(Subject::nothing_declared()));
     let verdict = Run::over(Path::new("Cargo.toml"))
         .observe(&under_declaring)
         .verdict();
     assert!(
-        matches!(verdict, Outcome::Clean),
+        matches!(verdict, Outcome::Clean(_)),
         "an observer declaring no bound at all still composes: the obligation is to answer the question, \
          which an empty answer does"
     );

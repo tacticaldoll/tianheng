@@ -9,7 +9,11 @@ use tianheng::prelude::*;
 fn main() -> ExitCode {
     let outcome = verdict();
     match &outcome {
-        Outcome::Clean => println!("✓ clean — every boundary and every house rule holds"),
+        Outcome::Clean(subject) => println!(
+            "✓ clean — every boundary and every house rule holds ({} boundary/boundaries over {} member(s))",
+            subject.declared(),
+            subject.reached()
+        ),
         Outcome::Violations(report) => {
             for violation in &report.violations {
                 println!(

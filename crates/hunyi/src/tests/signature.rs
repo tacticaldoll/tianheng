@@ -49,7 +49,7 @@ pub(super) fn duplicate_semantic_violations_collapse_keeping_the_more_severe() {
             sev,
         )
     };
-    match outcome_from(vec![mk(Severity::Warn), mk(Severity::Enforce)]) {
+    match outcome_from(vec![mk(Severity::Warn), mk(Severity::Enforce)], 1, 1) {
         Outcome::Violations(report) => {
             assert_eq!(
                 report.violations.len(),

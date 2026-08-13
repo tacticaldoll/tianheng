@@ -141,7 +141,7 @@ fn a_genuine_self_path_dependency_is_still_exempt_through_the_real_entry_point()
 
     let outcome = check(&constitution, probe.manifest());
     assert!(
-        matches!(outcome, Outcome::Clean),
+        matches!(outcome, Outcome::Clean(_)),
         "a genuine null-source self-dependency must remain exempt, got {outcome:?}"
     );
 }

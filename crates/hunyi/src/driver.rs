@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use serde_json::Value;
-use xuanji::{Outcome, Report, Severity, Violation};
+use xuanji::{Outcome, Report, Severity, Subject, Violation};
 
 use crate::errors::unreadable_workspace_error;
 use xingbiao::cargo_metadata;
@@ -19,7 +19,7 @@ use xingbiao::cargo_metadata;
 /// dominates Warn), so one architectural fact is reported once and the baseline-suppressed count is
 /// honest. Keeping the more severe is what stops a `warn` duplicate from masking an `enforce` one.
 /// This mirrors the 圭表 static dimension's dedup; each dimension owns its copy (三儀 ⊥ 三儀).
-pub(crate) fn outcome_from(violations: Vec<Violation>) -> Outcome {
+pub(crate) fn outcome_from(violations: Vec<Violation>, declared: usize, reached: usize) -> Outcome {
     let mut deduped: Vec<Violation> = Vec::new();
     for violation in violations {
         match deduped.iter_mut().find(|kept| kept.id() == violation.id()) {
@@ -32,7 +32,16 @@ pub(crate) fn outcome_from(violations: Vec<Violation>) -> Outcome {
         }
     }
     if deduped.is_empty() {
-        Outcome::Clean
+        // Both figures come from the caller that already holds them — the bundle it was given and the
+        // compilation roots it read. `None` is boundaries declared over a workspace with no root to read them
+        // from, which is a misconfiguration rather than a clean workspace.
+        match Subject::of(declared, reached) {
+            Some(subject) => Outcome::Clean(subject),
+            None => Outcome::ConstitutionError(format!(
+                "{declared} semantic boundary/boundaries are declared and this workspace has no compilation \
+                 root to observe them over, so nothing was judged — which is not a clean workspace"
+            )),
+        }
     } else {
         Outcome::Violations(Report::new(deduped))
     }
@@ -77,7 +86,11 @@ pub(crate) fn run_boundaries<B>(
     };
     let mut violations = Vec::new();
     match eval_into(&metadata, boundaries, per_boundary, &mut violations) {
-        Ok(()) => outcome_from(violations),
+        Ok(()) => outcome_from(
+            violations,
+            boundaries.len(),
+            xingbiao::member_root_files(&metadata).len(),
+        ),
         Err(error) => Outcome::ConstitutionError(error),
     }
 }
