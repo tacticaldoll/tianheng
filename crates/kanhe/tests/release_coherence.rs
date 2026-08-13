@@ -66,6 +66,16 @@ fn with_machinery(repo: &Path) {
         "#!/usr/bin/env bash\nexit 0\n",
     )
     .expect("write");
+    // Machinery where the machinery actually moved to: a gate inside the fixture's **unpublished** member.
+    // Without it the corpus derived from the manifests would be exercised only by `scripts/`, which is the
+    // enumeration this change replaced.
+    std::fs::create_dir_all(repo.join("crates/tianheng/tests"))
+        .expect("create the member's tests/");
+    std::fs::write(
+        repo.join("crates/tianheng/tests/fixture_gate.rs"),
+        "#[test]\nfn t() {}\n",
+    )
+    .expect("write");
 }
 
 fn refuse(repo: &Path, kind: Kind, needle: &str) {
@@ -408,6 +418,18 @@ fn a_gate_named_in_any_word_form_is_a_violation() {
         (
             "the-directory",
             "### Fixed\n- A repair described by naming `scripts/` and nothing in it.",
+        ),
+        // A gate that lives in an **unpublished crate** rather than under `scripts/`. This is the row the
+        // corpus could not see while it enumerated one directory: the window that deleted fourteen shell
+        // gates moved the machinery here, and the specification's own scenario named a path like this one
+        // while the enumeration still resolved only the old address.
+        (
+            "a-crates-resident-gate",
+            "### Fixed\n- A repair naming `crates/tianheng/tests/fixture_gate.rs`.",
+        ),
+        (
+            "a-crates-resident-basename",
+            "### Fixed\n- A repair naming `fixture_gate.rs`.",
         ),
     ] {
         let root = scratch(name);
@@ -1031,11 +1053,7 @@ fn machinery_that_cannot_be_enumerated_cannot_be_judged() {
     let root = scratch("unreadable-index");
     let fixture = build_fixture(&root, "unreadable-index", "0.2.0");
     std::fs::write(fixture.repo.join(".git/index"), b"not an index").expect("corrupt the index");
-    refuse(
-        &fixture.repo,
-        Kind::CannotJudge,
-        "could not enumerate scripts/",
-    );
+    refuse(&fixture.repo, Kind::CannotJudge, "could not enumerate");
     let _ = std::fs::remove_dir_all(&root);
 }
 

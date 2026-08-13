@@ -215,7 +215,7 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
 #### Scenario: A bare basename the enumerator resolves
 
 - **WHEN** an entry under an adopter-facing heading names `publish.sh` with no directory
-- **THEN** the reaction fails, because `git ls-files scripts/` resolves that basename to a tracked file
+- **THEN** the reaction fails, because the machinery enumeration resolves that basename to a tracked file
 
 #### Scenario: A gate named inside a longer span, or as unquoted prose
 
@@ -223,6 +223,19 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
   `` `` `crates/kanhe/tests/pin_bites.rs` `` ``, or a span wrapped across a source line, or a markdown link whose
   target is the gate, or the bare name with no backticks at all
 - **THEN** the reaction fails in every one of those, because the word is the unit rather than the span
+
+The machinery set SHALL be **produced from the workspace manifests**: every tracked path under a member the
+workspace does not publish, plus `scripts/`. It SHALL NOT be a location. The set was `git ls-files scripts/`,
+which was right while the machinery *was* fourteen shell gates and stopped being right in the window that
+deleted them and moved it into unpublished crates — leaving `scripts/` naming two wrappers, and this
+requirement's own scenario naming a path the enumeration could not resolve. `publish = false` is the same
+criterion the refusal states, read from the build rather than from a path.
+
+A **basename**, and an ancestor directory the enumeration derives, SHALL enter the set only where it names
+machinery alone. Measured when the corpus widened: 78 machinery paths against 182 published ones, with five
+basenames on both sides — and `crates/`, an ancestor of machinery and of every published crate, which made
+the first run of the widened corpus refuse this repository's own changelog. A full path is unambiguous and
+always enters; a convenience has to earn its place.
 
 #### Scenario: A bare basename the enumerator does not resolve
 

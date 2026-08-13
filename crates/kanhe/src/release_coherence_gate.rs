@@ -648,25 +648,102 @@ fn section_shape(changelog: &str) -> Shape {
 /// Adopter-facing is the **complement** of `### Self-governance`, so a heading nobody anticipated reacts
 /// rather than being exempt by default. Dated sections are record: rewriting one to satisfy a rule written
 /// afterwards would falsify it.
-/// Every word that names this repository's own machinery: a tracked path under `scripts/`, its basename, or an
-/// ancestor directory derived from that enumeration.
+/// Every word that names this repository's own machinery: a tracked path under any package the workspace
+/// does not publish, or under `scripts/`, plus the ancestor directories that enumeration derives.
+///
+/// **The corpus is produced from the manifests, not from a location.** It was `git ls-files scripts/` — which
+/// was right when the machinery *was* fourteen shell gates, and stopped being right in the window that
+/// deleted them and moved the machinery into `crates/kanhe/**` and `crates/shengmo/**`. `scripts/` now names
+/// two wrappers, so the check whose violation message reads *machinery, which ships in no package and which
+/// an adopter can never run* had been left pointing at the old address, and the property it holds — an
+/// adopter-facing entry naming something an adopter cannot run — went unobserved for everything that moved.
+/// `publish = false` is the same criterion the message states, read from the build rather than from a path.
+///
+/// **A basename enters only when it is unique across the whole tree.** Measured when this widened: the
+/// machinery is 78 tracked paths against 182 published ones, and five basenames appear on both sides —
+/// `Cargo.toml`, `README.md`, `bounds.rs`, `lib.rs`, `mod.rs`. Admitting those would refuse an adopter-facing
+/// entry for naming a published crate's own source, which is the opposite of this check's purpose. A full
+/// path is unambiguous and always enters; a basename is a convenience that has to earn its place, and the
+/// same rule governs the ancestor directories the enumeration derives — `crates/` leads to both sides.
 fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
-    let listing = git(repo, &["ls-files", "scripts/"])
-        .map_err(|err| cannot_judge(format!("could not enumerate scripts/: {err}")))?;
-    let mut names: BTreeSet<String> = BTreeSet::new();
-    for path in listing.lines().filter(|l| !l.is_empty()) {
-        names.insert(path.to_string());
-        if let Some(base) = path.rsplit('/').next() {
-            names.insert(base.to_string());
+    let metadata = git_metadata(repo)?;
+    let mut machinery: Vec<String> = Vec::new();
+    let mut published: BTreeSet<String> = BTreeSet::new();
+    for package in metadata["packages"].as_array().into_iter().flatten() {
+        let Some(name) = package["name"].as_str() else {
+            continue;
+        };
+        let unpublished = package["publish"].as_array().is_some_and(|r| r.is_empty());
+        let listing = git(repo, &["ls-files", &format!("crates/{name}/")])
+            .map_err(|err| cannot_judge(format!("could not enumerate crates/{name}/: {err}")))?;
+        for path in listing.lines().filter(|l| !l.is_empty()) {
+            if unpublished {
+                machinery.push(path.to_string());
+            } else {
+                if let Some(base) = path.rsplit('/').next() {
+                    published.insert(base.to_string());
+                }
+                let mut dir = path.to_string();
+                while let Some(cut) = dir.rfind('/') {
+                    dir.truncate(cut + 1);
+                    published.insert(dir.clone());
+                    dir.truncate(cut);
+                }
+            }
         }
-        let mut dir = path.to_string();
+    }
+    let scripts = git(repo, &["ls-files", "scripts/"])
+        .map_err(|err| cannot_judge(format!("could not enumerate scripts/: {err}")))?;
+    machinery.extend(
+        scripts
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(str::to_string),
+    );
+
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    for path in &machinery {
+        names.insert(path.clone());
+        if let Some(base) = path.rsplit('/').next() {
+            // Unique across the tree, or it names a published crate's file as well and would refuse an
+            // entry that is about the product rather than about the machinery.
+            if !published.contains(base) {
+                names.insert(base.to_string());
+            }
+        }
+        // The same rule as the basename, for the same reason and found the same way: widening the corpus
+        // made `crates/` a machinery name, because it is an ancestor of `crates/kanhe/`. It is equally an
+        // ancestor of every published crate, and the live CHANGELOG says `crates/` in adopter-facing prose —
+        // so the first run of this widening refused the repository's own changelog. An ancestor enters only
+        // where it leads to machinery alone.
+        let mut dir = path.clone();
         while let Some(cut) = dir.rfind('/') {
             dir.truncate(cut + 1);
-            names.insert(dir.clone());
+            if !published.contains(&dir) {
+                names.insert(dir.clone());
+            }
             dir.truncate(cut);
         }
     }
     Ok(names)
+}
+
+/// `cargo metadata` for the workspace at `repo`, so the corpus above comes from the build.
+fn git_metadata(repo: &Path) -> Result<serde_json::Value, Refusal> {
+    let out = std::process::Command::new(env!("CARGO"))
+        .args(["metadata", "--no-deps", "--format-version", "1"])
+        .current_dir(repo)
+        .output()
+        .map_err(|err| cannot_judge(format!("could not run cargo metadata: {err}")))?;
+    if !out.status.success() {
+        return Err(cannot_judge(format!(
+            "cargo metadata failed for {}: {}",
+            repo.display(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
+    serde_json::from_slice(&out.stdout)
+        .map_err(|err| cannot_judge(format!("cargo metadata is not JSON: {err}")))
 }
 
 fn adopter_cited_machinery(repo: &Path, changelog: &str) -> Result<Vec<String>, Refusal> {
@@ -760,13 +837,19 @@ pub fn workspace_files(repo: &Path, version: &str) {
              [workspace.dependencies]\nxuanji = {{ path = \"crates/xuanji\", version = \"{version}\" }}\n"
         ),
     );
-    for package in ["xuanji", "tianheng"] {
+    // `xuanji` publishes and `tianheng` does not, so a fixture exercises both sides of the criterion the
+    // machinery corpus reads from the manifests. Each member carries a `src/lib.rs`, because a workspace
+    // cargo cannot load is one this gate cannot enumerate — the fixture is a real workspace or it is not
+    // evidence about one.
+    for (package, publishes) in [("xuanji", true), ("tianheng", false)] {
+        let publish = if publishes { "" } else { "publish = false\n" };
         write(
             repo.join(format!("crates/{package}/Cargo.toml")),
             &format!(
-                "[package]\nname = \"{package}\"\nversion.workspace = true\nedition = \"2024\"\n"
+                "[package]\nname = \"{package}\"\nversion.workspace = true\nedition = \"2024\"\n{publish}"
             ),
         );
+        write(repo.join(format!("crates/{package}/src/lib.rs")), "");
     }
     let minor = version.rsplit_once('.').map(|(h, _)| h).unwrap_or(version);
     // The example package the fixture carries, named through a binding like the members above rather than
