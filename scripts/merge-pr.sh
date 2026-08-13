@@ -70,6 +70,28 @@ repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || cannot_judge \
     "cannot resolve this wrapper's own root from ${BASH_SOURCE[0]}, so the gate it must run before reaching \
 \`gh pr merge\` cannot be located — which is not the same fact as a gate that ran and refused"
 
+# The gate comes from `$repo`, this wrapper's own tree. Every piece of evidence — the title, the number, the
+# head, the live commit subjects — comes from whatever `gh` resolves out of the WORKING DIRECTORY. Those are
+# one tree whenever this is run the way its own refusals say to run it, and the `--repo` refusal enumerates
+# them as one. Nothing held that. Invoked by absolute path from another checkout the two come apart silently,
+# and this wrapper would judge one repository's pull request by another repository's law and then merge it.
+#
+# Compared through git rather than as strings: `$repo` is a logical path and a worktree root is a physical
+# one, so two spellings of the same tree would refuse. Asking git for both puts them in one form.
+gate_tree=$(git -C "$repo" rev-parse --show-toplevel) || cannot_judge \
+    "cannot resolve the worktree holding this wrapper's gate at $repo, so which law it would apply cannot be \
+decided"
+evidence_tree=$(git rev-parse --show-toplevel) || cannot_judge \
+    "cannot resolve the worktree this is being run from, so which repository the evidence would come from \
+cannot be decided"
+if [[ $gate_tree != "$evidence_tree" ]]; then
+    cannot_judge \
+        "this wrapper's gate lives in $gate_tree and its evidence would come from $evidence_tree. The gate is \
+one repository's law and the pull request is another's, and merging the second under the first is not a \
+judgement about either. Run it from a checkout of the repository whose pull request you are merging, using \
+that checkout's own copy of this wrapper"
+fi
+
 subject=""
 body_file=""
 passthrough=()
@@ -144,9 +166,11 @@ write another. Pass the subject as \`--subject <text>\` and the body as \`--body
         ;;
     --repo | --repo=* | -R*)
         printf 'merge message: %s\n' \
-            "refusing \`$1\`: this wrapper reads the title, the pull request number, the live commit subjects \
-and the gate from the repository it is run in, so a repository selector would judge one pull request and merge \
-another. Run it from a checkout of the repository whose pull request you are merging" >&2
+            "refusing \`$1\`: this wrapper reads the title, the pull request number, the head it pins the merge \
+to and the live commit subjects from the repository it is run in — and refuses to run at all unless its gate \
+comes from that same worktree. A repository selector would move the evidence off the one tree all of it is \
+required to share, so the gate would judge one pull request and the merge record another. Run it from a \
+checkout of the repository whose pull request you are merging" >&2
         exit 2
         ;;
     --merge | --rebase | --squash | -m* | -r* | -s*)
