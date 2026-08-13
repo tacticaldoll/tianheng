@@ -353,7 +353,7 @@ forward only arguments it names. An argument it does not name, including a spell
 future version of the tool adds, SHALL be refused before any evidence is read or gate is run, rather than passed
 on to the act.
 
-The admitted set SHALL be decided by **two** questions.
+The admitted set SHALL be decided by **three** questions.
 
 First: **does the argument move what the gate judged, or what the act records?** An argument that changes the
 message, the strategy, the repository, the source tree, the set of crates, what the tool verifies, or what gets
@@ -366,6 +366,16 @@ does not keep. Neither may an argument defer the act past the evidence: the gate
 so an argument that performs the act **later** SHALL be refused, since the record it produces need not be the one
 that was judged. This classification SHALL be measured against the tool at a **named version** and that version
 recorded beside the classification, since a tool's combination behaviour is not readable from its `--help`.
+
+Third: **does the argument perform a further act after the judged one?** The first two questions ask about the
+act itself; neither refuses an argument that leaves the judged act untouched and then does something else. The
+merge wrapper admitted `--delete-branch` on that gap for a window, sharing an arm with `--admin` and carrying no
+sentence of its own, while the criterion beside it admitted only arguments that change whether the merge
+proceeds. Deleting the head branch is a post-merge act with an effect no rerun undoes: a pull request stacked on
+that branch is auto-closed, and GitHub refuses to reopen it once the branch is gone and its head has moved —
+which this repository has already paid for. An argument whose effect outlives the act and which the wrapper
+cannot undo SHALL be refused, and its refusal SHALL name the consequence rather than the rule, because a
+refusal an operator cannot act on is one they work around.
 
 Each admitted argument SHALL be accepted in one spelling, with its value as a separate argument, because parsing
 a tool's short, glued and equals forms is what a denylist has to get exhaustively right and an allowlist does
@@ -396,6 +406,14 @@ for the diagnostics they carry, but they SHALL decide nothing the default refusa
 - **WHEN** a sanctioned wrapper is given any argument outside its admitted set, in any spelling
 - **THEN** it refuses with a usage error before reading evidence or running its gate, and says that it forwards
   only what cannot change what the act records
+
+#### Scenario: An argument that acts after the merge
+
+- **WHEN** a caller passes an argument that leaves the judged merge untouched and then performs a further act
+  whose effect the wrapper cannot undo — deleting the head branch
+- **THEN** it is refused, and the refusal names what the act does to a pull request stacked on that branch, so
+  the operator can tell when it is safe to do by hand
+- **PINNED-BY** `only_an_allowlisted_flag_reaches_the_merge`
 
 #### Scenario: An admitted argument reaches the act
 

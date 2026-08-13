@@ -617,6 +617,10 @@ fn only_an_allowlisted_flag_reaches_the_merge() {
         // Supplied by the wrapper itself now, so a caller's would replace the head the gate read from.
         "--match-head-commit",
         "--match-head-commit=abc123",
+        // A **post-merge** act, and the one admitted argument that had an irreversible side effect. It shared
+        // the `--admin` arm with no sentence of its own while the criterion beside it admits only flags that
+        // change whether the merge proceeds.
+        "--delete-branch",
         // And one nobody classified: an argument the wrapper does not know is refused, not passed on.
         "--some-flag-a-future-gh-adds",
     ] {
@@ -641,10 +645,22 @@ fn only_an_allowlisted_flag_reaches_the_merge() {
         );
     }
 
+    // A refusal an operator cannot act on is one they work around, and this is the refusal most likely to be
+    // met by someone who just wanted their branch tidied. It must name the consequence rather than the rule —
+    // the catch-all would already produce exit 2, so without this the arm carries no more than deleting it
+    // would.
+    let deletion = run_wrapper(&root, "subjects", &["--delete-branch"]);
+    assert!(
+        deletion.stderr.contains("auto-closes"),
+        "the refusal must name what deleting a branch does to a pull request stacked on it, so an operator \
+         can tell when it is safe to do by hand: {:?}",
+        deletion.stderr
+    );
+
     // The other half: EVERY flag that changes whether the merge may proceed — never what it records, and never
     // when it happens relative to the evidence — still arrives. Without this the assertions above are satisfied
-    // by a wrapper that refuses its own arguments, and asserting one of the three would leave the rest unheld.
-    for admitted in [vec!["--delete-branch"], vec!["--admin"]] {
+    // by a wrapper that refuses its own arguments.
+    for admitted in [vec!["--admin"]] {
         let forwarded = run_wrapper(&root, "subjects", &admitted);
         assert!(
             forwarded.status.success(),
