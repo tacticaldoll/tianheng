@@ -491,3 +491,58 @@ fn the_arrival_matrix_covers_every_argument_the_parser_forwards() {
          {unmeasured:?}"
     );
 }
+
+/// An unguarded command that fails cannot choose the exit class.
+///
+/// The rule this wrapper states — `1` is a gate that ran and refused, `2` is everything it could not judge —
+/// used to rest on every statement being guarded, and two sweeps were widened trying to hold that: first by
+/// tool name, then by command substitution. A bare `cd` walked through both, because the axis was never which
+/// shape a statement has. Under `set -e` **any** unguarded failure exits with the tool's status, so the set
+/// to enumerate is not the statements that must be guarded but the statements that may exit `1` — and there
+/// is one, the gate's own verdict arm.
+///
+/// Held by planting a failure rather than by reading the script for `trap`: a text property would pass for a
+/// trap that never fires, and `set -E` — which is what makes it fire inside a function — is a second token a
+/// reader would have to remember to look for.
+#[test]
+fn an_unguarded_failure_exits_the_unjudged_class() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let scratch =
+        std::env::temp_dir().join(format!("tianheng-publish-unguarded-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).expect("the scratch root is writable");
+
+    let script =
+        std::fs::read_to_string(root.join("scripts/publish.sh")).expect("read the wrapper");
+    // Before the gate and after the trap: a command that fails, guarded by nothing. `false` rather than a
+    // failing tool, so the direction is about the wrapper's own contract and not about any tool's behaviour.
+    let planted = script.replacen("verdict_file=$(mktemp)", "false\nverdict_file=$(mktemp)", 1);
+    assert_ne!(
+        planted, script,
+        "the plant site moved; this direction is judging an unmodified script"
+    );
+    let path = scratch.join("planted.sh");
+    std::fs::write(&path, &planted).expect("write the planted wrapper");
+
+    let output = Command::new("bash")
+        .arg(&path)
+        .arg("--dry-run")
+        .current_dir(&scratch)
+        .output()
+        .expect("run the planted wrapper");
+    let _ = std::fs::remove_dir_all(&scratch);
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "an unguarded failure must reach the unjudged class, not the one that means a gate refused"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("without reaching a verdict"),
+        "the wrapper must say what happened in its own voice — unguarded, this path exits 1 with no output \
+         at all, which is the shape that made it invisible: {stderr}"
+    );
+}

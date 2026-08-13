@@ -51,7 +51,7 @@
 # ONE spelling each, values as separate arguments. Parsing a tool's glued and equals forms is exactly
 # what let the short forms through the sibling wrapper; refusing them costs an argument's worth of
 # typing and removes the parsing question entirely.
-set -euo pipefail
+set -Eeuo pipefail
 
 # Before the gate, not after: a refusal must not depend on the gate's own verdict, and reading the
 # arguments is the cheapest of the two. A misconfigured invocation exits 2, the usage-error class this
@@ -69,6 +69,22 @@ cannot_judge() {
     printf 'publish source: %s\n' "$1" >&2
     exit 2
 }
+
+# **The class a wrapper exits is now decided by construction, not by a sweep that must be exhaustive.**
+#
+# Under `set -e` any unguarded failure exits with the TOOL's status, and this repository reserves `1` for a
+# gate that ran and refused. Two sweeps were widened to catch that — first by tool name, then by command
+# substitution — and a bare `cd` walked through both, because the axis was never *which shape the statement
+# has*: it is *any statement whose failure can choose the class*. That is every command, which is why
+# enumerating them is the wrong instrument. Enumerating what may exit `1` is the right one, and there is
+# exactly one such statement: the gate's own verdict arm.
+#
+# Measured on bash 5.x rather than reasoned about. A bare failure traps and exits 2, including a failed `cd`.
+# A `||`-guarded command does not trap, so every existing guard still decides its own outcome. A failure in a
+# condition — `if`, `while`, `!`, `&&` — does not trap, so the `grep -q` that checks the gate ran is
+# unaffected. An explicit `exit 1` is not intercepted, so the gate's verdict still reaches the caller. `set -E`
+# is required and is not optional: without it a failure inside a function exits 1 and the trap never sees it.
+trap 'cannot_judge "an unguarded command failed, so this wrapper stopped without reaching a verdict — which is not the same fact as a gate that ran and refused"' ERR
 
 # This script's own root: the tree the gate judges, the manifest it is run from, and the directory
 # `cargo publish` runs in. Acquired after `cannot_judge` rather than at the top of the file, because it is an
