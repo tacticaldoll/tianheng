@@ -20,7 +20,7 @@ declares its own tiny, isolated Constitution to demonstrate the sweep's malforme
 failure mode on purpose: a leading-`::` operand now fails loud as a constitution error (exit 2)
 instead of silently matching nothing.
 
-The repository's executable family ledger lives in `cargo test -p tianheng --test examples_suite`: it counts this
+The repository's executable family ledger lives in `cargo test -p shengmo --test examples_suite`: it counts this
 catalog's families only after the real evaluator and structured assertions above succeed, then
 compares all example owners with the deliberately reviewed inventory. The ledger does not
 infer families from builder methods; OpenSpec/API review still decides whether a new insertion path

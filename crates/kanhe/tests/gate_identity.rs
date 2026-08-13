@@ -129,3 +129,93 @@ fn every_gate_a_wrapper_cites_is_a_test_that_exists() {
             .join("\n")
     );
 }
+
+/// Every `cargo test -p <package> --test <target>` a tracked **document** hands a reader names a real target.
+///
+/// The sibling above holds the commands a *wrapper* runs. This holds the ones a *document* tells a human to
+/// run, which is the same claim reaching a different audience — and the audience that cannot debug it. The
+/// instance: `COOKBOOK.md` told an adopter `cargo test -p tianheng --test examples_suite` for a target living
+/// in `shengmo`, so cargo answered `no test target named 'examples_suite' in 'tianheng' package`. It arrived
+/// in the `0.5.0` window, when the shell suite migrated, while `AGENTS.md` and `BACKLOG.md` both carried the
+/// correct package — the repository disagreeing with itself in the one place an adopter reads.
+///
+/// **The target set is produced, never modelled.** `cargo metadata` publishes each package's test targets by
+/// name, so this is set membership against cargo's own answer. Mapping a package and target to
+/// `crates/<pkg>/tests/<target>.rs` would reimplement cargo's target resolution in string form, which this
+/// repository has already shipped a false negative from doing — and the sibling above says so, which is why
+/// it resolves through `--list` rather than through a path.
+///
+/// Markdown only, deliberately. A Rust source carries these pairs as **fixture input** — the directions in
+/// `reference_integrity.rs` plant `-p k --test t` as text for a parser to chew on — and admitting them would
+/// report a test asserting its own parser as a broken command. Measured: 35 occurrences across the tree, of
+/// which those fixtures are two and the `COOKBOOK.md` line was the one real defect.
+#[test]
+fn every_command_a_document_hands_a_reader_names_a_target_that_exists() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let metadata = run(
+        &root,
+        &["cargo", "metadata", "--no-deps", "--format-version", "1"],
+    )
+    .expect("cargo metadata answers for this workspace");
+    let metadata: serde_json::Value =
+        serde_json::from_str(&metadata).expect("cargo metadata is JSON");
+    let mut targets: std::collections::BTreeSet<(String, String)> = Default::default();
+    for package in metadata["packages"].as_array().into_iter().flatten() {
+        let Some(name) = package["name"].as_str() else {
+            continue;
+        };
+        for target in package["targets"].as_array().into_iter().flatten() {
+            let is_test = target["kind"]
+                .as_array()
+                .is_some_and(|k| k.iter().any(|k| k.as_str() == Some("test")));
+            if let (true, Some(target)) = (is_test, target["name"].as_str()) {
+                targets.insert((name.to_string(), target.to_string()));
+            }
+        }
+    }
+    assert!(
+        !targets.is_empty(),
+        "cargo named no test target, so this direction would hold over nothing"
+    );
+
+    let listing =
+        run(&root, &["git", "ls-files", "*.md"]).expect("the tracked Markdown is listable");
+    let mut examined = 0usize;
+    let mut broken = Vec::new();
+    for path in listing.lines().filter(|l| !l.is_empty()) {
+        let Ok(text) = std::fs::read_to_string(root.join(path)) else {
+            continue;
+        };
+        for line in text.lines() {
+            let words: Vec<&str> = line.split_whitespace().collect();
+            for window in words.windows(4) {
+                let ["-p", package, "--test", target] = window else {
+                    continue;
+                };
+                // A prose line ends the command with whatever punctuation the sentence needs — a backtick,
+                // then a period, a comma, a colon, a closing paren. Trimming only the backtick left every
+                // correct command in the tree reported as broken, which is a detector that cannot tell its
+                // own noise from a finding.
+                let target = target.trim_end_matches(|c: char| !c.is_alphanumeric() && c != '_');
+                examined += 1;
+                if !targets.contains(&((*package).to_string(), target.to_string())) {
+                    broken.push(format!(
+                        "  {path}: `cargo test -p {package} --test {target}` — cargo names no such test \
+                         target in that package"
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        examined > 0,
+        "no document names a package and a test target, so this direction would report clean over nothing"
+    );
+    assert!(
+        broken.is_empty(),
+        "a tracked document hands a reader a command cargo rejects:\n{}",
+        broken.join("\n")
+    );
+}

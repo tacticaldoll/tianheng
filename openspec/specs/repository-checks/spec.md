@@ -743,6 +743,27 @@ over executed text being decided on unclassified text, not about the marker appe
   and **refuted by measurement**, and a bound resting on a refuted instance would be worse than none
 - **UNPINNED** `BACKLOG.md` — *a check that never wrote a region decision is invisible*
 
+**A command a tracked document hands a reader SHALL name a target that exists.** The obligation above is
+about the commands a *wrapper* runs; this is the same claim reaching the audience that cannot debug it. The
+instance: `COOKBOOK.md` told an adopter to run the examples suite under the `tianheng` package, where that
+target lives in `shengmo`, so cargo answered that no test target of that name exists in that package — it
+arrived in the `0.5.0` window when the shell suite migrated, while `AGENTS.md` and `BACKLOG.md` both carried
+the correct package. The set of targets SHALL be **produced** by `cargo metadata`, never modelled by mapping a package and a
+target name onto a path under that crate's `tests/` directory: that mapping reimplements cargo's target
+resolution in string form, which this repository has already shipped a false negative from doing.
+
+The corpus is tracked Markdown. A Rust source carries these pairs as **fixture input** — a parser direction
+plants a package-and-target pair as text — and admitting them would report a test asserting its own parser as a broken
+command. Measured when this was written: 35 occurrences across the tree, two of them those fixtures, and one
+review-reported defect; running the check found **four more**, every one in an example README.
+
+#### Scenario: A document names a package that does not carry the target
+
+- **WHEN** tracked Markdown writes a `cargo test` invocation naming a package and a `--test` target that
+  `cargo metadata` does not report as a pair
+- **THEN** the check fails naming the document and the command, because a reader following it meets an error
+  rather than a gate
+
 ### Requirement: A constant a check judges by SHALL be held against its enumerator
 
 A list a check judges against SHALL be compared with whatever enumerates its set, wherever such an enumerator
