@@ -11,6 +11,44 @@ fn executed_regions_respect_the_source_language() {
     assert!(shell.shell().contains("// data"));
 }
 
+/// The positioned region keeps every line's own place, and blanks the ones it dropped.
+///
+/// The property `lines()` cannot have and every position-sensitive caller needs. Both halves are asserted,
+/// because either alone is satisfiable by a degenerate implementation — one that blanks everything, or one
+/// that blanks nothing and compacts.
+///
+/// The rule this exists for is the shell's continuation rule, measured rather than reasoned about: given
+/// `echo START \`, `# comment`, `--exact ghost`, bash prints `START` and then reports
+/// `--exact: command not found`. Compacted, the backslash reaches across the comment and binds the third
+/// line into the first command; positioned, the blank ends the continuation exactly where bash does.
+#[test]
+fn the_positioned_region_holds_each_line_at_its_own_index() {
+    let source = Source::of("echo START \\\n# comment\n--exact ghost\necho tail # cut\n");
+    let positioned = source.shell().positioned_lines();
+
+    assert_eq!(
+        positioned.len(),
+        4,
+        "every source line keeps a slot, or an index into this is an index into something else: {positioned:?}"
+    );
+    assert_eq!(positioned[0], "echo START \\");
+    assert_eq!(
+        positioned[1], "",
+        "a whole-line comment is blanked in place, not removed — removing it makes its neighbours adjacent \
+         and a trailing backslash then continues across the line bash uses to end the command"
+    );
+    assert_eq!(positioned[2], "--exact ghost");
+    assert_eq!(
+        positioned[3].trim_end(),
+        "echo tail",
+        "a tail comment is still cut; positioning changes where a line sits, not what counts as executed"
+    );
+
+    // The control: the compacted reading is genuinely shorter, so the assertion above is about a difference
+    // that exists rather than about two spellings of one thing.
+    assert_eq!(source.shell().lines().count(), 3);
+}
+
 /// A comment is not executed text **wherever it sits**, and a marker that begins no token is not a comment.
 ///
 /// Both directions, because either alone is satisfiable by a degenerate reader — one that cuts everything, or

@@ -210,6 +210,34 @@ fn a_script_whose_only_invocation_is_commented_out_is_named() {
 /// `--exact` naming a test that does not exist, written on the continuation of a commented line, executes and
 /// went unreported. Deciding the region once — with `Source::shell`, which cuts comments per physical line
 /// before anything is joined — is what surfaced it.
+/// A continuation does not reach **across** a comment, because bash ends the command there.
+///
+/// Measured: for `echo START \` / `# comment` / `--exact ghost`, bash prints `START` and then reports
+/// `--exact: command not found` — the backslash pulls the comment onto the line and `#` at a word boundary
+/// ends the command, so the third line is its own command rather than part of the first.
+///
+/// The first repair of this reader dropped comment lines and joined what was left, which makes lines 1 and 3
+/// adjacent and binds `--exact ghost` into the `cargo test` invocation — an invocation bash never runs, with
+/// that line's `--test` and `-p` bound to it. Reading through the positioned region ends the continuation at
+/// the comment's own position, as bash does.
+#[test]
+fn a_continuation_does_not_reach_across_a_comment() {
+    let script = "cargo test -p kanhe --test t \\\n# a comment ends the command here\n    -- --exact ghost\n";
+    let found = citations("scripts/w.sh", script);
+    assert_eq!(
+        found.len(),
+        1,
+        "`--exact ghost` is its own command line, so it is a citation: {found:?}"
+    );
+    assert_eq!(found[0].identifier, "ghost");
+    assert_eq!(
+        found[0].target, None,
+        "the comment ended the `cargo test` command, so this citation names no `--test` — binding it to one \
+         would report a target bash never gave it: {found:?}"
+    );
+    assert_eq!(found[0].package, None, "{found:?}");
+}
+
 #[test]
 fn a_marker_on_the_first_line_does_not_comment_the_continuation() {
     let found = citations("scripts/w.sh", &format!("# {}", invocation("ghost")));

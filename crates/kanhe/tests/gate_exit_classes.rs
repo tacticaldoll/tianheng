@@ -243,10 +243,10 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
         // scan currently admits a wrong answer. A dropped comment line becomes `""`, which ends no
         // continuation, so the walk stops there and the acquisition reports unguarded — loud, and the safe
         // direction for a wrapper standing in front of an irreversible act.
-        let mut lines: Vec<&str> = vec![""; text.lines().count()];
-        for (number, line) in &executed {
-            lines[number - 1] = line;
-        }
+        //
+        // Through `positioned_lines` rather than built here: this was hand-rolled at both sites that need it
+        // and the two disagreed, so the layout now has one implementation.
+        let lines = source.shell().positioned_lines();
         for (number, line) in &executed {
             let index = number - 1;
             // An assignment whose value is a command substitution — recognized on the opening line, because
