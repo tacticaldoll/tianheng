@@ -18,8 +18,6 @@
 # a declared bound, not an oversight.
 set -euo pipefail
 
-repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-
 usage() {
     printf 'usage: %s <pr-number> --body-file <path> [--subject <text>] [gh args…]\n' "${0##*/}" >&2
     printf '  The subject defaults to the pull request title, which is what the rule requires anyway.\n' >&2
@@ -63,6 +61,14 @@ cannot_judge() {
     printf 'merge message: %s\n' "$1" >&2
     exit 2
 }
+
+# This wrapper's own root, from which the gate is run — acquired after `cannot_judge` rather than at the top
+# of the file, because it is an acquisition like any other and must report the class that function defines.
+# Unguarded it was the one statement `set -e` answered for: a failed `cd` exits 1, so a wrapper that never
+# found its gate would have reported the class that means the gate ran and refused.
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || cannot_judge \
+    "cannot resolve this wrapper's own root from ${BASH_SOURCE[0]}, so the gate it must run before reaching \
+\`gh pr merge\` cannot be located — which is not the same fact as a gate that ran and refused"
 
 subject=""
 body_file=""

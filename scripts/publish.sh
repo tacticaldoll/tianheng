@@ -53,8 +53,6 @@
 # typing and removes the parsing question entirely.
 set -euo pipefail
 
-repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-
 # Before the gate, not after: a refusal must not depend on the gate's own verdict, and reading the
 # arguments is the cheapest of the two. A misconfigured invocation exits 2, the usage-error class this
 # repository's own runner contract already uses, rather than 1 — which is what a gate that ran and
@@ -71,6 +69,16 @@ cannot_judge() {
     printf 'publish source: %s\n' "$1" >&2
     exit 2
 }
+
+# This script's own root: the tree the gate judges, the manifest it is run from, and the directory
+# `cargo publish` runs in. Acquired after `cannot_judge` rather than at the top of the file, because it is an
+# acquisition like any other and must report the class that function defines. Unguarded it was the one
+# statement `set -e` answered for: a failed `cd` exits 1, so a script that never found the tree it publishes
+# would have reported the class that means the gate ran and refused, in front of an irreversible act.
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || cannot_judge \
+    "cannot resolve this script's own root from ${BASH_SOURCE[0]}, so neither the tree the source gate judges \
+nor the one \`cargo publish\` would package can be located — which is not the same fact as a gate that ran \
+and refused"
 
 # The package selection, held separately from everything else forwarded.
 #

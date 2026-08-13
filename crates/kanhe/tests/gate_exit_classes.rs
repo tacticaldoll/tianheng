@@ -206,37 +206,25 @@ fn join_continuations(lines: &[&str], index: usize) -> String {
     }
 }
 
-/// The text after a command substitution opens, past any `NAME=value` assignments in front of the tool.
-///
-/// A shell assignment prefix is part of the *invocation*, not of what is invoked, and the property this file
-/// judges is about the tool. Testing the text immediately after the opener left every environment-prefixed
-/// acquisition outside the corpus — including `var=$(NAME=value cargo test …)`, which is the shape the gate
-/// invocation takes in both sanctioned wrappers. The one acquisition those scripts exist for was the one the
-/// sweep never saw.
-fn strip_environment_prefix(rest: &str) -> &str {
-    let mut rest = rest.trim_start();
-    loop {
-        let Some((head, tail)) = rest.split_once(char::is_whitespace) else {
-            return rest;
-        };
-        // An assignment is a bare `NAME=value` word: no quoting to unpick, because a tool name never carries
-        // `=` before its first space and an assignment always does.
-        let is_assignment = head.split_once('=').is_some_and(|(name, _)| {
-            !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-        });
-        if !is_assignment {
-            return rest;
-        }
-        rest = tail.trim_start();
-    }
-}
-
 /// Every acquisition a wrapper makes is guarded, so a failing tool cannot choose the exit class.
 ///
 /// `var=$(tool …)` under `set -e` exits with the TOOL's status and only the tool's stderr. Measured, a failing
 /// commits read left the merge wrapper exiting **91** with nothing of its own said — a class that is neither of
 /// the two it defines, carrying the tool's words for a fact about the wrapper. Four acquisitions were unguarded,
 /// and the direction covering one of them passed because it asserted only that the wrapper failed.
+///
+/// **The corpus is every command substitution, and names no tool.** It used to be the acquisitions invoking
+/// `gh` or `cargo` — a list of the tools someone had thought of, with a helper beside it for reading past an
+/// environment prefix to find the tool's name. `repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)`, the
+/// first statement of *both* wrappers and the one that locates the gate, invoked neither and so was never
+/// examined. It was unguarded, and measured, a failed `cd` under `set -e` exits **1** — the class that means a
+/// gate ran and refused, reported by a wrapper whose gate had not been found. A sweep that exists to stop a
+/// tool choosing the class was letting one choose it, and the wrong class at that. A command substitution is
+/// the shape that carries the defect; what it invokes is no part of the property, so the tool test and its
+/// helper are gone rather than extended.
+///
+/// A failed acquisition is **refused** or **given a value**, never ignored: `|| verdict=""` supplies a
+/// fallback and is handled exactly as `|| cannot_judge` is. `|| true` is neither, and is not admitted.
 #[test]
 fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
     let Some(root) = workspace_root() else {
@@ -256,37 +244,18 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
             if !line.trim_start().contains("=$(") {
                 continue;
             }
-            // **Joined first, then read.** The tool name need not be on the physical line the substitution
-            // opens: both wrappers spread the gate invocation across three lines, with the environment
-            // assignments on the first and the tool on the last. Deciding the corpus on the opening line alone
-            // left `rest` as the continuation backslash, so the tool test failed and the acquisition these
-            // scripts exist for stayed outside the corpus — while the sweep reported clean over `publish.sh`,
-            // which contributed nothing at all. The continuation walk already existed for the guard below; it
-            // simply ran after the decision it needed to inform.
+            // **The whole statement, because the guard is part of it.** A trailing backslash means the
+            // statement is unfinished, and both wrappers spread the gate acquisition across seven lines with
+            // its `|| {` on the last. Reading the opening line alone answers a question about a statement with
+            // text that is not the statement.
             let joined = join_continuations(&lines, index);
-            let Some((_, rest)) = joined.split_once("=$(") else {
+            let Some((left, _)) = joined.split_once("=$(") else {
                 continue;
             };
-            // Past the environment prefix, because the TOOL is what this property is about, and an assignment
-            // in front of it is part of the invocation rather than of what is invoked.
-            let rest = strip_environment_prefix(rest);
-            if !rest.starts_with("gh ") && !rest.starts_with("cargo ") {
-                continue;
-            }
-            // The guard may sit on this line or on any continuation of it.
-            let mut guarded = false;
-            let mut cursor = index;
-            loop {
-                let current = lines[cursor];
-                if current.contains("cannot_judge") || current.contains("|| {") {
-                    guarded = true;
-                    break;
-                }
-                if !current.trim_end().ends_with('\\') || cursor + 1 >= lines.len() {
-                    break;
-                }
-                cursor += 1;
-            }
+            let variable = left.trim();
+            let guarded = joined.contains("cannot_judge")
+                || joined.contains("|| {")
+                || joined.contains(&format!("|| {variable}="));
             examined += 1;
             if !guarded {
                 unguarded.push(format!("{wrapper}:{}", index + 1));
