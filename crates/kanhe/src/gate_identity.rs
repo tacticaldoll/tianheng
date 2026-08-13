@@ -55,12 +55,16 @@ fn value_after(words: &[&str], flag: &str) -> Option<String> {
 /// **The region is decided once, by [`Source::shell`], and the continuation walk reads that.** This used to
 /// join raw lines and then skip the ones *beginning* with `#` — its own second opinion about what a script
 /// executes, and a narrower one: a **tail** comment was never cut, so `--exact` written after a `#` on an
-/// invocation line would have been read as a citation. `Source` exists so this decision is made in one place.
+/// invocation line would have been read as a citation.
+///
+/// Through [`Executed::positioned_lines`] rather than [`Executed::lines`], because the rule applied below is
+/// the shell's continuation rule and **position is part of it**. The first repair joined the compacted lines,
+/// which makes a comment's neighbours adjacent and lets a trailing backslash continue across the very line
+/// bash uses to end the command.
 pub fn citations(script_path: &str, script: &str) -> Vec<Citation> {
     let mut found = Vec::new();
     let source = Source::of(script);
-    let executed: Vec<&str> = source.shell().lines().collect();
-    for line in logical_lines(&executed.join("\n")) {
+    for line in logical_lines(&source.shell().positioned_lines().join("\n")) {
         let words: Vec<&str> = line.split_whitespace().collect();
         for (at, word) in words.iter().enumerate() {
             if *word != "--exact" {

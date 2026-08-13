@@ -156,6 +156,38 @@ impl<'a> Executed<'a> {
             })
     }
 
+    /// Executed lines laid back out at their **original positions**, blank where one was dropped.
+    ///
+    /// [`Self::lines`] compacts: dropping a whole-line comment makes its neighbours adjacent. That is
+    /// harmless for a caller asking *does any line say X* and wrong for one applying a rule where position
+    /// matters — the shell's continuation rule is such a rule, and both callers of this region in this crate
+    /// apply it.
+    ///
+    /// Measured rather than reasoned about. Given
+    ///
+    /// ```text
+    /// echo START \
+    /// # comment
+    /// --exact ghost
+    /// ```
+    ///
+    /// bash runs `echo START` and then `--exact ghost` as its own command (`--exact: command not found`): the
+    /// continuation pulls the comment onto the line, and `#` at a word boundary ends the command there. Over
+    /// the compacted lines the backslash instead reaches across the comment and binds `--exact ghost` into the
+    /// first invocation — a command bash never runs. A blank at the comment's position ends the continuation
+    /// exactly as bash does.
+    ///
+    /// This exists because the idiom was written twice by hand and the two disagreed: one caller built the
+    /// dense array and the other joined the compacted lines, in the same commit. One implementation is the
+    /// only arrangement in which they cannot.
+    pub fn positioned_lines(&self) -> Vec<&'a str> {
+        let mut positioned = vec![""; self.text.lines().count()];
+        for (number, line) in self.numbered_lines() {
+            positioned[number - 1] = line;
+        }
+        positioned
+    }
+
     /// Whether any executed line contains `needle`.
     pub fn contains(&self, needle: &str) -> bool {
         self.lines().any(|line| line.contains(needle))
