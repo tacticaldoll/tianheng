@@ -486,9 +486,9 @@ fn render_extents(code: &BTreeMap<String, BoundDecl>) -> String {
          observed it has no extent of its own and is recorded as under-reacting with the entry point as its \
          owner, and a bound both out of reach and granularity-limited cannot be expressed at all. The \
          sections below list every one of them; this paragraph deliberately does not, because a list typed \
-         here is a literal in a template and the freshness check compares that text with itself. The sibling \
-         capability gate-shape-contract requires its disclosure to be DERIVED from the specification and held \
-         both ways; that requirement has no counterpart here, and the backlog carries it.\n\n",
+         here is a literal in a template and the freshness check compares that text with itself. This \
+         disclosure is authored rather than derived from the specification and held both ways; the backlog \
+         carries that.\n\n",
     );
     // The membership claim this paragraph used to make — that **refuses to judge** carried no bound — was a
     // literal in this template, which is the one place a freshness check cannot catch a falsehood: the
