@@ -79,18 +79,30 @@ fn read_worktree(repo: &Path, args: &[&str], what: &str) -> Result<String, Refus
 /// conservative direction and it is deliberate: the alternative is granting an exemption on the strength of
 /// not having read one.
 pub fn hidden_by_the_checkout(repo: &Path) -> Result<Vec<String>, Refusal> {
-    hidden_by_the_checkout_with(repo, classify)
+    hidden_by_the_checkout_with(repo, classify, tracks)
 }
 
-/// The judgement above, with the exclusion classifier supplied.
+/// Whether this repository tracks `source` — the exclusion-file question, asked of one file.
+///
+/// A free function rather than a closure inline below so the caller that counts its calls and the caller
+/// that answers them are the same shape.
+fn tracks(repo: &Path, source: &str) -> bool {
+    git(repo, &["ls-files", "--error-unmatch", "-z", "--", source]).is_ok()
+}
+
+/// The judgement above, with the exclusion classifier and the tracked-source question supplied.
 ///
 /// Split so a direction can hand it a classifier that **failed** rather than one that matched nothing. The
 /// two are different facts and the refusal below says so; without this split the failing arm would be
 /// constructed by nothing, since a classifier that cannot run is not a state a fixture repository can be put
 /// into while `ls-files` and `status` still answer.
+///
+/// `tracks` is injected for a second reason: it is asked once per *source*, and the only way a direction can
+/// hold that — rather than re-measure a wall clock — is to count the asking.
 pub fn hidden_by_the_checkout_with(
     repo: &Path,
     classify: impl Fn(&Path, &[&str]) -> Result<String, NoClassification>,
+    mut tracks: impl FnMut(&Path, &str) -> bool,
 ) -> Result<Vec<String>, Refusal> {
     let unexcluded = read_worktree(repo, &["ls-files", "-z", "--others"], "untracked files")?;
     let visible = read_worktree(
@@ -137,11 +149,18 @@ pub fn hidden_by_the_checkout_with(
         }
     }
 
+    // The tracked question is about a SOURCE, and the sources are few where the paths are many — measured on
+    // this repository, 73,670 excluded paths named exactly one, `.gitignore`. Asked per path it was one
+    // `git ls-files` spawn each: 147 seconds of process creation to answer a single question 73,670 times,
+    // in front of the one act that cannot be undone. Asked per source it is one spawn.
+    let mut answered: std::collections::BTreeMap<&str, bool> = std::collections::BTreeMap::new();
     let mut hidden = Vec::new();
     for path in excluded {
         let source = sources.get(path).copied().unwrap_or("<unshown>");
         let tracked = source != "<unshown>"
-            && git(repo, &["ls-files", "--error-unmatch", "-z", "--", source]).is_ok();
+            && *answered
+                .entry(source)
+                .or_insert_with(|| tracks(repo, source));
         if !tracked {
             hidden.push(format!(
                 "  {path} — hidden by {source}, which this repository does not track"
@@ -160,8 +179,21 @@ pub enum NoClassification {
 }
 
 /// Ask `check-ignore` which exclusion hides each path, feeding the paths as raw bytes on stdin.
+///
+/// **The answer is drained while the question is still being asked.** Writing every path and only then
+/// reading works while the conversation fits in the kernel's pipe buffers and deadlocks the moment it does
+/// not: the child fills its 64 KB stdout and blocks, so it stops reading stdin, so the parent blocks on a
+/// full 64 KB stdin, and neither can move. Measured on this repository — 73,670 excluded paths, 9.1 MB in,
+/// 11.0 MB out, against a 64 KB pipe — the gate standing in front of `cargo publish` never reached a verdict
+/// at all: `git check-ignore` sat in `pipe_wait` and `scripts/publish.sh` hung indefinitely.
+///
+/// What made it survive review is worth naming: every fixture in the failure matrix hides a handful of
+/// files, so the premise "the excluded set is small" held everywhere it was ever exercised and failed only
+/// on the repository this gate exists to judge. A green suite is no evidence about a corpus it never saw.
+///
+/// `stderr` is drained by `wait_with_output` below, which is why stdout is the only handle taken here.
 pub fn classify(repo: &Path, paths: &[&str]) -> Result<String, NoClassification> {
-    use std::io::Write;
+    use std::io::{Read, Write};
     let mut child = hermetic("git")
         .args(["-c", "core.excludesFile=/dev/null"])
         .args(["check-ignore", "-z", "-v", "--no-index", "--stdin"])
@@ -171,25 +203,68 @@ pub fn classify(repo: &Path, paths: &[&str]) -> Result<String, NoClassification>
         .stderr(std::process::Stdio::piped())
         .spawn()
         .map_err(|err| NoClassification::Failed(format!("cannot run git check-ignore: {err}")))?;
-    {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .ok_or_else(|| NoClassification::Failed("check-ignore took no stdin".to_string()))?;
+
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| NoClassification::Failed("check-ignore gave no stdout".to_string()))?;
+    let drain = std::thread::spawn(move || {
+        let mut answer = Vec::new();
+        stdout.read_to_end(&mut answer).map(|_| answer)
+    });
+
+    // Taken rather than borrowed: the write ends by DROPPING stdin, and the child cannot finish until it
+    // sees that EOF. Left in place until the end of the call it would keep the pipe open past the read below.
+    let delivered = {
+        let mut stdin = match child.stdin.take() {
+            Some(stdin) => stdin,
+            None => {
+                let _ = drain.join();
+                let _ = child.wait();
+                return Err(NoClassification::Failed(
+                    "check-ignore took no stdin".to_string(),
+                ));
+            }
+        };
+        let mut delivered = Ok(());
         for path in paths {
-            stdin
+            delivered = stdin
                 .write_all(path.as_bytes())
-                .and_then(|()| stdin.write_all(b"\0"))
-                .map_err(|err| {
-                    NoClassification::Failed(format!("cannot write paths to check-ignore: {err}"))
-                })?;
+                .and_then(|()| stdin.write_all(b"\0"));
+            if delivered.is_err() {
+                break;
+            }
         }
+        delivered
+    };
+
+    // Reaped on every path, including the failed write — the child is drained and waited on before any
+    // outcome is consulted, so no arm below can leave a `git` behind holding a pipe.
+    let out = child.wait_with_output();
+    let answer = drain.join();
+
+    if let Err(err) = delivered {
+        return Err(NoClassification::Failed(format!(
+            "cannot write paths to check-ignore: {err}"
+        )));
     }
-    let out = child
-        .wait_with_output()
-        .map_err(|err| NoClassification::Failed(format!("check-ignore did not finish: {err}")))?;
+    let out =
+        out.map_err(|err| NoClassification::Failed(format!("check-ignore did not finish: {err}")))?;
+    let answer = match answer {
+        Ok(Ok(answer)) => answer,
+        Ok(Err(err)) => {
+            return Err(NoClassification::Failed(format!(
+                "cannot read check-ignore's answer: {err}"
+            )));
+        }
+        Err(_) => {
+            return Err(NoClassification::Failed(
+                "the reader of check-ignore's answer panicked".to_string(),
+            ));
+        }
+    };
     match out.status.code() {
-        Some(0) => Ok(String::from_utf8_lossy(&out.stdout).to_string()),
+        Some(0) => Ok(String::from_utf8_lossy(&answer).to_string()),
         Some(1) => Err(NoClassification::MatchedNothing),
         _ => Err(NoClassification::Failed(
             String::from_utf8_lossy(&out.stderr).trim_end().to_string(),
