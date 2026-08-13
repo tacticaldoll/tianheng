@@ -107,6 +107,32 @@ that one placeholder also keeps `openspec/changes/` present, so no second `.gitk
 These lifecycle commits never land on `main` individually — they squash up per *Branching and
 release* below.
 
+## Bind a claim to its measurement — construction where you can, a reaction where you must
+
+A claim about this repository — a figure, a verdict, a declared set — is bound to whatever measures it, and
+**how strongly depends on what carries the claim**:
+
+- **The claim carries no information the producer lacks, and nothing downstream filters on it** → *derive it*.
+  Do not keep a list. The retired dimension-list bound is the case: a literal beside an enumerator that
+  contributed nothing was two things that had to agree, so one of them was removed rather than checked.
+- **Something downstream filters on the claim** → *declare it, and hold it to the producer both ways*. The
+  literal is not a weakening here; it is what gives the enumerator something to disagree with. Measured:
+  removing `guibiao` from `self_governance`'s dimension list left a `guibiao` allowlist naming `hunyi` green,
+  because the coverage assertion filtered on the literal. A set-equality against the enumerator closes that,
+  and a one-way check does not.
+- **The carrier is text** → *a reaction is the only option*, and that is the weak branch by necessity. You
+  cannot make a Markdown sentence unconstructible, so a sweep compares it after the fact.
+
+**A claim carried by a value belongs in the first two branches, never the third.** `Outcome::Clean` was a
+value asserting the result of work while carrying none of it, and nothing compared it to anything: the weakest
+possible binding on the carrier that admits the strongest. It now carries the subject it was reached over, and
+the combination that would be a lie is unconstructible.
+
+*A census is produced, never typed* is this law's **text branch**, not a special case beside it — the strongest
+binding available when the claim lives in a sentence. It stays stated on its own below because it is the branch
+with a working instrument and a measured cost, and because a general principle nobody can check is the shape
+this repository dissolves rather than keeps.
+
 ## A census is produced, never typed
 
 A figure saying **how many members a set in this repository currently has** is produced by whatever enumerates
