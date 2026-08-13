@@ -176,6 +176,24 @@ consumer for an undemonstrated deduplication.
   *Shape:* one claim helper the fixture roots share, refusing a path the process did not create — not a
   per-site edit, since forty hand-changed call sites is the shape that drifts back.
 
+- **A command a document hands a reader is only checked in one shape.** *Class:* WATCH. *Observed pressure:*
+  `5be5678` closed the class *a command a document hands a reader names a target that exists* by
+  resolving `-p <package> --test <target>` pairs against `cargo metadata`, and a fifth instance survived it in
+  a **second shape**: `BLESS=1 bash crates/kanhe/tests/bound_register.rs`, a path handed to `bash` whose target
+  is a Rust integration test. Run as written it printed shell errors and **exited 0**, so a reader following it
+  got a silent no-op. *Observation source:* a review of the window, then a sweep of `bash <path>` across
+  tracked Rust and Markdown: five occurrences, of which one was live, one is a real script (`scripts/publish.sh`),
+  two are deliberate fixture strings in failure matrices, and one is a fictional example path in a doc comment.
+  *Current reaction or bound:* none for this shape; the pair shape is held by
+  `every_command_a_document_hands_a_reader_names_a_target_that_exists`. *Risk:* a reader meets a command that
+  does nothing and reports success — worse than one that fails, because the failure is silent. Bounded by the
+  sweep: one instance in the tree, now repaired. *Promotion trigger:* a second live instance of this shape, or
+  a third shape of the same class. *Version class:* patch; repository-internal, shipping in no crate.
+  *Authority:* `repository-checks`, which owns the pair-shape requirement. *Shape:* the corpus differs from the
+  pair check's — this shape appears in **Rust doc comments** as well as Markdown, and the rule is *a `bash`
+  target must be a tracked file with an executable mode*, which git records. Two corpora and two rules under one
+  requirement, which is why it is filed rather than folded into the existing check.
+
 - **`Bind a claim to its measurement` is a governing rule with no reaction.** *Class:* WATCH. *Observed
   pressure:* nine review rounds in the 0.5.0 window, whose largest class by far was *the corpus was wrong or
   its narrowing was undeclared* — nine of roughly twenty findings. The rule was written from that sweep and
