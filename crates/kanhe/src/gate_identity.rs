@@ -19,24 +19,37 @@ pub struct Citation {
     pub package: Option<String>,
 }
 
-/// Physical lines joined where one ends in a backslash — the shell's own continuation rule.
+/// Physical lines joined where one ends in a backslash — the shell's own continuation rule — each paired
+/// with the **one-based physical line it starts on**.
 ///
 /// A gate invocation spans several lines. Asking about `--exact` and `--test` per physical line can find them
 /// in different units and bind neither, so the shell's continuation rule is applied before either is read.
-pub fn logical_lines(script: &str) -> Vec<String> {
+///
+/// **The starting line travels with the text because the other caller needs it and would otherwise write this
+/// rule again.** It did: a second implementation in the exit-class sweep joined on `trim_end().strip_suffix`,
+/// which continues a line ending in backslash-then-whitespace. Measured, bash does not — given `echo A \ `
+/// followed by `echo B`, it runs **two** commands, printing `A` and then `B`, because the backslash escapes
+/// the space rather than the newline. That sweep decides whether every acquisition in the two
+/// irreversible-act wrappers is guarded, and its failure direction is *reports guarded when it is not*: text
+/// pulled in from a following line can carry the very token the guard is recognised by.
+pub fn logical_lines(script: &str) -> Vec<(usize, String)> {
     let mut joined = Vec::new();
     let mut current = String::new();
-    for line in script.lines() {
+    let mut start = 1usize;
+    for (index, line) in script.lines().enumerate() {
+        if current.is_empty() {
+            start = index + 1;
+        }
         if let Some(head) = line.strip_suffix('\\') {
             current.push_str(head);
             current.push(' ');
             continue;
         }
         current.push_str(line);
-        joined.push(std::mem::take(&mut current));
+        joined.push((start, std::mem::take(&mut current)));
     }
     if !current.is_empty() {
-        joined.push(current);
+        joined.push((start, current));
     }
     joined
 }
@@ -64,7 +77,7 @@ fn value_after(words: &[&str], flag: &str) -> Option<String> {
 pub fn citations(script_path: &str, script: &str) -> Vec<Citation> {
     let mut found = Vec::new();
     let source = Source::of(script);
-    for line in logical_lines(&source.shell().positioned_lines().join("\n")) {
+    for (_, line) in logical_lines(&source.shell().positioned_lines().join("\n")) {
         let words: Vec<&str> = line.split_whitespace().collect();
         for (at, word) in words.iter().enumerate() {
             if *word != "--exact" {
