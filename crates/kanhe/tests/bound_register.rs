@@ -541,9 +541,15 @@ fn every_bare_bound_reference_resolves_to_a_declared_bound() {
 
     let mut dangling = Vec::new();
     for path in corpus {
-        let Ok(text) = std::fs::read_to_string(root.join(path)) else {
-            continue;
-        };
+        // Skipping an unreadable file would report every bare reference in it as resolving, since a
+        // reference this sweep never read cannot be dangling. That is clean-over-unread, which this
+        // repository refuses wherever it enumerates tracked content.
+        let text = std::fs::read_to_string(root.join(path)).unwrap_or_else(|error| {
+            panic!(
+                "cannot read tracked file '{path}' — a file this check claims to have inspected must have \
+                 been read: {error}"
+            )
+        });
         for (line, id) in parse::bare_references(&capabilities, &text) {
             if !declared.contains(&id) {
                 dangling.push(format!("{path}:{line}: `{id}` names no declared bound"));

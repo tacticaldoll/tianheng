@@ -987,9 +987,16 @@ fn positional_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSet<Str
         .iter()
         .filter(|p| matches!(prose_of(p), Some(Prose::LineComment(_))))
     {
-        let Ok(text) = std::fs::read_to_string(corpus_root.join(path)) else {
-            continue;
-        };
+        // A file this direction claims to have inspected must have been read. `read > 0` below is a
+        // **vacuity** guard and not a completeness one: it catches every file being unreadable and says
+        // nothing about one of them being, which would leave this sweep reporting clean over a corpus it
+        // never opened in full. Two sibling directions in this file already refuse exactly this.
+        let text = std::fs::read_to_string(corpus_root.join(path)).unwrap_or_else(|error| {
+            panic!(
+                "cannot read tracked file '{path}' — a file this check claims to have inspected must have \
+                 been read: {error}"
+            )
+        });
         read += 1;
         for (index, line) in text.lines().enumerate() {
             if !is_inspected_line(path, line) {
