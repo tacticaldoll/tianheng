@@ -173,6 +173,26 @@ reader would have dropped**, and assert that one appears in the result. Two iden
 deduplication; the dropped one cannot. The negative run then needs no separate fixture — restore the narrower
 read and the case fails naming the member that vanished.
 
+**Finding instances is a class-directed sweep, and it belongs in every pre-release review.** The shapes above
+say what to look for; this says how, and it is a **review procedure rather than a reaction** — a distinction
+that is load-bearing here. `inline-symbol-path-confinement` declares a receiver-method read unobserved, and
+`split_once`, `next` and `first` are receiver-method calls, so this product's own dimensions cannot see these
+shapes at all. A reader applying two predicates can.
+
+1. Sweep the modules that parse or enumerate anything for `split_once`, `next`, `first`, `last`, `nth`,
+   `find`, `filter_map`, `unwrap_or_default`.
+2. Ask each hit two questions: **can the input hold more than one?** and **does the reader's claim cover the
+   extras?** Both yes, and it is one of the shapes above.
+3. Most hits die on the first question — splitting a path into segments, normalising a name — so the funnel is
+   steep and the reading cost is a pass, not an audit. Nothing is reported automatically, so the
+   false-positive cost is zero.
+
+It is written down rather than remembered because of what it caught. The defects it found in the
+release-readiness gate — a manifest read that took the first `name` key in any table, and a value parser that
+reported *cannot read* as *not present* to three consumers — sat in the largest unread logic module and had
+been read past by five linear review rounds. The sweep found both in one pass, and one of them let the gate
+report a clean release while a crate's lock version went unchecked.
+
 **Only the fourth shape is residue.** The first three are closed by construction where they occur, so filing
 them would register as unclosable something that is not. The fourth is filed in `BACKLOG.md` with its
 observation source inherited rather than invented: `inline-symbol-path-confinement` already declares that a
