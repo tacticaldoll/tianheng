@@ -1191,14 +1191,38 @@ fn merge_outcomes(first: Outcome, second: Outcome) -> Outcome {
         // than picking one is what keeps a fold of two clean verdicts from silently reporting only the
         // second's subject; summing rather than intersecting is right because the figures are each
         // dimension's own unit, and the composed claim is *these participants, together, reached this
-        // much*. The sum of two constructible subjects is constructible: if either declared something it
-        // also reached something, so the total cannot be declared-without-reached.
-        let declared = subject_of(&first).declared() + subject_of(&second).declared();
-        let reached = subject_of(&first).reached() + subject_of(&second).reached();
+        // much*.
+        //
+        // **Checked, because both figures come from outside.** `Subject::of` admits any `usize` pair where
+        // something declared also reached something, so a participant may hand this fold `usize::MAX` — and
+        // two of those overflow. Unchecked, that is a debug panic and a release wrap, which is the worst
+        // pair: the profile decides between a crash and a quiet lie. Measured on the code this replaces —
+        // debug reported `attempt to add with overflow`, release returned
+        // `Clean(Subject { declared: 18446744073709551614, reached: 2 })`. The wrapped total satisfies
+        // `Subject::of` because `reached` is still positive, so the fold states a **clean** verdict carrying
+        // a figure that is the sum of nothing.
+        //
+        // This is also what the sentence that stood here got wrong. *The sum of two constructible subjects
+        // is constructible* is true of the integers and not of `usize`, and the `None` arm below was called
+        // unreachable on the strength of it.
+        let (Some(declared), Some(reached)) = (
+            subject_of(&first)
+                .declared()
+                .checked_add(subject_of(&second).declared()),
+            subject_of(&first)
+                .reached()
+                .checked_add(subject_of(&second).reached()),
+        ) else {
+            return Outcome::ConstitutionError(
+                "the composed run's subject cannot be represented: the participants' declared or reached \
+                 counts sum past `usize`, so this fold can state no honest figure for what they covered"
+                    .to_string(),
+            );
+        };
         match Subject::of(declared, reached) {
             Some(subject) => Outcome::Clean(subject),
-            // Unreachable by the argument above, and constructed rather than asserted: a fold that could
-            // not name its own subject has not found a clean workspace.
+            // Now genuinely unreachable, and still constructed rather than asserted: with the sum checked
+            // above, either side declaring something means that side also reached something.
             None => Outcome::ConstitutionError(
                 "the composed run declared boundaries and reached nothing, so nothing was judged"
                     .to_string(),

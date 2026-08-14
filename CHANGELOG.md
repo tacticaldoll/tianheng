@@ -603,6 +603,19 @@ them.
 
 ### Fixed
 
+- **Composing two clean verdicts can no longer wrap into a clean verdict nobody reached.** The observer fold
+  summed each participant's `Subject` with unchecked `usize` addition. `Subject::of` admits any pair where
+  something declared also reached something, so `usize::MAX` declared is a value a participant can hand the
+  fold through the published surface alone — and two of those overflow. Measured on the code this replaces,
+  both ways: a debug build reported `attempt to add with overflow`, a release build returned
+  `Clean(Subject { declared: 18446744073709551614, reached: 2 })`. The wrap is the dangerous half, because the
+  wrapped total still satisfies `Subject::of` and the run states a clean verdict carrying a figure that is the
+  sum of nothing.
+
+  Both figures are now checked, and a sum that cannot be represented is an `Outcome::ConstitutionError` — exit
+  class 2, because an aggregate this fold cannot state is not a boundary anything violated. Only inputs that
+  previously panicked or wrapped behave differently, so nothing an adopter could rely on has moved.
+
 - **A field added to `Reached::AsIntended` would have escaped `borrows_every_string` silently.** That measure
   reaches every string a declaration carries, and its own documentation rested the guarantee on in-crate
   exhaustiveness — *"a variant added with a new string of its own fails to compile here rather than being

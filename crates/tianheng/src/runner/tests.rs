@@ -1328,6 +1328,43 @@ fn markdown_reasonless_boundary_has_no_blockquote_or_orphan_blank_line() {
 /// Asserted over the **rendered** projection, not over an identity function, because it is the rendering that
 /// a reader and an adopter see — an identity that distinguishes two boundaries while the heading collapses
 /// them is exactly the defect this exists for.
+/// A subject the fold cannot represent is refused, not wrapped into a clean verdict.
+///
+/// `Subject::of` admits any `usize` pair where something declared also reached something, so this is a value
+/// a third-party `Observer` can hand the fold from the published surface alone — `usize::MAX` declared is
+/// absurd as a count and perfectly ordinary as an input.
+///
+/// The failure it replaces was profile-dependent, which is why it is worth a case. Measured on that code,
+/// both ways: debug reported `attempt to add with overflow`; release returned
+/// `Clean(Subject { declared: 18446744073709551614, reached: 2 })`. The wrap is the dangerous half — the
+/// total still satisfies `Subject::of` because `reached` stayed positive, so the run reports **clean**
+/// carrying a figure that is the sum of nothing.
+#[test]
+fn a_composed_subject_that_cannot_be_represented_is_a_constitution_error() {
+    let huge = Subject::of(usize::MAX, 1).expect("declared something and reached something");
+    let merged = merge_outcomes(Outcome::Clean(huge), Outcome::Clean(huge));
+    match merged {
+        Outcome::ConstitutionError(why) => assert!(
+            why.contains("cannot be represented"),
+            "the refusal must say the sum is the problem: {why}"
+        ),
+        other => panic!(
+            "two clean subjects summing past `usize` must refuse rather than wrap into a verdict: {other:?}"
+        ),
+    }
+
+    // The control: the same fold over subjects that do sum is still clean, so the guard above refuses the
+    // overflow rather than the summing.
+    let small = Subject::of(2, 3).expect("declared something and reached something");
+    match merge_outcomes(Outcome::Clean(small), Outcome::Clean(small)) {
+        Outcome::Clean(subject) => {
+            assert_eq!(subject.declared(), 4, "the composed subject is the sum");
+            assert_eq!(subject.reached(), 6, "for both figures");
+        }
+        other => panic!("a representable sum must stay clean: {other:?}"),
+    }
+}
+
 #[test]
 fn markdown_headings_are_pairwise_distinct() {
     let c = Constitution::new("t")
