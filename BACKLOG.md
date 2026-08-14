@@ -233,6 +233,9 @@ consumer for an undemonstrated deduplication.
   repository-internal. *Authority:* `repository-checks`. *Shape:* only a set comparison in both directions
   catches it, and there is nothing to compare against until someone states what the subject is — which is why
   the capability-subject declarations exist and why widening them is the likely form of any repair.
+  Until there is a reaction, the interim instrument is the class-directed sweep stated in `AGENTS.md` — run
+  it at each pre-release review rather than trusting that the next instance will be noticed. It is what found
+  the release-coherence pair after five linear rounds had read past them.
 
   Two residues belong here rather than to the shapes that closed. `kanhe::selection` binds only the call sites
   that use it, and nothing enumerates the readers that should. And `census::figures_in` returns the first
