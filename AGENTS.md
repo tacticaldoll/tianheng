@@ -290,6 +290,18 @@ syscall sequence), and where a test genuinely cannot reach it, say so in the PR 
 evidence stands in its place instead of leaving the reader to assume a green suite covered it. A
 test kept for the contract rather than the change earns a comment saying which it is.
 
+**A mechanical rewrite over code matches an exact literal and asserts it occurred once.** Rewriting ~44 call
+sites here with a non-greedy pattern and the dot-matches-newline flag, the match crossed a statement boundary
+and turned an unrelated `assert_eq!(outcome.exit_code(), 0, "…")` into `matches!(outcome.exit_code(), 0, …)`.
+That one broke brace balance, so the compiler reported it — a corruption that still compiled would have been
+silent, and nothing in the suite was looking for it. Reverting the two damaged files and redoing them
+literal-by-literal was faster than repairing the pattern's output.
+
+So: no pattern that can span a statement, an exact substring for each edit, and a count assertion before
+writing. Widening a variant is its own case of this — `assert_eq!(x, Expected)` becomes
+`assert!(matches!(x, Expected(_)))`, never a fabricated expected value, because pinning one asserts more than
+the test meant.
+
 **A negative run proves nothing unless it moved only the thing under test.** Three ways one reads as
 decisive and is not, each measured in this repository rather than imagined:
 
@@ -431,6 +443,21 @@ If a change makes a self-governance test fail, **fix the change**, not the test.
 ## Definition of Done
 
 Run these from the workspace root before checking off an apply task, syncing, or reporting a change done. This is the single source for the local pre-flight gate list (so other docs need not restate it); CI runs a superset of it:
+
+**`git add` any file the change CREATED before running these.** The tree-wide gates take their path list from
+`git ls-files` and their content from disk, so the two halves see different things — measured, both
+directions: a **new** file that has not been added is invisible and its offences are not reported, while a
+**tracked** file modified and left unstaged is read as it stands on disk and is judged normally. Staging is
+enough; committing is not required.
+
+The failure mode is a full pass that means less than it looks. `#556`'s Definition of Done ran green over a
+file it had never opened, and the next round's suite failed on that same file, unchanged in between — the
+per-crate steps compile the worktree and do see new files, so most of the suite is green for real and only
+the repository-wide gates are blind. A partial blindness is far more convincing than a total one.
+
+This has no repository check, and the reason is worth stating rather than leaving to be rediscovered: in CI
+nothing is ever untracked, so a check would be vacuous exactly where it runs, and locally it would fire on
+every scratch file mid-edit — a refusal that is right at one moment of the day and wrong the rest of it.
 
 ```bash
 cargo build --workspace
