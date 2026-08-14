@@ -195,6 +195,14 @@ declared in code, and SHALL name every id on either side that has no counterpart
 duplicate-free before the sets are compared, since two declarations collapsing onto one id would satisfy an
 equality that proves nothing.
 
+**The id form is this repository's accounting, not a contract the protocol places on a participant.** The
+requirement above is scoped to `openspec/specs/*/spec.md` — these specs, audited by a check that ships in no
+package. `observer-protocol` asks a participant to declare what it does not observe and to say what defends
+each bound; it does not ask the id to index anything. So a third party inherits the `<capability>/<slug>`
+convention because it reads well, and inherits no reaction that would name a malformed one. Shipping the slug
+rule as an API would make this family's bookkeeping an adopter's obligation, which is the opposite of where
+this protocol places enforcement: on the declarer, who is asked to declare and not audited on how.
+
 The spec-side set SHALL be enumerated with the observation-bound register's canonical marker predicate; this
 gate SHALL NOT carry a second marker implementation. Slug derivation SHALL remain independently implemented and
 compared with the register projection, because sharing the id function would collapse that comparison to the
