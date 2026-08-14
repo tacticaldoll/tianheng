@@ -19,7 +19,7 @@ use tianheng::prelude::*;
 use tianheng::testing::assert_projection_matches;
 use tianheng::{BoundDecl, Defence, Extent, Owner, Reached};
 
-use kanhe::bound_register_parse::{marks_a_bound, slug_of};
+use kanhe::bound_register_parse::{marks_a_bound, projection_offences, slug_of};
 
 /// The projection this check holds fresh.
 const EXTENT_PROJECTION: &str = "docs/observation-bound-extents.md";
@@ -376,38 +376,28 @@ fn derived_ids_agree_with_the_register_projection() {
     let Some(root) = workspace_root() else {
         return;
     };
-    // **What this catches after the slug rule was unified: a stale projection.** It used to be justified as
-    // the guard against two `slug_of` implementations drifting — but the two were byte-identical, so they
-    // could only catch drift between themselves, a risk that existed solely because there were two. The
-    // comparison here is derived-set against a **tracked file**, not against a second computation, so one
-    // shared rule leaves it exactly as sharp: measured, deleting a heading from the projection turns this red
-    // both before and after the unification.
-    //
-    // Reading the projection INSTEAD of deriving is still rejected: `cargo test` runs before the register
-    // gate in the Definition of Done, so a stale projection would let the bijection pass while the specs and
-    // the code disagreed.
+    // The comparison itself lives in `bound_register_parse`, taking the projection as text, so what it
+    // catches is held by a case — `a_projection_disagreeing_with_the_derived_set_names_the_id_on_either_side`
+    // — instead of by a comment here. This direction supplies the real subject: the tracked projection, and
+    // the set derived from the tracked specs.
     let projection = root.join("docs/observation-bounds.md");
     let text = std::fs::read_to_string(&projection)
         .unwrap_or_else(|err| panic!("cannot read {projection:?}: {err}"));
-    let projected: BTreeSet<String> = text
-        .lines()
-        .filter_map(|line| line.strip_prefix("### `"))
-        .filter_map(|rest| rest.strip_suffix('`'))
-        .map(str::to_string)
-        .collect();
-    assert!(
-        !projected.is_empty(),
-        "no bound id parsed from {projection:?}; its shape may have changed, and an empty set agrees with \
-         anything"
-    );
 
     let derived: BTreeSet<String> = spec_bounds(&root).into_keys().collect();
-    assert_eq!(
-        derived, projected,
+    assert!(
+        !derived.is_empty(),
+        "no bound derived from the tracked specs, so this comparison would hold over nothing; the spec-side \
+         parse may have broken"
+    );
+
+    let offences = projection_offences(&derived, &text);
+    assert!(
+        offences.is_empty(),
         "the ids this check derives differ from the ids `crates/kanhe/tests/bound_register.rs` wrote into \
-         {projection:?}, so the projection is stale. The slug rule is one implementation, shared with the \
-         register, so the two sides cannot disagree about the rule itself. Regenerate with \
-         `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register`."
+         {projection:?}, so the projection is stale:\n  {}\nRegenerate with \
+         `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register`.",
+        offences.join("\n  ")
     );
 }
 

@@ -203,10 +203,18 @@ convention because it reads well, and inherits no reaction that would name a mal
 rule as an API would make this family's bookkeeping an adopter's obligation, which is the opposite of where
 this protocol places enforcement: on the declarer, who is asked to declare and not audited on how.
 
-The spec-side set SHALL be enumerated with the observation-bound register's canonical marker predicate; this
-gate SHALL NOT carry a second marker implementation. Slug derivation SHALL remain independently implemented and
-compared with the register projection, because sharing the id function would collapse that comparison to the
-same implementation on both sides.
+The spec-side set SHALL be enumerated with the observation-bound register's canonical marker predicate, and the
+id SHALL be derived with the register's canonical slug rule; this gate SHALL NOT carry a second implementation
+of either. The comparison SHALL be the derived set against the **tracked projection**, and SHALL name every id
+only one side carries — a property that holds however many implementations the slug rule has.
+
+Independent slug derivation was previously required here, reasoning that sharing the id function would collapse
+the comparison to the same implementation on both sides. That was measured and did not hold: the two
+implementations were byte-identical, so they could only catch drift between themselves — a risk that existed
+solely because there were two — and the comparison has always been against a tracked file rather than against a
+second computation. It is recorded as refuted rather than deleted, so it is not re-derived from the same
+intuition. A requirement stated as an implementation count is defensible only by counting implementations,
+which is a text detector over source; the property above is stated so that a case can hold it instead.
 
 The id SHALL be the `<capability>/<scenario-slug>` form the register already derives, so this reaction
 introduces no second naming scheme and no lookup table.
@@ -229,8 +237,14 @@ below says why, and a guard fails if one ever appears there.
 #### Scenario: The model consumes the register's declaration grammar
 
 - **WHEN** a heading is accepted or rejected by the canonical bound-marker predicate
-- **THEN** the model makes the same membership decision by calling that predicate, while independently deriving
-  the accepted heading's id
+- **THEN** the model makes the same membership decision by calling that predicate, and derives the accepted
+  heading's id by calling the canonical slug rule
+
+#### Scenario: A projection disagreeing with the derived set is named
+
+- **WHEN** the tracked projection lacks an id the specs derive, or carries one they do not
+- **THEN** the comparison names that id and says which side carries it, and it does so with the projection
+  supplied as text, so a stale projection can be constructed rather than argued about
 
 #### Scenario: A widened model-only marker would fail the bijection
 

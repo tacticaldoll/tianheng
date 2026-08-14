@@ -63,9 +63,11 @@ pub fn must(root: &Path, what: &str, args: &[&str]) -> String {
 
 /// The slug rule, applied to a scenario heading to derive a bound's id.
 ///
-/// `observation_bound_model.rs` derives these independently and compares its set against the projection this
-/// file generates. That is the only guard against the two rules drifting, so the duplication is deliberate:
-/// unifying them would make that comparison `f() == f()`.
+/// One implementation, shared by the register and by the model gate. It used to be duplicated, argued for as
+/// the guard against the two rules drifting — but the two were byte-identical, so they could only catch drift
+/// between themselves, a risk that existed solely because there were two. What the model gate actually
+/// compares is a derived set against a **tracked file**, not against a second computation, and that property
+/// is held by a case rather than by this comment: see [`projection_offences`].
 pub fn slug_of(heading: &str) -> String {
     let mut out = String::with_capacity(heading.len());
     let mut pending_hyphen = false;
@@ -320,6 +322,41 @@ fn is_kebab(slug: &str) -> bool {
 /// This resolves nothing by itself — it reports what looks like a reference, and the caller holds those
 /// against the produced id set. Recognition and resolution are kept apart so the bare form cannot grow a
 /// second opinion about which ids exist.
+/// Whether a generated projection carries exactly the ids a derivation produced, naming every id only one
+/// side has.
+///
+/// The projection arrives as **text** so a stale one can be constructed. That is the point: what this
+/// comparison catches is held by a case rather than by an argument, and the property survives however many
+/// implementations the slug rule has, because the comparison is a derived set against a tracked file and not
+/// against a second computation.
+///
+/// Reading the projection *instead* of deriving stays rejected: `cargo test` runs before the register gate in
+/// the Definition of Done, so a stale projection would let the bijection pass while the specs and the code
+/// disagreed.
+pub fn projection_offences(derived: &BTreeSet<String>, projection: &str) -> Vec<String> {
+    let projected: BTreeSet<&str> = projection
+        .lines()
+        .filter_map(|line| line.strip_prefix("### `"))
+        .filter_map(|rest| rest.strip_suffix('`'))
+        .collect();
+    let mut offences = Vec::new();
+    for id in derived {
+        if !projected.contains(id.as_str()) {
+            offences.push(format!(
+                "`{id}` is derived from the specs and is absent from the projection"
+            ));
+        }
+    }
+    for id in &projected {
+        if !derived.contains(*id) {
+            offences.push(format!(
+                "`{id}` is in the projection and is derived from no spec"
+            ));
+        }
+    }
+    offences
+}
+
 pub fn bare_references(capabilities: &BTreeSet<String>, text: &str) -> Vec<(usize, String)> {
     let mut found = Vec::new();
     for (index, line) in text.lines().enumerate() {
