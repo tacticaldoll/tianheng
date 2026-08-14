@@ -185,9 +185,15 @@ fn every_command_a_document_hands_a_reader_names_a_target_that_exists() {
     let mut examined = 0usize;
     let mut broken = Vec::new();
     for path in listing.lines().filter(|l| !l.is_empty()) {
-        let Ok(text) = std::fs::read_to_string(root.join(path)) else {
-            continue;
-        };
+        // `examined` counts what was opened, which is a vacuity guard and not a completeness one: one
+        // unreadable document leaves every command it hands a reader unchecked while the count still says
+        // this direction ran.
+        let text = std::fs::read_to_string(root.join(path)).unwrap_or_else(|error| {
+            panic!(
+                "cannot read tracked file '{path}' — a file this check claims to have inspected must have \
+                 been read: {error}"
+            )
+        });
         for line in text.lines() {
             let words: Vec<&str> = line.split_whitespace().collect();
             for window in words.windows(4) {
