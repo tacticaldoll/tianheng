@@ -283,11 +283,25 @@ cannot be shown to name one pull request"
 # only the tool's stderr — measured, a failing commits read left this wrapper exiting 91 with nothing of its own
 # said, so the class it reports was neither of the two it defines and the operator got gh's words for a fact
 # about this wrapper. The same shape as a value-taking flag failing on its shift arithmetic, one layer out.
-title=$(gh pr view "$pr" --repo "$repository" --json title --jq .title) || cannot_judge \
-    "cannot read pull request $pr's title, so whether the subject is that title cannot be decided"
-: "${subject:=$title}"
+# ONE pull request identity, resolved once and passed to every call below.
+#
+# `$pr` is a SELECTOR — a number, a branch, or a URL — and each `gh pr` call resolved it again. Four
+# resolutions landing on one pull request is agreement by circumstance, which is the shape this wrapper closed
+# for the repository a few lines up and left open for the pull request itself. `--match-head-commit` does not
+# close it: two open pull requests from one head branch to different bases carry the same head OID, so the pin
+# cannot tell them apart. This call is the only one that may take the selector, because resolving it is what it
+# is for.
 pr_number=$(gh pr view "$pr" --repo "$repository" --json number --jq .number) || cannot_judge \
-    "cannot read pull request $pr's number, so the live commits endpoint cannot be built from its canonical identity"
+    "cannot read pull request $pr's number, so the accepted selector, the live commit set and the merge cannot \
+be shown to name one pull request"
+if [[ ! $pr_number =~ ^[1-9][0-9]*$ ]]; then
+    cannot_judge \
+        "cannot resolve $pr to one pull request number; the evidence reads and the merge require its canonical \
+identity"
+fi
+title=$(gh pr view "$pr_number" --repo "$repository" --json title --jq .title) || cannot_judge \
+    "cannot read pull request $pr_number's title, so whether the subject is that title cannot be decided"
+: "${subject:=$title}"
 # The head the gate is about to read its evidence from, captured BEFORE the commit set — the order is the guard.
 #
 # What this closes: the gate judges the body against the pull request's commit subjects as they are while it
@@ -300,15 +314,12 @@ pr_number=$(gh pr view "$pr" --repo "$repository" --json number --jq .number) ||
 # ahead of the pinned head, so gh refuses: fails closed. Capture it after and the pinned head would include the
 # new commit while the gate judged the older set, so the merge would proceed and record a body missing it: fails
 # open. Same two calls, opposite guarantees.
-head=$(gh pr view "$pr" --repo "$repository" --json headRefOid --jq .headRefOid) || cannot_judge \
-    "cannot read pull request $pr's head commit, so the merge cannot be pinned to the head the gate reads from"
+head=$(gh pr view "$pr_number" --repo "$repository" --json headRefOid --jq .headRefOid) || cannot_judge \
+    "cannot read pull request $pr_number's head commit, so the merge cannot be pinned to the head the gate \
+reads from"
 if [[ ! $head =~ ^[0-9a-f]{7,40}$ ]]; then
     cannot_judge "cannot read the pull request's head commit, so the merge could not be pinned to the head \
 this gate read its evidence from — and an unpinned merge may record a body that no longer matches the commits"
-fi
-if [[ ! $pr_number =~ ^[1-9][0-9]*$ ]]; then
-    cannot_judge \
-        "cannot resolve $pr to one pull request number; the live commits endpoint requires its canonical identity"
 fi
 
 # The gate. A failure aborts before the merge, which is the point: the record below cannot be amended.
@@ -415,5 +426,5 @@ rm -f "$verdict_file"
 # the leak this repository closed one commit ago, reintroduced to fix a different defect. A value in `argv` has
 # an `ARG_MAX` ceiling a path does not, and that ceiling fails loud with `E2BIG` before the merge rather than
 # recording something wrong.
-exec gh pr merge "$pr" --repo "$repository" --squash --subject "$subject" --body "$body" \
+exec gh pr merge "$pr_number" --repo "$repository" --squash --subject "$subject" --body "$body" \
     --match-head-commit "$head" "${passthrough[@]}"

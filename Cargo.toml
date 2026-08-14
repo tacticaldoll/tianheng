@@ -15,20 +15,31 @@
 [workspace]
 resolver = "2"
 members = ["crates/xuanji", "crates/xingbiao", "crates/hunyi", "crates/guibiao", "crates/louke", "crates/tianheng", "crates/shengmo", "crates/kanhe"]
-# Every fixture and example is its own workspace root (each carries `[workspace]`), which is what
-# actually keeps this workspace from absorbing their deliberate faults — `members` above is an
-# explicit list with no globs, so nothing under these trees is inferred into it. These two entries
-# are the second line of that defence, for a future fixture or example added without its own
-# `[workspace]` table: excluded, it stays out; unexcluded, cargo would refuse to operate inside it
-# until the author picks one.
+# Every fixture and example is its own workspace root, each carrying `[workspace]`. That table is what
+# keeps this workspace from absorbing their deliberate faults — `members` above is an explicit list
+# with no globs, so nothing under these trees is inferred into it.
 #
-# Named as directory prefixes rather than one entry per package on purpose. The per-package list
-# they replace covered 3 of 5 fixtures and 3 of 6 examples — it had drifted, silently, because a
-# hand-maintained enumeration of a directory's contents rots as the directory grows, and a
-# governance rule that has drifted is read as license rather than law. A prefix cannot fall behind
-# what it contains. CI exercises the examples in isolation through
-# `crates/shengmo/tests/examples_suite.rs`.
-exclude = ["crates/tianheng/tests/fixtures", "examples"]
+# **`exclude` is a second line for `examples/` only, and cargo offers none for the in-repo fixtures.**
+# Measured, on a package carrying no `[workspace]` of its own:
+#
+#   exclude entry                          package location            result
+#   `sub` (top-level directory)            not inside a member         excluded, cargo proceeds
+#   `sub/a` (exact package path)           not inside a member         excluded, cargo proceeds
+#   `sub/*` (glob)                         not inside a member         NOT excluded — no glob support
+#   `m/tests/fixtures/a` (exact path)      inside member `m`           NOT excluded
+#   `crates/tianheng/tests/fixtures`       inside member `tianheng`    NOT excluded
+#
+# The deciding variable is nesting: a package inside a workspace member's own directory cannot be
+# excluded at all, whichever form the entry takes. Every in-repo fixture is at
+# `crates/<member>/tests/fixtures/<name>`, so entries naming them were inert — they read as a defence
+# that was never there, which is worse than no entry. They are dropped rather than extended.
+#
+# So the fixtures have exactly ONE defence, their own `[workspace]` table, and a single line needs
+# holding: `crates/kanhe/tests/workspace_isolation.rs` asserts every tracked fixture and example
+# manifest carries one. `examples/` is top-level, so its entry below does work, and it stays.
+#
+# CI exercises the examples in isolation through `crates/shengmo/tests/examples_suite.rs`.
+exclude = ["examples"]
 
 [workspace.package]
 version = "0.4.0"
