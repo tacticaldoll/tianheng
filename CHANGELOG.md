@@ -2076,8 +2076,12 @@ no adopter runs. They are here rather than under the adopter headings above beca
   instruments.
 
   The product decision had already been made by measurement rather than by argument: none of 垂象, 實錄 or 校讎
-  appears in any shipped public item, crate name, manifest, `description` or adopter-facing document. They are
-  this repository's own vocabulary and were never a product question. Each is now stated with where it is,
+  is a crate name or a `description`, and none appears in any published crate's public surface — zero
+  occurrences across the six publishable crates' `///` and `//!` documentation, and one `//` comment inside
+  `tianheng`'s private `render` module. Where they do appear — that comment, `kanhe`'s manifest comments,
+  `shengmo`'s source, and this repository's own governance documents and this entry — it is commentary about
+  this repository's vocabulary rather than a name an adopter uses, which is why the naming was never a product
+  question. Each is now stated with where it is,
   which is what the earlier attempts got wrong — one location table was false three times out of three, and one
   retirement rested on a grep that never swept `.github/`, where `CODEOWNERS`' first line reads *"The amendment
   reaction"*. The set name 三司 goes with them; 司 keeps a definition in place, because the 潛移 paragraph's

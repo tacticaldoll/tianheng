@@ -178,9 +178,13 @@ amendment flow — and taking a name that already has a referent is the misnamin
 
 This paragraph replaced one reading *crate-or-convention as their nature dictates*, which
 answered nothing and was consulted three times. The three answers written for it were all
-withdrawn, each restating a law that was then only half reacted to. None of the three names
-reaches any shipped item, crate name, manifest or adopter-facing document — they are this
-repository's own vocabulary, and were never a product question.
+withdrawn, each restating a law that was then only half reacted to. None of the three is a
+crate name, and none reaches any published crate's public surface: measured, zero occurrences
+across the six publishable crates' `///` and `//!` documentation, and one `//` comment inside
+`tianheng`'s private `render` module. Where they do appear — that comment, `kanhe`'s manifest
+comments, `shengmo`'s source, and this repository's own governance documents and changelog — it
+is commentary about this repository's vocabulary rather than a name an adopter uses. So the
+naming was never a product question.
 
 ## Naming — narrative, with meaning in the SSOT
 
