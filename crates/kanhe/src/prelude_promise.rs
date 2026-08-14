@@ -20,6 +20,7 @@
 //! this repository's own drift law refuses — or a contract that cannot name its trait at all. So the check
 //! asks the question it can answer honestly: does the name appear where the compiler will see it.
 
+use crate::selection::{all_of, the_only};
 use std::collections::BTreeSet;
 
 /// What the check could not judge, kept distinct from what it found.
@@ -36,6 +37,16 @@ pub enum Promise {
     Unnamed(Vec<String>),
     /// An input could not be judged, with the reason an operator acts on.
     CannotJudge(String),
+}
+
+/// Why this reader could not read the promise, as opposed to a promise it read and disagreed with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Unreadable {
+    /// A promised member written in a form this reader does not read — a path, a rename, a nested group or a
+    /// glob — quoted as written.
+    Member(String),
+    /// Several `pub mod prelude {` markers, so which block carries the promise is decided by position.
+    SeveralPreludes(usize),
 }
 
 /// The names `pub mod prelude` re-exports, recognized by **position** rather than by a bare marker.
@@ -62,26 +73,50 @@ pub enum Promise {
 /// read as complete. One re-export could have silently emptied this check of most of its subject, in the file
 /// whose entire purpose is catching a promise that narrowed without anyone noticing. The special case is
 /// gone: a glob is a form this reader does not read, and it is refused like the rest.
-pub fn promised_members(lib_rs: &str) -> Result<BTreeSet<String>, String> {
-    let Some(module) = lib_rs.split_once("pub mod prelude {") else {
-        return Ok(BTreeSet::new());
+pub fn promised_members(lib_rs: &str) -> Result<BTreeSet<String>, Unreadable> {
+    // **Exactly one prelude block, or this reader does not know which one holds the promise.** The marker was
+    // taken with `split_once`, so a second occurrence — a nested `pub mod prelude`, or the literal inside a
+    // doc comment — silently decided the question by position. Unlike the re-export statements below, these
+    // are not unioned: two blocks are two different promises, and merging them would invent a third.
+    let Ok(module) = the_only(
+        "`pub mod prelude {` block",
+        all_of(lib_rs.split("pub mod prelude {").skip(1)),
+    ) else {
+        let count = lib_rs.split("pub mod prelude {").count() - 1;
+        if count == 0 {
+            return Ok(BTreeSet::new());
+        }
+        return Err(Unreadable::SeveralPreludes(count));
     };
-    let Some(block) = module.1.split_once("pub use super::{") else {
+
+    // **Every re-export statement in the block, not the first.** `split_once("pub use super::{")` read one,
+    // so a second statement's members were dropped from the promise and no external contract had to name
+    // them — the hole this file exists to close, in the same function whose own doc rejects the identical
+    // dependence-on-absence for the outside-the-module case.
+    //
+    // Read rather than refused, because a second statement is a form this reader **can** read: splitting the
+    // prelude across two `pub use super::{…}` is legal and ordinary, and refusing it would be a false
+    // refusal over a promise that is perfectly well stated.
+    let statements = all_of(module.split("pub use super::{").skip(1));
+    if statements.is_empty() {
         return Ok(BTreeSet::new());
-    };
-    let Some((list, _)) = block.1.split_once("};") else {
-        return Ok(BTreeSet::new());
-    };
+    }
+
     let mut members = BTreeSet::new();
-    for entry in list.split(',') {
-        let entry = entry.trim();
-        if entry.is_empty() {
-            continue;
+    for statement in statements {
+        let Some((list, _)) = statement.split_once("};") else {
+            return Ok(BTreeSet::new());
+        };
+        for entry in list.split(',') {
+            let entry = entry.trim();
+            if entry.is_empty() {
+                continue;
+            }
+            if !entry.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                return Err(Unreadable::Member(entry.to_string()));
+            }
+            members.insert(entry.to_string());
         }
-        if !entry.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-            return Err(entry.to_string());
-        }
-        members.insert(entry.to_string());
     }
     Ok(members)
 }
@@ -113,13 +148,20 @@ pub fn mentioned_identifiers(contract_rs: &str) -> BTreeSet<String> {
 pub fn judge(lib_rs: &str, contract_rs: &str) -> Promise {
     let promised = match promised_members(lib_rs) {
         Ok(promised) => promised,
-        Err(entry) => {
+        Err(Unreadable::Member(entry)) => {
             return Promise::CannotJudge(format!(
                 "the prelude promises `{entry}`, which this check cannot read as a member name. A promised \
                  member written as a path, a rename, a nested group or a glob is not a member this check may \
                  drop: \
                  dropping it narrows the promise silently, and a promise that shrinks without saying so is \
                  the failure this whole check exists to catch"
+            ));
+        }
+        Err(Unreadable::SeveralPreludes(count)) => {
+            return Promise::CannotJudge(format!(
+                "{count} `pub mod prelude {{` markers are present, so which block carries the promise is \
+                 decided by whichever comes first in the file. Two blocks are two promises and merging them \
+                 would invent a third, so this is reported rather than resolved"
             ));
         }
     };

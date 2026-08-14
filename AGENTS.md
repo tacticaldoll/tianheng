@@ -142,6 +142,45 @@ ask when a new check is written or a review names a corpus defect — and where 
 the compiler enforces it afterwards rather than this paragraph. `BACKLOG.md` carries it as the un-reacted-SHALL
 class requires.
 
+## A reader reads its whole subject — four shapes, and only three close by construction
+
+The dominant defect class this repository ships, by count: a reader whose input is narrower than the thing it
+claims to judge, reporting clean over a subject it never read. It stays correct for exactly as long as a second
+instance happens not to exist, so it is found by review rather than by running anything.
+
+**Name the four separately.** They have different remedies, and treating them as one class produces one tool
+and leaves the rest open — which is this very failure applied to its own repair.
+
+- **Lossy selection** — several candidates exist and one is taken. `split_once("pub use super::{")` read the
+  first of the prelude's re-export statements; `trim_end_matches("::*")` folded a glob's whole set into one
+  identifier. *Closes by construction:* make the candidates a value first, then answer **how many** with
+  `kanhe::selection::{all_of, the_only}`. The bug is never that the wrong answer was chosen — it is that no
+  choice was made, because `split_once`, `.next()` and `.first()` are reached for by habit.
+- **Lossy acceptance** — input the reader cannot understand is skipped rather than refused. `machinery_names`
+  `continue`d on a failed prefix strip and enumerated 0 of 8 members. *Closes by construction:* a return type
+  with a third state, exactly as `capability_subjects::Declared` already does — `Absent`, the value, and
+  `Unreadable`. This needs no new policy; it is a precedent to copy.
+- **Lossy accumulation** — everything is read and the accumulator cannot hold it. `unpinned_bare: bool` could
+  not answer *more than one* because two collapse to `true` as one does. *Closes by construction:* widen the
+  binding to what the domain admits. A flag cannot count.
+- **Corpus narrower than the claim** — the reader's input set is a subset of what the requirement governs.
+  `marks_a_bound` gated citation resolution so 5 of 75 were never validated. *Does not close by construction:*
+  only a set comparison in both directions catches it, and there is nothing to compare against until someone
+  states what the subject is.
+
+**The falsifier is uniform, and it is not "give it two".** Give it two **where the second is the candidate this
+reader would have dropped**, and assert that one appears in the result. Two identical inputs can be masked by
+deduplication; the dropped one cannot. The negative run then needs no separate fixture — restore the narrower
+read and the case fails naming the member that vanished.
+
+**Only the fourth shape is residue.** The first three are closed by construction where they occur, so filing
+them would register as unclosable something that is not. The fourth is filed in `BACKLOG.md` with its
+observation source inherited rather than invented: `inline-symbol-path-confinement` already declares that a
+**receiver-method read is not observed** (no type inference on the receiver), and `text.split_once(…)`,
+`iter.next()` and `vec.first()` are all receiver-method calls — so this repository's own dimensions cannot see
+the shape, by a bound that already has an owner and a pinning test. The vocabulary above binds only the call
+sites that use it, and nothing enumerates the readers that should; that residue belongs to the same entry.
+
 ## A census is produced, never typed
 
 A figure saying **how many members a set in this repository currently has** is produced by whatever enumerates

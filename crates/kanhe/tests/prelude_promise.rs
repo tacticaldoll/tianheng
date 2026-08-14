@@ -68,6 +68,66 @@ fn the_promise_is_the_prelude_block_and_not_a_sibling_reexport() {
     );
 }
 
+/// Every re-export statement in the block, with the second being the one the old reader dropped.
+///
+/// Two of the thing is not enough on its own: the falsifier has to be the candidate the reader would have
+/// discarded, asserted present in the result. Here that is `Second`, in a statement after the first — which
+/// `split_once("pub use super::{")` never reached, so every member of it became a promised member no external
+/// contract had to name.
+///
+/// `First` is the control: it holds whether the second statement is read at all apart from whether the first
+/// still is. The negative run needs no edit to this test — restore `split_once` in place of the split over
+/// every statement and `Second` disappears.
+///
+/// Read rather than refused, deliberately: a prelude split across two `pub use super::{…}` is legal and
+/// ordinary Rust, so refusing it would be a false refusal over a well-stated promise. Refusal is this
+/// module's answer for forms it *cannot* read — a path, a rename, a nested group, a glob — and a second
+/// statement of a form it already reads is not one of those.
+#[test]
+fn every_reexport_statement_in_the_prelude_block_is_read() {
+    let two = "pub mod prelude {\n    pub use super::{First};\n    pub use super::{Second};\n}\n";
+    let members = promised_members(two).expect("both members are plain identifiers");
+    assert!(
+        members.contains("First"),
+        "the first statement must still be read, got {members:?}"
+    );
+    assert!(
+        members.contains("Second"),
+        "the second statement is the one the first-only reader dropped; a member missing here is a promised \
+         member no contract must name: {members:?}"
+    );
+
+    // The sibling distinction still holds with several statements in the block — a re-export outside the
+    // module is not the promise, however many the block itself carries.
+    let with_sibling = "pub use super::{Outside};\n\npub mod prelude {\n    pub use super::{First};\n    \
+                        pub use super::{Second};\n}\n";
+    let members = promised_members(with_sibling).expect("all three are plain identifiers");
+    assert!(
+        !members.contains("Outside"),
+        "widening to every statement must not widen past the prelude block, got {members:?}"
+    );
+}
+
+/// Two `pub mod prelude {` markers are reported, not resolved by position.
+///
+/// The sibling of the statement case above, and the opposite answer: statements inside one block are unioned
+/// because a split promise is still one promise, while two blocks are two promises and picking either by file
+/// order would decide the question silently. The second marker here is inside a doc comment, which is the
+/// reachable form — a nested `pub mod prelude` is legal too, but a comment needs no code to appear.
+#[test]
+fn several_prelude_markers_are_reported_rather_than_decided_by_position() {
+    let two_blocks = "/// see `pub mod prelude {` for the promise\npub mod prelude {\n    \
+                      pub use super::{Real};\n}\n";
+    let verdict = judge(two_blocks, "fn contract(_: Real) {}");
+    match verdict {
+        Promise::CannotJudge(why) => assert!(
+            why.contains("2") && why.contains("decided by whichever comes first"),
+            "the refusal must say how many and why it is not resolved: {why}"
+        ),
+        other => panic!("two prelude markers must not be judged by position, got {other:?}"),
+    }
+}
+
 /// Each refusal direction, and each seen to refuse rather than assumed to.
 #[test]
 fn an_input_that_cannot_be_read_is_refused_rather_than_reported_clean() {
