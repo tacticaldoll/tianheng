@@ -20,7 +20,9 @@
 
 use kanhe::bound_register_parse as parse;
 
-use parse::{Bound, Citation, bounds_in, must, parse_bounds, search, workspace_root};
+use parse::{
+    Bound, Citation, bounds_in, must, parse_bounds, pinning_citations, search, workspace_root,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -127,16 +129,22 @@ fn every_pinning_citation_resolves_to_one_registered_test() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let bounds = parse_bounds(&root);
+    // **Every citation in the tracked specs, not only those under a bound heading.** The register's own
+    // corpus is bound-gated and rightly so — a citation under an ordinary scenario declares no bound — but
+    // resolution is a different question, and the marker means one thing in both places. Measured: 70 of 75
+    // were resolved here and 5 were parsed by nothing, and renaming one of those five left the whole gate
+    // suite green while its spec cited a function that no longer existed.
+    let citations = pinning_citations(&root);
     let harness = registered_tests(&root);
 
     let mut offences = Vec::new();
-    for bound in &bounds {
-        let Citation::PinnedBy(citations) = &bound.citation else {
-            continue;
-        };
-        for citation in citations {
-            let at = format!("{} ({}:{})", bound.id, bound.spec, bound.line);
+    {
+        for record in &citations {
+            let citation = &record.name;
+            let at = match &record.bound {
+                Some(id) => format!("{id} ({}:{})", record.spec, record.line),
+                None => format!("{}:{}", record.spec, record.line),
+            };
 
             // Syntax first, and by construction rather than by escaping: the name is used as a search key and a
             // path component, so a metacharacter or a `..` would resolve a citation for a test that does not
@@ -178,7 +186,7 @@ fn every_pinning_citation_resolves_to_one_registered_test() {
             if registering.is_empty() {
                 offences.push(format!(
                 "  {at} is PINNED-BY `{citation}`, which the test harness does not register — a renamed or \
-                 deleted test leaves the bound defended by nothing"
+                 deleted test leaves this citation naming nothing"
             ));
                 continue;
             }
