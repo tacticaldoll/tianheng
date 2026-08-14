@@ -492,6 +492,59 @@ fn a_repository_reached_through_a_non_canonical_path_still_resolves_its_members(
     );
 }
 
+/// A `[lib]` name written **before** `[package]` does not become the package's name.
+///
+/// The read took the first line whose trimmed start was `name` anywhere in the manifest, which is right only
+/// while `[package]` precedes every other name-bearing table — a premise TOML does not impose and nothing
+/// stated. The multiplicity is not hypothetical: `crates/tianheng/Cargo.toml` carries three `name` keys
+/// (`[package]`, `[lib]`, `[[bin]]`), and the old read was correct there by their order and by the three
+/// values agreeing.
+///
+/// The second name here is the one the old reader would have taken, and it is a name no lock entry has — so
+/// under the old read this fixture reports a missing lock entry for `wrong_name` while `xuanji`'s real entry
+/// goes unexamined.
+#[test]
+fn a_lib_name_before_the_package_table_is_not_the_package_name() {
+    let root = scratch("lib-name-first");
+    let fixture = build_fixture(&root, "lib-name-first", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("crates/xuanji/Cargo.toml"),
+        "[lib]
+name = \"wrong_name\"\n\n[package]\nname = \"xuanji\"\nversion.workspace = true\n\
+         edition = \"2024\"\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: order the tables the other way");
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "the `[package]` table names this crate whatever order the tables are written in; taking `[lib]`'s \
+         name leaves the real package unexamined. Got: {:?}",
+        verdict.err()
+    );
+}
+
+/// A `[package]` name this reader cannot read is a cannot-judge, not a package that is silently absent.
+///
+/// Single-quoted values are valid TOML and `first_string_value` reads only double quotes. Both readers that
+/// consumed the old `Option` treated `None` as *not a package*: one skipped the lock-version comparison for
+/// it, the other dropped it from the family every example pin is checked against. Neither said anything.
+#[test]
+fn a_package_name_this_reader_cannot_read_is_a_cannot_judge() {
+    let root = scratch("unreadable-name");
+    let fixture = build_fixture(&root, "unreadable-name", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("crates/xuanji/Cargo.toml"),
+        "[package]\nname = 'xuanji'\nversion.workspace = true\nedition = \"2024\"\n",
+    )
+    .expect("write");
+    commit(&fixture.repo, "chore: quote the name the other way");
+    refuse(&fixture.repo, Kind::CannotJudge, "cannot read");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A basename the enumerator does not resolve is not machinery, however much it looks like a gate.
 #[test]
 fn a_basename_the_enumerator_does_not_resolve_is_coherent() {

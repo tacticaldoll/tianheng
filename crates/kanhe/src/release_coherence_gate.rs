@@ -83,11 +83,64 @@ fn first_string_value(line: &str) -> Option<String> {
     Some(value.to_string())
 }
 
-fn package_name(manifest: &str) -> Option<String> {
-    manifest
-        .lines()
-        .find(|line| line.trim_start().starts_with("name") && line.contains('='))
-        .and_then(first_string_value)
+/// What a member manifest says its package is called, or why this reader could not tell.
+///
+/// Three states rather than an `Option`, because every consumer here treated `None` as *not a package* and
+/// skipped it — so a manifest this reader could not parse left its package's lock version unchecked and its
+/// examples' pins unexamined, with the function still returning `Ok`. The template is
+/// `capability_subjects::Declared`, applied to a second reader.
+enum PackageName {
+    /// The `[package]` table's `name`.
+    Named(String),
+    /// No `[package]` table, or no `name` key inside it.
+    Absent,
+    /// A `name` this reader cannot read: a value not in double quotes, or more than one key in `[package]`.
+    Unreadable(String),
+}
+
+/// The `[package]` table's `name`, and only that table's.
+///
+/// **Scoped to the table, not to the first match in the file.** The previous read took the first line whose
+/// trimmed start was `name` anywhere in the manifest, which is correct only while `[package]` precedes every
+/// other name-bearing table — a premise TOML does not impose and nothing here stated.
+/// `crates/tianheng/Cargo.toml` already carries three `name` keys (`[package]`, `[lib]`, `[[bin]]`), so the
+/// multiplicity is present in this tree and the read was right by the order they happen to appear in and by
+/// the three values happening to agree.
+///
+/// `the_only` is deliberately **not** used, though this is a class-A shape: it reports none and several as one
+/// refusal, and here they are different facts — no `[package]` table means this is not a package manifest,
+/// while two `name` keys in one means it is malformed. The consumer needs to tell them apart, so the
+/// three-state return carries the distinction instead.
+fn package_name(manifest: &str) -> PackageName {
+    let mut in_package = false;
+    let mut names: Vec<&str> = Vec::new();
+    for line in manifest.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            // `[package]` exactly. `[package.metadata.docs.rs]` is a different table and names no package.
+            in_package = trimmed == "[package]";
+            continue;
+        }
+        if !in_package {
+            continue;
+        }
+        // `name` then `=`, so `name_of` and any other `name…` key is not this key.
+        let Some(rest) = trimmed.strip_prefix("name") else {
+            continue;
+        };
+        let Some(value) = rest.trim_start().strip_prefix('=') else {
+            continue;
+        };
+        names.push(value.trim());
+    }
+    match names.len() {
+        0 => PackageName::Absent,
+        1 => match first_string_value(names[0]) {
+            Some(name) => PackageName::Named(name),
+            None => PackageName::Unreadable(names[0].to_string()),
+        },
+        several => PackageName::Unreadable(format!("{several} `name` keys in `[package]`")),
+    }
 }
 
 /// Which phase of the release ritual this repository is in.
@@ -217,7 +270,13 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     // --- the version-bearing surfaces ---
     let manifests = workspace_manifests(repo)?;
     for (path, text) in &manifests {
-        let name = package_name(text).unwrap_or_else(|| path.clone());
+        // Only the refusal message needs the name here — the inheritance read below works off the text
+        // whichever state this is, so an unnameable package is reported by path rather than skipped. The
+        // third consumer, and the only one for which that is the right answer.
+        let name = match package_name(text) {
+            PackageName::Named(name) => name,
+            PackageName::Absent | PackageName::Unreadable(_) => path.clone(),
+        };
         let inherits = text.lines().any(|line| {
             let line = line.trim();
             let line = line.split('#').next().unwrap_or(line).trim_end();
@@ -455,10 +514,28 @@ fn require_example_pins(
     manifests: &[(String, String)],
     version: &str,
 ) -> Result<(), Refusal> {
-    let family: Vec<String> = manifests
-        .iter()
-        .filter_map(|(_, text)| package_name(text))
-        .collect();
+    // A manifest whose package this reader cannot name is not a crate the examples may quietly skip: it would
+    // drop out of `family`, and every example pinning it would then pass the `!family.iter().any(…)` filter
+    // below without being examined. The two vacuity guards in this function are aggregate, so seven of eight
+    // crates parsing keeps them silent while the eighth goes unchecked — which is the partial case a vacuity
+    // guard is exactly unable to see.
+    let mut family: Vec<String> = Vec::new();
+    for (path, text) in manifests {
+        match package_name(text) {
+            PackageName::Named(name) => family.push(name),
+            PackageName::Absent => {
+                return Err(cannot_judge(format!(
+                    "{path} declares no `[package]` name, so whether an example pins it cannot be decided"
+                )));
+            }
+            PackageName::Unreadable(what) => {
+                return Err(cannot_judge(format!(
+                    "{path} declares a `[package]` name this check cannot read ({what}), so whether an \
+                     example pins it cannot be decided"
+                )));
+            }
+        }
+    }
     let minor = version
         .rsplit_once('.')
         .map(|(head, _)| head)
@@ -548,9 +625,22 @@ fn require_lock_versions(
             }
         }
     }
-    for (_, text) in manifests {
-        let Some(package) = package_name(text) else {
-            continue;
+    for (path, text) in manifests {
+        // Skipping an unnameable package left its `Cargo.lock` version unchecked while this function still
+        // returned `Ok` — and nothing above proves every entry parses, only that the list is non-empty.
+        let package = match package_name(text) {
+            PackageName::Named(name) => name,
+            PackageName::Absent => {
+                return Err(cannot_judge(format!(
+                    "{path} declares no `[package]` name, so its lock entry cannot be looked up"
+                )));
+            }
+            PackageName::Unreadable(what) => {
+                return Err(cannot_judge(format!(
+                    "{path} declares a `[package]` name this check cannot read ({what}), so its lock entry \
+                     cannot be looked up"
+                )));
+            }
         };
         match versions.get(&package) {
             None => {
