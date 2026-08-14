@@ -108,6 +108,21 @@ consumer for an undemonstrated deduplication.
   this entry adds that the bound did not have is an **instance**: it had never been observed costing
   anything, and now it has.
 
+- **`observation-bound-register`'s own spec asserts a command's outcome that nothing runs.** *Class:*
+  READY-PATCH. *Observed pressure:* the spec states `openspec validate --specs --strict` passes over every
+  spec; measured, two did not, and `git grep` found the command named only in the scenario asserting its
+  result — not in `.github/workflows/ci.yml`, not in `AGENTS.md`'s Definition of Done, not in any script.
+  `CHANGELOG.md`'s entry recording the measurement said this gap was closed by adding the command to both;
+  it was not — corrected in the same edit that added this entry. *Observation source:* `git grep -n
+  "openspec validate"` over the tracked tree at `HEAD`, one hit, in prose. *Current reaction or bound:*
+  none — the scenario's claim is unheld by anything that runs. *Risk:* a spec passing `openspec validate`
+  is a precondition the requirement corpus assumes and nothing defends; a spec that later fails validation
+  would surface only if someone runs the command by hand. *Promotion trigger:* wiring `openspec validate
+  --specs --strict` into `ci.yml` and the Definition of Done, pinned to a validator version — the fix this
+  entry's own prose already claimed once. *Version class:* patch — a CI/DoD addition, no published
+  surface. *Authority:* `openspec/specs/observation-bound-register/spec.md`'s scenario asserting the
+  command's result.
+
 - **The bounds-method reader anchors on a whole-line occurrence that is not the definition.** *Class:*
   READY-PATCH. *Observed pressure:* the reader requires the signature to occur exactly once and at a line
   start, and knows nothing of comments or literals. So where the definition has moved out of the inspected
@@ -489,6 +504,14 @@ consumer for an undemonstrated deduplication.
   reaction and named in the projection, and that is all. Trigger for giving exemptions their own register: a
   second instance. This is the first.
 
+  **Retired two commits later, in the same window.** `gate-shape-contract` itself — the capability this entry
+  closed with — was retired by `5abda1f`, once `scripts/` held nothing but `merge-pr.sh` and `publish.sh` and
+  the capability's own projection read `0 gates, 11 properties each`: nothing left to pair, nothing left to
+  enumerate. The pairing this entry describes, and every property and bound declared under it, no longer
+  exists at `HEAD`. Recorded here rather than deleted, since the shape this entry closed — a gate's own
+  convention, re-learned by breaking — is the part worth keeping; the capability that closed it is not the
+  part that lasted.
+
 - ~~**A swallowed subshell status was repaired nine times and could be written a tenth.**~~ **CLOSED** in the open
   window, and closed as a *shape* rather than as a tenth repair. `gate-shape-contract` gained an eleventh property:
   a gate may not consume an observation source through `< <(producer)` whose producer can fail.
@@ -518,6 +541,12 @@ consumer for an undemonstrated deduplication.
   heading untouched because the slug is its id. Also unreproduced: the `git ls-files | grep -q` SIGPIPE shape, which
   needs enough data to fill a pipe buffer; migrated with the class and recorded as migrated without a demonstrated
   negative run. Trigger for revisiting: a swallowed status found in a shape the property does not reach.
+
+  **Retired with the rest of `gate-shape-contract`, by `5abda1f`.** The eleventh property, the shared capture
+  library, and the `--ordinary-empty` per-call-site contract this entry describes were all part of the same
+  capability, deleted whole once it reached the vacuity its own bounds warned about. Nothing at `HEAD` still
+  asserts either failure direction measured above; a future instance of a swallowed subshell status would
+  need a new reaction, not a resurrection of this one.
 
 - ~~**The pre-publish gate had no specification, and its stated bound had the cause backwards.**~~ **CLOSED** in
   the open window as the `publish-source-integrity` capability. Found in the 0.5.0 pre-release review, and worth
@@ -1165,8 +1194,22 @@ that also holds a closed READY-PATCH record.
 - ~~**Five declared bounds have no pinning test.**~~ **CLOSED** in the
   open window. Closed by writing unit tests for all 5 remaining UNPINNED scenarios across `external-crate-confinement`, `runtime-origin-assertion`, and `semantic-dyn-trait-boundary`, bringing `unpinned` count to 0.
 
-- ~~**`crates/kanhe/tests/reference_integrity.rs` has no companion failure matrix.**~~ **CLOSED** in the
-  open window. Closed by adding `crates/kanhe/tests/reference_integrity.rs`, a throwaway git repository fixture proving every refusal (exit 1 and exit 2) and pass direction of `crates/kanhe/tests/reference_integrity.rs`.
+- **`crates/kanhe/tests/reference_integrity.rs` has no companion failure matrix.** *Class:* READY-PATCH,
+  reopened. Previously marked CLOSED here as of the open window, on the claim that
+  `crates/kanhe/tests/reference_integrity.rs` gained a throwaway git-repository fixture proving every
+  refusal (exit 1 and exit 2) and pass direction. **That closure named the wrong subject and does not hold
+  at `HEAD`.** The fixture described was the shell era's throwaway test companion to its
+  `reference_integrity` gate script, added by `f41b3b9` — both deleted by `64ed18c` when `scripts/`
+  migrated to Rust. *Observed pressure:* the current `crates/kanhe/tests/reference_integrity.rs` (1,300+ lines) has
+  no `git init` fixture, no exit-code matrix, and never uses `kanhe::refusal::Kind`; its `scratch()` helper
+  builds plain temp directories for unit-testing isolated parsing subroutines, not a fixture repository
+  driving the gate's own pass/violation/cannot-judge behaviour against itself. *Observation source:* direct
+  inspection of the file at `HEAD` (13 commits since the migration, none adding such a fixture) and `git
+  show f41b3b9`/`git show 64ed18c --stat` for the addition and deletion. *Current reaction or bound:* none.
+  *Promotion trigger:* the fix this entry previously claimed, actually done — a fixture-driven
+  exit-1/exit-2/pass matrix for the current Rust gate. *Version class:* tests only; no published surface.
+  *Authority:* this entry's own prior (incorrect) closure, which an adversarial contract review over
+  `v0.4.0..HEAD` refuted by reading the file rather than the claim.
 
 - ~~**Owner-label identity collapses across a cfg-collided self-type alias.**~~ **CLOSED** in the
   0.4.0 window, after an independent review re-derived it. Closed by refusing to name the ambiguity
