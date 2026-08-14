@@ -8,6 +8,9 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// This workspace's root, or `None` when the checks are running somewhere that is not it.
+///
+/// Every gate reading tracked files returns early on `None` rather than judging a tree it cannot find.
 pub fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
@@ -103,6 +106,10 @@ fn contains_words(text: &str, words: &str) -> bool {
     })
 }
 
+/// How a declared bound answers the question every bound must answer: what defends it.
+///
+/// The two legal forms are exclusive — a test pins it, or a tracker owns the gap. The remaining variants are
+/// the malformed answers, kept as values rather than as parse failures so the register can name which one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Citation {
     /// Every test cited. Several are legal: `observation-bound-model` declares that one bound may be
@@ -113,24 +120,34 @@ pub enum Citation {
     PinnedBy(Vec<String>),
     /// The whole remainder of the `UNPINNED` line, which names the tracker and says what it owns.
     Unpinned(String),
+    /// `UNPINNED` with nothing after it — the gap is admitted and no one owns it.
     UnpinnedWithoutTracker,
     /// More than one `UNPINNED`. Several trackers are several **owners of one gap**, which is two answers to
     /// the question a citation exists to answer — unlike several `PINNED-BY`, which are several defences of
     /// one bound. The declaration holds one tracker, so keeping one of them silently records a bound whose
     /// owner is whichever line happened to be last.
     RepeatedUnpinned,
+    /// Both forms at once. They are exclusive answers, so carrying both says the bound is defended and
+    /// admittedly not defended.
     Both,
+    /// Neither form. The scenario declares itself a bound and then says nothing about what holds it.
     Neither,
 }
 
+/// One observation bound as the tracked specs declare it.
 #[derive(Debug, Clone)]
 pub struct Bound {
+    /// The `<capability>/<scenario-slug>` id, derived by [`slug_of`] rather than written down.
     pub id: String,
+    /// The capability whose spec declares it.
     pub capability: String,
+    /// The spec file it was read from, for citing the declaration back to a reader.
     pub spec: String,
+    /// One-based line of the scenario heading, so a refusal can point at it.
     pub line: usize,
     /// The `THEN` bullet, continuation lines joined — what the projection quotes.
     pub body: String,
+    /// What the scenario says defends it, in whichever form it took — including the malformed ones.
     pub citation: Citation,
 }
 
@@ -265,6 +282,10 @@ pub fn bounds_in(capability: &str, spec: &str, text: &str) -> Vec<Bound> {
     bounds
 }
 
+/// Every bound declared across the tracked specs, in one enumeration.
+///
+/// One parse, shared by the register check and the census, because a census is produced by the check that
+/// enumerates the set — see this module's own doc for why a second parse is not an option.
 pub fn parse_bounds(root: &Path) -> Vec<Bound> {
     let mut bounds = Vec::new();
 
@@ -322,6 +343,27 @@ fn is_kebab(slug: &str) -> bool {
 /// This resolves nothing by itself — it reports what looks like a reference, and the caller holds those
 /// against the produced id set. Recognition and resolution are kept apart so the bare form cannot grow a
 /// second opinion about which ids exist.
+pub fn bare_references(capabilities: &BTreeSet<String>, text: &str) -> Vec<(usize, String)> {
+    let mut found = Vec::new();
+    for (index, line) in text.lines().enumerate() {
+        let mut rest = line;
+        while let Some(start) = rest.find(is_word_char) {
+            let tail = &rest[start..];
+            let end = tail.find(|c| !is_word_char(c)).unwrap_or(tail.len());
+            let (word, remainder) = tail.split_at(end);
+            rest = remainder;
+            let Some((capability, slug)) = word.split_once('/') else {
+                continue;
+            };
+            if slug.contains('/') || !capabilities.contains(capability) || !is_kebab(slug) {
+                continue;
+            }
+            found.push((index + 1, word.to_string()));
+        }
+    }
+    found
+}
+
 /// Whether a generated projection carries exactly the ids a derivation produced, naming every id only one
 /// side has.
 ///
@@ -355,25 +397,4 @@ pub fn projection_offences(derived: &BTreeSet<String>, projection: &str) -> Vec<
         }
     }
     offences
-}
-
-pub fn bare_references(capabilities: &BTreeSet<String>, text: &str) -> Vec<(usize, String)> {
-    let mut found = Vec::new();
-    for (index, line) in text.lines().enumerate() {
-        let mut rest = line;
-        while let Some(start) = rest.find(is_word_char) {
-            let tail = &rest[start..];
-            let end = tail.find(|c| !is_word_char(c)).unwrap_or(tail.len());
-            let (word, remainder) = tail.split_at(end);
-            rest = remainder;
-            let Some((capability, slug)) = word.split_once('/') else {
-                continue;
-            };
-            if slug.contains('/') || !capabilities.contains(capability) || !is_kebab(slug) {
-                continue;
-            }
-            found.push((index + 1, word.to_string()));
-        }
-    }
-    found
 }

@@ -194,6 +194,25 @@ consumer for an undemonstrated deduplication.
   target must be a tracked file with an executable mode*, which git records. Two corpora and two rules under one
   requirement, which is why it is filed rather than folded into the existing check.
 
+- **A private item's doc comment can be stolen by an item inserted above it, and nothing reacts.** *Class:*
+  WATCH. *Observed pressure:* two in-window instances of one class, where a function was inserted between
+  another's doc run and the function itself, so Rust attached the whole run to the newcomer and left the
+  original undocumented. `604a4e1` did it to `bare_references` (public); `52bf5db` did it to
+  `adopter_cited_machinery` (private), where the merged run reads as one doc opening with a paragraph about a
+  different function, and it survived nine days and a crate rename. *Observation source:* a review of the
+  window, then `#![deny(missing_docs)]` added to `kanhe` and `shengmo` — the last two crates without it —
+  which produced 45 and 2 undocumented public items respectively, all now documented. *Current reaction or
+  bound:* `deny(missing_docs)`, in every crate, catches the **public** half: any item inserted between a doc
+  and its item leaves the original with zero docs, whichever of the two carries a doc of its own — measured by
+  reproducing `604a4e1`'s exact shape, which the lint refuses naming the victim. It does not reach private
+  items. *Risk:* a doc describes the wrong function while reading as though it describes the right one, which
+  is worse than an absent doc; a reader is actively misled. *Promotion trigger:* a third instance, or any
+  instance on a private item after this entry. *Version class:* patch; both crates ship in no package.
+  *Authority:* none — this is a lint policy, not a Tianheng boundary or a repository check. *Shape:*
+  `clippy::missing_docs_in_private_items` is the only mechanism that closes the private half, and it demands a
+  doc on **every** private item, which is heavier than this repository's minimalism warrants for a class with
+  two instances. Filed rather than adopted, so the choice is recorded instead of rediscovered.
+
 - **`Bind a claim to its measurement` is a governing rule with no reaction.** *Class:* WATCH. *Observed
   pressure:* nine review rounds in the 0.5.0 window, whose largest class by far was *the corpus was wrong or
   its narrowing was undeclared* — nine of roughly twenty findings. The rule was written from that sweep and

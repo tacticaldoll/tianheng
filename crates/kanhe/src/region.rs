@@ -67,6 +67,7 @@ struct Fence {
 pub struct Source(String);
 
 impl Source {
+    /// Take a whole tracked text as the source a region will be cut from.
     pub fn of(text: impl Into<String>) -> Self {
         Self(text.into())
     }
@@ -121,6 +122,7 @@ pub struct Executed<'a> {
 }
 
 impl<'a> Executed<'a> {
+    /// The executed lines alone, for a judgement that has no use for where they sat.
     pub fn lines(&self) -> impl Iterator<Item = &'a str> + use<'a> {
         self.numbered_lines().map(|(_, line)| line)
     }
@@ -243,14 +245,17 @@ fn cut_tail_comment<'a>(line: &'a str, comment: &str) -> &'a str {
 pub struct Header<'a>(&'a str);
 
 impl<'a> Header<'a> {
+    /// The header verbatim.
     pub fn text(&self) -> &'a str {
         self.0
     }
 
+    /// Whether the header carries this text anywhere, line breaks included.
     pub fn contains(&self, needle: &str) -> bool {
         self.0.contains(needle)
     }
 
+    /// The header's lines.
     pub fn lines(&self) -> impl Iterator<Item = &'a str> + use<'a> {
         self.0.lines()
     }
@@ -260,6 +265,8 @@ impl<'a> Header<'a> {
 pub struct Prose<'a>(&'a str);
 
 impl<'a> Prose<'a> {
+    /// Whether any prose line carries this text. Per line, not across the whole span, because a match
+    /// straddling a line break would be text no reader sees as one phrase.
     pub fn contains(&self, needle: &str) -> bool {
         self.lines().any(|line| line.contains(needle))
     }

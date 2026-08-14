@@ -15,6 +15,10 @@ use std::process::Command;
 
 use crate::refusal::{Refusal, cannot_judge, violation};
 
+/// A command that reads no ambient git configuration.
+///
+/// A fixture inheriting the judged machine cannot demonstrate a refusal: the shape it builds is not the shape
+/// it named.
 pub fn hermetic(program: &str) -> Command {
     let mut command = Command::new(program);
     command
@@ -101,8 +105,13 @@ fn package_name(manifest: &str) -> Option<String> {
 /// Which phase of the release ritual this repository is in.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum State {
+    /// Between releases: an adopter-facing `[Unreleased]` entry is required, and lockfile drift is
+    /// tolerated as history.
     Development,
+    /// The workspace version has moved forward for release preparation, so the dated section, the internal
+    /// pins and every workspace entry in `Cargo.lock` must all name it.
     ReleaseReady,
+    /// The `release: X.Y.Z` commit itself, held to the same alignment as `ReleaseReady`.
     Snapshot,
 }
 
@@ -119,6 +128,9 @@ impl State {
 const COMPARE: &str = "https://github.com/tacticaldoll/tianheng/compare";
 const RELEASES: &str = "https://github.com/tacticaldoll/tianheng/releases/tag";
 
+/// Judge a repository's release state, returning what to report or why it cannot be judged.
+///
+/// Read-only: it never bumps, commits, tags, or publishes.
 pub fn judge(repo: &Path) -> Result<String, Refusal> {
     if !repo.join("Cargo.toml").is_file() {
         return Err(cannot_judge(format!(
@@ -637,17 +649,6 @@ fn section_shape(changelog: &str) -> Shape {
     shape
 }
 
-/// Every adopter-facing `[Unreleased]` entry naming this repository's own machinery.
-///
-/// A name is a **word** — a maximal run of path characters, required to equal a tracked path, a tracked
-/// basename, or an ancestor directory derived from the enumeration. That is exact matching of a lexical token,
-/// not substring matching: the run is delimited by the first character a path cannot hold. An earlier rule
-/// compared whole backticked spans and three shapes this document already uses passed clean — a span carrying
-/// a command, a padded double-backtick span, and an inline span wrapped across a source line.
-///
-/// Adopter-facing is the **complement** of `### Self-governance`, so a heading nobody anticipated reacts
-/// rather than being exempt by default. Dated sections are record: rewriting one to satisfy a rule written
-/// afterwards would falsify it.
 /// Every word that names this repository's own machinery: a tracked path under any package the workspace
 /// does not publish, or under `scripts/`, plus the ancestor directories that enumeration derives.
 ///
@@ -760,6 +761,17 @@ fn git_metadata(repo: &Path) -> Result<serde_json::Value, Refusal> {
         .map_err(|err| cannot_judge(format!("cargo metadata is not JSON: {err}")))
 }
 
+/// Every adopter-facing `[Unreleased]` entry naming this repository's own machinery.
+///
+/// A name is a **word** — a maximal run of path characters, required to equal a tracked path, a tracked
+/// basename, or an ancestor directory derived from the enumeration. That is exact matching of a lexical token,
+/// not substring matching: the run is delimited by the first character a path cannot hold. An earlier rule
+/// compared whole backticked spans and three shapes this document already uses passed clean — a span carrying
+/// a command, a padded double-backtick span, and an inline span wrapped across a source line.
+///
+/// Adopter-facing is the **complement** of `### Self-governance`, so a heading nobody anticipated reacts
+/// rather than being exempt by default. Dated sections are record: rewriting one to satisfy a rule written
+/// afterwards would falsify it.
 fn adopter_cited_machinery(repo: &Path, changelog: &str) -> Result<Vec<String>, Refusal> {
     // One enumeration. A second copy lived here for one commit, built for a census that was dropped, and
     // two constructions of one set is the drift this file's own doc-comment says it exists to prevent.
@@ -818,6 +830,7 @@ fn adopter_cited_machinery(repo: &Path, changelog: &str) -> Result<Vec<String>, 
 /// the shape it named — measured on the sibling publish gate, where ambient signing configuration turned an
 /// intentionally unsigned tag into a signed one.
 pub struct Fixture {
+    /// The fixture repository's working tree.
     pub repo: PathBuf,
 }
 
@@ -842,6 +855,7 @@ fn write(path: PathBuf, body: &str) {
     std::fs::write(path, body).expect("the fixture file is writable");
 }
 
+/// Write a workspace manifest, its members and a matching `Cargo.lock`, all naming one version.
 pub fn workspace_files(repo: &Path, version: &str) {
     write(
         repo.join("Cargo.toml"),
@@ -902,6 +916,8 @@ pub fn workspace_files(repo: &Path, version: &str) {
     );
 }
 
+/// Write a changelog in the development shape: an `[Unreleased]` section, carrying an adopter-facing item
+/// only when asked, so its absence can be refused.
 pub fn development_changelog(repo: &Path, version: &str, with_item: bool) {
     let item = if with_item {
         "- An adopter-facing change.\n\n"
@@ -916,6 +932,8 @@ pub fn development_changelog(repo: &Path, version: &str, with_item: bool) {
     );
 }
 
+/// Write a changelog in the release shape: a dated section for `version`, with the link block naming
+/// `previous`.
 pub fn release_changelog(repo: &Path, version: &str, previous: &str) {
     write(
         repo.join("CHANGELOG.md"),
@@ -962,6 +980,7 @@ pub fn build_fixture(root: &Path, name: &str, version: &str) -> Fixture {
     Fixture { repo }
 }
 
+/// Commit everything in the fixture under one subject, with hermetic identity and no signing.
 pub fn commit(repo: &Path, subject: &str) {
     run(repo, &["git", "add", "."]);
     run(repo, &["git", "commit", "-qm", subject]);

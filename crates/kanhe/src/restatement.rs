@@ -32,6 +32,10 @@ pub fn comment_block_copies_allowlist(block: &str, allowlist: &[String]) -> bool
         })
 }
 
+/// Refuse a contiguous line-comment block that restates the whole of a declared allowlist.
+///
+/// A copied allowlist is a second declaration that nothing holds to the first, so it drifts silently. The
+/// refusal names the source and the block's first line.
 pub fn assert_comment_block_does_not_copy_allowlist(
     source: &Path,
     block_start: usize,

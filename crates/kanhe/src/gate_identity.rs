@@ -11,7 +11,9 @@ use crate::region::Source;
 /// One `--exact` citation found in a script: the identifier, and the invocation it belongs to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Citation {
+    /// The script the citation was read from, so a refusal can name the file to fix.
     pub script: String,
+    /// The identifier given to `--exact`, exactly as written.
     pub identifier: String,
     /// The `--test <target>` of the same invocation, absent where the line names none.
     pub target: Option<String>,
