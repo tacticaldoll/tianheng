@@ -11,22 +11,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use crate::refusal::{Refusal, cannot_judge, violation};
 
-/// A command that reads no ambient git configuration.
-///
-/// A fixture inheriting the judged machine cannot demonstrate a refusal: the shape it builds is not the shape
-/// it named.
-pub fn hermetic(program: &str) -> Command {
-    let mut command = Command::new(program);
-    command
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_SYSTEM", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1");
-    command
-}
+pub use crate::hermetic_git::hermetic;
 
 fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     let out = hermetic("git")

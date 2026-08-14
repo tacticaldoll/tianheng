@@ -593,13 +593,19 @@ impl Observer for ModuleHeaderObserver {
 
     fn bounds(&self) -> Vec<BoundDecl> {
         // Computed, because WHICH bounds you have depends on what you were configured to read.
+        //
+        // Two names, and NEITHER is the raw subtree. The pin must be a Rust identifier, or it can never
+        // name a test; the id is read as `<capability>/<name>`, so a subtree like `src/bin` would put a
+        // second slash in it and read as a second capability. Derive both with your own rule —
+        // `examples/observer-participant/src/observer.rs` carries one, and is the runnable version of
+        // this block.
         self.subtrees.iter().map(|subtree| BoundDecl::pinned(
-            BoundId::new(format!("house-rules/a-file-nested-below-{subtree}-is-out-of-reach")),
+            BoundId::new(format!("house-rules/a-file-nested-below-{name}-is-out-of-reach")),
             format!("a `.rs` file in a directory below `{subtree}`"),
             Extent::OutOfReach {
                 because: format!("this participant lists `{subtree}` one level deep and never descends").into(),
             },
-            format!("a_file_nested_below_{subtree}_is_out_of_reach"),
+            format!("a_file_nested_below_{pin}_is_out_of_reach"),
         )).collect()
     }
 }
