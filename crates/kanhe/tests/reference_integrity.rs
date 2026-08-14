@@ -94,20 +94,36 @@ enum Prose {
 /// A format the repository holds and this array does not name is a failure, not a default — see
 /// [`every_tracked_format_is_classified`]. Defaulting either way is the trap: `None` would read a new format's
 /// prose as absent, and a marker would guess one it may not have.
-const FORMATS: [(&str, Prose); 13] = [
-    (".md", Prose::Whole),
-    (".rs", Prose::LineComment("//")),
-    (".toml", Prose::LineComment("#")),
-    (".sh", Prose::LineComment("#")),
-    (".yml", Prose::LineComment("#")),
-    (".yaml", Prose::LineComment("#")),
-    (".gitignore", Prose::LineComment("#")),
-    (".lock", Prose::LineComment("#")),
-    ("CODEOWNERS", Prose::LineComment("#")),
-    (".txt", Prose::None),
-    (".tsv", Prose::None),
-    (".gitkeep", Prose::None),
-    ("LICENSE", Prose::None),
+/// How a key is matched against a file name.
+///
+/// Written per entry rather than inferred, because the rule it replaces — `name == key || name.ends_with(key)`
+/// — conflated a whole name with an extension and could express no third shape at all. That is what pushed the
+/// licence family out of this array and into an early return in [`prose_of`], leaving a declaration that calls
+/// itself the one declaration while a classification lived somewhere else, and its entry here unreachable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Match {
+    /// The whole file name, for a format that has no extension.
+    Name,
+    /// The extension, dot included.
+    Extension,
+    /// A prefix, for a family whose members carry a variant *suffix* instead of an extension.
+    Prefix,
+}
+
+const FORMATS: [(&str, Match, Prose); 13] = [
+    (".md", Match::Extension, Prose::Whole),
+    (".rs", Match::Extension, Prose::LineComment("//")),
+    (".toml", Match::Extension, Prose::LineComment("#")),
+    (".sh", Match::Extension, Prose::LineComment("#")),
+    (".yml", Match::Extension, Prose::LineComment("#")),
+    (".yaml", Match::Extension, Prose::LineComment("#")),
+    (".gitignore", Match::Name, Prose::LineComment("#")),
+    (".lock", Match::Extension, Prose::LineComment("#")),
+    ("CODEOWNERS", Match::Name, Prose::LineComment("#")),
+    (".txt", Match::Extension, Prose::None),
+    (".tsv", Match::Extension, Prose::None),
+    (".gitkeep", Match::Name, Prose::None),
+    ("LICENSE", Match::Prefix, Prose::None),
 ];
 
 /// How `path`'s format carries prose, or `None` if this repository has never classified it.
@@ -117,13 +133,19 @@ const FORMATS: [(&str, Prose); 13] = [
 /// extension.
 fn prose_of(path: &str) -> Option<Prose> {
     let name = Path::new(path).file_name()?.to_str()?;
-    if name.starts_with("LICENSE") {
-        return Some(Prose::None);
-    }
     FORMATS
         .iter()
-        .find(|(key, _)| name == *key || name.ends_with(*key))
-        .map(|(_, prose)| *prose)
+        .find(|(key, how, _)| matches(name, key, *how))
+        .map(|(_, _, prose)| *prose)
+}
+
+/// Whether one key claims this file name, under the shape that key declares.
+fn matches(name: &str, key: &str, how: Match) -> bool {
+    match how {
+        Match::Name => name == key,
+        Match::Extension => name.ends_with(key),
+        Match::Prefix => name.starts_with(key),
+    }
 }
 
 fn is_inspected_source(path: &str) -> bool {
@@ -176,6 +198,86 @@ fn every_tracked_format_is_classified() {
          while every sweep here still reports clean",
         unclassified.len(),
         unclassified.into_iter().collect::<Vec<_>>().join(", ")
+    );
+}
+
+/// The direction the classification lacked: every declared entry is **exercised** by some tracked file.
+///
+/// `every_tracked_format_is_classified` runs one way — tracked file to entry — and a one-way check cannot see
+/// a member nothing reaches. Measured before this direction existed: `("LICENSE", …)` was unreachable, because
+/// an early return in `prose_of` classified every `LICENSE`-prefixed name before the array was consulted and
+/// no tracked name ends with `LICENSE` without starting with it. The array called itself the one declaration
+/// while one classification lived in two places, and the entry that proved it stood for a window without
+/// anything noticing.
+///
+/// A dead entry is not cosmetic here: it reads as coverage of a format, so the next reader adding that format
+/// finds it already declared and moves on.
+#[test]
+fn every_declared_format_is_exercised_by_a_tracked_file() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let all = tracked(&root);
+    assert!(
+        !all.is_empty(),
+        "no tracked path was enumerated, so this direction would hold over nothing"
+    );
+    let names: Vec<&str> = all
+        .iter()
+        .filter_map(|path| Path::new(path).file_name()?.to_str())
+        .collect();
+    let unexercised: Vec<&str> = FORMATS
+        .iter()
+        .filter(|(key, how, _)| !names.iter().any(|name| matches(name, key, *how)))
+        .map(|(key, _, _)| *key)
+        .collect();
+    assert!(
+        unexercised.is_empty(),
+        "`FORMATS` declares {} entr(y/ies) no tracked file reaches: {}\nDrop it, or move the classification \
+         that shadows it back into the array — a declaration nothing exercises reads as coverage while giving \
+         none",
+        unexercised.len(),
+        unexercised.join(", ")
+    );
+}
+
+/// **Exactly one** entry claims each tracked file, so `find`'s answer does not depend on the array's order.
+///
+/// The order-dependence was unstated and held only by no key being a suffix of another. Asserted over the real
+/// corpus rather than as a rule about keys, because the keys now carry three different match shapes and
+/// "no key is a suffix of another" does not describe a collision between a `Name` and a `Prefix`.
+#[test]
+fn no_tracked_file_is_claimed_by_two_declared_formats() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let all = tracked(&root);
+    assert!(
+        !all.is_empty(),
+        "no tracked path was enumerated, so this direction would hold over nothing"
+    );
+    let mut contested = Vec::new();
+    for path in &all {
+        let Some(name) = Path::new(path).file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let claimants: Vec<&str> = FORMATS
+            .iter()
+            .filter(|(key, how, _)| matches(name, key, *how))
+            .map(|(key, _, _)| *key)
+            .collect();
+        if claimants.len() > 1 {
+            contested.push(format!(
+                "  {path} is claimed by {}",
+                claimants.join(" and ")
+            ));
+        }
+    }
+    assert!(
+        contested.is_empty(),
+        "a file matches more than one `FORMATS` entry, so which prose rule applies is decided by the array's \
+         order:\n{}",
+        contested.join("\n")
     );
 }
 
