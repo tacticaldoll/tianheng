@@ -890,6 +890,21 @@ them.
 
 ### Self-governance
 
+- **Five entries above describe a mechanism this same window later deleted, and none of them says so.** An
+  adversarial contract review read every entry in this section — and the ones above it — against `HEAD`,
+  not against the commit that closed each one, and found: the projection content-assertion test that
+  caught `` `author\s:` `` lived in the shell era's bound-register companion test, deleted whole by
+  `64ed18c` along with the rest of `scripts/`; the
+  block-comment-delimiter stop and its dropped 12-line cap were the same shell fallback's logic, deleted
+  with it; the second **third floor** (a citation matching a block comment's line, not its comment state)
+  was superseded 33 minutes later by `68cd5dd2`, before this entry — or `HEAD` — ever carried it in this
+  form; the `gate-shape-contract` `1-versus-2` bound's three-site correction and its process-substitution
+  property both went with the whole capability, three and two days after each landed, in `8d44e77` and
+  `5abda1f` respectively. Each entry was true when written and none is wrong about what it once did — a
+  capability's retirement, unlike a rename, leaves no term for a grep to find, so nothing swept these when
+  the deleting commit landed in the same window. `AGENTS.md`'s vocabulary-sweep rule is widened to name
+  this case, since the sweep it already stated did not.
+
 - **A declared bound outlived the behaviour it described, and the register said so to anyone who consulted it.**
   The dimension list's false negative — *a dimension absent from the check's own list is not examined* — was
   closed days earlier when that list began being read from cargo and compared both ways. The scenario, the typed
@@ -1989,7 +2004,11 @@ no adopter runs. They are here rather than under the adopter headings above beca
 - **A spec asserted the outcome of a command nothing ran.** `observation-bound-register` states that
   `openspec validate --specs --strict` passes over every spec. Measured, two did not, and `git grep` found
   that command in the scenario asserting its result and nowhere else — not in CI, not in the Definition of
-  Done. It is now the one non-cargo gate in both, pinned to the validator version.
+  Done. **That gap is not yet closed**, corrected here rather than left for a later reader to re-measure:
+  `git grep -n "openspec validate"` over the tracked tree at `HEAD` still returns the one hit, in the
+  scenario's own prose, and nothing in `ci.yml`, `AGENTS.md`'s Definition of Done, or any script invokes
+  it. The spec's claim about the command's outcome is still asserted without ever running it; filed in
+  `BACKLOG.md` rather than restated here as done.
 
 - **Three judgements could report clean over something they did not read.** All three were reported by review,
   verified against the code, and one reproduced against a running git before anything was changed.
