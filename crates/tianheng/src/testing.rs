@@ -371,10 +371,26 @@ mod tests {
                     command.env_remove("BLESS");
                 }
             }
-            let status = command.status().unwrap();
+            // **The child must be seen to have run, not merely to have exited 0.** `libtest` exits 0 for a
+            // filter that selects nothing — measured, `--exact <unknown> --ignored` reports
+            // `0 passed; 92 filtered out` and succeeds — so a rename of this module or of the child, or
+            // removing its `#[ignore]`, would empty all eight rows and leave this matrix green having run
+            // nothing. These eight rows are the only coverage of whether `assert_projection_fresh` overwrites
+            // a tracked file across the BLESS spellings, which `COOKBOOK.md` and `README.md` advertise.
+            //
+            // Same remedy and same sentence as its two siblings: `require_one_pass` in both sanctioned
+            // wrappers, and `ran_exactly_one` in `pin_bites` — *a filter matching nothing exits 0 over
+            // nothing*.
+            let output = command.output().unwrap();
+            let log = String::from_utf8_lossy(&output.stdout);
             assert!(
-                status.success(),
-                "projection child failed for BLESS={bless:?}, mode={mode}"
+                output.status.success(),
+                "projection child failed for BLESS={bless:?}, mode={mode}:\n{log}"
+            );
+            assert!(
+                log.contains("test result: ok. 1 passed"),
+                "the projection child did not run for BLESS={bless:?}, mode={mode} — a filter matching \
+                 nothing exits 0 over nothing, so this row proved nothing:\n{log}"
             );
         }
     }
