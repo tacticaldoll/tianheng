@@ -13,9 +13,8 @@ use std::process::Command;
 /// and a bare `git tag` demanded a message. A fixture that inherits the judged machine cannot demonstrate a
 /// refusal, because the shape it builds is not the shape it named.
 ///
-/// **It does not make a command read no ambient configuration**, and a new fixture deciding how much
-/// isolation it needs should read this list rather than the sentence above it. Measured with exactly the
-/// environment this function sets:
+/// **It does not make a command read no ambient configuration.** A new fixture deciding how much isolation it
+/// needs should go by this measurement, taken with exactly the environment this function sets:
 ///
 /// | ambient source | closed here |
 /// |---|---|

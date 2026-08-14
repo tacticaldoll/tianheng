@@ -455,6 +455,43 @@ fn a_gate_named_in_any_word_form_is_a_violation() {
     }
 }
 
+/// The subject every other fixture could not carry: a repository reached by a path that is not canonical.
+///
+/// The live call site above passes `PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")`, which renders
+/// with its `..` components intact, while `cargo metadata` reports canonical paths. Deriving the member prefix
+/// from the caller's spelling made **all eight** members fail to resolve: machinery collapsed to the two
+/// `scripts/` files, `published` stayed empty, and two `continue`s meant nothing said so. Measured on this
+/// repository with one changelog entry naming a member's file — the pre-fix gate reported `48 passed`, the
+/// fixed one refuses.
+///
+/// Every fixture root is a clean absolute, which is exactly why the whole matrix stayed green over a corpus
+/// that contained no member at all. This row spells the same repository the way the live caller spells it.
+#[test]
+fn a_repository_reached_through_a_non_canonical_path_still_resolves_its_members() {
+    let root = scratch("non-canonical-root");
+    let fixture = build_fixture(&root, "non-canonical-root", "0.2.0");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    with_machinery(&fixture.repo);
+    unreleased_body(
+        &fixture.repo,
+        "### Fixed\n- A repair naming `crates/renamed-dir/tests/renamed_gate.rs`.",
+    );
+    commit(&fixture.repo, "docs: name a member's gate");
+
+    let indirect = fixture.repo.join("crates").join("..");
+    let verdict = judge(&indirect);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err(
+        "a member's file named in adopter-facing prose is machinery however the root is spelled",
+    );
+    assert!(
+        refusal.message.contains("renamed_gate.rs"),
+        "the refusal must name the member's file; collapsing to `scripts/` is the defect this row exists for: \
+         {}",
+        refusal.message
+    );
+}
+
 /// A basename the enumerator does not resolve is not machinery, however much it looks like a gate.
 #[test]
 fn a_basename_the_enumerator_does_not_resolve_is_coherent() {

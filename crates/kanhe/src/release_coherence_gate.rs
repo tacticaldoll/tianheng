@@ -656,8 +656,21 @@ fn section_shape(changelog: &str) -> Shape {
 /// same rule governs the ancestor directories the enumeration derives — `crates/` leads to both sides.
 fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
     let metadata = git_metadata(repo)?;
+    // **The prefix comes from cargo, not from the caller's path.** `manifest_path` is canonical, while the
+    // live call site passes `PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")`, which renders with its
+    // `..` components intact — so stripping `repo.display()` failed for **all eight** members, machinery
+    // collapsed to the two `scripts/` files, `published` stayed empty, and two `continue`s made it silent.
+    // `workspace_root` is cargo's own answer for the tree it just described, so the two strings cannot
+    // disagree about spelling.
+    let Some(root) = metadata["workspace_root"].as_str() else {
+        return Err(cannot_judge(
+            "cargo metadata reported no workspace_root, so no member directory can be resolved",
+        ));
+    };
+    let prefix = format!("{root}/");
     let mut machinery: Vec<String> = Vec::new();
     let mut published: BTreeSet<String> = BTreeSet::new();
+    let mut enumerated = 0usize;
     for package in metadata["packages"].as_array().into_iter().flatten() {
         // **The directory comes from the manifest, not from the package name.** Deriving it as
         // `crates/<name>/` was the residual location assumption inside a repair whose own thesis was
@@ -666,20 +679,26 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
         // source whose basenames then enter the machinery set and refuse honest adopter prose.
         // `cargo metadata` answers this exactly — `manifest_path` is the member's own `Cargo.toml`.
         let Some(manifest) = package["manifest_path"].as_str() else {
-            continue;
+            return Err(cannot_judge(
+                "a package in cargo metadata carries no manifest_path, so its directory cannot be resolved",
+            ));
         };
         let Some(directory) = manifest
-            .strip_prefix(&format!("{}/", repo.display()))
+            .strip_prefix(&prefix)
             .and_then(|rest| rest.strip_suffix("Cargo.toml"))
         else {
-            // A manifest outside the repository this gate is judging is not a member of it. Skipping is the
-            // only honest answer: enumerating it would attribute another tree's files to this one.
-            continue;
+            // `--no-deps` lists workspace members only, so every manifest sits under the root cargo reported
+            // alongside them. One that does not is this gate's two sources describing different trees, which
+            // is a fact to report rather than a member to skip — skipping is what kept the collapse silent.
+            return Err(cannot_judge(format!(
+                "member manifest {manifest} is not under the workspace root {root} cargo reported for it"
+            )));
         };
         let unpublished = package["publish"].as_array().is_some_and(|r| r.is_empty());
         let listing = git(repo, &["ls-files", directory])
             .map_err(|err| cannot_judge(format!("could not enumerate {directory}: {err}")))?;
         for path in listing.lines().filter(|l| !l.is_empty()) {
+            enumerated += 1;
             if unpublished {
                 machinery.push(path.to_string());
             } else {
@@ -694,6 +713,16 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
                 }
             }
         }
+    }
+    // Members resolved and enumerated nothing means the directories were resolved against a root this
+    // repository's git does not share — the same collapse by another route, and `scripts/` alone would still
+    // look like an answer.
+    if enumerated == 0 {
+        return Err(cannot_judge(format!(
+            "no tracked file was found for any of the {} workspace members under {root}, so the machinery set \
+             would be `scripts/` alone and this check would pass over its own subject",
+            metadata["packages"].as_array().map_or(0, Vec::len)
+        )));
     }
     let scripts = git(repo, &["ls-files", "scripts/"])
         .map_err(|err| cannot_judge(format!("could not enumerate scripts/: {err}")))?;
