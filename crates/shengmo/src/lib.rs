@@ -26,6 +26,7 @@
 //! The name is chosen to say that before a reader has to ask.
 
 #![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 pub mod bounds;
 pub mod law;

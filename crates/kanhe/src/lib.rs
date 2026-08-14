@@ -25,6 +25,7 @@
 //! - **`tests/`** — the repository checks: what runs against the real repository.
 
 #![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 pub mod bound_register_parse;
 pub mod bounds;

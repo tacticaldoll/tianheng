@@ -233,6 +233,10 @@ pub fn shell_dependency_boundary() -> Boundary {
     }
 }
 
+/// The dependency allowlist a shell boundary carries.
+///
+/// Panics if handed any other boundary: the selector above admits only a dependency-allowlist rule, so a
+/// different one reaching here means the two disagree, which is louder than returning an empty slice.
 pub fn shell_dependency_allowlist(boundary: &Boundary) -> &[String] {
     match boundary {
         Boundary::Crate(crate_boundary) => match crate_boundary.rule() {

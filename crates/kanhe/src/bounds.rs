@@ -5,6 +5,7 @@
 
 use tianheng::{BoundDecl, BoundId, Extent, FactGranularity, Owner, Reached};
 
+/// Every observation bound the Kanhe-owned repository checks declare.
 pub fn observation_bounds() -> Vec<BoundDecl> {
     vec![
         BoundDecl::unpinned(

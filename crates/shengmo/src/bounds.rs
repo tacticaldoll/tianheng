@@ -5,6 +5,7 @@
 
 use tianheng::{BoundDecl, BoundId, Extent, Owner, Reached};
 
+/// Every observation bound Shengmo's self-governance dogfood and declaration checks declare.
 pub fn observation_bounds() -> Vec<BoundDecl> {
     vec![
         // --- self-law-projection ---

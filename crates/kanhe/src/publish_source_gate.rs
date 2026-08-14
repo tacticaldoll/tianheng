@@ -641,8 +641,11 @@ fn check_novalidate(payload: &str, signature: &Path) -> bool {
 /// The caller owns the root and its cleanup, because a builder that also decided lifetime would make a
 /// caller's single guard two.
 pub struct Fixture {
+    /// The working tree a publish would run from.
     pub repo: PathBuf,
+    /// The bare remote `main` was pushed to.
     pub remote: PathBuf,
+    /// The signing key the annotated tag was made with.
     pub key: PathBuf,
 }
 
@@ -675,6 +678,10 @@ fn run(dir: &Path, program: &str, args: &[&str]) {
     );
 }
 
+/// Build a [`Fixture`] under `root`, in the shape a publish is allowed to run from.
+///
+/// Every step is hermetic: a fixture that inherited the machine's signing configuration once turned an
+/// intentionally unsigned tag into a signed one, which made a refusal impossible to demonstrate.
 pub fn build_fixture(root: &Path, name: &str, version: &str) -> Fixture {
     let repo = root.join(name);
     let remote = root.join(format!("{name}-origin.git"));
