@@ -8,3 +8,4 @@ mod capability_subjects;
 mod gate_identity;
 mod hermetic_git;
 mod restatement;
+mod selection;

@@ -213,6 +213,33 @@ consumer for an undemonstrated deduplication.
   doc on **every** private item, which is heavier than this repository's minimalism warrants for a class with
   two instances. Filed rather than adopted, so the choice is recorded instead of rediscovered.
 
+- **A reader's corpus can be narrower than the requirement it serves, and this repository's own dimensions
+  cannot see the shape.** *Class:* WATCH. *Observed pressure:* the dominant class of the 0.5.0 window. Live
+  instances repaired here: `marks_a_bound` gated pinning-citation resolution so 5 of 75 citations were never
+  validated; `machinery_names` enumerated 0 of 8 workspace members against its own subject; the root
+  manifest's `exclude` named one fixture root of two while `.gitignore` named both. *Observation source:* a
+  sweep of the window's findings, then the classification in `AGENTS.md`'s *A reader reads its whole subject*,
+  which separates four shapes and closes three of them by construction. **This entry counts only the fourth**
+  — corpus narrower than the claim. Lossy selection, lossy acceptance and lossy accumulation are closed where
+  they occur (`kanhe::selection`, `capability_subjects::Declared`, and widening the binding), so counting them
+  here would fire this trigger on instances that are already shut. *Current reaction or bound:* none, and it
+  is not available. `inline-symbol-path-confinement` declares that a **receiver-method read is not observed**
+  — no type inference on the receiver, pinned by `inline_receiver_method_read_is_a_bound` — and
+  `text.split_once(…)`, `iter.next()` and `vec.first()` are receiver-method calls, so the shape sits outside
+  the observation surface this repository ships. That is an existing declared bound with an owner, not a
+  rationale invented for this entry. *Risk:* a check reports clean over a subject it never read, which is the
+  one direction the Core Contract forbids, and it is invisible until a second instance exists. *Promotion
+  trigger:* a third live instance of the fourth shape after this entry. *Version class:* patch;
+  repository-internal. *Authority:* `repository-checks`. *Shape:* only a set comparison in both directions
+  catches it, and there is nothing to compare against until someone states what the subject is — which is why
+  the capability-subject declarations exist and why widening them is the likely form of any repair.
+
+  Two residues belong here rather than to the shapes that closed. `kanhe::selection` binds only the call sites
+  that use it, and nothing enumerates the readers that should. And `census::figures_in` returns the first
+  match on a line, so a line writing one census phrase twice with different figures would have only the first
+  compared — measured across all 64 tracked Markdown files, zero lines carry a phrase twice, so it is latent
+  and left rather than repaired alongside a live one.
+
 - **`Bind a claim to its measurement` is a governing rule with no reaction.** *Class:* WATCH. *Observed
   pressure:* nine review rounds in the 0.5.0 window, whose largest class by far was *the corpus was wrong or
   its narrowing was undeclared* — nine of roughly twenty findings. The rule was written from that sweep and
