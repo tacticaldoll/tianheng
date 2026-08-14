@@ -151,6 +151,16 @@ Where the enumeration itself cannot be produced — no `cargo`, or a workspace t
 reaction SHALL refuse as a **cannot-judge** rather than fall back silently, because a citation's test-ness is
 then undecided rather than decided weakly.
 
+**Every `PINNED-BY` citation SHALL be resolved wherever it appears, independent of whether its scenario
+heading also marks a bound.** The marker means one thing in both places — *this test is the evidence* — and a
+renamed test leaves an ordinary scenario citing nothing exactly as silently as it would a bound. Measured: the
+tracked specs held 75 citations, of which 70 sat under bound headings and were resolved while 5 under ordinary
+scenario headings were parsed by nothing; renaming one of the five left the whole gate suite green with a spec
+citing a function that no longer existed. The register's own corpus stays bound-gated, because a citation
+under an ordinary scenario declares no bound and admitting it would invent one — it is resolution, not
+declaration, that follows the marker rather than the heading. This is the same rule the reference direction
+below already states for its own marker.
+
 The reaction SHALL verify that each `PINNED-BY` name resolves to exactly one Rust function **definition**
 under `crates/`. Resolving to none SHALL fail: a test that was renamed or deleted leaves a citation that reads
 as coverage while defending nothing. Resolving to more than one SHALL also fail: a name defined twice makes

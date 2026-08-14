@@ -282,6 +282,77 @@ pub fn bounds_in(capability: &str, spec: &str, text: &str) -> Vec<Bound> {
     bounds
 }
 
+/// One `PINNED-BY` citation, wherever in the tracked specs it was written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PinningCitation {
+    /// The spec file it was read from.
+    pub spec: String,
+    /// One-based line of the citation itself, so a refusal points at the line to fix.
+    pub line: usize,
+    /// The cited test name, backticks stripped, exactly as written.
+    pub name: String,
+    /// The bound this citation defends, where its scenario declares one. `None` for a citation under an
+    /// ordinary scenario, which cites evidence without declaring a bound.
+    pub bound: Option<String>,
+}
+
+/// Every declaration-form `PINNED-BY` citation in the tracked specs, **wherever it appears**.
+///
+/// The register reads citations only under a heading [`marks_a_bound`] accepts. That is the right corpus for
+/// the register — a citation under an ordinary scenario declares no bound, and admitting it would invent one —
+/// and the wrong corpus for **resolution**. The marker means one thing in both places: *this test is the
+/// evidence*. A renamed or deleted test leaves an ordinary scenario citing nothing exactly as silently as it
+/// would a bound, and the reader has no way to tell which sense a given line was written in.
+///
+/// Measured: 70 of the 75 citations in the tracked specs sat under bound headings and were resolved, while 5
+/// under ordinary scenario headings were parsed by nothing — renaming one of the five left the entire gate
+/// suite green with the spec citing a function that no longer existed.
+///
+/// `observation-bound-register` already states this rule for the sibling marker: a reference is resolved
+/// wherever it appears, independent of whether its line also states a bound. This is that rule, for this one.
+pub fn pinning_citations(root: &Path) -> Vec<PinningCitation> {
+    let mut found = Vec::new();
+
+    for (capability, spec) in tracked_specs(root) {
+        let text = std::fs::read_to_string(root.join(&spec)).unwrap_or_else(|err| {
+            panic!(
+                "could not read the citations from {spec}: {err} — a spec this check cannot parse leaves \
+                 them unresolved rather than resolved"
+            )
+        });
+        let mut bound: Option<String> = None;
+        for (index, raw) in text.lines().enumerate() {
+            let trimmed = raw.trim();
+            if let Some(heading) = raw.strip_prefix("#### Scenario:") {
+                let heading = heading.trim();
+                bound =
+                    marks_a_bound(heading).then(|| format!("{capability}/{}", slug_of(heading)));
+                continue;
+            }
+            // Any other heading ends the scenario, so a citation below it belongs to no scenario at all.
+            if trimmed.starts_with("### ") || trimmed.starts_with("## ") {
+                bound = None;
+                continue;
+            }
+            if let Some(rest) = trimmed.strip_prefix("- **PINNED-BY** ") {
+                found.push(PinningCitation {
+                    spec: spec.clone(),
+                    line: index + 1,
+                    name: rest.trim().trim_matches('`').to_string(),
+                    bound: bound.clone(),
+                });
+            }
+        }
+    }
+
+    assert!(
+        !found.is_empty(),
+        "parsed 0 pinning citations across the tracked specs — the declaration form changed, so this check \
+         cannot judge rather than reporting every citation resolved"
+    );
+    found
+}
+
 /// Every bound declared across the tracked specs, in one enumeration.
 ///
 /// One parse, shared by the register check and the census, because a census is produced by the check that
