@@ -1,4 +1,39 @@
-use crate::bound_register_parse::{bare_references, marks_a_bound};
+use crate::bound_register_parse::{bare_references, marks_a_bound, projection_offences};
+use std::collections::BTreeSet;
+
+/// What the model gate's comparison catches, as a case rather than as a claim.
+///
+/// The spec used to require the slug rule to be implemented twice, reasoning that one shared rule would
+/// collapse the comparison to `f() == f()`. That reasoning was measured and did not hold, because the
+/// comparison is a derived set against a **tracked file**. This holds the property that argument was trying to
+/// protect, and it holds it however many implementations the slug rule has — which is why it replaces the
+/// requirement rather than restating it.
+#[test]
+fn a_projection_disagreeing_with_the_derived_set_names_the_id_on_either_side() {
+    let derived: BTreeSet<String> = ["a/one", "b/two"].iter().map(|id| id.to_string()).collect();
+
+    let complete = "# heading\n\n### `a/one`\n\ntext\n\n### `b/two`\n";
+    assert!(
+        projection_offences(&derived, complete).is_empty(),
+        "a projection carrying exactly the derived ids must raise nothing"
+    );
+
+    let stale = "# heading\n\n### `a/one`\n";
+    let missing = projection_offences(&derived, stale);
+    assert_eq!(missing.len(), 1, "expected one offence, got {missing:?}");
+    assert!(
+        missing[0].contains("b/two") && missing[0].contains("absent from the projection"),
+        "a stale projection must name the id it lacks, got {missing:?}"
+    );
+
+    let invented = "### `a/one`\n### `b/two`\n### `c/three`\n";
+    let extra = projection_offences(&derived, invented);
+    assert_eq!(extra.len(), 1, "expected one offence, got {extra:?}");
+    assert!(
+        extra[0].contains("c/three") && extra[0].contains("derived from no spec"),
+        "an id no spec derives must be named, got {extra:?}"
+    );
+}
 
 #[test]
 fn bound_markers_are_bare_singular_word_sequences() {
