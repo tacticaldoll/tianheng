@@ -6,4 +6,5 @@
 mod bound_register_parse;
 mod capability_subjects;
 mod gate_identity;
+mod hermetic_git;
 mod restatement;

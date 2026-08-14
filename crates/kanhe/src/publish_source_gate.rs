@@ -649,20 +649,7 @@ pub struct Fixture {
     pub key: PathBuf,
 }
 
-/// Every fixture command runs **hermetically**.
-///
-/// Measured rather than assumed: without this the fixture inherited this repository's own signing
-/// configuration, so `git tag -a` produced a genuinely signed tag where the fixture wanted an unsigned one,
-/// and a bare `git tag` demanded a message. A fixture that inherits the judged machine cannot demonstrate a
-/// refusal, because the shape it builds is not the shape it named.
-pub fn hermetic(program: &str) -> Command {
-    let mut command = Command::new(program);
-    command
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_SYSTEM", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1");
-    command
-}
+pub use crate::hermetic_git::hermetic;
 
 fn run(dir: &Path, program: &str, args: &[&str]) {
     let out = hermetic(program)
