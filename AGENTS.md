@@ -290,6 +290,24 @@ syscall sequence), and where a test genuinely cannot reach it, say so in the PR 
 evidence stands in its place instead of leaving the reader to assume a green suite covered it. A
 test kept for the contract rather than the change earns a comment saying which it is.
 
+**A negative run proves nothing unless it moved only the thing under test.** Three ways one reads as
+decisive and is not, each measured in this repository rather than imagined:
+
+- **Observed at the wrong grain.** Three sweeps were perturbed by making a tracked file unreadable, and two
+  of the three appeared to refuse *before* their fix — a **sibling** direction in the same test binary was
+  failing. Name the direction (`-- --exact <fn>`), never the target, or the binary's colour is attributed to
+  whichever direction you had in mind.
+- **The subject was outside the reader's own corpus.** The same perturbation said nothing about a sweep whose
+  corpus is line-comment formats by construction: the Markdown file chosen was excluded before any of its
+  logic ran, so it passed for a reason unrelated to the change. The subject has to be something that reader
+  would actually have read.
+- **Both sides were perturbed.** Renaming a cited function together with its citation leaves the two
+  matching, so the run is green for exactly the reason it was green before. Move one side only.
+
+Each of these produces a green or a red that *feels* like evidence. The question that separates them is not
+"did it change colour" but **"what else could have produced that colour"** — and answering it costs one
+command, against a repair that would otherwise ship believing it was measured.
+
 A vocabulary- or identity-level breaking change additionally requires grepping every touched spec
 and doc for the retired term across its *whole* file, not only the new diff: sync bolting on a
 correctly-worded requirement while the same file's older prose still names the retired shape is
