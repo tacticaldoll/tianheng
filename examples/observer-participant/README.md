@@ -30,6 +30,14 @@ with the id, the shape, the reason and the pin all built by `format!` at the mom
 bounds it has depends on what it was told to read. `BoundId`'s owned-or-borrowed form exists for exactly this,
 and nothing inside the family exercises it — every family declaration is a literal.
 
+**A computed id needs two forms, and the type enforces neither.** A multi-segment subtree — `src/bin` — put a
+second slash into the id, so `house-rules/a-file-nested-below-src/bin-is-out-of-reach` read to a human as a
+second capability separator. The pin beside it was already sanitised into a Rust identifier, and the id was
+not, in the same expression. Both are derived now: the pin with underscores, the id with the shape this
+family's own headings take. Nothing catches this for you — `BoundId` validates no form, and the reaction that
+names a malformed one audits *this family's* specs, not yours. It is a convention because it reads; a
+participant that audits its own bounds defines what its own accounting needs.
+
 **And it declares more than one *extent*.** One bound is a shape it never reads: it lists a subtree one level deep
 and never descends, so a nested module file is out of reach. The other is a shape it reads and judges **too
 harshly** — the rule tests a file's first line, so a real module header sitting below a licence comment reads as

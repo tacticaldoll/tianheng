@@ -32,9 +32,18 @@ use std::borrow::Cow;
 /// way to produce. The slug is the declaring scenario's heading, lowercased, with each run of non-alphanumerics
 /// collapsed to one hyphen and the ends trimmed.
 ///
-/// The form is **not** validated here. A malformed id simply matches no declared scenario, and the reaction
-/// holding the two sets equal names it — one check rather than two that could disagree about what is well
-/// formed.
+/// The form is **not** validated here, and what catches a malformed one depends on who is declaring.
+///
+/// This family audits its own bounds: `observation-bound-model` requires a reaction holding the ids declared
+/// in **`openspec/specs/*/spec.md`** equal to the typed declarations, and a malformed id matches no scenario
+/// there, so that reaction names it. That is one repository's accounting discipline, and the check enforcing
+/// it ships in no package.
+///
+/// **A third party inherits the convention, not the reaction.** The protocol asks a participant to declare
+/// what it does not observe and to say what defends each bound; it does not ask the id to index anything, and
+/// nothing here will tell an implementor their id resolves nowhere. Where a repository audits its own bounds,
+/// that repository's accounting defines the form its ids must take — the `<capability>/<slug>` shape above is
+/// this family's, offered because it reads well to a human, not required of anyone.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BoundId(Cow<'static, str>);
 

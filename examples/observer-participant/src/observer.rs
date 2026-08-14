@@ -158,11 +158,37 @@ impl Observer for ModuleHeaderObserver {
         self.subtrees
             .iter()
             .flat_map(|subtree| {
-                let slug = subtree.replace(['/', '-', '.'], "_");
+                // Two names, two forms, and neither is the raw subtree. The **pin** is a Rust identifier,
+                // so separators become underscores. The **id** is read by a human as
+                // `<capability>/<name>`, so a second slash in it would read as a second capability
+                // separator — `house-rules/a-file-nested-below-src/bin-…` parses wrongly to an eye. The id
+                // takes the same shape this family's own bound headings take: non-alphanumeric runs collapsed
+                // to a single hyphen.
+                //
+                // Nothing enforces this on you. `BoundId` validates no form, and the reaction that names a
+                // malformed one audits *this family's* specs, not yours. It is a convention because it reads,
+                // and a participant that audits its own bounds defines the form its own accounting needs.
+                let pin = subtree.replace(['/', '-', '.'], "_");
+                let name: String = {
+                    let mut out = String::new();
+                    let mut gap = false;
+                    for ch in subtree.chars() {
+                        if ch.is_ascii_alphanumeric() {
+                            if gap && !out.is_empty() {
+                                out.push('-');
+                            }
+                            gap = false;
+                            out.push(ch.to_ascii_lowercase());
+                        } else {
+                            gap = true;
+                        }
+                    }
+                    out
+                };
                 [
                     BoundDecl::pinned(
                         BoundId::new(format!(
-                            "house-rules/a-file-nested-below-{subtree}-is-out-of-reach"
+                            "house-rules/a-file-nested-below-{name}-is-out-of-reach"
                         )),
                         format!("a `.rs` file in a directory below `{subtree}`"),
                         Extent::OutOfReach {
@@ -172,7 +198,7 @@ impl Observer for ModuleHeaderObserver {
                             )
                             .into(),
                         },
-                        format!("a_file_nested_below_{slug}_is_out_of_reach"),
+                        format!("a_file_nested_below_{pin}_is_out_of_reach"),
                     ),
                     // The second extent, and the one that makes this example about the bound MODEL rather than
                     // about the call that declares a bound. The rule reads a file's FIRST line, so a real module
@@ -184,7 +210,7 @@ impl Observer for ModuleHeaderObserver {
                     // the rule's wording saying something other than what the code does.
                     BoundDecl::pinned(
                         BoundId::new(format!(
-                            "house-rules/a-header-below-a-leading-comment-in-{subtree}-over-reacts"
+                            "house-rules/a-header-below-a-leading-comment-in-{name}-over-reacts"
                         )),
                         format!(
                             "a `.rs` file under `{subtree}` whose `//!` header sits below a leading comment"
@@ -197,7 +223,7 @@ impl Observer for ModuleHeaderObserver {
                             )
                             .into(),
                         }),
-                        format!("a_header_below_a_leading_comment_in_{slug}_over_reacts"),
+                        format!("a_header_below_a_leading_comment_in_{pin}_over_reacts"),
                     ),
                 ]
             })

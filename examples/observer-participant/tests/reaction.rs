@@ -98,8 +98,8 @@ fn the_declared_bounds_are_built_from_the_configuration() {
         vec![
             "house-rules/a-file-nested-below-src-is-out-of-reach".to_string(),
             "house-rules/a-header-below-a-leading-comment-in-src-over-reacts".to_string(),
-            "house-rules/a-file-nested-below-src/bin-is-out-of-reach".to_string(),
-            "house-rules/a-header-below-a-leading-comment-in-src/bin-over-reacts".to_string(),
+            "house-rules/a-file-nested-below-src-bin-is-out-of-reach".to_string(),
+            "house-rules/a-header-below-a-leading-comment-in-src-bin-over-reacts".to_string(),
         ],
         "one bound per extent per governed subtree, each named after it"
     );
