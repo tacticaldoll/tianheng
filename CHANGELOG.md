@@ -302,7 +302,21 @@ them.
 
 ### Changed
 
-- **BREAKING** — **a clean verdict now carries the subject it was reached over.** `Outcome::Clean` gained a
+- **A Markdown boundary heading now names the boundary, not one field of it.** `tianheng list --format
+  markdown` rendered each boundary as ``### `{target}` ``. For a crate boundary the target is the crate name
+  and is unique; for a module, semantic, or runtime boundary it is the module path alone, and `.module("crate")`
+  is the ordinary subtree-wide form — so every such boundary rendered the identical ``### `crate` ``, with the
+  crate that told them apart three lines lower. In this repository's own projection that was 5 of 13 headings,
+  four of them consecutive, three with bodies differing only by crate name. Headings are now
+  ``### `{crate}::{module}` ({kind})``, and ``### `{crate}` ({kind})`` where a boundary has no crate field.
+
+  Adopters rendering the Markdown projection will see every heading change, including crate boundaries, which
+  gain their kind. That is deliberate rather than incidental: kind is rendered as **data**, never as a `match`
+  arm, so a boundary kind added later is identified without the renderer being touched — the shape that
+  produced this defect was a heading derived from a subset of what distinguishes a boundary. The subset is now
+  as wide as construction can make it, and what construction cannot close — two boundaries alike in crate,
+  module and kind but differing in rule — is held by `markdown_headings_are_pairwise_distinct`, over the
+  rendered output rather than over an identity function, because it is the rendering that collapses.
   `Subject`: what the observation was asked to enforce, and how much of its own corpus it reached.
   `Subject::of` refuses the one combination that is a lie — *declared something, reached nothing* — so a
   participant can no longer report a sound workspace over an observation that never happened. Reaching nothing

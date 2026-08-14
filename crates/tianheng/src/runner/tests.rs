@@ -1313,8 +1313,54 @@ fn markdown_reasonless_boundary_has_no_blockquote_or_orphan_blank_line() {
     let md = constitution_markdown(&c);
     assert!(!md.contains("\n> "), "no blockquote when no reason:\n{md}");
     assert!(
-        md.contains("### `core`\n- **rule**"),
+        md.contains("### `core` (crate)\n- **rule**"),
         "heading immediately followed by the rule bullet:\n{md}"
+    );
+}
+
+/// No two boundaries render the same heading — the property the heading's shape narrows but cannot close.
+///
+/// The subject is the collision that was live: `.module("crate")` is the ordinary subtree-wide form, so the
+/// module path alone repeats across crates, and one crate can carry a module boundary and a semantic one over
+/// the same module. Both pairs are constructed here rather than waited for, so this holds whatever the
+/// declared law happens to contain.
+///
+/// Asserted over the **rendered** projection, not over an identity function, because it is the rendering that
+/// a reader and an adopter see — an identity that distinguishes two boundaries while the heading collapses
+/// them is exactly the defect this exists for.
+#[test]
+fn markdown_headings_are_pairwise_distinct() {
+    let c = Constitution::new("t")
+        .boundary(
+            CrateBoundary::crate_("alpha")
+                .deny_external_dependencies()
+                .because("a crate boundary"),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("alpha")
+                .module("crate")
+                .must_not_call_inline("std::time")
+                .because("a module boundary over the whole of alpha"),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("beta")
+                .module("crate")
+                .must_not_call_inline("std::time")
+                .because("the same module path in a different crate"),
+        );
+
+    let md = constitution_markdown(&c);
+    let headings: Vec<&str> = md.lines().filter(|line| line.starts_with("### ")).collect();
+    assert_eq!(
+        headings.len(),
+        3,
+        "every boundary must render a heading:\n{md}"
+    );
+    let distinct: std::collections::BTreeSet<&&str> = headings.iter().collect();
+    assert_eq!(
+        distinct.len(),
+        headings.len(),
+        "two boundaries render one heading, so a reader sees one where two exist: {headings:?}\n{md}"
     );
 }
 
