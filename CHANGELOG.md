@@ -902,6 +902,18 @@ them.
 
 ### Self-governance
 
+- **Two declared residues over the same class were cross-referenced instead of left as two separate problems
+  for a future reader to reconcile.** The bounds-method reader's whole-line-copy stated bound and
+  `kanhe::region`'s `Executed` abstraction both declare the identical gap for the identical reason — a block
+  comment and a string literal both need nested-span lexing this tree has "defeated repeatedly," which
+  neither closes. The citation was one-directional (`region.rs` already pointed at the reader's bound);
+  `observer-protocol`'s spec now points back. Also recorded, checked against the real corpus rather than
+  argued abstractly: the "require the anchor preceded by `impl Observer for`" candidate closure was measured
+  against the three real dimension files and refuted as literally stated (the real definitions sit several
+  lines and one sibling method below their `impl` line), and a looser scope-containment version only raises
+  the bar rather than closing the class. If this is ever closed, it needs one shared nested-span lexer
+  serving both sites, not a point patch to either.
+
 - **`openspec validate --specs --strict` now runs in CI and the Definition of Done, instead of only being
   claimed by a spec's own scenario.** `observation-bound-register/spec.md` states this command passes over
   every spec; it was never wired into `.github/workflows/ci.yml`, `AGENTS.md`'s Definition of Done, or any

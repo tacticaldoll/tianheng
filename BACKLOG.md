@@ -103,12 +103,29 @@ consumer for an undemonstrated deduplication.
   literal is not a comment — so the register's rejection of comment-delimiter lexing is not the reason here,
   and citing it was wrong. This reader's corpus is the three files `DIMENSIONS` names, 35, 48 and 43 lines,
   none carrying a string literal with a comment delimiter, so the register's measurement does not transfer in
-  either direction. Two candidate closures, neither adopted: require the anchor to be preceded by an
-  `impl Observer for` line, which refuses both reproduced perturbations, needs no lexing, and declines strictly
-  more — this reader's declared error direction; or stop reading a file the dimension table names and read the
-  definition the compiler resolves, which is a different instrument than any textual condition tried here. The
-  first is a further narrowing, and every textual narrowing of this recognizer's retired sibling was defeated,
-  which is why it is recorded for the next author to weigh rather than applied inside a closing review.
+  either direction. Two candidate closures, **neither adopted, and neither actually closes the class** —
+  checked against the real corpus rather than left as an abstract choice. Requiring the anchor to be preceded
+  by an `impl Observer for` line was measured against the three real files and refuted as stated: every real
+  `fn bounds(&self)` sits several lines and one sibling method below its `impl Observer for` line (a doc
+  comment and `fn observe` come between them), so a literal adjacency rule would refuse the real definitions
+  too. A looser scope-containment version (nested inside *some* `impl Observer for … { … }` block, not
+  necessarily adjacent) survives that check, but only raises the bar rather than closing the class: a
+  perturbation that wraps the *whole* fake `impl Observer for` block — not just the `fn bounds` line — inside
+  the same comment or string would still be accepted, because a scope tracker blind to comments and literals
+  reads a fake `impl` line inside a comment exactly as it reads a real one. The other candidate — reading the
+  definition the compiler resolves rather than a textual condition — needs real Rust parsing, which `kanhe`'s
+  declared dependency allowlist (`AGENTS.self-law.md`) currently forbids; adopting it would first require
+  amending that law, not just this reader.
+
+  **Not a defect unique to this reader.** `crates/kanhe/src/region.rs`'s own `Executed` abstraction declares
+  the identical residue for the same reason (a `/\* … \*/` span and a string-literal marker both need
+  nested-span lexing this tree has "defeated repeatedly," in that module's own words) and cites this exact
+  bound as its precedent — the citation was one-directional until this window closed it: see the
+  `observer-protocol` spec, now amended to cite `region.rs` back. Filing them separately let each be
+  rediscovered as a fresh problem; they are one class. If this is ever closed, the closure is a **shared**
+  nested-span lexer serving both sites, not a point patch to either — `guibiao::module_scan` already scans
+  nested block comments and is the instrument `region.rs`'s own doc comment names as existing if the residue
+  is ever worth closing.
 
 - **The construction-held list is hand-maintained prose.** *Class:* READY-PATCH. *Observed pressure:*
   `observer-protocol` requires the spec to say which dimensions' equality holds by construction, and nothing
