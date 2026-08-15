@@ -508,18 +508,54 @@ pub(super) fn confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms() {
     assert_eq!(violations[0].finding, "crate::service");
 }
 
+/// A module governed by name alone (`crate::bad`) is reachable from two separate compilation units — a
+/// `lib` and a `bin` target sharing one `src/` directory, each with its own conventional `mod bad;` that
+/// resolves to the identical physical file — and the confinement violation each unit's own copy carries
+/// is reported once per unit, not conflated into one and not silently dropped for either.
+///
+/// This is the real hazard the previous, misleadingly-named occupant of this test claimed to guard:
+/// its own fixture declared no `bin` target at all (`TempWorkspace::metadata` only ever emits one `lib`
+/// target) and was byte-for-byte the same fixture as
+/// [`confine_flags_an_external_import_outside_the_subtree`] above, adding no coverage beyond it under a
+/// name that promised otherwise. `check_module_boundary`'s per-root evaluation (each root walked as its
+/// own corpus, sibling roots excluded from each other's file set) already gets this right; this pins it.
 #[test]
-pub(super) fn confine_external_crate_conflates_coincident_lib_and_bin_conventional_paths() {
-    let (result, violations) = run_module_check(
-        "confine-lib-bin-conflation",
-        &[
-            ("lib.rs", "pub mod ffi;\npub mod service;\n"),
-            ("ffi.rs", "\n"),
-            ("service.rs", "use libc::c_int;\n"),
-        ],
-        confine("crate::ffi", "libc"),
-    );
+pub(super) fn confine_external_crate_evaluates_each_unit_at_a_coincident_conventional_path() {
+    let ws = TempWorkspace::new("confine-lib-bin-coincident");
+    ws.write("lib.rs", "pub mod ffi;\npub mod bad;\n");
+    ws.write("main.rs", "pub mod ffi;\npub mod bad;\nfn main() {}\n");
+    ws.write("ffi.rs", "\n");
+    ws.write("bad.rs", "use libc::c_int;\n");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "targets": [
+                { "kind": ["lib"], "src_path": ws.src().join("lib.rs").to_string_lossy() },
+                { "kind": ["bin"], "src_path": ws.src().join("main.rs").to_string_lossy() },
+            ],
+        }],
+    });
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &confine("crate::ffi", "libc"), &mut violations);
     assert!(result.is_ok(), "{result:?}");
-    assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target(), "libc");
+    assert_eq!(
+        violations.len(),
+        2,
+        "the coincident-path leak exists once per compilation unit and must be reported for each, \
+         not merged into one and not dropped for either: {violations:?}"
+    );
+    let units: std::collections::BTreeSet<String> = violations
+        .iter()
+        .map(|v| {
+            v.fact().to_json()["fields"]["unit"]
+                .as_str()
+                .expect("unit is a string")
+                .to_string()
+        })
+        .collect();
+    assert_eq!(
+        units,
+        std::collections::BTreeSet::from(["lib.rs".to_string(), "main.rs".to_string()]),
+        "each unit's own copy of the leak must carry that unit's own label: {violations:?}"
+    );
 }

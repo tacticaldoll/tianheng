@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**40 of 85 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**40 of 84 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -53,15 +53,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 **refuses to judge** and *out of reach* are kept distinct deliberately. The misclassification this model exists to prevent was exactly a confusion between them — a prediction of a silent false negative where the real behaviour was a fail-loud refusal — and a direction that cannot be named cannot be predicted with.
 
-## as intended, granularity bounded (6)
-
-### `external-crate-confinement/the-lib-and-bin-conventional-path-conflation-is-a-stated-bound`
-
-> a package whose library and binary conventional source paths coincide
-
-- **because**: the two targets' module graphs are not told apart, so a finding names one compilation unit where two share a path — the reaction still fires
-- **its defence must show**: collapses granularity
-- **pinned by**: `confine_external_crate_conflates_coincident_lib_and_bin_conventional_paths`
+## as intended, granularity bounded (5)
 
 ### `observation-bound-model/an-answer-that-depends-on-the-corpus-entry-point-has-no-extent-of-its-own-a-stated-bound`
 

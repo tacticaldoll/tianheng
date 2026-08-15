@@ -8,7 +8,7 @@
 //! crate is under test, so nothing outside it could enumerate these, and the bijection needs one reaction that
 //! sees every dimension at once.
 
-use xuanji::{BoundDecl, BoundId, Extent, FactGranularity, Owner, Reached};
+use xuanji::{BoundDecl, BoundId, Extent, Owner, Reached};
 
 /// Every observation bound 圭表 declares, in the order its specs declare them.
 pub fn observation_bounds() -> Vec<BoundDecl> {
@@ -36,18 +36,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                           inherited from the module scanner, which reacts wider than the build".into(),
             }),
             "confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms",
-        ),
-        BoundDecl::pinned(
-            BoundId::new(
-                "external-crate-confinement/the-lib-and-bin-conventional-path-conflation-is-a-stated-bound",
-            ),
-            "a package whose library and binary conventional source paths coincide",
-            Extent::Reached(Reached::AsIntended {
-                bounded: FactGranularity::Identity,
-                because: "the two targets' module graphs are not told apart, so a finding names one \
-                          compilation unit where two share a path — the reaction still fires".into(),
-            }),
-            "confine_external_crate_conflates_coincident_lib_and_bin_conventional_paths",
         ),
         BoundDecl::pinned(
             BoundId::new(
