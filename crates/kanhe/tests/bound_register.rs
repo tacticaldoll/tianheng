@@ -138,91 +138,89 @@ fn every_pinning_citation_resolves_to_one_registered_test() {
     let harness = registered_tests(&root);
 
     let mut offences = Vec::new();
-    {
-        for record in &citations {
-            let citation = &record.name;
-            let at = match &record.bound {
-                Some(id) => format!("{id} ({}:{})", record.spec, record.line),
-                None => format!("{}:{}", record.spec, record.line),
-            };
+    for record in &citations {
+        let citation = &record.name;
+        let at = match &record.bound {
+            Some(id) => format!("{id} ({}:{})", record.spec, record.line),
+            None => format!("{}:{}", record.spec, record.line),
+        };
 
-            // Syntax first, and by construction rather than by escaping: the name is used as a search key and a
-            // path component, so a metacharacter or a `..` would resolve a citation for a test that does not
-            // exist against something else entirely.
-            let (qualifier, name) = match citation.split_once("::") {
-                Some((q, n)) => (Some(q), n),
-                None => (None, citation.as_str()),
-            };
-            let ascii_ident = |s: &str| {
-                let s = s.strip_prefix("r#").unwrap_or(s);
-                !s.is_empty()
-                    && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-                    && !s.starts_with(|c: char| c.is_ascii_digit())
-            };
-            if !ascii_ident(name) || citation.matches("::").count() > 1 {
-                offences.push(format!(
+        // Syntax first, and by construction rather than by escaping: the name is used as a search key and a
+        // path component, so a metacharacter or a `..` would resolve a citation for a test that does not
+        // exist against something else entirely.
+        let (qualifier, name) = match citation.split_once("::") {
+            Some((q, n)) => (Some(q), n),
+            None => (None, citation.as_str()),
+        };
+        let ascii_ident = |s: &str| {
+            let s = s.strip_prefix("r#").unwrap_or(s);
+            !s.is_empty()
+                && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                && !s.starts_with(|c: char| c.is_ascii_digit())
+        };
+        if !ascii_ident(name) || citation.matches("::").count() > 1 {
+            offences.push(format!(
                 "  {at} is PINNED-BY `{citation}`, which is not a citation this check can resolve"
             ));
-                continue;
-            }
+            continue;
+        }
 
-            let packages: Vec<&String> = match qualifier {
-                Some(q) => {
-                    if !harness.contains_key(q) {
-                        offences.push(format!(
-                        "  {at} is PINNED-BY `{citation}`, whose crate qualifier names no workspace member"
-                    ));
-                        continue;
-                    }
-                    harness.keys().filter(|k| k.as_str() == q).collect()
+        let packages: Vec<&String> = match qualifier {
+            Some(q) => {
+                if !harness.contains_key(q) {
+                    offences.push(format!(
+                    "  {at} is PINNED-BY `{citation}`, whose crate qualifier names no workspace member"
+                ));
+                    continue;
                 }
-                None => harness.keys().collect(),
-            };
-
-            let registering: Vec<&String> = packages
-                .into_iter()
-                .filter(|p| harness[*p].contains(name))
-                .collect();
-            if registering.is_empty() {
-                offences.push(format!(
-                "  {at} is PINNED-BY `{citation}`, which the test harness does not register — a renamed or \
-                 deleted test leaves this citation naming nothing"
-            ));
-                continue;
+                harness.keys().filter(|k| k.as_str() == q).collect()
             }
+            None => harness.keys().collect(),
+        };
 
-            // The harness decides test-ness; the source decides uniqueness. A name registered once but defined
-            // twice names a set rather than a defence.
-            let sites = search(
-                &root,
-                "`git grep` locating the cited definition",
-                &[
-                    "git",
-                    "grep",
-                    "-n",
-                    "-E",
-                    // POSIX ERE, which is what `git grep -E` speaks: `\\s` and `\\b` are PCRE and match
-                    // nothing here — measured, they reported every citation defined zero times.
-                    // `pub(super) fn` and friends: a visibility qualifier may carry a parenthesised scope, and
-                    // this repository's dimension tests use exactly that. Measured — without it, every citation
-                    // in `guibiao`'s test modules reported zero definitions.
-                    &format!(
-                        "^[[:space:]]*(pub([(][^)]*[)])?[[:space:]]+)?(async[[:space:]]+)?(const[[:space:]]+)?(unsafe[[:space:]]+)?fn {name}[[:space:]]*[(<]"
-                    ),
-                    "--",
-                    // Scoped to the cited crate when the citation is qualified. That qualifier exists precisely
-                    // because one test name is registered in two crates here, so searching all of `crates/`
-                    // would report the citation ambiguous for the reason it was disambiguated.
-                    &qualifier.map_or("crates/".to_string(), |q| format!("crates/{q}/")),
-                ],
-            );
-            if sites.len() != 1 {
-                offences.push(format!(
-                "  {at} is PINNED-BY `{citation}`, defined {} times under crates/ — a citation names one \
-                 defence, not a set",
-                sites.len()
-            ));
-            }
+        let registering: Vec<&String> = packages
+            .into_iter()
+            .filter(|p| harness[*p].contains(name))
+            .collect();
+        if registering.is_empty() {
+            offences.push(format!(
+            "  {at} is PINNED-BY `{citation}`, which the test harness does not register — a renamed or \
+             deleted test leaves this citation naming nothing"
+        ));
+            continue;
+        }
+
+        // The harness decides test-ness; the source decides uniqueness. A name registered once but defined
+        // twice names a set rather than a defence.
+        let sites = search(
+            &root,
+            "`git grep` locating the cited definition",
+            &[
+                "git",
+                "grep",
+                "-n",
+                "-E",
+                // POSIX ERE, which is what `git grep -E` speaks: `\\s` and `\\b` are PCRE and match
+                // nothing here — measured, they reported every citation defined zero times.
+                // `pub(super) fn` and friends: a visibility qualifier may carry a parenthesised scope, and
+                // this repository's dimension tests use exactly that. Measured — without it, every citation
+                // in `guibiao`'s test modules reported zero definitions.
+                &format!(
+                    "^[[:space:]]*(pub([(][^)]*[)])?[[:space:]]+)?(async[[:space:]]+)?(const[[:space:]]+)?(unsafe[[:space:]]+)?fn {name}[[:space:]]*[(<]"
+                ),
+                "--",
+                // Scoped to the cited crate when the citation is qualified. That qualifier exists precisely
+                // because one test name is registered in two crates here, so searching all of `crates/`
+                // would report the citation ambiguous for the reason it was disambiguated.
+                &qualifier.map_or("crates/".to_string(), |q| format!("crates/{q}/")),
+            ],
+        );
+        if sites.len() != 1 {
+            offences.push(format!(
+            "  {at} is PINNED-BY `{citation}`, defined {} times under crates/ — a citation names one \
+             defence, not a set",
+            sites.len()
+        ));
         }
     }
     assert!(
