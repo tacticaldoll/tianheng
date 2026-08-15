@@ -21,8 +21,11 @@
 //! **fails**, loudly and saying so — the safe direction, because the alternative is a check that reports
 //! clean over a perturbation it never applied.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+use kanhe::bound_register_parse::{Citation, bounds_in};
 
 const RECORDS: &str = "crates/kanhe/tests/fixtures/pin_mutations.tsv";
 
@@ -116,39 +119,80 @@ fn parse_records(root: &Path) -> Vec<Record> {
     records
 }
 
-/// Every test name a declared bound cites, read from HEAD rather than the worktree.
-fn cited_names(root: &Path) -> Vec<String> {
-    let out = Command::new("git")
-        .args([
-            "grep",
-            "-h",
-            "-E",
-            "^- \\*\\*PINNED-BY\\*\\* `[^`]+`",
-            "HEAD",
-            "--",
-            "openspec/specs/*/spec.md",
-        ])
-        .current_dir(root)
-        .output()
-        .expect("run git grep for citations");
-    assert_eq!(
-        out.status.code(),
-        Some(0),
-        "could not read the register's citations from HEAD; a failed read is not an empty result"
+/// Every test name a declared bound cites, read from HEAD rather than the worktree, mapped to the bound
+/// id(s) it defends.
+///
+/// A survival message that names only the citation leaves a reader to go find which bound it was for; the
+/// canonical parser (`bound_register_parse::bounds_in`, the same one `bound_register.rs` uses — a second
+/// implementation of "which bound cites this name" is exactly the twin-drift class this repository keeps
+/// closing) already produces each `Bound`'s `id` beside its `Citation::PinnedBy` names. Read from `HEAD` per
+/// spec file rather than the worktree, matching this check's own discipline everywhere else.
+fn cited_bounds(root: &Path) -> HashMap<String, Vec<String>> {
+    let listing = must(
+        root,
+        "`git ls-files -- openspec/specs`",
+        &["git", "ls-files", "--", "openspec/specs"],
     );
-    let mut names: Vec<String> = String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .filter_map(|line| line.split('`').nth(1))
-        .map(|cite| cite.rsplit("::").next().unwrap_or(cite).to_string())
-        .collect();
-    names.sort();
-    names.dedup();
+    let mut by_name: HashMap<String, Vec<String>> = HashMap::new();
+    for path in listing.lines().filter(|p| p.ends_with("/spec.md")) {
+        let capability = path
+            .strip_prefix("openspec/specs/")
+            .and_then(|rest| rest.strip_suffix("/spec.md"))
+            .unwrap_or(path);
+        let text = must(
+            root,
+            &format!("`git show HEAD:{path}`"),
+            &["git", "show", &format!("HEAD:{path}")],
+        );
+        for bound in bounds_in(capability, path, &text) {
+            if let Citation::PinnedBy(names) = &bound.citation {
+                for cite in names {
+                    let short = cite.rsplit("::").next().unwrap_or(cite).to_string();
+                    by_name.entry(short).or_default().push(bound.id.clone());
+                }
+            }
+        }
+    }
     assert!(
-        !names.is_empty(),
+        !by_name.is_empty(),
         "HEAD's specs carry no PINNED-BY citation; a record naming a cited test cannot be judged against an \
          empty set"
     );
-    names
+    by_name
+}
+
+/// Every declared mutation's name resolves to at least one real bound id, not just to "cited".
+///
+/// This runs on every ordinary `cargo test -p kanhe`, unlike `every_declared_mutation_kills_the_pin_it_names`
+/// (gated behind `TIANHENG_PIN_BITES`, since it checks out a worktree and builds it) — `cited_bounds` itself
+/// costs only a `git ls-files` and one `git show` per spec, so this regression does not need that gate.
+#[test]
+fn every_declared_mutation_s_name_resolves_to_a_real_bound_id() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let records = parse_records(&root);
+    let cited = cited_bounds(&root);
+    for record in &records {
+        let bound_ids = cited.get(&record.name).unwrap_or_else(|| {
+            panic!(
+                "`{}` is a declared mutation's name but cited_bounds() maps nothing to it",
+                record.name
+            )
+        });
+        assert!(
+            !bound_ids.is_empty(),
+            "`{}` is cited but resolves to no bound id",
+            record.name
+        );
+        assert!(
+            bound_ids
+                .iter()
+                .all(|id| !id.is_empty() && id.contains('/')),
+            "`{}` resolves to a malformed bound id {bound_ids:?}; a bound id is `<capability>/<slug>`",
+            record.name
+        );
+    }
 }
 
 /// A detached worktree at HEAD, removed when this is dropped.
@@ -320,14 +364,14 @@ fn every_declared_mutation_kills_the_pin_it_names() {
     }
 
     let records = parse_records(&root);
-    let cited = cited_names(&root);
+    let cited = cited_bounds(&root);
     let scratch = Scratch::new(&root);
     let tree = scratch.tree.clone();
 
     for record in &records {
         let name = &record.name;
         assert!(
-            cited.contains(name),
+            cited.contains_key(name),
             "the record for `{name}` names a test no declared bound cites; a mutation is an assertion about \
              a citation, and one without a citation asserts nothing"
         );
@@ -419,10 +463,15 @@ fn every_declared_mutation_kills_the_pin_it_names() {
             code == Some(0)
         };
 
+        let bound_ids = cited.get(name).cloned().unwrap_or_default();
         assert!(
             !survived,
-            "`{name}` passes against the mutation declared for it, so the citation defends nothing: the \
-             defended behavior can change at that point and the pin will not notice"
+            "`{name}` passes against the mutation declared for it in {} (replacing `{}` with `{}`), so the \
+             citation defends nothing: {} can change at that point and the pin will not notice",
+            record.file,
+            record.from,
+            record.to,
+            bound_ids.join(", ")
         );
 
         // Where the mutated run failed, the control runs AGAIN after the restore. One control rules out a

@@ -899,6 +899,17 @@ them.
 
 ### Self-governance
 
+- **A pin surviving its declared mutation named the citation, never the bound it defended.** `pin_bites`'s
+  `cited_names()` read every `PINNED-BY` citation from `HEAD` as a flat list, discarding which bound each
+  one belonged to — so the one message this whole check exists to earn (a mutation a cited test does not
+  catch) could say only the bare test name. Replaced with `cited_bounds()`, which reuses the canonical
+  `bound_register_parse::bounds_in` parser (the same one `bound_register.rs` itself uses — a second
+  implementation of "which bound cites this name" is the twin-drift class this repository keeps closing)
+  to map each cited name to the bound id(s) it defends, still read from `HEAD` rather than the worktree.
+  The survival message now names the citation, the mutation (file and the anchor replaced), and the bound.
+  Pinned by a new, ungated regression (`every_declared_mutation_s_name_resolves_to_a_real_bound_id`, cheap
+  enough to run on every `cargo test -p kanhe`) verified to fail when the bound-id mapping is dropped.
+
 - **A citation resolving to more than one definition named the count, not where to look.** The bound
   register's duplicate-definition offence said `defined 2 times under crates/` without naming either
   site, even though `git grep -n`'s own output (`path:line:content`) was already sitting in hand. Extracted
