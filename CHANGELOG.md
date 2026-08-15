@@ -890,6 +890,15 @@ them.
 
 ### Self-governance
 
+- **The no-trait-object reaction scanned its own test file's crate, not the composed shell it names.**
+  `composition_introduces_no_trait_object` used `CARGO_MANIFEST_DIR` to find the corpus to scan; since
+  the test lives under `crates/kanhe/tests/`, that resolved to `crates/kanhe/src` — a directory with no
+  coupling to `Observer`/`Run` at all, confirmed by a single doc-string mention and nothing else. The
+  actual composed shell (`crates/tianheng/src`, where `Run` folds observers together) was never read.
+  The reaction now resolves the workspace root and scans `crates/tianheng/src` explicitly. A probe
+  function returning `Box<dyn Observer>`, injected into `crates/tianheng/src/runner.rs` and reverted
+  immediately after, confirmed the fixed reaction catches it and the prior one did not.
+
 - **The pre-publish source gate folded a read failure into "version missing," right before an
   irreversible act.** `workspace_version` read `Cargo.toml` with `.ok()?`, so a real `io::Error`
   (permission denied, a broken symlink, non-UTF8 bytes) and a manifest that reads fine but genuinely

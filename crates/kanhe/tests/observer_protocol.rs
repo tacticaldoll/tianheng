@@ -992,16 +992,22 @@ fn exposes_a_trait_object(line: &str) -> bool {
 /// The protocol introduces no trait object, asserted mechanically rather than trusted.
 ///
 /// A collection-based entry taking `&[&dyn Observer]` was designed first and rejected on measurement: no module
-/// of this crate is governed by a semantic boundary, and the `dyn`-trait DSL offers only forbid-all and
-/// forbid-named-operands, so a declared exposure would have been a name with no reaction. The eager fold removes
-/// the exposure instead of governing it — and this assertion is what keeps that true, since 渾儀 is not watching
-/// this crate.
+/// of **the composed shell** (`crates/tianheng`, where `Run` folds observers together) is governed by a semantic
+/// boundary, and the `dyn`-trait DSL offers only forbid-all and forbid-named-operands, so a declared exposure
+/// would have been a name with no reaction. The eager fold removes the exposure instead of governing it — and
+/// this assertion is what keeps that true, since 渾儀 is not watching the composed shell.
 ///
-/// It reads every Rust source recursively. Public re-exports can make an item in a private nested module
-/// reachable, so module visibility is not a sound premise for excluding that file from the corpus.
+/// It reads every Rust source recursively **below the composed shell's `src` directory, not this test's own
+/// crate** — this file lives under `crates/kanhe/tests/`, so `CARGO_MANIFEST_DIR` names `crates/kanhe`, which
+/// has no coupling to `Observer`/`Run` at all and would leave the scan inspecting the wrong tree entirely.
+/// Public re-exports can make an item in a private nested module reachable, so module visibility is not a sound
+/// premise for excluding that file from the corpus.
 #[test]
 fn composition_introduces_no_trait_object() {
-    let src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let src = root.join("crates/tianheng/src");
     if !src.is_dir() {
         assert!(
             std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
