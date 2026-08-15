@@ -6,7 +6,6 @@ The 漏刻 (runtime) dimension's first capability: declare which concrete-type *
 ## Subject
 
 - `crates/louke/src/**/*.rs`
-
 ## Requirements
 ### Requirement: Runtime boundary declared in Rust and installed write-once
 
@@ -357,9 +356,9 @@ SHALL be extracted and unioned the same way. Absence SHALL be tolerated only whe
 `cfg_attr` target NOR the conventional file resolves anywhere, and the declaration carries no other
 cfg-conditional gate (a bare `#[cfg]` or transparent-arm membership) — that combination is a
 genuinely broken reference on every configuration, so it SHALL still fail loud. A doubly-**nested**
-`#[cfg_attr(a, cfg_attr(b, path = "…"))]` is a stated, undetected bound of this hand-rolled scanner
-(unlike `hunyi`'s `syn`-based recursive resolution of the identical shape), never a silent claim of
-coverage.
+`#[cfg_attr(a, cfg_attr(b, path = "…"))]` SHALL be resolved the same way as a single-level one: the
+scanner locates the `path` value anywhere within the outer attribute's argument span rather than parsing
+nesting structure, so nesting depth does not change whether it is found.
 
 The identical union SHALL apply to a `cfg_attr`-wrapped `#[path]` on an **inline** `mod name { ... }`
 (a body, not a `;`-terminated declaration), where it governs the **base directory** `name`'s own
@@ -461,6 +460,11 @@ existed.
 
 - **WHEN** a target root declares `#[cfg_attr(unix, path = "unix_dir")] pub mod x { pub mod y; }` with `unix_dir/y.rs` present and holding a declared seam's probe, but the conventional `x/y.rs` absent
 - **THEN** the audit descends `y` from the `cfg_attr` target's directory and counts its probe, rather than reporting a constitution error against the absent conventional `x/y.rs`
+
+#### Scenario: A doubly-nested cfg_attr-wrapped #[path] is followed the same as a single-level one
+
+- **WHEN** a target root declares `#[cfg_attr(unix, cfg_attr(feature = "x", path = "nested.rs"))] pub mod plat;`, `nested.rs` present and holding a declared seam's probe, and the conventional `plat.rs` present but holding none
+- **THEN** the audit reads `nested.rs`'s probe and counts it as coverage, rather than reading the conventional file alone and reporting the seam unprobed
 
 ### Requirement: An un-auditable probe's identity distinguishes distinct offending expressions
 

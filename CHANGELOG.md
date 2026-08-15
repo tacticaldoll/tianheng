@@ -899,6 +899,26 @@ them.
 
 ### Self-governance
 
+- **A bound stated in prose but not declared as a scenario now fails, closing a gap the shell-to-Rust
+  migration silently dropped.** `observation-bound-register`'s requirement of the same name has been fully
+  specified — four scenarios, three residuals, a bounds-named-requirement exemption — since before this
+  window, but nothing reacted to it: the shell era's `BOUND_PROSE` scan (the bound-register gate script)
+  was deleted by `64ed18c` and never reimplemented. Ported directly (`states_a_bound_in_prose`,
+  `negates_bound_in_prose`, and a single-pass requirement/scenario state-machine walk in
+  `bound_register_parse.rs`, reusing `marks_a_bound` and `bare_references` rather than re-deriving either;
+  no regex crate, since `kanhe`'s dependency law admits none). Wired into the ordinary suite as
+  `every_bound_stated_in_prose_is_declared_as_a_scenario`.
+
+  Running the new scan against the live corpus surfaced one real hit:
+  `runtime-origin-assertion`'s "Root-aware audit excludes unreachable source files" requirement stated a
+  doubly-nested `#[cfg_attr(a, cfg_attr(b, path = "…"))]` as "a stated, undetected bound of this hand-rolled
+  scanner." Measured directly (a fixture with the nested target holding the only real probe): **false** —
+  the scanner's `path`-value search is a linear scan over the whole attribute span, indifferent to nesting
+  depth, so a doubly-nested target resolves exactly like a single-level one already does. The requirement
+  now states this as a SHALL with a new scenario, the matching stale comment in
+  `crates/louke/src/audit/scan/lexer.rs` is corrected, and a new regression test pins the now-confirmed
+  behavior in `crates/louke/src/audit/tests.rs`.
+
 - **A pin surviving its declared mutation named the citation, never the bound it defended.** `pin_bites`'s
   `cited_names()` read every `PINNED-BY` citation from `HEAD` as a flat list, discarding which bound each
   one belonged to — so the one message this whole check exists to earn (a mutation a cited test does not

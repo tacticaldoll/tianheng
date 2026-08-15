@@ -623,3 +623,38 @@ fn every_bare_bound_reference_resolves_to_a_declared_bound() {
         dangling.join("\n")
     );
 }
+
+/// A bound stated in prose but not declared as a scenario fails, which is what stops the register being
+/// completed by declaring only the convenient bounds — the floor `observation-bound-register/spec.md`
+/// states and, until this test, nothing reacted to.
+#[test]
+fn every_bound_stated_in_prose_is_declared_as_a_scenario() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let capabilities: BTreeSet<String> = parse::tracked_specs(&root)
+        .into_iter()
+        .map(|(capability, _)| capability)
+        .collect();
+
+    let mut offences = Vec::new();
+    for (_, spec) in parse::tracked_specs(&root) {
+        let text = std::fs::read_to_string(root.join(&spec)).unwrap_or_else(|error| {
+            panic!(
+                "could not read the declared bounds from {spec}: {error} — a spec this check cannot parse \
+                 leaves the register undecided rather than clean"
+            )
+        });
+        offences.extend(parse::undeclared_prose_offences(
+            &spec,
+            &text,
+            &capabilities,
+        ));
+    }
+    assert!(
+        offences.is_empty(),
+        "a bound stated in prose but not declared as a scenario, or a bounds-named requirement declaring \
+         none:\n{}",
+        offences.join("\n")
+    );
+}

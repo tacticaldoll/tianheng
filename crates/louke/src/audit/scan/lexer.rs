@@ -331,12 +331,12 @@ pub(crate) fn mod_preamble_attrs(
                     // which is never itself an identifier spelled `path`), if one is present. A
                     // module may carry more than one SEPARATE `cfg_attr`-wrapped `#[path]` (one per
                     // platform predicate); this arm fires once per occurrence of the outer loop, so
-                    // every one is collected. A doubly-nested `#[cfg_attr(a, cfg_attr(b, path =
-                    // "…"))]` is a stated, undetected bound here (a hand-rolled byte scanner, unlike
-                    // `hunyi`'s `syn`-based recursive walk) — rare enough in practice that chasing
-                    // full nested parity was not worth the added scanner complexity; a resolvable
-                    // `path` one level deep is never a silent claim of coverage either way, since the
-                    // scan still falls back to the conventional file.
+                    // every one is collected. `find_path_meta_value` searches linearly for `path`
+                    // anywhere in the argument span rather than parsing nesting structure, so a
+                    // doubly- (or deeper-) nested `#[cfg_attr(a, cfg_attr(b, path = "…"))]` resolves
+                    // the same way a single-level one does — measured directly
+                    // (`a_doubly_nested_cfg_attr_path_is_followed_the_same_as_a_single_nesting`), not
+                    // the undetected residual an earlier comment here claimed.
                     b"cfg_attr" => {
                         let paren_open = skip_preamble_trivia(bytes, name_end, mod_index);
                         if bytes.get(paren_open) == Some(&b'(') {

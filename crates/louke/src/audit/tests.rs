@@ -2498,6 +2498,36 @@ fn two_cfg_attr_path_declarations_covering_every_platform_are_clean_when_probes_
     );
 }
 
+/// A doubly-nested `#[cfg_attr(a, cfg_attr(b, path = "…"))]`'s inner `path` value IS extracted, contrary to
+/// a comment this repository carried claiming it was "a stated, undetected bound of this hand-rolled
+/// scanner": `find_path_meta_value` scans linearly for a `path` identifier followed by `=` anywhere within
+/// the outer `cfg_attr`'s whole argument span, so it does not distinguish nesting depth at all — it was
+/// never the recursive-descent parse the stale comment contrasted against `hunyi`'s `syn`-based walk.
+/// Measured directly: this fixture reports `Clean` (the nested target's probe counts), not the unprobed
+/// violation a genuinely undetected target would leave from the conventional file alone. Pinned here so a
+/// future change that actually introduces the limitation is a deliberate, measured one.
+#[test]
+fn a_doubly_nested_cfg_attr_path_is_followed_the_same_as_a_single_nesting() {
+    let tb = TempBase::new("cfg-attr-path-doubly-nested");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, cfg_attr(feature = \"x\", path = \"nested.rs\"))]\npub mod plat;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    // The conventional file, present and carrying no probe at all — if the nested target were NOT
+    // followed, this is all the scanner would see, and "seam" would be reported unprobed.
+    tb.source("plat.rs", "pub fn q(_o: u8) {}\n");
+    tb.source(
+        "nested.rs",
+        "pub fn r(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
+        "the doubly-nested target's real probe must be found (the conventional file alone has none): \
+         {outcome:?}"
+    );
+}
+
 /// A cfg_attr(path) target that does NOT exist on disk is skipped, not erred, when either the
 /// conventional file or another cfg_attr candidate backs the module — the union-observation
 /// counterpart of the crate-wide walk's own absence tolerance.
