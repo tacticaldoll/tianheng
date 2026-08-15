@@ -32,11 +32,14 @@ them.
   returns, so the promise and the file that enumerates it are held together for this member as they already were
   for the protocol's other prelude members.
 
-  Recorded because the cause is structural rather than an oversight: the three dimension contracts are tracked
-  files that **no capability's declared subject claims**, so the filing join that would otherwise have raised it
-  never had them in scope. That is a declared false negative of the repository checks, with an owner, and this is
-  the first time it was observed costing anything — filed in `BACKLOG.md` with its trigger rather than closed
-  here, since its stated reason has not moved.
+  Recorded because the cause is structural rather than an oversight: the three dimension contracts were tracked
+  files that **no capability's declared subject claimed**, so the filing join that would otherwise have raised it
+  never had them in scope. That was a declared false negative of the repository checks, with an owner, and it was
+  the first time it was observed costing anything — filed in `BACKLOG.md` with its trigger rather than closed on
+  the spot, since its stated reason (subjects need not tile the repository) had not moved. The trigger fired
+  once, for this member, and the promoted `READY-PATCH` closed it: `adopter-surface`'s declared `## Subject`
+  now names all four `adopter_surface.rs` files (the composed shell's alongside the three dimensions'), so a
+  future change to any of the three no longer goes unfiled.
 
 - **Every vocabulary type the observation protocol publishes was ruled on before it ships, by asking what a
   third party can own.** `0.5.0` is the first release in which an outside `Observer` can exist, so it is the

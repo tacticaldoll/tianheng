@@ -81,33 +81,6 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **A capability's declared subject does not reach every file whose change it should file, and the one
-  declared false negative covering that was observed costing something.** *Class:* READY-PATCH. *Observed
-  pressure:* `observation_bounds()` reached the public surface of three published crates in the `0.5.0`
-  window, was advertised as the way to read a dimension's declared bounds without composing a run, and was
-  named by no `adopter_surface.rs`. It was not an oversight that a sweep would have caught: the three
-  dimension contracts are tracked files **no capability's declared subject claims**, so the filing join never
-  had them in scope. `adopter-surface`'s subject names only the shell's three files. *Observation source:*
-  `crates/kanhe/tests/capability_subjects.rs`, whose
-  `files_no_capability_claims_are_reported_rather_than_implied_judged` prints the unclaimed count on every
-  clean run — the figure is produced there and deliberately not repeated here. *Current reaction or bound:*
-  the declared bound `repository-checks/files-no-capability-claims-a-stated-bound`, an
-  `UnderReacts` with `Owner::Engine`. Its stated reason is that requiring subjects to tile the repository
-  would buy coverage with a claim per capability nobody could defend, and that reason still holds. *Risk:* a
-  member of a published promise reaching `0.5.0` unheld — realised once already, closed for this member by
-  naming it in the three contracts. *Promotion trigger:* a **second** distinct instance of a published surface
-  member landing in an unclaimed file, or an adopter-visible defect traced to one. Tiling the repository is
-  explicitly not the candidate; extending an **existing** capability's subject to the files it plainly governs
-  is, and `adopter-surface` gaining the three dimension contracts is the worked example. *Compatibility
-  class:* patch — the subject declarations and the filing join ship in zero packages. *Authority:*
-  `openspec/specs/repository-checks/spec.md`'s *A capability SHALL declare the subject it governs* and the
-  bound declared in `crates/kanhe/src/bounds.rs`.
-
-  The structural half is filed rather than done because the bound's reason is still sound, and doing it under
-  a reason that has not moved would be rebaselining a declared false negative instead of closing it. What
-  this entry adds that the bound did not have is an **instance**: it had never been observed costing
-  anything, and now it has.
-
 - **`observation-bound-register`'s own spec asserts a command's outcome that nothing runs.** *Class:*
   READY-PATCH. *Observed pressure:* the spec states `openspec validate --specs --strict` passes over every
   spec; measured, two did not, and `git grep` found the command named only in the scenario asserting its
@@ -1506,6 +1479,35 @@ that also holds a closed READY-PATCH record.
   macro-generated or `pub use`-re-exported `fn` would still escape, which must be stated with it.
   Version class: PATCH. Authority: `openspec/specs/rule-model-surface/spec.md`'s stated
   namespace-blind bound and its scenario; the rustc verification and pinned test above.
+
+- ~~**A capability's declared subject does not reach every file whose change it should file, and the one
+  declared false negative covering that was observed costing something.**~~ **CLOSED** in the open window
+  via `change/claim-dimension-adopter-surface-subjects`. `adopter-surface`'s declared `## Subject` now names
+  all four `adopter_surface.rs` files — the composed shell's alongside `guibiao`'s, `hunyi`'s, and
+  `louke`'s — and `capability_subjects.rs`'s unclaimed-file count dropped from 109 to 106 (claimed 286 to
+  289), exactly the three this closes. An independent adversarial review confirmed the factual premise and
+  found no other capability already claimed any of the three files. The bound this entry was filed against
+  (`repository-checks/files-no-capability-claims-a-stated-bound`) is untouched and its reason still holds —
+  this closed one instance the promotion trigger named, not the bound itself. *Class:* READY-PATCH.
+  *Observed pressure:* `observation_bounds()` reached the public surface of three published crates in the
+  `0.5.0` window, was advertised as the way to read a dimension's declared bounds without composing a run,
+  and was named by no `adopter_surface.rs`. It was not an oversight that a sweep would have caught: the
+  three dimension contracts are tracked files **no capability's declared subject claims**, so the filing
+  join never had them in scope. `adopter-surface`'s subject named only the shell's three files.
+  *Observation source:* `crates/kanhe/tests/capability_subjects.rs`, whose
+  `files_no_capability_claims_are_reported_rather_than_implied_judged` prints the unclaimed count on every
+  clean run — the figure is produced there and deliberately not repeated here. *Current reaction or bound:*
+  the declared bound `repository-checks/files-no-capability-claims-a-stated-bound`, an `UnderReacts` with
+  `Owner::Engine`. Its stated reason is that requiring subjects to tile the repository would buy coverage
+  with a claim per capability nobody could defend, and that reason still holds. *Risk:* a member of a
+  published promise reaching `0.5.0` unheld — realised once already, closed for this member by naming it in
+  the three contracts. *Promotion trigger:* a **second** distinct instance of a published surface member
+  landing in an unclaimed file, or an adopter-visible defect traced to one. Tiling the repository is
+  explicitly not the candidate; extending an **existing** capability's subject to the files it plainly
+  governs is, and `adopter-surface` gaining the three dimension contracts is the worked example.
+  *Compatibility class:* patch — the subject declarations and the filing join ship in zero packages.
+  *Authority:* `openspec/specs/repository-checks/spec.md`'s *A capability SHALL declare the subject it
+  governs* and the bound declared in `crates/kanhe/src/bounds.rs`.
 
 ## Version horizons
 
