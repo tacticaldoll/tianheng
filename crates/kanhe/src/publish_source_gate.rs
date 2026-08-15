@@ -34,17 +34,7 @@ use crate::refusal::{Refusal, cannot_judge, violation};
 /// files. What the third row costs is handled by [`hidden_by_the_checkout`], which classifies rather than
 /// refuses.
 fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
-    let out = hermetic("git")
-        .args(["-c", "core.excludesFile=/dev/null"])
-        .args(args)
-        .current_dir(repo)
-        .output()
-        .map_err(|err| format!("cannot run git {args:?}: {err}"))?;
-    if out.status.success() {
-        Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
-    } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim_end().to_string())
-    }
+    crate::hermetic_git::run(repo, &["-c", "core.excludesFile=/dev/null"], args)
 }
 
 /// One read of the worktree, and **one** refusal construction serving every caller.

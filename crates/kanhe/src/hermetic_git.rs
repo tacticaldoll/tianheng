@@ -4,6 +4,7 @@
 //! one of them. The undocumented copy was then given a doc written without reading the other, and that doc
 //! overclaimed — which is what two implementations of one thing cost even when the code cannot drift.
 
+use std::path::Path;
 use std::process::Command;
 
 /// A command that reads neither the **global** nor the **system** git config file.
@@ -33,4 +34,25 @@ pub fn hermetic(program: &str) -> Command {
         .env("GIT_CONFIG_SYSTEM", "/dev/null")
         .env("GIT_CONFIG_NOSYSTEM", "1");
     command
+}
+
+/// One read of `git` in `repo` through [`hermetic`], with the output/success/failure mapping every gate's
+/// own `git()` wrapper otherwise has to restate.
+///
+/// It lived twice here too, byte-identical past the leading flags, in the same two files this module's own
+/// doc comment already names for [`hermetic`]. `flags` are spliced in before `args` — `&[]` for
+/// `release_coherence_gate`, `&["-c", "core.excludesFile=/dev/null"]` for `publish_source_gate`, which must
+/// also close the last ambient row this module's doc table leaves open.
+pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, String> {
+    let out = hermetic("git")
+        .args(flags)
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .map_err(|err| format!("cannot run git {args:?}: {err}"))?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim_end().to_string())
+    }
 }
