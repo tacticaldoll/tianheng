@@ -899,6 +899,37 @@ them.
 
 ### Self-governance
 
+- **The 20-item partial-claims batch from the `v0.4.0..HEAD` audit is closed.** Each carried real evidence
+  but an incomplete verification artifact — usually a real fix whose permanent regression test was actually
+  a manual, one-time terminal check. Verified each individually; where a genuine gap survived, closed it
+  with a committed test rather than recording the claim as good enough:
+  - `bound_register.rs` gained `search_and_must_panic_on_a_genuine_failure_not_only_on_a_clean_miss` (the
+    shell era's `cd`-failure-collapsed-into-grep's-no-match-exit regression, and the general exit>1
+    distinction), `tracked_specs_refuses_a_repository_with_no_spec_md_rather_than_reporting_it_empty`, and
+    `a_raw_identifier_citation_resolves_to_its_definition` (extracting the shared `definition_pattern` so
+    the test and the real check cannot diverge).
+  - `shengmo/tests/self_governance.rs` gained `the_publish_field_s_four_states_are_read_correctly`,
+    extracting `excluded_by_publish_field` so the dimension enumerator's four-state claim is pinned against
+    cargo's actual reported shapes rather than only against whichever states this workspace's manifests
+    happen to carry.
+  - `dod_coherence.rs` gained `a_dod_block_with_no_commands_is_refused_not_reported_clean` — its own
+    zero-commands guard existed in code but no test exercised it, unlike its `whitespace_hygiene.rs` sibling
+    fixture, which was already present and correct.
+  - Two CHANGELOG claims were themselves corrected on recount: "the regenerated projection differs by
+    exactly three lines" undercounted a diff that also added two whole new crate sections (19 insertions, 3
+    deletions, not 3 lines), and a stale reference to a deleted script and its test twin was reworded.
+  - The remainder verified clean on inspection: existing hand-written test coverage already matched claimed
+    shapes just not literally "table-driven" wording, a shell-era hardening concern (ambient environment
+    override of a governance-document list) is structurally impossible against the Rust port's `const`-based
+    design, `cargo metadata`-sourced identity reads cannot be defeated by a manifest-level alias by
+    construction, and several fixture/durability claims (the anti-restatement reaction, the publish
+    wrapper's allowlist and `--manifest-path` refusal, the lexical trait-object continuation-line bound, the
+    third text-recognizer's HTML-comment-span fix) were confirmed still currently passing rather than
+    re-argued from scratch.
+  - A `scripts/` line-count discrepancy (6,827 vs. 6,841) turned out not to be an error: the two figures
+    answer different, both-legitimate questions about what counts as a "library" (whether a 14-line
+    mutation-fixture data table is one).
+
 - **A DoD-coherence requirement carried over from the shell era was investigated rather than assumed
   still applicable, and retired.** The deleted shell predecessor of `dod_coherence` additionally required
   three named "focused example matrix" scripts and a positive driver script to appear as one contiguous,
@@ -2126,9 +2157,12 @@ no adopter runs. They are here rather than under the adopter headings above beca
   `tianheng` crate goes from 25 test targets in its tarball to 8, and the 8 are the ones whose subject is the
   packaged code. Nothing an adopter could run has left, and no API, binary, or behaviour moves.
 
-  The law itself did not change: the regenerated projection differs by exactly three lines, all of them the
-  preamble's own self-reference. The refusal-site census is identical to the figure recorded before anything
-  moved — 67 enumerated, 60 defended, 7 declared out of reach, 0 undistinguished — which is what a move should
+  No pre-existing dimension's own law changed: the projection's three pre-existing content lines that move
+  touched are the preamble's own self-reference (which crate and test now generate it), and the rest of the
+  diff is additive — two new crate sections declaring `shengmo`'s and this crate's own boundaries (named
+  `jiaochou` at the commit that moved it, `kanhe` today), one each for the two members created to hold what
+  moved. The refusal-site census is identical to the figure recorded before anything moved — 67 enumerated,
+  60 defended, 7 declared out of reach, 0 undistinguished — which is what a move should
   produce.
 
 - **Four documents restated a declaration the law owns, and the rule forbidding it was already written.** A

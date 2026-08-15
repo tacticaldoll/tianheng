@@ -25,6 +25,7 @@ use parse::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use std::process::Command;
 
 // --- citations ------------------------------------------------------------------------------------------
 
@@ -155,6 +156,194 @@ fn definition_count_offence(at: &str, citation: &str, sites: &[String]) -> Optio
     ))
 }
 
+/// The POSIX ERE `git grep -E` pattern that locates a cited name's definition line.
+///
+/// Shared between the real check and [`a_raw_identifier_citation_resolves_to_its_definition`] so the two
+/// cannot silently diverge — a test asserting behavior against its own copy of the pattern would say
+/// nothing about the pattern the check actually runs.
+fn definition_pattern(name: &str) -> String {
+    // `\\s` and `\\b` are PCRE and match nothing here — measured, they reported every citation defined
+    // zero times. `pub(super) fn` and friends: a visibility qualifier may carry a parenthesised scope, and
+    // this repository's dimension tests use exactly that. Measured — without it, every citation in
+    // `guibiao`'s test modules reported zero definitions.
+    format!(
+        "^[[:space:]]*(pub([(][^)]*[)])?[[:space:]]+)?(async[[:space:]]+)?(const[[:space:]]+)?(unsafe[[:space:]]+)?fn {name}[[:space:]]*[(<]"
+    )
+}
+
+/// A citation naming a raw identifier (`r#name`) resolves to its definition, matching
+/// `observation-bound-register/spec.md`'s "A citation naming a raw identifier" scenario: the register
+/// imposes no naming convention beyond a valid Rust identifier, and a raw identifier is one. `#` carries no
+/// special meaning to POSIX ERE, so [`definition_pattern`]'s literal-name substitution matches an `r#`-named
+/// definition the same way it matches any other — traced by direct reasoning until now, never by a fixture.
+#[test]
+fn a_raw_identifier_citation_resolves_to_its_definition() {
+    let fixture = std::env::temp_dir().join(format!(
+        "tianheng-bound-register-raw-ident-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&fixture);
+    std::fs::create_dir_all(&fixture).expect("the fixture directory is writable");
+    std::fs::write(
+        fixture.join("probe.rs"),
+        "#[test]\nfn r#type() {\n    assert!(true);\n}\n",
+    )
+    .expect("writable");
+    for arguments in [["init", "-q"], ["add", "-A"]] {
+        let status = Command::new("git")
+            .arg("-C")
+            .arg(&fixture)
+            .args(arguments)
+            .status()
+            .expect("git is available");
+        assert!(status.success(), "the fixture repository is prepared");
+    }
+
+    let sites = search(
+        &fixture,
+        "raw-identifier probe",
+        &[
+            "git",
+            "grep",
+            "-n",
+            "-E",
+            &definition_pattern("r#type"),
+            "--",
+            ".",
+        ],
+    );
+    let _ = std::fs::remove_dir_all(&fixture);
+    assert_eq!(
+        sites.len(),
+        1,
+        "a raw-identifier definition must resolve to exactly one site: {sites:?}"
+    );
+    assert!(
+        sites[0].contains("fn r#type"),
+        "the resolved site must be the raw-identifier definition: {sites:?}"
+    );
+}
+
+/// `search()`'s no-match/failure split, exercised against real subprocess exit codes rather than reasoned
+/// about from the source alone: a clean miss (`git ls-files` enumerating nothing, `git grep` matching
+/// nothing) must return empty, while a genuine failure (an unrecognised flag, a malformed pattern, a target
+/// repository that is not there at all — all exit above 1, or fail to spawn at all) must panic rather than
+/// be read as the same empty result. Collapsing that distinction is exactly the shell-era failure mode this
+/// module's own doc comment on `search` describes: a producer's exit-1-means-no-match contract has to be
+/// named per call site, and the untested direction is the one that turns a failed read into a silent clean
+/// pass. The unavailable-target case also closes the shell era's own regression the CHANGELOG records: a
+/// `cd` failure into a target repository that had gone missing collapsed into grep's ordinary no-match exit
+/// and reported a clean 1 rather than cannot-judge — `Command::current_dir` on a path that does not exist
+/// fails at spawn (measured: `Err(No such file or directory)`, never a status code), so it cannot be
+/// mistaken for grep's own exit 1 either.
+#[test]
+fn search_and_must_panic_on_a_genuine_failure_not_only_on_a_clean_miss() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+
+    // A clean miss: `git ls-files` enumerating a path this repository does not track. Exit 1, empty Vec,
+    // no panic.
+    assert_eq!(
+        search(
+            &root,
+            "clean-miss probe",
+            &["git", "ls-files", "--", "zzz-absent-probe-path-xyz"],
+        ),
+        Vec::<String>::new(),
+        "a clean miss is empty, not a panic"
+    );
+
+    // A genuine failure: an unrecognised flag exits above 1 (129, measured), which is neither 0 (success)
+    // nor 1 (clean miss) — `search` must panic rather than silently return empty.
+    let bad_flag = std::panic::catch_unwind(|| {
+        search(
+            &root,
+            "bad-flag probe",
+            &["git", "ls-files", "--this-flag-does-not-exist"],
+        )
+    });
+    assert!(
+        bad_flag.is_err(),
+        "an unrecognised flag is a genuine failure and must panic, not read as a clean miss"
+    );
+
+    // The same distinction for `must`, which requires success outright: a malformed `git grep` pattern
+    // exits above 1 (128, measured) and must panic rather than return truncated or empty output.
+    let bad_pattern = std::panic::catch_unwind(|| {
+        must(
+            &root,
+            "bad-pattern probe",
+            &["git", "grep", "-E", "[", "--", "crates/"],
+        )
+    });
+    assert!(
+        bad_pattern.is_err(),
+        "a malformed pattern is a genuine failure and must panic, not be read as empty output"
+    );
+
+    // The target repository itself unavailable — the shell era's `cd` failure, ported here as a `root` that
+    // does not exist. Neither `search` nor `must` may read this as an ordinary clean miss.
+    let missing_root = std::env::temp_dir().join(format!(
+        "tianheng-bound-register-missing-root-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&missing_root);
+    let missing_search = std::panic::catch_unwind(|| {
+        search(
+            &missing_root,
+            "missing-root probe (search)",
+            &["git", "ls-files"],
+        )
+    });
+    assert!(
+        missing_search.is_err(),
+        "an unavailable target repository is cannot-judge, not a clean miss"
+    );
+    let missing_must = std::panic::catch_unwind(|| {
+        must(
+            &missing_root,
+            "missing-root probe (must)",
+            &["git", "ls-files"],
+        )
+    });
+    assert!(
+        missing_must.is_err(),
+        "an unavailable target repository is cannot-judge for `must` too"
+    );
+}
+
+/// `tracked_specs`'s own vacuity refusal, exercised against a real fixture repository rather than read from
+/// the source alone: a tree with no `openspec/specs/*/spec.md` at all must panic — reporting zero bounds
+/// declared would be indistinguishable from a genuinely clean repository, which is the vacuity direction
+/// every sibling enumeration in this module refuses the same way.
+#[test]
+fn tracked_specs_refuses_a_repository_with_no_spec_md_rather_than_reporting_it_empty() {
+    let fixture = std::env::temp_dir().join(format!(
+        "tianheng-bound-register-no-specs-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&fixture);
+    std::fs::create_dir_all(fixture.join("openspec")).expect("the fixture directory is writable");
+    std::fs::write(fixture.join("openspec").join("README.md"), "# Not a spec\n").expect("writable");
+    for arguments in [["init", "-q"], ["add", "-A"]] {
+        let status = Command::new("git")
+            .arg("-C")
+            .arg(&fixture)
+            .args(arguments)
+            .status()
+            .expect("git is available");
+        assert!(status.success(), "the fixture repository is prepared");
+    }
+
+    let refused = std::panic::catch_unwind(|| parse::tracked_specs(&fixture));
+    let _ = std::fs::remove_dir_all(&fixture);
+    assert!(
+        refused.is_err(),
+        "a repository with no openspec/specs/*/spec.md must refuse rather than report zero bounds declared"
+    );
+}
+
 #[test]
 fn a_duplicate_definition_offence_names_both_sites() {
     let sites = vec![
@@ -266,14 +455,7 @@ fn every_pinning_citation_resolves_to_one_registered_test() {
                 "grep",
                 "-n",
                 "-E",
-                // POSIX ERE, which is what `git grep -E` speaks: `\\s` and `\\b` are PCRE and match
-                // nothing here — measured, they reported every citation defined zero times.
-                // `pub(super) fn` and friends: a visibility qualifier may carry a parenthesised scope, and
-                // this repository's dimension tests use exactly that. Measured — without it, every citation
-                // in `guibiao`'s test modules reported zero definitions.
-                &format!(
-                    "^[[:space:]]*(pub([(][^)]*[)])?[[:space:]]+)?(async[[:space:]]+)?(const[[:space:]]+)?(unsafe[[:space:]]+)?fn {name}[[:space:]]*[(<]"
-                ),
+                &definition_pattern(name),
                 "--",
                 // Scoped to the cited crate when the citation is qualified. That qualifier exists precisely
                 // because one test name is registered in two crates here, so searching all of `crates/`
