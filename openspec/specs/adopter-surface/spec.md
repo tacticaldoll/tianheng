@@ -12,7 +12,6 @@ documented adoption path remains usable and semantically honest across the 0.2 l
 - `crates/guibiao/tests/adopter_surface.rs`
 - `crates/hunyi/tests/adopter_surface.rs`
 - `crates/louke/tests/adopter_surface.rs`
-
 ## Requirements
 ### Requirement: The prelude is the composed adopter entrypoint
 
@@ -73,6 +72,14 @@ builder/check chains including `NoExistentialLeak`. They SHALL NOT invoke CLI, f
 process side effects merely to prove API availability, and SHALL NOT imply an unimplemented plugin
 protocol.
 
+Each standalone instrument's own promised check/reaction surface is compile-reacted by that
+dimension's own `tests/adopter_surface.rs` — `crates/guibiao/tests/adopter_surface.rs`,
+`crates/hunyi/tests/adopter_surface.rs`, and `crates/louke/tests/adopter_surface.rs` — alongside the
+composed shell's `crates/tianheng/tests/adopter_surface.rs`. This capability's declared subject SHALL
+name all four: a standalone dimension's own adoption compile check is this capability's concern by
+the same argument that put the shell's file there, not a file some other capability happens to leave
+unclaimed.
+
 #### Scenario: A composed export is accidentally removed
 
 - **WHEN** a promised prelude name is removed, relocated, or unusable
@@ -87,6 +94,13 @@ protocol.
 
 - **WHEN** the compile consumer references a run or check function
 - **THEN** it type-checks the signature without executing observation or presentation side effects
+
+#### Scenario: A dimension's own standalone-surface test is this capability's subject
+
+- **WHEN** a change touches `crates/guibiao/tests/adopter_surface.rs`,
+  `crates/hunyi/tests/adopter_surface.rs`, or `crates/louke/tests/adopter_surface.rs`
+- **THEN** it is filed under `adopter-surface`, because that dimension's own external compilation
+  reaction is what this requirement obligates and this capability's declared subject names the file
 
 ### Requirement: Shipped prelude additions are explicit compile-reacted promises
 
