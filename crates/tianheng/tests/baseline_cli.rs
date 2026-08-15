@@ -496,7 +496,7 @@ fn a_directory_that_cannot_be_flushed_does_not_fail_a_landed_write() {
     };
     let dir = std::env::temp_dir().join(format!("tianheng-unflushable-dir-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create the test directory");
+    xingbiao::claim_scratch(&dir).expect("create the test directory");
 
     // Restore a readable mode before any assertion can unwind, so a failure cannot leave an
     // unreadable directory behind in the temp dir.
@@ -809,7 +809,7 @@ fn rewriting_through_a_symlink_into_a_non_utf8_named_directory_still_succeeds() 
     dir_name.push(0xFF);
     let weird_dir = PathBuf::from(OsString::from_vec(dir_name));
     let _ = std::fs::remove_dir_all(&weird_dir);
-    std::fs::create_dir(&weird_dir).expect("create the non-UTF-8-named directory");
+    xingbiao::claim_scratch(&weird_dir).expect("create the non-UTF-8-named directory");
 
     let real_target = weird_dir.join("baseline.json");
     std::fs::write(&real_target, &valid_baseline_content).expect("seed the real target");

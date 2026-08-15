@@ -902,6 +902,17 @@ them.
 
 ### Self-governance
 
+- **A fixture scratch root is now claimed the same way everywhere, not just at the one production site a
+  prior fix closed.** `kanhe::publish_source_gate::claim_scratch` closed the exposure for the signature
+  workflow standing in front of `cargo publish`: `create_dir_all` silently adopts a pre-existing symlink and
+  writes through it, while `create_dir` cannot follow one and refuses. Roughly forty **test-fixture** scratch
+  roots across `guibiao`, `hunyi`, `louke`, `tianheng`, and `kanhe` still used the wider call, each one a
+  developer-machine-only race window rather than a path to a release artefact. Added `xingbiao::claim_scratch`
+  — the shared helper lives in the lightest-weight crate already reachable from every dimension, so it
+  closes the gap without amending `kanhe`'s dependency law — and migrated 37 call sites across 24 files.
+  Sites that only build a subdirectory *within* an already-claimed root were left untouched, since building
+  structure inside a root the fixture already owns was never the exposure.
+
 - **Whether `observer-protocol`'s declared construction-held dimension list matches the built-in composition
   path is now held to that, by a cheaper route than the one originally recorded for it.** The recorded plan
   was a perturbed build: empty a dimension's observer and see which assertion fails. Reading the built-in

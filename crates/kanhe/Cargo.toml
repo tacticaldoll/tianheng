@@ -24,3 +24,8 @@ shengmo = { path = "../shengmo" }
 tianheng = { path = "../tianheng" }
 # Cargo's `--message-format=json` stream: a corpus comes from the build, never from a list.
 serde_json = { workspace = true }
+
+[dev-dependencies]
+# The shared fixture-scratch-root claim (`claim_scratch`), so a test's temp directory refuses to adopt a
+# pre-existing symlink rather than writing through it.
+xingbiao = { workspace = true }

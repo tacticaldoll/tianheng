@@ -34,6 +34,7 @@ impl ProbeWorkspace {
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
+        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
         std::fs::create_dir_all(dir.join("src")).expect("create temp src dir");
         let manifest = dir.join("Cargo.toml");
         std::fs::write(

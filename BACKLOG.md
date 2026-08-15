@@ -127,26 +127,6 @@ consumer for an undemonstrated deduplication.
   nested block comments and is the instrument `region.rs`'s own doc comment names as existing if the residue
   is ever worth closing.
 
-- **Fixture scratch roots are claimed with `create_dir_all`, which adopts a pre-existing symlink.** *Class:*
-  READY-PATCH. *Observed pressure:* the Gate 8 review of the 0.5.0 window found it in
-  `publish_source_gate::verify_tag_signature`, where the scratch holds `tag.sig` and `check_novalidate` reads
-  it back — so a redirected directory let someone substitute a signature over the same payload made with their
-  own key, in front of `cargo publish`. That site is closed by `claim_scratch`. *Observation source:* a sweep
-  of every `create_dir_all` in `crates/`, run when that fix landed: three harnesses already claim their roots
-  with `create_dir` and an `AlreadyExists` arm — `merge_workflow.rs`, `publish_workflow.rs`,
-  `reference_integrity.rs`, which are the ones that put a controlled `bin/` on `PATH` — and roughly forty
-  fixture roots across `guibiao`, `hunyi`, `louke`, `tianheng` and the remaining `kanhe` directions do not.
-  *Current reaction or bound:* none; nothing holds the shape, and the closed site is closed by hand.
-  *Risk:* bounded and unlike the closed one. A redirected **fixture** root corrupts a test run on a developer's
-  machine; it reaches no release artefact and no irreversible act, because the gate's own scratch no longer
-  takes this route. Measured on this machine: `create_dir_all` on a symlink-to-directory returns `Ok(())` and
-  the writes land in the link's target, `create_dir` returns `AlreadyExists`, and `remove_dir_all` removes the
-  link rather than following it — so every one of these is a race in a window, not a plant-and-wait.
-  *Promotion trigger:* a second site where the redirected directory feeds something a verdict or an artefact
-  depends on, rather than a fixture a test reads back itself. *Version class:* patch; repository-internal,
-  shipping in no crate. *Authority:* `publish-source-integrity`, which paid for the first instance.
-  *Shape:* one claim helper the fixture roots share, refusing a path the process did not create — not a
-  per-site edit, since forty hand-changed call sites is the shape that drifts back.
 
 - **A command a document hands a reader is only checked in one shape.** *Class:* WATCH. *Observed pressure:*
   `5be5678` closed the class *a command a document hands a reader names a target that exists* by
@@ -1538,6 +1518,37 @@ that also holds a closed READY-PATCH record.
   constructed equality for a measured one — the failure the requirement's own sentence exists to prevent, in
   the sentence that prevents it. *Promotion trigger:* fired; the list went stale inside the window that wrote
   it. *Version class:* patch; repository-internal, shipping in no crate. *Authority:* `observer-protocol`.
+
+- ~~**Fixture scratch roots are claimed with `create_dir_all`, which adopts a pre-existing symlink.**~~
+  **CLOSED** in the open window via `fix/shared-scratch-claim-helper`. The shared helper this entry called
+  for now lives in `xingbiao` (the lightest-weight crate already depended on by `guibiao` and `hunyi`, and
+  optionally by `louke`) rather than in `kanhe`, so it reaches every crate without amending `kanhe`'s
+  dependency law: `xingbiao::claim_scratch` wraps `create_dir` with the same reasoning
+  `kanhe::publish_source_gate::claim_scratch` already carried for its one production site, which is
+  untouched — this closes the **test-fixture** instances, a different layer than the production gate the
+  first instance was found in. Migrated 37 call sites across 24 files in all five crates (`guibiao`,
+  `hunyi`, `louke`, `tianheng`, `kanhe`), leaving untouched every site that only builds a subdirectory
+  *within* a root some other call had already claimed — that half was never the exposure. Added `xingbiao`
+  as a `dev-dependency` to `tianheng` and `kanhe` (which lacked it; `guibiao`/`hunyi` already carry it as a
+  regular dependency, and `louke` gained an unconditional dev-dependency alongside its existing
+  `audit`-feature-gated optional one, so `cargo test -p louke` — audit OFF — can still reach it).
+  `xingbiao`'s own test suite gained three cases, including a direct reproduction of the defect this closes:
+  a pre-planted symlink that `create_dir_all` silently adopts and `claim_scratch` refuses. *Class:*
+  READY-PATCH. *Observed pressure:* the Gate 8 review of the 0.5.0 window found it in
+  `publish_source_gate::verify_tag_signature`, where the scratch holds `tag.sig` and `check_novalidate` reads
+  it back — so a redirected directory let someone substitute a signature over the same payload made with
+  their own key, in front of `cargo publish`. That site was closed by `claim_scratch` before this entry was
+  filed. *Observation source:* a sweep of every `create_dir_all` in `crates/`, run when that fix landed:
+  three harnesses already claimed their roots with `create_dir` and an `AlreadyExists` arm —
+  `merge_workflow.rs`, `publish_workflow.rs`, `reference_integrity.rs`, which are the ones that put a
+  controlled `bin/` on `PATH` — and roughly forty fixture roots across `guibiao`, `hunyi`, `louke`,
+  `tianheng` and the remaining `kanhe` directions did not. *Risk:* bounded and unlike the closed production
+  one — a redirected **fixture** root corrupts a test run on a developer's machine; it reaches no release
+  artefact and no irreversible act. Measured on the machine this closed on: `create_dir_all` on a
+  symlink-to-directory returns `Ok(())` and the writes land in the link's target, `create_dir` returns
+  `AlreadyExists`, and `remove_dir_all` removes the link rather than following it — so every one of these
+  was a race in a window, not a plant-and-wait. *Version class:* patch; repository-internal, shipping in no
+  crate. *Authority:* `publish-source-integrity`, which paid for the first instance.
 
 ## Version horizons
 

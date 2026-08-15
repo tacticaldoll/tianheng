@@ -61,6 +61,7 @@ impl TempBase {
     fn new(label: &str) -> Self {
         let base = std::env::temp_dir().join(format!("louke-{label}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
+        xingbiao::claim_scratch(&base).expect("the fixture root is writable");
         Self(base)
     }
 

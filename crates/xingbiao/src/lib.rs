@@ -351,3 +351,24 @@ pub fn audit_corpus_and_anchor(manifest_path: &Path) -> Result<(Vec<PathBuf>, Pa
     };
     Ok((roots, anchor))
 }
+
+/// Claim `path` as a directory this process created, refusing to adopt one that already exists.
+///
+/// **`create_dir_all` accepts a pre-existing symlink to a directory.** Measured: `create_dir_all` on such a
+/// link returns `Ok(())` and every subsequent write lands in the link's *target*, while `create_dir` cannot
+/// follow a symlink and returns `AlreadyExists` — the narrow call is what makes the refusal possible at all.
+///
+/// A fixture scratch root is typically built from `temp_dir()` and a predictable name (a process id, a
+/// counter), so it is guessable by anyone on the machine. The ordinary `remove_dir_all` then `create_dir_all`
+/// idiom leaves a window between the two calls in which a planted symlink is silently adopted, and everything
+/// the fixture writes afterward lands wherever that link points. `create_dir` closes the window rather than
+/// narrowing it: the root is claimed only if this call is the one that created it, and `remove_dir_all`
+/// itself removes a symlink at the path rather than following it, so an attacker must win a race rather than
+/// leave something lying around in advance.
+///
+/// **This is about the root only.** Every directory beneath a root this call already claimed is safe to build
+/// with the ordinary `create_dir_all`, because nothing outside the fixture's own control could have planted
+/// anything there first.
+pub fn claim_scratch(path: &Path) -> std::io::Result<()> {
+    std::fs::create_dir(path)
+}

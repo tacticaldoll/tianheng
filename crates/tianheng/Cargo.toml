@@ -23,6 +23,11 @@ hunyi = { workspace = true }
 louke = { workspace = true, features = ["audit"] }
 serde_json = { workspace = true }
 
+[dev-dependencies]
+# The shared fixture-scratch-root claim (`claim_scratch`), so a test's temp directory refuses to adopt a
+# pre-existing symlink rather than writing through it.
+xingbiao = { workspace = true }
+
 [lib]
 name = "tianheng"
 path = "src/lib.rs"

@@ -33,6 +33,7 @@ impl RootProbe {
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
+        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
         std::fs::create_dir_all(dir.join("src")).expect("create src dir");
         let manifest = dir.join("Cargo.toml");
         std::fs::write(
@@ -245,7 +246,7 @@ fn a_target_root_outside_the_package_directory_is_refused_not_labeled() {
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&shared);
-    std::fs::create_dir_all(&shared).expect("create shared dir");
+    xingbiao::claim_scratch(&shared).expect("create shared dir");
     std::fs::write(
         shared.join("outside.rs"),
         format!("fn main() {{}}\n{OFFENDING}"),

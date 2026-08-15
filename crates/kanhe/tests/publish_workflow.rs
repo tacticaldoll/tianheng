@@ -64,7 +64,7 @@ fn run_wrapper_with_env(root: &Path, extra: &[&str], env: &[(&str, &str)]) -> Ru
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
-        match std::fs::create_dir(&candidate) {
+        match xingbiao::claim_scratch(&candidate) {
             Ok(()) => break candidate,
             Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(err) => panic!(
@@ -512,7 +512,7 @@ fn an_unguarded_failure_exits_the_unjudged_class() {
     let scratch =
         std::env::temp_dir().join(format!("tianheng-publish-unguarded-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
-    std::fs::create_dir_all(&scratch).expect("the scratch root is writable");
+    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
 
     let script =
         std::fs::read_to_string(root.join("scripts/publish.sh")).expect("read the wrapper");

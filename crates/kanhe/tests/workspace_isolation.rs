@@ -136,7 +136,7 @@ fn a_manifest_without_the_table_is_a_violation() {
 fn the_refusal_classes_are_distinct() {
     let root = std::env::temp_dir().join(format!("kanhe-isolation-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(&root).expect("create");
+    xingbiao::claim_scratch(&root).expect("create");
     // Not a git repository, so the enumeration cannot answer — which is not the same fact as a manifest
     // that disagrees.
     let refusal = judge(&root).expect_err("an unenumerable tree cannot be judged");

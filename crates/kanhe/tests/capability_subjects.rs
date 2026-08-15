@@ -278,7 +278,7 @@ fn files_no_capability_claims_are_reported_rather_than_implied_judged() {
 fn a_branch_with_no_resolvable_base_cannot_be_judged() {
     let scratch = std::env::temp_dir().join(format!("kanhe-no-base-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
-    std::fs::create_dir_all(&scratch).expect("the scratch root is writable");
+    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
     for args in [
         vec!["init", "-q", "."],
         vec![

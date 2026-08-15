@@ -12,7 +12,8 @@ use std::process::Command;
 #[test]
 fn the_global_config_file_cannot_reach_a_hermetic_command() {
     let home = std::env::temp_dir().join(format!("kanhe-hermetic-{}", std::process::id()));
-    std::fs::create_dir_all(&home).expect("create the fixture home");
+    let _ = std::fs::remove_dir_all(&home);
+    xingbiao::claim_scratch(&home).expect("create the fixture home");
     std::fs::write(home.join(".gitconfig"), "[probe]\n\tkey = AMBIENT\n").expect("write");
 
     let read = |mut command: Command| {

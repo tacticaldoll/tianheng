@@ -375,6 +375,7 @@ fn an_empty_surface_fails_rather_than_reporting_clean() {
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&fixture);
+    xingbiao::claim_scratch(&fixture).expect("the fixture directory is writable");
     std::fs::create_dir_all(fixture.join("docs")).expect("the fixture directory is writable");
     std::fs::write(fixture.join(READERS_ENTRY_POINT), "# AGENTS\n").expect("writable");
     // Joined from components, and the fixture document below is named without a directory, because
