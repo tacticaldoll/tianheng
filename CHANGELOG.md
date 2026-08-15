@@ -902,6 +902,36 @@ them.
 
 ### Self-governance
 
+- **A third adversarial review round, of the second round's own fix, found a small correctness gap the
+  extraction inherited and a stale BACKLOG residue from a fix that had already landed.**
+  - `citations_in` (extracted last round from `pinning_citations`) reset its tracked bound only on a
+    `### `/`## ` heading, not on a bare `#### ` heading spelled something other than `Scenario:` —
+    `bounds_in`'s own body scan stops on any of the three. A citation following such a heading was
+    silently attributed to whichever bound scenario opened above it. Inherited verbatim from
+    `pinning_citations`'s original code, not introduced by the extraction, but now shared by two
+    checks instead of one. No tracked spec currently has a bare `#### ` heading, so this was latent;
+    fixed to match `bounds_in` exactly, with a regression test proving the disagreement first.
+  - Simplified `cited_bounds`'s citation-to-name accumulation to `.extend(citation.bound)` (an
+    `Option<T>` is 0 or 1 items) instead of a named intermediate and a branch.
+  - Widened `dispatch`'s `ParsedArgs` destructure (moved earlier last round) from matching by
+    reference to **consuming by value**: every remaining use of a non-`Copy` field
+    (`manifest_path`/`baseline_path`/`write_baseline_path`) now reads the bound local, and the
+    compiler refuses `parsed.<field>` for any of them, naming the field, if a later line tries it.
+    (A `Copy` field — `format`, `warn_uncovered`, `disallow_stale` — has no such backstop, since
+    copying a place doesn't consume it; every field in this function is read through the bound local
+    by convention for those three, not by a guarantee the type system enforces.)
+  - `BACKLOG.md`'s own *"census::figures_in returns the first match on a line"* residue note was
+    already false: the fix that closed it (`39c8856`) landed the day after the note was written
+    (`ca437abb`), and nobody removed the note. Corrected.
+  - Filed rather than fixed: `observation_bound_model.rs`'s `spec_bounds`/`spec_defence` is a third,
+    untouched implementation of the same `#### Scenario:`/`PINNED-BY` grammar `bounds_in`/
+    `citations_in` now share, and it has already diverged from them in two latent edge cases
+    (requires a literal space after `Scenario:`; checks an untrimmed line for a closing heading).
+    Recorded as a `WATCH` entry in `BACKLOG.md` rather than unified here — it touches a file this
+    window's fixes did not otherwise reach, and reworking it deserves its own scoped review.
+
+  Every fix here also carries a committed regression test verified in both directions.
+
 - **A second adversarial review round, this time of the first round's own fix, found the first
   round had reinvented logic that already existed and left one sibling flag-conflict check out of a
   hardening its own comment said was "the one place this could least afford to recur unnoticed."**
