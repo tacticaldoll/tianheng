@@ -603,6 +603,15 @@ them.
 
 ### Fixed
 
+- **`list`'s check-only-flag rejection was a hand-written array beside `ParsedArgs`, not derived from
+  it.** A new check-only field added to `ParsedArgs` without a matching update to `dispatch_list`'s
+  array would reach `list` unrejected instead of failing loud — measured directly: an added
+  `strict_mode: bool` field, wired everywhere except this one array, compiled clean and `list
+  --strict-mode` exited `0`. `dispatch_list` now exhaustively destructures `ParsedArgs` (no `..`), so
+  a field added without an arm here fails to **compile**, naming the missing field, instead of
+  silently reaching `list`. Only the failure mode for a field not yet added changes; every flag `list`
+  rejects today is unchanged.
+
 - **Composing two clean verdicts can no longer wrap into a clean verdict nobody reached.** The observer fold
   summed each participant's `Subject` with unchecked `usize` addition. `Subject::of` admits any pair where
   something declared also reached something, so `usize::MAX` declared is a value a participant can hand the
