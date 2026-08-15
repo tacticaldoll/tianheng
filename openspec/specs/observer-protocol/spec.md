@@ -217,6 +217,11 @@ comparison resting on the dimensions that did not.
   `observation-bound-model` reads every dimension's declarations through `Observer::bounds` and holds them in a
   bijection with the specs, which fails on any difference of membership or content. Measured both ways. So the
   residual is narrower than a divergent list slipping through, and wider than a comment.
+  **Not a defect unique to this reader.** `kanhe::region`'s own `Executed` abstraction declares the identical
+  residue for the same reason — a block comment and a string literal both need nested-span lexing to tell from
+  executed text, which this tree has defeated repeatedly and left declared rather than approximated. Closing
+  either needs the same instrument; closing one without the other would leave the class recorded twice under
+  two names for a reader to reconcile.
   This bound SHALL be **shown rather than described**: the reaction enumerates every shape it decides together
   with the decision, the reader is run against that table, and the rows where it reads a body that is not the
   method's are this bound. A sentence here that the table contradicts fails, which is what the three repair
