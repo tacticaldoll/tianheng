@@ -385,8 +385,15 @@ fn extract(line: &str) -> Vec<Reference> {
 /// trailing slash reads as "not a directory" and a directory-only pattern silently fails to match, so whether
 /// this check fires depended on whichever example directories happened to be built on the machine running it.
 /// Querying the target once more with a trailing slash forces the directory reading regardless of what is on
-/// disk, so a real directory-only match no longer depends on incidental local build state. This can only widen
-/// what counts as ignored (a bare match already returns true on its own), never narrow it.
+/// disk, so a real directory-only match no longer depends on incidental local build state.
+///
+/// **This widens what counts as ignored only when `target` is not already a real, non-directory file.** A
+/// trailing slash asks git "if this were a directory, would a directory-only pattern ignore it" — sound when
+/// nothing is there yet to say otherwise, but wrong once `target` already exists on disk as something that is
+/// not a directory: forcing the directory reading there can match a directory-only pattern a real file must
+/// never match (`git check-ignore` itself agrees the bare, no-slash query is correct in that case). The retry
+/// is skipped whenever the candidate is on disk and not a directory, so a real file sharing a name with a
+/// directory-only pattern is never misclassified as ignored.
 fn ignored(root: &Path, target: &str) -> bool {
     let query = |candidate: &str| {
         Command::new("git")
@@ -396,7 +403,14 @@ fn ignored(root: &Path, target: &str) -> bool {
             .map(|s| s.success())
             .unwrap_or(false)
     };
-    query(target) || query(&format!("{}/", target.trim_end_matches('/')))
+    if query(target) {
+        return true;
+    }
+    let trimmed = target.trim_end_matches('/');
+    if root.join(trimmed).is_file() {
+        return false;
+    }
+    query(&format!("{trimmed}/"))
 }
 
 /// A directory-only ignore pattern must be recognised whether or not the directory happens to exist yet.
@@ -423,6 +437,34 @@ fn a_directory_only_ignore_pattern_reacts_whether_or_not_the_directory_exists() 
         "a directory-only ignore pattern must match its candidate even before the directory is ever \
          created — otherwise this check's verdict on a generated path depends on which examples happen to \
          be built on the machine running it"
+    );
+}
+
+/// A real file sharing a name with a directory-only ignore pattern is not ignored.
+///
+/// The trailing-slash retry above exists to catch a directory-only pattern before the directory is ever
+/// created; forcing that same directory reading onto a candidate that already exists on disk as a real,
+/// ordinary file would instead misreport a genuinely stale or tracked-elsewhere reference as "deliberately
+/// ignored" — the false positive the previous doc comment's "can only widen, never narrow" claim did not
+/// account for.
+#[test]
+fn a_real_file_sharing_a_directory_only_pattern_s_name_is_not_ignored() {
+    let repo = scratch("directory-ignore-real-file");
+    let init = Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(&repo)
+        .status()
+        .expect("run git init");
+    assert!(init.success(), "could not init the fixture repository");
+    std::fs::write(repo.join(".gitignore"), "/build/\n").expect("write the fixture .gitignore");
+    std::fs::write(repo.join("build"), "not a directory").expect("write the fixture file");
+
+    let seen = ignored(&repo, "build");
+    let _ = std::fs::remove_dir_all(&repo);
+    assert!(
+        !seen,
+        "`build` exists on disk as an ordinary file, not a directory, so a directory-only `/build/` \
+         pattern must not be read as ignoring it"
     );
 }
 

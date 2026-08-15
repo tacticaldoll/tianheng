@@ -902,6 +902,53 @@ them.
 
 ### Self-governance
 
+- **An adversarial review of this whole remediation window's own work (items above, back to the
+  `v0.4.0..HEAD` audit tracker) found five defects in the fixes and checks it produced, and all five are
+  closed.** Reviewing a campaign's own output for the same class of drift it exists to catch is the same
+  discipline the campaign already applies to the rest of the repository, turned on itself:
+  - `dispatch`'s `--write-baseline` conflict check read `parsed.write_baseline_path` /
+    `parsed.warn_uncovered` / `parsed.format` by field access, while `dispatch_list`'s equivalent guard just
+    above it was exhaustively destructured so a `ParsedArgs` field added later fails to compile rather than
+    reaching `list` unconsidered — the asymmetry a Contract-violated finding earlier this window was
+    specifically about, recurring at the one other site the same struct is read from a live conflict check.
+    Now exhaustively destructured too.
+  - `pin_bites`'s `cited_bounds()` (introduced this window to map a citation to the bound id it defends) read
+    citations through `bound_register_parse::bounds_in`, which is scoped to scenarios `marks_a_bound`
+    accepts — the observation-bound register's own job, not this check's. A `PINNED-BY` citation under an
+    ordinary requirement scenario (this window's own
+    `the_construction_held_list_matches_the_built_in_composition_path` among them: 7 of 76 tracked citations)
+    was silently invisible to it, where the `cited_names()` it replaced had recognized every `PINNED-BY` line
+    regardless of heading. Masked today because no `pin_mutations.tsv` record names one of the seven, but the
+    first one added would have panicked reporting a real citation as cited by no declared bound. Broadened to
+    recognize every citation, mapping a name found only outside a bound scenario to an empty id list rather
+    than dropping it.
+  - `reference_integrity`'s `ignored()` (the trailing-slash retry fixed earlier this window) forces the
+    directory reading regardless of what is on disk, which its own doc comment claimed "can only widen …
+    never narrow" what counts as ignored. Measured false: `git check-ignore -q -- build/` matches a
+    directory-only `/build/` pattern even when `build` exists on disk as an ordinary file, so a real,
+    trackable file sharing a name with a directory-only pattern was misclassified as deliberately ignored —
+    a stale reference to it would have gone unreported. The retry is now skipped whenever the candidate
+    already exists on disk as something that is not a directory.
+  - `bound_register_parse::undeclared_prose_offences`'s own doc comment claimed it recognizes a declared
+    bound scenario "mirroring `bounds_in`'s own recognition exactly, so the two cannot come to disagree" —
+    false for an indented `#### Scenario:` heading: `bounds_in`'s opening check is untrimmed and does not
+    recognize it, while this function trimmed the line first and did. An indented bound-marked scenario
+    would vanish from the register entirely (never a declared bound, and never reported as prose stating one
+    outside a declared scenario either) with neither check disagreeing loud enough to say so. No tracked
+    spec is currently indented; fixed to check the untrimmed line, matching `bounds_in` exactly as claimed.
+  - `census.rs`'s `figures_in` overlap protection (added earlier this window) skipped past only the *first*
+    placeholder's own number after a match, closing the exposure where a start offset inside that number's
+    tail re-triggered a spurious rematch. The identical exposure survives one placeholder later: a phrase of
+    two or more placeholders with a short or empty literal after a non-first one lets *that* figure's digits
+    restart a match, reusing text a prior occurrence already consumed (`"{} of {}"` against `"3 of 53 of
+    9"` returned `[[3, 53], [53, 9]]`, double-counting `53`). Both currently-declared census phrases have
+    long literal tails and never triggered it. Simplified rather than special-cased further: `match_from` now
+    reports the whole match's consumed length, and the scan skips past all of it, which closes both the
+    original and this exposure with less code than tracking the first number's boundary alone did.
+
+  Each fix carries a committed regression test verified in both directions: reverting the fix reproduces the
+  exact reported defect, and restoring it passes.
+
 - **A fixture scratch root is now claimed the same way everywhere, not just at the one production site a
   prior fix closed.** `kanhe::publish_source_gate::claim_scratch` closed the exposure for the signature
   workflow standing in front of `cargo publish`: `create_dir_all` silently adopts a pre-existing symlink and

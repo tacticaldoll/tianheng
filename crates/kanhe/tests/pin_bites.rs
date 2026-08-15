@@ -119,14 +119,19 @@ fn parse_records(root: &Path) -> Vec<Record> {
     records
 }
 
-/// Every test name a declared bound cites, read from HEAD rather than the worktree, mapped to the bound
-/// id(s) it defends.
+/// Every test name a `PINNED-BY` line cites anywhere in a tracked spec, read from HEAD rather than the
+/// worktree, mapped to the bound id(s) it defends where it defends any.
 ///
-/// A survival message that names only the citation leaves a reader to go find which bound it was for; the
-/// canonical parser (`bound_register_parse::bounds_in`, the same one `bound_register.rs` uses — a second
+/// `bound_register_parse::bounds_in` (the same canonical parser `bound_register.rs` uses — a second
 /// implementation of "which bound cites this name" is exactly the twin-drift class this repository keeps
-/// closing) already produces each `Bound`'s `id` beside its `Citation::PinnedBy` names. Read from `HEAD` per
-/// spec file rather than the worktree, matching this check's own discipline everywhere else.
+/// closing) already produces each `Bound`'s `id` beside its `Citation::PinnedBy` names, but it is scoped to
+/// scenarios `marks_a_bound` accepts — the observation-bound register's own job, not this check's. An
+/// ordinary requirement scenario can carry the identical citation line to name the test that verifies IT,
+/// and this check exists to hold *a pinning citation*, not only a registered bound's, to biting: a name
+/// found only outside a bound scenario is entered with an empty id list rather than dropped, so
+/// [`every_declared_mutation_kills_the_pin_it_names`] still recognizes it as a real citation instead of
+/// reporting — as it once did — that no declared bound cites a test HEAD plainly cites. Read from `HEAD`
+/// per spec file rather than the worktree, matching this check's own discipline everywhere else.
 fn cited_bounds(root: &Path) -> HashMap<String, Vec<String>> {
     let listing = must(
         root,
@@ -150,6 +155,17 @@ fn cited_bounds(root: &Path) -> HashMap<String, Vec<String>> {
                     let short = cite.rsplit("::").next().unwrap_or(cite).to_string();
                     by_name.entry(short).or_default().push(bound.id.clone());
                 }
+            }
+        }
+        // The pass above only sees a `PINNED-BY` line under a bound-marked scenario heading. This one
+        // walks every line so a citation under an ordinary requirement scenario is still recorded —
+        // `.or_default()` leaves an already-mapped name's bound id(s) untouched and only adds an empty
+        // entry for a name `bounds_in` never saw.
+        for raw in text.lines() {
+            if let Some(rest) = raw.trim().strip_prefix("- **PINNED-BY** ") {
+                let cite = rest.trim().trim_matches('`');
+                let short = cite.rsplit("::").next().unwrap_or(cite).to_string();
+                by_name.entry(short).or_default();
             }
         }
     }
