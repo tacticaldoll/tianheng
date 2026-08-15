@@ -275,6 +275,32 @@ fn an_unreadable_source_cannot_be_judged_rather_than_refused() {
     );
 }
 
+/// A manifest that cannot be READ (not merely absent or malformed once read) must not be judged as
+/// though its version were missing — a real `io::Error` and a genuinely absent version are different
+/// facts right before an irreversible `cargo publish`, and folding one into the other hides which one
+/// happened.
+#[test]
+fn a_manifest_this_gate_cannot_read_is_not_judged_as_though_its_version_is_missing() {
+    let root = scratch("unreadable-manifest");
+    let fixture = build_fixture(&root, "unreadable-manifest", "9.9.9");
+    std::fs::write(fixture.repo.join("Cargo.toml"), [0xff, 0xfe, 0xfd])
+        .expect("write invalid utf-8 in place of the manifest");
+    let refusal = judge(&fixture.repo, &fixture.remote.display().to_string())
+        .expect_err("a manifest this gate cannot read must not be judged as though absent");
+    let _ = std::fs::remove_dir_all(&root);
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("could not read") && refusal.message.contains("Cargo.toml"),
+        "the refusal must name the read failure rather than fold it into the generic missing message: {}",
+        refusal.message
+    );
+    assert!(
+        !refusal.message.contains("<missing>"),
+        "a real read failure must not be reported identically to a genuinely absent version: {}",
+        refusal.message
+    );
+}
+
 // --- the cannot-judge directions, and the two the matrix was shadowing -------------------------------------
 
 /// The refusal KIND was defended; the refusal's SUBJECT was not.

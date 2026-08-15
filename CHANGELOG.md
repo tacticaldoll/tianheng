@@ -890,6 +890,16 @@ them.
 
 ### Self-governance
 
+- **The pre-publish source gate folded a read failure into "version missing," right before an
+  irreversible act.** `workspace_version` read `Cargo.toml` with `.ok()?`, so a real `io::Error`
+  (permission denied, a broken symlink, non-UTF8 bytes) and a manifest that reads fine but genuinely
+  lacks a version key produced the identical `workspace version is missing or malformed: <missing>`
+  refusal — the one distinction this gate exists to draw, at the one moment (`cargo publish`) it matters
+  most to draw it. `workspace_version` now returns the read failure instead of discarding it, and
+  `judge` reports it by name rather than folding it into the generic message. Pinned by a test that
+  writes invalid UTF-8 in place of the manifest and asserts the refusal names the read failure and never
+  reads `<missing>`; run against the prior code, it failed exactly as expected.
+
 - **Five entries above describe a mechanism this same window later deleted, and none of them says so.** An
   adversarial contract review read every entry in this section — and the ones above it — against `HEAD`,
   not against the commit that closed each one, and found: the projection content-assertion test that

@@ -273,8 +273,14 @@ pub fn classify(repo: &Path, paths: &[&str]) -> Result<String, NoClassification>
 }
 
 /// The `[workspace.package]` version, or the `[package]` version where there is no workspace table.
-fn workspace_version(repo: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(repo.join("Cargo.toml")).ok()?;
+///
+/// A read failure (permission denied, a broken symlink, non-UTF8 bytes) is a distinct fact from the
+/// version key genuinely being absent from a manifest that reads fine — the caller judges the two
+/// differently right before an irreversible `cargo publish`, so this does not fold one into the other.
+fn workspace_version(repo: &Path) -> Result<Option<String>, String> {
+    let manifest = repo.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest)
+        .map_err(|err| format!("could not read {}: {err}", manifest.display()))?;
     let mut in_package = false;
     for line in text.lines() {
         let trimmed = line.trim();
@@ -286,12 +292,12 @@ fn workspace_version(repo: &Path) -> Option<String> {
             if let Some(rest) = trimmed.strip_prefix("version") {
                 let rest = rest.trim_start();
                 if let Some(rest) = rest.strip_prefix('=') {
-                    return Some(rest.trim().trim_matches('"').to_string());
+                    return Ok(Some(rest.trim().trim_matches('"').to_string()));
                 }
             }
         }
     }
-    None
+    Ok(None)
 }
 
 fn is_semver(version: &str) -> bool {
@@ -321,7 +327,9 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
         ))
     })?;
 
-    let version = workspace_version(repo).unwrap_or_default();
+    let version = workspace_version(repo)
+        .map_err(cannot_judge)?
+        .unwrap_or_default();
     if !is_semver(&version) {
         return Err(cannot_judge(format!(
             "workspace version is missing or malformed: {}",
