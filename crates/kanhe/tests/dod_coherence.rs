@@ -161,6 +161,24 @@ fn local_dod_commands_exist_in_ci() {
     );
 }
 
+/// A Definition of Done block that parses to zero commands must refuse rather than report clean.
+///
+/// The direction this gate's own zero-commands guard defends: a heading or fence-marker change that this
+/// parser no longer recognizes would silently produce an empty command list, and `missing_from_ci` over an
+/// empty list is vacuously satisfied — "every command CI runs" holding over no commands at all. Only a
+/// comment line inside the fence (which `dod_commands` strips to nothing), never an absent block or a
+/// present-but-empty one, exercises the same collapse a shape change would cause.
+#[test]
+fn a_dod_block_with_no_commands_is_refused_not_reported_clean() {
+    let agents = "## Definition of Done\n\n```bash\n# only a comment, no command\n```\n";
+    let refused = std::panic::catch_unwind(|| dod_commands(agents));
+    assert!(
+        refused.is_err(),
+        "a Definition of Done block parsing to zero commands must panic, not silently pass \
+         `missing_from_ci` over an empty corpus"
+    );
+}
+
 #[test]
 fn a_missing_supply_chain_action_leaves_cargo_deny_missing() {
     let agents = "## Definition of Done\n\n```bash\ncargo deny check\n```\n";

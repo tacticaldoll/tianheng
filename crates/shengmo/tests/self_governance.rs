@@ -108,10 +108,7 @@ fn dimension_crates() -> BTreeSet<String> {
         // dimension restricted to a private registry left this set and its allowlist went unchecked: the same
         // false negative as the two revisions before this one, now through the field's *semantics* rather than
         // through its text.
-        if package["publish"]
-            .as_array()
-            .is_some_and(|registries| registries.is_empty())
-        {
+        if excluded_by_publish_field(&package["publish"]) {
             continue;
         }
         let Some(name) = package["name"].as_str() else {
@@ -144,6 +141,41 @@ fn dimension_crates() -> BTreeSet<String> {
         "no dimension crate was enumerated, so this comparison would hold over nothing"
     );
     found
+}
+
+/// Whether a package's `publish` field excludes it from the dimension set — only the empty array does.
+///
+/// Extracted so the four-state claim (private-registry caught, `publish = false` still excluded, an
+/// ordinary publishable dimension still caught, ordinary absence still caught) is testable directly against
+/// cargo's actual reported shapes, rather than only against whichever states this workspace's own manifests
+/// happen to carry today.
+fn excluded_by_publish_field(publish: &serde_json::Value) -> bool {
+    publish
+        .as_array()
+        .is_some_and(|registries| registries.is_empty())
+}
+
+/// The four `publish` shapes `cargo metadata` reports, each measured directly rather than assumed: absent
+/// (`null`, the common case — no `publish` key at all), `true` (also `null` — cargo does not distinguish
+/// explicit `true` from absence), `false` (the empty array — the one shape that excludes), and a private
+/// registry (`["some-registry"]`, a non-empty array — a crate that publishes, just not to crates.io, which
+/// the fourth revision of this enumerator excluded by mistake).
+#[test]
+fn the_publish_field_s_four_states_are_read_correctly() {
+    assert!(
+        !excluded_by_publish_field(&serde_json::Value::Null),
+        "absent (or `true`, which cargo also reports as null) must not exclude — an ordinary publishable \
+         dimension must still be caught"
+    );
+    assert!(
+        excluded_by_publish_field(&serde_json::json!([])),
+        "publish = false (the empty array) is the one shape that excludes"
+    );
+    assert!(
+        !excluded_by_publish_field(&serde_json::json!(["some-registry"])),
+        "a non-empty array is a crate that publishes to a named registry, not an unpublishable one — the \
+         false negative this state's own fix closed"
+    );
 }
 
 #[test]
