@@ -902,6 +902,46 @@ them.
 
 ### Self-governance
 
+- **A fifth adversarial review round, this time scoped to the whole `v0.4.0..HEAD` remediation
+  campaign again rather than only the latest fix, found a live, currently-active defect in the
+  observation-bound register's own prose scan — not merely a latent one.**
+  `bound_register_parse::states_a_bound_in_prose`/`negates_bound_in_prose` compared every token
+  case-sensitively against lowercase literals (`"stated"`, `"documented"`, `"not"`, `"never"`,
+  `"a"`, `"an"`), so ordinary sentence-initial capitalization never matched. Measured against a real
+  tracked spec: `semantic-dyn-trait-boundary/spec.md`'s "**Stated** renderer-granularity bounds MAY
+  coalesce the same subject at the same seam..." was read past silently by
+  `every_bound_stated_in_prose_is_declared_as_a_scenario` — a production gate that runs on every
+  `cargo test -p kanhe` — reporting the spec clean over a bound genuinely stated in prose and
+  declared nowhere. Fixed by case-folding both functions before tokenizing.
+
+  Fixing the detector surfaced the real violation it had been masking: with the fix in place, the
+  gate correctly failed against that exact sentence. Investigated rather than silenced — the
+  sentence is a normative design statement about `hunyi`'s own violation-identity model (how a
+  renderer's declared fact-granularity may coalesce findings), not a description of an unclosed
+  observation gap in this repository's own governance tooling, so declaring it as a formal
+  `#### Scenario: ... - a stated bound` would misrepresent it as a residual this repository cannot
+  close.
+  Reworded the sentence instead, preserving its exact normative meaning while removing the
+  "stated ... bounds" phrase that triggered the (now-correct) detector: "A renderer MAY declare a
+  coarser granularity that coalesces the same subject at the same seam, but traversal position
+  SHALL NOT be used to claim injectivity." Verified: the gate and `openspec validate --specs
+  --strict` both pass with the fix and the reword together.
+
+  Filed rather than fixed, both currently latent (verified against every tracked spec, zero live
+  instances): `negates_bound_in_prose`'s one-interposed-word budget is measured independently from
+  `states_a_bound_in_prose`'s own, so a sentence stacking both qualifiers
+  (`"this is not a documented residual bound"`) reads as a declaration instead of the denial it is;
+  and `requirement_heading_is_bounds_named` checks only the character *after* a `bound`/`bounds`
+  match, not before, so a heading containing `outbound`/`rebound`/`unbounded` as a substring would be
+  wrongly classified as bounds-named. Both recorded as `WATCH` entries in `BACKLOG.md`.
+
+  Also fixed in this round: `crates/xingbiao/src/tests.rs`'s own `TempDir::new` — the crate that
+  shipped `claim_scratch` this window still used `remove_dir_all`/`create_dir_all` for its own test
+  fixture root, the exact vulnerable idiom the migration existed to close, a few dozen lines from
+  `claim_scratch`'s own regression tests. Now uses `claim_scratch`.
+
+  Every code fix here carries a committed regression test verified in both directions.
+
 - **A fourth adversarial review round, of the third round's own fix, found one cosmetic issue and
   raised one question already settled by investigation.** `dispatch`'s exhaustive `ParsedArgs`
   destructure bound `manifest_path` (`Option<String>`) and later shadowed it 45 lines on with a

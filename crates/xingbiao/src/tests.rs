@@ -307,7 +307,11 @@ impl TempDir {
     fn new(label: &str) -> Self {
         let dir = std::env::temp_dir().join(format!("xingbiao-{label}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        // Claimed the same way this crate's own `claim_scratch` requires of every other caller: a
+        // predictable, PID-based path directly under the world-writable system temp directory is
+        // exactly the shape `claim_scratch` exists to protect, and this crate's own test fixture is
+        // not exempt from the migration it shipped.
+        claim_scratch(&dir).unwrap();
         Self(dir)
     }
 

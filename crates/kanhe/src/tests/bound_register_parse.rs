@@ -74,6 +74,14 @@ fn prose_bound_trigger_admits_one_interposed_word() {
         ("this is a stated two word bound", false),
         ("nothing here mentions a boundary at all", false),
         ("understated bounds should not match", false),
+        // Sentence-initial capitalization — the ordinary case a real requirement's body prose uses, and the
+        // shape `semantic-dyn-trait-boundary/spec.md` carries verbatim ("Stated renderer-granularity bounds
+        // MAY coalesce..."), which this exact-case comparison read past silently before this fix.
+        (
+            "Stated renderer-granularity bounds MAY coalesce the same subject",
+            true,
+        ),
+        ("Documented residual bounds still apply", true),
     ];
     for (line, expected) in cases {
         assert_eq!(
@@ -114,6 +122,10 @@ fn negation_adjacent_to_the_noun_is_excluded_a_negation_elsewhere_in_the_sentenc
         // The interposed-word tolerance belongs to "a/an ... bound", not to "stated/documented ... bound" —
         // one word between "a" and "bound" is tolerated here, same as the base case above.
         "this is not a plain bound",
+        // Sentence-initial capitalization of the negator itself — the same case-folding fix as
+        // `states_a_bound_in_prose`'s, in the direction where a miss reports a genuine denial as a
+        // declaration instead of exempting it.
+        "Not a stated bound",
     ];
     for line in genuine_denials {
         assert!(
