@@ -899,6 +899,15 @@ them.
 
 ### Self-governance
 
+- **`scripts/merge-pr.sh` refused `gh`'s short spelling of `--delete-branch` without naming why.** `-d`
+  fell through to the generic catch-all message instead of the dedicated one explaining that deleting a
+  branch auto-closes any pull request stacked on it — unlike every other admitted-consequence flag
+  family in this wrapper, each of which catches its own short/glued spelling in the same arm (`-t*` with
+  `--subject`, `-F*`/`-b*` with `--body-file`/`--body`, and so on). Safety held either way (`-d` was
+  still refused, exit 2), but the operator wasn't told the actual consequence. `-d` now shares the
+  `--delete-branch` arm. Pinned by a new assertion in `only_an_allowlisted_flag_reaches_the_merge`; run
+  against the prior script, it failed with the generic message this fix replaces.
+
 - **The no-trait-object reaction scanned its own test file's crate, not the composed shell it names.**
   `composition_introduces_no_trait_object` used `CARGO_MANIFEST_DIR` to find the corpus to scan; since
   the test lives under `crates/kanhe/tests/`, that resolved to `crates/kanhe/src` — a directory with no
