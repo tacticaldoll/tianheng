@@ -899,6 +899,17 @@ them.
 
 ### Self-governance
 
+- **The register's own projection was only staleness-checked, never content-checked.** The companion test
+  compared `render_projection`'s output against the tracked `docs/observation-bounds.md` byte-for-byte — proof
+  the document and the renderer agree, never proof either is right, since both come from the same format
+  string. A typo baked into that string literal (the `` `author\s:` `` mangled-apostrophe class this
+  repository has hit before) would regenerate byte-identically under `BLESS=1` and pass. Added
+  `the_projection_s_disclosures_are_asserted_not_only_its_freshness`: reads the blessed document directly,
+  independent of the renderer, and asserts each disclosure the requirements oblige the header to make is
+  literally present, refusing a rendered backslash outright. Verified both negative directions: a missing
+  disclosure and a stray backslash injected into the live document each fail the new test with the exact
+  message this fix adds; the byte-diff freshness test alone would have passed both.
+
 - **A bound stated in prose but not declared as a scenario now fails, closing a gap the shell-to-Rust
   migration silently dropped.** `observation-bound-register`'s requirement of the same name has been fully
   specified — four scenarios, three residuals, a bounds-named-requirement exemption — since before this
