@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**16 of 84 declared bounds have no pinning test.** That figure is the register's
+**15 of 83 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -190,12 +190,6 @@ fallback used where no manifest exists, which the register spec describes.
 > the reaction reads that copy's body and reports it as the method's. Both anchor conditions are satisfied — one occurrence, at a line start — and the reader knows nothing of comments or literals, so the class is "the unique whole-line occurrence is not the definition" rather than any one syntactic position. What passes is a **second, hand-maintained path that agrees today**: a *divergent* list does not, because `observation-bound-model` reads every dimension's declarations through `Observer::bounds` and holds them in a bijection with the specs, which fails on any difference of membership or content. Measured both ways. So the residual is narrower than a divergent list slipping through, and wider than a comment. **Not a defect unique to this reader.** `kanhe::region`'s own `Executed` abstraction declares the identical residue for the same reason — a block comment and a string literal both need nested-span lexing to tell from executed text, which this tree has defeated repeatedly and left declared rather than approximated. Closing either needs the same instrument; closing one without the other would leave the class recorded twice under two names for a reader to reconcile. This bound SHALL be **shown rather than described**: the reaction enumerates every shape it decides together with the decision, the reader is run against that table, and the rows where it reads a body that is not the method's are this bound. A sentence here that the table contradicts fails, which is what the three repair rounds preceding this scenario could not do
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*
-
-### `observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound`
-
-> nothing reacts. The list is hand-maintained prose about a set the code enumerates, and falsifying it passes the whole suite and every gate — measured. Deciding it needs a perturbed build, not a read: an independently-implemented dimension fails the equality assert when its observer is emptied, a construction-held one fails only the reacts-at-all assert, and no in-process reaction can apply that perturbation to itself
-
-- **unpinned**, tracked by: `BACKLOG.md` — *the construction-held list is hand-maintained prose*
 
 ### `observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound`
 

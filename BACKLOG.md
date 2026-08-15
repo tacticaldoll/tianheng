@@ -127,24 +127,6 @@ consumer for an undemonstrated deduplication.
   nested block comments and is the instrument `region.rs`'s own doc comment names as existing if the residue
   is ever worth closing.
 
-- **The construction-held list is hand-maintained prose.** *Class:* READY-PATCH. *Observed pressure:*
-  `observer-protocol` requires the spec to say which dimensions' equality holds by construction, and nothing
-  observes that the list is correct. The 0.5.0 window is the evidence: the list named runtime alone, the shell's
-  semantic arm changed under it in the same window, and the list was repaired **by hand**. Falsifying it — say,
-  claiming static is construction-held and runtime observed — passes the whole workspace suite and every gate.
-  *Observation source:* the final sweep of that window, which ran exactly that perturbation.
-  *Current reaction or bound:* the declared bound
-  `observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound`.
-  *Risk:* a reader takes a constructed equality for a measured one — the failure the requirement's own sentence
-  exists to prevent, in the sentence that prevents it. *Promotion trigger:* fired; the list went stale inside
-  the window that wrote it. *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
-  `observer-protocol`. *Shape:* not a text reader — that route is retired and its defeat is recorded one
-  requirement over. The discriminator is behavioural and needs a **perturbed build**: empty a dimension's
-  observer and see which assertion fails — the equality assert for an independently-implemented dimension, only
-  the reacts-at-all assert for a construction-held one. `crates/kanhe/tests/pin_bites.rs` already builds and runs a
-  mutated checkout, so the machinery exists; what it does not yet do is carry a declaration whose subject is a
-  spec sentence rather than a pinning citation.
-
 - **Fixture scratch roots are claimed with `create_dir_all`, which adopts a pre-existing symlink.** *Class:*
   READY-PATCH. *Observed pressure:* the Gate 8 review of the 0.5.0 window found it in
   `publish_source_gate::verify_tag_signature`, where the scratch holds `tag.sig` and `check_novalidate` reads
@@ -352,7 +334,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
   specs held
   **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **84 bounds across 24 capabilities** — a live figure rather than part of the measurement
+  currently holds **83 bounds across 24 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -1532,6 +1514,30 @@ that also holds a closed READY-PATCH record.
   entry's own prose already claimed once. *Version class:* patch — a CI/DoD addition, no published
   surface. *Authority:* `openspec/specs/observation-bound-register/spec.md`'s scenario asserting the
   command's result.
+
+- ~~**The construction-held list is hand-maintained prose.**~~ **CLOSED** in the open window via
+  `fix/construction-held-list-verification`, and by a cheaper route than the one this entry's own prose
+  called for. The recorded plan was a perturbed build through `pin_bites.rs`'s mutated-worktree machinery,
+  extended to carry a declaration whose subject is a spec sentence rather than a pinning citation. Reading the
+  built-in composition path's own source instead answered the same question directly: for a construction-held
+  dimension the built-in path does not call some function that happens to agree with the observer today, it
+  *constructs that dimension's own `Observer` and calls `.observe()` on it* — one implementation to find, not
+  two runs to compare. `crates/tianheng/src/runner.rs`'s `evaluate_constitution` was read to confirm this
+  textually: the semantic and runtime arms each construct `SemanticObserver`/`RuntimeObserver` directly, and
+  the static arm still calls `check_and_cover` without ever constructing `StaticObserver`. Added
+  `the_construction_held_list_matches_the_built_in_composition_path`, and re-pointed the spec's scenario from
+  `UNPINNED` to `PINNED-BY` it. Verified both negative directions: moving `SemanticObserver::new(...)` out of
+  `evaluate_constitution`'s own body (into a sibling function it merely calls) fails the new test, and adding
+  a `StaticObserver::new(...)` construction inside `evaluate_constitution` also fails it — restoring the real
+  implementation passes both. *Class:* READY-PATCH. *Observed pressure:* `observer-protocol` requires the
+  spec to say which dimensions' equality holds by construction, and nothing observed that the list was
+  correct. The 0.5.0 window is the evidence: the list named runtime alone, the shell's semantic arm changed
+  under it in the same window, and the list was repaired **by hand**. Falsifying it — say, claiming static is
+  construction-held and runtime observed — passed the whole workspace suite and every gate. *Observation
+  source:* the final sweep of that window, which ran exactly that perturbation. *Risk:* a reader takes a
+  constructed equality for a measured one — the failure the requirement's own sentence exists to prevent, in
+  the sentence that prevents it. *Promotion trigger:* fired; the list went stale inside the window that wrote
+  it. *Version class:* patch; repository-internal, shipping in no crate. *Authority:* `observer-protocol`.
 
 ## Version horizons
 

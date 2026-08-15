@@ -186,20 +186,22 @@ attribute beginning with `#` remains executed Rust text.
 
 Where the built-in path obtains a dimension's outcome **by invoking that dimension's observer**, equality for
 that dimension holds **by construction rather than by observation**, and the spec SHALL say which dimensions
-those are — otherwise a reader takes a constructed equality for a measured one. **Nothing observes that this
-list is correct**, and this window is the evidence: the list named runtime alone, the shell's semantic arm
-changed under it, and the list was repaired by hand rather than by a reaction. It is a membership claim about a
-set with an enumerator, which is the shape this family refuses everywhere else, and it is declared as a bound
-below rather than left implied. A reaction is conceivable but not textual — whether a dimension's equality is
-construction-held is decidable by *perturbing* that dimension's observer and seeing whether the equality assert
-or only the reacts-at-all assert fails, which needs a mutated build rather than a read. The **runtime** and
-**semantic** dimensions are such cases: the built-in path invokes `RuntimeObserver` and `SemanticObserver`, so
-for runtime its two copies of those three statements — the corpus derivation, the audit call and the
-`cannot read workspace` message — become one, and for semantic there is no second call at which the two
-verdicts could differ. What that does *not* settle for either is whether the shell honours its delegation
-obligation, which is a different property with a bound of its own. The
-**static** dimension remains independently implemented on both sides — the built-in path calls
-`check_and_cover`, the observer calls `check` — and for it the reaction's equality is observed.
+those are — otherwise a reader takes a constructed equality for a measured one. The list is now held to that:
+a reaction reads the built-in path's own source and refuses if a dimension it declares construction-held is
+not constructed there, or if a dimension it does not declare so is. This was true in only one direction until
+this window: the list named runtime alone, the shell's semantic arm changed under it, and the list was
+repaired by hand — a membership claim about a set with an enumerator, which is the shape this family refuses
+everywhere else. What answers it is textual rather than a perturbed build: for a construction-held dimension
+the built-in path does not call some *other* function that happens to agree with the observer today, it
+directly constructs that dimension's own `Observer` and calls `.observe()` on it, so there is exactly one
+implementation to read rather than two runs to compare. The **runtime** and **semantic** dimensions are such
+cases: the built-in path invokes `RuntimeObserver::new(...).observe(...)` and
+`SemanticObserver::new(...).observe(...)` directly, so for runtime its two copies of those three statements —
+the corpus derivation, the audit call and the `cannot read workspace` message — become one, and for semantic
+there is no second call at which the two verdicts could differ. What that does *not* settle for either is
+whether the shell honours its delegation obligation, which is a different property with a bound of its own.
+The **static** dimension remains independently implemented on both sides — the built-in path calls
+`check_and_cover` and never constructs `StaticObserver` — and for it the reaction's equality is observed.
 
 Where a dimension's equality is construction-held, the reaction SHALL still observe that the fixture's boundary
 for that dimension **reacts at all**. Otherwise an arm that quietly went vacuous would leave the whole
@@ -228,16 +230,14 @@ comparison resting on the dimensions that did not.
   rounds preceding this scenario could not do
 - **UNPINNED** `BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*
 
-#### Scenario: Whether the stated construction-held list matches the composition path is not observed — a stated bound
+#### Scenario: The stated construction-held list is held against the composition path
 
-- **WHEN** the list of construction-held dimensions in this requirement names a different set than the built-in
-  path's actual observer invocations
-- **THEN** nothing reacts. The list is hand-maintained prose about a set the code enumerates, and falsifying it
-  passes the whole suite and every gate — measured. Deciding it needs a perturbed build, not a read: an
-  independently-implemented dimension fails the equality assert when its observer is emptied, a
-  construction-held one fails only the reacts-at-all assert, and no in-process reaction can apply that
-  perturbation to itself
-- **UNPINNED** `BACKLOG.md` — *the construction-held list is hand-maintained prose*
+- **WHEN** the built-in composition path's own source is read for each dimension named construction-held above
+- **THEN** the reaction fails if a construction-held dimension's own `Observer` is not constructed there, or if
+  a dimension not named construction-held has one constructed there instead — read directly rather than
+  inferred from a mutated build, since a construction-held dimension has exactly one implementation to find,
+  not two runs to compare
+- **PINNED-BY** `the_construction_held_list_matches_the_built_in_composition_path`
 
 #### Scenario: The trait-driven fold disagrees with the existing path
 

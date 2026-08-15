@@ -276,6 +276,57 @@ fn every_observer_declares_exactly_its_dimension_s_bounds() {
     }
 }
 
+/// Whether `observer-protocol`'s declared construction-held list (semantic, runtime — not static) matches
+/// what the built-in composition path actually invokes.
+///
+/// A textual read rather than a runtime perturbation, and it can be: for a construction-held dimension the
+/// built-in path does not call some *other* function that happens to agree with the observer today — it
+/// directly constructs that dimension's own `Observer` and calls `.observe()` on it, so there is exactly one
+/// implementation, not two that could drift apart. Reading which call each arm makes answers the same
+/// question a mutated build would (`observation-bound-register/spec.md`'s "an independently-implemented
+/// dimension fails the equality assert when its observer is emptied, a construction-held one fails only the
+/// reacts-at-all assert") without paying for one: emptying `SemanticObserver::observe`'s body cannot make the
+/// built-in path disagree with itself, because the built-in path's semantic arm *is* that call. What this
+/// reads is the fact underneath that inference — the composition literally constructs the observer — not the
+/// inference itself.
+#[test]
+fn the_construction_held_list_matches_the_built_in_composition_path() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let path = root.join("crates/tianheng/src/runner.rs");
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("cannot read {path:?}: {error}"));
+    let source = Source::of(text);
+    let body = function_body(&source, "fn evaluate_constitution(").unwrap_or_else(|| {
+        panic!(
+            "no unique `fn evaluate_constitution` body in {path:?}: {} — the built-in composition path this \
+             test verifies against no longer exists where expected",
+            decline_reason(&source, "fn evaluate_constitution(")
+        )
+    });
+    let composition = body.whole();
+
+    assert!(
+        composition.contains("SemanticObserver::new("),
+        "the semantic dimension is declared construction-held in observer-protocol/spec.md, but the built-in \
+         path no longer constructs `SemanticObserver` directly — either the declaration or the composition \
+         path has drifted"
+    );
+    assert!(
+        composition.contains("RuntimeObserver::new("),
+        "the runtime dimension is declared construction-held in observer-protocol/spec.md, but the built-in \
+         path no longer constructs `RuntimeObserver` directly — either the declaration or the composition \
+         path has drifted"
+    );
+    assert!(
+        !composition.contains("StaticObserver::new("),
+        "the static dimension is declared independently implemented in observer-protocol/spec.md — if the \
+         built-in path started constructing `StaticObserver` directly, static would become construction-held \
+         too and the spec's list would be stale"
+    );
+}
+
 /// A source with no `fn bounds` is a **refusal to judge**, not a pass.
 ///
 /// The check panics naming the dimension when the method is absent from the file its array entry points at.
