@@ -6,7 +6,6 @@ The 漏刻 (runtime) dimension's first capability: declare which concrete-type *
 ## Subject
 
 - `crates/louke/src/**/*.rs`
-
 ## Requirements
 ### Requirement: Runtime boundary declared in Rust and installed write-once
 

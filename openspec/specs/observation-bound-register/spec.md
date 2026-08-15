@@ -27,7 +27,6 @@ trusted — and would be committing the failure it exists to end.
 
 The reaction runs as `cargo test -p kanhe --test bound_register`, so *violation* and *cannot-judge* below name
 values of its result type rather than process statuses.
-
 ## Requirements
 ### Requirement: An observation bound is declared as a scenario that names itself one
 
