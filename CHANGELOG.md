@@ -902,6 +902,18 @@ them.
 
 ### Self-governance
 
+- **`openspec validate --specs --strict` now runs in CI and the Definition of Done, instead of only being
+  claimed by a spec's own scenario.** `observation-bound-register/spec.md` states this command passes over
+  every spec; it was never wired into `.github/workflows/ci.yml`, `AGENTS.md`'s Definition of Done, or any
+  script — a prior CHANGELOG entry had said this gap was closed by adding the command to both, and it was
+  not. Wiring it surfaced a genuine failure the command's own passing claim had been masking: `repository-checks`'s
+  "The prelude promise SHALL be held against the contract compiled from outside" requirement failed strict
+  validation, because its opening sentence — the only line the validator's parsed `text` field reads — carried
+  no SHALL/MUST keyword, even though the rest of the paragraph did. Reworded the opening sentence to lead
+  with the SHALL; all 36 tracked specs now validate clean. The invocation is pinned
+  (`npx --yes @fission-ai/openspec@1.4.1 validate --specs --strict`) so a future validator release cannot
+  silently change what "passes" means here.
+
 - **The 20-item partial-claims batch from the `v0.4.0..HEAD` audit is closed.** Each carried real evidence
   but an incomplete verification artifact — usually a real fix whose permanent regression test was actually
   a manual, one-time terminal check. Verified each individually; where a genuine gap survived, closed it

@@ -60,6 +60,9 @@ jobs:
           cargo clippy --all-targets --all-features -- -D warnings
           cargo fmt --all --check
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items
+      - name: every spec validates
+        run: |
+          npx --yes @fission-ai/openspec@1.4.1 validate --specs --strict
       - name: observation bounds are declared and defended
         run: |
           TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register --test pin_bites

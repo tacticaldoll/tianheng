@@ -1015,9 +1015,10 @@ to the shape, because falling back is the false refusal being removed.
 
 ### Requirement: The prelude promise SHALL be held against the contract compiled from outside
 
-The composed wildcard prelude's promise is `adopter-surface`'s; holding it is a repository check's. A check
-SHALL read the promise from the prelude's own block, read the external-view integration test compiled against
-it, and refuse when a promised member is mentioned nowhere. It SHALL refuse as a cannot-judge when the promise
+A repository check SHALL hold the composed wildcard prelude's promise against the contract compiled from
+outside — `adopter-surface` declares the promise, and a repository check is what holds it. The check SHALL
+read the promise from the prelude's own block, read the external-view integration test compiled against it,
+and refuse when a promised member is mentioned nowhere. It SHALL refuse as a cannot-judge when the promise
 parses to nothing or the contract yields no identifier, since both make every direction hold vacuously.
 
 #### Scenario: Whether a mention compiles anything is not observed — a stated bound

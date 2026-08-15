@@ -81,21 +81,6 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **`observation-bound-register`'s own spec asserts a command's outcome that nothing runs.** *Class:*
-  READY-PATCH. *Observed pressure:* the spec states `openspec validate --specs --strict` passes over every
-  spec; measured, two did not, and `git grep` found the command named only in the scenario asserting its
-  result — not in `.github/workflows/ci.yml`, not in `AGENTS.md`'s Definition of Done, not in any script.
-  `CHANGELOG.md`'s entry recording the measurement said this gap was closed by adding the command to both;
-  it was not — corrected in the same edit that added this entry. *Observation source:* `git grep -n
-  "openspec validate"` over the tracked tree at `HEAD`, one hit, in prose. *Current reaction or bound:*
-  none — the scenario's claim is unheld by anything that runs. *Risk:* a spec passing `openspec validate`
-  is a precondition the requirement corpus assumes and nothing defends; a spec that later fails validation
-  would surface only if someone runs the command by hand. *Promotion trigger:* wiring `openspec validate
-  --specs --strict` into `ci.yml` and the Definition of Done, pinned to a validator version — the fix this
-  entry's own prose already claimed once. *Version class:* patch — a CI/DoD addition, no published
-  surface. *Authority:* `openspec/specs/observation-bound-register/spec.md`'s scenario asserting the
-  command's result.
-
 - **The bounds-method reader anchors on a whole-line occurrence that is not the definition.** *Class:*
   READY-PATCH. *Observed pressure:* the reader requires the signature to occur exactly once and at a line
   start, and knows nothing of comments or literals. So where the definition has moved out of the inspected
@@ -1508,6 +1493,28 @@ that also holds a closed READY-PATCH record.
   *Compatibility class:* patch — the subject declarations and the filing join ship in zero packages.
   *Authority:* `openspec/specs/repository-checks/spec.md`'s *A capability SHALL declare the subject it
   governs* and the bound declared in `crates/kanhe/src/bounds.rs`.
+
+- ~~**`observation-bound-register`'s own spec asserts a command's outcome that nothing runs.**~~ **CLOSED**
+  in the open window via `fix/wire-openspec-validate-into-ci-dod`. `npx --yes @fission-ai/openspec@1.4.1
+  validate --specs --strict` is now a line in both `AGENTS.md`'s Definition of Done and CI's `dod` job, so
+  the claim the spec's own scenario made is now held by a reaction rather than by prose. Closing it also
+  required a genuine fix, not only wiring: `repository-checks`'s own "The prelude promise SHALL be held
+  against the contract compiled from outside" requirement failed strict validation because its opening
+  sentence — the only line the validator's parsed `text` field reads — carried no SHALL/MUST keyword, even
+  though the rest of the paragraph did; reworded the opening sentence to lead with the SHALL. *Class:*
+  READY-PATCH. *Observed pressure:* the spec states `openspec validate --specs --strict` passes over every
+  spec; measured, two did not, and `git grep` found the command named only in the scenario asserting its
+  result — not in `.github/workflows/ci.yml`, not in `AGENTS.md`'s Definition of Done, not in any script.
+  `CHANGELOG.md`'s entry recording the measurement said this gap was closed by adding the command to both;
+  it was not — corrected in the same edit that added this entry. *Observation source:* `git grep -n
+  "openspec validate"` over the tracked tree at `HEAD`, one hit, in prose. *Current reaction or bound:*
+  none — the scenario's claim is unheld by anything that runs. *Risk:* a spec passing `openspec validate`
+  is a precondition the requirement corpus assumes and nothing defends; a spec that later fails validation
+  would surface only if someone runs the command by hand. *Promotion trigger:* wiring `openspec validate
+  --specs --strict` into `ci.yml` and the Definition of Done, pinned to a validator version — the fix this
+  entry's own prose already claimed once. *Version class:* patch — a CI/DoD addition, no published
+  surface. *Authority:* `openspec/specs/observation-bound-register/spec.md`'s scenario asserting the
+  command's result.
 
 ## Version horizons
 
