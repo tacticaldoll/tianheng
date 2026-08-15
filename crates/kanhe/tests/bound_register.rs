@@ -476,6 +476,57 @@ fn the_register_projection_is_generated_and_fresh() {
     );
 }
 
+/// Scenario: The projection's disclosures are asserted, not only its freshness.
+///
+/// `the_register_projection_is_generated_and_fresh` only proves the tracked document and `render_projection`
+/// agree — both come from this same file, so a typo baked into the format string (the `author\s:` mangled
+/// apostrophe this repository has hit before) would regenerate byte-identically under `BLESS=1` and pass.
+/// This reads the blessed document's actual tracked content directly, independent of `render_projection`,
+/// and asserts each disclosure the requirements oblige the header to make is literally present, refusing a
+/// rendered backslash outright (this document's prose never wants one, so it is a quoting artifact rather
+/// than content).
+#[test]
+fn the_projection_s_disclosures_are_asserted_not_only_its_freshness() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let text = std::fs::read_to_string(root.join("docs/observation-bounds.md")).unwrap_or_else(|error| {
+        panic!("docs/observation-bounds.md must be readable for its disclosures to be asserted: {error}")
+    });
+
+    let required_disclosures = [
+        // The headline unpinned-count figure.
+        "have no pinning test",
+        // The undeclared-prose direction's three named residuals.
+        "Unrecognized wording",
+        "line-oriented",
+        "A reference clears more than it names",
+        // The bounds-named-requirement exemption's price.
+        "must declare at least one bound scenario",
+        // The restatement direction's own floor (a shared citation, not a shared behaviour).
+        "same pinning test",
+        // The retired third floor, recorded rather than silently removed.
+        "retired",
+        // Generated-document provenance, matching AGENTS.self-law.md's own convention.
+        "Do not edit by hand",
+    ];
+    let missing: Vec<&str> = required_disclosures
+        .into_iter()
+        .filter(|phrase| !text.contains(phrase))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "docs/observation-bounds.md is missing required disclosure(s): {missing:?}"
+    );
+
+    assert!(
+        !text.contains('\\'),
+        "docs/observation-bounds.md carries a rendered backslash — this document's prose never wants one, \
+         so it is a quoting artifact (the `author\\s:` class this repository has hit before) rather than \
+         content"
+    );
+}
+
 // The census this file once swept for lives in `census.rs`, declared beside every other, so one
 // check holds them all. Two implementations of one comparison is what that file exists to end.
 
