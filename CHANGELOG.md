@@ -899,6 +899,19 @@ them.
 
 ### Self-governance
 
+- **A census sweep read only the first figure-match on a line, missing a stale one following a correct
+  one.** `figures_in` returned on its first successful match, so a line writing the current figures first and
+  a stale earlier draft's figures later, in the same declared phrasing, reported clean — the trailing stale
+  occurrence was never examined. Fixed to collect every occurrence. Fixing this surfaced a second, sharper
+  defect adversarially: trying every byte offset means a start one digit into a multi-digit number reads its
+  tail digit as its own separate number (matching the same phrase again), and a start inside a hyphenated
+  compound number word reads its tail word as its own separate number — both producing a spurious extra
+  match on an ordinary, single-occurrence line. `match_from` now reports how far the first number's own token
+  reached, and the scan skips past it rather than retrying one byte later, closing both the digit and the
+  compound-word overlap the same way. Verified both negative directions: a naive "collect every offset with
+  no skip" reintroduces the spurious extra match on a correctly-written line, and reverting the fix entirely
+  reintroduces the original missed-stale-figure defect.
+
 - **The register's own projection was only staleness-checked, never content-checked.** The companion test
   compared `render_projection`'s output against the tracked `docs/observation-bounds.md` byte-for-byte — proof
   the document and the renderer agree, never proof either is right, since both come from the same format
