@@ -402,13 +402,27 @@ fn dispatch_list(constitution: &Constitution, parsed: &ParsedArgs) -> u8 {
     //
     // Ordered by this check rather than by the command line, so the message is a function of the set supplied and
     // not of how it was typed — which is what makes it assertable.
+    //
+    // Exhaustively destructured (no `..`) rather than read through `parsed.field`: a `ParsedArgs` field added
+    // without a matching arm here fails to COMPILE, naming the missing field, instead of silently reaching
+    // `list` unrejected — a hand-written array beside the struct was only ever going to disagree with it again,
+    // the way this command's own single-sentence flag naming and `check`'s equivalent requirement already had.
+    let ParsedArgs {
+        command: _,
+        manifest_path,
+        baseline_path,
+        write_baseline_path,
+        format: _,
+        warn_uncovered,
+        disallow_stale,
+    } = parsed;
     let mut inapplicable = Vec::new();
     for (flag, supplied) in [
-        ("--manifest-path", parsed.manifest_path.is_some()),
-        ("--baseline", parsed.baseline_path.is_some()),
-        ("--write-baseline", parsed.write_baseline_path.is_some()),
-        ("--warn-uncovered", parsed.warn_uncovered),
-        ("--disallow-stale", parsed.disallow_stale),
+        ("--manifest-path", manifest_path.is_some()),
+        ("--baseline", baseline_path.is_some()),
+        ("--write-baseline", write_baseline_path.is_some()),
+        ("--warn-uncovered", *warn_uncovered),
+        ("--disallow-stale", *disallow_stale),
     ] {
         if supplied {
             inapplicable.push(flag);
