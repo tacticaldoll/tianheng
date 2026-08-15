@@ -297,21 +297,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*",
         ),
-        BoundDecl::unpinned(
-            BoundId::new(
-                "observer-protocol/whether-the-stated-construction-held-list-matches-the-composition-path-is-not-observed-a-stated-bound",
-            ),
-            "the requirement's list of construction-held dimensions naming a different set than the built-in path invokes",
-            Extent::Reached(Reached::UnderReacts {
-                because: "the list is hand-maintained prose about a set the code enumerates, and falsifying \
-                          it passes the whole suite and every gate; deciding it needs a perturbed build \
-                          rather than a read, because the discriminator is which assertion fails when a \
-                          dimension's observer is emptied"
-                    .into(),
-                owner: Owner::Engine,
-            }),
-            "`BACKLOG.md` — *the construction-held list is hand-maintained prose*",
-        ),
         // --- observation-bound-register ---
         BoundDecl::unpinned(
             BoundId::new(

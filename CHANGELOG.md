@@ -902,6 +902,20 @@ them.
 
 ### Self-governance
 
+- **Whether `observer-protocol`'s declared construction-held dimension list matches the built-in composition
+  path is now held to that, by a cheaper route than the one originally recorded for it.** The recorded plan
+  was a perturbed build: empty a dimension's observer and see which assertion fails. Reading the built-in
+  path's own source directly answers the same question without paying for one — for a construction-held
+  dimension the built-in path does not call some function that happens to agree with the observer today, it
+  *constructs that dimension's own `Observer` and calls `.observe()` on it*, so there is exactly one
+  implementation to find rather than two runs to compare. `evaluate_constitution`'s semantic and runtime arms
+  each construct `SemanticObserver`/`RuntimeObserver` directly; the static arm still calls `check_and_cover`
+  without ever constructing `StaticObserver`. Added
+  `the_construction_held_list_matches_the_built_in_composition_path` and re-pointed the spec's scenario from
+  `UNPINNED` to `PINNED-BY` it. Verified both negative directions: moving the semantic construction out of
+  `evaluate_constitution`'s own body fails the new test, and adding a static construction inside it also
+  fails — restoring the real implementation passes both.
+
 - **Two declared residues over the same class were cross-referenced instead of left as two separate problems
   for a future reader to reconcile.** The bounds-method reader's whole-line-copy stated bound and
   `kanhe::region`'s `Executed` abstraction both declare the identical gap for the identical reason — a block
