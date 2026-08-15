@@ -43,15 +43,23 @@ pub struct Census {
 /// capabilities"` against declared `[73, 22]` returned only the leading, correct match under the previous
 /// first-match version, so the trailing stale figures produced no offence.
 ///
-/// **A start offset landing inside an already-read number's own token is skipped**, advancing past it
-/// instead of retrying one byte later. Trying every offset means a start inside `73` reads `3` as its own
-/// number, and a start inside the compound word `seventy-three` reads its tail `three` as its own number
-/// (value 3) — both matching the same phrase again. Measured directly: without this, `"73 bounds across 22
-/// capabilities"` reported both `[73, 22]` and the spurious `[3, 22]`, and `"seventy-three bounds across
-/// twenty-two capabilities"` reported both `[73, 22]` and the spurious `[3, 22]` from `three`. Neither is the
-/// residual the header already discloses (a figure reflowed across a line break): each is a false occurrence
-/// entirely inside one already-read number, which the phrase's own literal cannot rule out on its own when
-/// there is none before the placeholder to anchor against.
+/// **A start offset landing inside an already-matched occurrence is skipped**, advancing past the whole
+/// match instead of retrying one byte later. Trying every offset means a start inside `73` reads `3` as its
+/// own number, and a start inside the compound word `seventy-three` reads its tail `three` as its own number
+/// (value 3) — both then re-matching the same phrase's remaining tail again, reusing the second figure that
+/// belonged to the first occurrence. Measured directly: without this, `"73 bounds across 22 capabilities"`
+/// reported both `[73, 22]` and the spurious `[3, 22]`, and `"seventy-three bounds across twenty-two
+/// capabilities"` reported both `[73, 22]` and the spurious `[3, 22]` from `three`. Neither is the residual
+/// the header already discloses (a figure reflowed across a line break): each is a false occurrence sharing
+/// text with one already read.
+///
+/// **This applies to every placeholder's figure, not only the first.** A phrase of two or more placeholders
+/// with a short or empty literal after a middle or final one has the identical exposure one placeholder
+/// later: `"{} of {}"` against `"3 of 53 of 9"` returned both `[3, 53]` and the spurious `[53, 9]` under a
+/// version of this function that only skipped past the first placeholder's own token — the second figure's
+/// digits, `53`, were still available to start a fresh match. Skipping to the end of the **whole** matched
+/// span rather than only its first number's token closes both at once, because every figure the match
+/// consumed — first, middle, or last — sits inside that span.
 fn figures_in(line: &str, phrase: &str) -> Vec<Vec<usize>> {
     let parts: Vec<&str> = phrase.split("{}").collect();
     if parts.len() < 2 {
@@ -65,9 +73,9 @@ fn figures_in(line: &str, phrase: &str) -> Vec<Vec<usize>> {
             continue;
         }
         match match_from(&line[start..], &parts) {
-            Some((figures, first_number_end)) => {
+            Some((figures, matched_len)) => {
                 found.push(figures);
-                start += first_number_end.max(1);
+                start += matched_len.max(1);
             }
             None => start += 1,
         }
@@ -75,25 +83,21 @@ fn figures_in(line: &str, phrase: &str) -> Vec<Vec<usize>> {
     found
 }
 
-/// One attempt, anchored at the front of `rest`. Returns the figures alongside how many bytes into `rest`
-/// the first number's own token ends (after `parts[0]`), so [`figures_in`] can skip past it rather than
-/// re-reading its own suffix as a fresh, shorter number.
+/// One attempt, anchored at the front of `rest`. Returns the figures alongside how many bytes of `rest` the
+/// whole match consumed, so [`figures_in`] can skip past it entirely rather than re-reading any of its
+/// figures — first, middle, or last — as the start of a fresh, shorter match.
 fn match_from(rest: &str, parts: &[&str]) -> Option<(Vec<usize>, usize)> {
     let mut tail_rest = rest.strip_prefix(parts[0])?;
     let mut found = Vec::with_capacity(parts.len() - 1);
-    let mut first_number_end = None;
     for tail in &parts[1..] {
         let (value, consumed) = number_at(tail_rest)?;
-        if first_number_end.is_none() {
-            first_number_end = Some(parts[0].len() + consumed);
-        }
         tail_rest = &tail_rest[consumed..];
         found.push(value);
         if !tail.is_empty() {
             tail_rest = tail_rest.strip_prefix(*tail)?;
         }
     }
-    Some((found, first_number_end.unwrap_or(parts[0].len())))
+    Some((found, rest.len() - tail_rest.len()))
 }
 
 /// The count written at the front of `rest`, in digits **or in words**, and how many bytes it took.
@@ -308,5 +312,16 @@ mod tests {
             ),
             vec![vec![12, 5], vec![73, 22]]
         );
+    }
+
+    /// A short or empty literal after a non-first placeholder must not let that figure's own digits start a
+    /// second, spurious match — the same overlap [`every_occurrence_on_one_line_is_read_not_only_the_first`]
+    /// closed for the first placeholder, one placeholder later. `"{} bounds across {} capabilities"` has a
+    /// long literal after its second placeholder, so this never showed there; a phrase like `"{} of {}"`,
+    /// whose final placeholder has no literal after it at all, has the identical exposure.
+    #[test]
+    fn a_later_placeholder_s_figure_does_not_start_a_second_spurious_match() {
+        let phrase = "{} of {}";
+        assert_eq!(figures_in("3 of 53 of 9", phrase), vec![vec![3, 53]]);
     }
 }

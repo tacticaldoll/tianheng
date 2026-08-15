@@ -429,12 +429,17 @@ pub fn undeclared_prose_offences(
         let line_no = index + 1;
         let trimmed = raw.trim();
 
-        if let Some(rest) = trimmed.strip_prefix("#### ") {
-            // Any #### heading closes whichever bound scenario was open; only one spelled "Scenario:" and
-            // accepted by `marks_a_bound` reopens one — mirroring `bounds_in`'s own recognition exactly, so
-            // the two cannot come to disagree about what counts as a declared bound scenario.
+        if trimmed.starts_with("#### ") {
+            // Any #### heading, however indented, closes whichever bound scenario was open —
+            // `bounds_in`'s own body scan stops the same way, tolerating indentation once it is already
+            // inside a scenario. Only a heading spelled "Scenario:" **at column zero** and accepted by
+            // `marks_a_bound` reopens one: `bounds_in`'s own *opening* check is `raw.strip_prefix("####
+            // Scenario:")`, untrimmed, so an indented "#### Scenario: ..." line never opens a bound there
+            // either — checking `raw` rather than `trimmed` here keeps that exact, so an indented heading
+            // cannot be treated as a declared bound scenario by this reader while going unregistered by
+            // `bounds_in`, silently dropped from both.
             in_bound_scenario = false;
-            if let Some(heading) = rest.strip_prefix("Scenario:") {
+            if let Some(heading) = raw.strip_prefix("#### Scenario:") {
                 if marks_a_bound(heading.trim()) {
                     in_bound_scenario = true;
                     req_declared_bound = true;

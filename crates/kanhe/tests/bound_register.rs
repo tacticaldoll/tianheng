@@ -790,6 +790,35 @@ fn a_citation_answered_twice_fails_whichever_answer_is_repeated() {
     );
 }
 
+/// An indented `#### Scenario:` heading is not a declared bound scenario to `bounds_in`, and
+/// `undeclared_prose_offences` must not treat it as one either — the two disagreeing is exactly how a bound
+/// could vanish from the register while this check reports the spec clean.
+///
+/// `bounds_in`'s own opening check is `raw.strip_prefix("#### Scenario:")`, unindented; a heading with leading
+/// whitespace fails it and declares no bound. `undeclared_prose_offences` trimmed the line before checking,
+/// so it used to accept the identical indented heading, mark the requirement as having "declared" a bound
+/// scenario, and suppress the prose beneath it — a bound stated in prose, under a heading neither reader
+/// agreed was a scenario, then reported nowhere at all.
+#[test]
+fn an_indented_scenario_heading_is_not_a_declared_bound_to_either_reader() {
+    let spec = "openspec/specs/some-capability/spec.md";
+    let capabilities: BTreeSet<String> = ["some-capability".to_string()].into_iter().collect();
+    let text = "### Requirement: Something\n\n  #### Scenario: Indented — a stated bound\n\n- **WHEN** x\n- **THEN** this is a stated bound\n";
+
+    assert_eq!(
+        bounds_in("some-capability", spec, text).len(),
+        0,
+        "an indented heading must not be recognized as a declared bound scenario"
+    );
+    let offences = parse::undeclared_prose_offences(spec, text, &capabilities);
+    assert_eq!(
+        offences.len(),
+        1,
+        "the prose beneath an indented, unrecognized heading states a bound and must be reported exactly \
+         as it would be with no heading above it at all: {offences:?}"
+    );
+}
+
 /// Every **bare** bound id in tracked Rust and Markdown resolves to a declared bound.
 ///
 /// The `(bound: …)` form clears prose; this resolves the **id**, which is no less a reference for being
