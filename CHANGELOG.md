@@ -899,6 +899,18 @@ them.
 
 ### Self-governance
 
+- **A DoD-coherence requirement carried over from the shell era was investigated rather than assumed
+  still applicable, and retired.** The deleted shell predecessor of `dod_coherence` additionally required
+  three named "focused example matrix" scripts and a positive driver script to appear as one contiguous,
+  ordered sequence in both `AGENTS.md`'s Definition of Done and CI, and required the driver to never name
+  a matrix script directly — guarding against the matrices and the driver silently reordering or nesting.
+  None of those scripts exist anymore: the shell-to-Rust migration consolidated them into one Rust test,
+  `examples_suite`, which owns its own example table and ordering internally and is named on a single
+  DoD/CI line the existing membership check already covers. There is no longer a sequence of separate
+  commands to order and no separate driver script that could recurse into a matrix script, so rebuilding
+  the check would have nothing left to react to. Recorded the decision in `dod_coherence`'s own doc
+  comment rather than leaving the gap silent.
+
 - **A confinement test's name claimed to guard against a lib/bin coincident-path conflation its fixture
   never created.** `external_confinement`'s
   `confine_external_crate_conflates_coincident_lib_and_bin_conventional_paths` declared only a single
