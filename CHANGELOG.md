@@ -902,6 +902,31 @@ them.
 
 ### Self-governance
 
+- **A second adversarial review round, this time of the first round's own fix, found the first
+  round had reinvented logic that already existed and left one sibling flag-conflict check out of a
+  hardening its own comment said was "the one place this could least afford to recur unnoticed."**
+  Reviewing a review's own fix for the same drift is the same discipline one level deeper:
+  - `pin_bites`'s `cited_bounds()` fix (below) added a second, hand-written line scanner to recognize
+    a `PINNED-BY` citation outside a bound scenario — duplicating `bound_register_parse`'s own
+    existing `pinning_citations`, which already resolves a citation to its bound wherever it appears,
+    just from the worktree rather than from `HEAD`. Extracted `pinning_citations`'s per-text scan into
+    a new `citations_in(capability, spec, text)`, reused by both: `pinning_citations` for the
+    worktree, `cited_bounds` for `HEAD`. One recognizer instead of two, and `cited_bounds` no longer
+    scans each spec's text twice.
+  - `dispatch`'s exhaustive `ParsedArgs` destructure (below) covered only `--write-baseline`'s own two
+    conflict checks, leaving the `--baseline`/`--write-baseline` mutual-exclusion check and the
+    `--disallow-stale`-requires-`--baseline` check three lines above still reading `parsed.<field>`
+    directly — the identical asymmetry, one level up in the same function. Moved the destructure
+    earlier so it covers every flag-conflict check `dispatch` makes, not only the last two.
+  - Clarified `every_declared_mutation_s_name_resolves_to_a_real_bound_id`'s doc comment: `cited_bounds`
+    mapping a non-bound citation to an empty id list (below) stops the *existence* check from
+    mistaking a real citation for a fabricated one, but this test still refuses a `pin_mutations.tsv`
+    record for such a name, by design — a declared mutation is a claim about a bound's defence, and a
+    citation with no bound to defend is not one. Not a behavior change; the prior comment did not say
+    so and a reviewer read the CHANGELOG entry below as claiming otherwise.
+
+  Every fix here also carries a committed regression test verified in both directions.
+
 - **An adversarial review of this whole remediation window's own work (items above, back to the
   `v0.4.0..HEAD` audit tracker) found five defects in the fixes and checks it produced, and all five are
   closed.** Reviewing a campaign's own output for the same class of drift it exists to catch is the same
