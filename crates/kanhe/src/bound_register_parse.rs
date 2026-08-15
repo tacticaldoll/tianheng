@@ -91,10 +91,18 @@ pub fn slug_of(heading: &str) -> String {
 /// Whether a scenario heading marks itself a bound, in the one form the register admits: the marker word
 /// adjacent to `bound`, with no interposed qualifier. Measured: admitting one interposed word let the phrase
 /// "stated and not yet declared as bounds" read as a declaration.
+///
+/// Case-folded before matching, for the same reason [`states_a_bound_in_prose`] and
+/// [`negates_bound_in_prose`] are: a heading spelled `"... - A Stated Bound"` (Title Case, the shape a
+/// heading-writing convention could plausibly reach for) marks a bound exactly as `"... - a stated bound"`
+/// does, and an exact-case match would silently miss it — opening no bound for it in [`bounds_in`], and then
+/// having the now-case-folded prose scan correctly (and confusingly) report the surrounding text as an
+/// undeclared bound the author believed they *had* declared.
 pub fn marks_a_bound(heading: &str) -> bool {
+    let lower = heading.to_ascii_lowercase();
     ["a stated bound", "a documented bound"]
         .into_iter()
-        .any(|marker| contains_words(heading, marker))
+        .any(|marker| contains_words(&lower, marker))
 }
 
 fn contains_words(text: &str, words: &str) -> bool {
