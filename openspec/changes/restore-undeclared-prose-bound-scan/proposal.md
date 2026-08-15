@@ -45,6 +45,14 @@ gap by giving the requirement its reaction, not by changing what the requirement
   but not declared as a scenario SHALL fail") and its four scenarios are already fully specified; this
   change gives it the reaction it currently has none of. The delta spec restates the existing requirement
   unchanged, so sync can confirm text parity rather than merge new prose.
+- `runtime-origin-assertion`: **real requirement wording change**, found only by actually running the new
+  scan against the live corpus. Its "Root-aware audit excludes unreachable source files" requirement stated
+  a doubly-nested `#[cfg_attr(a, cfg_attr(b, path = "…"))]` as "a stated, undetected bound of this
+  hand-rolled scanner" — measured directly (a fixture with the nested target holding the only real probe)
+  and found **false**: the scanner extracts a `path` value by a linear search over the whole attribute span
+  regardless of nesting depth, so a doubly-nested target resolves exactly the same as a single-level one.
+  The requirement now states this as a SHALL rather than a residual, with a new scenario, and the stale
+  claim is removed from both the spec and the matching code comment in `crates/louke/src/audit/scan/lexer.rs`.
 
 ## Impact
 
@@ -52,8 +60,8 @@ gap by giving the requirement its reaction, not by changing what the requirement
   exclusion, requirement/scenario state tracking), reusing existing `marks_a_bound` and `bare_references`.
 - `crates/kanhe/tests/bound_register.rs`: a new test wiring the scan into the ordinary suite, plus
   synthetic-text tests for each of the requirement's four scenarios.
-- Must scan the live `openspec/specs/*` corpus (34+ files) cleanly — no new false positives. If the real
-  corpus contains genuine prior undeclared-prose bounds once the scan runs, those need declaring as proper
-  scenarios or excluding by reference, which may touch spec files beyond `observation-bound-register`
-  itself (found only once the scan actually runs).
-- Repository-internal (`kanhe` is `publish = false`); no adopter-facing API or manifest changes.
+- `crates/louke/src/audit/scan/lexer.rs` and `crates/louke/src/audit/tests.rs`: a stale code comment
+  corrected and a new regression test, found via the live-corpus run (see Modified Capabilities above).
+- `openspec/specs/runtime-origin-assertion/spec.md`: one requirement's stale residual claim corrected to a
+  SHALL, with a new scenario — the live corpus hit this proposal's Impact section already flagged as possible.
+- Repository-internal (`kanhe` and `louke`'s audit feature; no adopter-facing API or manifest changes).

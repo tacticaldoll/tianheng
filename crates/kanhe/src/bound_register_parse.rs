@@ -106,6 +106,83 @@ fn contains_words(text: &str, words: &str) -> bool {
     })
 }
 
+/// A token stripped of everything but its alphanumeric/hyphen core, so `"bound,"`, `"(a"`, and `"a"` compare
+/// equal to their bare forms without a second tokenization pass.
+fn bare_word(token: &str) -> &str {
+    token.trim_matches(|c: char| !c.is_alphanumeric() && c != '-')
+}
+
+/// Whether `word` is a single word of letters/hyphens only — the shell era's `[A-Za-z-]+` class, for the one
+/// interposed word both [`states_a_bound_in_prose`] and [`negates_bound_in_prose`] tolerate.
+fn is_plain_word(word: &str) -> bool {
+    !word.is_empty() && word.chars().all(|c| c.is_ascii_alphabetic() || c == '-')
+}
+
+/// Whether `line` states a bound in prose: `stated`/`documented`, optionally one interposed word of
+/// letters/hyphens, then `bound`/`bounds`.
+///
+/// Ported from the shell era's own `BOUND_PROSE` scan (`(stated|documented)( [A-Za-z-]+)? bounds?`,
+/// the shell era's bound-register gate, deleted by the migration to Rust and never reimplemented), as a
+/// whitespace-tokenized walk rather than a regex — `kanhe`'s dependency law admits no regex crate. This is
+/// **not** [`marks_a_bound`]: that recognizer derives a bound's *identity* from a scenario heading and was
+/// deliberately narrowed to admit no interposed word, because a qualifier there doubled as an unclosed
+/// classification feeding the derived id. This function's match feeds no id — it only decides whether a
+/// line is a candidate for the declaration/exemption/reference check around it — so that reason for
+/// tightening does not carry over, and the shell era's own looser tolerance is the right one to keep.
+///
+/// Word-boundary aware on every token (tighter than the shell's raw substring match, which had no boundary
+/// on `stated`/`documented` itself — `"understated bounds"` would have matched it).
+pub fn states_a_bound_in_prose(line: &str) -> bool {
+    let words: Vec<&str> = line.split_whitespace().map(bare_word).collect();
+    for (i, word) in words.iter().enumerate() {
+        if *word != "stated" && *word != "documented" {
+            continue;
+        }
+        match words.get(i + 1) {
+            Some(&"bound") | Some(&"bounds") => return true,
+            Some(interposed) if is_plain_word(interposed) => {
+                if matches!(words.get(i + 2), Some(&"bound") | Some(&"bounds")) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Whether `line` negates the bound noun directly: `rather than`/`not`/`never` immediately before
+/// `a`/`an`, optionally one interposed word, then `bound`/`bounds`.
+///
+/// Ported from the shell era's own measured lesson (the deleted bound-register gate's `negated()`): a
+/// wider "negation anywhere nearby" rule was tried first and hid three real declarations in this
+/// repository's own specs while catching none of the intended cases, because each of those three has a
+/// negation somewhere in the sentence that applies to a different verb, not to the bound noun. Only a
+/// negation word sitting immediately against `a`/`an` denies the bound itself.
+pub fn negates_bound_in_prose(line: &str) -> bool {
+    let words: Vec<&str> = line.split_whitespace().map(bare_word).collect();
+    for (i, word) in words.iter().enumerate() {
+        if *word != "a" && *word != "an" {
+            continue;
+        }
+        let negator_immediately_before = (i >= 1 && matches!(words[i - 1], "not" | "never"))
+            || (i >= 2 && words[i - 2] == "rather" && words[i - 1] == "than");
+        if !negator_immediately_before {
+            continue;
+        }
+        match words.get(i + 1) {
+            Some(&"bound") | Some(&"bounds") => return true,
+            Some(interposed) if is_plain_word(interposed) => {
+                if matches!(words.get(i + 2), Some(&"bound") | Some(&"bounds")) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
 /// How a declared bound answers the question every bound must answer: what defends it.
 ///
 /// The two legal forms are exclusive — a test pins it, or a tracker owns the gap. The remaining variants are
@@ -280,6 +357,132 @@ pub fn bounds_in(capability: &str, spec: &str, text: &str) -> Vec<Bound> {
         });
     }
     bounds
+}
+
+/// Whether a `### Requirement:` heading's own wording names bounds — the exemption
+/// `observation-bound-register/spec.md` declares ("Prose under a requirement whose heading names bounds is
+/// not reported"). Ported from the shell era's `tolower(req) ~ /bounds?([^a-z]|$)/`: `bound`/`bounds` as a
+/// substring whose following character, if any, is not a letter — so `boundary` is excluded (`ary` follows)
+/// but `bounds:`, `bound.`, or a heading ending in `bound` are not.
+fn requirement_heading_is_bounds_named(heading: &str) -> bool {
+    let lower = heading.to_ascii_lowercase();
+    lower.match_indices("bound").any(|(start, _)| {
+        let after_bound = &lower[start + "bound".len()..];
+        let after = after_bound.strip_prefix('s').unwrap_or(after_bound);
+        after
+            .chars()
+            .next()
+            .is_none_or(|ch| !ch.is_ascii_alphabetic())
+    })
+}
+
+/// The first `limit` **characters** of `text` (not bytes), so a truncation cannot split a multi-byte
+/// character and panic.
+fn truncate_chars(text: &str, limit: usize) -> String {
+    text.chars().take(limit).collect()
+}
+
+/// Every offence this capability's spec commits against "A bound stated in prose but not declared as a
+/// scenario SHALL fail": a bound-declaring prose line outside any declared bound scenario with no
+/// resolvable reference, or a bounds-named requirement that states one and declares no bound scenario of
+/// its own.
+///
+/// Ported from the shell era's own single-pass `awk` state machine (the deleted bound-register gate,
+/// deleted by the migration to Rust and never reimplemented — the requirement's own text has described this
+/// reaction the whole time). One pass over `text`'s lines tracks two nested states exactly as that script
+/// did: the enclosing `### Requirement:` heading (and whether its own wording names bounds), and the
+/// enclosing `####` block (and whether [`marks_a_bound`] accepts it as a declared bound scenario). A
+/// triggering line ([`states_a_bound_in_prose`], minus [`negates_bound_in_prose`]) is cleared by sitting
+/// inside a declared scenario, by carrying a resolvable reference ([`bare_references`]), or — inside a
+/// bounds-named requirement — is exempted there in favor of charging that requirement for declaring at
+/// least one bound scenario of its own.
+///
+/// `capabilities` is the same caller-enumerated set [`bare_references`] takes, for the same reason: a
+/// capability added later must be recognized without this function being touched.
+pub fn undeclared_prose_offences(
+    spec: &str,
+    text: &str,
+    capabilities: &BTreeSet<String>,
+) -> Vec<String> {
+    let mut offences = Vec::new();
+
+    let mut in_bound_scenario = false;
+    let mut req_heading = String::new();
+    let mut req_line = 0usize;
+    let mut req_is_bounds = false;
+    let mut req_declared_bound = false;
+    let mut req_stated_undeclared = false;
+
+    macro_rules! flush_requirement {
+        () => {
+            if req_is_bounds && req_stated_undeclared && !req_declared_bound {
+                offences.push(format!(
+                    "{spec}:{req_line} — the requirement \"{req_heading}\" names bounds, so its prose may \
+                     state them, but it declares no bound scenario; a prose list with no reaction anywhere \
+                     is the state this register opposes"
+                ));
+            }
+        };
+    }
+
+    for (index, raw) in text.lines().enumerate() {
+        let line_no = index + 1;
+        let trimmed = raw.trim();
+
+        if let Some(rest) = trimmed.strip_prefix("#### ") {
+            // Any #### heading closes whichever bound scenario was open; only one spelled "Scenario:" and
+            // accepted by `marks_a_bound` reopens one — mirroring `bounds_in`'s own recognition exactly, so
+            // the two cannot come to disagree about what counts as a declared bound scenario.
+            in_bound_scenario = false;
+            if let Some(heading) = rest.strip_prefix("Scenario:") {
+                if marks_a_bound(heading.trim()) {
+                    in_bound_scenario = true;
+                    req_declared_bound = true;
+                }
+            }
+            continue;
+        }
+
+        if trimmed.starts_with('#') {
+            // A "#"/"##"/"###" heading (1-3 hashes; #### was handled above and already `continue`d): closes
+            // whatever requirement section was open, and opens a new one when it is itself a Requirement.
+            flush_requirement!();
+            in_bound_scenario = false;
+            req_heading.clear();
+            req_line = 0;
+            req_is_bounds = false;
+            req_declared_bound = false;
+            req_stated_undeclared = false;
+            if let Some(name) = trimmed.strip_prefix("### Requirement:") {
+                let name = name.trim();
+                req_heading = name.to_string();
+                req_line = line_no;
+                req_is_bounds = requirement_heading_is_bounds_named(name);
+            }
+            continue;
+        }
+
+        if in_bound_scenario {
+            continue;
+        }
+        if !states_a_bound_in_prose(trimmed) || negates_bound_in_prose(trimmed) {
+            continue;
+        }
+        if req_is_bounds {
+            req_stated_undeclared = true;
+            continue;
+        }
+        if !bare_references(capabilities, trimmed).is_empty() {
+            continue;
+        }
+        offences.push(format!(
+            "{spec}:{line_no} states a bound outside any declared bound scenario, so it is absent from the \
+             register: {}",
+            truncate_chars(trimmed, 108)
+        ));
+    }
+    flush_requirement!();
+    offences
 }
 
 /// One `PINNED-BY` citation, wherever in the tracked specs it was written.
