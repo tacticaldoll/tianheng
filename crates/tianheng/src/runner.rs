@@ -554,13 +554,31 @@ where
         }
     };
 
+    // Exhaustively destructured (no `..`), mirroring `dispatch_list`'s own guard above: a
+    // `ParsedArgs` field added without a matching arm here fails to COMPILE, naming the missing
+    // field, instead of silently reaching one of `check`'s flag-conflict checks below unconsidered.
+    // Covers every conflict check in this function, not only `--write-baseline`'s own two — an
+    // earlier version of this guard covered only those two, leaving the `--baseline`/
+    // `--write-baseline` mutual-exclusion check and the `--disallow-stale`-requires-`--baseline`
+    // check reading `parsed.<field>` directly, the same asymmetry recurring one level up in the
+    // same function.
+    let ParsedArgs {
+        command: _,
+        manifest_path: _,
+        baseline_path,
+        write_baseline_path,
+        format,
+        warn_uncovered,
+        disallow_stale,
+    } = &parsed;
+
     // A contradictory flag pair is a pure usage error, independent of any workspace — check it
     // before resolving the manifest, so an also-absent `--manifest-path` (whose "no Cargo.toml
     // found" diagnostic would otherwise fire first) cannot mask the real misconfiguration.
-    if parsed.baseline_path.is_some() && parsed.write_baseline_path.is_some() {
+    if baseline_path.is_some() && write_baseline_path.is_some() {
         return usage("--baseline and --write-baseline are mutually exclusive");
     }
-    if parsed.disallow_stale && parsed.baseline_path.is_none() {
+    if *disallow_stale && baseline_path.is_none() {
         return usage("--disallow-stale requires --baseline");
     }
     // `--write-baseline` records a snapshot; it emits no report at all, so a flag whose only effect
@@ -576,21 +594,6 @@ where
     // changes nothing observable". `--warn-uncovered` under `--format json` stays accepted: the JSON
     // report's `coverage` object already carries every uncovered crate unconditionally, so the flag
     // is redundant there rather than dropped — the consumer receives the whole fact either way.
-    //
-    // Exhaustively destructured (no `..`), mirroring `dispatch_list`'s own guard above: a
-    // `ParsedArgs` field added without a matching arm here fails to COMPILE, naming the missing
-    // field, instead of silently reaching `--write-baseline` unconsidered — this exact check is the
-    // one the comment above documents as having already silently dropped two flags for that reason,
-    // so it is the one place this asymmetry could least afford to recur unnoticed.
-    let ParsedArgs {
-        command: _,
-        manifest_path: _,
-        baseline_path: _,
-        write_baseline_path,
-        format,
-        warn_uncovered,
-        disallow_stale: _,
-    } = &parsed;
     if write_baseline_path.is_some() {
         if *warn_uncovered {
             return usage(

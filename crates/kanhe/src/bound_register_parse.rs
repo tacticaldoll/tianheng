@@ -520,7 +520,6 @@ pub struct PinningCitation {
 /// wherever it appears, independent of whether its line also states a bound. This is that rule, for this one.
 pub fn pinning_citations(root: &Path) -> Vec<PinningCitation> {
     let mut found = Vec::new();
-
     for (capability, spec) in tracked_specs(root) {
         let text = std::fs::read_to_string(root.join(&spec)).unwrap_or_else(|err| {
             panic!(
@@ -528,36 +527,46 @@ pub fn pinning_citations(root: &Path) -> Vec<PinningCitation> {
                  them unresolved rather than resolved"
             )
         });
-        let mut bound: Option<String> = None;
-        for (index, raw) in text.lines().enumerate() {
-            let trimmed = raw.trim();
-            if let Some(heading) = raw.strip_prefix("#### Scenario:") {
-                let heading = heading.trim();
-                bound =
-                    marks_a_bound(heading).then(|| format!("{capability}/{}", slug_of(heading)));
-                continue;
-            }
-            // Any other heading ends the scenario, so a citation below it belongs to no scenario at all.
-            if trimmed.starts_with("### ") || trimmed.starts_with("## ") {
-                bound = None;
-                continue;
-            }
-            if let Some(rest) = trimmed.strip_prefix("- **PINNED-BY** ") {
-                found.push(PinningCitation {
-                    spec: spec.clone(),
-                    line: index + 1,
-                    name: rest.trim().trim_matches('`').to_string(),
-                    bound: bound.clone(),
-                });
-            }
-        }
+        found.extend(citations_in(&capability, &spec, &text));
     }
-
     assert!(
         !found.is_empty(),
         "parsed 0 pinning citations across the tracked specs — the declaration form changed, so this check \
          cannot judge rather than reporting every citation resolved"
     );
+    found
+}
+
+/// Every `PINNED-BY` citation in one spec's already-read `text`, wherever it appears, with the bound it
+/// defends where its enclosing scenario declares one.
+///
+/// Extracted so a caller holding `text` from somewhere other than the worktree — `HEAD` via `git show`, for
+/// instance — gets the identical recognition [`pinning_citations`] uses, rather than a second hand-written
+/// scanner over the same `#### Scenario:`/`- **PINNED-BY**` grammar that could drift from it.
+pub fn citations_in(capability: &str, spec: &str, text: &str) -> Vec<PinningCitation> {
+    let mut found = Vec::new();
+    let mut bound: Option<String> = None;
+    for (index, raw) in text.lines().enumerate() {
+        let trimmed = raw.trim();
+        if let Some(heading) = raw.strip_prefix("#### Scenario:") {
+            let heading = heading.trim();
+            bound = marks_a_bound(heading).then(|| format!("{capability}/{}", slug_of(heading)));
+            continue;
+        }
+        // Any other heading ends the scenario, so a citation below it belongs to no scenario at all.
+        if trimmed.starts_with("### ") || trimmed.starts_with("## ") {
+            bound = None;
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("- **PINNED-BY** ") {
+            found.push(PinningCitation {
+                spec: spec.to_string(),
+                line: index + 1,
+                name: rest.trim().trim_matches('`').to_string(),
+                bound: bound.clone(),
+            });
+        }
+    }
     found
 }
 

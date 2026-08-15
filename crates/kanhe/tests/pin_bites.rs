@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use kanhe::bound_register_parse::{Citation, bounds_in};
+use kanhe::bound_register_parse::citations_in;
 
 const RECORDS: &str = "crates/kanhe/tests/fixtures/pin_mutations.tsv";
 
@@ -122,16 +122,18 @@ fn parse_records(root: &Path) -> Vec<Record> {
 /// Every test name a `PINNED-BY` line cites anywhere in a tracked spec, read from HEAD rather than the
 /// worktree, mapped to the bound id(s) it defends where it defends any.
 ///
-/// `bound_register_parse::bounds_in` (the same canonical parser `bound_register.rs` uses — a second
-/// implementation of "which bound cites this name" is exactly the twin-drift class this repository keeps
-/// closing) already produces each `Bound`'s `id` beside its `Citation::PinnedBy` names, but it is scoped to
-/// scenarios `marks_a_bound` accepts — the observation-bound register's own job, not this check's. An
-/// ordinary requirement scenario can carry the identical citation line to name the test that verifies IT,
-/// and this check exists to hold *a pinning citation*, not only a registered bound's, to biting: a name
-/// found only outside a bound scenario is entered with an empty id list rather than dropped, so
+/// `bound_register_parse::citations_in` (the same canonical scanner `pinning_citations` uses for the
+/// worktree — a second hand-written recognizer of the same `#### Scenario:`/`- **PINNED-BY**` grammar is
+/// exactly the twin-drift class this repository keeps closing) already resolves a citation to the bound it
+/// defends **wherever the citation appears**, not only under a scenario `marks_a_bound` accepts: an ordinary
+/// requirement scenario can carry the identical citation line to name the test that verifies IT, and this
+/// check exists to hold *a pinning citation*, not only a registered bound's, to biting. A name found only
+/// under an ordinary scenario is entered with an empty id list rather than dropped, so
 /// [`every_declared_mutation_kills_the_pin_it_names`] still recognizes it as a real citation instead of
-/// reporting — as it once did — that no declared bound cites a test HEAD plainly cites. Read from `HEAD`
-/// per spec file rather than the worktree, matching this check's own discipline everywhere else.
+/// reporting — as it once did, when this read only the bound-scoped subset — that no declared bound cites a
+/// test HEAD plainly cites. Read from `HEAD` per spec file rather than the worktree (`citations_in` takes
+/// already-read text precisely so a caller can hand it either), matching this check's own discipline
+/// everywhere else.
 fn cited_bounds(root: &Path) -> HashMap<String, Vec<String>> {
     let listing = must(
         root,
@@ -149,23 +151,16 @@ fn cited_bounds(root: &Path) -> HashMap<String, Vec<String>> {
             &format!("`git show HEAD:{path}`"),
             &["git", "show", &format!("HEAD:{path}")],
         );
-        for bound in bounds_in(capability, path, &text) {
-            if let Citation::PinnedBy(names) = &bound.citation {
-                for cite in names {
-                    let short = cite.rsplit("::").next().unwrap_or(cite).to_string();
-                    by_name.entry(short).or_default().push(bound.id.clone());
-                }
-            }
-        }
-        // The pass above only sees a `PINNED-BY` line under a bound-marked scenario heading. This one
-        // walks every line so a citation under an ordinary requirement scenario is still recorded —
-        // `.or_default()` leaves an already-mapped name's bound id(s) untouched and only adds an empty
-        // entry for a name `bounds_in` never saw.
-        for raw in text.lines() {
-            if let Some(rest) = raw.trim().strip_prefix("- **PINNED-BY** ") {
-                let cite = rest.trim().trim_matches('`');
-                let short = cite.rsplit("::").next().unwrap_or(cite).to_string();
-                by_name.entry(short).or_default();
+        for citation in citations_in(capability, path, &text) {
+            let short = citation
+                .name
+                .rsplit("::")
+                .next()
+                .unwrap_or(&citation.name)
+                .to_string();
+            let entry = by_name.entry(short).or_default();
+            if let Some(id) = citation.bound {
+                entry.push(id);
             }
         }
     }
@@ -182,6 +177,14 @@ fn cited_bounds(root: &Path) -> HashMap<String, Vec<String>> {
 /// This runs on every ordinary `cargo test -p kanhe`, unlike `every_declared_mutation_kills_the_pin_it_names`
 /// (gated behind `TIANHENG_PIN_BITES`, since it checks out a worktree and builds it) — `cited_bounds` itself
 /// costs only a `git ls-files` and one `git show` per spec, so this regression does not need that gate.
+///
+/// **`RECORDS` names citations of registered bounds, deliberately, not any `PINNED-BY` line at all.**
+/// `cited_bounds` maps a name cited only under an ordinary (non-bound) scenario to an empty id list rather
+/// than dropping it — so `every_declared_mutation_kills_the_pin_it_names`'s existence check no longer
+/// mistakes a real citation for a fabricated one — but this assertion still refuses it here, by design: a
+/// declared mutation is a claim about a bound's defence, and a citation with no bound to defend is not one.
+/// Adding a `RECORDS` entry for one of those names still fails, correctly, right here rather than at the
+/// existence check above.
 #[test]
 fn every_declared_mutation_s_name_resolves_to_a_real_bound_id() {
     let Some(root) = workspace_root() else {
