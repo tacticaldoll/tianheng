@@ -153,7 +153,7 @@ fn an_unreadable_tracked_file_is_refused_rather_than_skipped() {
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&scratch);
-    std::fs::create_dir_all(&scratch).expect("the scratch root is writable");
+    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
 
     let listing = "i/lf\tzzz_absent_whitespace_probe.md\n";
     let (offences, inspected) = offences(&scratch, listing);
@@ -208,7 +208,7 @@ fn each_offence_shape_is_named_when_it_is_shown() {
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&scratch);
-    std::fs::create_dir_all(&scratch).expect("the scratch root is writable");
+    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
 
     for (name, body, expected) in [
         (

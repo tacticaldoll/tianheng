@@ -361,3 +361,46 @@ fn try_visit_reports_first_visit_then_repeat_and_fails_loud_on_an_unresolvable_p
     );
     assert!(try_visit(&mut visited, &dir.path("missing.rs")).is_err());
 }
+
+#[test]
+fn claim_scratch_creates_a_fresh_root() {
+    let dir = TempDir::new("claim-fresh");
+    let root = dir.path("root");
+    assert!(claim_scratch(&root).is_ok());
+    assert!(root.is_dir());
+}
+
+#[test]
+fn claim_scratch_refuses_an_existing_directory() {
+    let dir = TempDir::new("claim-existing");
+    let root = dir.path("root");
+    std::fs::create_dir(&root).expect("the fixture directory is writable");
+    assert!(
+        claim_scratch(&root).is_err(),
+        "a path that already exists must be refused, not silently adopted"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn claim_scratch_refuses_a_pre_existing_symlink_that_create_dir_all_would_adopt() {
+    let dir = TempDir::new("claim-symlink");
+    let target = dir.path("elsewhere");
+    std::fs::create_dir(&target).expect("the symlink target is writable");
+    let root = dir.path("root");
+    std::os::unix::fs::symlink(&target, &root).expect("create the symlink");
+
+    // The defect this replaces, measured directly: `create_dir_all` follows the symlink and reports success,
+    // so writes meant for a freshly claimed root would land in `target` instead.
+    assert!(
+        std::fs::create_dir_all(&root).is_ok(),
+        "control: create_dir_all silently adopts the symlink, which is exactly the defect claim_scratch exists \
+         to close"
+    );
+
+    assert!(
+        claim_scratch(&root).is_err(),
+        "a symlink at the path must be refused — mkdir cannot follow it, so adopting it would write through \
+         to whatever it points at"
+    );
+}

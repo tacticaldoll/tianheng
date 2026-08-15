@@ -40,7 +40,7 @@ fn a_valid_signature_from_an_unauthorized_key_is_accepted() {
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(&root).expect("the fixture root is writable");
+    xingbiao::claim_scratch(&root).expect("the fixture root is writable");
 
     let fixture = build_fixture(&root, "unauthorized", "9.9.9");
 

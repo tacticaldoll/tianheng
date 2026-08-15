@@ -943,7 +943,7 @@ fn the_runtime_audit_reports_the_declared_unprobed_seam() {
 fn composed_runtime_audit_uses_custom_roots_and_rejects_orphan_only_coverage() {
     let base = TempPath::named("runtime-root");
     let base = base.path();
-    std::fs::create_dir_all(base).unwrap();
+    xingbiao::claim_scratch(base).unwrap();
     std::fs::write(
         base.join("Cargo.toml"),
         "[package]\nname='runtime-root-fixture'\nversion='0.0.0'\nedition='2021'\n\
@@ -2290,6 +2290,7 @@ fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
     // ascent over a real temp tree so the walk is proven without touching the process cwd.
     let root = TempPath::named("nearest");
     let root = root.path();
+    xingbiao::claim_scratch(root).expect("mkdir root");
     let outer = root.join("outer");
     let inner = outer.join("inner");
     let leaf = inner.join("a").join("b");
@@ -2456,7 +2457,7 @@ fn projection_gate_reacts_to_missing_stale_and_regenerates_on_bless() {
 #[test]
 fn a_symlink_is_reported_dangling_only_when_its_target_does_not_resolve() {
     let dir = TempPath::named("symlink-classification");
-    std::fs::create_dir_all(dir.path()).expect("create dir");
+    xingbiao::claim_scratch(dir.path()).expect("create dir");
 
     let dangling = dir.path().join("dangling-baseline.json");
     std::os::unix::fs::symlink(dir.path().join("absent.json"), &dangling).expect("dangling link");

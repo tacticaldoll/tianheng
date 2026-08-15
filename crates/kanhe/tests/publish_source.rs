@@ -36,7 +36,7 @@ fn scratch(name: &str) -> PathBuf {
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(&root).expect("the fixture root is writable");
+    xingbiao::claim_scratch(&root).expect("the fixture root is writable");
     root
 }
 

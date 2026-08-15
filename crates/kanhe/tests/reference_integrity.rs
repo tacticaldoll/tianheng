@@ -66,7 +66,7 @@ fn scratch(label: &str) -> PathBuf {
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
-        match std::fs::create_dir(&candidate) {
+        match xingbiao::claim_scratch(&candidate) {
             Ok(()) => return candidate,
             Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(err) => panic!("cannot acquire reference-integrity fixture root: {err}"),
@@ -748,6 +748,7 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&scratch);
+    xingbiao::claim_scratch(&scratch).expect("scratch is writable");
     std::fs::create_dir_all(scratch.join("crates/tianheng")).expect("scratch is writable");
 
     // The corpus is judged against THIS repository's tracked paths, so "absent" means absent here.
@@ -883,7 +884,7 @@ fn a_bare_rust_basename_reacts_only_for_a_name_this_repository_deleted() {
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&scratch);
-    std::fs::create_dir_all(&scratch).expect("scratch is writable");
+    xingbiao::claim_scratch(&scratch).expect("scratch is writable");
 
     let deleted = "probe-deleted.md";
     let never = "probe-never-tracked.md";
@@ -998,6 +999,7 @@ fn an_active_plan_may_name_a_path_it_intends_to_create() {
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&scratch);
+    xingbiao::claim_scratch(&scratch).expect("scratch is writable");
 
     // Under a **tracked** member: an untracked crate directory is unenforceable by design, so a probe there
     // would be unrefused for a reason that has nothing to do with the exclusion being tested.

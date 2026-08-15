@@ -278,7 +278,7 @@ mod tests {
                 std::process::id()
             ));
             let _ = std::fs::remove_dir_all(&root);
-            std::fs::create_dir_all(&root).unwrap();
+            xingbiao::claim_scratch(&root).unwrap();
             std::fs::create_dir_all(root.join("src")).unwrap();
             std::fs::write(
                 root.join("Cargo.toml"),

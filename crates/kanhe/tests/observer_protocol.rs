@@ -1120,6 +1120,7 @@ fn a_trait_object_in_a_nested_source_file_is_observed() {
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("create nested source fixture");
     let nested = root.join("runner");
     std::fs::create_dir_all(&nested).expect("create nested source fixture");
     std::fs::write(

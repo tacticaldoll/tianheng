@@ -183,7 +183,7 @@ fn a_raw_identifier_citation_resolves_to_its_definition() {
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&fixture);
-    std::fs::create_dir_all(&fixture).expect("the fixture directory is writable");
+    xingbiao::claim_scratch(&fixture).expect("the fixture directory is writable");
     std::fs::write(
         fixture.join("probe.rs"),
         "#[test]\nfn r#type() {\n    assert!(true);\n}\n",
@@ -324,6 +324,7 @@ fn tracked_specs_refuses_a_repository_with_no_spec_md_rather_than_reporting_it_e
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&fixture);
+    xingbiao::claim_scratch(&fixture).expect("the fixture directory is writable");
     std::fs::create_dir_all(fixture.join("openspec")).expect("the fixture directory is writable");
     std::fs::write(fixture.join("openspec").join("README.md"), "# Not a spec\n").expect("writable");
     for arguments in [["init", "-q"], ["add", "-A"]] {

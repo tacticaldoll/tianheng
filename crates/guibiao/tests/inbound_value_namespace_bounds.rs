@@ -19,6 +19,7 @@ impl Probe {
             N.fetch_add(1, Ordering::Relaxed)
         ));
         let _ = std::fs::remove_dir_all(&dir);
+        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
         std::fs::create_dir_all(dir.join("src")).expect("create src");
         std::fs::write(
             dir.join("Cargo.toml"),

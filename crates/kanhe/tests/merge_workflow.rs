@@ -85,7 +85,7 @@ fn run_wrapper_in(root: &Path, mode: &str, extra: &[&str], cwd: Option<&Path>) -
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
-        match std::fs::create_dir(&candidate) {
+        match xingbiao::claim_scratch(&candidate) {
             Ok(()) => break candidate,
             Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(err) => {
@@ -286,7 +286,7 @@ fn a_pull_request_from_another_worktree_is_refused_before_any_evidence_is_read()
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&elsewhere);
-    std::fs::create_dir_all(&elsewhere).expect("create an unrelated worktree");
+    xingbiao::claim_scratch(&elsewhere).expect("create an unrelated worktree");
     let init = Command::new("git")
         .args(["init", "-q", "-b", "main"])
         .current_dir(&elsewhere)

@@ -166,7 +166,7 @@ fn a_count_in_an_undeclared_phrasing_is_a_stated_bound() {
     );
     let scratch = std::env::temp_dir().join(format!("tianheng-census-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
-    std::fs::create_dir_all(&scratch).expect("the scratch root is writable");
+    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
     std::fs::write(scratch.join("control.md"), &control).expect("write");
     assert!(
         !sweep(&scratch, &["control.md".to_string()], &declared).is_empty(),
@@ -221,7 +221,7 @@ fn a_census_outside_markdown_is_a_stated_bound() {
     let scratch =
         std::env::temp_dir().join(format!("tianheng-census-corpus-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
-    std::fs::create_dir_all(&scratch).expect("the scratch root is writable");
+    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
     std::fs::write(scratch.join("held.md"), &wrong).expect("write the Markdown control");
     std::fs::write(scratch.join("unheld.rs"), &wrong).expect("write the Rust subject");
 
