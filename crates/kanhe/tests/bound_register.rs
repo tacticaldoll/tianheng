@@ -124,6 +124,72 @@ fn registered_tests(root: &Path) -> BTreeMap<String, BTreeSet<String>> {
     by_package
 }
 
+/// The offence for a citation resolving to anything other than exactly one definition, or `None` when it
+/// resolves cleanly.
+///
+/// Naming the count alone (`defined N times`) tells a reader THAT a citation is ambiguous but not where to
+/// look. For the more-than-one direction each `git grep -n` line in `sites` already carries `path:line:content`
+/// — the zero direction has no site to name, so it keeps the bare count. Extracted as its own function so this
+/// shape is testable without a live `cargo test --list` enumeration: the resolution loop that produces `sites`
+/// needs a real workspace, but the message it earns from a given `sites` value does not.
+fn definition_count_offence(at: &str, citation: &str, sites: &[String]) -> Option<String> {
+    if sites.len() == 1 {
+        return None;
+    }
+    let detail = if sites.is_empty() {
+        String::new()
+    } else {
+        format!(
+            ":\n{}",
+            sites
+                .iter()
+                .map(|site| format!("    {site}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    };
+    Some(format!(
+        "  {at} is PINNED-BY `{citation}`, defined {} times under crates/ — a citation names one defence, not \
+         a set{detail}",
+        sites.len()
+    ))
+}
+
+#[test]
+fn a_duplicate_definition_offence_names_both_sites() {
+    let sites = vec![
+        "crates/kanhe/tests/scratch_probe.rs:12:pub fn probe_duplicate_fn() {}".to_string(),
+        "crates/xuanji/src/scratch_probe_extra.rs:4:fn probe_duplicate_fn() {}".to_string(),
+    ];
+    let offence = definition_count_offence("some-bound (spec.md:1)", "probe_duplicate_fn", &sites)
+        .expect("more than one site must be an offence");
+    assert!(
+        offence.contains("crates/kanhe/tests/scratch_probe.rs:12"),
+        "the offence must name the first definition site: {offence}"
+    );
+    assert!(
+        offence.contains("crates/xuanji/src/scratch_probe_extra.rs:4"),
+        "the offence must name the second definition site, not only the count: {offence}"
+    );
+}
+
+#[test]
+fn a_single_definition_is_not_an_offence() {
+    let sites = vec!["crates/kanhe/tests/scratch_probe.rs:12:pub fn probe_fn() {}".to_string()];
+    assert!(definition_count_offence("some-bound (spec.md:1)", "probe_fn", &sites).is_none());
+}
+
+#[test]
+fn a_zero_definition_offence_names_the_count_with_no_site_list() {
+    let offence = definition_count_offence("some-bound (spec.md:1)", "probe_fn", &[])
+        .expect("zero sites must still be an offence");
+    assert!(
+        offence
+            .ends_with("defined 0 times under crates/ — a citation names one defence, not a set"),
+        "with no sites to name, the message stays the bare count: {offence}"
+    );
+}
+
 #[test]
 fn every_pinning_citation_resolves_to_one_registered_test() {
     let Some(root) = workspace_root() else {
@@ -215,12 +281,8 @@ fn every_pinning_citation_resolves_to_one_registered_test() {
                 &qualifier.map_or("crates/".to_string(), |q| format!("crates/{q}/")),
             ],
         );
-        if sites.len() != 1 {
-            offences.push(format!(
-            "  {at} is PINNED-BY `{citation}`, defined {} times under crates/ — a citation names one \
-             defence, not a set",
-            sites.len()
-        ));
+        if let Some(offence) = definition_count_offence(&at, citation, &sites) {
+            offences.push(offence);
         }
     }
     assert!(
