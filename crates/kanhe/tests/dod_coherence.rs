@@ -2,6 +2,18 @@
 //!
 //! Asserts that every command listed in AGENTS.md's Definition of Done block appears
 //! in .github/workflows/ci.yml so local pre-flight gates remain a strict subset of CI.
+//!
+//! **Deliberately narrower than its deleted shell predecessor, the DoD-coherence gate script.** That
+//! script additionally required three named "focused example matrix" scripts and a positive driver
+//! script to appear as one contiguous, ordered sequence in both documents, and required the driver's own
+//! source to never name a matrix script directly — guarding against the matrices and the driver silently
+//! reordering or nesting relative to each other. Investigated rather than ported: those separate scripts
+//! no longer exist. The shell-to-Rust migration consolidated them into one Rust test,
+//! `crates/shengmo/tests/examples_suite.rs`, which owns its own example table and ordering internally
+//! (checked by the compiler, not by grepping source text for basenames) and is named on a single DoD/CI
+//! line this file's membership check already covers. There is no longer a sequence of separate commands
+//! to order, and no separate driver script that could recurse into a matrix script, so a check for either
+//! would have nothing left to react to.
 
 use std::path::PathBuf;
 
