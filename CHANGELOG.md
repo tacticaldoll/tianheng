@@ -902,6 +902,20 @@ them.
 
 ### Self-governance
 
+- **A sixth adversarial review round, of the fifth round's own fix, found the identical
+  case-sensitivity gap survived in the one sibling recognizer that fix did not touch.**
+  `bound_register_parse::marks_a_bound` (which decides whether a *scenario heading* — not prose —
+  marks itself a bound) still compared `"a stated bound"`/`"a documented bound"` case-sensitively,
+  the same exact-case bug `states_a_bound_in_prose`/`negates_bound_in_prose` were just fixed for one
+  entry above. Currently latent — every tracked `#### Scenario:` heading is lowercase — but the
+  asymmetry itself was live: with the prose functions now case-folded and this one not, a heading
+  written Title Case (`"... - A Stated Bound"`) would open no bound in `bounds_in` while the
+  now-fixed prose scan correctly flagged the surrounding text as stated-but-undeclared — the
+  opposite-direction confusion from what the fifth round's fix closed, for the one function in the
+  same file it didn't reach. Fixed the same way: case-fold before matching.
+
+  Every code fix here also carries a committed regression test verified in both directions.
+
 - **A fifth adversarial review round, this time scoped to the whole `v0.4.0..HEAD` remediation
   campaign again rather than only the latest fix, found a live, currently-active defect in the
   observation-bound register's own prose scan — not merely a latent one.**

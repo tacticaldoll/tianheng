@@ -50,6 +50,10 @@ fn bound_markers_are_bare_singular_word_sequences() {
         ("Metadata stated boundary", false),
         ("Data stated bound", false),
         ("資料a stated bound", false),
+        // Title Case — the shape a heading-writing convention could plausibly reach for, and the same
+        // case-folding fix `states_a_bound_in_prose`/`negates_bound_in_prose` needed for the identical reason.
+        ("Which member owns it — A Stated Bound", true),
+        ("Which member owns it — A Documented Bound", true),
     ];
 
     for (heading, expected) in cases {
