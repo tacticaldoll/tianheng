@@ -902,6 +902,22 @@ them.
 
 ### Self-governance
 
+- **A fourth adversarial review round, of the third round's own fix, found one cosmetic issue and
+  raised one question already settled by investigation.** `dispatch`'s exhaustive `ParsedArgs`
+  destructure bound `manifest_path` (`Option<String>`) and later shadowed it 45 lines on with a
+  differently-typed local of the same name (`PathBuf`, the resolved path) — legal, but a reader
+  scanning between the two must track which binding is in scope. Renamed the first to
+  `manifest_path_arg`. The review also asked, at low confidence, whether an indented `#### Scenario:`
+  heading could make `citations_in`'s newly-widened close-check disagree with `bounds_in`'s; verified
+  directly (not merely argued) that both readers treat the case identically — an indented heading
+  opens no bound in either (both check the raw, unindented line to open one) and closes whichever
+  bound was open in both (both now check the trimmed line to close one) — so this was already correct,
+  not a live gap.
+
+  This round's fix carries no new regression test — the one change is a pure rename with no behavior
+  difference, and the investigated question resolved to "already correct," verified with a throwaway
+  probe rather than a permanent test since there is no behavior to pin.
+
 - **A third adversarial review round, of the second round's own fix, found a small correctness gap the
   extraction inherited and a stale BACKLOG residue from a fix that had already landed.**
   - `citations_in` (extracted last round from `pinning_citations`) reset its tracked bound only on a
