@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**16 of 85 declared bounds have no pinning test.** That figure is the register's
+**16 of 84 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -62,12 +62,6 @@ fallback used where no manifest exists, which the register spec describes.
 > the system observes it as written rather than evaluating the predicate, so the reaction is cfg-blind — inherited from the module scanner and stated here, never a silent claim about which branch is live
 
 - **pinned by**: `confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms`
-
-### `external-crate-confinement/the-lib-and-bin-conventional-path-conflation-is-a-stated-bound`
-
-> the system does not distinguish their module graphs — the conflation inherited from the module scanner, stated rather than silently resolved
-
-- **pinned by**: `confine_external_crate_conflates_coincident_lib_and_bin_conventional_paths`
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 

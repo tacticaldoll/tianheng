@@ -899,6 +899,21 @@ them.
 
 ### Self-governance
 
+- **A confinement test's name claimed to guard against a lib/bin coincident-path conflation its fixture
+  never created.** `external_confinement`'s
+  `confine_external_crate_conflates_coincident_lib_and_bin_conventional_paths` declared only a single
+  library target — the test helper it used has no way to declare a second — so it never exercised any
+  lib/bin interaction at all, and was otherwise byte-for-byte the same fixture as an existing test
+  immediately above it in the same file, adding no coverage under a name that promised otherwise. Built a
+  real fixture with a `lib` and a `bin` target sharing one `src/` directory, each with its own conventional
+  `mod` declaration resolving to the identical physical file, and confirmed `check_module_boundary`'s
+  per-root evaluation already reports each unit's own copy of a leak once, for its own unit — neither
+  merged into one nor dropped for either. Deleted the redundant test and added
+  `confine_external_crate_evaluates_each_unit_at_a_coincident_conventional_path`, which pins that real,
+  previously-unpinned behavior. Verified both negative directions: reproducing the historical false
+  negative (only the first root evaluated) drops the fixture from two reported violations to one, and the
+  restored per-root evaluation reports both, each carrying its own unit label.
+
 - **A reference-integrity exemption for a deliberately git-ignored path depended on whether the ignored
   directory happened to exist on disk.** `reference_integrity`'s `ignored()` helper exempts a
   prose-referenced path from the stale-reference check when git itself deliberately ignores it (a
