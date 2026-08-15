@@ -378,13 +378,52 @@ fn extract(line: &str) -> Vec<Reference> {
 
 /// Whether git deliberately ignores this path, which is a different fact from a stale reference: a generated
 /// lockfile an example carries is named in prose and tracked by nothing on purpose.
+///
+/// A directory-only `.gitignore` pattern (one ending in `/`, e.g. `/target/`) only matches a candidate git can
+/// see is a directory. When the candidate exists on disk, `git check-ignore` `lstat`s it and knows; when it does
+/// not — the ordinary case for a generated path a fresh checkout has not built yet — a bare query with no
+/// trailing slash reads as "not a directory" and a directory-only pattern silently fails to match, so whether
+/// this check fires depended on whichever example directories happened to be built on the machine running it.
+/// Querying the target once more with a trailing slash forces the directory reading regardless of what is on
+/// disk, so a real directory-only match no longer depends on incidental local build state. This can only widen
+/// what counts as ignored (a bare match already returns true on its own), never narrow it.
 fn ignored(root: &Path, target: &str) -> bool {
-    Command::new("git")
-        .args(["check-ignore", "-q", "--", target])
-        .current_dir(root)
+    let query = |candidate: &str| {
+        Command::new("git")
+            .args(["check-ignore", "-q", "--", candidate])
+            .current_dir(root)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    };
+    query(target) || query(&format!("{}/", target.trim_end_matches('/')))
+}
+
+/// A directory-only ignore pattern must be recognised whether or not the directory happens to exist yet.
+///
+/// Built against a throwaway git repository rather than this workspace, so the result cannot depend on
+/// whichever example or crate has already been built here. `/build/` is a directory-only pattern; the probe
+/// never creates a `build` directory, matching the ordinary case of a generated path a fresh checkout has not
+/// produced yet.
+#[test]
+fn a_directory_only_ignore_pattern_reacts_whether_or_not_the_directory_exists() {
+    let repo = scratch("directory-ignore");
+    let init = Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(&repo)
         .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .expect("run git init");
+    assert!(init.success(), "could not init the fixture repository");
+    std::fs::write(repo.join(".gitignore"), "/build/\n").expect("write the fixture .gitignore");
+
+    let seen = ignored(&repo, "build");
+    let _ = std::fs::remove_dir_all(&repo);
+    assert!(
+        seen,
+        "a directory-only ignore pattern must match its candidate even before the directory is ever \
+         created — otherwise this check's verdict on a generated path depends on which examples happen to \
+         be built on the machine running it"
+    );
 }
 
 /// The nearest ancestor directory of `path` that a tracked `Cargo.toml` makes a package.
