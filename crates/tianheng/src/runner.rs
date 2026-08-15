@@ -554,23 +554,28 @@ where
         }
     };
 
-    // Exhaustively destructured (no `..`), mirroring `dispatch_list`'s own guard above: a
-    // `ParsedArgs` field added without a matching arm here fails to COMPILE, naming the missing
-    // field, instead of silently reaching one of `check`'s flag-conflict checks below unconsidered.
-    // Covers every conflict check in this function, not only `--write-baseline`'s own two — an
-    // earlier version of this guard covered only those two, leaving the `--baseline`/
-    // `--write-baseline` mutual-exclusion check and the `--disallow-stale`-requires-`--baseline`
-    // check reading `parsed.<field>` directly, the same asymmetry recurring one level up in the
-    // same function.
+    // Exhaustively destructured (no `..`) and **consumed by value** — not merely matched by
+    // reference — so every remaining use of a `ParsedArgs` field in this function reads the bound
+    // local rather than `parsed.<field>`. Matching by reference (an earlier version of this guard
+    // did) only forces exhaustiveness at the match site itself: a field added later and read as
+    // `parsed.<field>` anywhere else in this function still compiles, unconsidered by the guard,
+    // which is the asymmetry a prior fix here closed for one check and left standing for the ones
+    // after it. Consuming `parsed` closes that for `manifest_path`/`baseline_path`/
+    // `write_baseline_path` outright: the compiler refuses `parsed.<field>` once its value has moved
+    // into a local, naming the field. A `Copy` field (`format`, `warn_uncovered`, `disallow_stale`)
+    // has no such backstop — copying a place doesn't consume it, so `parsed.<copy field>` stays
+    // legal even after this destructure names it — so every field in this function is, by
+    // convention, always read through the bound local below rather than through `parsed`, and no
+    // later line in this function does otherwise.
     let ParsedArgs {
         command: _,
-        manifest_path: _,
+        manifest_path,
         baseline_path,
         write_baseline_path,
         format,
         warn_uncovered,
         disallow_stale,
-    } = &parsed;
+    } = parsed;
 
     // A contradictory flag pair is a pure usage error, independent of any workspace — check it
     // before resolving the manifest, so an also-absent `--manifest-path` (whose "no Cargo.toml
@@ -578,7 +583,7 @@ where
     if baseline_path.is_some() && write_baseline_path.is_some() {
         return usage("--baseline and --write-baseline are mutually exclusive");
     }
-    if *disallow_stale && baseline_path.is_none() {
+    if disallow_stale && baseline_path.is_none() {
         return usage("--disallow-stale requires --baseline");
     }
     // `--write-baseline` records a snapshot; it emits no report at all, so a flag whose only effect
@@ -595,7 +600,7 @@ where
     // report's `coverage` object already carries every uncovered crate unconditionally, so the flag
     // is redundant there rather than dropped — the consumer receives the whole fact either way.
     if write_baseline_path.is_some() {
-        if *warn_uncovered {
+        if warn_uncovered {
             return usage(
                 "--warn-uncovered cannot apply to --write-baseline: recording a baseline emits \
                  no coverage report to raise an advisory in",
@@ -609,14 +614,14 @@ where
         }
     }
 
-    let manifest_path = match resolve_manifest_path(parsed.manifest_path) {
+    let manifest_path = match resolve_manifest_path(manifest_path) {
         Ok(path) => path,
         Err(code) => return code,
     };
 
     let (mut outcome, observed_coverage) = evaluate_constitution(constitution, &manifest_path);
 
-    if let Some(path) = parsed.write_baseline_path {
+    if let Some(path) = write_baseline_path {
         return write_baseline(&outcome, &path);
     }
 
@@ -628,23 +633,18 @@ where
         _ => observed_coverage,
     };
 
-    if let Some(path) = parsed.baseline_path {
+    if let Some(path) = baseline_path {
         return gate(
             &mut outcome,
             &path,
             report_format,
             coverage.as_ref(),
-            parsed.warn_uncovered,
-            parsed.disallow_stale,
+            warn_uncovered,
+            disallow_stale,
         );
     }
 
-    print_report(
-        report_format,
-        &outcome,
-        coverage.as_ref(),
-        parsed.warn_uncovered,
-    );
+    print_report(report_format, &outcome, coverage.as_ref(), warn_uncovered);
     outcome.exit_code()
 }
 

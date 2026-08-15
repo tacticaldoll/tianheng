@@ -553,8 +553,15 @@ pub fn citations_in(capability: &str, spec: &str, text: &str) -> Vec<PinningCita
             bound = marks_a_bound(heading).then(|| format!("{capability}/{}", slug_of(heading)));
             continue;
         }
-        // Any other heading ends the scenario, so a citation below it belongs to no scenario at all.
-        if trimmed.starts_with("### ") || trimmed.starts_with("## ") {
+        // Any other heading ends the scenario, so a citation below it belongs to no scenario at all —
+        // including a bare `#### ` heading not spelled `Scenario:`, matching `bounds_in`'s own body-scan
+        // stopping rule (which also treats any `#### `/`### `/`## ` as ending the scenario body) exactly.
+        // Checking only `### `/`## ` here once left a citation after such a heading still attributed to
+        // whichever bound scenario opened above it, disagreeing with `bounds_in` about which bound (if
+        // any) that citation defends. No tracked spec currently has a `#### ` heading spelled any other
+        // way, so this was latent rather than observed.
+        if trimmed.starts_with("#### ") || trimmed.starts_with("### ") || trimmed.starts_with("## ")
+        {
             bound = None;
             continue;
         }

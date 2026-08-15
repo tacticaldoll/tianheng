@@ -158,10 +158,7 @@ fn cited_bounds(root: &Path) -> HashMap<String, Vec<String>> {
                 .next()
                 .unwrap_or(&citation.name)
                 .to_string();
-            let entry = by_name.entry(short).or_default();
-            if let Some(id) = citation.bound {
-                entry.push(id);
-            }
+            by_name.entry(short).or_default().extend(citation.bound);
         }
     }
     assert!(
@@ -524,5 +521,30 @@ fn every_declared_mutation_kills_the_pin_it_names() {
             .collect::<std::collections::BTreeSet<_>>()
             .len(),
         cited.len()
+    );
+}
+
+/// A bare `#### ` heading not spelled `Scenario:` ends the open bound scenario in `citations_in`, matching
+/// `bounds_in`'s own body-scan stopping rule.
+///
+/// `citations_in` used to reset its tracked bound only on `### `/`## `, not on a bare `#### ` heading —
+/// unlike `bounds_in`, which stops a bound's body scan on any of the three. A citation following such a
+/// heading was silently attributed to whichever bound scenario opened above it, disagreeing with `bounds_in`
+/// about which bound (if any) it defends. No tracked spec currently has a `#### ` heading spelled any other
+/// way, so this was latent rather than observed.
+#[test]
+fn a_bare_heading_ends_the_open_bound_in_citations_in() {
+    use kanhe::bound_register_parse::citations_in;
+    let text = "### Requirement: Foo\n\n#### Scenario: First — a stated bound\n\n- **THEN** x\n\n#### Notes:\n\n\
+                - **PINNED-BY** `test_after_bare_heading`\n";
+    let citations = citations_in(
+        "some-capability",
+        "openspec/specs/some-capability/spec.md",
+        text,
+    );
+    assert_eq!(citations.len(), 1);
+    assert_eq!(
+        citations[0].bound, None,
+        "a bare #### heading not spelled Scenario: must end the open bound scenario"
     );
 }

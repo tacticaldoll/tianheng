@@ -189,11 +189,10 @@ consumer for an undemonstrated deduplication.
   it at each pre-release review rather than trusting that the next instance will be noticed. It is what found
   the release-coherence pair after five linear rounds had read past them.
 
-  Two residues belong here rather than to the shapes that closed. `kanhe::selection` binds only the call sites
-  that use it, and nothing enumerates the readers that should. And `census::figures_in` returns the first
-  match on a line, so a line writing one census phrase twice with different figures would have only the first
-  compared — measured across all 64 tracked Markdown files, zero lines carry a phrase twice, so it is latent
-  and left rather than repaired alongside a live one.
+  One residue belongs here rather than to the shapes that closed. `kanhe::selection` binds only the call sites
+  that use it, and nothing enumerates the readers that should. (A second residue recorded alongside this one —
+  `census::figures_in` reading only the first match on a line — was closed the following day and is no longer
+  live; this entry went uncorrected until a later adversarial-review pass noticed the drift.)
 
 - **`Bind a claim to its measurement` is a governing rule with no reaction.** *Class:* WATCH. *Observed
   pressure:* nine review rounds in the 0.5.0 window, whose largest class by far was *the corpus was wrong or
@@ -213,6 +212,34 @@ consumer for an undemonstrated deduplication.
   which is intent rather than shape, and the measured-and-rejected class here is exactly judgements over text.
   If it is ever reacted, the reaction is more likely to be a **type** that makes the weak binding harder to
   reach than a scan that recognises it.
+
+- **A third hand-written scanner of the `#### Scenario:`/`- **PINNED-BY**` grammar still disagrees with the
+  other two on two edge cases.** *Class:* WATCH. *Observed pressure:* `bound_register_parse::bounds_in` and
+  `bound_register_parse::citations_in` (the latter extracted from `pinning_citations` during an adversarial
+  review this window, so `pin_bites::cited_bounds` and `pinning_citations` share one recognizer instead of
+  two) now agree with each other exactly. `crates/kanhe/tests/observation_bound_model.rs`'s own
+  `spec_bounds`/`spec_defence` were not touched by that extraction and remain a **third**, independent
+  implementation of the identical grammar, found by the same review to have already drifted from the other
+  two in two ways: it requires a literal trailing space after `"#### Scenario:"` (`bounds_in`/`citations_in`
+  trim the heading instead, so `"#### Scenario:Foo"` with no space is a bound to them and not to this
+  scanner), and it checks an **untrimmed** line for a closing `"###"`/`"##"` heading (`bounds_in`/
+  `citations_in` check the trimmed line, so an indented closing heading ends a bound's scope for them and not
+  for this scanner). *Observation source:* the adversarial review's cross-file tracer, verified by grepping
+  every tracked spec for both shapes — none currently has a `"Scenario:"` with no following space or an
+  indented `"###"`/`"##"` heading, so both disagreements are latent. *Current reaction or bound:* none;
+  `observation_bound_model.rs`'s bijection tests only compare its own scanner's output against
+  `observation_bounds()`, which cannot see a disagreement with `bounds_in`/`citations_in` since nothing
+  compares the three against each other. *Risk:* a future spec edit hitting either latent shape would have
+  `observation_bound_model.rs` and the register disagree on a bound's existence or a citation's defended id,
+  each internally consistent and both wrong relative to the other. *Promotion trigger:* either latent shape
+  appearing in a tracked spec, or a fourth independent scanner of this grammar appearing anywhere in the
+  crate. *Version class:* patch; repository-internal, shipping in no crate. *Authority:* none declared yet —
+  the three readers currently agree on every live spec, so nothing has been violated to anchor one. *Shape:*
+  closing this fully needs one shared low-level walker (`"#### Scenario:"`-untrimmed to open,
+  `"#### "`/`"### "`/`"## "`-trimmed to close, matching `bounds_in`'s own rules) that all three call sites use,
+  not a third point patch; filed rather than done here because it touches `observation_bound_model.rs`'s core
+  logic, a file this window's fixes did not otherwise touch, and reworking it deserves its own scoped review
+  rather than folding into an adversarial-review pass over a different fix.
 
 - **`observation-bound-model`'s projection discloses its own bounds by a typed list; its sibling requires a
   derived one.** *Class:* READY-PATCH. *Observed pressure:* `gate-shape-contract` hit this and wrote the
