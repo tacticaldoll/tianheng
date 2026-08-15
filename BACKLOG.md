@@ -241,6 +241,53 @@ consumer for an undemonstrated deduplication.
   logic, a file this window's fixes did not otherwise touch, and reworking it deserves its own scoped review
   rather than folding into an adversarial-review pass over a different fix.
 
+- **`negates_bound_in_prose`'s one-interposed-word budget is measured from `a`/`an`, independently of
+  `states_a_bound_in_prose`'s own budget measured from `stated`/`documented`, so a sentence stacking both
+  qualifiers is read as a declaration rather than the denial it is.** *Class:* WATCH. *Observed pressure:* an
+  adversarial review of this window's own fix (which corrected a live case-sensitivity gap in both functions,
+  see the `CHANGELOG.md` entry) also asked whether the two functions' independent one-word tolerances could
+  ever disagree, and found they can: `"this is not a documented residual bound"` has `states_a_bound_in_prose`
+  return `true` (one interposed word, `residual`, between `documented` and `bound`) and
+  `negates_bound_in_prose` return `false` (its own one-word budget, between `a` and `bound`, is already spent
+  on `documented`, leaving no room for `residual` before `bound`) — so `undeclared_prose_offences`'s
+  `!states(...) || negates(...)` guard evaluates `false`, and a genuinely negated sentence is reported as an
+  undeclared bound. *Observation source:* verified directly (`states_a_bound_in_prose` returns `true`,
+  `negates_bound_in_prose` returns `false` for the sentence above), then grepped every tracked spec for
+  `(not|never) a (stated|documented) [a-z-]+ bounds?` — zero matches, so this is latent. *Current reaction or
+  bound:* none. *Risk:* a future spec sentence combining a negation with a states-side qualifier
+  (`"...is not a documented residual bound"`) would be misreported as an undeclared bound rather than
+  correctly exempted as a denial. *Promotion trigger:* a live instance of the stacked shape in a tracked spec.
+  *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
+  `observation-bound-register`'s "A bound stated in prose but not declared as a scenario SHALL fail" — the
+  requirement this pair jointly enforces. *Shape:* the two budgets need to share one accounting (e.g. count
+  every interposed word from the negator through to `bound`/`bounds`, capped at two total: one for the
+  negator's own qualifier, one for the states-side qualifier) rather than each independently assuming it owns
+  the only interposed word in the sentence — a design question, not a one-line patch, which is why it is
+  filed rather than widened here under time pressure.
+
+- **`requirement_heading_is_bounds_named` matches `bound`/`bounds` as a bare substring with no check on the
+  character *before* the match, so an unrelated word like `Outbound`/`Rebound`/`Unbounded` in a requirement
+  heading would falsely exempt that requirement from the undeclared-prose check.** *Class:* WATCH. *Observed
+  pressure:* the same adversarial review, independently reported by two finders. The function checks only that
+  the character *after* `bound(s)` is non-alphabetic (so `boundary`/`boundaries` are correctly excluded), with
+  no symmetric check on the character before — unlike this file's own `contains_words`, used by
+  [`marks_a_bound`], which checks both sides. *Observation source:* traced by hand
+  (`requirement_heading_is_bounds_named("Outbound Requests")` returns `true`: `"bound"` matches inside
+  `"outbound"`, and the character following it — a space, from `" requests"` — reads as "no letter follows"),
+  then grepped every tracked `### Requirement:` heading for a `bound`-containing word that is not
+  `bound(s)`/`boundary/boundaries` itself — none found, so latent. *Current reaction or bound:* none.
+  *Risk:* a requirement heading using an ordinary English word containing `bound` as a substring
+  (`outbound`, `rebound`, `unbounded`, `abound`) would be wrongly classified as bounds-named, exempting real
+  bound-stating prose beneath it from `undeclared_prose_offences` and instead charging that requirement with
+  "declares no bound scenario of its own" — the wrong failure mode for a heading that was never about bounds
+  at all. *Promotion trigger:* a live instance of such a heading in a tracked spec. *Version class:* patch;
+  repository-internal, shipping in no crate. *Authority:* `observation-bound-register`, the same requirement
+  the sibling entry above cites. *Shape:* add the same before-the-match boundary check `contains_words`
+  already has, most simply by having this function call `contains_words(heading, "bound")` /
+  `contains_words(heading, "bounds")` (or a variant tolerant of the `boundary` exemption) instead of its own
+  one-sided scan — a smaller change than the sibling entry above, filed alongside it rather than folded into
+  this window's fix because both were found by the same pass and neither has a live instance forcing it.
+
 - **`observation-bound-model`'s projection discloses its own bounds by a typed list; its sibling requires a
   derived one.** *Class:* READY-PATCH. *Observed pressure:* `gate-shape-contract` hit this and wrote the
   requirement — *"That disclosure SHALL be **derived from the specification, not typed into the generator**,

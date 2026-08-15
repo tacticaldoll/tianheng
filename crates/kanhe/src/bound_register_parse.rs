@@ -132,8 +132,15 @@ fn is_plain_word(word: &str) -> bool {
 ///
 /// Word-boundary aware on every token (tighter than the shell's raw substring match, which had no boundary
 /// on `stated`/`documented` itself — `"understated bounds"` would have matched it).
+///
+/// **Case-folded before tokenizing.** A sentence-initial `"Stated renderer-granularity bounds MAY..."` is
+/// exactly the shape this function exists to catch, and an exact-case comparison against lowercase literals
+/// never matches ordinary sentence capitalization — measured directly against a real tracked spec
+/// (`semantic-dyn-trait-boundary/spec.md`'s "Stated renderer-granularity bounds MAY coalesce..."), which this
+/// reader read past silently before this fix.
 pub fn states_a_bound_in_prose(line: &str) -> bool {
-    let words: Vec<&str> = line.split_whitespace().map(bare_word).collect();
+    let lower = line.to_ascii_lowercase();
+    let words: Vec<&str> = lower.split_whitespace().map(bare_word).collect();
     for (i, word) in words.iter().enumerate() {
         if *word != "stated" && *word != "documented" {
             continue;
@@ -159,8 +166,15 @@ pub fn states_a_bound_in_prose(line: &str) -> bool {
 /// repository's own specs while catching none of the intended cases, because each of those three has a
 /// negation somewhere in the sentence that applies to a different verb, not to the bound noun. Only a
 /// negation word sitting immediately against `a`/`an` denies the bound itself.
+///
+/// **Case-folded before tokenizing**, for the same reason [`states_a_bound_in_prose`] is: a sentence-initial
+/// `"Not a stated bound"` denies the bound exactly as `"not a stated bound"` does, and an exact-case
+/// comparison would silently fail to recognize the denial — the opposite-direction failure from
+/// `states_a_bound_in_prose`'s, since a missed negation here reports a genuinely negated sentence as a
+/// declaration instead of exempting it.
 pub fn negates_bound_in_prose(line: &str) -> bool {
-    let words: Vec<&str> = line.split_whitespace().map(bare_word).collect();
+    let lower = line.to_ascii_lowercase();
+    let words: Vec<&str> = lower.split_whitespace().map(bare_word).collect();
     for (i, word) in words.iter().enumerate() {
         if *word != "a" && *word != "an" {
             continue;
