@@ -9,6 +9,9 @@ documented adoption path remains usable and semantically honest across the 0.2 l
 - `crates/tianheng/src/lib.rs`
 - `crates/tianheng/src/sans_io.rs`
 - `crates/tianheng/tests/adopter_surface.rs`
+- `crates/guibiao/tests/adopter_surface.rs`
+- `crates/hunyi/tests/adopter_surface.rs`
+- `crates/louke/tests/adopter_surface.rs`
 
 ## Requirements
 ### Requirement: The prelude is the composed adopter entrypoint

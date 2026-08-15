@@ -1,14 +1,15 @@
 ## 1. Apply
 
-- [ ] 1.1 Extend `openspec/specs/adopter-surface/spec.md`'s `## Subject` to name
+- [x] 1.1 Extend `openspec/specs/adopter-surface/spec.md`'s `## Subject` to name
       `crates/guibiao/tests/adopter_surface.rs`, `crates/hunyi/tests/adopter_surface.rs`, and
       `crates/louke/tests/adopter_surface.rs`, alongside the existing three shell files.
-- [ ] 1.2 Confirm `crates/kanhe/tests/capability_subjects.rs`'s unclaimed-file count drops by exactly
-      three on a clean run, and that no other capability's subject already claims any of the three
-      files (which would make this an overlap rather than a genuine gap close).
+- [x] 1.2 Confirmed: unclaimed count dropped from 109 to 106 (claimed 286 to 289), exactly three, and
+      an independent adversarial review confirmed no other capability's spec already names any of the
+      three files under its own `## Subject`.
 
 ## 2. Verify
 
-- [ ] 2.1 Run the full Definition of Done gate list.
-- [ ] 2.2 Confirm `openspec validate --strict` passes over every spec, including the modified
-      `adopter-surface` spec.
+- [x] 2.1 Full Definition of Done gate list run: green.
+- [x] 2.2 `adopter-surface` validates individually. `openspec validate --specs --strict` shows one
+      pre-existing failure (`repository-checks`, unrelated to this change — confirmed identical with
+      this change stashed out) and is not this change's to fix.
