@@ -899,6 +899,15 @@ them.
 
 ### Self-governance
 
+- **`hermetic_git`'s own `git()`-wrapper output/success/failure mapping lived twice, byte-identical past
+  the leading flags, in `publish_source_gate` and `release_coherence_gate` — the exact class this module
+  already exists to have closed for the `hermetic` builder underneath it.** The earlier fix unified
+  `hermetic()` but left the wrapper built on top of it duplicated in the same two files. Moved into
+  `hermetic_git::run(repo, flags, args)`, taking a leading-flags slice (`&[]` for
+  `release_coherence_gate`, `&["-c", "core.excludesFile=/dev/null"]` for `publish_source_gate`); both
+  gate files' own `git()` now delegate to it in one line. No behavior change, confirmed by all 30
+  `publish_source`, 1 `publish_source_integrity`, and 51 `release_coherence` tests passing unchanged.
+
 - **`scripts/merge-pr.sh` refused `gh`'s short spelling of `--delete-branch` without naming why.** `-d`
   fell through to the generic catch-all message instead of the dedicated one explaining that deleting a
   branch auto-closes any pull request stacked on it — unlike every other admitted-consequence flag

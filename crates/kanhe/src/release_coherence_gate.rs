@@ -17,16 +17,7 @@ use crate::refusal::{Refusal, cannot_judge, violation};
 pub use crate::hermetic_git::hermetic;
 
 fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
-    let out = hermetic("git")
-        .args(args)
-        .current_dir(repo)
-        .output()
-        .map_err(|err| format!("cannot run git {args:?}: {err}"))?;
-    if out.status.success() {
-        Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
-    } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim_end().to_string())
-    }
+    crate::hermetic_git::run(repo, &[], args)
 }
 
 fn read(repo: &Path, rel: &str) -> Result<String, Refusal> {
