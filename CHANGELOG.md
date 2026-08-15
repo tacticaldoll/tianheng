@@ -899,6 +899,20 @@ them.
 
 ### Self-governance
 
+- **A reference-integrity exemption for a deliberately git-ignored path depended on whether the ignored
+  directory happened to exist on disk.** `reference_integrity`'s `ignored()` helper exempts a
+  prose-referenced path from the stale-reference check when git itself deliberately ignores it (a
+  generated directory, for instance). A directory-only `.gitignore` pattern (one ending in `/`) only
+  matches a candidate `git check-ignore` can see is a directory, and it can only see that by `lstat`ing
+  a path that exists — so a generated directory a fresh checkout has not built yet read as "not a
+  directory," silently failing to match, and whether the check fired depended on which examples happened
+  to be built on the machine running it rather than on the repository's own declared ignore rules. Fixed
+  by also querying the candidate with a trailing slash forced on, which reads as a directory regardless
+  of what is on disk; this can only widen what counts as ignored, never narrow it, since the original
+  bare query still runs first. Verified both negative directions: a fixture git repository with a
+  directory-only pattern and no directory ever created reproduces the missed match under the old
+  single-query form, and the new query catches it.
+
 - **A census sweep read only the first figure-match on a line, missing a stale one following a correct
   one.** `figures_in` returned on its first successful match, so a line writing the current figures first and
   a stale earlier draft's figures later, in the same declared phrasing, reported clean — the trailing stale
