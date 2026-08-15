@@ -29,43 +29,71 @@ pub struct Census {
     pub figures: Vec<usize>,
 }
 
-/// Read the figures a line writes in this census's phrasing, if it writes them at all.
+/// Read every match this line carries of this census's phrasing, left to right.
 ///
 /// Matching is literal between placeholders and a run of digits at each, tried from every offset — so
 /// `73 bounds across 22 capabilities` is recognised wherever a sentence carries it, which is where a census
 /// actually gets written. Anchoring at offset zero was the first draft and it matched nothing: a phrase
 /// beginning with a placeholder has an empty leading literal, and the digits then had to be the line's first
 /// characters.
-fn figures_in(line: &str, phrase: &str) -> Option<Vec<usize>> {
+///
+/// **Every occurrence on the line is collected, not only the first.** Returning on the first match left a
+/// line stating the correct figures first, followed later by a stale earlier draft's, silently unexamined —
+/// measured directly: `"73 bounds across 22 capabilities, earlier drafts said 12 bounds across 5
+/// capabilities"` against declared `[73, 22]` returned only the leading, correct match under the previous
+/// first-match version, so the trailing stale figures produced no offence.
+///
+/// **A start offset landing inside an already-read number's own token is skipped**, advancing past it
+/// instead of retrying one byte later. Trying every offset means a start inside `73` reads `3` as its own
+/// number, and a start inside the compound word `seventy-three` reads its tail `three` as its own number
+/// (value 3) — both matching the same phrase again. Measured directly: without this, `"73 bounds across 22
+/// capabilities"` reported both `[73, 22]` and the spurious `[3, 22]`, and `"seventy-three bounds across
+/// twenty-two capabilities"` reported both `[73, 22]` and the spurious `[3, 22]` from `three`. Neither is the
+/// residual the header already discloses (a figure reflowed across a line break): each is a false occurrence
+/// entirely inside one already-read number, which the phrase's own literal cannot rule out on its own when
+/// there is none before the placeholder to anchor against.
+fn figures_in(line: &str, phrase: &str) -> Vec<Vec<usize>> {
     let parts: Vec<&str> = phrase.split("{}").collect();
     if parts.len() < 2 {
-        return None;
+        return Vec::new();
     }
-    let bytes = line.len();
-    for start in 0..=bytes {
+    let mut found = Vec::new();
+    let mut start = 0usize;
+    while start <= line.len() {
         if !line.is_char_boundary(start) {
+            start += 1;
             continue;
         }
-        if let Some(found) = match_from(&line[start..], &parts) {
-            return Some(found);
+        match match_from(&line[start..], &parts) {
+            Some((figures, first_number_end)) => {
+                found.push(figures);
+                start += first_number_end.max(1);
+            }
+            None => start += 1,
         }
     }
-    None
+    found
 }
 
-/// One attempt, anchored at the front of `rest`.
-fn match_from(rest: &str, parts: &[&str]) -> Option<Vec<usize>> {
-    let mut rest = rest.strip_prefix(parts[0])?;
+/// One attempt, anchored at the front of `rest`. Returns the figures alongside how many bytes into `rest`
+/// the first number's own token ends (after `parts[0]`), so [`figures_in`] can skip past it rather than
+/// re-reading its own suffix as a fresh, shorter number.
+fn match_from(rest: &str, parts: &[&str]) -> Option<(Vec<usize>, usize)> {
+    let mut tail_rest = rest.strip_prefix(parts[0])?;
     let mut found = Vec::with_capacity(parts.len() - 1);
+    let mut first_number_end = None;
     for tail in &parts[1..] {
-        let (value, consumed) = number_at(rest)?;
-        rest = &rest[consumed..];
+        let (value, consumed) = number_at(tail_rest)?;
+        if first_number_end.is_none() {
+            first_number_end = Some(parts[0].len() + consumed);
+        }
+        tail_rest = &tail_rest[consumed..];
         found.push(value);
         if !tail.is_empty() {
-            rest = rest.strip_prefix(*tail)?;
+            tail_rest = tail_rest.strip_prefix(*tail)?;
         }
     }
-    Some(found)
+    Some((found, first_number_end.unwrap_or(parts[0].len())))
 }
 
 /// The count written at the front of `rest`, in digits **or in words**, and how many bytes it took.
@@ -205,17 +233,16 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusa
         };
         for (index, line) in text.lines().enumerate() {
             for census in declared {
-                let Some(written) = figures_in(line, census.phrase) else {
-                    continue;
-                };
-                if written != census.figures {
-                    offences.push(violation(format!(
-                        "  {path}:{} writes {written:?} for {} where the check that enumerates it \
-                         produces {:?} — a census is produced, never typed",
-                        index + 1,
-                        census.subject,
-                        census.figures
-                    )));
+                for written in figures_in(line, census.phrase) {
+                    if written != census.figures {
+                        offences.push(violation(format!(
+                            "  {path}:{} writes {written:?} for {} where the check that enumerates it \
+                             produces {:?} — a census is produced, never typed",
+                            index + 1,
+                            census.subject,
+                            census.figures
+                        )));
+                    }
                 }
             }
         }
@@ -235,24 +262,51 @@ mod tests {
                 "the register currently holds **73 bounds across 22 capabilities** today",
                 phrase
             ),
-            Some(vec![73, 22])
+            vec![vec![73, 22]]
         );
-        assert_eq!(figures_in("no figures here", phrase), None);
+        assert_eq!(
+            figures_in("no figures here", phrase),
+            Vec::<Vec<usize>>::new()
+        );
         // Words, which is how this repository's prose actually writes a count.
         assert_eq!(
             figures_in(
                 "seventy-three bounds across twenty-two capabilities",
                 phrase
             ),
-            Some(vec![73, 22])
+            vec![vec![73, 22]]
         );
         assert_eq!(
             figures_in("nineteen bounds across nine capabilities", phrase),
-            Some(vec![19, 9])
+            vec![vec![19, 9]]
         );
         assert_eq!(
             figures_in("73 bounds across many capabilities", phrase),
-            None
+            Vec::<Vec<usize>>::new()
+        );
+    }
+
+    /// The direction this repository's own review measured missing: a line stating the correct figures
+    /// first and a stale earlier draft's later must surface **both** matches, not only the leading one.
+    #[test]
+    fn every_occurrence_on_one_line_is_read_not_only_the_first() {
+        let phrase = "{} bounds across {} capabilities";
+        assert_eq!(
+            figures_in(
+                "73 bounds across 22 capabilities, earlier drafts said 12 bounds across 5 capabilities",
+                phrase
+            ),
+            vec![vec![73, 22], vec![12, 5]]
+        );
+        // The reverse order: the stale figure first, the correct one trailing — already caught before this
+        // fix, kept as the control.
+        assert_eq!(
+            figures_in(
+                "earlier drafts said 12 bounds across 5 capabilities, corrected to 73 bounds across 22 \
+                 capabilities",
+                phrase
+            ),
+            vec![vec![12, 5], vec![73, 22]]
         );
     }
 }
