@@ -899,6 +899,14 @@ them.
 
 ### Self-governance
 
+- **A citation resolving to more than one definition named the count, not where to look.** The bound
+  register's duplicate-definition offence said `defined 2 times under crates/` without naming either
+  site, even though `git grep -n`'s own output (`path:line:content`) was already sitting in hand. Extracted
+  the offence-formatting into `definition_count_offence`, directly unit-tested with a synthetic two-site
+  input rather than only through the live `cargo test --list` enumeration, and it now lists every
+  definition site under the count. The zero-sites direction (a citation the harness registers but no
+  definition matches) is unchanged — there is no site to name.
+
 - **`hermetic_git`'s own `git()`-wrapper output/success/failure mapping lived twice, byte-identical past
   the leading flags, in `publish_source_gate` and `release_coherence_gate` — the exact class this module
   already exists to have closed for the `hermetic` builder underneath it.** The earlier fix unified
