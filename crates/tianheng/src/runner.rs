@@ -569,7 +569,7 @@ where
     // later line in this function does otherwise.
     let ParsedArgs {
         command: _,
-        manifest_path,
+        manifest_path: manifest_path_arg,
         baseline_path,
         write_baseline_path,
         format,
@@ -614,7 +614,7 @@ where
         }
     }
 
-    let manifest_path = match resolve_manifest_path(manifest_path) {
+    let manifest_path = match resolve_manifest_path(manifest_path_arg) {
         Ok(path) => path,
         Err(code) => return code,
     };
