@@ -200,7 +200,7 @@ checkout of the repository whose pull request you are merging" >&2
 gate judges that squash's message" >&2
         exit 2
         ;;
-    --delete-branch)
+    --delete-branch | -d)
         printf 'merge message: %s\n' \
             "refusing \`$1\`: it is not part of the merge, it is an act **after** it — and the one with an \
 effect no rerun undoes. Deleting a branch another pull request targets auto-closes that pull request, and \

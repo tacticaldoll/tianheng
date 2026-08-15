@@ -621,6 +621,7 @@ fn only_an_allowlisted_flag_reaches_the_merge() {
         // the `--admin` arm with no sentence of its own while the criterion beside it admits only flags that
         // change whether the merge proceeds.
         "--delete-branch",
+        "-d",
         // And one nobody classified: an argument the wrapper does not know is refused, not passed on.
         "--some-flag-a-future-gh-adds",
     ] {
@@ -655,6 +656,18 @@ fn only_an_allowlisted_flag_reaches_the_merge() {
         "the refusal must name what deleting a branch does to a pull request stacked on it, so an operator \
          can tell when it is safe to do by hand: {:?}",
         deletion.stderr
+    );
+
+    // `gh`'s own short spelling for the same flag must carry the same consequence, not just the same exit
+    // code: every other admitted-consequence flag family catches its short form in the same arm (`-t*` with
+    // `--subject`, `-F*`/`-b*` with `--body-file`/`--body`, and so on), and `-d` had been the one exception,
+    // falling through to the generic catch-all instead.
+    let short_deletion = run_wrapper(&root, "subjects", &["-d"]);
+    assert!(
+        short_deletion.stderr.contains("auto-closes"),
+        "`-d` is gh's own short spelling of `--delete-branch` and must name the same consequence, not just \
+         be refused generically: {:?}",
+        short_deletion.stderr
     );
 
     // The other half: EVERY flag that changes whether the merge may proceed — never what it records, and never
