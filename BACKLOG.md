@@ -79,6 +79,27 @@ consumer for an undemonstrated deduplication.
   others parse a data format whose syntax marks comments. That measurement is the reason this is debt rather
   than a gap someone forgot.
 
+- **`examples/observer-participant`'s own test fixture was not migrated to `xingbiao::claim_scratch`,
+  unlike every other scratch-root claim in the workspace.** *Class:* ACCEPTED DEBT. *Observed pressure:*
+  an adversarial review of the whole `v0.4.0..HEAD` campaign found `examples/observer-participant/tests/
+  reaction.rs`'s `Fixture::new` still does `remove_dir_all` then `create_dir_all(root.join("src"))` on a
+  predictable `temp_dir().join(format!("house-rules-{name}-{pid}"))` path — the exact symlink-adoption
+  race the `claim_scratch` migration closed at every other one of the ~40 call sites it touched.
+  *Observation source:* read directly; confirmed every other workspace fixture with this shape now calls
+  `claim_scratch` and this one does not. *Current reaction or bound:* none. *Risk:* low and unchanged from
+  before the migration — developer-machine-only, requires a local attacker able to plant a symlink at a
+  PID-guessable path before this one test runs, in an example crate that ships in no package. *Why debt,
+  not a gap someone forgot:* `examples/observer-participant/Cargo.toml` states its design goal explicitly —
+  "One dependency, and deliberately nothing else... an example that needed a new export would be proving
+  the opposite of what it exists to prove" — and `claim_scratch` is not re-exported through `tianheng`'s
+  public prelude. Migrating this fixture would require either adding a new export to `tianheng` just for
+  an example's own test helper, or adding `xingbiao` as a second dependency, either of which contradicts
+  the example's stated purpose. *Promotion trigger:* `xingbiao::claim_scratch` (or an equivalent) becoming
+  reachable through `tianheng::prelude` for an unrelated reason, at which point migrating this one fixture
+  would cost nothing further. *Version class:* patch; an example, shipping in no package. *Authority:*
+  `examples/observer-participant/Cargo.toml`'s own header comment, the one place this constraint is
+  declared.
+
 ### READY-PATCH
 
 - **The bounds-method reader anchors on a whole-line occurrence that is not the definition.** *Class:*
