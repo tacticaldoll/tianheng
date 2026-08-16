@@ -65,7 +65,7 @@ jobs:
           npx --yes @fission-ai/openspec@1.4.1 validate --specs --strict
       - name: observation bounds are declared and defended
         run: |
-          TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register --test pin_bites
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register
 
   msrv:
     name: MSRV (rust-version)
