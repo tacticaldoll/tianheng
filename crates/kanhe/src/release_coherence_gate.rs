@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use crate::refusal::{Refusal, cannot_judge, violation};
 
 pub use crate::hermetic_git::hermetic;
+use crate::manifest::{semver, workspace_version};
 
 fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     crate::hermetic_git::run(repo, &[], args)
@@ -23,49 +24,6 @@ fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
 fn read(repo: &Path, rel: &str) -> Result<String, Refusal> {
     std::fs::read_to_string(repo.join(rel))
         .map_err(|err| cannot_judge(format!("could not read {rel}: {err}")))
-}
-
-/// The first `version = "…"` under `[workspace.package]`.
-fn workspace_version(text: &str) -> Option<String> {
-    let mut inside = false;
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if trimmed == "[workspace.package]" {
-            inside = true;
-            continue;
-        }
-        if trimmed.starts_with('[') {
-            inside = false;
-            continue;
-        }
-        if inside {
-            if let Some(rest) = trimmed
-                .strip_prefix("version")
-                .and_then(|rest| rest.trim_start().strip_prefix('='))
-            {
-                return Some(rest.trim().trim_matches('"').to_string());
-            }
-        }
-    }
-    None
-}
-
-fn semver(version: &str) -> Option<(u64, u64, u64)> {
-    let parts: Vec<&str> = version.split('.').collect();
-    if parts.len() != 3 {
-        return None;
-    }
-    let mut out = [0u64; 3];
-    for (index, part) in parts.iter().enumerate() {
-        if part.is_empty()
-            || !part.chars().all(|c| c.is_ascii_digit())
-            || (part.len() > 1 && part.starts_with('0'))
-        {
-            return None;
-        }
-        out[index] = part.parse().ok()?;
-    }
-    Some((out[0], out[1], out[2]))
 }
 
 /// A double-quoted value this reader found, or a statement that it could not read one.

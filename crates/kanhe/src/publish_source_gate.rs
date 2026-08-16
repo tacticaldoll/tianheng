@@ -14,6 +14,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::manifest::is_semver;
 use crate::refusal::{Refusal, cannot_judge, violation};
 
 /// The judgement's own git, isolated from everything outside the repository it judges.
@@ -262,42 +263,16 @@ pub fn classify(repo: &Path, paths: &[&str]) -> Result<String, NoClassification>
     }
 }
 
-/// The `[workspace.package]` version, or the `[package]` version where there is no workspace table.
+/// The `[workspace.package]` version this repository declares, or why it could not be read.
 ///
-/// A read failure (permission denied, a broken symlink, non-UTF8 bytes) is a distinct fact from the
-/// version key genuinely being absent from a manifest that reads fine — the caller judges the two
-/// differently right before an irreversible `cargo publish`, so this does not fold one into the other.
+/// The parse is [`crate::manifest::workspace_version`]; only the read is local, because this gate takes a
+/// path where its sibling already holds the text. The two used to parse it separately and disagreed about
+/// whether a `[package]` table counts — see that module for why it no longer does.
 fn workspace_version(repo: &Path) -> Result<Option<String>, String> {
     let manifest = repo.join("Cargo.toml");
     let text = std::fs::read_to_string(&manifest)
         .map_err(|err| format!("could not read {}: {err}", manifest.display()))?;
-    let mut in_package = false;
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') {
-            in_package = trimmed == "[workspace.package]" || trimmed == "[package]";
-            continue;
-        }
-        if in_package {
-            if let Some(rest) = trimmed.strip_prefix("version") {
-                let rest = rest.trim_start();
-                if let Some(rest) = rest.strip_prefix('=') {
-                    return Ok(Some(rest.trim().trim_matches('"').to_string()));
-                }
-            }
-        }
-    }
-    Ok(None)
-}
-
-fn is_semver(version: &str) -> bool {
-    let parts: Vec<&str> = version.split('.').collect();
-    parts.len() == 3
-        && parts.iter().all(|p| {
-            !p.is_empty()
-                && p.chars().all(|c| c.is_ascii_digit())
-                && (p.len() == 1 || !p.starts_with('0'))
-        })
+    Ok(crate::manifest::workspace_version(&text))
 }
 
 /// Judge whether `repo` is the source a release publishes from.

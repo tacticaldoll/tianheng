@@ -708,7 +708,7 @@ consumer for an undemonstrated deduplication.
   then grepped every tracked `### Requirement:` heading for a `bound`-containing word that is not
   `bound(s)`/`boundary/boundaries` itself — none found, so latent. *Current reaction or bound:* none.
   *Risk:* a requirement heading using an ordinary English word containing `bound` as a substring
-  (`outbound`, `rebound`, `unbounded`, `abound`) would be wrongly classified as bounds-named, exempting real
+  (`outbound`, `rebound`, `abound`) would be wrongly classified as bounds-named, exempting real
   bound-stating prose beneath it from `undeclared_prose_offences` and instead charging that requirement with
   "declares no bound scenario of its own" — the wrong failure mode for a heading that was never about bounds
   at all. *Promotion trigger:* a live instance of such a heading in a tracked spec. *Version class:* patch;
@@ -768,6 +768,27 @@ consumer for an undemonstrated deduplication.
   is. *Promotion trigger:* a family whose only adopter-shaped owner declares it through a profile, or a
   second profile reaching a family no bare declaration names. **Not fired.** *Version class:* patch;
   repository-internal, shipping in no crate. *Authority:* `governance-dogfood`.
+
+- **WATCH: the capability-subject filing join observes nothing under the declared OpenSpec mode.** *Class:*
+  WATCH. *Observed pressure:* `capability_subjects.rs`'s
+  `a_change_names_every_capability_whose_subject_it_touches` enumerates `openspec/changes/*/proposal.md` and
+  returns early when that is empty. `PROJECT.md` records this project using OpenSpec's `specs` half and not
+  its `changes` half, so the corpus is empty by declaration and the early return is always taken.
+  *Observation source:* `git ls-files openspec/changes` returns one path, `archive/.gitkeep`; the join was
+  built in the same window the mode was declared, four commits apart, and neither noticed the other. Three
+  sibling `openspec/changes/` carve-outs are in the same position — `law_restatement.rs`'s projection filter
+  and two in `reference_integrity.rs` — though one of those is exercised by a fixture that plants a
+  synthetic change path, so it is a branch with no live subject rather than dead code. *Current reaction or
+  bound:* none for the class it guarded. **The filing class is defended by review alone**, and it is live
+  rather than hypothetical: `scripts/publish.sh` has two claimants, which is the shape the join was built
+  from. *Risk:* a requirement filed under the wrong capability goes unnoticed until someone reads both
+  specs. Bounded — the mistake is visible in the diff of any PR that makes it. *Why not re-point it:* the
+  join compares a proposal's **declared** capability set against the subjects a diff touches, and under
+  `specs` mode there is no independent declaration to compare against — reading the set from the touched
+  spec paths is near-tautological, since touching a spec is naming its capability. *Promotion trigger:* a
+  requirement found filed under the wrong capability, or the `changes` half being adopted, which makes the
+  join start working with no edit. **Not fired.** *Version class:* patch; repository-internal, shipping in
+  no crate. *Authority:* `capability-subjects`, and `PROJECT.md`'s adoption-mode decision.
 
 - **WATCH: nine structural findings the merged-review campaign deliberately did not take.** *Observed
   pressure:* a contributed review's Gate 4 found twelve functions long or deeply nested enough to hide more
