@@ -904,6 +904,59 @@ them.
 
 ### Self-governance
 
+- **Two independent full-campaign reviews were merged, and their intersection was empty.** One was run
+  here; the other was contributed as a 27-agent parallel pass. Neither found anything the other found — 7
+  findings from one, 4 from the other — which is the most useful thing either produced, and the reason both
+  are recorded rather than the union being reported as one review's output.
+
+  **Two of the incoming review's grades were reversed on measurement, and both reversals mattered more than
+  the findings they replaced.** Its `CONTRACT-VIOLATED` on `BACKLOG.md`'s spec-corpus figures ("30-75%
+  stale") was wrong: measured at `ee15665`, the commit that wrote them, requirements **310** and scenarios
+  **1177** are exact, and the sentence says the specs *held* them. Acting on that grade would have destroyed
+  a correct record and replaced it with a live-looking claim this repository's own census policy forbids in
+  prose. What was actually wrong was smaller — no measurement anchor, and `1048` counted *lines carrying*
+  `SHALL` while the sentence called them occurrences. Its `VIOLATED` on the mutation harness's target
+  directory was likewise a real hardening described at the wrong grade: the isolation held, by cargo's
+  default, and what was missing was anything asking for it.
+
+  The other direction is recorded too: the incoming review's gate ladder blocked Gates 5-6 for two files on
+  Gate 4 length findings, and **both of this window's actual correctness defects live at Gate 6 in exactly
+  those two files** — the lockfile table boundary and the scenario-reader divergence below. Length is style;
+  a wrong verdict is not.
+
+- **A `Cargo.lock` table that is not `[[package]]` no longer absorbs the package block above it.**
+  `[[patch.unused]]`, which cargo writes whenever a `[patch]` section exists, carries its own `name`,
+  `version` and `source`; those overwrote the still-open block's, so the last member's version was replaced
+  before it was filed and the release gate reported `Cargo.lock is missing workspace package …` for a lock
+  that records it. A false accusation in front of `cargo publish`. Any table header now closes the record and
+  only `[[package]]` reopens one — skipping the foreign tables by name would have been a list of the ones
+  someone had thought of.
+
+- **The three readers of the scenario grammar stop at the same line.** `bounds_in` and `citations_in` ended a
+  scenario at `## `/`### `/`#### ` while `undeclared_prose_offences` ended one at any line starting with `#`,
+  so a `##### ` sub-heading left the first two inside a declared bound and the third outside it — reporting
+  prose as an undeclared bound the register had registered. One `ends_scenario` predicate now, and the
+  direction holds it as *agreement between the readers* rather than as three separate expectations.
+
+- **The census word reader's ceiling is a declared bound.** `number_at` reads the units, the tens and one
+  compound of the two, stopping at ninety-nine, while every sibling residual in that requirement was
+  declared. A word reader that silently stops matching reads as covered. Declared rather than extended:
+  the figures this repository writes in words are the small ones. The register is 84 bounds now.
+
+- **The pinned OpenSpec validator is reproduced from a committed lock rather than resolved fresh.** The exact
+  version pin bound the direct package and nothing below it, so `npx` resolved the transitive tree anew on
+  every CI run and every local Definition of Done. `npm ci` against `package-lock.json` pins all 80 packages
+  by integrity digest and `--no-install` refuses the network. `/node_modules/` is ignored rather than merely
+  untracked, because the publish gate reads `--untracked-files=all`.
+
+- **Smaller, in one campaign:** the reference gate's dated-section exemption now states how wide it is while a
+  release is being prepared (measured: 41 references in the unreleased section, all resolving — filed WATCH);
+  the mutation checkout asks for its own target directory instead of inheriting one; `git_metadata` is called
+  `cargo_metadata`, which is what it runs; the identifier tokenizer that lived twice lives once, and
+  deliberately stays separate from the prose tokenizer it resembles; a CI step that named a defence it did not
+  exercise no longer selects it; both wrappers stop depending on bash 4.4 for an empty passthrough; and
+  `COOKBOOK.md`'s two elided names stop looking like ones its block binds.
+
 - **A sixth adversarial review round, of the fifth round's own fix, found the identical
   case-sensitivity gap survived in the one sibling recognizer that fix did not touch.**
   `bound_register_parse::marks_a_bound` (which decides whether a *scenario heading* — not prose —
