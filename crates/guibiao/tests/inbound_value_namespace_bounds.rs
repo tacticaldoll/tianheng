@@ -68,7 +68,7 @@ fn findings(manifest: &Path) -> Vec<String> {
     }
 }
 
-/// The reaction the two bounds below must not disturb: a real value binding still reacts.
+/// The reaction the inbound-value namespace bounds must not disturb: a real value binding still reacts.
 #[test]
 fn a_real_value_binding_still_reacts() {
     let probe = Probe::new(

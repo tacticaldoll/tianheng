@@ -597,7 +597,7 @@ fn a_tag_whose_commit_is_missing_cannot_be_resolved() {
 // otherwise be judged differently in different places, which is the one thing a governance gate must not do.
 //
 // The classifier is exercised directly, because these three cases are about which source hid a path rather
-// than about the whole judgement; one direction below carries the same shape through `judge` to show the
+// than about the whole judgement; a sibling direction carries the same shape through `judge` to show the
 // wiring.
 
 /// A repository whose only commit tracks whatever `tracked` names, with `stray` present and untracked.
@@ -741,7 +741,7 @@ fn a_file_hidden_by_this_clones_exclude_file_is_not_clean() {
 //
 // Each fixture above hides a handful of files, so "the excluded set is small" held in all of them and was
 // never a claim anything made. Measured on this repository when these were written, the set was 73,670 paths
-// — `/target/` alone — and the two directions below are the only place that number's consequences are
+// — `/target/` alone — and the two directions naming that pattern are the only place that number's consequences are
 // constructed.
 //
 // **Every figure either sizes a fixture or is read back from one.** The first draft typed the fixture size

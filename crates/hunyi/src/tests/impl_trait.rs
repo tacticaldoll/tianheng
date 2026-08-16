@@ -683,7 +683,7 @@ pub(super) fn dyn_trait_two_platform_modules_impling_the_same_owner_stay_distinc
     );
 }
 
-/// Same property as the two tests above, for the `InherentAssoc` seam kind itself (assoc
+/// Same property as its two sibling directions, for the `InherentAssoc` seam kind itself (assoc
 /// `const`/`type`), which — unlike `InherentMethod` — had no two-module regression test at all
 /// before this, in any capability. Mirrors `dyn_in_an_inherent_impl_public_assoc_const_reacts`'s
 /// fixture shape, split across two platform modules for the same owner.

@@ -1164,7 +1164,20 @@ const POSITIONAL_COUNTS: [&str; 12] = [
     "twelve",
 ];
 
-/// The unit words that carry a position instead of a name.
+/// The words that are **pure position**, carrying no thing of their own. Used by the article branch only.
+///
+/// **The counted branch used this list too, and that was the defect.** A count applied to any noun is an
+/// offset — the requirement forbids *a counted offset* and names no vocabulary — so gating it on four words
+/// made a second list beside the rule, joined to nothing and necessarily narrower than it.
+///
+/// **It stays for the article branch**, because the requirement's wording there turns on the noun: *a
+/// definite article naming no thing*. A line is pure position and names nothing; a construct named and
+/// located is a reference to a thing, which the rule permits and this check's quiet half asserts. Removing
+/// the list from both branches was tried and measured, and took the tree an order of magnitude further —
+/// almost entirely onto the `the <construct>` phrases the requirement allows. One list, one branch.
+///
+/// No figure is written here. The refusal prints its own count and its own list, and a number in prose
+/// beside a reaction that produces one is the second owner this repository removes on sight.
 const POSITIONAL_UNITS: [&str; 4] = ["lines", "line", "paragraph", "sentence"];
 
 /// The adverbs that stand in for the thing a reference should have named.
@@ -1178,24 +1191,65 @@ const POSITIONAL_ADVERBS: [&str; 4] = ["just", "immediately", "directly", "right
 ///
 /// The article case takes the plural too. The hand sweep that preceded this check wrote its pattern with the
 /// singular only, and this check's first tree-wide run found the instance it had missed.
+/// The byte index just past the last non-alphanumeric character, or `0` if there is none.
+///
+/// **`at + 1` is wrong here and panicked on this repository's own text.** `rfind` yields the byte index a
+/// character *starts* at, so adding one lands inside any character wider than a byte — measured, a comment
+/// containing a CJK name aborted the run with *start byte index 31 is not a char boundary*. The `rsplit`
+/// this replaced was boundary-safe for free; hand-rolled offsets are not, and the width has to be asked for.
+fn after_last_break(text: &str) -> usize {
+    text.char_indices()
+        .rev()
+        .find(|(_, character)| !character.is_ascii_alphanumeric())
+        .map_or(0, |(at, character)| at + character.len_utf8())
+}
+
 fn positional_reference(line: &str) -> Option<String> {
     let lower = line.to_ascii_lowercase();
     for direction in ["above", "below"] {
         for (index, _) in lower.match_indices(direction) {
             let before = lower[..index].trim_end();
-            for unit in POSITIONAL_UNITS {
-                if let Some(head) = before.strip_suffix(unit) {
-                    let head = head.trim_end();
-                    let last = head.rsplit(|c: char| !c.is_ascii_alphanumeric()).next();
-                    let counted = last.is_some_and(|token| {
-                        !token.is_empty()
-                            && (token.chars().all(|c| c.is_ascii_digit())
-                                || POSITIONAL_COUNTS.contains(&token))
-                    });
-                    if counted || head.ends_with("the") {
-                        return Some(format!("{unit} {direction}"));
-                    }
-                }
+            // The noun the direction applies to, and what sits before it — with the gap between them kept,
+            // because two of the conditions in `counted` turn on that gap rather than on the words.
+            let noun_start = after_last_break(before);
+            let noun = &before[noun_start..];
+            let head = before[..noun_start].trim_end();
+            let count_start = after_last_break(head);
+            let count = &head[count_start..];
+            let count_prefix = head[..count_start].chars().next_back();
+
+            // **Counted: any noun, and the count must be a count.** A count applied to anything is an
+            // offset, so the noun is read rather than matched against a list. Two conditions keep that from
+            // becoming its opposite error, each measured against a live phrase it was refusing:
+            //
+            //   the count is a whole word    a count welded into a name is not counting the noun;
+            //                                 `round-9 finding above` names a finding called round-9
+            //   the count is adjacent         a count separated from the noun by punctuation is in another
+            //                                 clause, and `after_last_break` yields it empty
+            //
+            // A `gap == " "` condition was written here for the second and **removed after measuring it**:
+            // the emptiness check already excluded every live instance, so the condition was inert — and it
+            // would have introduced a false negative of its own, refusing to see a phrase written with two
+            // spaces. A discriminator that changes no verdict is a claim, not a guard.
+            //
+            // Neither adds a vocabulary. A third candidate did — refusing a copula as the noun — and was
+            // dropped: a list of verbs is the shape just removed from this branch, and the phrase it would
+            // have spared reads better named anyway.
+            //
+            // **The specimens are not written here.** Three times during this repair a positional phrase
+            // quoted as an example landed in the corpus and refused itself. They live on executed lines in
+            // `every_positional_shape_reacts_and_a_named_thing_does_not`, which is where this file already
+            // kept them and where the discipline says they belong.
+            let counted = !noun.is_empty()
+                && !count.is_empty()
+                && !count_prefix.is_some_and(|c| c.is_ascii_alphanumeric() || c == '-')
+                && (count.chars().all(|c| c.is_ascii_digit())
+                    || POSITIONAL_COUNTS.contains(&count));
+            // **Article: only a unit.** The requirement's article clause turns on the noun — pure position
+            // names nothing, while a construct named and located is a reference to a thing the rule permits.
+            let article = head.ends_with("the") && POSITIONAL_UNITS.contains(&noun);
+            if counted || article {
+                return Some(format!("{noun} {direction}"));
             }
             for adverb in POSITIONAL_ADVERBS {
                 if before.ends_with(adverb) {
@@ -1289,6 +1343,12 @@ fn every_positional_shape_reacts_and_a_named_thing_does_not() {
         "// listed in `ALL` on the lines below it",
         "// the 12 lines below",
         "/// the paragraph above states it",
+        // The counted branch reads any noun, not a unit list. These are shapes it missed while it did,
+        // every one taken from a live comment this repository was carrying.
+        "/// enumerated once for the two directions below.",
+        "// one direction below carries the same shape",
+        "// what the two statements above already guarantee",
+        "// the two cases below that carry `--package`",
     ] {
         assert!(
             positional_reference(reacting).is_some(),
@@ -1301,6 +1361,10 @@ fn every_positional_shape_reacts_and_a_named_thing_does_not() {
         "/// See [`sign_probe`], which checks its own write.",
         "// above",
         "// nine of them",
+        // The two discriminators that keep the widened counted branch from becoming its opposite error.
+        // Each is a live phrase the branch refused before them, and each fails a different condition.
+        "// The `cfg_if!` form of the round-9 finding above",
+        "/// it is one component and stays one (asserted above, where it does run)",
     ] {
         assert!(
             positional_reference(quiet).is_none(),

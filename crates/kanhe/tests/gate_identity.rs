@@ -30,7 +30,7 @@ fn run(root: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-/// Every tracked shell script and its text, enumerated once for the two directions below.
+/// Every tracked shell script and its text, enumerated once for the two directions that read it.
 ///
 /// One implementation because two would be two enumerations that must agree, and a script the second forgot
 /// would be judged by one direction and not the other — which is the granularity defect this file's newer

@@ -299,7 +299,7 @@ fn crate_root_files_is_unique_by_root_not_by_adjacency() {
 }
 
 /// A unique, self-cleaning temp directory for a path-identity fixture: replaces the hand-rolled
-/// `temp_dir().join(format!(...))` + manual `remove_dir_all` at both ends the two tests below
+/// `temp_dir().join(format!(...))` + manual `remove_dir_all` at both ends the two directions that follow
 /// otherwise each repeat.
 struct TempDir(PathBuf);
 

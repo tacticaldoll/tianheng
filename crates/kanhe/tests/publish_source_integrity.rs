@@ -51,7 +51,7 @@ fn a_valid_signature_from_an_unauthorized_key_is_accepted() {
         "the fixture must hold its own ephemeral key, or it demonstrates nothing"
     );
     // What keeps the signer unauthorized is that every fixture command runs hermetically — asserting the
-    // scratch root holds no allowed-signers file asserts what the two statements above already guarantee.
+    // scratch root holds no allowed-signers file asserts what the two preceding assertions already guarantee.
 
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
