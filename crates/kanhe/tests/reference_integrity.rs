@@ -514,6 +514,144 @@ fn in_repository_references_resolve() {
 /// tree is a verdict that deleting a detector can only make emptier: measured, all four extraction forms were
 /// disabled one at a time and the check stayed green every time. A check whose only assertion is that
 /// it found nothing cannot be shown to find anything.
+/// A markdown link target, resolved against the linking file's own directory.
+///
+/// Returns the offence, or `None` when the target resolves or is not a path at all.
+fn link_offence(
+    files: &HashSet<String>,
+    rel_path: &str,
+    reference: &Reference,
+    raw: &str,
+    is_test_source: bool,
+) -> Option<String> {
+    // The same illustrative rule the qualified branch carries: a fixture's markdown link names a path in the
+    // repository that fixture builds.
+    if is_test_source && (raw.starts_with("scripts/") || raw.starts_with("examples/")) {
+        return None;
+    }
+    // A link may name a bare word, which is a rustdoc symbol rather than a path.
+    if !raw.contains('/') && !raw.contains('.') {
+        return None;
+    }
+    let cleaned = raw.strip_prefix("file://").unwrap_or(raw);
+    let cleaned = match cleaned.find("/tianheng/") {
+        Some(pos) => &cleaned[pos + "/tianheng/".len()..],
+        None => cleaned,
+    };
+    // An absolute target — or one that arrived as `file://` — names the repository root. Joining it to the
+    // naming file's directory resolves `COOKBOOK.md` to a sibling of the spec that linked it, which exists
+    // nowhere.
+    let absolute = raw.starts_with('/') || raw.starts_with("file://");
+    let parent = Path::new(rel_path).parent().unwrap_or(Path::new(""));
+    let joined = if absolute {
+        PathBuf::from(cleaned.trim_start_matches('/'))
+    } else {
+        parent.join(cleaned)
+    };
+    let mut parts: Vec<String> = Vec::new();
+    for component in joined.components() {
+        match component {
+            std::path::Component::Normal(c) => parts.push(c.to_string_lossy().into_owned()),
+            std::path::Component::ParentDir => {
+                parts.pop();
+            }
+            _ => {}
+        }
+    }
+    let normalised = parts.join("/");
+    if normalised.is_empty() || holds(files, &normalised) {
+        return None;
+    }
+    Some(format!(
+        "{rel_path}: links to '{}', which resolves to '{normalised}' and is tracked by nothing",
+        reference.text
+    ))
+}
+
+/// A package-relative `tests/…` path, resolved against the naming file's own package and then every package.
+fn package_relative_offence(
+    files: &HashSet<String>,
+    packages: &[String],
+    rel_path: &str,
+    raw: &str,
+) -> Option<String> {
+    // A package-RELATIVE path names nothing when the naming file belongs to no package: a root-level
+    // governance document saying `tests/…` is describing some package's layout in general, or quoting a path
+    // precisely because it exists nowhere — `[0.4.0]` records correcting one and names it in the sentence
+    // that says so. Resolving it against every member instead would make that record an offence for being a
+    // record.
+    let home = package_of(files, rel_path)?;
+    // It resolves against the referencing file's OWN package first — an example's README naming
+    // `tests/reaction.rs` means that example's — and against every workspace member after, which is how a
+    // governance document names one without repeating the crate.
+    if holds(files, &format!("{home}/{raw}")) {
+        return None;
+    }
+    if packages
+        .iter()
+        .any(|home| holds(files, &format!("{home}/{raw}")))
+    {
+        return None;
+    }
+    Some(format!(
+        "{rel_path}: references '{raw}', which is tracked under no workspace member"
+    ))
+}
+
+/// A path carrying a `/`, held against the tracked set and against git's own ignore rules.
+fn qualified_offence(
+    files: &HashSet<String>,
+    members: &[String],
+    root: &Path,
+    rel_path: &str,
+    raw: &str,
+) -> Option<String> {
+    if holds(files, raw) || ignored(root, raw) {
+        return None;
+    }
+    // Illustrative rather than real, in two decidable forms.
+    //
+    // A `crates/<name>/…` path whose `<name>` is no tracked workspace member is a fixture in a doc comment
+    // or a test — `crates/foo/src/lib.rs` — and reading it as a dangling reference would make every example
+    // of the shape an offence. The rule needs the member set, which is why an empty one refuses in the
+    // caller.
+    if let Some(rest) = raw.strip_prefix("crates/") {
+        if let Some(name) = rest.split('/').next() {
+            if !members.iter().any(|m| m == name) {
+                return None;
+            }
+        }
+    }
+    Some(format!(
+        "{rel_path}: references '{raw}', which is not tracked in this repository"
+    ))
+}
+
+/// A bare basename, decided by whether this repository ever tracked it outside a change directory.
+///
+/// Several tracked files carrying it says nothing about which was meant, and one means the reference
+/// resolves. NONE is the case the spec left open, and discarding it made this whole form inert — extracted
+/// and thrown away, which is why twenty-odd references to files this window deleted survived the sweep.
+///
+/// The decidable split: a name that WAS tracked, somewhere other than a change directory, is a stale
+/// reference to something deleted. A name tracked only under `openspec/changes/` is the lifecycle's own
+/// vocabulary — `proposal.md`, `tasks.md`, `design.md` are pruned at every sync by design — and a name never
+/// tracked at all is not a path.
+fn bare_basename_offence(
+    basename_count: &std::collections::HashMap<&str, usize>,
+    deleted_outside_changes: &BTreeSet<String>,
+    rel_path: &str,
+    raw: &str,
+) -> Option<String> {
+    if basename_count.contains_key(raw) || !deleted_outside_changes.contains(raw) {
+        return None;
+    }
+    Some(format!(
+        "{rel_path}: references '{raw}', which this repository deleted — point it at what replaced it, or \
+         drop the reference"
+    ))
+}
+
 fn offences_in(
     root: &Path,
     corpus_root: &Path,
@@ -655,130 +793,21 @@ fn offences_in(
                     continue;
                 }
 
-                if reference.from_link {
-                    // The same illustrative rule the qualified branch carries: a fixture's markdown link
-                    // names a path in the repository that fixture builds.
-                    if is_test_source
-                        && (raw.starts_with("scripts/") || raw.starts_with("examples/"))
-                    {
-                        continue;
-                    }
-                    // A link may name a bare word, which is a rustdoc symbol rather than a path.
-                    if !raw.contains('/') && !raw.contains('.') {
-                        continue;
-                    }
-                    let cleaned = raw.strip_prefix("file://").unwrap_or(raw);
-                    let cleaned = match cleaned.find("/tianheng/") {
-                        Some(pos) => &cleaned[pos + "/tianheng/".len()..],
-                        None => cleaned,
-                    };
-                    // An absolute target — or one that arrived as `file://` — names the repository root.
-                    // Joining it to the naming file's directory resolves `COOKBOOK.md` to a sibling of the
-                    // spec that linked it, which exists nowhere.
-                    let absolute = raw.starts_with('/') || raw.starts_with("file://");
-                    let parent = Path::new(rel_path).parent().unwrap_or(Path::new(""));
-                    let joined = if absolute {
-                        PathBuf::from(cleaned.trim_start_matches('/'))
-                    } else {
-                        parent.join(cleaned)
-                    };
-                    let mut parts: Vec<String> = Vec::new();
-                    for component in joined.components() {
-                        match component {
-                            std::path::Component::Normal(c) => {
-                                parts.push(c.to_string_lossy().into_owned())
-                            }
-                            std::path::Component::ParentDir => {
-                                parts.pop();
-                            }
-                            _ => {}
-                        }
-                    }
-                    let normalised = parts.join("/");
-                    if normalised.is_empty() || holds(&files, &normalised) {
-                        continue;
-                    }
-                    offences.insert(format!(
-                        "{rel_path}: links to '{}', which resolves to '{normalised}' and is tracked by \
-                         nothing",
-                        reference.text
-                    ));
-                    continue;
-                }
-
-                if raw.starts_with("tests/") {
-                    // A package-RELATIVE path names nothing when the naming file belongs to no package: a
-                    // root-level governance document saying `tests/…` is describing some package's layout in
-                    // general, or quoting a path precisely because it exists nowhere — `[0.4.0]` records
-                    // correcting one and names it in the sentence that says so. Resolving it against every
-                    // member instead would make that record an offence for being a record.
-                    if package_of(&files, rel_path).is_none() {
-                        continue;
-                    }
-                    // A package-relative path. It resolves against the referencing file's OWN package first —
-                    // an example's README naming `tests/reaction.rs` means that example's — and against every
-                    // workspace member after, which is how a governance document names one without repeating
-                    // the crate.
-                    if let Some(home) = package_of(&files, rel_path) {
-                        if holds(&files, &format!("{home}/{raw}")) {
-                            continue;
-                        }
-                    }
-                    if packages
-                        .iter()
-                        .any(|home| holds(&files, &format!("{home}/{raw}")))
-                    {
-                        continue;
-                    }
-                    offences.insert(format!(
-                        "{rel_path}: references '{raw}', which is tracked under no workspace member"
-                    ));
-                    continue;
-                }
-
-                if raw.contains('/') {
-                    if holds(&files, raw) || ignored(root, raw) {
-                        continue;
-                    }
-                    // Illustrative rather than real, in two decidable forms.
-                    //
-                    // A `crates/<name>/…` path whose `<name>` is no tracked workspace member is a fixture in
-                    // a doc comment or a test — `crates/foo/src/lib.rs` — and reading it as a dangling
-                    // reference would make every example of the shape an offence. The rule needs the member
-                    // set, which is why an empty one refuses above.
-                    if let Some(rest) = raw.strip_prefix("crates/") {
-                        if let Some(name) = rest.split('/').next() {
-                            if !members.iter().any(|m| m == name) {
-                                continue;
-                            }
-                        }
-                    }
-                    offences.insert(format!(
-                        "{rel_path}: references '{raw}', which is not tracked in this repository"
-                    ));
-                    continue;
-                }
-
-                // A bare basename. Several tracked files carrying it says nothing about which was meant, and
-                // one means the reference resolves. NONE is the case the spec left open, and discarding it
-                // made this whole form inert — extracted and thrown away, which is why twenty-odd references
-                // to files this window deleted survived the sweep.
-                //
-                // The decidable split: a name that WAS tracked, somewhere other than a change directory, is a
-                // stale reference to something deleted. A name tracked only under `openspec/changes/` is the
-                // lifecycle's own vocabulary — `proposal.md`, `tasks.md`, `design.md` are pruned at every
-                // sync by design — and a name never tracked at all is not a path.
-                match basename_count.get(raw) {
-                    Some(_) => {}
-                    None => {
-                        if deleted_outside_changes.contains(raw) {
-                            offences.insert(format!(
-                                "{rel_path}: references '{raw}', which this repository deleted — point it at \
-                                 what replaced it, or drop the reference"
-                            ));
-                        }
-                    }
-                }
+                // The four forms, in the order they were always tried: a markdown link, a package-relative
+                // `tests/…` path, a qualified path, and a bare basename. Each answers `Some(offence)` or
+                // `None` for *resolves*, and they stay mutually exclusive because the dispatch is a chain —
+                // the `continue` after each branch used to be what made that true, and an `else if` says it
+                // rather than depending on every branch remembering to end.
+                let offence = if reference.from_link {
+                    link_offence(&files, rel_path, &reference, raw, is_test_source)
+                } else if raw.starts_with("tests/") {
+                    package_relative_offence(&files, &packages, rel_path, raw)
+                } else if raw.contains('/') {
+                    qualified_offence(&files, &members, root, rel_path, raw)
+                } else {
+                    bare_basename_offence(&basename_count, &deleted_outside_changes, rel_path, raw)
+                };
+                offences.extend(offence);
             }
         }
     }
