@@ -1878,10 +1878,12 @@ it before assigning a horizon here; the entries below are horizons, not a second
   name: no open pull request targeted it, CI triggers on `main` and on any pull request rather than on a
   branch name, and the only prose naming it was this paragraph.
 
-  What is deliberately **not** done yet: the workspace version is still `0.4.0`, and the bump, the dated
-  CHANGELOG section, the internal pins, and `Cargo.lock` all move together at release preparation. Until then
-  `crates/kanhe/tests/release_coherence.rs` reports `development: 0.4.0`, which is the coherent state for an open window —
-  it reads versions, never a branch name, so the rename changed nothing it judges.
+  What was deliberately not done **when this entry was written**: the version bump, the dated CHANGELOG
+  section, the internal pins and `Cargo.lock`, which move together at release preparation. `a9b3f42` has
+  since done all four, so the gate reports `release-ready: 0.5.0` rather than the `development: 0.4.0` this
+  paragraph described. Corrected rather than deleted, because the point it was making survives and is the
+  one that matters here: the gate reads versions, never a branch name, so the rename changed nothing it
+  judges.
 - **Next breaking window (if earned)** — requires real adopter or correctness pressure.
 
 ## Explicitly not on the roadmap

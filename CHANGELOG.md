@@ -904,6 +904,56 @@ them.
 
 ### Self-governance
 
+- **Three CHANGELOG and BACKLOG corrections were described in commit bodies and never written.** A scripted
+  edit matched its anchor loosely — an em dash where the script expected a colon, a sentence that had grown a
+  clause — and returned the text unchanged. Nothing failed: the staging step found no diff, the commit
+  succeeded, and its body reported the correction as done. Two release-window entries and one `BACKLOG.md`
+  paragraph were lost that way.
+
+  **The commit body asserting a repair that never happened is the worse half.** A reader auditing this window
+  takes it as evidence, and the paragraph it claimed to fix — *"the workspace version is still `0.4.0`"* —
+  went on being false while the record said it had been corrected. Found by a review that checked
+  `git show --stat` against the body rather than reading the body.
+
+  The method changed, not just the text: a scripted record edit now fails loudly when its anchor misses. It
+  caught a third instance within the same sitting.
+
+- **The release gate read manifests as raw text, so a commented-out pin was refused as a live one.**
+  `require_internal_pins` filtered on `path`, `"crates/` and `=` with no comment exclusion, so
+  `# xuanji = { path = "crates/xuanji" }` satisfied every predicate, counted toward the non-vacuity guard,
+  and was refused as `internal dependency # xuanji has no version pin` — a false refusal in front of the
+  release gate, over text that declares nothing.
+
+  The three readers a comment could satisfy go through `kanhe::region` now, which this file had imported
+  nowhere. Two are deliberately left raw and the reason is pinned rather than argued: the inherit check
+  compares a whole space-stripped line against one literal and the package-name read strips a `name` prefix,
+  so no spelling of a comment satisfies either. Converting them would **narrow**, not widen —
+  `version.workspace = true#c` is a legal TOML comment that `region`'s token-start rule reads as content, so
+  a valid manifest would stop inheriting. Neither rule is exactly TOML; they err in opposite directions, and
+  which is safe depends on the predicate.
+
+  `region` gains a `toml()` accessor rather than reusing `shell()`: they agree on `#` by coincidence of
+  syntax, not by sharing a decision.
+
+- **An `ssh-keygen` was left unreaped on one failure path, in front of `cargo publish`.** `pipe_into` was
+  extracted to own write-then-reap and its comment claimed reaping on every path; `sign_probe` hand-rolled
+  the same three steps and returned on a failed write **before** dropping stdin and before any wait. One
+  copy stood as the counterexample to the other's documentation. Both consume one `deliver_and_reap` now.
+
+- **The limit that let a boundary's reason overreach is a declared bound.** `crate-dependency-boundary`
+  declared none while the register held 84, and its reader observes no optionality at all — an
+  `optional = true` edge sits in cargo's declared set like any other, so a dependency rule governs it as
+  though it were unconditional. A **product** limit: any adopter writing `restrict_dependencies_to` on a
+  crate with optional dependencies gets the optional ones counted. Declared through the full path — spec
+  scenario, typed declaration, a pinning direction, both projections — and the register is 85 bounds across
+  25 capabilities.
+
+- **Smaller:** the CHANGELOG section-name derivation was written twice byte-identical and is now one
+  function, whose doc comment was then found sitting on the wrong item — the extraction had displaced
+  `section_shape`'s, a class no reaction can catch and one this repository has paid for before; `npm ci`
+  gains `--ignore-scripts`, closing the half a lockfile does not, since pinning *which* packages install
+  never stopped 80 of them running install scripts on a release-branch checkout.
+
 - **A boundary's reason asserted structure its own rule cannot see, in the text most designed to be
   imitated.** 漏刻's `because` said the hot path depends on 璇璣 only *with xingbiao audit-gated for CI probe
   coverage*. Its rule is `restrict_dependencies_to(["xuanji", "xingbiao"])`, which reads the declared
@@ -1182,7 +1232,7 @@ them.
 - **The census word reader's ceiling is a declared bound.** `number_at` reads the units, the tens and one
   compound of the two, stopping at ninety-nine, while every sibling residual in that requirement was
   declared. A word reader that silently stops matching reads as covered. Declared rather than extended:
-  the figures this repository writes in words are the small ones. The register is 84 bounds now.
+  the figures this repository writes in words are the small ones. The register is 85 bounds now.
 
 - **The pinned OpenSpec validator is reproduced from a committed lock rather than resolved fresh.** The exact
   version pin bound the direct package and nothing below it, so `npx` resolved the transitive tree anew on

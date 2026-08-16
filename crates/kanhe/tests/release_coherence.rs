@@ -722,6 +722,39 @@ fn a_commented_out_internal_pin_is_not_a_pin() {
     );
 }
 
+/// A comment cannot satisfy the two manifest predicates left reading raw text.
+///
+/// Three readers in this gate were routed through `region` because a comment *could* satisfy them. Two were
+/// not, and the claim that they are safe is held here rather than left in a comment: the inherit check
+/// compares a whole space-stripped line against one literal, and the package-name read strips a `name`
+/// prefix from a trimmed line — a `#`-led line equals neither, in any spelling.
+///
+/// Pinned because the alternative was converting them, and converting the inherit check would **narrow**
+/// it: `version.workspace = true#c` is a legal TOML comment that `region`'s token-start rule reads as
+/// content, so a valid manifest would stop inheriting and be refused.
+#[test]
+fn a_comment_cannot_satisfy_the_inherit_or_name_predicate() {
+    for spelling in [
+        "# version.workspace = true",
+        "#version.workspace = true",
+        "  # version.workspace = true",
+        "# name = \"solo\"",
+        "#name = \"solo\"",
+    ] {
+        let line = spelling.trim();
+        let cut = line.split('#').next().unwrap_or(line).trim_end();
+        assert_ne!(
+            cut.replace(' ', ""),
+            "version.workspace=true",
+            "a commented line must not read as an inherit declaration: {spelling:?}"
+        );
+        assert!(
+            line.strip_prefix("name").is_none(),
+            "a commented line must not read as a `name` key: {spelling:?}"
+        );
+    }
+}
+
 /// A basename the enumerator does not resolve is not machinery, however much it looks like a gate.
 #[test]
 fn a_basename_the_enumerator_does_not_resolve_is_coherent() {
