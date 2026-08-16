@@ -904,6 +904,29 @@ them.
 
 ### Self-governance
 
+- **The family-coverage reaction had its own source file in the corpus it judges, and credited families to
+  itself for naming them.** `crates/shengmo/tests/family_coverage.rs` lives under `crates/shengmo/`, which
+  its own owner rule admitted — so a boundary type mentioned in its prose counted as an adopter-shaped owner
+  of that family. A reaction whose corpus contains its own text can be satisfied by *describing* the thing it
+  checks for.
+
+  Found by a probe that should have failed and did not. Renaming the one type
+  `examples/sans-io-pure/tests/reaction.rs` spells should have made that family read as unowned; it stayed
+  owned, by a comment. With the judge excluded, the same probe now reports `["AsyncExposureBoundary"]`
+  exactly as it should.
+
+  A residual is declared alongside: **ownership is credited by type name, so a profile is invisible.**
+  `Constitution::sans_io_pure` constructs a `ModuleBoundary` and an `AsyncExposureBoundary` internally, so a
+  file declaring a family that way never spells the type. `examples/sans-io-pure` declares async exposure on
+  its imitable surface exactly that way and is credited only because a separate test names the type outright.
+  Stated in the reaction's own documentation and filed as `WATCH`, not closed by widening the reader — the
+  honest closure asks what a profile *expands to*, which means evaluating constructor bodies rather than
+  reading declarations.
+
+  A claim this review made two rounds earlier is retired by the same reading: `AsyncExposureBoundary` is
+  **not** missing from `sans-io-pure`'s `src/governance.rs`. It is declared there through the profile. The
+  asymmetry was an artifact of grepping for a type name, which is the same mistake the reaction was making.
+
 - **The OpenSpec adoption mode is declared, after being chosen from the beginning and written down nowhere.**
   OpenSpec has two halves — `specs/` as the per-capability requirement truth, and `changes/` as a proposal
   workflow. This project has always used the first and never the second: zero change directories have ever

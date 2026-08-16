@@ -748,6 +748,27 @@ consumer for an undemonstrated deduplication.
   a human call about intent, not a defect to repair. **Not fired.** *Version class:* not release-affecting.
   *Authority:* `AGENTS.md` itself.
 
+- **WATCH: the family-coverage reaction credits ownership by type NAME, so a profile is invisible to it.**
+  *Class:* WATCH. *Observed pressure:* a profile constructs its boundaries internally —
+  `Constitution::sans_io_pure` builds a `ModuleBoundary` and an `AsyncExposureBoundary` from one
+  `SansIoPure` — so a file declaring a family that way never spells the type, and
+  `crates/shengmo/tests/family_coverage.rs` does not credit it. *Observation source:* found while checking a
+  claim this review had already written down and been wrong about. `examples/sans-io-pure` declares async
+  exposure in its `src/governance.rs` through the profile and is credited only because its
+  `tests/reaction.rs` separately names `AsyncExposureBoundary` outright; reading `sans_io.rs` rather than
+  grepping for the type is what showed it. **Measured, not argued:** renaming that one type in
+  `tests/reaction.rs` makes the reaction report `["AsyncExposureBoundary"]` unowned while
+  `src/governance.rs` still declares it through the profile. *Current reaction or bound:* none — the residual is stated in the
+  reaction's own module documentation rather than left for a reader to rediscover. *Risk:* a **false
+  refusal**, which is the direction that costs most here: delete one line of that test and a family reads as
+  unowned while the example still teaches it, sending someone to write coverage that already exists. Bounded
+  today — every family has an owner that spells its type. *Why not simply widen the reader:* the honest
+  closure is not a longer name list but asking what a profile *expands to*, which means evaluating
+  constructor bodies rather than reading declarations — a different instrument from the one this reaction
+  is. *Promotion trigger:* a family whose only adopter-shaped owner declares it through a profile, or a
+  second profile reaching a family no bare declaration names. **Not fired.** *Version class:* patch;
+  repository-internal, shipping in no crate. *Authority:* `governance-dogfood`.
+
 - **WATCH: ten structural findings the merged-review campaign deliberately did not take.** *Observed
   pressure:* a contributed review's Gate 4 found twelve functions long or deeply nested enough to hide more
   than one responsibility. Two were taken (`offences_in`'s four resolution rules, `judge`'s six phases) and
@@ -1314,9 +1335,12 @@ that also holds a closed READY-PATCH record.
     Measured: every family it names does have an adopter-shaped owner today, so the substance holds and the
     gap is that nothing would notice one losing its owner. Build it **derived both ways** — families from
     the boundary types, owners from the examples and the self-law — never as a hand-kept inventory. Drop its
-    stale `0.2.x` anchor and its unrelated `GovernanceTest` clause. One asymmetry an inventory surfaces at
-    once: `AsyncExposureBoundary` is owned only in `sans-io-pure`'s `tests/reaction.rs`, not in its
-    `src/governance.rs` like every sibling.
+    stale `0.2.x` anchor and its unrelated `GovernanceTest` clause. *(This entry also claimed an asymmetry —
+    that `AsyncExposureBoundary` was owned only in `sans-io-pure`'s `tests/reaction.rs` and not in its
+    `src/governance.rs` like every sibling. **False, and corrected when it was checked rather than grepped:**
+    `Constitution::sans_io_pure` constructs an `AsyncExposureBoundary` internally, so that example does
+    declare the family on its imitable surface, through the profile. What the observation really found is a
+    limit of the coverage reaction, filed as WATCH below.)*
   *Risk:* a reader consulting a spec is told a rule is enforced when it is not — the same class the bound
   register was built to end one level down. *Promotion trigger:* fired; this is the work, not a candidate
   for it. One branch and one pull request, because each orphan needs the same decision made per orphan
