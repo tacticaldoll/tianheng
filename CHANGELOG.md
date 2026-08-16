@@ -904,13 +904,40 @@ them.
 
 ### Self-governance
 
+- **The manifest region borrowed the shell's comment rule, and TOML's is not the shell's.** `region::toml()`
+  and `region::shell()` shared the marker `#` and, until now, one rule: a marker opens a comment only where it
+  begins a token. That rule is the shell's own — `echo a#b` prints `a#b` — and it is not TOML's, which admits
+  zero whitespace before `#`.
+
+  **It was wrong in both directions at once, which is why no adjustment of it was the answer.**
+  `xuanji = { path = "crates/xuanji" }#, version = "0.2.0"` declares a dependency with **no** version. The
+  region read the commented text as content, `require_internal_pins` found a pin in it, and the release gate
+  certified a manifest the registry would then reject — a false **pass** in front of `cargo publish`. Running
+  the other way, `version.workspace = true#c` is a legal comment on a line that still inherits, so cutting
+  nothing there was a false refusal. An earlier entry in this window measured that second direction and
+  concluded the affected readers had to stay raw; the direction that mattered was never measured.
+
+  `toml()` tracks strings now and cuts where TOML cuts: `#` outside a string, wherever it sits, across every
+  string form — the multi-line ones included, since `"""` and `'''` cross the line boundary a per-line scan
+  assumes. That keeps a `"https://…#anchor"` value whole by knowing it is a string rather than by hoping no
+  space precedes the fragment, which is what the token-start rule was reaching for and could only
+  approximate. `shell()` keeps the token-start rule, because it *is* the shell's rule and not an
+  approximation of one.
+
+  With a rule that is actually the language's, nothing was left protecting the readers held out of the
+  region. Both are converted, and a fourth hand-rolled spelling of this same rule — a bare `split('#')`
+  inside the inherit check — is gone with the exception it served. `package_name` gained something in the
+  move: it had been answering `Unreadable` for `name = "kanhe" # the repository checks`, a legal manifest.
+
 - **A defence was written as a restatement of the rule it defends.** The direction protecting two raw
   manifest readers held its own copy of both predicates and called nothing in the gate — five string
   assertions about themselves, which no edit to the product could turn red. Two sites cited it as a guard.
 
-  The decision it recorded is right and survives: converting those readers would **narrow** them, because
-  `version.workspace = true#c` is legal TOML that `region`'s token-start rule reads as content. What was
-  wrong is that the artifact recording the measurement was a copy of the rule rather than a reader of it.
+  The decision it recorded held against the rule as it then stood: converting those readers would have
+  **narrowed** them, because `version.workspace = true#c` is legal TOML that `region`'s token-start rule read
+  as content. What was wrong is that the artifact recording the measurement was a copy of the rule rather
+  than a reader of it — and the measurement was half a rule, since the same blindness ran the other way as a
+  false pass. Both readers are converted now that `region::toml()` cuts where TOML cuts.
 
   Replaced by two directions through `judge`, and the one that matters was run against the change it exists
   to prevent: converting the inherit reader to `region::toml()` turns it red. The cheap way to tell the two
@@ -939,15 +966,13 @@ them.
   release gate, over text that declares nothing.
 
   The three readers a comment could satisfy go through `kanhe::region` now, which this file had imported
-  nowhere. Two are deliberately left raw, and what makes them safe is held through `judge`: the inherit check
-  compares a whole space-stripped line against one literal and the package-name read strips a `name` prefix,
-  so no spelling of a comment satisfies either. Converting them would **narrow**, not widen —
-  `version.workspace = true#c` is a legal TOML comment that `region`'s token-start rule reads as content, so
-  a valid manifest would stop inheriting. Neither rule is exactly TOML; they err in opposite directions, and
-  which is safe depends on the predicate.
+  nowhere. Two were left raw at this point, because `region`'s token-start rule would have refused the legal
+  `version.workspace = true#c`. The exception did not outlast the window: that rule was not TOML's in either
+  direction, and once `toml()` was given TOML's own, both readers were converted too.
 
   `region` gains a `toml()` accessor rather than reusing `shell()`: they agree on `#` by coincidence of
-  syntax, not by sharing a decision.
+  syntax, not by sharing a decision. Which is what later made it possible to correct one language's rule
+  without touching the other's.
 
 - **An `ssh-keygen` was left unreaped on one failure path, in front of `cargo publish`.** `pipe_into` was
   extracted to own write-then-reap and its comment claimed reaping on every path; `sign_probe` hand-rolled

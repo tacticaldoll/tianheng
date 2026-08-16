@@ -1436,3 +1436,32 @@ fn an_example_directory_holding_no_manifest_is_skipped() {
         verdict.err()
     );
 }
+
+/// A glued comment cannot supply a version pin the manifest does not declare.
+///
+/// TOML admits zero whitespace before `#`, so `{ path = "crates/xuanji" }#, version = "0.2.0"` declares a
+/// dependency with **no** version. The token-start rule read that `#` as content, found `version` in the
+/// commented tail, and passed the pin — a false pass in front of `cargo publish`, where the crate would then
+/// be rejected by the registry for the pin the gate had just certified.
+///
+/// The sibling of `an_inherit_line_with_a_glued_comment_still_inherits`: the same blindness, the opposite
+/// direction of error, which is why the rule had to become TOML's rather than either predicate's.
+#[test]
+fn a_glued_comment_cannot_supply_an_internal_version_pin() {
+    let root = scratch("glued-pin");
+    let fixture = build_fixture(&root, "glued-pin", "0.2.0");
+    let manifest = fixture.repo.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        text.replace(
+            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }",
+            "xuanji = { path = \"crates/xuanji\" }#, version = \"0.2.0\"",
+        ),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: glue the pin into a comment");
+    refuse(&fixture.repo, Kind::Violation, "has no version pin");
+    let _ = std::fs::remove_dir_all(&root);
+}

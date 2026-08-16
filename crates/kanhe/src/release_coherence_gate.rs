@@ -81,9 +81,14 @@ enum PackageName {
 /// while two `name` keys in one means it is malformed. The consumer needs to tell them apart, so the
 /// three-state return carries the distinction instead.
 fn package_name(manifest: &str) -> PackageName {
+    // Executed manifest text. Raw lines were safe against a commented-out `name` only by accident — a
+    // `#`-led line fails `strip_prefix("name")` — and not safe at all against a *trailing* comment:
+    // `name = "kanhe" # the repository checks` handed `quoted_value` a value with a comment glued to it and
+    // came back `Unreadable`, refusing a legal manifest.
+    let source = crate::region::Source::of(manifest);
     let mut in_package = false;
     let mut names: Vec<&str> = Vec::new();
-    for line in manifest.lines() {
+    for line in source.toml().lines() {
         let trimmed = line.trim();
         if trimmed.starts_with('[') {
             // `[package]` exactly. `[package.metadata.docs.rs]` is a different table and names no package.
@@ -238,29 +243,18 @@ fn require_version_surfaces(
             PackageName::Named(name) => name,
             PackageName::Absent | PackageName::Unreadable(_) => path.clone(),
         };
-        // **Not routed through `region::toml()`, and this is the exception rather than an omission.**
-        // Three readers in this file were converted because their predicates *could* be satisfied by a
-        // comment. This one cannot: it compares a whole line, space-stripped, against one literal, so no
-        // spelling of a commented-out line equals it — held through `judge` by
+        // This reader held its own `split('#')` — a fourth spelling of one language's comment rule, and the
+        // only one of the four that was TOML's. It was kept out of `region` while `toml()` cut at a token
+        // start, because converting it then would have refused `version.workspace = true#c`, which is a
+        // legal comment on a line that still inherits. `toml()` now tracks strings and cuts where TOML cuts,
+        // so the exception has nothing left to protect and the hand-rolled rule is gone with it.
+        //
+        // Both directions run through `judge`: `an_inherit_line_with_a_glued_comment_still_inherits` and
         // `a_member_whose_only_inherit_line_is_commented_out_is_refused`.
-        //
-        // The direction that turns red if this reader is converted anyway is
-        // `an_inherit_line_with_a_glued_comment_still_inherits`, and it has been run against the conversion.
-        // A first attempt cited a direction that asserted the same fact against **its own copy** of this
-        // predicate and called nothing here — a restatement with `#[test]` on it, which no edit to this
-        // function could turn.
-        //
-        // Converting it would be a **narrowing**, not a widening. Measured: `version.workspace = true#c` is
-        // a legal TOML comment, and `region`'s token-start rule — which exists so a `"https://…#frag"`
-        // inside a string survives — reads that `#` as content, so the line would stop inheriting and a
-        // valid manifest would be refused. Neither rule is exactly TOML; each errs in the opposite
-        // direction, and the safe one differs per predicate. `package_name` is left raw for the same
-        // reason: `strip_prefix("name")` on a trimmed line cannot match a `#`-led one.
-        let inherits = text.lines().any(|line| {
-            let line = line.trim();
-            let line = line.split('#').next().unwrap_or(line).trim_end();
-            line.replace(' ', "") == "version.workspace=true"
-        });
+        let inherits = crate::region::Source::of(text.as_str())
+            .toml()
+            .lines()
+            .any(|line| line.replace(' ', "") == "version.workspace=true");
         if !inherits {
             return Err(violation(format!(
                 "workspace package {name} must inherit version.workspace = true"
