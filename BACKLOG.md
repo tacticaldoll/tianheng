@@ -49,36 +49,11 @@ place holding the same two things. It also regenerated a hazard every campaign �
 hand-written line counts of live functions, unheld by anything, written by the same review round that was
 removing that class elsewhere.
 
-The `v0.4.0..release/0.5.0` merged-review campaign is the first to land under this rule. Its closed work is
-`CHANGELOG.md`'s `### Self-governance` section and PR #603; what it left open is the `READY-PATCH` entry
-immediately below, plus the deferred structural findings under `WATCH`.
-
-- **Three spec requirements the shell-to-Rust migration orphaned.** *Class:* READY-PATCH. *Observed
-  pressure:* a contributed adversarial review found two; a sweep run to decide their shape found the third.
-  *Observation source:* each of the twelve shell files `64ed18c` deleted, mapped to the spec requirement it
-  implemented — nine were correctly swept when they were deleted, three were not. *Current reaction or
-  bound:* none; each states a live `SHALL` that nothing runs, which is the failure this whole family exists
-  to end, committed inside its own governance.
-  - `governance-dogfood`'s focused-matrix ordering requirement and its three scenarios — **REMOVE**. The
-    decision was made and recorded in `dd6e1f8`, in `dod_coherence.rs`'s doc comment and in the retired
-    remediation queue; it never reached the spec.
-  - `reference-integrity`'s fixture-policy requirement and its three scenarios — **REVISE**. The capability
-    changed shape rather than vanishing: the port parameterises `offences_in` directly instead of accepting
-    a fixture-set option, and `GOVERNANCE_DOCUMENTS` is a compile-time `const`.
-  - `governance-dogfood`'s boundary-family coverage requirement and its two scenarios — **REVISE + BUILD**.
-    Measured: every family it names does have an adopter-shaped owner today, so the substance holds and the
-    gap is that nothing would notice one losing its owner. Build it **derived both ways** — families from
-    the boundary types, owners from the examples and the self-law — never as a hand-kept inventory. Drop its
-    stale `0.2.x` anchor and its unrelated `GovernanceTest` clause. One asymmetry an inventory surfaces at
-    once: `AsyncExposureBoundary` is owned only in `sans-io-pure`'s `tests/reaction.rs`, not in its
-    `src/governance.rs` like every sibling.
-  *Risk:* a reader consulting a spec is told a rule is enforced when it is not — the same class the bound
-  register was built to end one level down. *Promotion trigger:* fired; this is the work, not a candidate
-  for it. It rides one `change/` branch as one OpenSpec lifecycle, because each orphan needs the same
-  decision made per orphan rather than three separate repairs, and the guard that would have caught two of
-  them — every spec's `## Subject` resolving to paths that exist — belongs in that same change, since a
-  revised scenario must carry its observation evidence with it. *Version class:* patch; repository-internal,
-  shipping in no crate. *Authority:* `governance-dogfood` and `reference-integrity`.
+The `v0.4.0..release/0.5.0` merged-review campaign is the first to land under this rule, and it is now fully
+closed: its repairs are `CHANGELOG.md`'s `### Self-governance` section and PRs #603, #604 and #605, and its
+three orphaned spec requirements closed with the last of those. Its reproduction record is under *Closed —
+reproduction records*; what it left standing is filed by class in the index below — the deferred structural
+findings and the lifecycle-prose finding, both `WATCH`. **No live queue.**
 
 ## Live decision index
 
@@ -735,6 +710,23 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **WATCH: `AGENTS.md`'s OpenSpec lifecycle section describes a process with no instances.** *Class:* WATCH.
+  *Observed pressure:* found while deciding the entry above — its four phases, commit-type conventions and
+  archive-pruning guardrail are written in the present indicative ("A capability change **moves through**
+  OpenSpec") about something that has never happened here. *Observation source:* zero
+  `docs(openspec): propose`/`sync` commits in the full history; `openspec/changes/**` untouched since
+  `2f903fb`; 151 direct spec edits in the last window. The path evidence is independent of commit subjects,
+  so the 2026-07-17 history rewrite does not weaken it. *Current reaction or bound:* none — this is prose
+  stating a fact about the tree that the tree contradicts, the same class as the three orphans above and
+  larger. *Risk:* an agent reading `AGENTS.md` first, as that file instructs, plans work through a lifecycle
+  nobody runs — which this session did, three times, before measuring. *Not simply deleted:* half of it is
+  live and load-bearing. The sync-evidence rule (a materially changed scenario carries its observation
+  evidence in the same change) **is** followed, and `openspec/changes/archive/.gitkeep` is tracked exactly as
+  described. So the disposition is audit-then-dissolve/convert/keep per claim, not removal. *Promotion
+  trigger:* a decision on whether the lifecycle is being restored or is being acknowledged as abandoned —
+  a human call about intent, not a defect to repair. **Not fired.** *Version class:* not release-affecting.
+  *Authority:* `AGENTS.md` itself.
+
 - **WATCH: ten structural findings the merged-review campaign deliberately did not take.** *Observed
   pressure:* a contributed review's Gate 4 found twelve functions long or deeply nested enough to hide more
   than one responsibility. Two were taken (`offences_in`'s four resolution rules, `judge`'s six phases) and
@@ -1275,6 +1267,59 @@ retained entry carries its own `Class:` line, and a count here would go stale th
 closes — which is how the previous two sentences came to say "DESIGN-BREAKING" and "six" about a section
 that also holds a closed READY-PATCH record.
 
+
+- ~~**Three spec requirements the shell-to-Rust migration orphaned.**~~ **CLOSED** in the open window via
+  `fix/close-the-migration-orphans`. All three landed: `governance-dogfood`'s focused-matrix requirement
+  removed, `reference-integrity`'s fixture-policy requirement restated as what the port does, and its
+  boundary-family requirement rebuilt as a derivation held both ways by
+  `crates/shengmo/tests/family_coverage.rs`. The entry is kept verbatim below because two of its own claims
+  were wrong and the corrections are the part worth not re-deriving: it called the work "one OpenSpec
+  lifecycle" for a lifecycle this repository has never run, and it promised a `## Subject` guard that already
+  existed and would not have caught these anyway.
+
+- **Three spec requirements the shell-to-Rust migration orphaned.** *Class:* READY-PATCH. *Observed
+  pressure:* a contributed adversarial review found two; a sweep run to decide their shape found the third.
+  *Observation source:* each of the twelve shell files `64ed18c` deleted, mapped to the spec requirement it
+  implemented — nine were correctly swept when they were deleted, three were not. *Current reaction or
+  bound:* none; each states a live `SHALL` that nothing runs, which is the failure this whole family exists
+  to end, committed inside its own governance.
+  - `governance-dogfood`'s focused-matrix ordering requirement and its three scenarios — **REMOVE**. The
+    decision was made and recorded in `dd6e1f8`, in `dod_coherence.rs`'s doc comment and in the retired
+    remediation queue; it never reached the spec.
+  - `reference-integrity`'s fixture-policy requirement and its three scenarios — **REVISE**. The capability
+    changed shape rather than vanishing: the port parameterises `offences_in` directly instead of accepting
+    a fixture-set option, and `GOVERNANCE_DOCUMENTS` is a compile-time `const`.
+  - `governance-dogfood`'s boundary-family coverage requirement and its two scenarios — **REVISE + BUILD**.
+    Measured: every family it names does have an adopter-shaped owner today, so the substance holds and the
+    gap is that nothing would notice one losing its owner. Build it **derived both ways** — families from
+    the boundary types, owners from the examples and the self-law — never as a hand-kept inventory. Drop its
+    stale `0.2.x` anchor and its unrelated `GovernanceTest` clause. One asymmetry an inventory surfaces at
+    once: `AsyncExposureBoundary` is owned only in `sans-io-pure`'s `tests/reaction.rs`, not in its
+    `src/governance.rs` like every sibling.
+  *Risk:* a reader consulting a spec is told a rule is enforced when it is not — the same class the bound
+  register was built to end one level down. *Promotion trigger:* fired; this is the work, not a candidate
+  for it. One branch and one pull request, because each orphan needs the same decision made per orphan
+  rather than three separate repairs.
+
+  **This entry claimed a guard would have caught two of them, and that was wrong too.** The guard named —
+  every spec's `## Subject` resolving to tracked paths — **already exists** as
+  `capability_subjects::declaration_offences`, held by `every_capability_declares_the_subject_it_governs`,
+  and it was green the whole time: all three orphans' subjects resolve perfectly well while a requirement
+  under them described a deleted mechanism. Specifying it as new work would have rebuilt a live reaction.
+  What actually found them was reading each shell file the migration deleted and asking which requirement it
+  had implemented — a judgement over prose. **No reaction is proposed for this class**, because deciding
+  whether a prose-described mechanism still exists is the instrument this repository has measured and
+  rejected three times. The residual is stated instead: a requirement can outlive its mechanism, and only a
+  reader comparing the two will see it.
+
+  **This entry said "one OpenSpec lifecycle" and that was wrong about this repository.** Measured: the
+  `explore → propose → apply → sync` lifecycle `AGENTS.md` describes has **never run here** — zero
+  `docs(openspec): propose`/`sync` commits in the whole history, and `openspec/changes/` untouched since
+  `2f903fb` (`release: 0.1.0`), which is when its `.gitkeep` was added. The `v0.4.0..0.5.0` window edited
+  `openspec/specs/*/spec.md` in 151 commits, every one an ordinary `fix:`/`feat:`/`docs:`. `READY-PATCH` is a
+  **compatibility class** in this file's own definition above, not a process exemption, and conflating the
+  two is what produced the wrong claim. *Version class:* patch; repository-internal, shipping in no crate.
+  *Authority:* `governance-dogfood` and `reference-integrity`.
 
 - ~~**A bare trait name may not resolve against a same-module trait, contrary to the bound's own wording.**~~ **CLOSED** in the
   open window, in two steps, and the second is the one the record has to carry. The probe confirmed the gap: a
