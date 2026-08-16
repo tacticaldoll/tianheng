@@ -687,6 +687,41 @@ fn a_non_package_table_does_not_absorb_the_block_above_it() {
     );
 }
 
+/// A commented-out internal pin is not a pin.
+///
+/// The three manifest readers took raw lines. `# xuanji = { path = "crates/xuanji" }` satisfies every
+/// predicate the internal-pin filter applies — it contains `path`, `"crates/`, and `=` — so it was counted
+/// as a declared pin and then refused for carrying no version: `internal dependency # xuanji has no version
+/// pin`. A **false refusal**, in front of the release gate, over text that declares nothing. It also
+/// inflated the `pins == 0` vacuity guard, so a manifest whose only "pins" were commentary would have read
+/// as a manifest that had been checked.
+///
+/// The sibling reader four hundred lines up had stripped `#` by hand the whole time, so one file read one
+/// corpus two ways. All three go through `region` now.
+#[test]
+fn a_commented_out_internal_pin_is_not_a_pin() {
+    let root = scratch("commented-pin");
+    let fixture = build_fixture(&root, "commented-pin", "0.2.0");
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    let manifest = fixture.repo.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read the fixture manifest");
+    std::fs::write(
+        &manifest,
+        format!("{text}\n# hunyi = {{ path = \"crates/hunyi\" }}\n"),
+    )
+    .expect("write");
+    commit(&fixture.repo, "chore: comment out an internal pin");
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "a commented-out dependency declares nothing, so refusing it names a disagreement no manifest \
+         makes. Got: {:?}",
+        verdict.err()
+    );
+}
+
 /// A basename the enumerator does not resolve is not machinery, however much it looks like a gate.
 #[test]
 fn a_basename_the_enumerator_does_not_resolve_is_coherent() {

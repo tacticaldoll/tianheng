@@ -496,7 +496,13 @@ fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal> {
 
 fn require_internal_pins(root_manifest: &str, version: &str) -> Result<(), Refusal> {
     let mut pins = 0usize;
-    for line in root_manifest.lines() {
+    // Executed manifest text, not raw lines. A commented-out internal dependency —
+    // `# xuanji = { path = "crates/xuanji" }` — satisfies every predicate this filter applies, so it was counted as
+    // a pin and then refused for having no version: a **false refusal** in front of the release gate, and
+    // one that also inflated the vacuity guard with text declaring nothing. The sibling four hundred lines
+    // up already stripped `#` by hand; this module now asks `region` instead, which is the module written
+    // so that forgetting was not possible, and which this file imported nowhere.
+    for line in crate::region::Source::of(root_manifest).toml().lines() {
         let trimmed = line.trim();
         if !trimmed.contains("path") || !trimmed.contains("\"crates/") || !trimmed.contains('=') {
             continue;
@@ -589,7 +595,9 @@ fn require_example_pins(
             .unwrap_or_default()
             .to_string_lossy()
             .into_owned();
-        for line in text.lines() {
+        // Executed text, for the reason `require_internal_pins` records: a commented-out family pin
+        // would otherwise be read as a declared one.
+        for line in crate::region::Source::of(text.as_str()).toml().lines() {
             let trimmed = line.trim();
             let Some((key, rest)) = trimmed.split_once('=') else {
                 continue;
@@ -684,7 +692,9 @@ fn require_lock_versions(
     // Whether the lines being read belong to a `[[package]]` block. A foreign table's keys are not this
     // package's, and skipping them by name would be a list of the tables someone thought of.
     let mut in_package = false;
-    for line in lock.lines() {
+    // Executed text here too. A lock file is generated and rarely carries comments, but the reader is the
+    // same shape as its two siblings and a corpus narrower than the claim is the defect all three shared.
+    for line in crate::region::Source::of(lock.as_str()).toml().lines() {
         let trimmed = line.trim();
         if trimmed.starts_with('[') {
             close(&mut name, &mut version_of, &mut sourced, &mut entries);
@@ -809,6 +819,24 @@ struct Shape {
 /// The line between this and an entry's *content* is where the decidable stops: whether an entry is accurate,
 /// whether "no adopter action" is true, whether a named symbol exists are judgements over prose, and the
 /// detector they would need is the one this repository measured three times and rejected.
+/// The release section a `## [` heading names, with any ` - DATE` suffix dropped.
+///
+/// **One derivation.** It was written twice, byte-identical, in `section_shape` and
+/// `adopter_cited_machinery` — the shape this file's
+/// own header says it exists to close, in the file that says it. A third walk decides section boundaries by
+/// a different rule again and is left alone deliberately: `unreleased_has_item` asks *where does
+/// `[Unreleased]` end*, which is a boundary question, not a naming one, and folding it in would make one
+/// function answer two.
+fn section_of(line: &str) -> Option<String> {
+    line.starts_with("## [").then(|| {
+        line.split(" - ")
+            .next()
+            .unwrap_or(line)
+            .trim_end()
+            .to_string()
+    })
+}
+
 fn section_shape(changelog: &str) -> Shape {
     let mut shape = Shape {
         headings: BTreeMap::new(),
@@ -816,13 +844,8 @@ fn section_shape(changelog: &str) -> Shape {
     };
     let mut section = String::new();
     for line in changelog.lines() {
-        if line.starts_with("## [") {
-            section = line
-                .split(" - ")
-                .next()
-                .unwrap_or(line)
-                .trim_end()
-                .to_string();
+        if let Some(named) = section_of(line) {
+            section = named;
             // The `continue` stands on its own: a section heading carries no `### …` and marks no break, so
             // the arms below must not see it.
             continue;
@@ -855,7 +878,7 @@ fn section_shape(changelog: &str) -> Shape {
 /// `publish = false` is the same criterion the message states, read from the build rather than from a path.
 ///
 /// **A basename enters only when it is unique across the whole tree.** Measured when this widened: the
-/// machinery is 78 tracked paths against 182 published ones, and five basenames appear on both sides —
+/// machinery was 78 tracked paths against 182 published ones, and five basenames appeared on both sides —
 /// `Cargo.toml`, `README.md`, `bounds.rs`, `lib.rs`, `mod.rs`. Admitting those would refuse an adopter-facing
 /// entry for naming a published crate's own source, which is the opposite of this check's purpose. A full
 /// path is unambiguous and always enters; a basename is a convenience that has to earn its place, and the
@@ -1004,13 +1027,8 @@ fn adopter_cited_machinery(repo: &Path, changelog: &str) -> Result<Vec<String>, 
     let mut section = String::new();
     let mut heading = String::new();
     for line in changelog.lines() {
-        if line.starts_with("## [") {
-            section = line
-                .split(" - ")
-                .next()
-                .unwrap_or(line)
-                .trim_end()
-                .to_string();
+        if let Some(named) = section_of(line) {
+            section = named;
             heading.clear();
             continue;
         }

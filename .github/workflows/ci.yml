@@ -67,8 +67,12 @@ jobs:
         # transitive release executed here, on a checkout of the release branch, and in every contributor's
         # local Definition of Done. The committed lock pins all 80 resolved packages by integrity digest, and
         # `--no-install` refuses to reach the network if the tree is not the one the lock names.
+        #
+        # `--ignore-scripts` closes the half the lock does not. A lock pins *which* packages install; it
+        # does not stop the 80 of them running `preinstall`/`install`/`postinstall` on a checkout of the
+        # release branch. The validator is a JS CLI with no build step, so nothing here needs them.
         run: |
-          npm ci
+          npm ci --ignore-scripts
           npx --no-install openspec validate --specs --strict
       - name: observation bounds are declared and defended
         run: |
