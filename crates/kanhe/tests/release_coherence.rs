@@ -649,6 +649,44 @@ fn two_source_less_entries_under_one_name_cannot_be_judged() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// A table that is not `[[package]]` does not absorb the package block above it.
+///
+/// The block boundary was `[[package]]` **alone**, so every other table header read as ordinary content while
+/// the block above it stayed open. `[[patch.unused]]` — which cargo writes whenever a `[patch]` section
+/// exists — carries its own `name`, `version` and `source`, and those overwrote the open block's: the last
+/// member's version was replaced before it was ever filed, so that member vanished from the map and the
+/// workspace lookup reported `Cargo.lock is missing workspace package …` for a lock that holds it. A **false
+/// accusation**, which is the class this module's own header says it exists to prevent.
+///
+/// Written at the END of the file, where cargo writes it, so the block it absorbs is the fixture's last
+/// member rather than a position chosen to make the point.
+#[test]
+fn a_non_package_table_does_not_absorb_the_block_above_it() {
+    let root = scratch("lock-foreign-table");
+    let fixture = build_fixture(&root, "lock-foreign-table", "0.2.0");
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    let lock = fixture.repo.join("Cargo.lock");
+    let text = std::fs::read_to_string(&lock).expect("read the fixture lock");
+    std::fs::write(
+        &lock,
+        format!(
+            "{text}\n[[patch.unused]]\nname = \"some-patched-crate\"\nversion = \"9.9.9\"\n\
+             source = \"registry+https://example.invalid/index\"\n"
+        ),
+    )
+    .expect("write");
+    commit(&fixture.repo, "chore: add a patch.unused table to the lock");
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "a `[[patch.unused]]` table carries its own name and version; reading them into the package block \
+         above it drops that member and reports it absent from a lock that records it. Got: {:?}",
+        verdict.err()
+    );
+}
+
 /// A basename the enumerator does not resolve is not machinery, however much it looks like a gate.
 #[test]
 fn a_basename_the_enumerator_does_not_resolve_is_coherent() {

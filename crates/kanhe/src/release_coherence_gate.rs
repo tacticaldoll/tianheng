@@ -643,9 +643,16 @@ fn require_lock_versions(
     let mut name = String::new();
     let mut version_of: Option<String> = None;
     let mut sourced = false;
-    // A block ends at the next `[[package]]` or at end of input, so the record is filed on the boundary
+    // A block ends at the next **table header** or at end of input, so the record is filed on the boundary
     // rather than when its version is read — `source` is written after `version` in cargo's own output, and
     // filing early would record every entry as source-less.
+    //
+    // **`[[package]]` is not the only table a lock carries, and the boundary is not the only thing that
+    // depended on believing it was.** `[[patch.unused]]` — written whenever a `[patch]` section exists — has
+    // its own `name`, `version` and `source`, and `[metadata]` closes an older lock. Read as ordinary content
+    // they left the block above still open and overwrote its fields, so the last member's version was
+    // replaced before it was ever filed and the workspace lookup reported that member missing from a lock
+    // that records it. Every table therefore closes the record, and only `[[package]]` reopens one.
     let close = |name: &mut String,
                  version_of: &mut Option<String>,
                  sourced: &mut bool,
@@ -659,10 +666,16 @@ fn require_lock_versions(
         name.clear();
         *sourced = false;
     };
+    // Whether the lines being read belong to a `[[package]]` block. A foreign table's keys are not this
+    // package's, and skipping them by name would be a list of the tables someone thought of.
+    let mut in_package = false;
     for line in lock.lines() {
         let trimmed = line.trim();
-        if trimmed == "[[package]]" {
+        if trimmed.starts_with('[') {
             close(&mut name, &mut version_of, &mut sourced, &mut entries);
+            in_package = trimmed == "[[package]]";
+        } else if !in_package {
+            continue;
         } else if trimmed.starts_with("source") && trimmed.contains('=') {
             sourced = true;
         } else if trimmed.starts_with("name") && trimmed.contains('=') {
