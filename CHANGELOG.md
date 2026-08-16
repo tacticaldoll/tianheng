@@ -904,6 +904,32 @@ them.
 
 ### Self-governance
 
+- **The prelude reader entered the module and never left it.** `promised_members` found the promise by
+  splitting on `pub mod prelude {` and taking what followed — which is everything to end of file. So a
+  `pub use super::{ … };` written *after* the module closed became a promised member.
+
+  Its own doc asserted the stronger property, that entering the module made the sibling distinction true **by
+  construction rather than by circumstance**. Entering is half of it. The half that was missing is the one
+  that fails: entering alone excludes a sibling above the module and absorbs one below it, and every fixture
+  placed the sibling above — the one arrangement the unbounded reader answers correctly. A property asserted
+  in the only position where it cannot fail was measured no more than the prose was.
+
+  The direction that matters is widening. A name absorbed from outside the module enters the promise, so
+  `adopter_surface.rs` is then required to name something `tianheng::prelude::*` does not export — a demand no
+  compiler can settle, since the contract mentions identifiers rather than importing them.
+
+  The block now ends at its matching close, walked over executed Rust and refused as `UnclosedPrelude` if that
+  close is never found. The two brace directions are not symmetric and the walk is built around which one is
+  dangerous: a stray `}` inside a comment would end the block early and drop every member after it — the
+  promise narrowing silently, the one failure this check exists to catch — while a stray `{` leaves the walk
+  unbalanced and is refused rather than guessed. Cutting line comments removes the first; the region's
+  declared block-comment residue remains, and errs into the second.
+
+  One fixture had to be repaired rather than the walk: the member-form refusal wrote `a::{B` and `C}` as
+  separate entries, each carrying an unbalanced brace of its own. That went unnoticed while the read ran to
+  end of file. It is one nested group now, and the same test passes against the *unrepaired* reader, so the
+  repair took no coverage with it.
+
 - **The manifest region borrowed the shell's comment rule, and TOML's is not the shell's.** `region::toml()`
   and `region::shell()` shared the marker `#` and, until now, one rule: a marker opens a comment only where it
   begins a token. That rule is the shell's own — `echo a#b` prints `a#b` — and it is not TOML's, which admits
