@@ -722,37 +722,67 @@ fn a_commented_out_internal_pin_is_not_a_pin() {
     );
 }
 
-/// A comment cannot satisfy the two manifest predicates left reading raw text.
+/// An inherit line with a glued comment still inherits.
 ///
-/// Three readers in this gate were routed through `region` because a comment *could* satisfy them. Two were
-/// not, and the claim that they are safe is held here rather than left in a comment: the inherit check
-/// compares a whole space-stripped line against one literal, and the package-name read strips a `name`
-/// prefix from a trimmed line — a `#`-led line equals neither, in any spelling.
+/// **This is the direction that turns red if the two raw manifest readers are converted to
+/// `region::toml()`** — which is the whole reason the decision not to convert them is worth defending.
+/// `version.workspace = true#c` is legal TOML: the grammar allows zero whitespace before a comment. The
+/// token-start rule `region` uses — which exists so a `"https://…#frag"` inside a string survives — reads
+/// that `#` as content, so the line would stop matching and a valid manifest would be refused.
 ///
-/// Pinned because the alternative was converting them, and converting the inherit check would **narrow**
-/// it: `version.workspace = true#c` is a legal TOML comment that `region`'s token-start rule reads as
-/// content, so a valid manifest would stop inheriting and be refused.
+/// The direction this replaces asserted the same fact against **its own copy** of the predicate and called
+/// nothing in the gate, so no edit to the product could turn it. Two sites cited it as a guard. The question
+/// that separates the two is the cheap one: *which change to the product makes this red?* Here it is one
+/// line, and it has been run.
 #[test]
-fn a_comment_cannot_satisfy_the_inherit_or_name_predicate() {
-    for spelling in [
-        "# version.workspace = true",
-        "#version.workspace = true",
-        "  # version.workspace = true",
-        "# name = \"solo\"",
-        "#name = \"solo\"",
-    ] {
-        let line = spelling.trim();
-        let cut = line.split('#').next().unwrap_or(line).trim_end();
-        assert_ne!(
-            cut.replace(' ', ""),
-            "version.workspace=true",
-            "a commented line must not read as an inherit declaration: {spelling:?}"
-        );
-        assert!(
-            line.strip_prefix("name").is_none(),
-            "a commented line must not read as a `name` key: {spelling:?}"
-        );
-    }
+fn an_inherit_line_with_a_glued_comment_still_inherits() {
+    let root = scratch("glued-comment");
+    let fixture = build_fixture(&root, "glued-comment", "0.2.0");
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    let member = fixture.repo.join("crates/xuanji/Cargo.toml");
+    let text = std::fs::read_to_string(&member).expect("read the member manifest");
+    std::fs::write(
+        &member,
+        text.replace("version.workspace = true", "version.workspace = true#c"),
+    )
+    .expect("write");
+    commit(&fixture.repo, "chore: glue a comment to the inherit line");
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "TOML allows zero whitespace before a comment, so this member still inherits; refusing it would be \
+         a false refusal introduced by reading the line under a rule written for a different language. \
+         Got: {:?}",
+        verdict.err()
+    );
+}
+
+/// A member whose only inherit line is commented out is refused.
+///
+/// The other direction of the same predicate, through the same entry point: a comment declares nothing, so
+/// the member does not inherit and the gate says which one.
+#[test]
+fn a_member_whose_only_inherit_line_is_commented_out_is_refused() {
+    let root = scratch("commented-inherit");
+    let fixture = build_fixture(&root, "commented-inherit", "0.2.0");
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    let member = fixture.repo.join("crates/xuanji/Cargo.toml");
+    let text = std::fs::read_to_string(&member).expect("read the member manifest");
+    std::fs::write(
+        &member,
+        text.replace("version.workspace = true", "# version.workspace = true"),
+    )
+    .expect("write");
+    commit(&fixture.repo, "chore: comment out the inherit line");
+    refuse(
+        &fixture.repo,
+        Kind::Violation,
+        "must inherit version.workspace",
+    );
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A basename the enumerator does not resolve is not machinery, however much it looks like a gate.
