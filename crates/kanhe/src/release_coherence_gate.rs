@@ -82,9 +82,16 @@ enum PackageName {
 /// three-state return carries the distinction instead.
 fn package_name(manifest: &str) -> PackageName {
     // Executed manifest text. Raw lines were safe against a commented-out `name` only by accident — a
-    // `#`-led line fails `strip_prefix("name")` — and not safe at all against a *trailing* comment:
-    // `name = "kanhe" # the repository checks` handed `quoted_value` a value with a comment glued to it and
-    // came back `Unreadable`, refusing a legal manifest.
+    // `#`-led line fails `strip_prefix("name")` — and not safe at all against a comment on the **table
+    // heading**: `[package] # the repository checks` fails `trimmed == "[package]"`, so the table never
+    // opens, no `name` is found, and `require_example_pins` answers `cannot_judge` over a legal manifest.
+    // Held by `a_package_heading_with_a_trailing_comment_still_opens_the_table`, run against raw lines.
+    //
+    // A first version of this comment claimed the benefit was at the `name` **value** —
+    // `name = "kanhe" # …` supposedly reaching `quoted_value` as `Unreadable`. It never did:
+    // `quoted_value` takes the text between the first pair of quotes and discards what follows. The claim
+    // was refuted by a reviewer, and stating a benefit a reader could have checked against the function ten
+    // lines up is the cheaper half of the discipline the previous commit wrote down.
     let source = crate::region::Source::of(manifest);
     let mut in_package = false;
     let mut names: Vec<&str> = Vec::new();
@@ -243,8 +250,12 @@ fn require_version_surfaces(
             PackageName::Named(name) => name,
             PackageName::Absent | PackageName::Unreadable(_) => path.clone(),
         };
-        // This reader held its own `split('#')` — a fourth spelling of one language's comment rule, and the
-        // only one of the four that was TOML's. It was kept out of `region` while `toml()` cut at a token
+        // This reader held its own `split('#')` — the last hand-rolled cut over TOML text outside `region`.
+        // Measured, because an earlier wording called it "a fourth spelling of one language's rule": four
+        // `split('#')`-shaped sites existed, but the other three read a Markdown heading, a shell command
+        // and a URL fragment, so they are not this rule and never were.
+        //
+        // It was kept out of `region` while `toml()` cut at a token
         // start, because converting it then would have refused `version.workspace = true#c`, which is a
         // legal comment on a line that still inherits. `toml()` now tracks strings and cuts where TOML cuts,
         // so the exception has nothing left to protect and the hand-rolled rule is gone with it.

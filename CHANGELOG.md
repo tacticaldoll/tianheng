@@ -951,9 +951,20 @@ them.
   approximation of one.
 
   With a rule that is actually the language's, nothing was left protecting the readers held out of the
-  region. Both are converted, and a fourth hand-rolled spelling of this same rule — a bare `split('#')`
-  inside the inherit check — is gone with the exception it served. `package_name` gained something in the
-  move: it had been answering `Unreadable` for `name = "kanhe" # the repository checks`, a legal manifest.
+  region. Both are converted, and the last hand-rolled cut over TOML text outside `region` — a bare
+  `split('#')` inside the inherit check — is gone with the exception it served. That count was itself checked
+  after an earlier wording called it *a fourth spelling of this same rule*: four `split('#')`-shaped sites
+  existed, and the other three read a Markdown heading, a shell command and a URL fragment. `package_name` gained something in the
+  move, at the table **heading**: `[package] # the repository checks` fails `trimmed == "[package]"`, so the
+  table never opened, no `name` was found, and `require_example_pins` answered `cannot_judge` over a legal
+  manifest.
+
+  This entry first claimed that benefit at the `name` **value** — `name = "kanhe" # …` supposedly reaching
+  `quoted_value` as `Unreadable`. It never did: `quoted_value` takes the text between the first pair of
+  quotes and discards what follows, before these commits as after them. **A reviewer refuted it by reading
+  the function.** The correction is recorded rather than quietly swapped, because a claimed benefit is
+  evidence to anyone auditing why a conversion was worth making, and one that dissolves on inspection is the
+  same defect as a direction that cannot go red — asserted, never run.
 
 - **A defence was written as a restatement of the rule it defends.** The direction protecting two raw
   manifest readers held its own copy of both predicates and called nothing in the gate — five string
