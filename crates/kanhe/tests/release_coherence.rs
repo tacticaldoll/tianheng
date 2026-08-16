@@ -545,6 +545,56 @@ fn a_package_name_this_reader_cannot_read_is_a_cannot_judge() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// A `Cargo.lock` name this reader cannot read is a cannot-judge, not a package that is not there.
+///
+/// Single-quoted values are valid TOML. The read defaulted an unreadable name to the empty string, which the
+/// `!name.is_empty()` guard then took as *no package here* — so that entry's version never reached the map,
+/// and the workspace lookup either reported it missing or matched a stale one recorded under the previous
+/// name.
+///
+/// **Release-ready, deliberately.** During development this repository tolerates lockfile drift by design, so
+/// the reader is never reached and the real tree cannot exercise it — measured: perturbing the live
+/// `Cargo.lock` leaves the gate green for that reason alone, which is a subject outside the reader's corpus
+/// rather than evidence about it.
+#[test]
+fn a_lock_name_this_reader_cannot_read_is_a_cannot_judge() {
+    let root = scratch("lock-name-unreadable");
+    let fixture = build_fixture(&root, "lock-name-unreadable", "0.2.0");
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    let lock = fixture.repo.join("Cargo.lock");
+    let text = std::fs::read_to_string(&lock).expect("read the fixture lock");
+    std::fs::write(&lock, text.replace("name = \"xuanji\"", "name = 'xuanji'")).expect("write");
+    commit(&fixture.repo, "chore: quote a lock name the other way");
+    refuse(&fixture.repo, Kind::CannotJudge, "cannot read");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// An example pin this reader cannot read is a cannot-judge, not a requirement that is absent.
+///
+/// The key is already known to name a family crate when the pin is read, so failing to read its version is a
+/// limit of this reader and not a fact about the example. Skipping it left that example unexamined while the
+/// aggregate `requirements` counter stayed non-zero on the strength of the other examples — the partial case
+/// an aggregate guard is exactly unable to see.
+#[test]
+fn an_example_pin_this_reader_cannot_read_is_a_cannot_judge() {
+    let root = scratch("pin-unreadable");
+    let fixture = build_fixture(&root, "pin-unreadable", "0.2.0");
+    let example = "adopter";
+    let manifest = fixture.repo.join(format!("examples/{example}/Cargo.toml"));
+    let text = std::fs::read_to_string(&manifest).expect("read the fixture example manifest");
+    // Only the pin's quoting moves. Re-quoting the whole manifest would take the package name with it and
+    // trip a different reader first, so the run would be red for a reason other than the one under test.
+    let single = text
+        .replace("xuanji = \"", "xuanji = '")
+        .replace("\"\n", "'\n");
+    std::fs::write(&manifest, single).expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: quote an example pin the other way");
+    refuse(&fixture.repo, Kind::CannotJudge, "cannot read");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A basename the enumerator does not resolve is not machinery, however much it looks like a gate.
 #[test]
 fn a_basename_the_enumerator_does_not_resolve_is_coherent() {
