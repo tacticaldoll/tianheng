@@ -252,3 +252,89 @@ fn a_fence_closes_only_on_a_run_at_least_as_long() {
     );
     assert!(long_opener.prose().contains("tail"), "the longer run does");
 }
+
+/// TOML's comment rule is TOML's, not the shell's spelled the same way.
+///
+/// `toml()` and `shell()` share the marker `#` and were once one rule. They are not one rule: TOML admits
+/// zero whitespace before `#`, the shell does not, and the difference is not cosmetic in either direction.
+///
+/// Both were live. `{ path = "crates/xuanji" }#, version = "0.2.0"` declares **no** version, and the release
+/// gate read the commented one and certified the pin — a false pass in front of `cargo publish`. Meanwhile
+/// `version.workspace = true#c` is a legal comment on a line that still inherits, so cutting nothing there
+/// was a false refusal. One rule that is actually TOML's answers both; no adjustment of a borrowed rule does.
+///
+/// The negative run for each direction is a separate edit, which is why they are separate assertions with
+/// separate reasons rather than one fixture.
+#[test]
+fn a_toml_comment_needs_no_whitespace_before_it_and_a_hash_in_a_string_is_not_one() {
+    let glued = Source::of("xuanji = { path = \"crates/xuanji\" }#, version = \"0.2.0\"\n");
+    assert!(
+        glued.toml().contains("path = \"crates/xuanji\""),
+        "the executed head survives the cut"
+    );
+    assert!(
+        !glued.toml().contains("version"),
+        "a glued `#` opens a TOML comment, so the version it carries was never declared — reading it is how \
+         a manifest with no pin passed the gate that exists to check the pin"
+    );
+
+    // The value the token-start rule was reaching for, now held by knowing it is a string rather than by
+    // hoping no space precedes the fragment. A space does precede it here, which the old rule cut.
+    let fragment = Source::of("documentation = \"https://docs.rs/kanhe/ #anchor\"\n");
+    assert!(
+        fragment.toml().contains("#anchor\""),
+        "a `#` inside a string is string content at any distance from the quote"
+    );
+
+    let escaped = Source::of("description = \"a quote \\\" then #not-a-comment\"\n");
+    assert!(
+        escaped.toml().contains("#not-a-comment"),
+        "an escaped quote does not close the string, so what follows is still inside it"
+    );
+
+    let literal = Source::of("path = 'C:\\x #still-a-path'\n");
+    assert!(
+        literal.toml().contains("#still-a-path"),
+        "a literal string takes no escapes and still holds its `#`"
+    );
+
+    // The shell keeps the token-start rule because it *is* the shell's rule: `echo a#b` prints `a#b`.
+    let shell = Source::of("printf '%s' a#b\n");
+    assert!(
+        shell.shell().contains("a#b"),
+        "widening TOML's rule must not widen the shell's — they share a marker, not a decision"
+    );
+}
+
+/// A multi-line TOML string carries its `#` across the line boundary, whole-line ones included.
+///
+/// The reason the scan is not per-line. `"""` and `'''` span lines, so a `#`-led line inside one is string
+/// content; dropping it as a whole-line comment deletes executed text, which is the direction the Core
+/// Contract forbids — and the drop is the one branch a tail-cut alone would not have covered.
+///
+/// The single-line forms deliberately do **not** carry: TOML forbids a raw newline inside them, so an
+/// unterminated `"` is malformed and its damage stays on its own line instead of swallowing the file.
+#[test]
+fn a_multi_line_toml_string_carries_across_lines_and_a_broken_one_does_not() {
+    let spanning = Source::of(
+        "description = \"\"\"\n# not a comment\nstill inside\n\"\"\"\nversion = \"1\"\n",
+    );
+    assert!(
+        spanning.toml().contains("# not a comment"),
+        "a `#`-led line inside `\"\"\"` is string content, not a whole-line comment"
+    );
+    assert!(
+        spanning.toml().contains("still inside"),
+        "and the string continues to its own delimiter"
+    );
+    assert!(
+        spanning.toml().contains("version = \"1\""),
+        "the delimiter closes it, so what follows is code again"
+    );
+
+    let unterminated = Source::of("name = \"broken\nversion = \"1\" # cut\n");
+    assert!(
+        !unterminated.toml().contains("cut"),
+        "an unterminated single-line string ends at its line, so the next line is read as the code it is"
+    );
+}
