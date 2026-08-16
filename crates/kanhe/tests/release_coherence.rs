@@ -595,6 +595,60 @@ fn an_example_pin_this_reader_cannot_read_is_a_cannot_judge() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// A registry entry sharing a workspace member's name is not that member's lock entry.
+///
+/// The map was single-valued and keyed on the name alone, so the first entry won and everything after it was
+/// dropped. Two entries under one name is ordinary in a lock — two versions of one crate, or a member sharing
+/// a name with something fetched — and `source` is what tells them apart: a workspace member has none.
+///
+/// The registry entry is written **first** and carries a version the workspace does not have, so under the
+/// old read it wins and the gate reports a version disagreement that is not one. The member's own entry, with
+/// the right version, sat second and was discarded.
+#[test]
+fn a_registry_entry_sharing_a_members_name_is_not_the_members_entry() {
+    let root = scratch("lock-name-shared");
+    let fixture = build_fixture(&root, "lock-name-shared", "0.2.0");
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    let lock = fixture.repo.join("Cargo.lock");
+    let text = std::fs::read_to_string(&lock).expect("read the fixture lock");
+    let decoy = "version = 4\n\n[[package]]\nname = \"xuanji\"\nversion = \"9.9.9\"\n\
+                 source = \"registry+https://example.invalid/index\"\n";
+    std::fs::write(&lock, text.replacen("version = 4\n\n", decoy, 1)).expect("write");
+    commit(
+        &fixture.repo,
+        "chore: add a registry entry sharing a member's name",
+    );
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "the source-less entry is the workspace member's, whichever order the blocks are written in; \
+         comparing against the registry entry reports a disagreement that is not one. Got: {:?}",
+        verdict.err()
+    );
+}
+
+/// Two source-less entries under one name is a cannot-judge, not a member picked by position.
+///
+/// The opposite answer to the direction above, and the reason selecting by `source` is not enough on its own:
+/// if two entries both lack a source, which is the workspace member is genuinely undecided, and choosing
+/// either would be deciding it by the order the file happens to be written in.
+#[test]
+fn two_source_less_entries_under_one_name_cannot_be_judged() {
+    let root = scratch("lock-name-ambiguous");
+    let fixture = build_fixture(&root, "lock-name-ambiguous", "0.2.0");
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    let lock = fixture.repo.join("Cargo.lock");
+    let text = std::fs::read_to_string(&lock).expect("read the fixture lock");
+    let twin = "version = 4\n\n[[package]]\nname = \"xuanji\"\nversion = \"9.9.9\"\n";
+    std::fs::write(&lock, text.replacen("version = 4\n\n", twin, 1)).expect("write");
+    commit(&fixture.repo, "chore: add a second source-less entry");
+    refuse(&fixture.repo, Kind::CannotJudge, "with no source");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A basename the enumerator does not resolve is not machinery, however much it looks like a gate.
 #[test]
 fn a_basename_the_enumerator_does_not_resolve_is_coherent() {
