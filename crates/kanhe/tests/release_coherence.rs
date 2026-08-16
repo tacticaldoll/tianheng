@@ -1465,3 +1465,39 @@ fn a_glued_comment_cannot_supply_an_internal_version_pin() {
     refuse(&fixture.repo, Kind::Violation, "has no version pin");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A `[package]` heading carrying a trailing comment still opens the package table.
+///
+/// The measured difference between reading raw manifest lines and reading executed ones in `package_name`,
+/// and it is the table heading rather than the `name` value. `[package] # the repository checks` fails
+/// `trimmed == "[package]"`, so the whole table is skipped, no `name` is found, and the manifest reports
+/// `Absent` — which `require_example_pins` turns into `cannot_judge`, refusing to judge a release over a
+/// perfectly legal manifest.
+///
+/// Recorded because the entry claiming this conversion's benefit named the wrong one: it said
+/// `name = "kanhe" # the repository checks` had been answering `Unreadable`. It had not.
+/// `quoted_value` takes the text between the first pair of quotes and discards what follows, so a
+/// trailing comment there was always read correctly. The claim was refuted by a reviewer and is replaced by
+/// the direction the measurement actually supports.
+#[test]
+fn a_package_heading_with_a_trailing_comment_still_opens_the_table() {
+    let root = scratch("commented-heading");
+    let fixture = build_fixture(&root, "commented-heading", "0.2.0");
+    let member = fixture.repo.join("crates/xuanji/Cargo.toml");
+    let text = std::fs::read_to_string(&member).expect("read the member manifest");
+    std::fs::write(
+        &member,
+        text.replacen("[package]", "[package] # the repository checks", 1),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: comment the package heading");
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "a comment after `[package]` is a comment; the table it heads is still the package table, and \
+         refusing to judge the release over it is a false refusal. Got: {:?}",
+        verdict.err()
+    );
+}
