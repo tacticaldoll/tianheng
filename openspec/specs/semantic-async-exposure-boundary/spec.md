@@ -9,6 +9,7 @@ observed from the pure local AST signal `syn::Signature.asyncness`. Shape-only, 
 surface impl-trait governs (free fns, inherent methods, trait method declarations; trait-impl
 methods and private items excluded). Its finding is an owner-qualified item identity so distinct
 async fns never collide under the baseline.
+
 ## Subject
 
 - `crates/hunyi/src/*.rs`

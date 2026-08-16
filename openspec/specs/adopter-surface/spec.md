@@ -4,6 +4,7 @@
 
 Define the composed wildcard entrypoint and its external compilation reaction so Tianheng's
 documented adoption path remains usable and semantically honest across the 0.2 line.
+
 ## Subject
 
 - `crates/tianheng/src/lib.rs`

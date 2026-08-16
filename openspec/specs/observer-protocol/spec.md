@@ -5,6 +5,7 @@
 Make declaring what a reaction does not observe a condition of taking part: a fixed lifecycle whose every method
 has no default body, and an eager fold that composes participants into one verdict while preserving the family's
 cannot-judge-supersedes invariant.
+
 ## Subject
 
 - `crates/tianheng/src/existential.rs`

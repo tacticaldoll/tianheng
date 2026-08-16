@@ -9,6 +9,7 @@ return an ergonomic `impl Iterator` yet never leak an existential `impl crate::p
 reuses the return-position walk and signature-coupling's resolver (resolve + re-export
 canonicalization + exact-or-module-prefix match), the same machinery operand-scoped dyn uses; same
 `syn` observation source, no new crate.
+
 ## Subject
 
 - `crates/hunyi/src/*.rs`
