@@ -25,6 +25,22 @@
 //! That an owner exercises its family *well*. It asserts that a family is reachable from something an
 //! adopter can read and run, which is what makes a family lose its owner visible. Whether the owner's
 //! assertion is a good one is the owner's own test's job.
+//!
+//! # The residual: ownership is credited by type NAME, so a profile is invisible
+//!
+//! A profile constructs its boundaries internally — `Constitution::sans_io_pure` builds a
+//! `ModuleBoundary` and an `AsyncExposureBoundary` from one `SansIoPure` — and a file declaring the family
+//! that way never spells the type. This reader would not credit it.
+//!
+//! Live instance, and the reason this is stated rather than reasoned about: `examples/sans-io-pure` declares
+//! async exposure in its `src/governance.rs` **through the profile**, and is credited here only because its
+//! `tests/reaction.rs` happens to name `AsyncExposureBoundary` outright. Delete that one test line and the
+//! family reads as unowned while the example still teaches it — a false refusal, in the direction this
+//! reaction exists to make loud.
+//!
+//! Not closed by expanding the reader, because the honest closure is not a bigger name list: it is asking
+//! what a profile *expands to*, which means evaluating constructor bodies rather than reading declarations.
+//! Filed in `BACKLOG.md` as WATCH with the trigger that would change the answer.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -92,13 +108,25 @@ fn families(root: &Path) -> BTreeSet<String> {
     found
 }
 
+/// This file. Excluded from the corpus it judges — see [`is_owner_path`].
+const THIS_GATE: &str = "crates/shengmo/tests/family_coverage.rs";
+
 /// Whether a tracked path is somewhere an adopter-shaped reaction can live.
 ///
 /// An isolated example workspace, or this repository's own self-law. **Not** the dimension crates' internal
 /// tests: the requirement is about a reaction an adopter could read and run, and `hunyi`'s unit tests are
 /// neither an example nor self-governance.
+///
+/// **And not this file, which is the judge and not an owner.** It sits under `crates/shengmo/`, so the rule
+/// above admitted it, and it names boundary types in its own prose — so the gate credited families to itself
+/// for *talking about them*. Caught by planting a probe that should have failed and did not: renaming the
+/// one type `examples/sans-io-pure/tests/reaction.rs` spells left the family still "owned", by this comment.
+/// A reaction whose corpus contains its own text can be satisfied by describing the thing it checks for,
+/// which is the failure mode this repository names rather than discovers.
 fn is_owner_path(path: &str) -> bool {
-    (path.starts_with("examples/") || path.starts_with("crates/shengmo/")) && path.ends_with(".rs")
+    path != THIS_GATE
+        && (path.starts_with("examples/") || path.starts_with("crates/shengmo/"))
+        && path.ends_with(".rs")
 }
 
 /// Each family, and the owners naming it.
