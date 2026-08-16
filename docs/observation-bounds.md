@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**15 of 83 declared bounds have no pinning test.** That figure is the register's
+**15 of 84 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -308,6 +308,12 @@ fallback used where no manifest exists, which the register spec describes.
 > no repository check fires. The declaration is the coverage; reaching further needs a judgement over prose, which is the instrument measured three times and rejected. `AGENTS.md` carries the other half as a rule with no check: a count of something this repository does not produce is not written
 
 - **pinned by**: `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
+
+### `repository-checks/a-figure-written-in-words-at-one-hundred-or-above-is-not-matched-a-stated-bound`
+
+> the sweep does not match it, a stated bound: the word reader covers the units, the tens, and one compound of the two, which stops at ninety-nine. Extending it upward buys nothing measurable — the figures this repository writes in words are the small ones, and a set large enough to need three-digit words is one whose prose writes digits. The residual is stated rather than closed because a word reader that silently stops matching reads as covered, which is the failure this requirement's own sweep exists to refuse
+
+- **pinned by**: `a_word_form_at_one_hundred_or_above_is_a_stated_bound`
 
 ### `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound`
 

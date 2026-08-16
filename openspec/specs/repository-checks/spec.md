@@ -253,6 +253,17 @@ detector `AGENTS.md` records as designed, measured three times and rejected.
   no check: a count of something this repository does not produce is not written
 - **PINNED-BY** `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
 
+#### Scenario: A figure written in words at one hundred or above is not matched — a stated bound
+
+- **WHEN** a tracked Markdown document writes a declared census's phrase with a figure spelled in words at one
+  hundred or above
+- **THEN** the sweep does not match it, a stated bound: the word reader covers the units, the tens, and one
+  compound of the two, which stops at ninety-nine. Extending it upward buys nothing measurable — the figures
+  this repository writes in words are the small ones, and a set large enough to need three-digit words is one
+  whose prose writes digits. The residual is stated rather than closed because a word reader that silently
+  stops matching reads as covered, which is the failure this requirement's own sweep exists to refuse
+- **PINNED-BY** `a_word_form_at_one_hundred_or_above_is_a_stated_bound`
+
 #### Scenario: A census written outside Markdown is not observed — a stated bound
 
 - **WHEN** a tracked file that is not Markdown — a Rust doc comment, a shell comment, a manifest — writes a

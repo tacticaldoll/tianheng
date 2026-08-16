@@ -406,10 +406,10 @@ consumer for an undemonstrated deduplication.
   *Current reaction or bound:* none. Only a **bound** carries a `PINNED-BY`; an ordinary requirement is bound to
   nothing, so no gate can tell a SHALL with a reaction from one without. *Risk:* the class recurring and being found
   by hand or not at all — a normative rule nothing enforces is indistinguishable from one that is enforced, which is
-  the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
-  specs held
-  **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **83 bounds across 24 capabilities** — a live figure rather than part of the measurement
+  the failure the bound register was built to end one level down. *Measured before promotion, not estimated —
+  at `ee15665`, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
+  **1048** lines carrying `SHALL`, across **310** requirements and **1177** scenarios. The register, by contrast,
+  currently holds **84 bounds across 24 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
