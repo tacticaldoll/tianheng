@@ -904,6 +904,42 @@ them.
 
 ### Self-governance
 
+- **The repair that gave the manifest region TOML's comment rule dropped a whitespace class on the way
+  through.** Routing the inherit check into `region::toml()` replaced `line.trim()` then
+  `replace(' ', "")` with `replace(' ', "")` alone. TOML's `wschar` is `%x20` **and** `%x09`, so
+  `\tversion.workspace = true` stopped matching and its member was refused with *must inherit
+  version.workspace = true* — a false refusal in front of the release gate over a legal, cargo-accepted
+  manifest.
+
+  **The same class and the same direction as the defect that repair had just closed, reintroduced by the
+  repair.** Latent: no tracked manifest is tab-indented, and no direction covered a tab spelling, so nothing
+  would have said so. Of the five manifest readers in that file the other four trim; this is the only one
+  comparing a whole line, which is the predicate an omitted whitespace class hurts most.
+
+  Restoring the `trim()` would have fixed the indent and left the tab *before a comment*, which the region
+  correctly leaves in the head. The predicate asks its own question now — this line with its whitespace
+  gone, `%x20` and `%x09` and nothing else. `split_whitespace()` would also have closed it and is not used:
+  it removes every Unicode whitespace character, which is wider than the grammar and would accept a line
+  TOML rejects. Reading the language's own rule rather than a wider borrowed one is the entire subject of
+  the repair this regressed out of.
+
+  Two spellings are held, the indent and the gap before a comment, because only one of them was reachable
+  from the comment work that introduced the defect.
+
+- **A test doc went on defending a decision that had been reversed.** The direction for the glued inherit
+  comment was written to justify keeping two manifest readers out of `region`, on the ground that `toml()`'s
+  token-start rule read that `#` as content. Three commits later `toml()` stopped using that rule and both
+  readers were converted.
+
+  The reversing commit swept `CHANGELOG.md` for the superseded conclusion and **did not sweep the test whose
+  own subject the reversal changed** — the same supersession, one file over. The direction itself was never
+  wrong and still passes; what expired is the reason it gave for existing, and a stale reason is what a
+  future reader reasons from. It now records what happened to it, and names the edit that turns it red under
+  the rule the reader actually has: reverting `toml()` to the token-start rule, run rather than asserted.
+
+  Found by a review that re-read the prose the fix had made false, which is the third site of this shape in
+  this window and the first found by someone other than the sweep.
+
 - **The prelude reader entered the module and never left it.** `promised_members` found the promise by
   splitting on `pub mod prelude {` and taking what followed — which is everything to end of file. So a
   `pub use super::{ … };` written *after* the module closed became a promised member.

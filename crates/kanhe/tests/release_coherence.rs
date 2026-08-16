@@ -724,16 +724,22 @@ fn a_commented_out_internal_pin_is_not_a_pin() {
 
 /// An inherit line with a glued comment still inherits.
 ///
-/// **This is the direction that turns red if the two raw manifest readers are converted to
-/// `region::toml()`** — which is the whole reason the decision not to convert them is worth defending.
-/// `version.workspace = true#c` is legal TOML: the grammar allows zero whitespace before a comment. The
-/// token-start rule `region` uses — which exists so a `"https://…#frag"` inside a string survives — reads
-/// that `#` as content, so the line would stop matching and a valid manifest would be refused.
+/// `version.workspace = true#c` is legal TOML: the grammar allows zero whitespace before a comment. So this
+/// member inherits, and a reader that refuses it refuses a valid manifest.
 ///
-/// The direction this replaces asserted the same fact against **its own copy** of the predicate and called
-/// nothing in the gate, so no edit to the product could turn it. Two sites cited it as a guard. The question
-/// that separates the two is the cheap one: *which change to the product makes this red?* Here it is one
-/// line, and it has been run.
+/// **What this doc said, and what happened to it.** It was written to defend a decision to keep two manifest
+/// readers out of `region`, on the ground that `toml()`'s token-start rule read that `#` as content. Three
+/// commits later `toml()` stopped using the token-start rule — it lexes strings and cuts where TOML cuts —
+/// and both readers were converted. The measurement was right about the rule of the day; the conclusion it
+/// carried is gone, and this paragraph outlived it by one file. The commit that reversed the decision swept
+/// `CHANGELOG.md` for the superseded conclusion and did not sweep the test whose own subject the reversal
+/// changed.
+///
+/// **What holds it now is a different edit.** Reverting `toml()` to `Rule::TokenStart("#")` turns this red,
+/// which is the same one-line negative run under a rule the reader no longer has a choice about. The
+/// direction this replaced asserted the same fact against **its own copy** of the predicate and called
+/// nothing in the gate, so no edit to the product could turn it at all — the question that separates the two
+/// being the cheap one: *which change to the product makes this red?*
 #[test]
 fn an_inherit_line_with_a_glued_comment_still_inherits() {
     let root = scratch("glued-comment");
@@ -1500,4 +1506,42 @@ fn a_package_heading_with_a_trailing_comment_still_opens_the_table() {
          refusing to judge the release over it is a false refusal. Got: {:?}",
         verdict.err()
     );
+}
+
+/// A tab is whitespace to TOML, so an inherit line spelled with one still inherits.
+///
+/// The repair that routed this reader through `region::toml()` dropped the `trim()` the hand-rolled version
+/// had, leaving `line.replace(' ', "")` — which removes `%x20` and not `%x09`, while TOML's `wschar` is both.
+/// So `\tversion.workspace = true` stopped matching and its member was refused with *must inherit
+/// version.workspace = true*: a false refusal in front of the release gate over a legal, cargo-accepted
+/// manifest. The same class and the same direction as the defect the repair had just closed, reintroduced by
+/// the repair.
+///
+/// Two spellings, because the tab can sit on either side of the content and only one of them was reachable
+/// from the comment work: the indent, and the gap before a comment that `toml_head` correctly leaves in the
+/// head. Of the five manifest readers in this file the other four trim, and this is the only one comparing a
+/// whole line — the predicate an omitted whitespace class hurts most.
+#[test]
+fn an_inherit_line_spelled_with_tabs_still_inherits() {
+    for (label, spelling) in [
+        ("tab-indent", "\tversion.workspace = true"),
+        ("tab-before-comment", "version.workspace = true\t# c"),
+    ] {
+        let root = scratch(label);
+        let fixture = build_fixture(&root, label, "0.2.0");
+        workspace_files(&fixture.repo, "0.2.1");
+        release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+        let member = fixture.repo.join("crates/xuanji/Cargo.toml");
+        let text = std::fs::read_to_string(&member).expect("read the member manifest");
+        std::fs::write(&member, text.replace("version.workspace = true", spelling)).expect("write");
+        commit(&fixture.repo, "chore: spell the inherit line with a tab");
+        let verdict = judge(&fixture.repo);
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(
+            verdict.is_ok(),
+            "`{label}`: a tab is TOML whitespace, so this member inherits and refusing it is a false \
+             refusal. Got: {:?}",
+            verdict.err()
+        );
+    }
 }

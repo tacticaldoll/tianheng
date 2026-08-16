@@ -52,6 +52,25 @@ fn quoted_value(line: &str) -> Quoted {
     }
 }
 
+/// A TOML line with its whitespace removed, for a predicate that compares a whole line against one spelling.
+///
+/// **TOML's `wschar` is `%x20` and `%x09`, and this removes exactly those.** The predicate it serves used to
+/// be `line.trim()` then `replace(' ', "")`, and routing the reader through `region::toml()` dropped the
+/// `trim()` — leaving a rule that removed spaces and not tabs. `\tversion.workspace = true` stopped matching
+/// and its member was refused: a false refusal in front of the release gate over a legal manifest, of the
+/// same class and direction as the defect that repair had just closed.
+///
+/// Restoring the `trim()` would have fixed the indent and left the tab *before a comment*, which the region
+/// correctly leaves in the head. Asking the question the predicate means — this line with its whitespace
+/// gone — cannot come apart that way again.
+///
+/// `split_whitespace()` would also do it and is not used: it removes every Unicode whitespace character,
+/// which is wider than the grammar and would accept a line TOML rejects. Reading the language's own rule
+/// instead of a wider borrowed one is the whole subject of the repair this regressed out of.
+fn without_wschar(line: &str) -> String {
+    line.chars().filter(|c| !matches!(c, ' ' | '\t')).collect()
+}
+
 /// What a member manifest says its package is called, or why this reader could not tell.
 ///
 /// Three states rather than an `Option`, because every consumer here treated `None` as *not a package* and
@@ -265,7 +284,7 @@ fn require_version_surfaces(
         let inherits = crate::region::Source::of(text.as_str())
             .toml()
             .lines()
-            .any(|line| line.replace(' ', "") == "version.workspace=true");
+            .any(|line| without_wschar(line) == "version.workspace=true");
         if !inherits {
             return Err(violation(format!(
                 "workspace package {name} must inherit version.workspace = true"
