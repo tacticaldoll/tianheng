@@ -68,10 +68,30 @@ fn semver(version: &str) -> Option<(u64, u64, u64)> {
     Some((out[0], out[1], out[2]))
 }
 
-fn first_string_value(line: &str) -> Option<String> {
-    let (_, rest) = line.split_once('"')?;
-    let (value, _) = rest.split_once('"')?;
-    Some(value.to_string())
+/// A double-quoted value this reader found, or a statement that it could not read one.
+///
+/// **Not an `Option`, because every consumer of the one this replaces read `None` as *the key is absent* and
+/// skipped the line.** Single-quoted and literal TOML strings are valid and are not read here; that is a
+/// limit of this reader, not a fact about the manifest, and conflating the two let a readable-to-cargo
+/// manifest go unchecked while the surrounding function still returned `Ok`. Measured on this repository with
+/// one crate's name single-quoted, the release gate reported a clean release.
+///
+/// A type that cannot be defaulted, so the compiler asks each site which of the two it meant.
+enum Quoted {
+    /// The text between the first pair of double quotes on the line.
+    Value(String),
+    /// No double-quoted span: a single-quoted or literal value, or a shape this reader has never met.
+    Unreadable,
+}
+
+fn quoted_value(line: &str) -> Quoted {
+    match line
+        .split_once('"')
+        .and_then(|(_, rest)| rest.split_once('"'))
+    {
+        Some((value, _)) => Quoted::Value(value.to_string()),
+        None => Quoted::Unreadable,
+    }
 }
 
 /// What a member manifest says its package is called, or why this reader could not tell.
@@ -126,9 +146,9 @@ fn package_name(manifest: &str) -> PackageName {
     }
     match names.len() {
         0 => PackageName::Absent,
-        1 => match first_string_value(names[0]) {
-            Some(name) => PackageName::Named(name),
-            None => PackageName::Unreadable(names[0].to_string()),
+        1 => match quoted_value(names[0]) {
+            Quoted::Value(name) => PackageName::Named(name),
+            Quoted::Unreadable => PackageName::Unreadable(names[0].to_string()),
         },
         several => PackageName::Unreadable(format!("{several} `name` keys in `[package]`")),
     }
@@ -563,6 +583,9 @@ fn require_example_pins(
             if !family.iter().any(|f| f == key) {
                 continue;
             }
+            // The key is already known to name a family crate, so a pin this reader cannot read is not a
+            // pin that is absent — skipping it left an example's requirement unexamined while the aggregate
+            // `requirements` counter stayed non-zero on the strength of the other examples.
             let pin = if rest.trim_start().starts_with('{') {
                 rest.split("version")
                     .nth(1)
@@ -570,9 +593,18 @@ fn require_example_pins(
                     .and_then(|(_, r)| r.split_once('"'))
                     .map(|(v, _)| v.to_string())
             } else {
-                first_string_value(rest)
+                match quoted_value(rest) {
+                    Quoted::Value(pin) => Some(pin),
+                    Quoted::Unreadable => None,
+                }
             };
-            let Some(pin) = pin else { continue };
+            let Some(pin) = pin else {
+                return Err(cannot_judge(format!(
+                    "example {name} requires {key} with a version this check cannot read ({}), so whether it \
+                     satisfies the workspace version cannot be decided",
+                    rest.trim()
+                )));
+            };
             requirements += 1;
             if pin != minor && pin != version {
                 return Err(violation(format!(
@@ -609,10 +641,31 @@ fn require_lock_versions(
         if trimmed == "[[package]]" {
             name.clear();
         } else if trimmed.starts_with("name") && trimmed.contains('=') {
-            name = first_string_value(trimmed).unwrap_or_default();
+            // An unreadable name defaulted to the empty string, which the `!name.is_empty()` guard below
+            // then read as *no package here* — so that entry's version never entered the map and the
+            // workspace lookup reported it missing, or found a stale one under the previous name.
+            match quoted_value(trimmed) {
+                Quoted::Value(value) => name = value,
+                Quoted::Unreadable => {
+                    return Err(cannot_judge(format!(
+                        "Cargo.lock carries a package name this check cannot read ({}), so the versions it \
+                         records cannot be compared",
+                        trimmed
+                    )));
+                }
+            }
         } else if trimmed.starts_with("version") && trimmed.contains('=') && !name.is_empty() {
-            if let Some(value) = first_string_value(trimmed) {
-                versions.entry(name.clone()).or_insert(value);
+            match quoted_value(trimmed) {
+                Quoted::Value(value) => {
+                    versions.entry(name.clone()).or_insert(value);
+                }
+                Quoted::Unreadable => {
+                    return Err(cannot_judge(format!(
+                        "Cargo.lock records a version for {name} that this check cannot read ({}), so \
+                         whether it matches the workspace cannot be decided",
+                        trimmed
+                    )));
+                }
             }
         }
     }

@@ -111,8 +111,16 @@ fn dimension_crates() -> BTreeSet<String> {
         if excluded_by_publish_field(&package["publish"]) {
             continue;
         }
+        // A package whose name is not a string is not a package this comparison may drop: it would leave the
+        // set silently and its allowlist would go unchecked, which is the false negative the comments above
+        // record this direction having carried through six revisions. `cargo metadata` always emits a name,
+        // so this is unreachable — and unreachable is the reason to refuse rather than to skip, because a
+        // skip here would be indistinguishable from the clean case it produces.
         let Some(name) = package["name"].as_str() else {
-            continue;
+            panic!(
+                "cargo metadata reported a package with no name string, so the dimension set cannot be \
+                 built — a package dropped here takes its allowlist out of this comparison with it"
+            );
         };
         if name == "xuanji" {
             continue;
