@@ -17,15 +17,16 @@ yanked = "deny"
 
 [licenses]
 version = 2
-# Every license below is present in the actual dependency graph (all permissive):
-#   MIT / Apache-2.0      — xuanji, guibiao, tianheng, hunyi, serde_json, serde_core,
-#                           itoa, ryu, and 渾儀's AST stack: syn, proc-macro2, quote
-#   Unlicense             — memchr (dual Unlicense OR MIT)
-#   Unicode-3.0           — unicode-ident (licensed `(MIT OR Apache-2.0) AND Unicode-3.0`,
-#                           pulled by syn): the Unicode data tables it embeds carry the
-#                           permissive Unicode license, which the SPDX `AND` requires us to
-#                           accept explicitly. Reviewed and accepted — it ships no code we
-#                           author, only Unicode's own character-class data.
+# All four are permissive. **Which crate carries which is not written here** — `cargo deny list`
+# enumerates it against the graph as it is, and a hand-kept copy beside a producer is the shape this
+# repository removes. One stood here, claimed to be exhaustive, and had drifted.
+#
+# What an enumeration cannot carry, and so stays:
+#   Unicode-3.0 — `unicode-ident` is licensed `(MIT OR Apache-2.0) AND Unicode-3.0`. The SPDX `AND`
+#                 means the Unicode term must be accepted explicitly rather than satisfied by the
+#                 permissive half, which is why a fourth entry appears in an otherwise MIT/Apache
+#                 list. Reviewed and accepted: it ships no code we author, only Unicode's own
+#                 character-class data.
 # Adding a dependency under any other license fails CI until it is reviewed here.
 allow = ["MIT", "Apache-2.0", "Unlicense", "Unicode-3.0"]
 confidence-threshold = 0.9
