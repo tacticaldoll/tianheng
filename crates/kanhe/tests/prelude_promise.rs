@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use kanhe::prelude_promise::{Promise, judge, mentioned_identifiers, promised_members};
+use kanhe::prelude_promise::{Promise, Unreadable, judge, mentioned_identifiers, promised_members};
 
 const LIB: &str = "crates/tianheng/src/lib.rs";
 const CONTRACT: &str = "crates/tianheng/tests/adopter_surface.rs";
@@ -240,12 +240,24 @@ fn a_member_named_only_in_a_comment_is_counted_as_named() {
 #[test]
 fn a_promised_member_the_parser_cannot_read_is_refused() {
     let contract = "fn t() { let _ = (Alpha, Beta); }";
-    for form in ["runner::Format", "Foo as Bar", "a::{B", "C}"] {
+    // Written as **source forms**, each with the entry the reader chokes on. A nested group splits at its
+    // comma, so the refusal names its first half; that is the entry, and naming it is what the promise is.
+    //
+    // The forms used to be entry fragments, and two of them — `a::{B` and `C}` — put an unbalanced brace in
+    // the fixture on their own. That went unnoticed while the block ran to end of file and became a refusal
+    // once it had to find its close. No branch is lost: one predicate rejects every one of these entries, and
+    // a trailing `C}` reaches it only as the tail of a group whose head is refused first.
+    for (form, entry) in [
+        ("runner::Format", "runner::Format"),
+        ("Foo as Bar", "Foo as Bar"),
+        ("a::{B, C}", "a::{B"),
+        ("runner::*", "runner::*"),
+    ] {
         let promise =
             format!("pub mod prelude {{\n    pub use super::{{Alpha, {form}, Beta}};\n}}\n");
         match judge(&promise, contract) {
             Promise::CannotJudge(why) => assert!(
-                why.contains(form),
+                why.contains(entry),
                 "the refusal must name the member it could not read, got {why:?}"
             ),
             other => panic!("`{form}` must be refused rather than dropped, got {other:?}"),
@@ -277,5 +289,54 @@ fn a_longer_identifier_containing_a_promised_name_is_not_a_mention() {
     assert!(
         !mentioned.contains("Run"),
         "a promised name embedded in a longer identifier is not a mention, got {mentioned:?}"
+    );
+}
+
+/// The prelude block ends at its own closing brace, so a re-export **after** the module is not the promise.
+///
+/// The sibling case had been asserted in one position only. `split("pub mod prelude {").skip(1)` takes
+/// everything from the opener to end of file, so it excludes a sibling above the module and absorbs one below
+/// it — and the fixtures placed every sibling above, which is the arrangement the loose reader answers
+/// correctly. The reader's own doc claimed the stronger property: that *entering* the module made this true by
+/// construction. Entering it is half of that; leaving it is the other half.
+///
+/// Widening is the direction that matters here. A name absorbed from outside the module enters the promise, so
+/// `adopter_surface.rs` must name a member `tianheng::prelude::*` does not export — a demand the compiler
+/// cannot check, since the contract mentions identifiers rather than importing them.
+#[test]
+fn the_promise_ends_where_the_prelude_block_ends() {
+    let after =
+        "pub mod prelude {\n    pub use super::{Promised};\n}\n\npub use super::{NotPromised};\n";
+    let members = promised_members(after).expect("both members are plain identifiers");
+    assert!(
+        members.contains("Promised"),
+        "the block's own member must still be read, got {members:?}"
+    );
+    assert!(
+        !members.contains("NotPromised"),
+        "a re-export after the block's closing brace is outside the promise, got {members:?}"
+    );
+}
+
+/// A brace inside a comment cannot close the block early.
+///
+/// The extent is walked over executed Rust for one direction: an unbalanced `}` in a comment would end the
+/// block before its real close, dropping every member after it — the promise narrowing silently, which is the
+/// exact failure this file exists to catch. An unbalanced `{` errs the other way and is refused rather than
+/// guessed.
+#[test]
+fn a_brace_in_a_comment_neither_closes_nor_opens_the_block() {
+    let commented = "pub mod prelude {\n    // a stray } in prose\n    pub use super::{Late};\n}\n";
+    let members = promised_members(commented).expect("`Late` is a plain identifier");
+    assert!(
+        members.contains("Late"),
+        "a `}}` in a comment is not the block's close, so what follows it is still promised: {members:?}"
+    );
+
+    let unclosed = "pub mod prelude {\n    pub use super::{Early};\n";
+    assert_eq!(
+        promised_members(unclosed),
+        Err(Unreadable::UnclosedPrelude),
+        "a block whose close this reader never finds is refused, never read to end of file"
     );
 }

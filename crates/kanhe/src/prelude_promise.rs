@@ -47,17 +47,27 @@ pub enum Unreadable {
     Member(String),
     /// Several `pub mod prelude {` markers, so which block carries the promise is decided by position.
     SeveralPreludes(usize),
+    /// The block's opener was found and its closing brace was not, so where the promise ends is unknown.
+    ///
+    /// Refused rather than read to end of file. Reading on is what made a re-export *after* the module a
+    /// promised member — a promise that widened by exactly the amount the reader failed to bound.
+    UnclosedPrelude,
 }
 
 /// The names `pub mod prelude` re-exports, recognized by **position** rather than by a bare marker.
 ///
-/// The block is found by entering `pub mod prelude {` and reading its `pub use super::{ … };`, so a re-export
-/// anywhere else in the file is not the promise. **Entering the module is what makes that true by construction
-/// rather than by circumstance.** A reader keyed on the marker alone agrees exactly while no sibling re-export
-/// of that form exists, and the first one added would widen the promise without changing a line here — a
-/// correctness that depends on the absence of something is the shape this family declines. Measured when this
-/// was written: no sibling existed, which is precisely why the looser reader could not have been caught by
-/// running it.
+/// The block is found by entering `pub mod prelude {`, **leaving at its matching close**, and reading the
+/// `pub use super::{ … };` between — so a re-export anywhere else in the file is not the promise. A reader
+/// keyed on the marker alone agrees exactly while no sibling re-export of that form exists, and the first one
+/// added would widen the promise without changing a line here; a correctness that depends on the absence of
+/// something is the shape this family declines. Measured when this was written: no sibling existed, which is
+/// precisely why the looser reader could not have been caught by running it.
+///
+/// **Leaving is half of that, and this doc claimed the whole of it while the code held one half.** Entering
+/// alone excludes a sibling written *before* the module and absorbs one written after it, because the read
+/// then ran to end of file. Every fixture placed the sibling before — the arrangement the unbounded reader
+/// answers correctly — so the property was asserted in the one position that could not fail. The two
+/// directions are one requirement and are now held in both.
 ///
 /// **A member this reader cannot understand is refused, never dropped.** The forms it reads are plain
 /// identifiers; a path (`runner::Format`), a rename (`Foo as Bar`), a nested group (`a::{B, C}`) or a glob
@@ -87,6 +97,15 @@ pub fn promised_members(lib_rs: &str) -> Result<BTreeSet<String>, Unreadable> {
             return Ok(BTreeSet::new());
         }
         return Err(Unreadable::SeveralPreludes(count));
+    };
+
+    // **And the block ends at its own closing brace.** Entering the module was only half of what the
+    // paragraph above claims: `split(…).skip(1)` runs from the opener to end of file, so it excluded a
+    // sibling re-export written *before* the module and absorbed one written after it. Every fixture put the
+    // sibling before, which is the arrangement the unbounded reader answers correctly, so the distinction the
+    // doc asserted had never been run in the direction that fails.
+    let Some(module) = block_body(module) else {
+        return Err(Unreadable::UnclosedPrelude);
     };
 
     // **Every re-export statement in the block, not the first.** `split_once("pub use super::{")` read one,
@@ -119,6 +138,41 @@ pub fn promised_members(lib_rs: &str) -> Result<BTreeSet<String>, Unreadable> {
         }
     }
     Ok(members)
+}
+
+/// The prelude block's own text: from just inside its opener to its matching close, or `None` if the close is
+/// never reached.
+///
+/// **Walked over executed Rust, and the two brace directions are not symmetric.** A stray `}` inside a comment
+/// would end the block early and drop every member after it — the promise narrowing silently, which is the
+/// one failure this file exists to catch. A stray `{` leaves the walk unbalanced, and that is refused rather
+/// than guessed. Cutting line comments removes the dangerous direction; `region`'s declared block-comment
+/// residue remains and errs toward the safe one, since an unclosed walk refuses.
+///
+/// A brace inside a **string literal** is the same residue and needs the same lexing, which is why this reads
+/// a region rather than rolling its own cut. Valid Rust in this position is re-export statements, so no
+/// instance exists here — and the reason that is not an argument for reading raw text is the finding this
+/// function comes from: the loose reader was also correct on every input anyone had written.
+fn block_body(tail: &str) -> Option<String> {
+    let source = crate::region::Source::of(tail);
+    let mut depth = 1usize;
+    let mut body = String::new();
+    for line in source.rust().lines() {
+        for ch in line.chars() {
+            if ch == '}' {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(body);
+                }
+            }
+            body.push(ch);
+            if ch == '{' {
+                depth += 1;
+            }
+        }
+        body.push('\n');
+    }
+    None
 }
 
 /// Every identifier the contract mentions, wherever it mentions it.
@@ -156,6 +210,15 @@ pub fn judge(lib_rs: &str, contract_rs: &str) -> Promise {
                  dropping it narrows the promise silently, and a promise that shrinks without saying so is \
                  the failure this whole check exists to catch"
             ));
+        }
+        Err(Unreadable::UnclosedPrelude) => {
+            return Promise::CannotJudge(
+                "`pub mod prelude {` was found and its closing brace was not, so where the promise ends is \
+                 unknown. Read to end of file instead, every `pub use super::{ … };` after the module would \
+                 join the promise — which is the widening this check would then have to report against the \
+                 contract"
+                    .to_string(),
+            );
         }
         Err(Unreadable::SeveralPreludes(count)) => {
             return Promise::CannotJudge(format!(
