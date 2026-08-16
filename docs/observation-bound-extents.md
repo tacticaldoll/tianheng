@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**39 of 83 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**40 of 84 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -32,6 +32,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound` — owner: engine
 - `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
+- `repository-checks/a-figure-written-in-words-at-one-hundred-or-above-is-not-matched-a-stated-bound` — owner: engine
 - `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
 - `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/files-no-capability-claims-a-stated-bound` — owner: engine
@@ -414,7 +415,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (39)
+## under-reacts (40)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -631,6 +632,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the declaration is the coverage — a census names the one sentence its figures are written in, and a count outside that sentence is unheld. Reaching it needs a judgement over prose, the instrument this repository designed, measured three times and rejected; `AGENTS.md` carries the other half as a rule with no check
 - **its defence must show**: does not react
 - **pinned by**: `a_count_in_an_undeclared_phrasing_is_a_stated_bound`
+
+### `repository-checks/a-figure-written-in-words-at-one-hundred-or-above-is-not-matched-a-stated-bound`
+
+> a declared census's figure spelled in words at one hundred or above
+
+- **because**: the word reader covers the units, the tens, and one compound of the two, which stops at ninety-nine. The figures this repository writes in words are the small ones, and a set large enough to need three-digit words is one whose prose writes digits — so extending it upward buys nothing measurable, while a word reader that silently stops matching reads as covered
+- **its defence must show**: does not react
+- **pinned by**: `a_word_form_at_one_hundred_or_above_is_a_stated_bound`
 
 ### `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound`
 

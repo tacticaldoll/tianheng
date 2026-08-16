@@ -233,4 +233,9 @@ cd "$repo" || cannot_judge \
 # script's is deliberate.
 rm -f "$verdict_file"
 
-exec cargo publish "${selection[@]}" "${forwarded[@]}"
+# `forwarded` may be empty, and `"${empty[@]}"` under `set -u` is an unbound variable before bash 4.4 —
+# where this wrapper would abort through the ERR trap reporting "an unguarded command failed", a sentence
+# about the wrong cause, on the argument-free invocation that is the ordinary one. `selection` is never empty
+# and needs no guard. The `+` form is used rather than a version check, so no minimum has to be declared
+# anywhere and kept in step.
+exec cargo publish "${selection[@]}" ${forwarded[@]+"${forwarded[@]}"}

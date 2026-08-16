@@ -45,6 +45,13 @@ conclusion). The sweep's own working queue file is not retained once fully drain
 now lives here and in the closing PRs, not in a file kept only because it once existed. A future
 sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
 
+**Live queue: [`docs/audit/2026-08-16-merged-review-campaign.md`](docs/audit/2026-08-16-merged-review-campaign.md).**
+Two independent full-range reviews over `v0.4.0..release/0.5.0`, merged; their intersection was empty. Its
+Phase B-G are closed. What remains open is **Phase A** — three spec requirements the shell-to-Rust migration
+orphaned, found by mapping each deleted shell file to the requirement it implemented, and needing one
+OpenSpec change rather than three repairs — and the ten Gate 4 structural findings deliberately deferred out
+of the same campaign. The `0.5.0` remediation queue this replaces was retired at 43/43, per the rule above.
+
 ## Live decision index
 
 ### DESIGN-BREAKING
@@ -406,10 +413,10 @@ consumer for an undemonstrated deduplication.
   *Current reaction or bound:* none. Only a **bound** carries a `PINNED-BY`; an ordinary requirement is bound to
   nothing, so no gate can tell a SHALL with a reaction from one without. *Risk:* the class recurring and being found
   by hand or not at all — a normative rule nothing enforces is indistinguishable from one that is enforced, which is
-  the failure the bound register was built to end one level down. *Measured before promotion, not estimated:* the
-  specs held
-  **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **83 bounds across 24 capabilities** — a live figure rather than part of the measurement
+  the failure the bound register was built to end one level down. *Measured before promotion, not estimated —
+  at `ee15665`, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
+  **1048** lines carrying `SHALL`, across **310** requirements and **1177** scenarios. The register, by contrast,
+  currently holds **84 bounds across 24 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -699,6 +706,26 @@ consumer for an undemonstrated deduplication.
 
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
+
+- **WATCH: the reference gate's dated-section exemption is widest while the section is still being
+  written.** *Observed pressure:* the exemption keys on a section being *dated*, and dating is the freeze
+  act — `chore(release): prepare X.Y.Z` cuts `[Unreleased]` into `## [X.Y.Z] - DATE`, after which
+  `release-coherence` **requires** `[Unreleased]` to be empty in the release-ready state. So from the prepare
+  commit until the release, every new CHANGELOG entry is written into a dated section
+  `crates/kanhe/tests/reference_integrity.rs` skips, and that section is the largest and newest in the file.
+  *Observation source:* the `[0.5.0]` section measured at 2026-08-16 — 2,572 lines carrying 41 distinct
+  in-repository references (22 prefixed paths, 19 bare basenames), resolved by hand, **all resolving**. So
+  the exposure is real and has cost nothing yet. *Current reaction or bound:* none for that window; the
+  reasoning is recorded beside the `in_dated_section` skip rather than left for a reader to rediscover.
+  *Risk:* bounded and self-limiting — a stale path written into the current version's section survives only
+  until someone reads it, and the same paths are usually named in the code the entry describes, which the
+  gate does read. *Why not simply narrow it:* making the current version an exception means this scan asking
+  `release-coherence` which version is unreleased, so a reference verdict would begin to depend on the
+  release spine and a shallow checkout would move it — trading a bounded blind spot for a verdict that
+  varies with checkout depth. *Promotion trigger:* a stale reference found inside the section of a version
+  **not yet released** — the 41 above are the control and cannot stand as evidence for themselves. **Not
+  fired.** *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
+  `openspec/specs/reference-integrity/spec.md`.
 
 - **WATCH: `PROJECT.md` restates facts a generated projection already holds, and states others nothing
   holds.** *Observed pressure:* three consecutive attempts at one paragraph were withdrawn, all failing the

@@ -192,6 +192,55 @@ fn a_count_in_an_undeclared_phrasing_is_a_stated_bound() {
     );
 }
 
+/// `repository-checks/a-figure-written-in-words-at-one-hundred-or-above-is-not-matched-a-stated-bound`
+///
+/// `UnderReacts`, owned by the engine. `number_at` reads the units, the tens, and one compound of the two,
+/// which stops at ninety-nine. Both directions on one body, differing only in how the figure is **spelled**:
+/// a bound whose silence is not contrasted with a reaction on the same shape is indistinguishable from a
+/// sweep that reads nothing.
+///
+/// Declared with fixed figures rather than the register's own, because the property under test is the word
+/// reader's reach and not the size of any set this repository happens to hold today.
+#[test]
+fn a_word_form_at_one_hundred_or_above_is_a_stated_bound() {
+    let declared = vec![Census {
+        subject: "a control",
+        phrase: "{} bounds across {} capabilities",
+        figures: vec![99, 24],
+    }];
+    let scratch =
+        std::env::temp_dir().join(format!("tianheng-census-words-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+
+    // The control: a disagreeing figure written in words the reader reaches.
+    std::fs::write(
+        scratch.join("below.md"),
+        "  a line writing ninety-eight bounds across 24 capabilities\n",
+    )
+    .expect("write");
+    assert!(
+        !sweep(&scratch, &["below.md".to_string()], &declared).is_empty(),
+        "the sweep must see a disagreement spelled in words below one hundred, or the silence below says \
+         nothing about the ceiling"
+    );
+
+    // The bound: the same disagreement, spelled at one hundred.
+    std::fs::write(
+        scratch.join("above.md"),
+        "  a line writing one hundred bounds across 24 capabilities\n",
+    )
+    .expect("write");
+    let offences = sweep(&scratch, &["above.md".to_string()], &declared);
+    let _ = std::fs::remove_dir_all(&scratch);
+    assert!(
+        offences.is_empty(),
+        "the sweep must stay silent about a figure spelled at one hundred or above — that is the declared \
+         bound, and a word reader that silently stops matching is why it is stated rather than left to be \
+         discovered. Got: {offences:?}"
+    );
+}
+
 /// `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound`
 ///
 /// `UnderReacts`, owned by the engine. The corpus is tracked Markdown, and the narrowing was measured rather

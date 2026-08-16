@@ -1,0 +1,10 @@
+{
+  "name": "tianheng-governance-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The pinned OpenSpec validator this repository's Definition of Done and CI run. Not a package: it exists so `npm ci` resolves one tree from a committed lock instead of `npx` resolving a fresh one on every run.",
+  "license": "MIT OR Apache-2.0",
+  "devDependencies": {
+    "@fission-ai/openspec": "1.4.1"
+  }
+}

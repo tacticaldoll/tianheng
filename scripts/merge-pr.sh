@@ -426,5 +426,10 @@ rm -f "$verdict_file"
 # the leak this repository closed one commit ago, reintroduced to fix a different defect. A value in `argv` has
 # an `ARG_MAX` ceiling a path does not, and that ceiling fails loud with `E2BIG` before the merge rather than
 # recording something wrong.
+#
+# `passthrough` may be empty, and `"${empty[@]}"` under `set -u` is an unbound variable before bash 4.4 —
+# where this wrapper would abort through the ERR trap reporting "an unguarded command failed", a sentence
+# about the wrong cause, on the invocation with no passthrough flags that is the ordinary one. The `+` form
+# is used rather than a version check, so no minimum has to be declared anywhere and kept in step.
 exec gh pr merge "$pr_number" --repo "$repository" --squash --subject "$subject" --body "$body" \
-    --match-head-commit "$head" "${passthrough[@]}"
+    --match-head-commit "$head" ${passthrough[@]+"${passthrough[@]}"}

@@ -61,6 +61,22 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
+                "repository-checks/a-figure-written-in-words-at-one-hundred-or-above-is-not-matched-a-stated-bound",
+            ),
+            "a declared census's figure spelled in words at one hundred or above",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the word reader covers the units, the tens, and one compound of the two, which \
+                          stops at ninety-nine. The figures this repository writes in words are the small \
+                          ones, and a set large enough to need three-digit words is one whose prose writes \
+                          digits — so extending it upward buys nothing measurable, while a word reader that \
+                          silently stops matching reads as covered"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_word_form_at_one_hundred_or_above_is_a_stated_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound",
             ),
             "a declared census written with the wrong figures in a tracked file that is not Markdown",

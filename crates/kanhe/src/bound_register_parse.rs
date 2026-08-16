@@ -105,6 +105,21 @@ pub fn marks_a_bound(heading: &str) -> bool {
         .any(|marker| contains_words(&lower, marker))
 }
 
+/// Whether `trimmed` ends whichever scenario was open.
+///
+/// **One predicate, because three readers of this grammar had three copies of it and one of them differed.**
+/// [`bounds_in`] and [`citations_in`] stopped at `## `/`### `/`#### `; [`undeclared_prose_offences`] stopped
+/// at *any* line whose trimmed form starts with `#`. A `##### ` sub-heading fell between them — the first two
+/// kept the bound scenario open while the third had left it, so prose below it was reported as an undeclared
+/// bound that [`bounds_in`] had in fact registered. Latent, since no tracked spec carries a five-hash heading,
+/// and the same class [`citations_in`]'s own comment records closing one heading-depth up.
+///
+/// A `#` line this does not name — `##### `, `# `, or a `#tag` — is ordinary content, which is what
+/// [`bounds_in`] has always treated it as.
+fn ends_scenario(trimmed: &str) -> bool {
+    trimmed.starts_with("#### ") || trimmed.starts_with("### ") || trimmed.starts_with("## ")
+}
+
 fn contains_words(text: &str, words: &str) -> bool {
     text.match_indices(words).any(|(start, matched)| {
         let before = text[..start].chars().next_back();
@@ -305,10 +320,7 @@ pub fn bounds_in(capability: &str, spec: &str, text: &str) -> Vec<Bound> {
 
         for line in lines.iter().skip(index + 1) {
             let trimmed = line.trim();
-            if trimmed.starts_with("#### ")
-                || trimmed.starts_with("### ")
-                || trimmed.starts_with("## ")
-            {
+            if ends_scenario(trimmed) {
                 break;
             }
             if let Some(rest) = trimmed.strip_prefix("- **THEN** ") {
@@ -470,9 +482,14 @@ pub fn undeclared_prose_offences(
             continue;
         }
 
-        if trimmed.starts_with('#') {
-            // A "#"/"##"/"###" heading (1-3 hashes; #### was handled above and already `continue`d): closes
-            // whatever requirement section was open, and opens a new one when it is itself a Requirement.
+        if ends_scenario(trimmed) {
+            // A `## `/`### ` heading (`#### ` was handled above and already `continue`d): closes whatever
+            // requirement section was open, and opens a new one when it is itself a Requirement.
+            //
+            // **Through `ends_scenario`, not `starts_with('#')`.** The wider form ended a scenario here that
+            // `bounds_in` and `citations_in` kept open — a `##### ` sub-heading, a `# ` title, a `#tag` —
+            // and the prose below it was then read outside the very scenario that declares it. Those lines
+            // are ordinary content to the other two readers, so they are ordinary content here.
             flush_requirement!();
             in_bound_scenario = false;
             req_heading.clear();
@@ -582,8 +599,7 @@ pub fn citations_in(capability: &str, spec: &str, text: &str) -> Vec<PinningCita
         // whichever bound scenario opened above it, disagreeing with `bounds_in` about which bound (if
         // any) that citation defends. No tracked spec currently has a `#### ` heading spelled any other
         // way, so this was latent rather than observed.
-        if trimmed.starts_with("#### ") || trimmed.starts_with("### ") || trimmed.starts_with("## ")
-        {
+        if ends_scenario(trimmed) {
             bound = None;
             continue;
         }

@@ -23,6 +23,11 @@
 # only, exactly as an example's is.
 /crates/*/tests/fixtures/*/target/
 /crates/*/tests/fixtures/*/Cargo.lock
+# `npm ci` installs the pinned OpenSpec validator here. The tree is reproduced from the committed
+# `package-lock.json`, so the directory is build output and never repository content. It must be ignored
+# rather than merely untracked: `crates/kanhe/tests/publish_source.rs` reads `--untracked-files=all`, and an
+# untracked, unignored install would make the worktree dirty and block an irreversible act.
+/node_modules/
 /.agent/
 /.agents/
 /.amazonq/

@@ -180,44 +180,25 @@ impl State {
 const COMPARE: &str = "https://github.com/tacticaldoll/tianheng/compare";
 const RELEASES: &str = "https://github.com/tacticaldoll/tianheng/releases/tag";
 
-/// Judge a repository's release state, returning what to report or why it cannot be judged.
+/// The release spine, and which phase of the ritual the workspace is in relative to it.
+struct Spine {
+    /// Which phase the workspace is in, relative to the latest release commit.
+    state: State,
+    /// The latest `release: X.Y.Z` subject's version.
+    release_version: String,
+    /// The one before it, absent when the latest is the first release.
+    previous_release: Option<String>,
+}
+
+/// Read the release spine out of the commit log and classify the workspace against it.
 ///
-/// Read-only: it never bumps, commits, tags, or publishes.
-pub fn judge(repo: &Path) -> Result<String, Refusal> {
-    if !repo.join("Cargo.toml").is_file() {
-        return Err(cannot_judge(format!(
-            "repository root {} has no Cargo.toml",
-            repo.display()
-        )));
-    }
-    if !repo.join("CHANGELOG.md").is_file() {
-        return Err(cannot_judge(format!(
-            "repository root {} has no CHANGELOG.md",
-            repo.display()
-        )));
-    }
-    git(repo, &["rev-parse", "--is-inside-work-tree"]).map_err(|_| {
-        cannot_judge(format!(
-            "repository root {} has no git history",
-            repo.display()
-        ))
-    })?;
-
-    let root_manifest = read(repo, "Cargo.toml")?;
-    let version = workspace_version(&root_manifest).unwrap_or_default();
-    let Some(version_parts) = semver(&version) else {
-        return Err(cannot_judge(format!(
-            "workspace version is missing or malformed: {}",
-            if version.is_empty() {
-                "<missing>"
-            } else {
-                &version
-            }
-        )));
-    };
-    let changelog = read(repo, "CHANGELOG.md")?;
-
-    // --- the release spine ---
+/// A malformed `release:` subject is a **violation** — the history disagrees with its own form — while an
+/// absent spine is a **cannot-judge**, because a shallow clone cannot see one and that is not a disagreement.
+fn release_spine(
+    repo: &Path,
+    version: &str,
+    version_parts: (u64, u64, u64),
+) -> Result<Spine, Refusal> {
     let subjects = git(repo, &["log", "--format=%H%x09%s"])
         .map_err(|err| cannot_judge(format!("could not read the release history: {err}")))?;
     let mut history: Vec<(String, String)> = Vec::new();
@@ -277,8 +258,19 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
             std::cmp::Ordering::Greater => State::ReleaseReady,
         }
     };
+    Ok(Spine {
+        state,
+        release_version,
+        previous_release,
+    })
+}
 
-    // --- the version-bearing surfaces ---
+/// Every version-bearing surface outside the changelog, and the member manifests the later phases read.
+fn require_version_surfaces(
+    repo: &Path,
+    root_manifest: &str,
+    version: &str,
+) -> Result<Vec<(String, String)>, Refusal> {
     let manifests = workspace_manifests(repo)?;
     for (path, text) in &manifests {
         // Only the refusal message needs the name here — the inheritance read below works off the text
@@ -299,10 +291,19 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
             )));
         }
     }
-    require_internal_pins(&root_manifest, &version)?;
-    require_example_pins(repo, &manifests, &version)?;
+    require_internal_pins(root_manifest, version)?;
+    require_example_pins(repo, &manifests, version)?;
+    Ok(manifests)
+}
 
-    // --- state-dependent changelog surfaces ---
+/// The changelog surfaces whose required shape depends on which phase of the ritual this is.
+fn require_changelog_state(
+    repo: &Path,
+    changelog: &str,
+    manifests: &[(String, String)],
+    version: &str,
+    spine: &Spine,
+) -> Result<(), Refusal> {
     let unreleased_sections = changelog
         .lines()
         .filter(|line| line.trim_end() == "## [Unreleased]")
@@ -312,8 +313,8 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
             "CHANGELOG must contain exactly one [Unreleased] section".to_string(),
         ));
     }
-    let has_item = unreleased_has_item(&changelog);
-    match state {
+    let has_item = unreleased_has_item(changelog);
+    match spine.state {
         State::Development => {
             if !has_item {
                 return Err(violation(
@@ -332,7 +333,7 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
             if has_item {
                 return Err(violation(format!(
                     "[Unreleased] must be empty in {} state",
-                    state.label()
+                    spine.state.label()
                 )));
             }
             let dated = changelog.lines().any(|line| {
@@ -345,10 +346,10 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
                     "CHANGELOG is missing dated release notes for {version}"
                 )));
             }
-            let from = if state == State::ReleaseReady {
-                Some(release_version.clone())
+            let from = if spine.state == State::ReleaseReady {
+                Some(spine.release_version.clone())
             } else {
-                previous_release.clone()
+                spine.previous_release.clone()
             };
             let expected = match &from {
                 Some(previous) => format!("[{version}]: {COMPARE}/v{previous}...v{version}"),
@@ -362,16 +363,21 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
                     None => format!("first release CHANGELOG link must target v{version}"),
                 }));
             }
-            require_lock_versions(repo, &manifests, &version)?;
+            require_lock_versions(repo, manifests, version)?;
         }
     }
+    Ok(())
+}
 
-    // --- each release section's internal consistency ---
-    // The vacuity guard this walk once carried is UNREACHABLE and is gone. `## [Unreleased]` is itself a
-    // `## [` section, and the exactly-one-`[Unreleased]` check above already refuses a changelog with none —
-    // more specifically, and as a violation rather than an undecidable. A guard whose input an earlier check
-    // forecloses cannot fire, and keeping it would read as coverage. Found by trying to write its WHEN.
-    let shape = section_shape(&changelog);
+/// Each release section's internal consistency: no repeated heading, and every `**BREAKING**` paired with a
+/// `### Migration`.
+///
+/// The vacuity guard this walk once carried is UNREACHABLE and is gone. `## [Unreleased]` is itself a
+/// `## [` section, and the exactly-one-`[Unreleased]` check in the caller already refuses a changelog with
+/// none — more specifically, and as a violation rather than an undecidable. A guard whose input an earlier
+/// check forecloses cannot fire, and keeping it would read as coverage. Found by trying to write its WHEN.
+fn require_section_shape(changelog: &str) -> Result<(), Refusal> {
+    let shape = section_shape(changelog);
     let mut duplicates: Vec<String> = shape
         .headings
         .iter()
@@ -407,9 +413,12 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
                 .join("\n")
         )));
     }
+    Ok(())
+}
 
-    // --- adopter narrative names no self-governance machinery ---
-    let leaked = adopter_cited_machinery(repo, &changelog)?;
+/// The adopter-facing narrative names none of this repository's own machinery.
+fn require_adopter_narrative(repo: &Path, changelog: &str) -> Result<(), Refusal> {
+    let leaked = adopter_cited_machinery(repo, changelog)?;
     if !leaked.is_empty() {
         return Err(violation(format!(
             "an adopter-facing CHANGELOG entry names this repository's own machinery, which ships in no \
@@ -418,10 +427,58 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
             leaked.join("\n")
         )));
     }
+    Ok(())
+}
+
+/// Judge a repository's release state, returning what to report or why it cannot be judged.
+///
+/// Read-only: it never bumps, commits, tags, or publishes.
+pub fn judge(repo: &Path) -> Result<String, Refusal> {
+    if !repo.join("Cargo.toml").is_file() {
+        return Err(cannot_judge(format!(
+            "repository root {} has no Cargo.toml",
+            repo.display()
+        )));
+    }
+    if !repo.join("CHANGELOG.md").is_file() {
+        return Err(cannot_judge(format!(
+            "repository root {} has no CHANGELOG.md",
+            repo.display()
+        )));
+    }
+    git(repo, &["rev-parse", "--is-inside-work-tree"]).map_err(|_| {
+        cannot_judge(format!(
+            "repository root {} has no git history",
+            repo.display()
+        ))
+    })?;
+
+    let root_manifest = read(repo, "Cargo.toml")?;
+    let version = workspace_version(&root_manifest).unwrap_or_default();
+    let Some(version_parts) = semver(&version) else {
+        return Err(cannot_judge(format!(
+            "workspace version is missing or malformed: {}",
+            if version.is_empty() {
+                "<missing>"
+            } else {
+                &version
+            }
+        )));
+    };
+    let changelog = read(repo, "CHANGELOG.md")?;
+
+    // The phases, in the order a reader meets a refusal in. **The order is observable**: a repository with
+    // two problems is refused for whichever phase reaches its own first, and the failure matrix asserts the
+    // message. So these are a sequence rather than a set, and moving one moves what gets reported.
+    let spine = release_spine(repo, &version, version_parts)?;
+    let manifests = require_version_surfaces(repo, &root_manifest, &version)?;
+    require_changelog_state(repo, &changelog, &manifests, &version, &spine)?;
+    require_section_shape(&changelog)?;
+    require_adopter_narrative(repo, &changelog)?;
 
     Ok(format!(
         "ok release coherence ({}: {version})",
-        state.label()
+        spine.state.label()
     ))
 }
 
@@ -643,9 +700,16 @@ fn require_lock_versions(
     let mut name = String::new();
     let mut version_of: Option<String> = None;
     let mut sourced = false;
-    // A block ends at the next `[[package]]` or at end of input, so the record is filed on the boundary
+    // A block ends at the next **table header** or at end of input, so the record is filed on the boundary
     // rather than when its version is read — `source` is written after `version` in cargo's own output, and
     // filing early would record every entry as source-less.
+    //
+    // **`[[package]]` is not the only table a lock carries, and the boundary is not the only thing that
+    // depended on believing it was.** `[[patch.unused]]` — written whenever a `[patch]` section exists — has
+    // its own `name`, `version` and `source`, and `[metadata]` closes an older lock. Read as ordinary content
+    // they left the block above still open and overwrote its fields, so the last member's version was
+    // replaced before it was ever filed and the workspace lookup reported that member missing from a lock
+    // that records it. Every table therefore closes the record, and only `[[package]]` reopens one.
     let close = |name: &mut String,
                  version_of: &mut Option<String>,
                  sourced: &mut bool,
@@ -659,10 +723,16 @@ fn require_lock_versions(
         name.clear();
         *sourced = false;
     };
+    // Whether the lines being read belong to a `[[package]]` block. A foreign table's keys are not this
+    // package's, and skipping them by name would be a list of the tables someone thought of.
+    let mut in_package = false;
     for line in lock.lines() {
         let trimmed = line.trim();
-        if trimmed == "[[package]]" {
+        if trimmed.starts_with('[') {
             close(&mut name, &mut version_of, &mut sourced, &mut entries);
+            in_package = trimmed == "[[package]]";
+        } else if !in_package {
+            continue;
         } else if trimmed.starts_with("source") && trimmed.contains('=') {
             sourced = true;
         } else if trimmed.starts_with("name") && trimmed.contains('=') {
@@ -833,7 +903,7 @@ fn section_shape(changelog: &str) -> Shape {
 /// path is unambiguous and always enters; a basename is a convenience that has to earn its place, and the
 /// same rule governs the ancestor directories the enumeration derives — `crates/` leads to both sides.
 fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
-    let metadata = git_metadata(repo)?;
+    let metadata = cargo_metadata(repo)?;
     // **The prefix comes from cargo, not from the caller's path.** `manifest_path` is canonical, while the
     // live call site passes `PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")`, which renders with its
     // `..` components intact — so stripping `repo.display()` failed for **all eight** members, machinery
@@ -939,7 +1009,7 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
 }
 
 /// `cargo metadata` for the workspace at `repo`, so the corpus above comes from the build.
-fn git_metadata(repo: &Path) -> Result<serde_json::Value, Refusal> {
+fn cargo_metadata(repo: &Path) -> Result<serde_json::Value, Refusal> {
     let out = std::process::Command::new(env!("CARGO"))
         .args(["metadata", "--no-deps", "--format-version", "1"])
         .current_dir(repo)

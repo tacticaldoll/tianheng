@@ -42,6 +42,14 @@ fn run(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
         .args(&args[1..])
         .current_dir(dir)
         .env("CARGO_TERM_COLOR", "never")
+        // The checkout builds in **its own** target directory, which the register spec requires because
+        // this reaction's whole premise is that the binary under test came from the *mutated* tree. It held
+        // by accident: cargo defaults the directory relative to the workspace it resolves from `current_dir`,
+        // so nothing here asked for the isolation and an ambient `CARGO_TARGET_DIR` took it away silently —
+        // one variable in a caller's shell, and every mutation would be judged against a shared build.
+        // Removed rather than set, so the requirement rests on cargo's own default instead of on a second
+        // path this file would then own.
+        .env_remove("CARGO_TARGET_DIR")
         .output()
         .unwrap_or_else(|err| panic!("cannot run {args:?}: {err}"));
     (
