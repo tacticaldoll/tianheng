@@ -22,14 +22,25 @@ pub fn comment_restates_the_declaration(line: &str) -> bool {
 /// `a_comment_naming_every_member_for_another_reason_is_refused`: the question it answers is whether the
 /// members all appear, never why, so a block naming them for a different purpose reads the same as a copy.
 pub fn comment_block_copies_allowlist(block: &str, allowlist: &[String]) -> bool {
-    !allowlist.is_empty()
-        && allowlist.iter().all(|member| {
-            block
-                .split(|character: char| {
-                    !(character.is_ascii_alphanumeric() || character == '_' || character == '-')
-                })
-                .any(|token| token == member)
+    !allowlist.is_empty() && allowlist.iter().all(|member| names(block, member))
+}
+
+/// Whether `block` carries `word` as a **whole token**, under this module's one tokenizing rule.
+///
+/// It lived twice, byte-for-byte: once inside [`comment_block_copies_allowlist`]'s `all`, once as
+/// [`names_the_crate`]'s whole body. Both decide the same question about the same corpus — does this comment
+/// name that identifier — so a change to what counts as a token (admitting `.`, or dropping ascii-only) had
+/// to be made in both or the two would disagree about the same block.
+///
+/// Deliberately **not** shared with `bound_register_parse`'s tokenizers, which look alike and are not: that
+/// reader splits on unicode alphanumerics and admits `-` but not `_`, because it is reading English prose
+/// rather than Rust identifiers. One predicate per question, not one predicate per resemblance.
+fn names(block: &str, word: &str) -> bool {
+    block
+        .split(|character: char| {
+            !(character.is_ascii_alphanumeric() || character == '_' || character == '-')
         })
+        .any(|token| token == word)
 }
 
 /// Refuse a contiguous line-comment block that restates the whole of a declared allowlist.
@@ -75,11 +86,7 @@ pub fn allowlists(boundaries: &[Boundary]) -> Vec<(String, Vec<String>)> {
 
 /// Whether a block names the crate whose allowlist is being checked.
 fn names_the_crate(block: &str, crate_name: &str) -> bool {
-    block
-        .split(|character: char| {
-            !(character.is_ascii_alphanumeric() || character == '_' || character == '-')
-        })
-        .any(|token| token == crate_name)
+    names(block, crate_name)
 }
 
 /// Every contiguous block of `text` that names every member of some declared allowlist.
