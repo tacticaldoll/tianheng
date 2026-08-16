@@ -599,14 +599,19 @@ impl Observer for ModuleHeaderObserver {
         // second slash in it and read as a second capability. Derive both with your own rule —
         // `examples/observer-participant/src/observer.rs` carries one, and is the runnable version of
         // this block.
-        self.subtrees.iter().map(|subtree| BoundDecl::pinned(
-            BoundId::new(format!("house-rules/a-file-nested-below-{name}-is-out-of-reach")),
-            format!("a `.rs` file in a directory below `{subtree}`"),
-            Extent::OutOfReach {
-                because: format!("this participant lists `{subtree}` one level deep and never descends").into(),
-            },
-            format!("a_file_nested_below_{pin}_is_out_of_reach"),
-        )).collect()
+        self.subtrees.iter().map(|subtree| {
+            // The two you owe. `subtree` is yours already; these are not, and this block does not
+            // invent them for you — see the runnable version named above.
+            let (name, pin) = your_own_derivation(subtree);
+            BoundDecl::pinned(
+                BoundId::new(format!("house-rules/a-file-nested-below-{name}-is-out-of-reach")),
+                format!("a `.rs` file in a directory below `{subtree}`"),
+                Extent::OutOfReach {
+                    because: format!("this participant lists `{subtree}` one level deep and never descends").into(),
+                },
+                format!("a_file_nested_below_{pin}_is_out_of_reach"),
+            )
+        }).collect()
     }
 }
 ```
