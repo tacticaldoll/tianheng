@@ -241,8 +241,14 @@ fn require_version_surfaces(
         // **Not routed through `region::toml()`, and this is the exception rather than an omission.**
         // Three readers in this file were converted because their predicates *could* be satisfied by a
         // comment. This one cannot: it compares a whole line, space-stripped, against one literal, so no
-        // spelling of a commented-out line equals it — held by
-        // `a_comment_cannot_satisfy_the_inherit_or_name_predicate` rather than argued here.
+        // spelling of a commented-out line equals it — held through `judge` by
+        // `a_member_whose_only_inherit_line_is_commented_out_is_refused`.
+        //
+        // The direction that turns red if this reader is converted anyway is
+        // `an_inherit_line_with_a_glued_comment_still_inherits`, and it has been run against the conversion.
+        // A first attempt cited a direction that asserted the same fact against **its own copy** of this
+        // predicate and called nothing here — a restatement with `#[test]` on it, which no edit to this
+        // function could turn.
         //
         // Converting it would be a **narrowing**, not a widening. Measured: `version.workspace = true#c` is
         // a legal TOML comment, and `region`'s token-start rule — which exists so a `"https://…#frag"`

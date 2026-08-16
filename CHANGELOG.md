@@ -904,6 +904,20 @@ them.
 
 ### Self-governance
 
+- **A defence was written as a restatement of the rule it defends.** The direction protecting two raw
+  manifest readers held its own copy of both predicates and called nothing in the gate — five string
+  assertions about themselves, which no edit to the product could turn red. Two sites cited it as a guard.
+
+  The decision it recorded is right and survives: converting those readers would **narrow** them, because
+  `version.workspace = true#c` is legal TOML that `region`'s token-start rule reads as content. What was
+  wrong is that the artifact recording the measurement was a copy of the rule rather than a reader of it.
+
+  Replaced by two directions through `judge`, and the one that matters was run against the change it exists
+  to prevent: converting the inherit reader to `region::toml()` turns it red. The cheap way to tell the two
+  apart, worth writing down because this is the second time it has been needed — **before writing a
+  direction, ask which edit to the product makes it red. If the answer is none, it is documentation with
+  `#[test]` on it.**
+
 - **Three CHANGELOG and BACKLOG corrections were described in commit bodies and never written.** A scripted
   edit matched its anchor loosely — an em dash where the script expected a colon, a sentence that had grown a
   clause — and returned the text unchanged. Nothing failed: the staging step found no diff, the commit
@@ -925,7 +939,7 @@ them.
   release gate, over text that declares nothing.
 
   The three readers a comment could satisfy go through `kanhe::region` now, which this file had imported
-  nowhere. Two are deliberately left raw and the reason is pinned rather than argued: the inherit check
+  nowhere. Two are deliberately left raw, and what makes them safe is held through `judge`: the inherit check
   compares a whole space-stripped line against one literal and the package-name read strips a `name` prefix,
   so no spelling of a comment satisfies either. Converting them would **narrow**, not widen —
   `version.workspace = true#c` is a legal TOML comment that `region`'s token-start rule reads as content, so
