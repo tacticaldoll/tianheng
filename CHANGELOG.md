@@ -904,6 +904,30 @@ them.
 
 ### Self-governance
 
+- **A boundary's reason asserted structure its own rule cannot see, in the text most designed to be
+  imitated.** 漏刻's `because` said the hot path depends on 璇璣 only *with xingbiao audit-gated for CI probe
+  coverage*. Its rule is `restrict_dependencies_to(["xuanji", "xingbiao"])`, which reads the declared
+  dependency set — it cannot tell a hot path from an audit path, and it observes an optional edge exactly as
+  it observes an ordinary one, which `crate_dependency`'s own matrix pins as *optional/version/inherited
+  included*.
+
+  **Demonstrated, not argued**: removing `optional = true` from louke's manifest leaves the entire
+  self-governance suite green, `tianheng_governs_itself` included, while that clause becomes false. That is
+  the test `AGENTS.md` sets — *a reason must never assert structure the law does not react to* — and this
+  reason failed it.
+
+  It matters more here than in an ordinary comment because it projects verbatim into `AGENTS.self-law.md`,
+  the Layer-2 text whose stated job is to condition an agent's continuations by example. An open loop was
+  being modelled where it is most copied. The sibling reason one boundary down already gets this right by
+  saying *"direct normal edges"* — naming exactly what its own rule sees — which is what makes this a miss
+  rather than a house style.
+
+  Trimmed to the perimeter, and **not** re-declared as a boundary: no supported observation surface
+  expresses a feature-gated edge. The hot-path/audit split is Layer 3 and already lives in louke's own
+  `[features]` comment. The property itself was never unguarded — CI compiles the audit-off configuration
+  through `cargo clippy -p louke` and `cargo test -p louke` — so what was open was the law's claim about
+  itself, not the invariant.
+
 - **Two further review rounds closed the last four findings, and one of them corrected a record.**
 
   **The counted-offset detector read four unit words where its requirement names none.** `positional_reference`

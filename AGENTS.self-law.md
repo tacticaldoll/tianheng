@@ -49,7 +49,7 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `louke` (crate)
 
-> 漏刻 is the runtime dimension: hot path depends on 璇璣 only, with xingbiao audit-gated for CI probe coverage. 三儀 ⊥ 三儀: naming no sibling dimension, it reacts in prod independently of the 天衡 shell
+> 漏刻 is the runtime dimension: it depends on 璇璣 and 星表 only. 三儀 ⊥ 三儀: naming no sibling dimension, it reacts in prod independently of the 天衡 shell
 
 - **rule**: restrict dependencies to (only: xuanji, xingbiao)
 - **kind**: crate · **severity**: enforce

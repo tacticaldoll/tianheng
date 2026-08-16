@@ -81,10 +81,20 @@ pub fn constitution() -> Constitution {
         .boundary(
             CrateBoundary::crate_("louke")
                 .restrict_dependencies_to(["xuanji", "xingbiao"])
+                // Trimmed to the perimeter. It used to say the hot path depends on 璇璣 only *with
+                // xingbiao audit-gated*, and this rule sees neither half: `restrict_dependencies_to`
+                // reads the declared dependency set, which cannot tell a hot path from an audit path and
+                // observes an optional edge exactly as it observes an ordinary one — pinned by
+                // `crate_dependency`'s "optional/version/inherited included". Delete `optional = true`
+                // from louke's manifest and this boundary stays green while that clause turns false,
+                // which is the test AGENTS.md sets: a reason must never assert structure the law does not
+                // react to. The feature split is Layer 3 and already lives in louke's own `[features]`
+                // comment; no supported observation surface expresses a feature-gated edge, so it is not
+                // declarable here either. The sibling below already does this correctly by saying "direct
+                // normal edges" — naming exactly what its own rule sees.
                 .because(
-                    "漏刻 is the runtime dimension: hot path depends on 璇璣 only, with xingbiao \
-                     audit-gated for CI probe coverage. 三儀 ⊥ 三儀: naming no sibling dimension, \
-                     it reacts in prod independently of the 天衡 shell",
+                    "漏刻 is the runtime dimension: it depends on 璇璣 and 星表 only. 三儀 ⊥ 三儀: \
+                     naming no sibling dimension, it reacts in prod independently of the 天衡 shell",
                 ),
         )
         .boundary(
