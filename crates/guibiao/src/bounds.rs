@@ -25,6 +25,20 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "source_rule_flags_every_git_source_outside_a_registry_or_path_allowlist",
         ),
+        // --- crate-dependency-boundary ---
+        BoundDecl::pinned(
+            BoundId::new(
+                "crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound",
+            ),
+            "a dependency edge declared `optional = true`, reachable only when a feature enables it",
+            Extent::Reached(Reached::OverReacts {
+                because: "the rules read the declared dependency set, and cargo reports an optional edge in \
+                          it like any other, so an edge confined to a non-default feature is governed as \
+                          though it were unconditional — no rule can express *only when that feature is on*"
+                    .into(),
+            }),
+            "an_optional_dependency_edge_is_observed_as_a_declared_one",
+        ),
         // --- external-crate-confinement ---
         BoundDecl::pinned(
             BoundId::new(

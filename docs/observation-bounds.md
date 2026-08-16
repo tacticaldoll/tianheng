@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**15 of 84 declared bounds have no pinning test.** That figure is the register's
+**15 of 85 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -46,6 +46,14 @@ uninvoked macro — because the scan read only the form of a line. Test-ness is 
 harness enumeration, which registers none of those. The weakness survives only in the source-text
 fallback used where no manifest exists, which the register spec describes.
 
+
+## crate-dependency-boundary
+
+### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
+
+> that edge is governed exactly as an unconditional one, a stated bound: the rules read the **declared** dependency set, cargo reports an optional edge in that set like any other, and no rule can express *depends on this only when that feature is on*. A boundary therefore cannot say that an edge is confined to a non-default feature, and a reason that claims it would be asserting structure no rule observes. Where that distinction matters, the reaction is a build of the feature-off configuration — outside this capability — and the split belongs in the manifest's own `[features]` prose
+
+- **pinned by**: `an_optional_dependency_edge_is_observed_as_a_declared_one`
 
 ## crate-source-boundary
 

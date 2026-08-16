@@ -64,6 +64,18 @@ selected one are out of scope.
 - **WHEN** the target crate declares only dependencies that resolve to workspace paths
 - **THEN** the system reports no external-dependency violation for that boundary
 
+#### Scenario: An optional dependency edge is observed as a declared one — a stated bound
+
+- **WHEN** the target crate declares a dependency with `optional = true`, reachable only when some feature
+  enables it, and a dependency rule governs the crate
+- **THEN** that edge is governed exactly as an unconditional one, a stated bound: the rules read the
+  **declared** dependency set, cargo reports an optional edge in that set like any other, and no rule can
+  express *depends on this only when that feature is on*. A boundary therefore cannot say that an edge is
+  confined to a non-default feature, and a reason that claims it would be asserting structure no rule
+  observes. Where that distinction matters, the reaction is a build of the feature-off configuration —
+  outside this capability — and the split belongs in the manifest's own `[features]` prose
+- **PINNED-BY** `an_optional_dependency_edge_is_observed_as_a_declared_one`
+
 #### Scenario: Dev and build dependencies are ignored by default
 
 - **WHEN** the target crate declares a registry dependency only under `[dev-dependencies]` or `[build-dependencies]` and the boundary selects the default normal kind
