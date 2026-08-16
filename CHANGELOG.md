@@ -22,6 +22,8 @@ them.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-16
+
 ### Documentation
 
 - **A standalone-dimension adopter can now read a dimension's declared bounds through the contract that
@@ -4488,7 +4490,8 @@ adopter-written builder is a drop-in swap (see **Compatibility**).
   the 天衡 (`tianheng`) shell that composes them into one `check` with a `0` / `1` / `2` exit
   contract and `--format json` / `sarif` projections.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/tacticaldoll/tianheng/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/tacticaldoll/tianheng/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tacticaldoll/tianheng/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/tacticaldoll/tianheng/compare/v0.2.2...v0.2.3
