@@ -246,7 +246,8 @@ fn release_spine(
         }
         State::Snapshot
     } else {
-        let released = semver(&release_version).expect("the history holds only well-formed versions");
+        let released =
+            semver(&release_version).expect("the history holds only well-formed versions");
         match version_parts.cmp(&released) {
             std::cmp::Ordering::Less => {
                 return Err(violation(format!(

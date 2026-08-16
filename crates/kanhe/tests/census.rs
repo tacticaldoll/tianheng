@@ -208,7 +208,8 @@ fn a_word_form_at_one_hundred_or_above_is_a_stated_bound() {
         phrase: "{} bounds across {} capabilities",
         figures: vec![99, 24],
     }];
-    let scratch = std::env::temp_dir().join(format!("tianheng-census-words-{}", std::process::id()));
+    let scratch =
+        std::env::temp_dir().join(format!("tianheng-census-words-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
     xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
 
