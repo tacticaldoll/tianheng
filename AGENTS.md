@@ -508,7 +508,8 @@ cargo fmt --all --check
 TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items
 cargo deny check
-npx --yes @fission-ai/openspec@1.4.1 validate --specs --strict
+npm ci                                     # the pinned validator, reproduced from the committed lock
+npx --no-install openspec validate --specs --strict
 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test whitespace_hygiene
 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test reference_integrity
 TIANHENG_EXAMPLES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p shengmo --test examples_suite

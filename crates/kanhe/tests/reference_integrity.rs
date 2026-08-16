@@ -110,8 +110,12 @@ enum Match {
     Prefix,
 }
 
-const FORMATS: [(&str, Match, Prose); 13] = [
+const FORMATS: [(&str, Match, Prose); 14] = [
     (".md", Match::Extension, Prose::Whole),
+    // JSON admits no comment syntax at all, so there is no prose here to carry a reference — `Prose::None`
+    // is the honest classification rather than a narrowing. The tracked members are the pinned validator's
+    // `package.json` and the `package-lock.json` reproducing its tree.
+    (".json", Match::Extension, Prose::None),
     (".rs", Match::Extension, Prose::LineComment("//")),
     (".toml", Match::Extension, Prose::LineComment("#")),
     (".sh", Match::Extension, Prose::LineComment("#")),

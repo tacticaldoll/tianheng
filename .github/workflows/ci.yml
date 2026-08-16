@@ -61,8 +61,15 @@ jobs:
           cargo fmt --all --check
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items
       - name: every spec validates
+        # `npm ci` rather than `npx --yes @fission-ai/openspec@1.4.1`. The exact-version pin was real — npm
+        # forbids republishing a version — but it bound only the direct package, while `npx` resolved the
+        # TRANSITIVE tree fresh on every run with no lock and no integrity check. So a newly published
+        # transitive release executed here, on a checkout of the release branch, and in every contributor's
+        # local Definition of Done. The committed lock pins all 80 resolved packages by integrity digest, and
+        # `--no-install` refuses to reach the network if the tree is not the one the lock names.
         run: |
-          npx --yes @fission-ai/openspec@1.4.1 validate --specs --strict
+          npm ci
+          npx --no-install openspec validate --specs --strict
       - name: observation bounds are declared and defended
         run: |
           TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register
