@@ -19,7 +19,7 @@ disagree.
 ## Not 校讎, and not one of the 三儀
 
 校讎 already has a referent here: it is one of the **三司** and names the *amendment flow* — the
-steward routing, the OpenSpec lifecycle. Taking a word that already has a referent is the misnaming
+steward routing, and the amendment itself. Taking a word that already has a referent is the misnaming
 this crate's siblings exist to end, and a first draft of this crate did exactly that. 勘合 belongs
 to neither vocabulary: it measures nothing, so it is no 儀, and it administers nothing, so it is no
 司.

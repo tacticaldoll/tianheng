@@ -719,6 +719,18 @@ consumer for an undemonstrated deduplication.
   one-sided scan — a smaller change than the sibling entry above, filed alongside it rather than folded into
   this window's fix because both were found by the same pass and neither has a live instance forcing it.
 
+- ~~**WATCH: `AGENTS.md`'s OpenSpec lifecycle section describes a process with no instances.**~~
+  **CLOSED** in the open window via `fix/declare-the-openspec-adoption-mode`. The diagnosis in the entry
+  below was the second of three, and the third is the one that was acted on. Not *unrealized aspiration*
+  and not *prose contradicted by practice*: **an adoption decision made from the beginning and written
+  down nowhere.** OpenSpec offers a `specs` half and a `changes` half; this project uses the first, has
+  never used the second, and `openspec/config.yaml` declared neither. So `AGENTS.md` described the mode not
+  chosen, and a reader had nothing telling them it was a choice. The call is now in `PROJECT.md`'s
+  Decisions with what would change it, and `AGENTS.md` states how a capability change is worked in the mode
+  actually in use. `openspec/changes/archive/.gitkeep` **stays** — its job is now optionality rather than
+  archive hygiene, so adopting the other half needs no exception — and nothing enforces the mode,
+  deliberately, since a check that fired on a change directory would prevent that adoption.
+
 - **WATCH: `AGENTS.md`'s OpenSpec lifecycle section describes a process with no instances.** *Class:* WATCH.
   *Observed pressure:* found while deciding the entry above — its four phases, commit-type conventions and
   archive-pruning guardrail are written in the present indicative ("A capability change **moves through**

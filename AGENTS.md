@@ -75,37 +75,38 @@ implementation requires the entry to name its observation source, risk, compatib
 authority in `BACKLOG.md`; a breaking candidate does not promise a minor release until its recorded
 trigger fires.
 
-## OpenSpec lifecycle
+## Working a capability change — OpenSpec in `specs` mode
 
-A capability change moves through OpenSpec: **explore → propose → apply → sync**. Each committed
-phase is self-describing and follows *Commits & PRs* below. Propose and sync are documentation
-changes — `docs(openspec): propose <change>` and `docs(openspec): sync <change>` — while apply names
-the actual product effect (`feat(xuanji)!: …`, `fix(hunyi): …`, `refactor(guibiao)!: …`, and so on).
-The lifecycle phase stays explicit without pretending that `propose` / `apply` / `sync` are
-Conventional Commit types:
+**This project uses OpenSpec's `specs` half and not its `changes` half**, and that is a chosen mode
+rather than a stage on the way to something. `openspec/specs/*` is the per-capability requirement
+truth; there is no proposal workflow, no change directory, and no separate lifecycle vocabulary.
+`PROJECT.md`'s Decisions records why, and what would change it.
 
-1. **explore** — investigate and shape intent; write no feature code outside a change.
-2. **propose** — write `proposal.md` / `design.md` / `specs/**` / `tasks.md`.
-3. **apply** — implement against the delta specs; check off a task only after verification (the
-   Definition of Done below).
-4. **sync** — merge the delta into `openspec/specs/*` (agent-driven).
+So a capability change is one ordinary piece of work:
 
-At sync, every new or materially changed scenario must carry its observation evidence in the same
-change: either name the existing reaction or repository check in the change's design/tasks and PR `## Verification`, or
-add a new guard and record the required negative run. If a property cannot fail because the data model
-constructs it, state that construction in requirement prose rather than inventing a scenario. A scenario
-with neither form of evidence does not enter the main specs.
+1. **Read** the capability's spec, and the law projection the SOP above names.
+2. **Write the requirement onto its spec** — a new or amended `### Requirement:` and its
+   `#### Scenario:`s, edited in place.
+3. **Write the reaction that answers it**, in the same branch.
+4. **Land both as one squash pull request**, whose subject names the product effect
+   (`feat(xuanji)!: …`, `fix(hunyi): …`, `refactor(guibiao)!: …`) per *Commits & PRs* below.
 
-A completed change is **not** retained as a persistent dated copy. The OpenSpec CLI folds sync
-into its `archive` command, whose default *moves* the change under
-`changes/archive/YYYY-MM-DD-<name>/`; once the delta is synced into the specs, Tianheng removes
-**that dated copy**, while **keeping the `changes/archive/` directory itself as a tracked empty
-placeholder (a single `.gitkeep`)** — the archive home is stable but never accumulates
-completed-change scaffolding. Its record then lives in the main specs and git history. (Pruning
-the dated copy each sync is the guardrail against the archive silently accumulating those copies;
-that one placeholder also keeps `openspec/changes/` present, so no second `.gitkeep` is needed.)
-These lifecycle commits never land on `main` individually — they squash up per *Branching and
-release* below.
+The spec and the reaction move together **because they are one change**, not because a sync step
+merges them later. A pull request that edits a requirement and ships no reaction for it is the thing
+this arrangement exists to make visible.
+
+**Every new or materially changed scenario carries its observation evidence in that same pull
+request**: either name the existing reaction or repository check in the PR's `## Verification`, or
+add a new guard and record the required negative run. If a property cannot fail because the data
+model constructs it, state that construction in requirement prose rather than inventing a scenario.
+A scenario with neither form of evidence does not belong in a spec.
+
+`openspec/changes/` stays present, empty but for `archive/.gitkeep`. **Its job is optionality**: the
+directory exists so adopting the `changes` half later needs no setup and no exception, and the one
+placeholder is what keeps `openspec/changes/` itself tracked. It is not evidence that the workflow is
+in use — nothing has ever been written there. Nothing enforces the mode either, deliberately: a check
+that failed when a change directory appeared would prevent the adoption the placeholder is held open
+for.
 
 ## Bind a claim to its measurement — construction where you can, a reaction where you must
 
