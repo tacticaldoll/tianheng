@@ -243,6 +243,23 @@ decoration: the sentence it sat in said the same thing without it, right up unti
 true. Where the count matters, produce it and let the producing document carry it; where it does not, write
 the property and leave the number out.
 
+**A line count is the sharpest case of this and gets named rather than left to the general rule.** It counts
+nothing the repository enumerates, it moves on every edit to its subject — a rename, a rewrap, a comment —
+and it is almost always decoration by the test above: a sentence naming three files, their three lengths, and
+the property they share says exactly what the same sentence says without the three lengths. Measured when
+this was written: one live instance in a tracked document, correct at that moment and held by nothing — and
+removing it took one clause out of a sentence that still means what it meant. The instance is not quoted
+here with its figures, because an example carrying live numbers is the thing it warns against. **A live line count is not written.** A line count of something that is *gone* is a record
+and is fine — `repository-checks`'s `1562 lines of it — a figure measured when that shell was deleted and
+standing as a record of that moment, not a census` is the form: it says when it was taken and that the set
+it counted no longer exists, so nothing can drift out from under it.
+
+**No detector is proposed, and that is a decision rather than a gap.** Telling a live count from a record is
+reading what a sentence means, which is the prose instrument this repository designed, measured three times
+and rejected. The decidable alternative — refuse every line count in a tracked document — would refuse the
+`1562` above, which is correct and useful. So this half stays a rule the reviewer holds, and the sweep that
+finds its violations is a `git grep` run deliberately, not a reaction that runs itself.
+
 Two shapes are outside a census by construction, and stating them is the point. A figure in a **record** — a
 commit message, a dated changelog section, `docs/history/` — is a measurement of the moment it was taken and
 stands as one; only a live document owes a produced figure. The rule reaches commit messages otherwise, and

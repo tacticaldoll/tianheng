@@ -904,6 +904,32 @@ them.
 
 ### Self-governance
 
+- **The second defect queue is gone, and with it the convention that kept making one.** `BACKLOG.md` promised
+  every sweep its own dated `docs/audit/*.md` file. That was two mechanisms for one job: a closed finding's
+  substance is its closing PR and this file, an open one is a `READY-PATCH` or `WATCH` entry with the
+  observation source and trigger `BACKLOG.md` already asks for, and the separate file held a second copy of
+  both.
+
+  It also regenerated a hazard each campaign, which is what made this worth removing rather than tidying. The
+  queue written one commit earlier carried **hand-written line counts of live functions**, held by nothing —
+  produced by the same review round that was removing that exact class elsewhere in the tree.
+
+- **A live line count is not written, and the rule now names it.** `AGENTS.md` already said a count of
+  something this repository does not produce is not written; a line count is the sharpest case, because it
+  counts nothing the repository enumerates and moves on every edit to its subject — a rename, a rewrap, a
+  comment. A sweep found one live instance in a tracked document: correct at that moment, held by nothing,
+  and decoration by the rule's own test — removing it took one clause out of a sentence that still means what
+  it meant.
+
+  A line count of something **gone** stays fine and the rule says so, with the tree's own example as the
+  form: `repository-checks`'s figure for the deleted shell library says when it was taken and that the set no
+  longer exists, so nothing can drift out from under it.
+
+  **No detector, deliberately.** Telling a live count from a record is reading what a sentence means — the
+  prose instrument this repository designed, measured three times and rejected — while the decidable
+  alternative, refusing every line count, would refuse the correct record above. This half stays a rule the
+  reviewer holds and a `git grep` run on purpose. Recorded so the next reader does not re-derive the choice.
+
 - **Two independent full-campaign reviews were merged, and their intersection was empty.** One was run
   here; the other was contributed as a 27-agent parallel pass. Neither found anything the other found — 7
   findings from one, 4 from the other — which is the most useful thing either produced, and the reason both
