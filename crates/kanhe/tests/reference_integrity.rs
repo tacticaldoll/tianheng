@@ -619,6 +619,22 @@ fn offences_in(
             // crates inside this window, in the document the CHANGELOG advertises to adopters as the
             // provenance authority. Fourteen of the directory's fifteen path references already resolved,
             // so the blindness protected nothing and cost the one thing it was covering.
+            //
+            // **The exemption keys on *dated*, and dating is the freeze act — that is deliberate, and it is
+            // the half a reader is most likely to challenge.** The version currently being prepared already
+            // carries its date: `chore(release): prepare X.Y.Z` cuts `[Unreleased]` into
+            // `## [X.Y.Z] - DATE`, and `release-coherence` then *requires* `[Unreleased]` to be empty in the
+            // release-ready state — so from that commit until the release, every new entry is written into a
+            // dated section this scan skips. The exemption is therefore widest exactly while the section is
+            // still being edited.
+            //
+            // Kept as written, because the alternative reads worse: making the current version an exception
+            // means this scan asking `release-coherence` which version is unreleased, so a reference verdict
+            // would start depending on the release spine and a shallow checkout would move it. Measured on
+            // the `0.5.0` section at the moment this was written — 2,572 lines, 41 distinct references
+            // (22 prefixed paths, 19 bare basenames), **all resolving** — so the exposure is real and the
+            // cost of it is not. Filed as WATCH in `BACKLOG.md` with the trigger that would change the answer:
+            // a stale reference found inside the section of a version not yet released.
             if in_dated_section {
                 continue;
             }

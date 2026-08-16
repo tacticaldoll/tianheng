@@ -700,6 +700,26 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **WATCH: the reference gate's dated-section exemption is widest while the section is still being
+  written.** *Observed pressure:* the exemption keys on a section being *dated*, and dating is the freeze
+  act — `chore(release): prepare X.Y.Z` cuts `[Unreleased]` into `## [X.Y.Z] - DATE`, after which
+  `release-coherence` **requires** `[Unreleased]` to be empty in the release-ready state. So from the prepare
+  commit until the release, every new CHANGELOG entry is written into a dated section
+  `crates/kanhe/tests/reference_integrity.rs` skips, and that section is the largest and newest in the file.
+  *Observation source:* the `[0.5.0]` section measured at 2026-08-16 — 2,572 lines carrying 41 distinct
+  in-repository references (22 prefixed paths, 19 bare basenames), resolved by hand, **all resolving**. So
+  the exposure is real and has cost nothing yet. *Current reaction or bound:* none for that window; the
+  reasoning is recorded beside the `in_dated_section` skip rather than left for a reader to rediscover.
+  *Risk:* bounded and self-limiting — a stale path written into the current version's section survives only
+  until someone reads it, and the same paths are usually named in the code the entry describes, which the
+  gate does read. *Why not simply narrow it:* making the current version an exception means this scan asking
+  `release-coherence` which version is unreleased, so a reference verdict would begin to depend on the
+  release spine and a shallow checkout would move it — trading a bounded blind spot for a verdict that
+  varies with checkout depth. *Promotion trigger:* a stale reference found inside the section of a version
+  **not yet released** — the 41 above are the control and cannot stand as evidence for themselves. **Not
+  fired.** *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
+  `openspec/specs/reference-integrity/spec.md`.
+
 - **WATCH: `PROJECT.md` restates facts a generated projection already holds, and states others nothing
   holds.** *Observed pressure:* three consecutive attempts at one paragraph were withdrawn, all failing the
   same way — asserting a location or an absence without sweeping for it. Classifying that file's claims
