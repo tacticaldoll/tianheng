@@ -22,26 +22,42 @@ judgment regardless of its parent process.
 - **WHEN** a required governance document is absent and the process environment names a smaller document set
 - **THEN** the reaction still fails, naming the absent required document
 
-### Requirement: Fixture policy narrowing SHALL be explicit and confined
+### Requirement: A fixture corpus SHALL be supplied as an argument, never as a narrowed policy
 
-The gate SHALL accept an explicit fixture-only governance-document set when judging a repository other than
-Tianheng's own physical workspace. The set SHALL be non-empty. The option SHALL be refused on the real workspace,
-and an unreadable or incomplete input SHALL fail, naming what could not be read.
+A direction judging a repository other than Tianheng's own SHALL supply that repository's corpus and tracked
+set **as arguments to the judgement**, so a fixture and the real workspace run the same code over different
+inputs. The required governance-document set SHALL NOT be narrowable at all — not by an option, not by the
+environment, not for a fixture.
 
-#### Scenario: The zero-corpus fixture narrows its prerequisite set
+**This requirement was rewritten to describe what the port does.** It used to require the gate to *accept an
+explicit fixture-only governance-document set*, refused on the real workspace, with an unreadable or surplus
+input naming what could not be read — a CLI-shaped option the shell-era gate carried. The shell-to-Rust
+migration removed it and gave the fixtures a stronger shape instead: `offences_in` takes the corpus root, the
+tracked paths and the corpus as parameters, and `GOVERNANCE_DOCUMENTS` is a compile-time `const` no caller can
+reach. The three scenarios below replace three that described the option's behaviour, which nothing had
+implemented for two windows.
 
-- **WHEN** the failure matrix explicitly supplies a non-empty fixture set for a throwaway repository
-- **THEN** the gate uses it, allowing the later zero-inspected-files refusal to be observed
+The direction the old wording was protecting survives, and is stronger: a narrowing that cannot be expressed
+cannot be requested on the real workspace, so the refusal it demanded is unreachable by construction rather
+than by a check.
 
-#### Scenario: Fixture policy targets the real workspace
+#### Scenario: A fixture corpus is judged by the same code as the real workspace
 
-- **WHEN** fixture-only policy narrowing is requested for Tianheng's own physical workspace
-- **THEN** the reaction fails rather than weakening the required set
+- **WHEN** a direction supplies a throwaway repository's root, tracked set and corpus to the judgement
+- **THEN** it is evaluated by the same function the real workspace is, so the fixture demonstrates the
+  reaction rather than a copy of it
 
-#### Scenario: Fixture policy is empty, surplus, or an argument is unknown
+#### Scenario: The required governance-document set cannot be narrowed
 
-- **WHEN** the fixture option has no non-empty value or has surplus values, or an unknown argument is supplied
-- **THEN** the reaction fails, naming the invalid invocation
+- **WHEN** any caller, on any repository, attempts to supply a smaller required governance-document set
+- **THEN** there is no parameter, option or environment variable that carries one; the set is a compile-time
+  constant, so the narrowing this requirement once refused is not expressible
+
+#### Scenario: A fixture corpus that inspects nothing is refused
+
+- **WHEN** the supplied corpus yields no inspectable source
+- **THEN** the judgement fails rather than reporting clean, because a verdict over nothing is not a verdict —
+  the refusal the fixture-only option existed to make observable
 
 ### Requirement: Tracked checkout content is the reference evidence
 
