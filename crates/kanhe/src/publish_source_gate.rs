@@ -546,23 +546,40 @@ impl Drop for Scratch {
 /// nothing and the round trip fail, "reporting the mechanism broken when only the harness was". This function
 /// sits under release-tag signature verification, in front of the one irreversible act, where a refusal
 /// invented by the harness is exactly as costly as a miss.
-fn pipe_into(mut child: std::process::Child, payload: &str) -> bool {
+fn pipe_into(child: std::process::Child, payload: &str) -> bool {
+    deliver_and_reap(child, payload).is_some_and(|out| out.status.success())
+}
+
+/// Write `payload` to `child`'s stdin, close it, and **reap the child whichever way the write went**.
+///
+/// `None` is *the child did not complete successfully as a delivery* — the write failed, or the wait did.
+/// The output is returned so a caller needing the child's stdout does not have to re-implement this.
+///
+/// **That re-implementation is why this exists.** `sign_probe` hand-rolled the same three steps and diverged
+/// on the failure path: it returned on a failed `write_all` **before** dropping stdin and before any wait,
+/// leaving an `ssh-keygen` unreaped — while [`pipe_into`]'s own comment claimed reaping on every path. One
+/// of the two copies was the counterexample to the other's documentation. Two callers, one implementation,
+/// and the reap is now unforgettable rather than remembered twice.
+///
+/// `wait_with_output` rather than `wait`: it drains the child's pipes, so a caller that pipes stdout cannot
+/// deadlock against a full buffer — the same hazard this file already handles with a drain thread where the
+/// conversation is two-way.
+fn deliver_and_reap(mut child: std::process::Child, payload: &str) -> Option<std::process::Output> {
     use std::io::Write;
     let delivered = match child.stdin.as_mut() {
         Some(stdin) => stdin.write_all(payload.as_bytes()).is_ok(),
         None => false,
     };
     drop(child.stdin.take());
-    let waited = child.wait().map(|status| status.success()).unwrap_or(false);
-    // Reaped either way — the child is waited on before the delivery result is consulted, so a failed write
-    // cannot leave it behind.
-    delivered && waited
+    let out = child.wait_with_output().ok();
+    // Reaped either way — the wait happens before the delivery result is consulted, so a failed write
+    // cannot leave the child behind.
+    if delivered { out } else { None }
 }
 
 fn sign_probe(key: &Path, scratch: &Path) -> bool {
-    use std::io::Write;
     let sig = scratch.join("probe.sig");
-    let Ok(mut child) = Command::new("ssh-keygen")
+    let Ok(child) = Command::new("ssh-keygen")
         .args(["-Y", "sign", "-n", "git", "-f"])
         .arg(key)
         .stdin(std::process::Stdio::piped())
@@ -575,13 +592,7 @@ fn sign_probe(key: &Path, scratch: &Path) -> bool {
     // The payload must reach stdin before the child is waited on. Spawning and waiting immediately closes
     // stdin at once, so `ssh-keygen` signs the EMPTY payload and the round trip then fails against "probe" —
     // reporting the mechanism broken when only the harness was.
-    if let Some(stdin) = child.stdin.as_mut() {
-        if stdin.write_all(b"probe").is_err() {
-            return false;
-        }
-    }
-    drop(child.stdin.take());
-    let Ok(out) = child.wait_with_output() else {
+    let Some(out) = deliver_and_reap(child, "probe") else {
         return false;
     };
     if !out.status.success() || std::fs::write(&sig, &out.stdout).is_err() {

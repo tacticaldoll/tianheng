@@ -88,6 +88,23 @@ impl Source {
         }
     }
 
+    /// Executed manifest text — a `Cargo.toml` or a `Cargo.lock`. TOML comments begin with `#`.
+    ///
+    /// **A separate accessor from [`shell`](Self::shell) though the marker is identical**, because the call
+    /// site is what has to be right: a manifest reader asking for `shell()` reads as a mistake, and the next
+    /// person to widen one language's rule should not silently widen the other's. They agree today by
+    /// coincidence of syntax, not by sharing a decision.
+    ///
+    /// The token-start rule matters more here than the marker does: a manifest carries `"https://…"` in
+    /// `repository`, `homepage` and `documentation`, and cutting at the first `#` would truncate any such
+    /// value that carried a fragment.
+    pub fn toml(&self) -> Executed<'_> {
+        Executed {
+            text: &self.0,
+            comment: "#",
+        }
+    }
+
     /// Everything above the first `##` heading.
     ///
     /// Where a generated document warns, and where a shell gate declares its contract. A warning below the first
