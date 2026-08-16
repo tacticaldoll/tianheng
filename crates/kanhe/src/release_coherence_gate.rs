@@ -846,7 +846,7 @@ fn section_shape(changelog: &str) -> Shape {
 /// path is unambiguous and always enters; a basename is a convenience that has to earn its place, and the
 /// same rule governs the ancestor directories the enumeration derives — `crates/` leads to both sides.
 fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
-    let metadata = git_metadata(repo)?;
+    let metadata = cargo_metadata(repo)?;
     // **The prefix comes from cargo, not from the caller's path.** `manifest_path` is canonical, while the
     // live call site passes `PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")`, which renders with its
     // `..` components intact — so stripping `repo.display()` failed for **all eight** members, machinery
@@ -952,7 +952,7 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
 }
 
 /// `cargo metadata` for the workspace at `repo`, so the corpus above comes from the build.
-fn git_metadata(repo: &Path) -> Result<serde_json::Value, Refusal> {
+fn cargo_metadata(repo: &Path) -> Result<serde_json::Value, Refusal> {
     let out = std::process::Command::new(env!("CARGO"))
         .args(["metadata", "--no-deps", "--format-version", "1"])
         .current_dir(repo)
