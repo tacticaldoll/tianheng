@@ -634,12 +634,37 @@ fn require_lock_versions(
     version: &str,
 ) -> Result<(), Refusal> {
     let lock = read(repo, "Cargo.lock")?;
-    let mut versions: BTreeMap<String, String> = BTreeMap::new();
+    // **Every entry under a name, and whether each carries a `source`.** A single-valued map keyed on the
+    // name kept the first entry and dropped the rest, which is only right while no name appears twice — and
+    // two entries under one name is ordinary in a lock file, either as two versions of one crate or as a
+    // workspace member sharing a name with something from a registry. Nothing here stated that premise, and
+    // `source` is what tells the two apart: a workspace member has none, everything fetched has one.
+    let mut entries: BTreeMap<String, Vec<(String, bool)>> = BTreeMap::new();
     let mut name = String::new();
+    let mut version_of: Option<String> = None;
+    let mut sourced = false;
+    // A block ends at the next `[[package]]` or at end of input, so the record is filed on the boundary
+    // rather than when its version is read — `source` is written after `version` in cargo's own output, and
+    // filing early would record every entry as source-less.
+    let close = |name: &mut String,
+                 version_of: &mut Option<String>,
+                 sourced: &mut bool,
+                 entries: &mut BTreeMap<String, Vec<(String, bool)>>| {
+        if let (false, Some(found)) = (name.is_empty(), version_of.take()) {
+            entries
+                .entry(name.clone())
+                .or_default()
+                .push((found, *sourced));
+        }
+        name.clear();
+        *sourced = false;
+    };
     for line in lock.lines() {
         let trimmed = line.trim();
         if trimmed == "[[package]]" {
-            name.clear();
+            close(&mut name, &mut version_of, &mut sourced, &mut entries);
+        } else if trimmed.starts_with("source") && trimmed.contains('=') {
+            sourced = true;
         } else if trimmed.starts_with("name") && trimmed.contains('=') {
             // An unreadable name defaulted to the empty string, which the `!name.is_empty()` guard below
             // then read as *no package here* — so that entry's version never entered the map and the
@@ -657,7 +682,7 @@ fn require_lock_versions(
         } else if trimmed.starts_with("version") && trimmed.contains('=') && !name.is_empty() {
             match quoted_value(trimmed) {
                 Quoted::Value(value) => {
-                    versions.entry(name.clone()).or_insert(value);
+                    version_of = Some(value);
                 }
                 Quoted::Unreadable => {
                     return Err(cannot_judge(format!(
@@ -669,6 +694,8 @@ fn require_lock_versions(
             }
         }
     }
+    close(&mut name, &mut version_of, &mut sourced, &mut entries);
+
     for (path, text) in manifests {
         // Skipping an unnameable package left its `Cargo.lock` version unchecked while this function still
         // returned `Ok` — and nothing above proves every entry parses, only that the list is non-empty.
@@ -686,7 +713,24 @@ fn require_lock_versions(
                 )));
             }
         };
-        match versions.get(&package) {
+        // A workspace member is the entry with no `source`. Selecting by name alone would compare against a
+        // registry entry that merely shares the name, which reads as a version disagreement that is not one.
+        let mut local = entries
+            .get(&package)
+            .into_iter()
+            .flatten()
+            .filter(|(_, sourced)| !sourced)
+            .map(|(found, _)| found);
+        let first = local.next();
+        let extra = local.count();
+        if extra > 0 {
+            return Err(cannot_judge(format!(
+                "Cargo.lock carries {} entries for {package} with no source, so which one is the workspace \
+                 member is not decided",
+                extra + 1
+            )));
+        }
+        match first {
             None => {
                 return Err(violation(format!(
                     "Cargo.lock is missing workspace package {package}"
