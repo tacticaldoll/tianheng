@@ -74,11 +74,36 @@ immediately below, plus the deferred structural findings under `WATCH`.
     `src/governance.rs` like every sibling.
   *Risk:* a reader consulting a spec is told a rule is enforced when it is not — the same class the bound
   register was built to end one level down. *Promotion trigger:* fired; this is the work, not a candidate
-  for it. It rides one `change/` branch as one OpenSpec lifecycle, because each orphan needs the same
-  decision made per orphan rather than three separate repairs, and the guard that would have caught two of
-  them — every spec's `## Subject` resolving to paths that exist — belongs in that same change, since a
-  revised scenario must carry its observation evidence with it. *Version class:* patch; repository-internal,
-  shipping in no crate. *Authority:* `governance-dogfood` and `reference-integrity`.
+  for it. One branch and one pull request, because each orphan needs the same decision made per orphan
+  rather than three separate repairs, and the guard that would have caught two of them — every spec's
+  `## Subject` resolving to paths that exist — belongs with them, since a revised scenario must carry its
+  observation evidence in the same change.
+
+  **This entry said "one OpenSpec lifecycle" and that was wrong about this repository.** Measured: the
+  `explore → propose → apply → sync` lifecycle `AGENTS.md` describes has **never run here** — zero
+  `docs(openspec): propose`/`sync` commits in the whole history, and `openspec/changes/` untouched since
+  `2f903fb` (`release: 0.1.0`), which is when its `.gitkeep` was added. The `v0.4.0..0.5.0` window edited
+  `openspec/specs/*/spec.md` in 151 commits, every one an ordinary `fix:`/`feat:`/`docs:`. `READY-PATCH` is a
+  **compatibility class** in this file's own definition above, not a process exemption, and conflating the
+  two is what produced the wrong claim. *Version class:* patch; repository-internal, shipping in no crate.
+  *Authority:* `governance-dogfood` and `reference-integrity`.
+
+- **WATCH: `AGENTS.md`'s OpenSpec lifecycle section describes a process with no instances.** *Class:* WATCH.
+  *Observed pressure:* found while deciding the entry above — its four phases, commit-type conventions and
+  archive-pruning guardrail are written in the present indicative ("A capability change **moves through**
+  OpenSpec") about something that has never happened here. *Observation source:* zero
+  `docs(openspec): propose`/`sync` commits in the full history; `openspec/changes/**` untouched since
+  `2f903fb`; 151 direct spec edits in the last window. The path evidence is independent of commit subjects,
+  so the 2026-07-17 history rewrite does not weaken it. *Current reaction or bound:* none — this is prose
+  stating a fact about the tree that the tree contradicts, the same class as the three orphans above and
+  larger. *Risk:* an agent reading `AGENTS.md` first, as that file instructs, plans work through a lifecycle
+  nobody runs — which this session did, three times, before measuring. *Not simply deleted:* half of it is
+  live and load-bearing. The sync-evidence rule (a materially changed scenario carries its observation
+  evidence in the same change) **is** followed, and `openspec/changes/archive/.gitkeep` is tracked exactly as
+  described. So the disposition is audit-then-dissolve/convert/keep per claim, not removal. *Promotion
+  trigger:* a decision on whether the lifecycle is being restored or is being acknowledged as abandoned —
+  a human call about intent, not a defect to repair. **Not fired.** *Version class:* not release-affecting.
+  *Authority:* `AGENTS.md` itself.
 
 ## Live decision index
 
