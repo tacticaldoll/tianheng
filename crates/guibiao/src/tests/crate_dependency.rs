@@ -1338,6 +1338,46 @@ pub(super) fn source_rule_flags_every_git_source_outside_a_registry_or_path_allo
     );
 }
 
+/// `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
+///
+/// `UnderReacts`, owned by the engine. `RestrictDependenciesTo` reads the **declared** dependency set, and
+/// cargo reports an `optional = true` edge in that set like any other. So a crate whose edge exists only
+/// under a feature is governed as though the edge were unconditional, and a boundary cannot express
+/// *depends on this only when that feature is on*.
+///
+/// Both directions on one package, differing only in the flag: the ordinary edge and the optional one are
+/// reported identically, which is what makes the bound a bound rather than an oversight. The sibling
+/// source-rule direction states the same fact for source kinds; this states it for the dependency set,
+/// which is the rule an adopter reaches for first.
+#[test]
+pub(super) fn an_optional_dependency_edge_is_observed_as_a_declared_one() {
+    let package = serde_json::json!({
+        "dependencies": [
+            { "name": "always", "source": null, "kind": null },
+            { "name": "gated", "source": null, "kind": null, "optional": true },
+        ]
+    });
+    let rule = Rule::RestrictDependenciesTo {
+        allowed: vec!["always".to_string()],
+    };
+    assert_eq!(
+        rule.findings(&package, &[], DependencyKind::Normal),
+        vec!["gated".to_string()],
+        "an optional edge is in the declared set, so it is governed exactly as an unconditional one — the \
+         reader has no way to tell them apart, which is the declared bound"
+    );
+
+    let permissive = Rule::RestrictDependenciesTo {
+        allowed: vec!["always".to_string(), "gated".to_string()],
+    };
+    assert!(
+        permissive
+            .findings(&package, &[], DependencyKind::Normal)
+            .is_empty(),
+        "and naming it in the allowlist clears it, whether or not the feature enabling it is ever on"
+    );
+}
+
 #[test]
 pub(super) fn source_rule_registry_only_flags_a_path_dependency() {
     // Permit only [Registry]: the path dep is now flagged too (alongside every git
