@@ -19,7 +19,12 @@ live item is promoted, it must name: **class**, **observed pressure**, **observa
 (the spec, project decision, or code/test evidence that owns the claim). Classify it as:
 
 - **READY-PATCH** — supported pressure with a concrete source, and the correction preserves the
-  published API and current baseline/report identity wire.
+  published API and current baseline/report identity wire. **It classifies the evidence and the
+  compatibility, not how much design the correction still needs.** An entry whose pressure is measured and
+  whose fix breaks nothing is READY-PATCH even when the fix is a capability someone has yet to design —
+  reading the class as "small" or "next" is what made one such entry sit here for a window declaring no
+  class at all, because neither WATCH (which is for *thin* evidence) nor DESIGN-BREAKING (which is for a
+  *migration*) described it and this one looked too large.
 - **DESIGN-BREAKING** — a supported problem whose honest solution needs a public or wire migration.
 - **WATCH** — plausible pressure without enough adopter, second-consumer, or correctness evidence.
 - **ACCEPTED DEBT** — a known, bounded risk whose current reaction or documented coverage bound is
@@ -159,166 +164,6 @@ consumer for an undemonstrated deduplication.
   is ever worth closing.
 
 
-- **A command a document hands a reader is only checked in one shape.** *Class:* WATCH. *Observed pressure:*
-  `5be5678` closed the class *a command a document hands a reader names a target that exists* by
-  resolving `-p <package> --test <target>` pairs against `cargo metadata`, and a fifth instance survived it in
-  a **second shape**: `BLESS=1 bash crates/kanhe/tests/bound_register.rs`, a path handed to `bash` whose target
-  is a Rust integration test. Run as written it printed shell errors and **exited 0**, so a reader following it
-  got a silent no-op. *Observation source:* a review of the window, then a sweep of `bash <path>` across
-  tracked Rust and Markdown: five occurrences, of which one was live, one is a real script (`scripts/publish.sh`),
-  two are deliberate fixture strings in failure matrices, and one is a fictional example path in a doc comment.
-  *Current reaction or bound:* none for this shape; the pair shape is held by
-  `every_command_a_document_hands_a_reader_names_a_target_that_exists`. *Risk:* a reader meets a command that
-  does nothing and reports success — worse than one that fails, because the failure is silent. Bounded by the
-  sweep: one instance in the tree, now repaired. *Promotion trigger:* a second live instance of this shape, or
-  a third shape of the same class. *Version class:* patch; repository-internal, shipping in no crate.
-  *Authority:* `repository-checks`, which owns the pair-shape requirement. *Shape:* the corpus differs from the
-  pair check's — this shape appears in **Rust doc comments** as well as Markdown, and the rule is *a `bash`
-  target must be a tracked file with an executable mode*, which git records. Two corpora and two rules under one
-  requirement, which is why it is filed rather than folded into the existing check.
-
-- **A private item's doc comment can be stolen by an item inserted above it, and nothing reacts.** *Class:*
-  WATCH. *Observed pressure:* two in-window instances of one class, where a function was inserted between
-  another's doc run and the function itself, so Rust attached the whole run to the newcomer and left the
-  original undocumented. `604a4e1` did it to `bare_references` (public); `52bf5db` did it to
-  `adopter_cited_machinery` (private), where the merged run reads as one doc opening with a paragraph about a
-  different function, and it survived nine days and a crate rename. *Observation source:* a review of the
-  window, then `#![deny(missing_docs)]` added to `kanhe` and `shengmo` — the last two crates without it —
-  which produced 45 and 2 undocumented public items respectively, all now documented. *Current reaction or
-  bound:* `deny(missing_docs)`, in every crate, catches the **public** half: any item inserted between a doc
-  and its item leaves the original with zero docs, whichever of the two carries a doc of its own — measured by
-  reproducing `604a4e1`'s exact shape, which the lint refuses naming the victim. It does not reach private
-  items. *Risk:* a doc describes the wrong function while reading as though it describes the right one, which
-  is worse than an absent doc; a reader is actively misled. *Promotion trigger:* a third instance, or any
-  instance on a private item after this entry. *Version class:* patch; both crates ship in no package.
-  *Authority:* none — this is a lint policy, not a Tianheng boundary or a repository check. *Shape:*
-  `clippy::missing_docs_in_private_items` is the only mechanism that closes the private half, and it demands a
-  doc on **every** private item, which is heavier than this repository's minimalism warrants for a class with
-  two instances. Filed rather than adopted, so the choice is recorded instead of rediscovered.
-
-- **A reader's corpus can be narrower than the requirement it serves, and this repository's own dimensions
-  cannot see the shape.** *Class:* WATCH. *Observed pressure:* the dominant class of the 0.5.0 window. Live
-  instances repaired here: `marks_a_bound` gated pinning-citation resolution so 5 of 75 citations were never
-  validated; `machinery_names` enumerated 0 of 8 workspace members against its own subject; the root
-  manifest's `exclude` named one fixture root of two while `.gitignore` named both. *Observation source:* a
-  sweep of the window's findings, then the classification in `AGENTS.md`'s *A reader reads its whole subject*,
-  which separates four shapes and closes three of them by construction. **This entry counts only the fourth**
-  — corpus narrower than the claim. Lossy selection, lossy acceptance and lossy accumulation are closed where
-  they occur (`kanhe::selection`, `capability_subjects::Declared`, and widening the binding), so counting them
-  here would fire this trigger on instances that are already shut. *Current reaction or bound:* none, and it
-  is not available. `inline-symbol-path-confinement` declares that a **receiver-method read is not observed**
-  — no type inference on the receiver, pinned by `inline_receiver_method_read_is_a_bound` — and
-  `text.split_once(…)`, `iter.next()` and `vec.first()` are receiver-method calls, so the shape sits outside
-  the observation surface this repository ships. That is an existing declared bound with an owner, not a
-  rationale invented for this entry. *Risk:* a check reports clean over a subject it never read, which is the
-  one direction the Core Contract forbids, and it is invisible until a second instance exists. *Promotion
-  trigger:* a third live instance of the fourth shape after this entry. *Version class:* patch;
-  repository-internal. *Authority:* `repository-checks`. *Shape:* only a set comparison in both directions
-  catches it, and there is nothing to compare against until someone states what the subject is — which is why
-  the capability-subject declarations exist and why widening them is the likely form of any repair.
-  Until there is a reaction, the interim instrument is the class-directed sweep stated in `AGENTS.md` — run
-  it at each pre-release review rather than trusting that the next instance will be noticed. It is what found
-  the release-coherence pair after five linear rounds had read past them.
-
-  One residue belongs here rather than to the shapes that closed. `kanhe::selection` binds only the call sites
-  that use it, and nothing enumerates the readers that should. (A second residue recorded alongside this one —
-  `census::figures_in` reading only the first match on a line — was closed the following day and is no longer
-  live; this entry went uncorrected until a later adversarial-review pass noticed the drift.)
-
-- **`Bind a claim to its measurement` is a governing rule with no reaction.** *Class:* WATCH. *Observed
-  pressure:* nine review rounds in the 0.5.0 window, whose largest class by far was *the corpus was wrong or
-  its narrowing was undeclared* — nine of roughly twenty findings. The rule was written from that sweep and
-  names three bindings: derive it, declare it and hold it both ways, or compare it after the fact where the
-  carrier is text. *Observation source:* the sweep itself, plus the refutation inside it — `WRAPPERS` was
-  proposed as a derivation candidate and `self_governance`'s own comment defeated it, because removing
-  `guibiao` from that literal left a `guibiao` allowlist naming `hunyi` green. *Current reaction or bound:*
-  the **text branch** is enforced by `crates/kanhe/tests/census.rs`; the rule above it is enforced by nothing.
-  *Risk:* bounded and of a particular kind — the rule tells an author which instrument to reach for, so its
-  failure mode is a check built with the weak binding where the strong one was available, which is a defect a
-  reviewer finds rather than one that ships. Every instance found so far was found that way. *Promotion
-  trigger:* an instance where the wrong binding was chosen **after** this rule was written — the rule being
-  the control, so the nine that produced it cannot stand as evidence for themselves. *Version class:* patch;
-  repository-internal, shipping in no crate. *Authority:* `repository-checks`, which owns the shape of a
-  check. *Shape:* not a prose detector — answering it needs to know that a value is a claim *about* something,
-  which is intent rather than shape, and the measured-and-rejected class here is exactly judgements over text.
-  If it is ever reacted, the reaction is more likely to be a **type** that makes the weak binding harder to
-  reach than a scan that recognises it.
-
-- **A third hand-written scanner of the `#### Scenario:`/`- **PINNED-BY**` grammar still disagrees with the
-  other two on two edge cases.** *Class:* WATCH. *Observed pressure:* `bound_register_parse::bounds_in` and
-  `bound_register_parse::citations_in` (the latter extracted from `pinning_citations` during an adversarial
-  review this window, so `pin_bites::cited_bounds` and `pinning_citations` share one recognizer instead of
-  two) now agree with each other exactly. `crates/kanhe/tests/observation_bound_model.rs`'s own
-  `spec_bounds`/`spec_defence` were not touched by that extraction and remain a **third**, independent
-  implementation of the identical grammar, found by the same review to have already drifted from the other
-  two in two ways: it requires a literal trailing space after `"#### Scenario:"` (`bounds_in`/`citations_in`
-  trim the heading instead, so `"#### Scenario:Foo"` with no space is a bound to them and not to this
-  scanner), and it checks an **untrimmed** line for a closing `"###"`/`"##"` heading (`bounds_in`/
-  `citations_in` check the trimmed line, so an indented closing heading ends a bound's scope for them and not
-  for this scanner). *Observation source:* the adversarial review's cross-file tracer, verified by grepping
-  every tracked spec for both shapes — none currently has a `"Scenario:"` with no following space or an
-  indented `"###"`/`"##"` heading, so both disagreements are latent. *Current reaction or bound:* none;
-  `observation_bound_model.rs`'s bijection tests only compare its own scanner's output against
-  `observation_bounds()`, which cannot see a disagreement with `bounds_in`/`citations_in` since nothing
-  compares the three against each other. *Risk:* a future spec edit hitting either latent shape would have
-  `observation_bound_model.rs` and the register disagree on a bound's existence or a citation's defended id,
-  each internally consistent and both wrong relative to the other. *Promotion trigger:* either latent shape
-  appearing in a tracked spec, or a fourth independent scanner of this grammar appearing anywhere in the
-  crate. *Version class:* patch; repository-internal, shipping in no crate. *Authority:* none declared yet —
-  the three readers currently agree on every live spec, so nothing has been violated to anchor one. *Shape:*
-  closing this fully needs one shared low-level walker (`"#### Scenario:"`-untrimmed to open,
-  `"#### "`/`"### "`/`"## "`-trimmed to close, matching `bounds_in`'s own rules) that all three call sites use,
-  not a third point patch; filed rather than done here because it touches `observation_bound_model.rs`'s core
-  logic, a file this window's fixes did not otherwise touch, and reworking it deserves its own scoped review
-  rather than folding into an adversarial-review pass over a different fix.
-
-- **`negates_bound_in_prose`'s one-interposed-word budget is measured from `a`/`an`, independently of
-  `states_a_bound_in_prose`'s own budget measured from `stated`/`documented`, so a sentence stacking both
-  qualifiers is read as a declaration rather than the denial it is.** *Class:* WATCH. *Observed pressure:* an
-  adversarial review of this window's own fix (which corrected a live case-sensitivity gap in both functions,
-  see the `CHANGELOG.md` entry) also asked whether the two functions' independent one-word tolerances could
-  ever disagree, and found they can: `"this is not a documented residual bound"` has `states_a_bound_in_prose`
-  return `true` (one interposed word, `residual`, between `documented` and `bound`) and
-  `negates_bound_in_prose` return `false` (its own one-word budget, between `a` and `bound`, is already spent
-  on `documented`, leaving no room for `residual` before `bound`) — so `undeclared_prose_offences`'s
-  `!states(...) || negates(...)` guard evaluates `false`, and a genuinely negated sentence is reported as an
-  undeclared bound. *Observation source:* verified directly (`states_a_bound_in_prose` returns `true`,
-  `negates_bound_in_prose` returns `false` for the sentence above), then grepped every tracked spec for
-  `(not|never) a (stated|documented) [a-z-]+ bounds?` — zero matches, so this is latent. *Current reaction or
-  bound:* none. *Risk:* a future spec sentence combining a negation with a states-side qualifier
-  (`"...is not a documented residual bound"`) would be misreported as an undeclared bound rather than
-  correctly exempted as a denial. *Promotion trigger:* a live instance of the stacked shape in a tracked spec.
-  *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
-  `observation-bound-register`'s "A bound stated in prose but not declared as a scenario SHALL fail" — the
-  requirement this pair jointly enforces. *Shape:* the two budgets need to share one accounting (e.g. count
-  every interposed word from the negator through to `bound`/`bounds`, capped at two total: one for the
-  negator's own qualifier, one for the states-side qualifier) rather than each independently assuming it owns
-  the only interposed word in the sentence — a design question, not a one-line patch, which is why it is
-  filed rather than widened here under time pressure.
-
-- **`requirement_heading_is_bounds_named` matches `bound`/`bounds` as a bare substring with no check on the
-  character *before* the match, so an unrelated word like `Outbound`/`Rebound`/`Unbounded` in a requirement
-  heading would falsely exempt that requirement from the undeclared-prose check.** *Class:* WATCH. *Observed
-  pressure:* the same adversarial review, independently reported by two finders. The function checks only that
-  the character *after* `bound(s)` is non-alphabetic (so `boundary`/`boundaries` are correctly excluded), with
-  no symmetric check on the character before — unlike this file's own `contains_words`, used by
-  [`marks_a_bound`], which checks both sides. *Observation source:* traced by hand
-  (`requirement_heading_is_bounds_named("Outbound Requests")` returns `true`: `"bound"` matches inside
-  `"outbound"`, and the character following it — a space, from `" requests"` — reads as "no letter follows"),
-  then grepped every tracked `### Requirement:` heading for a `bound`-containing word that is not
-  `bound(s)`/`boundary/boundaries` itself — none found, so latent. *Current reaction or bound:* none.
-  *Risk:* a requirement heading using an ordinary English word containing `bound` as a substring
-  (`outbound`, `rebound`, `unbounded`, `abound`) would be wrongly classified as bounds-named, exempting real
-  bound-stating prose beneath it from `undeclared_prose_offences` and instead charging that requirement with
-  "declares no bound scenario of its own" — the wrong failure mode for a heading that was never about bounds
-  at all. *Promotion trigger:* a live instance of such a heading in a tracked spec. *Version class:* patch;
-  repository-internal, shipping in no crate. *Authority:* `observation-bound-register`, the same requirement
-  the sibling entry above cites. *Shape:* add the same before-the-match boundary check `contains_words`
-  already has, most simply by having this function call `contains_words(heading, "bound")` /
-  `contains_words(heading, "bounds")` (or a variant tolerant of the `boundary` exemption) instead of its own
-  one-sided scan — a smaller change than the sibling entry above, filed alongside it rather than folded into
-  this window's fix because both were found by the same pass and neither has a live instance forcing it.
-
 - **`observation-bound-model`'s projection discloses its own bounds by a typed list; its sibling requires a
   derived one.** *Class:* READY-PATCH. *Observed pressure:* `gate-shape-contract` hit this and wrote the
   requirement — *"That disclosure SHALL be **derived from the specification, not typed into the generator**,
@@ -392,7 +237,11 @@ consumer for an undemonstrated deduplication.
   through the observer — a shape in which the guard stops compiling rather than one in which it merely has
   nowhere tidy to sit.
 
-- **Every normative SHALL either has a reaction or is a declared bound.** *Observed pressure:* **ten** found
+- **Every normative SHALL either has a reaction or is a declared bound.** *Class:* READY-PATCH — by the
+  definition above, which classifies evidence and compatibility rather than remaining design effort: the
+  pressure is measured and the correction preserves every published API. It declared no class at all until
+  the classification reaction was built, because it reads as too large for a heading that sounds like "next".
+  *Observed pressure:* **ten** found
   and closed through re-review #3 of the 0.5.0 window. The first seven were the family's declarations staying
   literal, the equality fixture reacting in every dimension, an observer declaring exactly its dimension's bounds
   (a comparison that was `f() == f()`), the protocol's required `bounds` method having no consumer at all, *an
@@ -709,6 +558,166 @@ consumer for an undemonstrated deduplication.
 
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
+
+- **WATCH: A command a document hands a reader is only checked in one shape.** *Class:* WATCH. *Observed pressure:*
+  `5be5678` closed the class *a command a document hands a reader names a target that exists* by
+  resolving `-p <package> --test <target>` pairs against `cargo metadata`, and a fifth instance survived it in
+  a **second shape**: `BLESS=1 bash crates/kanhe/tests/bound_register.rs`, a path handed to `bash` whose target
+  is a Rust integration test. Run as written it printed shell errors and **exited 0**, so a reader following it
+  got a silent no-op. *Observation source:* a review of the window, then a sweep of `bash <path>` across
+  tracked Rust and Markdown: five occurrences, of which one was live, one is a real script (`scripts/publish.sh`),
+  two are deliberate fixture strings in failure matrices, and one is a fictional example path in a doc comment.
+  *Current reaction or bound:* none for this shape; the pair shape is held by
+  `every_command_a_document_hands_a_reader_names_a_target_that_exists`. *Risk:* a reader meets a command that
+  does nothing and reports success — worse than one that fails, because the failure is silent. Bounded by the
+  sweep: one instance in the tree, now repaired. *Promotion trigger:* a second live instance of this shape, or
+  a third shape of the same class. *Version class:* patch; repository-internal, shipping in no crate.
+  *Authority:* `repository-checks`, which owns the pair-shape requirement. *Shape:* the corpus differs from the
+  pair check's — this shape appears in **Rust doc comments** as well as Markdown, and the rule is *a `bash`
+  target must be a tracked file with an executable mode*, which git records. Two corpora and two rules under one
+  requirement, which is why it is filed rather than folded into the existing check.
+
+- **WATCH: A private item's doc comment can be stolen by an item inserted above it, and nothing reacts.** *Class:*
+  WATCH. *Observed pressure:* two in-window instances of one class, where a function was inserted between
+  another's doc run and the function itself, so Rust attached the whole run to the newcomer and left the
+  original undocumented. `604a4e1` did it to `bare_references` (public); `52bf5db` did it to
+  `adopter_cited_machinery` (private), where the merged run reads as one doc opening with a paragraph about a
+  different function, and it survived nine days and a crate rename. *Observation source:* a review of the
+  window, then `#![deny(missing_docs)]` added to `kanhe` and `shengmo` — the last two crates without it —
+  which produced 45 and 2 undocumented public items respectively, all now documented. *Current reaction or
+  bound:* `deny(missing_docs)`, in every crate, catches the **public** half: any item inserted between a doc
+  and its item leaves the original with zero docs, whichever of the two carries a doc of its own — measured by
+  reproducing `604a4e1`'s exact shape, which the lint refuses naming the victim. It does not reach private
+  items. *Risk:* a doc describes the wrong function while reading as though it describes the right one, which
+  is worse than an absent doc; a reader is actively misled. *Promotion trigger:* a third instance, or any
+  instance on a private item after this entry. *Version class:* patch; both crates ship in no package.
+  *Authority:* none — this is a lint policy, not a Tianheng boundary or a repository check. *Shape:*
+  `clippy::missing_docs_in_private_items` is the only mechanism that closes the private half, and it demands a
+  doc on **every** private item, which is heavier than this repository's minimalism warrants for a class with
+  two instances. Filed rather than adopted, so the choice is recorded instead of rediscovered.
+
+- **WATCH: A reader's corpus can be narrower than the requirement it serves, and this repository's own dimensions
+  cannot see the shape.** *Class:* WATCH. *Observed pressure:* the dominant class of the 0.5.0 window. Live
+  instances repaired here: `marks_a_bound` gated pinning-citation resolution so 5 of 75 citations were never
+  validated; `machinery_names` enumerated 0 of 8 workspace members against its own subject; the root
+  manifest's `exclude` named one fixture root of two while `.gitignore` named both. *Observation source:* a
+  sweep of the window's findings, then the classification in `AGENTS.md`'s *A reader reads its whole subject*,
+  which separates four shapes and closes three of them by construction. **This entry counts only the fourth**
+  — corpus narrower than the claim. Lossy selection, lossy acceptance and lossy accumulation are closed where
+  they occur (`kanhe::selection`, `capability_subjects::Declared`, and widening the binding), so counting them
+  here would fire this trigger on instances that are already shut. *Current reaction or bound:* none, and it
+  is not available. `inline-symbol-path-confinement` declares that a **receiver-method read is not observed**
+  — no type inference on the receiver, pinned by `inline_receiver_method_read_is_a_bound` — and
+  `text.split_once(…)`, `iter.next()` and `vec.first()` are receiver-method calls, so the shape sits outside
+  the observation surface this repository ships. That is an existing declared bound with an owner, not a
+  rationale invented for this entry. *Risk:* a check reports clean over a subject it never read, which is the
+  one direction the Core Contract forbids, and it is invisible until a second instance exists. *Promotion
+  trigger:* a third live instance of the fourth shape after this entry. *Version class:* patch;
+  repository-internal. *Authority:* `repository-checks`. *Shape:* only a set comparison in both directions
+  catches it, and there is nothing to compare against until someone states what the subject is — which is why
+  the capability-subject declarations exist and why widening them is the likely form of any repair.
+  Until there is a reaction, the interim instrument is the class-directed sweep stated in `AGENTS.md` — run
+  it at each pre-release review rather than trusting that the next instance will be noticed. It is what found
+  the release-coherence pair after five linear rounds had read past them.
+
+  One residue belongs here rather than to the shapes that closed. `kanhe::selection` binds only the call sites
+  that use it, and nothing enumerates the readers that should. (A second residue recorded alongside this one —
+  `census::figures_in` reading only the first match on a line — was closed the following day and is no longer
+  live; this entry went uncorrected until a later adversarial-review pass noticed the drift.)
+
+- **WATCH: `Bind a claim to its measurement` is a governing rule with no reaction.** *Class:* WATCH. *Observed
+  pressure:* nine review rounds in the 0.5.0 window, whose largest class by far was *the corpus was wrong or
+  its narrowing was undeclared* — nine of roughly twenty findings. The rule was written from that sweep and
+  names three bindings: derive it, declare it and hold it both ways, or compare it after the fact where the
+  carrier is text. *Observation source:* the sweep itself, plus the refutation inside it — `WRAPPERS` was
+  proposed as a derivation candidate and `self_governance`'s own comment defeated it, because removing
+  `guibiao` from that literal left a `guibiao` allowlist naming `hunyi` green. *Current reaction or bound:*
+  the **text branch** is enforced by `crates/kanhe/tests/census.rs`; the rule above it is enforced by nothing.
+  *Risk:* bounded and of a particular kind — the rule tells an author which instrument to reach for, so its
+  failure mode is a check built with the weak binding where the strong one was available, which is a defect a
+  reviewer finds rather than one that ships. Every instance found so far was found that way. *Promotion
+  trigger:* an instance where the wrong binding was chosen **after** this rule was written — the rule being
+  the control, so the nine that produced it cannot stand as evidence for themselves. *Version class:* patch;
+  repository-internal, shipping in no crate. *Authority:* `repository-checks`, which owns the shape of a
+  check. *Shape:* not a prose detector — answering it needs to know that a value is a claim *about* something,
+  which is intent rather than shape, and the measured-and-rejected class here is exactly judgements over text.
+  If it is ever reacted, the reaction is more likely to be a **type** that makes the weak binding harder to
+  reach than a scan that recognises it.
+
+- **WATCH: A third hand-written scanner of the `#### Scenario:`/`- **PINNED-BY**` grammar still disagrees with the
+  other two on two edge cases.** *Class:* WATCH. *Observed pressure:* `bound_register_parse::bounds_in` and
+  `bound_register_parse::citations_in` (the latter extracted from `pinning_citations` during an adversarial
+  review this window, so `pin_bites::cited_bounds` and `pinning_citations` share one recognizer instead of
+  two) now agree with each other exactly. `crates/kanhe/tests/observation_bound_model.rs`'s own
+  `spec_bounds`/`spec_defence` were not touched by that extraction and remain a **third**, independent
+  implementation of the identical grammar, found by the same review to have already drifted from the other
+  two in two ways: it requires a literal trailing space after `"#### Scenario:"` (`bounds_in`/`citations_in`
+  trim the heading instead, so `"#### Scenario:Foo"` with no space is a bound to them and not to this
+  scanner), and it checks an **untrimmed** line for a closing `"###"`/`"##"` heading (`bounds_in`/
+  `citations_in` check the trimmed line, so an indented closing heading ends a bound's scope for them and not
+  for this scanner). *Observation source:* the adversarial review's cross-file tracer, verified by grepping
+  every tracked spec for both shapes — none currently has a `"Scenario:"` with no following space or an
+  indented `"###"`/`"##"` heading, so both disagreements are latent. *Current reaction or bound:* none;
+  `observation_bound_model.rs`'s bijection tests only compare its own scanner's output against
+  `observation_bounds()`, which cannot see a disagreement with `bounds_in`/`citations_in` since nothing
+  compares the three against each other. *Risk:* a future spec edit hitting either latent shape would have
+  `observation_bound_model.rs` and the register disagree on a bound's existence or a citation's defended id,
+  each internally consistent and both wrong relative to the other. *Promotion trigger:* either latent shape
+  appearing in a tracked spec, or a fourth independent scanner of this grammar appearing anywhere in the
+  crate. *Version class:* patch; repository-internal, shipping in no crate. *Authority:* none declared yet —
+  the three readers currently agree on every live spec, so nothing has been violated to anchor one. *Shape:*
+  closing this fully needs one shared low-level walker (`"#### Scenario:"`-untrimmed to open,
+  `"#### "`/`"### "`/`"## "`-trimmed to close, matching `bounds_in`'s own rules) that all three call sites use,
+  not a third point patch; filed rather than done here because it touches `observation_bound_model.rs`'s core
+  logic, a file this window's fixes did not otherwise touch, and reworking it deserves its own scoped review
+  rather than folding into an adversarial-review pass over a different fix.
+
+- **WATCH: `negates_bound_in_prose`'s one-interposed-word budget is measured from `a`/`an`, independently of
+  `states_a_bound_in_prose`'s own budget measured from `stated`/`documented`, so a sentence stacking both
+  qualifiers is read as a declaration rather than the denial it is.** *Class:* WATCH. *Observed pressure:* an
+  adversarial review of this window's own fix (which corrected a live case-sensitivity gap in both functions,
+  see the `CHANGELOG.md` entry) also asked whether the two functions' independent one-word tolerances could
+  ever disagree, and found they can: `"this is not a documented residual bound"` has `states_a_bound_in_prose`
+  return `true` (one interposed word, `residual`, between `documented` and `bound`) and
+  `negates_bound_in_prose` return `false` (its own one-word budget, between `a` and `bound`, is already spent
+  on `documented`, leaving no room for `residual` before `bound`) — so `undeclared_prose_offences`'s
+  `!states(...) || negates(...)` guard evaluates `false`, and a genuinely negated sentence is reported as an
+  undeclared bound. *Observation source:* verified directly (`states_a_bound_in_prose` returns `true`,
+  `negates_bound_in_prose` returns `false` for the sentence above), then grepped every tracked spec for
+  `(not|never) a (stated|documented) [a-z-]+ bounds?` — zero matches, so this is latent. *Current reaction or
+  bound:* none. *Risk:* a future spec sentence combining a negation with a states-side qualifier
+  (`"...is not a documented residual bound"`) would be misreported as an undeclared bound rather than
+  correctly exempted as a denial. *Promotion trigger:* a live instance of the stacked shape in a tracked spec.
+  *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
+  `observation-bound-register`'s "A bound stated in prose but not declared as a scenario SHALL fail" — the
+  requirement this pair jointly enforces. *Shape:* the two budgets need to share one accounting (e.g. count
+  every interposed word from the negator through to `bound`/`bounds`, capped at two total: one for the
+  negator's own qualifier, one for the states-side qualifier) rather than each independently assuming it owns
+  the only interposed word in the sentence — a design question, not a one-line patch, which is why it is
+  filed rather than widened here under time pressure.
+
+- **WATCH: `requirement_heading_is_bounds_named` matches `bound`/`bounds` as a bare substring with no check on the
+  character *before* the match, so an unrelated word like `Outbound`/`Rebound`/`Unbounded` in a requirement
+  heading would falsely exempt that requirement from the undeclared-prose check.** *Class:* WATCH. *Observed
+  pressure:* the same adversarial review, independently reported by two finders. The function checks only that
+  the character *after* `bound(s)` is non-alphabetic (so `boundary`/`boundaries` are correctly excluded), with
+  no symmetric check on the character before — unlike this file's own `contains_words`, used by
+  [`marks_a_bound`], which checks both sides. *Observation source:* traced by hand
+  (`requirement_heading_is_bounds_named("Outbound Requests")` returns `true`: `"bound"` matches inside
+  `"outbound"`, and the character following it — a space, from `" requests"` — reads as "no letter follows"),
+  then grepped every tracked `### Requirement:` heading for a `bound`-containing word that is not
+  `bound(s)`/`boundary/boundaries` itself — none found, so latent. *Current reaction or bound:* none.
+  *Risk:* a requirement heading using an ordinary English word containing `bound` as a substring
+  (`outbound`, `rebound`, `unbounded`, `abound`) would be wrongly classified as bounds-named, exempting real
+  bound-stating prose beneath it from `undeclared_prose_offences` and instead charging that requirement with
+  "declares no bound scenario of its own" — the wrong failure mode for a heading that was never about bounds
+  at all. *Promotion trigger:* a live instance of such a heading in a tracked spec. *Version class:* patch;
+  repository-internal, shipping in no crate. *Authority:* `observation-bound-register`, the same requirement
+  the sibling entry above cites. *Shape:* add the same before-the-match boundary check `contains_words`
+  already has, most simply by having this function call `contains_words(heading, "bound")` /
+  `contains_words(heading, "bounds")` (or a variant tolerant of the `boundary` exemption) instead of its own
+  one-sided scan — a smaller change than the sibling entry above, filed alongside it rather than folded into
+  this window's fix because both were found by the same pass and neither has a live instance forcing it.
 
 - **WATCH: `AGENTS.md`'s OpenSpec lifecycle section describes a process with no instances.** *Class:* WATCH.
   *Observed pressure:* found while deciding the entry above — its four phases, commit-type conventions and
