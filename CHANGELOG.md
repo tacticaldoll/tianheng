@@ -904,6 +904,36 @@ them.
 
 ### Self-governance
 
+- **Three spec requirements described mechanisms the shell-to-Rust migration had deleted, and are closed.**
+  Each stated a live `SHALL` that nothing ran — the failure this whole family exists to end, committed inside
+  its own governance, where a reader consulting a spec is told a rule is enforced when it is not.
+
+  `governance-dogfood`'s focused-matrix ordering requirement is **removed**: its three shell scripts became
+  one Rust test that owns its ordering internally, so there is no sequence of separate commands left to order.
+  The decision was taken two windows ago and recorded in three places; it reached the spec in none of them.
+
+  `reference-integrity`'s fixture-policy requirement is **restated as what the port does**. It demanded an
+  explicit fixture-only governance-document set, refused on the real workspace. Nothing implements it — and
+  the replacement is stronger: `offences_in` takes the corpus as arguments so a fixture and the real workspace
+  run the same code, and the required set is a compile-time `const`, so the narrowing the old wording refused
+  is now not expressible rather than refused by a check.
+
+  `governance-dogfood`'s boundary-family coverage requirement is **rebuilt as a derivation**. It asked for an
+  inventory of thirteen families anchored to the `0.2.x` surface; a literal beside an enumerator is the shape
+  that lets a family be added and never re-examined. Neither side is written down now: families are the
+  boundary types the composed shell re-exports, owners are the tracked files under `examples/` and
+  `crates/shengmo/` naming one, and the reaction fails in both directions. Two of the thirteen were
+  **profiles, not families** — `sans_io_pure`'s own documentation says it "adds no new reaction" — so counting
+  them would have asserted coverage of a reaction that does not exist.
+
+  **How they were found, and what does not catch them.** Not by a reaction: by reading each of the twelve
+  shell files the migration deleted and asking which requirement had implemented it. Nine were correctly
+  swept when they were deleted; three were not. A first draft of this work promised a `## Subject`-resolution
+  guard alongside — which already exists, was green throughout, and would not have caught these anyway, since
+  all three subjects resolve while the mechanisms under them were gone. No reaction is proposed: deciding
+  whether a prose-described mechanism still exists is the instrument this repository has measured and
+  rejected three times. The residual is stated instead.
+
 - **The second defect queue is gone, and with it the convention that kept making one.** `BACKLOG.md` promised
   every sweep its own dated `docs/audit/*.md` file. That was two mechanisms for one job: a closed finding's
   substance is its closing PR and this file, an open one is a `READY-PATCH` or `WATCH` entry with the

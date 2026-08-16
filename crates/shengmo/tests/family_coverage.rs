@@ -80,8 +80,9 @@ fn boundary_types(text: &str) -> BTreeSet<String> {
 /// The families: the boundary types the composed shell re-exports.
 fn families(root: &Path) -> BTreeSet<String> {
     let shell = root.join("crates/tianheng/src/lib.rs");
-    let text = std::fs::read_to_string(&shell)
-        .unwrap_or_else(|err| panic!("cannot read the composed shell's surface at {shell:?}: {err}"));
+    let text = std::fs::read_to_string(&shell).unwrap_or_else(|err| {
+        panic!("cannot read the composed shell's surface at {shell:?}: {err}")
+    });
     let found = boundary_types(&text);
     assert!(
         !found.is_empty(),
@@ -145,7 +146,10 @@ fn every_published_family_has_an_adopter_shaped_owner() {
     let families = families(&root);
     let owned = owners(&root, &files);
 
-    let unowned: Vec<&String> = families.iter().filter(|f| !owned.contains_key(*f)).collect();
+    let unowned: Vec<&String> = families
+        .iter()
+        .filter(|f| !owned.contains_key(*f))
+        .collect();
     assert!(
         unowned.is_empty(),
         "the composed shell publishes {} boundary famil(ies) that no example workspace and no self-law file \
