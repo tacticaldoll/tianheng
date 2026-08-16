@@ -439,22 +439,20 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
 
 /// Take `path` as a directory this process created, or refuse.
 ///
-/// **`create_dir_all` accepts a pre-existing symlink to a directory.** Measured: `create_dir_all` on such a
-/// link returns `Ok(())` and every subsequent write lands in the link's *target*, while `create_dir` returns
-/// `AlreadyExists` — a `mkdir` cannot follow a symlink, which is the whole reason to use the narrow call.
+/// **Why `create_dir` and not `create_dir_all` is stated once, in `xingbiao::claim_scratch`** — the symlink
+/// adoption, the guessable `temp_dir()`-relative root, the window between `remove_dir_all` and this call,
+/// and the measurements behind each. That statement was written here too, near-verbatim, which is one rule
+/// with two owners and free to drift; the implementations stay separate (this one returns a `Refusal`,
+/// `xingbiao` is only a dev-dependency here) but the rule does not. Named rather than linked: `xingbiao` is
+/// not in this crate's library scope, so an intra-doc link would not resolve.
 ///
-/// What that costs here. The scratch directory holds the throwaway signing key, the probe signature, and
+/// What is local to this site, and is the reason it returns a `Refusal` at all. The scratch directory holds
 /// `tag.sig` — which the signature check then reads **back**. Redirect the directory and someone else owns
 /// both ends of that write-then-read: they can substitute a signature they made over the same payload with
 /// their own key, and `ssh-keygen -Y check-novalidate` answers *this signature is valid over this payload*
 /// without asking whose key made it. The check that would then pass is the one whose entire point is that
 /// "a signature block quoted in a tag message is text, not a signature" — so a release tag whose signature
 /// does **not** verify over the tag object would verify, in front of an act that cannot be undone.
-///
-/// The path is `temp_dir()`-relative and predictable — process id and a counter — so it is guessable by
-/// anyone on the machine. It is not plant-and-wait: `remove_dir_all` **does** remove a symlink at the path
-/// rather than following it (measured), so the window is between that removal and this call, and an attacker
-/// must win a race rather than leave something lying around. This closes the window rather than narrowing it.
 ///
 /// **The removal is the caller's**, so a direction can supply exactly the state that appears in that window.
 /// The same split as [`hidden_by_the_checkout_with`], for the same reason: the failing arm is not a state a

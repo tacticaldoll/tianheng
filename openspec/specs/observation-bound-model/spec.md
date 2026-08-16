@@ -5,6 +5,7 @@
 Type where a reaction's measure deliberately stops, so a declared observation bound carries a classification a
 reaction can check rather than an adjective a reader must interpret — and hold the specs' declarations and the
 code's in a bijection, in both directions.
+
 ## Subject
 
 - `crates/*/src/bounds.rs`

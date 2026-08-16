@@ -5,6 +5,7 @@
 Govern what must be true of the source `cargo publish` runs from: the committed state asserted before an
 irreversible act, the tag signature actually verified rather than shape-matched, and the one thing about that
 signature this gate deliberately does not judge.
+
 ## Subject
 
 - `scripts/publish.sh`

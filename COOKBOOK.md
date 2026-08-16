@@ -639,6 +639,13 @@ Three things worth knowing before you write one:
 `examples/observer-participant` is the runnable version of all of the above, including the exit-2
 direction and the computed bounds, and the repository's examples gate runs it.
 
+**One thing it demonstrates that this sketch elides**: the walk, the rule and the report are three
+functions, not one `observe` body. The rule takes the file's *text* rather than its path, so it is
+decidable from a string and a test can show it every shape it must answer for without a filesystem; the
+walk answers *which files* and returns why it could not when it cannot, so "no files" and "could not look"
+stay different facts. Copy that seam along with the rest — an `observe` that folds all three together works
+and cannot be tested a layer at a time.
+
 ### Publish an imitable Agent Law for your codebase (Three-Layer Agent Law)
 
 *Intent: publish your declared governance as a 3-layer imitable Agent Law (`AGENTS.md` / `AGENTS.self-law.md`) so AI agents imitate your architecture by gravity (潛移) — and gate it in `cargo test` so the projection never rots.*

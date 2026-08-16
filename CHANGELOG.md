@@ -904,6 +904,46 @@ them.
 
 ### Self-governance
 
+- **Two more static reviews landed, and eight findings survived verification.** Both were run against the
+  merged tree, so most of what they raised was already closed; these are the ones that were not.
+
+  **A fixture helper was about to become permanent published API.** `xingbiao::claim_scratch` is
+  `#[doc(hidden)]` now. Measured: zero call sites outside a test target or a `#[cfg(test)]` module, while
+  星表's domain is declared workspace data — it lives there for a dependency-graph reason, which is not a
+  domain fit. `0.5.0` is the release that first publishes it, so this was the last moment the decision was
+  free; the same argument this section already makes for `BoundaryKind`, applied to the item that still had
+  the choice.
+
+  **The repository checks had no code owner.** `.github/CODEOWNERS` states its own criterion — *the
+  protected file must be the boundary whose edit turns CI green after drift* — and this window moved every
+  repository check into `crates/kanhe/` and put two wrappers in `scripts/` in front of `cargo publish` and
+  `gh pr merge`. CODEOWNERS was updated for the one move it noticed and not for the class, so the file
+  guarding against an agent weakening a boundary to pass CI protected the self-law and left every gate
+  unowned. Both paths are named now, and `scripts/` for a reason of its own: an edit there does not relax a
+  boundary, it removes the requirement to consult one.
+
+  **`deny.toml`'s licence comment kept a hand-written copy of the dependency graph** and claimed it was
+  exhaustive. It was wrong four ways — one crate named that no graph here contains, three in the graph and
+  unnamed — in the supply-chain gate, where a reviewer doing a licence audit would trust it. Removed rather
+  than corrected: `cargo deny list` produces it, and fixing the entries repairs the instance while leaving
+  the next drift to be found by hand. What survives is what a list cannot carry — why an SPDX `AND` clause
+  is accepted explicitly.
+
+  **The family-coverage gate's path denylist is replaced by cutting comments.** Excluding the gate's own
+  file closed the instance; any corpus file could credit a family from a doc comment. The rule is
+  `kanhe::region`'s, replicated and cited because `kanhe` depends on `shengmo` — and the family side was
+  re-measured to confirm the cut narrowed nothing.
+
+  **The reference participant separates its walk, its rule and its report.** Nine siblings of the same shape
+  stay filed as `WATCH`; this one moved because `COOKBOOK.md` sends adopters to it as the runnable version
+  of its recipe, so a design whose layers cannot be tested apart is being taught rather than merely lived
+  with. The rule now takes the file's text rather than its path, which is what makes it decidable from a
+  string.
+
+  Two smaller: `create_dir`'s threat model had two owners and now has one, and a scenario in
+  `reference-integrity` says which reaction it means — two independent reviews read *the reaction fails* as
+  requiring an integration nothing states, so the sentence was the defect rather than the code.
+
 - **The family-coverage reaction had its own source file in the corpus it judges, and credited families to
   itself for naming them.** `crates/shengmo/tests/family_coverage.rs` lives under `crates/shengmo/`, which
   its own owner rule admitted — so a boundary type mentioned in its prose counted as an adopter-shaped owner

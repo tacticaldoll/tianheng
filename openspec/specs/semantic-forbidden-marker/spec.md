@@ -3,6 +3,7 @@
 ## Purpose
 
 The 渾儀 (semantic) dimension's forbidden-marker capability: types **defined in a governed module subtree** must not acquire a forbidden trait — observed as a `#[derive(T)]` on the type or a hand `impl T for X` (anywhere in the crate) whose self-type resolves to a definition under the subtree. It delivers the "this layer is not `T`-able" intent (both idiomatic acquisition forms), the forbidden-marker complement to exposure, impl-locality, and visibility. Matching is by leaf identifier (no false negative across the derive-macro/trait path split); the forbidden-attribute slice stays deferred.
+
 ## Subject
 
 - `crates/hunyi/src/*.rs`

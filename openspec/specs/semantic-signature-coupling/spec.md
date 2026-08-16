@@ -11,6 +11,7 @@ external-crate name set (v0.1.4), with the governed module's own child modules e
 `mod dep` is not misread as the dependency. Trait-impl positions are out of scope for a bare
 boundary (see the opt-in `semantic-trait-impl-exposure`); named public re-exports are in scope by
 default (see `semantic-reexport-exposure`).
+
 ## Subject
 
 - `crates/hunyi/src/*.rs`

@@ -3,6 +3,7 @@
 ## Purpose
 
 The 漏刻 (runtime) dimension's first capability: declare which concrete-type **origins** may cross a named runtime **seam**, and probe live `dyn` objects in production to catch a forbidden-origin type slipping through a `dyn Trait` into a layer it must not reach — what static and semantic analysis structurally cannot see. It has two faces: a **prod face** (the probe reacts fail-closed, emitting a `Violation` event by default, panic opt-in) and a **CI face** (`audit_probe_coverage` verifies every declared seam is probed and every probe references a declared seam). Origin is **observed**: it is **derived from the type** — the module the concrete type is defined in — and never taken from the registering call, so no code in the process can present a type under an origin it does not have (the origin requirement below states this in full and is authoritative over this summary). The hot path is std-only and lock-free; the crate depends on 璇璣 (`xuanji`) only — 星表 (`xingbiao`) is an additive, `audit`-feature-gated exception for the CI face's own cycle guard that never reaches the production hot path.
+
 ## Subject
 
 - `crates/louke/src/**/*.rs`

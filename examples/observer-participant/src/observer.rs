@@ -38,6 +38,82 @@ impl ModuleHeaderObserver {
     }
 }
 
+// --- the three layers, kept apart on purpose -----------------------------------------------------------
+//
+// `observe` below did all of this inline: the directory walk, the header rule, and the `Violation` shape.
+// It works either way — this example is the one `COOKBOOK.md` sends an adopter to as the runnable version
+// of its recipe, and an adopter copying a design in which the I/O, the rule and the reporting cannot be
+// read or tested apart inherits that. So they are apart.
+//
+// Where the seam is drawn matters more than that there is one. The I/O layer answers *which files*, and
+// says why it could not when it cannot. The rule answers *is this one wrong* and touches no filesystem —
+// which is what makes it testable from a string. The reporting layer answers *what does that look like to
+// a consumer* and knows nothing about how the file was found.
+
+/// The `.rs` files directly inside `directory`, or a sentence saying what could not be read.
+///
+/// **`Err` is a constitution error, never an empty list.** A participant that reports clean because the
+/// look failed is the one bug the family's contract forbids outright, so this cannot answer "no files" for
+/// a directory it could not open — the two are different facts and the type keeps them apart.
+///
+/// One level deep, deliberately: the bound this participant declares says so, and descending would make
+/// the declared bound a lie.
+fn rs_files_in(directory: &Path) -> Result<Vec<std::path::PathBuf>, String> {
+    let entries = std::fs::read_dir(directory).map_err(|error| {
+        format!(
+            "cannot read governed subtree '{}': {error}",
+            directory.display()
+        )
+    })?;
+    let mut files = Vec::new();
+    for entry in entries {
+        let path = entry
+            .map_err(|error| format!("cannot enumerate '{}': {error}", directory.display()))?
+            .path();
+        if path.extension().and_then(|extension| extension.to_str()) == Some("rs") {
+            files.push(path);
+        }
+    }
+    Ok(files)
+}
+
+/// The rule itself: does this file open with a `//!` module header?
+///
+/// Takes the text rather than the path, so it is decidable from a string and a direction can show it every
+/// shape it must answer for without touching a filesystem. That is the whole reason it is not inline.
+fn opens_with_module_header(text: &str) -> bool {
+    text.lines()
+        .next()
+        .is_some_and(|line| line.trim_start().starts_with("//!"))
+}
+
+/// One finding, in the shape a consumer reads.
+///
+/// Knows nothing about how the file was found — which is what lets the walk above change without touching
+/// what a report says.
+fn violation_for(subtree: &str, label: String) -> Violation {
+    Violation::new(
+        // Borrowed from 三儀's vocabulary, and the nearest honest fit rather than a right one:
+        // `BoundaryKind` has no value a participant owns, so an outsider's violation must claim one of the
+        // family's four. Recorded as a finding of this example in its README rather than worked around here.
+        BoundaryKind::Module,
+        ViolationId::new(
+            subtree.to_string(),
+            RuleKey::of("house-rules.rule/module-header", [("subtree", subtree)]),
+            StructuredFactIdentity::of(
+                "house-rules.fact/module-header",
+                "missing-header",
+                [("file", label.as_str())],
+            ),
+        ),
+        RULE,
+        label.clone(),
+        REASON.to_string(),
+        Severity::Enforce,
+    )
+    .with_file(Some(label))
+}
+
 impl Observer for ModuleHeaderObserver {
     /// Read each configured subtree one level deep and report every file with no header.
     ///
@@ -56,34 +132,13 @@ impl Observer for ModuleHeaderObserver {
         // it hoped to.
         let mut files_read = 0usize;
         for subtree in &self.subtrees {
-            let directory = root.join(subtree);
-            let entries = match std::fs::read_dir(&directory) {
-                Ok(entries) => entries,
-                Err(error) => {
-                    return Outcome::ConstitutionError(format!(
-                        "cannot read governed subtree '{}': {error}",
-                        directory.display()
-                    ));
-                }
+            let files = match rs_files_in(&root.join(subtree)) {
+                Ok(files) => files,
+                Err(unreadable) => return Outcome::ConstitutionError(unreadable),
             };
-            for entry in entries {
-                let path = match entry {
-                    Ok(entry) => entry.path(),
-                    Err(error) => {
-                        return Outcome::ConstitutionError(format!(
-                            "cannot enumerate '{}': {error}",
-                            directory.display()
-                        ));
-                    }
-                };
-                if path.extension().and_then(|extension| extension.to_str()) != Some("rs") {
-                    continue;
-                }
+            for path in files {
                 let text = match std::fs::read_to_string(&path) {
-                    Ok(text) => {
-                        files_read += 1;
-                        text
-                    }
+                    Ok(text) => text,
                     Err(error) => {
                         return Outcome::ConstitutionError(format!(
                             "cannot read '{}': {error}",
@@ -91,11 +146,8 @@ impl Observer for ModuleHeaderObserver {
                         ));
                     }
                 };
-                if text
-                    .lines()
-                    .next()
-                    .is_some_and(|line| line.trim_start().starts_with("//!"))
-                {
+                files_read += 1;
+                if opens_with_module_header(&text) {
                     continue;
                 }
                 let label = path
@@ -103,32 +155,7 @@ impl Observer for ModuleHeaderObserver {
                     .unwrap_or(&path)
                     .display()
                     .to_string();
-                violations.push(
-                    Violation::new(
-                        // Borrowed from 三儀's vocabulary, and the nearest honest fit rather than a right
-                        // one: `BoundaryKind` has no value a participant owns, so an outsider's violation
-                        // must claim one of the family's four. Recorded as a finding of this example in its
-                        // README rather than worked around here.
-                        BoundaryKind::Module,
-                        ViolationId::new(
-                            subtree.clone(),
-                            RuleKey::of(
-                                "house-rules.rule/module-header",
-                                [("subtree", subtree.as_str())],
-                            ),
-                            StructuredFactIdentity::of(
-                                "house-rules.fact/module-header",
-                                "missing-header",
-                                [("file", label.as_str())],
-                            ),
-                        ),
-                        RULE,
-                        label.clone(),
-                        REASON.to_string(),
-                        Severity::Enforce,
-                    )
-                    .with_file(Some(label)),
-                );
+                violations.push(violation_for(subtree, label));
             }
         }
         if violations.is_empty() {

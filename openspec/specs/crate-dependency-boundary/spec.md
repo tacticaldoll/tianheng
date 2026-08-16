@@ -7,6 +7,7 @@ observed dependencies of its target crate (via `cargo metadata`) and react with 
 distinct CI exit code — clean, boundary violation, or constitution error — never a
 silent pass. This is Tianheng's first reaction and the proof of its core contract: a
 declared boundary in Rust produces a real, non-bypassable reaction when violated.
+
 ## Subject
 
 - `crates/guibiao/src/*.rs`

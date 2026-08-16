@@ -354,6 +354,17 @@ pub fn audit_corpus_and_anchor(manifest_path: &Path) -> Result<(Vec<PathBuf>, Pa
 
 /// Claim `path` as a directory this process created, refusing to adopt one that already exists.
 ///
+/// **Fixture infrastructure, deliberately withheld from the API contract.** It is `pub` because callers in
+/// six crates' test targets need it across crate boundaries, and `#[doc(hidden)]` because 星表's domain is
+/// declared workspace data — a scratch-directory claim is not in it. It lives here for a dependency-graph
+/// reason (the lightest crate already reachable from every dimension), and a dependency-graph reason is not
+/// a domain fit.
+///
+/// The distinction is not cosmetic at `0.5.0`, which is the release that first publishes it: a documented
+/// item is a promise an adopter may build on and this family cannot then withdraw, while a hidden one keeps
+/// every present caller compiling and commits to nothing. Zero call sites outside a test target or a
+/// `#[cfg(test)]` module were measured before hiding it.
+///
 /// **`create_dir_all` accepts a pre-existing symlink to a directory.** Measured: `create_dir_all` on such a
 /// link returns `Ok(())` and every subsequent write lands in the link's *target*, while `create_dir` cannot
 /// follow a symlink and returns `AlreadyExists` — the narrow call is what makes the refusal possible at all.
@@ -369,6 +380,7 @@ pub fn audit_corpus_and_anchor(manifest_path: &Path) -> Result<(Vec<PathBuf>, Pa
 /// **This is about the root only.** Every directory beneath a root this call already claimed is safe to build
 /// with the ordinary `create_dir_all`, because nothing outside the fixture's own control could have planted
 /// anything there first.
+#[doc(hidden)]
 pub fn claim_scratch(path: &Path) -> std::io::Result<()> {
     std::fs::create_dir(path)
 }

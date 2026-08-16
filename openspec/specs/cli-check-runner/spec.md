@@ -7,6 +7,7 @@ Rust-declared constitution into a CI reaction. It fixes the flag surface
 (`--manifest-path`), the usage-error handling, and how the process exit code and
 report mirror the reaction outcome (0 clean or warn-only, 1 enforce violation,
 2 constitution/usage error), so a CI gate has a stable, non-bypassable contract.
+
 ## Subject
 
 - `crates/tianheng/src/main.rs`
