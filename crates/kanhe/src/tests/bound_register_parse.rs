@@ -1,8 +1,59 @@
 use crate::bound_register_parse::{
-    bare_references, marks_a_bound, negates_bound_in_prose, projection_offences,
-    states_a_bound_in_prose, undeclared_prose_offences,
+    bare_references, bounds_in, citations_in, marks_a_bound, negates_bound_in_prose,
+    projection_offences, states_a_bound_in_prose, undeclared_prose_offences,
 };
 use std::collections::BTreeSet;
+
+/// The three readers of this grammar agree on where a scenario ends.
+///
+/// Held as **agreement between them**, not as three separate expectations. What went wrong is that they
+/// disagreed, and a direction asserting each reader's own answer passes while they diverge: `bounds_in` and
+/// `citations_in` stopped a scenario at `## `/`### `/`#### ` while `undeclared_prose_offences` stopped at any
+/// line starting with `#`. A `##### ` sub-heading fell between — the first two kept the bound scenario open,
+/// the third had left it, and the prose below was reported as an undeclared bound the register had in fact
+/// registered.
+///
+/// The prose line is one a real tracked spec carries (`semantic-dyn-trait-boundary`'s "Stated
+/// renderer-granularity bounds..."), so the trigger is the shape this scan actually meets rather than one
+/// written to make the point.
+#[test]
+fn the_scenario_readers_agree_where_a_scenario_ends() {
+    let text = "# Capability\n\
+                \n\
+                ### Requirement: A thing holds\n\
+                \n\
+                #### Scenario: A shape is out of reach - a stated bound\n\
+                \n\
+                - **THEN** the reader stops at the shape\n\
+                - **PINNED-BY** `a_test`\n\
+                \n\
+                ##### A sub-heading inside the scenario\n\
+                \n\
+                Stated renderer-granularity bounds may coalesce here.\n";
+
+    let bounds = bounds_in("cap", "cap/spec.md", text);
+    assert_eq!(
+        bounds.len(),
+        1,
+        "the scenario declares exactly one bound: {bounds:?}"
+    );
+
+    let citations = citations_in("cap", "cap/spec.md", text);
+    assert_eq!(citations.len(), 1, "one citation is written: {citations:?}");
+    assert_eq!(
+        citations[0].bound.as_deref(),
+        Some(bounds[0].id.as_str()),
+        "the citation must be attributed to the bound `bounds_in` registered, or the two readers disagree \
+         about which scenario it sits in"
+    );
+
+    let offences = undeclared_prose_offences("cap/spec.md", text, &capability_set());
+    assert!(
+        offences.is_empty(),
+        "the prose sits inside the scenario `bounds_in` registered, so reporting it undeclared is these two \
+         readers disagreeing about where that scenario ended: {offences:?}"
+    );
+}
 
 /// What the model gate's comparison catches, as a case rather than as a claim.
 ///
