@@ -41,16 +41,44 @@ cited in the affected code's history and `CHANGELOG.md`), 2 verified moot, 2 ref
 live decisions below, and its own prior two-round sweep's 6 refuted / 6 upheld-by-only-one-lens
 findings absorbed into `DECLINED`/`WATCH` below (condensed deliberately rather than kept verbatim,
 to avoid a future reader anchoring on a raw agent-verdict's specific phrasing instead of the settled
-conclusion). The sweep's own working queue file is not retained once fully drained — its substance
-now lives here and in the closing PRs, not in a file kept only because it once existed. A future
-sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
+conclusion). **A sweep's findings are entries in this file, closed or open — there is no second queue.**
+The `docs/audit/*.md` convention that used to promise each sweep its own dated file is retired: a closed
+finding's substance is its closing PR and `CHANGELOG.md`, an open one is a `READY-PATCH` or `WATCH` entry
+below with the observation source and trigger this file already asks for, and a separate file was a second
+place holding the same two things. It also regenerated a hazard every campaign — the last one carried
+hand-written line counts of live functions, unheld by anything, written by the same review round that was
+removing that class elsewhere.
 
-**Live queue: [`docs/audit/2026-08-16-merged-review-campaign.md`](docs/audit/2026-08-16-merged-review-campaign.md).**
-Two independent full-range reviews over `v0.4.0..release/0.5.0`, merged; their intersection was empty. Its
-Phase B-G are closed. What remains open is **Phase A** — three spec requirements the shell-to-Rust migration
-orphaned, found by mapping each deleted shell file to the requirement it implemented, and needing one
-OpenSpec change rather than three repairs — and the ten Gate 4 structural findings deliberately deferred out
-of the same campaign. The `0.5.0` remediation queue this replaces was retired at 43/43, per the rule above.
+The `v0.4.0..release/0.5.0` merged-review campaign is the first to land under this rule. Its closed work is
+`CHANGELOG.md`'s `### Self-governance` section and PR #603; what it left open is the `READY-PATCH` entry
+immediately below, plus the deferred structural findings under `WATCH`.
+
+- **Three spec requirements the shell-to-Rust migration orphaned.** *Class:* READY-PATCH. *Observed
+  pressure:* a contributed adversarial review found two; a sweep run to decide their shape found the third.
+  *Observation source:* each of the twelve shell files `64ed18c` deleted, mapped to the spec requirement it
+  implemented — nine were correctly swept when they were deleted, three were not. *Current reaction or
+  bound:* none; each states a live `SHALL` that nothing runs, which is the failure this whole family exists
+  to end, committed inside its own governance.
+  - `governance-dogfood`'s focused-matrix ordering requirement and its three scenarios — **REMOVE**. The
+    decision was made and recorded in `dd6e1f8`, in `dod_coherence.rs`'s doc comment and in the retired
+    remediation queue; it never reached the spec.
+  - `reference-integrity`'s fixture-policy requirement and its three scenarios — **REVISE**. The capability
+    changed shape rather than vanishing: the port parameterises `offences_in` directly instead of accepting
+    a fixture-set option, and `GOVERNANCE_DOCUMENTS` is a compile-time `const`.
+  - `governance-dogfood`'s boundary-family coverage requirement and its two scenarios — **REVISE + BUILD**.
+    Measured: every family it names does have an adopter-shaped owner today, so the substance holds and the
+    gap is that nothing would notice one losing its owner. Build it **derived both ways** — families from
+    the boundary types, owners from the examples and the self-law — never as a hand-kept inventory. Drop its
+    stale `0.2.x` anchor and its unrelated `GovernanceTest` clause. One asymmetry an inventory surfaces at
+    once: `AsyncExposureBoundary` is owned only in `sans-io-pure`'s `tests/reaction.rs`, not in its
+    `src/governance.rs` like every sibling.
+  *Risk:* a reader consulting a spec is told a rule is enforced when it is not — the same class the bound
+  register was built to end one level down. *Promotion trigger:* fired; this is the work, not a candidate
+  for it. It rides one `change/` branch as one OpenSpec lifecycle, because each orphan needs the same
+  decision made per orphan rather than three separate repairs, and the guard that would have caught two of
+  them — every spec's `## Subject` resolving to paths that exist — belongs in that same change, since a
+  revised scenario must carry its observation evidence with it. *Version class:* patch; repository-internal,
+  shipping in no crate. *Authority:* `governance-dogfood` and `reference-integrity`.
 
 ## Live decision index
 
@@ -129,8 +157,8 @@ consumer for an undemonstrated deduplication.
 
   *Shape, with the corpus measured rather than borrowed:* comment stripping does **not** close this — a string
   literal is not a comment — so the register's rejection of comment-delimiter lexing is not the reason here,
-  and citing it was wrong. This reader's corpus is the three files `DIMENSIONS` names, 35, 48 and 43 lines,
-  none carrying a string literal with a comment delimiter, so the register's measurement does not transfer in
+  and citing it was wrong. This reader's corpus is the three files `DIMENSIONS` names, none of which carries a
+  string literal with a comment delimiter, so the register's measurement does not transfer in
   either direction. Two candidate closures, **neither adopted, and neither actually closes the class** —
   checked against the real corpus rather than left as an abstract choice. Requiring the anchor to be preceded
   by an `impl Observer for` line was measured against the three real files and refuted as stated: every real
@@ -706,6 +734,23 @@ consumer for an undemonstrated deduplication.
 
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
+
+- **WATCH: ten structural findings the merged-review campaign deliberately did not take.** *Observed
+  pressure:* a contributed review's Gate 4 found twelve functions long or deeply nested enough to hide more
+  than one responsibility. Two were taken (`offences_in`'s four resolution rules, `judge`'s six phases) and
+  ten were not. *Observation source:* that review, measured against `HEAD` — every length it reported was
+  reproduced exactly. The residual sites are `publish_source_gate`'s `judge` and `verify_tag_signature`,
+  `release_coherence_gate`'s `machinery_names`, `bound_register_parse`'s `bounds_in` and
+  `undeclared_prose_offences`, `census`'s `number_at` and `sweep`, `region`'s `Prose::lines`,
+  `reference_integrity`'s link normalisation, and `examples/observer-participant`'s `observe`. *Current
+  reaction or bound:* none, and none is wanted — length is not a property this repository reacts to.
+  *Risk:* low and legible. These are pure structural changes to gate code that stabilised inside the window
+  that found them, and the risk of moving it is not symmetric with the risk of leaving it long. *Promotion
+  trigger:* a defect found in one of the named sites whose diagnosis was made harder by its length — not the
+  length itself, which is the measurement that already exists and is not the evidence. **Not fired.** *When
+  it fires:* `observer-participant`'s `observe` must be repaired together with `COOKBOOK.md`, which points at
+  that file as the runnable version of its own recipe. *Version class:* patch; repository-internal.
+  *Authority:* the campaign recorded in `CHANGELOG.md`'s `### Self-governance` section.
 
 - **WATCH: the reference gate's dated-section exemption is widest while the section is still being
   written.** *Observed pressure:* the exemption keys on a section being *dated*, and dating is the freeze
