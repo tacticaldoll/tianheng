@@ -904,6 +904,33 @@ them.
 
 ### Self-governance
 
+- **The OpenSpec adoption mode is declared, after being chosen from the beginning and written down nowhere.**
+  OpenSpec has two halves — `specs/` as the per-capability requirement truth, and `changes/` as a proposal
+  workflow. This project has always used the first and never the second: zero change directories have ever
+  existed, while seven whole capabilities were specified in this window alone, four of them under `feat:`.
+  `openspec/config.yaml` declared neither half, and `AGENTS.md` described the `changes` workflow in the
+  present indicative — so the document a reader is told to consult first described the mode not in use, with
+  nothing saying it was a choice.
+
+  The cost was observed rather than argued: an agent reading `AGENTS.md` first, exactly as that file
+  instructs, planned work through the unused mode three times in one session before anyone measured.
+
+  The call now sits in `PROJECT.md`'s Decisions with the condition that would change it — a change too large
+  to land as one reviewable pull request — and `AGENTS.md` states how a capability change is worked in the
+  mode actually in use: the requirement is written onto its spec, the reaction is written in the same branch,
+  and both land as one squash. **The spec and the reaction move together because they are one change**, not
+  because a later sync step merges them.
+
+  **Two things deliberately not done.** `openspec/changes/archive/.gitkeep` stays, its stated job changed
+  from archive hygiene — which described pruning that never happens here — to **optionality**: the directory
+  exists so adopting the other half needs no setup and no exception. And nothing enforces the mode, because a
+  check that fired when a change directory appeared would prevent exactly that adoption. Encoding the choice
+  into the tree, by deletion or by reaction, is the freezing the declaration exists to avoid.
+
+  Three diagnoses were written before the right one. *Unrealized aspiration* and *prose contradicted by
+  practice* both read the gap as a failure to follow a process; it was an undeclared decision, and the
+  correction came from the challenge rather than from the review.
+
 - **`BACKLOG.md` classified work twice and the two disagreed, in the file whose job is classification.**
   Every entry sits under a `### ` class heading *and* declares its own `*Class:*`. Seven of twelve live
   entries under `### READY-PATCH` declared `*Class:* WATCH`, and one declared no class at all.

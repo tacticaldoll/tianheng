@@ -335,3 +335,17 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   already been made to lie. It is not a general preference for abstraction — `BoundaryKind`'s four names are
   right for the dimensions they name, and the gap is that nothing else can be said.
 - **The composed adopter surface is compile-reacted.** `tianheng::prelude::*` is the entrypoint. `check_constitution(&Constitution, &Path) -> Outcome` unifies CLI and library testing evaluation.
+- **OpenSpec is adopted in its `specs` mode, not its `changes` mode.** OpenSpec offers two halves: `specs/` as
+  the per-capability requirement truth, and `changes/` as a proposal workflow — a change directory carrying
+  `proposal.md` / `design.md` / `tasks.md`, synced into the specs and then archived. This project uses the
+  first and not the second. A requirement change is written directly onto its spec, in the same branch and
+  pull request as the reaction that answers it. *(Recorded 2026-08: the mode had been chosen in practice from
+  the beginning and stated nowhere — measured, zero change directories have ever existed, while seven whole
+  capabilities were specified in this window alone, four of them under `feat:`. `AGENTS.md` meanwhile
+  described the `changes` workflow in the present indicative, and the cost was observed rather than
+  hypothesised: an agent reading it first, as that file instructs, planned work through a mode this project
+  does not use, three times in one session, before anyone measured.)* **What would change it:** a change too
+  large to land as one reviewable pull request, where the value of a written proposal exceeds the cost of a
+  second place for requirements to live. That has not happened; the discriminator is reviewability, not size
+  of intent. Nothing enforces the mode, deliberately — a reaction that failed when a change directory
+  appeared would prevent adopting the other half, which is the freezing this decision exists to avoid.

@@ -7,7 +7,7 @@
 //! generator its own header names.
 //!
 //! It is **not** 校讎. That word is already spent: 校讎 is one of the 三司 and names the *amendment
-//! flow* — the steward routing, the OpenSpec lifecycle — while this crate collates a record. A first
+//! flow* — the steward routing, and the amendment itself — while this crate collates a record. A first
 //! draft of this crate took the name anyway, which is the misnaming its own siblings exist to end.
 //!
 //! It is **not** self-governance either. 繩墨 holds the law 天衡 declares over itself and the dogfood gates that
