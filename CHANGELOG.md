@@ -904,6 +904,49 @@ them.
 
 ### Self-governance
 
+- **Two further review rounds closed the last four findings, and one of them corrected a record.**
+
+  **The counted-offset detector read four unit words where its requirement names none.** `positional_reference`
+  recognised an offset as a count followed by `lines`/`line`/`paragraph`/`sentence`; the requirement forbids
+  *a counted offset* and names no vocabulary, so those four were a second list beside the rule and could only
+  be narrower. Sixteen live positional references stood in tracked comments, four of them in the gate's own
+  crate — clean over its own requirement. All repaired by naming the construct.
+
+  The **article** branch keeps the list, because its clause turns on the noun: *a definite article naming no
+  thing*. A line is pure position; a construct named and located is a reference the rule permits. Dropping
+  the list from both branches was measured and took the tree an order of magnitude further, almost entirely
+  onto phrases the requirement allows.
+
+  Two conditions keep the widened branch from its opposite error, neither adding a vocabulary: the count must
+  be a whole word (`round-9 finding above` names a finding), and it must be adjacent to the noun. A third was
+  written, **measured to change no verdict, and removed** — it would have introduced a false negative of its
+  own. A discriminator that changes no verdict is a claim, not a guard.
+
+  **`workspace_version` and `semver` lived twice, in the same two files whose command builder was extracted
+  this window — and unlike that pair, these had diverged.** One accepted a `[package]` table where the other
+  did not; one was a digit check that admitted a version too large to order, the other a parse that refused
+  it. Two readers of one fact reaching different verdicts, in front of `cargo publish`. Now one module, with
+  the overflow boundary pinned. The `[package]` fallback is **not** carried forward: measured unreachable for
+  every subject either gate has, so keeping it would preserve an untested branch settling a disagreement no
+  input could produce.
+
+  **`CLASSES` restated `AGENTS.md`'s vocabulary with nothing joining them.** Its doc explained why the set is
+  not derived from the *headings* and said nothing about the document where the vocabulary is stated, so a
+  class dropped from the contract would go on being admitted. Joined both ways, in the shape
+  `merge_message_gate` already uses for its commit types against the same document — including the loud
+  refusal when the anchor sentence cannot be parsed.
+
+  **The capability-subject filing join observes nothing under the declared mode**, and now says so. It
+  enumerates `openspec/changes/*/proposal.md`, which the `specs`-mode decision makes permanently empty — the
+  join and the declaration landed four commits apart and neither noticed the other. Not re-pointed: under
+  `specs` mode there is no independent capability declaration to compare a diff against. Recorded with its
+  trigger instead, because an inert reaction reads as coverage.
+
+  **A record said something untrue.** Both `BACKLOG.md` and this file listed `unbounded` among the words that
+  would be wrongly read as bounds-named. The check strips an optional `s` and then refuses a following
+  letter, so `bound` + `ed` does not match — and `unbounded` occurs live in this tree, so a reader verifying
+  the claim would find it false. The residual is real for the other three; only the example was wrong.
+
 - **Two more static reviews landed, and eight findings survived verification.** Both were run against the
   merged tree, so most of what they raised was already closed; these are the ones that were not.
 
@@ -1175,8 +1218,12 @@ them.
   `states_a_bound_in_prose`'s own, so a sentence stacking both qualifiers
   (`"this is not a documented residual bound"`) reads as a declaration instead of the denial it is;
   and `requirement_heading_is_bounds_named` checks only the character *after* a `bound`/`bounds`
-  match, not before, so a heading containing `outbound`/`rebound`/`unbounded` as a substring would be
-  wrongly classified as bounds-named. Both recorded as `WATCH` entries in `BACKLOG.md`.
+  match, not before, so a heading containing `outbound`/`rebound`/`abound` as a substring would be
+  wrongly classified as bounds-named. (`unbounded` was listed here and in `BACKLOG.md` and is **wrong**:
+  the check strips an optional `s` and then refuses a following letter, so `bound` + `ed` does not match.
+  Corrected where both records stated it — a closed record carrying a false claim is worse than no
+  record, and `unbounded` occurs live in this tree, so a reader checking the claim would find it false.)
+  Both recorded as `WATCH` entries in `BACKLOG.md`.
 
   Also fixed in this round: `crates/xingbiao/src/tests.rs`'s own `TempDir::new` — the crate that
   shipped `claim_scratch` this window still used `remove_dir_all`/`create_dir_all` for its own test

@@ -221,7 +221,7 @@ fn only_an_allowlisted_argument_reaches_the_publish() {
 ///
 /// A controlled executable cannot answer what the real tool does; that measurement belongs beside the
 /// classification, in the script's own comment, against a named version. What this direction can hold is that
-/// the wrapper composes a selection cargo would honour, so the two cases below that carry `--package` assert the
+/// the wrapper composes a selection cargo would honour, so the two `--package` cases assert the
 /// absence of `--workspace` as much as the presence of the selector.
 #[test]
 fn an_admitted_argument_reaches_the_publish_as_cargo_would_honour_it() {

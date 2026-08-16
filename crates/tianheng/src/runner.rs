@@ -855,7 +855,7 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
 /// writable but not readable (mode `0300`) cannot be opened for it at all. Turning any of those
 /// into "cannot write baseline" would report failure for a baseline that is sitting correctly on
 /// disk, and would regress adopters for whom this path worked before the flush existed. So a
-/// runtime inability to flush a directory is treated exactly as the compile-time one is below: as
+/// runtime inability to flush a directory is treated exactly as the compile-time inability is: as
 /// this platform not offering the operation, not as the write having failed.
 ///
 /// Unix only for the compile-time half: `File::open` on a directory is not portable — Windows

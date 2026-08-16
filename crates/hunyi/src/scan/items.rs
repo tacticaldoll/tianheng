@@ -492,7 +492,7 @@ fn resolve_conventional_child(
     Ok(())
 }
 
-// `child_dir` and `file_dir` are distinct module-resolution bases (see the two helpers above), not
+// `child_dir` and `file_dir` are distinct module-resolution bases (see `child_dir` and `file_dir`), not
 // bundled: they thread the descent by position alongside the crate-scan accumulator and guards.
 pub(super) fn resolve_child_modules(
     items: &[FlatItem],

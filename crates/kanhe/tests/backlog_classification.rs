@@ -21,6 +21,7 @@
 //! rejected three times. This one does not: a heading is a literal, a `*Class:*` line is a literal, and
 //! whether they match is decidable. Where a class is decidable it gets a reaction.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 /// The classes `BACKLOG.md`'s own governance section defines.
@@ -36,6 +37,31 @@ const CLASSES: [&str; 6] = [
     "DECLINED",
     "BUILT / HISTORY",
 ];
+
+/// The classes `AGENTS.md`'s classification sentence names, or `None` if that sentence cannot be read.
+///
+/// **`None` rather than an empty list, for the reason `merge_message_gate::admitted_types` gives**: a
+/// contract that could not be parsed is a different fact from one that admits nothing, and returning empty
+/// would make the comparison below hold vacuously — agreeing with whatever [`CLASSES`] already says while
+/// reporting that it had checked.
+///
+/// Anchored on the sentence rather than on the individual words, and it ends at that sentence's period so
+/// the backticked `BACKLOG.md` in the next one stays outside.
+fn classified_classes(agents: &str) -> Option<Vec<String>> {
+    let clause = agents.split("Classify live work by its").nth(1)?;
+    let run = clause.split(". ").next()?;
+    let classes: Vec<String> = run
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect();
+    if classes.is_empty() {
+        None
+    } else {
+        Some(classes)
+    }
+}
 
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
@@ -188,5 +214,47 @@ fn every_live_entry_sits_under_the_class_it_declares() {
         "{} live backlog entr(ies) disagree with the heading they sit under:\n{}",
         offences.len(),
         offences.join("\n")
+    );
+}
+
+/// [`CLASSES`] is the set `AGENTS.md` names, in both directions.
+///
+/// **The array was a second copy of the contract with nothing joining the two.** Its own doc explained why
+/// the legal set is not derived from the *headings* — a typo'd heading would define its own class — and
+/// said nothing about `AGENTS.md`, where the vocabulary is actually stated. A class dropped from the
+/// contract would keep being admitted here, silently.
+///
+/// The shape is `merge_message_gate::admitted_types` / `gate_types`, which this crate already uses to hold
+/// its Conventional Commit types against the same document. One sibling did it right; this is that.
+#[test]
+fn the_classes_are_the_ones_agents_md_names() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let agents = std::fs::read_to_string(root.join("AGENTS.md"))
+        .expect("AGENTS.md states the classification this file judges by and must be readable");
+    let contract: BTreeSet<String> = classified_classes(&agents)
+        .unwrap_or_else(|| {
+            panic!(
+                "cannot read the classification from AGENTS.md — the sentence beginning `Classify live \
+                 work by its` is the anchor, and a contract this reader cannot parse is not a contract \
+                 admitting nothing"
+            )
+        })
+        .into_iter()
+        .collect();
+    let declared: BTreeSet<String> = CLASSES.iter().map(|c| (*c).to_string()).collect();
+
+    let stated_but_unadmitted: Vec<&String> = contract.difference(&declared).collect();
+    assert!(
+        stated_but_unadmitted.is_empty(),
+        "AGENTS.md classifies work under these and this check does not admit them, so an entry declaring \
+         one reads as declaring nothing: {stated_but_unadmitted:?}"
+    );
+    let admitted_but_unstated: Vec<&String> = declared.difference(&contract).collect();
+    assert!(
+        admitted_but_unstated.is_empty(),
+        "this check admits these classes and AGENTS.md names none of them, so a class could be dropped \
+         from the contract and go on being accepted here: {admitted_but_unstated:?}"
     );
 }

@@ -192,6 +192,23 @@ fn a_change_names_every_capability_whose_subject_it_touches() {
     if changes.is_empty() {
         // No filing decision is in front of this check. An ordinary checkout is asking no such question,
         // and refusing one would be noise rather than governance.
+        //
+        // **Under the declared OpenSpec mode this branch is always taken, and saying so is the point.**
+        // `PROJECT.md` records that this project uses OpenSpec's `specs` half and not its `changes` half,
+        // so `openspec/changes/` holds nothing but `archive/.gitkeep` and the corpus above can never be
+        // non-empty. This direction therefore observes nothing today — it is held for the same optionality
+        // the placeholder is, and it starts working the day a change directory exists.
+        //
+        // The class it was built from is **currently defended by review alone**: a change filing a
+        // wrapper's requirement under the wrong capability, which is live because `scripts/publish.sh` has
+        // two claimants. That is recorded in `BACKLOG.md` rather than left for a reader to infer from an
+        // early return, because an inert reaction reads as coverage — which is the failure this whole file
+        // exists to refuse one level up.
+        //
+        // Re-pointing it at what `specs` mode does produce was considered and rejected: the join compares a
+        // proposal's *declared* capability set against the subjects a diff touches, and reading that set
+        // from the touched spec paths instead is near-tautological — touching a spec is naming its
+        // capability. There is no second, independent declaration to compare against.
         return;
     }
 

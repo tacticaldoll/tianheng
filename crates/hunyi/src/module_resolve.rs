@@ -375,7 +375,7 @@ fn push_file_form_branches(
                 ModuleFile::One(file) => file,
                 ModuleFile::Ambiguous { flat, nested } => {
                     // `seg`, not `module`: the ambiguous declaration may be an ANCESTOR of the
-                    // anchor being resolved, and the two paths below are that ancestor's.
+                    // anchor being resolved, and both candidate paths are that ancestor's.
                     return Err(dual_backed_module_error(
                         module,
                         seg,
