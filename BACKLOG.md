@@ -45,6 +45,13 @@ conclusion). The sweep's own working queue file is not retained once fully drain
 now lives here and in the closing PRs, not in a file kept only because it once existed. A future
 sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
 
+**Live queue: [`docs/audit/2026-08-16-merged-review-campaign.md`](docs/audit/2026-08-16-merged-review-campaign.md).**
+Two independent full-range reviews over `v0.4.0..release/0.5.0`, merged; their intersection was empty. Its
+Phase B-G are closed. What remains open is **Phase A** — three spec requirements the shell-to-Rust migration
+orphaned, found by mapping each deleted shell file to the requirement it implemented, and needing one
+OpenSpec change rather than three repairs — and the ten Gate 4 structural findings deliberately deferred out
+of the same campaign. The `0.5.0` remediation queue this replaces was retired at 43/43, per the rule above.
+
 ## Live decision index
 
 ### DESIGN-BREAKING
