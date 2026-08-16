@@ -769,21 +769,25 @@ consumer for an undemonstrated deduplication.
   second profile reaching a family no bare declaration names. **Not fired.** *Version class:* patch;
   repository-internal, shipping in no crate. *Authority:* `governance-dogfood`.
 
-- **WATCH: ten structural findings the merged-review campaign deliberately did not take.** *Observed
+- **WATCH: nine structural findings the merged-review campaign deliberately did not take.** *Observed
   pressure:* a contributed review's Gate 4 found twelve functions long or deeply nested enough to hide more
   than one responsibility. Two were taken (`offences_in`'s four resolution rules, `judge`'s six phases) and
   ten were not. *Observation source:* that review, measured against `HEAD` — every length it reported was
   reproduced exactly. The residual sites are `publish_source_gate`'s `judge` and `verify_tag_signature`,
   `release_coherence_gate`'s `machinery_names`, `bound_register_parse`'s `bounds_in` and
   `undeclared_prose_offences`, `census`'s `number_at` and `sweep`, `region`'s `Prose::lines`,
-  `reference_integrity`'s link normalisation, and `examples/observer-participant`'s `observe`. *Current
+  `reference_integrity`'s link normalisation. *Current
   reaction or bound:* none, and none is wanted — length is not a property this repository reacts to.
   *Risk:* low and legible. These are pure structural changes to gate code that stabilised inside the window
   that found them, and the risk of moving it is not symmetric with the risk of leaving it long. *Promotion
   trigger:* a defect found in one of the named sites whose diagnosis was made harder by its length — not the
-  length itself, which is the measurement that already exists and is not the evidence. **Not fired.** *When
-  it fires:* `observer-participant`'s `observe` must be repaired together with `COOKBOOK.md`, which points at
-  that file as the runnable version of its own recipe. *Version class:* patch; repository-internal.
+  length itself, which is the measurement that already exists and is not the evidence. **Not fired.**
+  *One of the twelve left this list on its own evidence, not on the trigger:*
+  `examples/observer-participant`'s `observe` was split, because a second review pointed out that
+  `COOKBOOK.md` sends adopters to it as the runnable version of its recipe — so a design whose layers cannot
+  be tested apart is being *taught*, which is an adopter-facing consequence rather than the internal
+  maintainability cost the other nine carry. The trigger stays as written for those nine; what moved this one
+  was a different kind of argument, not a lower bar. *Version class:* patch; repository-internal.
   *Authority:* the campaign recorded in `CHANGELOG.md`'s `### Self-governance` section.
 
 - **WATCH: the reference gate's dated-section exemption is widest while the section is still being
