@@ -904,6 +904,34 @@ them.
 
 ### Self-governance
 
+- **`BACKLOG.md` classified work twice and the two disagreed, in the file whose job is classification.**
+  Every entry sits under a `### ` class heading *and* declares its own `*Class:*`. Seven of twelve live
+  entries under `### READY-PATCH` declared `*Class:* WATCH`, and one declared no class at all.
+
+  Not a formatting complaint: the classification exists so a reader can ask *what is ready to work on*, and
+  the heading is what they read. Measured, the heading answered **twelve** where the truth was **four** — the
+  question was asked in that form and got the wrong answer before this was found. The seven moved to the
+  class they declare.
+
+  **This one earned a reaction where its siblings did not, and the difference is worth stating.** The
+  residuals recorded elsewhere in this window — whether a requirement outlived its mechanism, whether a
+  figure reads as a live claim or a record — need a judgement over what a sentence means, which this
+  repository has designed, measured and rejected three times. This one is decidable: a heading is a literal,
+  a `*Class:*` line is a literal, and whether they agree is a comparison. Where the class is decidable it
+  gets a reaction, and `crates/kanhe/tests/backlog_classification.rs` now holds both directions — an entry
+  under the wrong heading, and an entry declaring nothing, which the first direction cannot see because a
+  missing line disagrees with nothing.
+
+  Building it also found that the file has **two** legal ways to declare a class — a `*Class:*` line in the
+  classified sections, a title prefix in the combined one — and that both abbreviate (`ACCEPTED` for
+  `ACCEPTED DEBT`). Both are read, rather than one being made to conform: requiring both forms everywhere
+  would put the fact in two places inside each entry, which is the shape being removed one level up.
+
+  The `READY-PATCH` definition gained a clause instead of one entry being misfiled to fit it. It classifies
+  **evidence and compatibility, not how much design the correction still needs** — the entry that declared no
+  class had measured pressure and broke no API, and was left unclassified only because the heading sounds
+  like "next" and its fix is a capability yet to be designed.
+
 - **Three spec requirements described mechanisms the shell-to-Rust migration had deleted, and are closed.**
   Each stated a live `SHALL` that nothing ran — the failure this whole family exists to end, committed inside
   its own governance, where a reader consulting a spec is told a rule is enforced when it is not.
