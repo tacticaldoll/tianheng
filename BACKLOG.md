@@ -75,9 +75,18 @@ immediately below, plus the deferred structural findings under `WATCH`.
   *Risk:* a reader consulting a spec is told a rule is enforced when it is not — the same class the bound
   register was built to end one level down. *Promotion trigger:* fired; this is the work, not a candidate
   for it. One branch and one pull request, because each orphan needs the same decision made per orphan
-  rather than three separate repairs, and the guard that would have caught two of them — every spec's
-  `## Subject` resolving to paths that exist — belongs with them, since a revised scenario must carry its
-  observation evidence in the same change.
+  rather than three separate repairs.
+
+  **This entry claimed a guard would have caught two of them, and that was wrong too.** The guard named —
+  every spec's `## Subject` resolving to tracked paths — **already exists** as
+  `capability_subjects::declaration_offences`, held by `every_capability_declares_the_subject_it_governs`,
+  and it was green the whole time: all three orphans' subjects resolve perfectly well while a requirement
+  under them described a deleted mechanism. Specifying it as new work would have rebuilt a live reaction.
+  What actually found them was reading each shell file the migration deleted and asking which requirement it
+  had implemented — a judgement over prose. **No reaction is proposed for this class**, because deciding
+  whether a prose-described mechanism still exists is the instrument this repository has measured and
+  rejected three times. The residual is stated instead: a requirement can outlive its mechanism, and only a
+  reader comparing the two will see it.
 
   **This entry said "one OpenSpec lifecycle" and that was wrong about this repository.** Measured: the
   `explore → propose → apply → sync` lifecycle `AGENTS.md` describes has **never run here** — zero

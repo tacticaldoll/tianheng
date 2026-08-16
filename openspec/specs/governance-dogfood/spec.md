@@ -149,7 +149,14 @@ migration consolidated them into one Rust test — `crates/shengmo/tests/example
 ordering internally, checked by the compiler rather than by grepping one document for another's basenames.
 There is no longer a sequence of separate commands to order, and no separate driver that could recurse into a
 matrix. The decision was taken and recorded when the consolidation landed; it did not reach this file for two
-windows, which is what the `## Subject` direction added alongside this change now catches.
+windows.
+
+**Nothing catches this class, and saying so is more honest than naming a guard that does not.** A first draft
+of this paragraph claimed the subject-resolution direction would have caught it. It would not:
+`capability_subjects::declaration_offences` already refuses a subject glob matching no tracked path, and it
+was green throughout — this capability's globs resolve perfectly well while a requirement under them
+described a mechanism that had been deleted. What found it was reading each shell file the migration removed
+and asking which requirement it had implemented, which is a judgement over prose, not a reaction.
 
 #### Scenario: Every live example is exercised
 
