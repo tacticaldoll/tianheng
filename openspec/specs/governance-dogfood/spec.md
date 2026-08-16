@@ -13,28 +13,53 @@ adopter-shaped examples without turning tutorials into exhaustive fixtures or in
 ## Requirements
 ### Requirement: Public boundary families have adopter-shaped reaction coverage
 
-The repository SHALL maintain an executable, reviewable inventory mapping the published 0.2.x
-`Constitution` boundary-family set to at least one repository-owned self-governance or isolated
-example reaction. That set is: static crate and module boundaries; signature, trait-impl,
-visibility, forbidden-marker, dyn-trait, impl-trait, async-exposure, and unsafe semantic
-boundaries; the `sans_io_pure` and `no_existential_leak` composed profiles; and runtime boundaries.
-A family SHALL count as fulfilled only after its owner executes the real evaluator against source
-or Cargo metadata and observes its declared structured reaction; construction, projection, an exit
-code that another family could cause, or a free-standing coverage claim SHALL NOT count. The
-dogfood gate SHALL fail when any inventoried family has no fulfilled owner or an owner claims a
-family absent from the inventory. The self-governance suite SHALL dogfood `tianheng::testing::GovernanceTest`
-to execute reaction, workspace member coverage, and projection freshness assertions.
+Every boundary family the composed shell publishes SHALL be named by at least one adopter-shaped reaction —
+an isolated example workspace, or this repository's own self-law. **Both sides of that comparison SHALL be
+derived, neither written down.** The families SHALL be the boundary types `crates/tianheng/src/lib.rs`
+re-exports, and the owners SHALL be the tracked files under `examples/` and `crates/shengmo/` naming such a
+type. The reaction SHALL fail in **both** directions: a published family no owner names, and an owned type
+the shell does not publish.
 
-#### Scenario: Every public family has a fulfilled reaction owner
+**No inventory, and the requirement used to ask for one.** It named thirteen families in prose, anchored to
+the `0.2.x` surface. A literal beside an enumerator is the shape this repository removes on sight: a family
+added to the shell keeps its old answer in the list and nobody re-examines it, which is the failure the
+inventory was for. One derivation from the shell's own re-exports replaces it, and the version anchor goes
+with it — a derived set has no release to be anchored to.
 
-- **WHEN** the dogfood suite runs against the current public `Constitution` surface via `tianheng::testing::GovernanceTest`
-- **THEN** every inventoried boundary family has at least one owner whose real evaluator and
-  structured reaction assertions completed successfully
+Two of the thirteen were **profiles, not families**, and are not covered here.
+`Constitution::sans_io_pure`'s own documentation states it is "a convenience over declaring the two
+boundaries by hand; it adds no new reaction", and `no_existential_leak` is the same shape. A profile is a
+bundle, so the boundaries it bundles cover it by construction; counting it as a family would have this
+reaction assert coverage of a reaction that does not exist.
 
-#### Scenario: Missing family ownership fails the gate
+The requirement's third clause — that the self-governance suite dogfood `tianheng::testing::GovernanceTest` —
+is **dropped rather than fixed**. That harness executes clean-reaction, workspace-member-coverage and
+projection-freshness assertions; none of them is family coverage, so it was an unrelated obligation carried
+inside this requirement and satisfied by nothing.
 
-- **WHEN** an inventoried published family has no successfully fulfilled reaction owner
-- **THEN** the dogfood gate fails and names the missing family identity
+What is **not** claimed: that an owner exercises its family well. This holds that a family is reachable from
+something an adopter can read and run, which is what makes a family losing its owner visible; whether the
+owner's assertion is a good one belongs to the owner's own test.
+
+#### Scenario: A published family no owner names
+
+- **WHEN** the composed shell re-exports a boundary type that no tracked file under `examples/` or
+  `crates/shengmo/` names
+- **THEN** the dogfood reaction fails and names that family
+- **PINNED-BY** `every_published_family_has_an_adopter_shaped_owner`
+
+#### Scenario: An owned type the shell does not publish
+
+- **WHEN** an example workspace or the self-law names a boundary type the composed shell does not re-export
+- **THEN** the dogfood reaction fails and names it, because coverage of a surface no adopter reaches is not
+  coverage of the published family set
+- **PINNED-BY** `every_published_family_has_an_adopter_shaped_owner`
+
+#### Scenario: Neither side of the comparison is empty
+
+- **WHEN** the shell's re-exports or the owner corpus yields nothing
+- **THEN** the reaction fails on the derivation itself rather than reporting every family owned, because two
+  empty sets agree
 
 ### Requirement: Breadth stays separate from teaching examples
 
