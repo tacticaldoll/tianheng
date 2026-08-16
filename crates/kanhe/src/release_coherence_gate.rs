@@ -238,6 +238,18 @@ fn require_version_surfaces(
             PackageName::Named(name) => name,
             PackageName::Absent | PackageName::Unreadable(_) => path.clone(),
         };
+        // **Not routed through `region::toml()`, and this is the exception rather than an omission.**
+        // Three readers in this file were converted because their predicates *could* be satisfied by a
+        // comment. This one cannot: it compares a whole line, space-stripped, against one literal, so no
+        // spelling of a commented-out line equals it — held by
+        // `a_comment_cannot_satisfy_the_inherit_or_name_predicate` rather than argued here.
+        //
+        // Converting it would be a **narrowing**, not a widening. Measured: `version.workspace = true#c` is
+        // a legal TOML comment, and `region`'s token-start rule — which exists so a `"https://…#frag"`
+        // inside a string survives — reads that `#` as content, so the line would stop inheriting and a
+        // valid manifest would be refused. Neither rule is exactly TOML; each errs in the opposite
+        // direction, and the safe one differs per predicate. `package_name` is left raw for the same
+        // reason: `strip_prefix("name")` on a trimmed line cannot match a `#`-led one.
         let inherits = text.lines().any(|line| {
             let line = line.trim();
             let line = line.split('#').next().unwrap_or(line).trim_end();
@@ -810,15 +822,6 @@ struct Shape {
     breaking: BTreeSet<String>,
 }
 
-/// The document's grammar — which headings each release section carries, and which sections mark a break.
-///
-/// It once also collected the section names themselves. Nothing read them: `judge` consumes the headings and
-/// the breaking set, so the collection was computed and discarded. `dead_code` cannot see that — `insert` counts
-/// as a use of the field — which is why a `-D warnings` workspace passed over it.
-///
-/// The line between this and an entry's *content* is where the decidable stops: whether an entry is accurate,
-/// whether "no adopter action" is true, whether a named symbol exists are judgements over prose, and the
-/// detector they would need is the one this repository measured three times and rejected.
 /// The release section a `## [` heading names, with any ` - DATE` suffix dropped.
 ///
 /// **One derivation.** It was written twice, byte-identical, in `section_shape` and
@@ -837,6 +840,15 @@ fn section_of(line: &str) -> Option<String> {
     })
 }
 
+/// The document's grammar — which headings each release section carries, and which sections mark a break.
+///
+/// It once also collected the section names themselves. Nothing read them: `judge` consumes the headings and
+/// the breaking set, so the collection was computed and discarded. `dead_code` cannot see that — `insert` counts
+/// as a use of the field — which is why a `-D warnings` workspace passed over it.
+///
+/// The line between this and an entry's *content* is where the decidable stops: whether an entry is accurate,
+/// whether "no adopter action" is true, whether a named symbol exists are judgements over prose, and the
+/// detector they would need is the one this repository measured three times and rejected.
 fn section_shape(changelog: &str) -> Shape {
     let mut shape = Shape {
         headings: BTreeMap::new(),
