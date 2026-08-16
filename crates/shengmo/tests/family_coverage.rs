@@ -76,13 +76,51 @@ fn tracked(root: &Path) -> Vec<String> {
     files
 }
 
-/// Every `…Boundary` identifier in `text`, as whole words.
+/// The executed part of a Rust line: everything before a `//` that begins a token.
+///
+/// **The rule is `kanhe::region`'s `cut_tail_comment`, replicated rather than called.** `kanhe` depends on
+/// this crate, so reaching the other way is a cycle; lifting the rule into a crate both can see would put
+/// text-region machinery on a published surface, which is the mistake `xingbiao::claim_scratch` was just
+/// corrected for. Two implementations, one owner for the rule — and the owner is worth citing rather than
+/// re-deriving, because the narrow condition is measured: cutting at the *first* `//` corrupts 26 lines in
+/// this repository, including `"https://…"` constants and a string carrying `"/// …"`.
+fn executed(line: &str) -> &str {
+    let mut from = 0;
+    while let Some(offset) = line[from..].find("//") {
+        let at = from + offset;
+        let begins_a_token = at == 0
+            || line[..at]
+                .chars()
+                .next_back()
+                .is_some_and(char::is_whitespace);
+        if begins_a_token {
+            return &line[..at];
+        }
+        from = at + "//".len();
+    }
+    line
+}
+
+/// Every `…Boundary` identifier in `text`'s **executed** lines, as whole words.
 ///
 /// One recognizer for both sides, so the families and the owners cannot disagree about what a boundary type
 /// is named. A second copy of this rule is exactly the drift the derivation exists to avoid.
+///
+/// **Comments are cut, which is what closes the class rather than one instance of it.** This read used to
+/// take the raw blob, so any corpus file naming a family in a doc comment credited it — the gate's own file
+/// did, and was excluded by a one-path denylist. A denylist is a second list that has to stay right; the
+/// comment cut needs no list, and the exclusion is gone with it.
+///
+/// **Residue, stated rather than closed:** a Rust `/* … */` span is executed text to this reader, exactly as
+/// it is to `kanhe::region` and for the same reason — the cut is the line-comment marker and nothing else.
+/// A family named only inside a block comment in an owner file would still be credited. It errs toward
+/// **over**-crediting, which is the direction that reports a family owned rather than refusing one that is.
 fn boundary_types(text: &str) -> BTreeSet<String> {
     let mut found = BTreeSet::new();
-    for token in text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')) {
+    for token in text
+        .lines()
+        .flat_map(|line| executed(line).split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')))
+    {
         if token.len() > "Boundary".len()
             && token.ends_with("Boundary")
             && token.starts_with(|c: char| c.is_ascii_uppercase())
@@ -108,25 +146,19 @@ fn families(root: &Path) -> BTreeSet<String> {
     found
 }
 
-/// This file. Excluded from the corpus it judges — see [`is_owner_path`].
-const THIS_GATE: &str = "crates/shengmo/tests/family_coverage.rs";
-
 /// Whether a tracked path is somewhere an adopter-shaped reaction can live.
 ///
 /// An isolated example workspace, or this repository's own self-law. **Not** the dimension crates' internal
 /// tests: the requirement is about a reaction an adopter could read and run, and `hunyi`'s unit tests are
 /// neither an example nor self-governance.
 ///
-/// **And not this file, which is the judge and not an owner.** It sits under `crates/shengmo/`, so the rule
-/// above admitted it, and it names boundary types in its own prose — so the gate credited families to itself
-/// for *talking about them*. Caught by planting a probe that should have failed and did not: renaming the
-/// one type `examples/sans-io-pure/tests/reaction.rs` spells left the family still "owned", by this comment.
-/// A reaction whose corpus contains its own text can be satisfied by describing the thing it checks for,
-/// which is the failure mode this repository names rather than discovers.
+/// **This file is in the corpus and that is now safe.** It sits under `crates/shengmo/`, and it names
+/// boundary types throughout its own documentation — so while [`boundary_types`] read the raw blob, the gate
+/// credited families to itself for *talking about them*. That was patched by excluding this one path, which
+/// is a second list that has to stay right: any other corpus file could do the same. Cutting comments closes
+/// the class, so the exclusion is gone rather than kept alongside.
 fn is_owner_path(path: &str) -> bool {
-    path != THIS_GATE
-        && (path.starts_with("examples/") || path.starts_with("crates/shengmo/"))
-        && path.ends_with(".rs")
+    (path.starts_with("examples/") || path.starts_with("crates/shengmo/")) && path.ends_with(".rs")
 }
 
 /// Each family, and the owners naming it.
