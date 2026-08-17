@@ -912,6 +912,27 @@ them.
 
 ### Self-governance
 
+- **A struct-literal field sat four columns left of its sibling, and `cargo fmt --all --check` was green
+  over it.** One declaration in `crates/shengmo/src/bounds.rs` indented `owner:` at 12 where its own
+  `because:` and its twin declaration eight lines above both sit at 16. rustfmt declines to reformat that
+  `vec![]` element, so the formatter the Definition of Done runs to own `.rs` layout does not reach it —
+  measured, not assumed: the check exits 0 both before and after the repair.
+
+  Deliberately **no reaction is added**. A structural scan of every tracked `.rs` for mixed field
+  indentation within one block returned two candidates and the second was a false positive — a `word:` inside
+  a string continuation — so the class has exactly one live instance, against a formatter that already
+  governs the rest. Building an indentation check beside rustfmt for that is the defensive
+  over-foolproofing the drift law forbids, and the measurement is recorded here so the next reader does not
+  have to redo it to reach the same answer.
+
+- **The marking rule that says which changes are breaking is paired per section, not per entry.** Filed to
+  `BACKLOG.md` as `READY-PATCH` rather than repaired: `require_section_shape` is satisfied by one marked
+  entry plus one `### Migration` heading anywhere in the same section, which is how an unmarked breaking
+  entry stood beside a marked one in this very release's notes with the gate green. The entry carries the
+  candidate shapes and refutes the obvious one — pairing each entry to a migration bullet needs text matching
+  between two prose bullets, and the direction that matters (*should this have been marked?*) asks whether a
+  change requires adopter action, which no reaction can decide.
+
 - **The workflow made the pinning argument for npm and never applied it to itself.** Every `uses:` in
   `.github/workflows/ci.yml` named a mutable major tag. Twelve lines below the first of them sits the comment
   explaining why `npx` was replaced by `npm ci` against a committed lock — *"`npx` resolved the TRANSITIVE
