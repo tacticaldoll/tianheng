@@ -41,6 +41,22 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*",
         ),
+        BoundDecl::unpinned(
+            BoundId::new(
+                "repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound",
+            ),
+            "a pull request title changing between the wrapper's post-gate re-read of it and `gh pr merge`",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the wrapper pins two of its three judged inputs by construction -- the body \
+                          travels as the value the gate judged, and the commit set is pinned through \
+                          `--match-head-commit`, which the server decides atomically. `gh` offers no \
+                          equivalent for the title, so a re-read shrinks the exposure from a whole \
+                          `cargo test` to one API call rather than closing it"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*",
+        ),
         BoundDecl::pinned(
             BoundId::new(
                 "repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound",

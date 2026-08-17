@@ -356,3 +356,36 @@ fn the_gate_admits_exactly_the_types_the_contract_does() {
         "the gate admits these types and AGENTS.md does not state them: {admitted_but_unstated:?}"
     );
 }
+
+/// Two anchors mean the contract could not be read, never the first one's answer.
+///
+/// The agreement direction above compares the gate's list against the contract's. Reading past a second
+/// anchor — the shape prose acquires the moment a rule is restated, quoted, or given an example — would have
+/// it compare against half its subject while reporting agreement, which is the silent narrowing
+/// `admitted_types`' own doc argues against for an empty parse, one level up from it.
+///
+/// Negative run: with `.nth(1)`, the two-anchor input answers `Some(["feat", "fix"])` — the first anchor's
+/// list, with the second's `refactor` dropped and nothing said.
+#[test]
+fn two_admitted_type_anchors_cannot_be_read() {
+    const ANCHOR: &str = "Use the narrowest honest type:";
+    let one = format!("prose. {ANCHOR} `feat`, `fix`. more prose");
+    assert_eq!(
+        kanhe::merge_message_gate::admitted_types(&one),
+        Some(vec!["feat".to_string(), "fix".to_string()]),
+        "the control: one anchor reads its own run"
+    );
+
+    let two = format!("{one}\n\nrestated: {ANCHOR} `refactor`. and on");
+    assert_eq!(
+        kanhe::merge_message_gate::admitted_types(&two),
+        None,
+        "two anchors are a contract this reader may not choose between — not the first one's list"
+    );
+
+    assert_eq!(
+        kanhe::merge_message_gate::admitted_types("no anchor at all"),
+        None,
+        "and no anchor is still unreadable, as it was"
+    );
+}

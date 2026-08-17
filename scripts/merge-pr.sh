@@ -335,7 +335,6 @@ fi
 # unjudged. It also searched a stream carrying arbitrary tooling output, where a class could be read from text no
 # judgement wrote. A file the gate writes only when it has a verdict makes *absent* mean unjudged by
 # construction.
-GATE_VERDICT_ENV=TIANHENG_GATE_VERDICT
 GATE_VIOLATION_CLASS=Violation
 
 verdict_file=$(mktemp) || cannot_judge \
@@ -396,6 +395,36 @@ gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
     exit 2
 }
 require_one_pass "$gate_output"
+
+# The title is re-read, because it is the OTHER END OF A RELATION rather than a value being recorded.
+#
+# This wrapper judges three inputs and treated them two ways, each with a reason of its own. The body travels
+# as the VALUE the gate judged, so a rewrite between the two cannot reach the record. The commit set is one
+# end of `body == their concatenation`, so a push in between makes the judged relation false and
+# `--match-head-commit` refuses. `subject == title` is a relation too — and the title was captured once and
+# never looked at again, so an edit during the gate left the merge recording a subject that is no longer the
+# title, which is the disagreement the rule exists to prevent. Sorted by the wrapper's own criterion, it was
+# filed on the wrong side.
+#
+# **This narrows the window; it does not close it, and the difference is the point.** `--match-head-commit`
+# is decided by the server, atomically. `gh` offers no `--match-title`, so a client-side re-read shrinks the
+# exposure from a whole `cargo test` — minutes on a cold target directory — to one API call, and a change
+# inside that call still lands. The residue is a declared bound of `repository-checks`, beside the one for a
+# merge made outside this wrapper, rather than a limit this comment implies away.
+title_now=$(gh pr view "$pr_number" --repo "$repository" --json title --jq .title) || cannot_judge \
+    "cannot re-read pull request $pr_number's title after the gate, so whether the subject the gate approved \
+is still that title cannot be decided — which is not the same fact as a subject that disagrees"
+# **A moved title is a cannot-judge, not a disagreement**, and the exit-class check refused the first draft
+# of this guard for saying otherwise. The gate did not find the subject wrong: it found it right, against a
+# title that no longer exists, so what this wrapper has is a verdict about a vanished input. That is the
+# class `merge_message_gate::judge` already gives an unavailable title — "which is not the same fact as a
+# subject that disagrees" — and the construction that reserves `1` for the gate's own verdict arm is what
+# caught the misfiling.
+if [[ $title_now != "$title" ]]; then
+    cannot_judge "the pull request's title changed while the gate ran. It judged \"$title\", the title is \
+now \"$title_now\", so the verdict in hand is about a title that no longer exists rather than about a \
+subject that disagrees. Re-run this wrapper and it will judge the title that exists now"
+fi
 
 # Removed here, not left to the trap. An EXIT trap does not run when `exec` replaces the shell image —
 # measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while the same script without `exec` prints

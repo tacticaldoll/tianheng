@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**15 of 87 declared bounds have no pinning test.** That figure is the register's
+**16 of 88 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -368,6 +368,12 @@ fallback used where no manifest exists, which the register spec describes.
 ### `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound`
 
 > no repository check fires. Both assertions guard the sanctioned path; reaching further would mean observing the operator's shell or GitHub's servers rather than this repository. The pinning check narrows this without closing it: it keeps the sanctioned path sanctioned, so what is left is choosing not to use it rather than using it unguarded
+
+- **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
+
+### `repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound`
+
+> nothing observes it, and the merge records the subject the gate approved against a title that has since moved. The wrapper judges three inputs and pins two of them by construction — the body travels as the value the gate judged, and the commit set is pinned through `--match-head-commit`, which GitHub decides atomically. `gh` offers no `--match-title`, so the third can only be re-read, which shrinks the exposure from a whole `cargo test` to one API call rather than closing it. Closing it needs a server-decided precondition this tool does not offer
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
 

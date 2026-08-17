@@ -992,6 +992,17 @@ before that.
   rather than using it unguarded
 - **UNPINNED** `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
 
+#### Scenario: A title edited inside the re-read itself — a stated bound
+
+- **WHEN** the pull request's title changes between the wrapper's post-gate re-read of it and `gh pr merge`
+- **THEN** nothing observes it, and the merge records the subject the gate approved against a title that has
+  since moved. The wrapper judges three inputs and pins two of them by construction — the body travels as
+  the value the gate judged, and the commit set is pinned through `--match-head-commit`, which GitHub
+  decides atomically. `gh` offers no `--match-title`, so the third can only be re-read, which shrinks the
+  exposure from a whole `cargo test` to one API call rather than closing it. Closing it needs a
+  server-decided precondition this tool does not offer
+- **UNPINNED** `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
+
 ### Requirement: The squash-message gate SHALL refuse a shape by what it is, not by what it resembles
 
 The gate SHALL refuse a message for what it is rather than for what it resembles: a refusal at the merge is a
