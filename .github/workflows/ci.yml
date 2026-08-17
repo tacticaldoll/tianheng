@@ -26,7 +26,13 @@ permissions:
 # **Refreshing them is a human act with no automation behind it, deliberately** — see `BACKLOG.md`'s
 # accepted-debt entry. To move one, resolve the tag and paste the commit:
 #
-#   gh api repos/actions/checkout/git/ref/tags/v5 --jq .object.sha
+#   gh api repos/actions/checkout/commits/v5 --jq .sha
+#
+# The `commits` endpoint, not `git/ref/tags`. Measured against both actions pinned below: a lightweight tag's
+# ref answers `object.type=commit`, an ANNOTATED tag's answers `object.type=tag`, and its `.object.sha` is the
+# tag object rather than the commit — `cargo-deny-action@v2` is annotated, so the ref form yields a SHA that is
+# not a commit and cannot be pinned. `commits/<tag>` dereferences either kind, and its answers are byte-equal
+# to what each `uses:` in this file pins.
 #
 # Pinning is not upgrading: each SHA below is what that major tag pointed at when it was pinned, so this
 # changed which bytes run and not which version.

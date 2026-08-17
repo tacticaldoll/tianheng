@@ -89,8 +89,9 @@ consumer for an undemonstrated deduplication.
   unchosen — which is the direction the pin closed. *Promotion trigger:* a pinned action falling far enough
   behind to miss a security advisory, or a second ecosystem arriving whose pinning would want the same
   answer — either makes one dependency-refresh mechanism worth more than two hand-maintained pins.
-  *Compatibility class:* patch; CI configuration ships in no crate. *Authority:* this entry and the
-  workflow's own comment, which names the one-line `gh api` refresh command rather than implying automation.
+  *Compatibility class:* patch; CI configuration ships in no crate. *Authority:* this entry, and the workflow
+  comment's refresh recipe — `repos/<owner>/<repo>/commits/<tag>`, which dereferences an annotated tag to its
+  commit where `git/ref/tags` returns the tag object.
 
   Dependabot was considered and not adopted **now**, for a reason rather than by omission: it would add a
   configuration file, a bot-authored pull-request stream, and a second squash-message author to a repository
@@ -166,10 +167,9 @@ consumer for an undemonstrated deduplication.
   one is invisible.** *Class:* READY-PATCH. *Observed pressure:* `require_section_shape` collects
   `shape.breaking` as a set of **section names**, and requires each such section to carry a `### Migration`
   heading. One marked entry plus one Migration heading therefore satisfies the whole section however many
-  unmarked breaking entries sit beside them. Measured on this repository's own `[0.5.0]`: two Migration
-  bullets against one marked entry, with `Outcome::Clean` → `Outcome::Clean(Subject)` — a change that stops
-  every existing `Outcome::Clean` pattern compiling — carrying its own migration instruction and no mark.
-  The gate was green throughout, before and after the correction. *Observation source:* the `v0.4.0..HEAD`
+  unmarked breaking entries sit beside them. Measured on this repository's own `[0.5.0]`: its `### Migration`
+  section instructed an adopter to change every `Outcome::Clean` pattern, while the entry that change belongs
+  to carried no mark. The gate was green throughout, before and after the correction. *Observation source:* the `v0.4.0..HEAD`
   static review, and the correction it produced. *Current reaction or bound:* `release-coherence`'s
   section-shape requirement, which is what this entry says is too coarse; nothing else reads the marking.
   *Risk, bounded rather than assumed:* the information is **present but unannounced** — a reader who opens
@@ -203,7 +203,12 @@ consumer for an undemonstrated deduplication.
     turns detection into **declaration**, which is where this family puts enforcement: the obligation lands
     on the author, not on a reader of prose. Two bullets may share a handle and one bullet may carry two, so
     neither multiplicity is a false refusal. The cost is real and is an authoring-convention change: every
-    future Migration bullet gains a handle, and `[0.5.0]`'s existing two would be backfilled.
+    future Migration bullet gains a handle, and `[0.5.0]`'s existing bullets would be backfilled.
+
+    A Migration section may also carry a bullet that deliberately names **no** entry — `[0.5.0]`'s
+    *Nothing else requires action* is one — so the join has to admit a declared-empty form, or such a bullet
+    moves out of the section. Which of the two is part of the design rather than a detail after it, and it
+    was invisible while this paragraph carried a hand-typed count that happened to omit that bullet.
 
   **An earlier wording of this paragraph refuted the join outright**, on the ground that pairing an entry to a
   Migration bullet needs text matching between two prose bullets. That is true only of the *implicit* form.

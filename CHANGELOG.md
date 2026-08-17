@@ -937,6 +937,18 @@ them.
   both ways, the shape the bound register already uses — and it is a capability rather than a tightening,
   which is why it is filed with its trigger instead of built inside this window.
 
+- **The refresh recipe written beside the pins was wrong for one of the two actions it documents.** The
+  comment told a reader to resolve a tag with `git/ref/tags/<tag> --jq .object.sha`. Measured against both
+  pinned actions: a lightweight tag's ref answers `object.type=commit`, but an **annotated** tag's answers
+  `object.type=tag`, and its `.object.sha` is the tag object rather than the commit —
+  `cargo-deny-action@v2` is annotated, so anyone following the recipe would paste a SHA that is not a commit.
+  `commits/<tag>` dereferences either kind, and its answers are byte-equal to the two SHAs pinned in the file.
+
+  Nothing reacts to this class, and the honest reason is that the defect is semantic rather than referential:
+  the command resolved, ran, and returned the wrong thing. It is the third instance in this window of *out of
+  corpus is not permission* — a gate exists, its corpus was chosen deliberately, and the sweep is what has to
+  cover the rest.
+
 - **The workflow made the pinning argument for npm and never applied it to itself.** Every `uses:` in
   `.github/workflows/ci.yml` named a mutable major tag, while the same file's `every spec validates` step
   carried the comment explaining why `npx` was replaced by `npm ci` against a committed lock — *"`npx` resolved the TRANSITIVE
