@@ -279,13 +279,16 @@ than a reviewer's discovery:
 1. **Declared** — something here enumerates the set, so the figure is *produced* by that enumerator and the
    sentence carrying it is declared in `crates/kanhe/tests/census.rs`. The only state that cannot drift, and
    therefore the one to reach for first.
-2. **Anchored** — nothing enumerates the set, but the measurement is reconstructible: name the commit it was
-   taken at and the command or perturbation that produced it, in the form `BACKLOG.md`'s promotion measurement
-   already uses — *measured at `<sha>`, by `git grep` over `<paths>`*. An anchored figure is an external fact
-   any reader can re-run rather than the state of the session that wrote it, so it is not weaker than a
-   declaration, only narrower: it binds the number and nothing else. A **judgement** over the measured set —
-   *most of them were X* — is not anchored by naming the commit, however exactly its subject is named. Where
-   such a judgement carries a decision, it becomes cases rather than an adjective.
+2. **Anchored** — nothing enumerates the set, so the figure is bound to the moment it was taken, and the
+   stronger form is worth a clause. **Reconstructible:** name the commit and the command or perturbation, in
+   the form `BACKLOG.md`'s promotion measurement uses — *measured at `<sha>`, by `git grep` over `<paths>`* —
+   and any reader can re-run it. **A moment alone** — *measured when this was written*, *at `v0.4.0`*, *when
+   that shell was deleted* — cannot be re-run, and is the floor rather than a lapse: it is all a figure about
+   a vanished subject can have, and `repository-checks`'s line count of the deleted shell library is the
+   worked example. Reach for the first wherever the producer still exists. Either way the figure is a fact
+   about a past moment rather than the state of the session that wrote it. A **judgement** over the measured
+   set — *most of them were X* — is anchored by neither form, however exactly its subject is named; where one
+   carries a decision it becomes cases rather than an adjective.
 3. **Dropped** — the sentence says the same thing without it. Most figures belong here, and the test is to
    read the sentence with the number gone.
 
@@ -410,9 +413,10 @@ option — the sweep is stated here as the discipline in its place.
 closes.** It said `CHANGELOG.md` and `BACKLOG.md`, which are where a *narration* usually sits — and
 `PROJECT.md`'s Decisions section carried `gate-shape-contract` in the present indicative for the whole window,
 outside a sweep written for exactly that. A corpus narrower than the claim, in the paragraph about corpora
-narrower than their claims. A dated `CHANGELOG.md` section is the one exemption and it is by construction: a
-released section is a record of what was true then, so holding it to `HEAD` would demand that the record
-change every time the tree does.
+narrower than their claims. The record carriers stand outside it by construction, and they are the same three
+this file already names — a commit message, a dated `CHANGELOG.md` section, `docs/history/`: each is a
+measurement of the moment it was taken, so holding one to `HEAD` would demand that the record change every
+time the tree does.
 
 ## Commits & PRs
 
