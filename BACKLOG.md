@@ -180,19 +180,45 @@ consumer for an undemonstrated deduplication.
   decided. *Version class:* patch; a repository check shipping in no crate. *Authority:*
   `openspec/specs/release-coherence/spec.md`, and `CHANGELOG.md`'s own marking rule.
 
-  *Shape, with the obvious candidate refuted before it is proposed:* "each `**BREAKING**` entry is named by a
-  Migration bullet" needs text matching between two prose bullets, which is the prose detector this
-  repository designed, measured three times and rejected — and the direction that actually matters, *an
-  entry that should be marked and is not*, is undecidable by any reaction, because it asks whether a change
-  requires adopter action. The candidate that survives that objection is the **asymmetry**: a section whose
-  Migration bullets outnumber its marked entries. It is pure counting, reads no semantics, and would have
-  caught this exact instance. What it is not is a theorem — one breaking change may legitimately need two
-  migration steps — so it cannot be a violation without inviting the false refusal this repository forbids
-  its gates, and this repository has no warning class to put it in. The remaining direction is to leave the
-  changelog entirely and read the **published surface** instead: an enum variant changing arity is
-  structural and observable, and the dimension contracts under `tests/adopter_surface.rs` already compile
-  against it. That is a capability rather than a tightening, which is why this entry is filed at its
-  measured size rather than repaired inside the release window that found it.
+  *Shape.* The direction that actually matters — *an entry that should be marked and is not* — is undecidable
+  by any reaction, because it asks whether a change requires adopter action. The candidates below work around
+  that, and they separate on whether the rule is a **theorem** — so it can be a violation without inviting a
+  false refusal — and whether it catches **the instance that produced this entry**.
+
+  - **A migration section in a release section that marks nothing `**BREAKING**`.** A theorem — telling an
+    adopter to act while declaring nothing breaking contradicts `CHANGELOG.md`'s own rule — and nearly free.
+    It does **not** catch the observed instance: `[0.5.0]` carried one marked entry, and what went missing
+    was the *second*. A check that cannot cover the case it was written from reads as coverage while
+    providing none, and this one has zero observations of its own besides, so it is named here to be
+    rejected rather than kept as a cheap option.
+  - **The counting asymmetry** — a section whose Migration bullets outnumber its marked entries. Pure
+    counting, no semantics, and it would have caught this instance. It is **not** a theorem: one breaking
+    change may legitimately need two migration steps. So it cannot be a violation without the false refusal
+    this repository forbids its gates, and `refusal::Kind` is not the place to put it — *cannot-judge* means
+    the source could not be read, not that it was read and is ambiguous, and borrowing it here would blunt
+    the one distinction the verdict channel exists to carry.
+  - **A named join, which is a theorem and does catch it.** Require each Migration bullet to name the entry
+    it migrates by a stable handle, and run the correspondence both ways. This is the shape
+    `observation_bound_model.rs` already uses between a spec scenario and its typed declaration, and it
+    turns detection into **declaration**, which is where this family puts enforcement: the obligation lands
+    on the author, not on a reader of prose. Two bullets may share a handle and one bullet may carry two, so
+    neither multiplicity is a false refusal. The cost is real and is an authoring-convention change: every
+    future Migration bullet gains a handle, and `[0.5.0]`'s existing two would be backfilled.
+
+  **An earlier wording of this paragraph refuted the join outright**, on the ground that pairing an entry to a
+  Migration bullet needs text matching between two prose bullets. That is true only of the *implicit* form.
+  Making the handle explicit is precisely how this repository escapes prose matching everywhere else, and
+  refuting the whole candidate for the weakness of its weakest form would have told whoever picks this up
+  that the road was closed.
+
+  *Leaving the changelog entirely* — reading the **published surface** and requiring a mark wherever it
+  changed incompatibly — remains the most direct instrument and carries a cost this entry first omitted:
+  both `cargo public-api` and a raw rustdoc-JSON diff need **nightly**, while this workspace pins a stable
+  MSRV and CI installs no nightly toolchain. Adding one is its own decision, not a step inside this repair.
+
+  All of which is why the entry is filed at its measured size rather than repaired inside the release window
+  that found it: the only candidate that is both a theorem and covers its own instance is a capability, not a
+  tightening.
 
 - **The bounds-method reader anchors on a whole-line occurrence that is not the definition.** *Class:*
   READY-PATCH. *Observed pressure:* the reader requires the signature to occur exactly once and at a line
