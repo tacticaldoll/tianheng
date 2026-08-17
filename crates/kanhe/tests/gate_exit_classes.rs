@@ -57,27 +57,27 @@ fn each_wrapper_uses_the_channel_the_gates_report_on() {
     };
     for wrapper in WRAPPERS {
         let text = read(&root, wrapper);
-        for (name, expected) in [
-            ("GATE_VERDICT_ENV", verdict_channel::ENV.to_string()),
-            (
-                "GATE_VIOLATION_CLASS",
-                verdict_channel::rendered(Kind::Violation),
-            ),
-        ] {
-            let declared = text
-                .lines()
-                .find_map(|line| line.trim().strip_prefix(&format!("{name}=")))
-                .unwrap_or_else(|| {
-                    panic!(
-                        "{wrapper} declares no `{name}`, so the class it reports for a failing gate rests on \
-                         nothing this check can compare"
-                    )
-                });
-            assert_eq!(
-                declared, expected,
-                "{wrapper} uses `{declared}` for {name} while `kanhe::verdict_channel` defines `{expected}`"
-            );
-        }
+        // **Only the scalar a wrapper actually READS is declared.** `GATE_VERDICT_ENV` was declared beside
+        // this one and never read: the invocation writes the variable name literally, because a shell cannot
+        // expand one into an environment-assignment prefix. So the declaration was a second spelling of a
+        // token the assertion below already pins against `verdict_channel::ENV` — dead in the shell, and
+        // held alive here by an assertion demanding it exist. Both are gone; the pin that does the work
+        // stays.
+        let name = "GATE_VIOLATION_CLASS";
+        let expected = verdict_channel::rendered(Kind::Violation);
+        let declared = text
+            .lines()
+            .find_map(|line| line.trim().strip_prefix(&format!("{name}=")))
+            .unwrap_or_else(|| {
+                panic!(
+                    "{wrapper} declares no `{name}`, so the class it reports for a failing gate rests on \
+                     nothing this check can compare"
+                )
+            });
+        assert_eq!(
+            declared, expected,
+            "{wrapper} uses `{declared}` for {name} while `kanhe::verdict_channel` defines `{expected}`"
+        );
         // The variable must actually be handed to the gate, not merely declared. Declared and unused would make
         // the file absent for every run, so every violation would report as unjudged.
         assert!(

@@ -224,8 +224,17 @@ pub fn judge(
 /// vacuous in the direction that matters: an empty contract set is a subset of anything, so the gate would keep
 /// admitting whatever it already admits while reporting agreement. Returning `None` lets the caller say the
 /// contract could not be read, which is a different fact from the two sides disagreeing.
+///
+/// **And exactly one anchor, or the contract could not be read.** `.nth(1)` took the text after the first
+/// occurrence, so a second — the shape prose acquires the moment a rule is restated — was dropped in
+/// silence, and the agreement direction then compared the gate's list against half its subject while
+/// reporting agreement. That is the same silent-narrowing this function's own doc argues against for an
+/// empty parse, one level up from it, and `crate::selection` is what answers *how many* rather than
+/// inheriting one.
 pub fn admitted_types(agents: &str) -> Option<Vec<String>> {
-    let clause = agents.split("Use the narrowest honest type:").nth(1)?;
+    const ANCHOR: &str = "Use the narrowest honest type:";
+    let clause =
+        crate::selection::the_only("admitted-types anchor", agents.split(ANCHOR).skip(1)).ok()?;
     // The run ends at the sentence's period, so a later backticked word — `!`, `BREAKING CHANGE:` — is outside.
     let run = clause.split(". ").next()?;
     let types: Vec<String> = run

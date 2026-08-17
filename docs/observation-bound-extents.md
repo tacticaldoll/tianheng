@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**41 of 87 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**42 of 88 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -34,6 +34,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
 - `repository-checks/a-figure-written-in-words-at-one-hundred-or-above-is-not-matched-a-stated-bound` — owner: engine
 - `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
+- `repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound` — owner: engine
 - `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound` — owner: engine
 - `repository-checks/files-no-capability-claims-a-stated-bound` — owner: engine
@@ -432,7 +433,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (41)
+## under-reacts (42)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -663,6 +664,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 > an act reaching cargo publish or a merge without going through its wrapper
 
 - **because**: both assertions guard the sanctioned path -- the wrapper requiring its gate to report one passing test, and the check pinning the identifier it cites. Reaching further would mean observing the operator's shell or GitHub's servers rather than this repository
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
+
+### `repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound`
+
+> a pull request title changing between the wrapper's post-gate re-read of it and `gh pr merge`
+
+- **because**: the wrapper pins two of its three judged inputs by construction -- the body travels as the value the gate judged, and the commit set is pinned through `--match-head-commit`, which the server decides atomically. `gh` offers no equivalent for the title, so a re-read shrinks the exposure from a whole `cargo test` to one API call rather than closing it
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
 

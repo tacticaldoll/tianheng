@@ -937,6 +937,39 @@ them.
   both ways, the shape the bound register already uses — and it is a capability rather than a tightening,
   which is why it is filed with its trigger instead of built inside this window.
 
+- **The merge wrapper pinned two of its three judged inputs and left the third captured once.** It reads a
+  subject, a body and a commit set, judges them, and then merges — and it had a reason written beside each
+  treatment. The body travels as the **value** the gate judged, so a rewrite in between cannot reach the
+  record. The commit set is one end of *body equals their concatenation*, so a push in between makes the
+  judged relation false and `--match-head-commit` refuses. `subject == title` is a relation too, and the
+  title was captured once and never looked at again: an edit during the gate left the merge recording a
+  subject that is no longer the title, which is exactly the disagreement the rule exists to prevent. Sorted
+  by the wrapper's own criterion, it was filed on the wrong side.
+
+  The title is now re-read after the gate. **That narrows the window and does not close it**, which is
+  declared rather than implied: `--match-head-commit` is decided by the server atomically, `gh` offers no
+  `--match-title`, so a client-side re-read shrinks the exposure from a whole `cargo test` to one API call.
+  The residue is a declared bound of `repository-checks`, beside the one for a merge made outside the
+  wrapper.
+
+  **A moved title is a cannot-judge, and the exit-class check refused the first draft for saying otherwise.**
+  The gate did not find the subject wrong — it found it right, against a title that no longer exists, so what
+  the wrapper holds is a verdict about a vanished input. The construction reserving exit `1` for the gate's
+  own verdict arm is what caught the misfiling.
+
+- **Two occurrences of the admitted-types anchor read as one.** The clause naming the narrowest honest commit
+  type is the anchor the contract-agreement direction reads from, and it was taken with `.nth(1)`. A second
+  occurrence — the shape prose acquires the moment a rule is restated, quoted or exampled — was dropped in
+  silence, so the gate's list would have been compared against half its subject while reporting agreement.
+  Two anchors are now a contract this reader may not choose between.
+
+- **A wrapper scalar that was declared, pinned, and never read.** `GATE_VERDICT_ENV` sat in both wrappers
+  beside `GATE_VIOLATION_CLASS`, which *is* read. It never could be: the invocation writes the variable name
+  literally, because a shell cannot expand one into an environment-assignment prefix. So it was a second
+  spelling of a token the exit-class check already pins against `verdict_channel::ENV` at the invocation
+  itself — dead in the shell, and held alive by an assertion demanding it exist. Both are gone; the pin that
+  does the work stays.
+
 - **A composed run no longer states a subject on a participant's behalf.** `Report::empty()` is public and
   `Outcome::Violations` of it exits `0`, so a participant can return an outcome that is violation-free and
   names no subject — and `0.5.0` is the first release in which an outside `Observer` can be that participant.

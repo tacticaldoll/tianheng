@@ -174,7 +174,6 @@ done
 # unjudged. It also searched a stream carrying arbitrary tooling output, where a class could be read from text no
 # judgement wrote. A file the gate writes only when it has a verdict makes *absent* mean unjudged by
 # construction.
-GATE_VERDICT_ENV=TIANHENG_GATE_VERDICT
 GATE_VIOLATION_CLASS=Violation
 
 verdict_file=$(mktemp) || cannot_judge \
