@@ -935,8 +935,8 @@ them.
   change requires adopter action, which no reaction can decide.
 
 - **The workflow made the pinning argument for npm and never applied it to itself.** Every `uses:` in
-  `.github/workflows/ci.yml` named a mutable major tag. Twelve lines below the first of them sits the comment
-  explaining why `npx` was replaced by `npm ci` against a committed lock — *"`npx` resolved the TRANSITIVE
+  `.github/workflows/ci.yml` named a mutable major tag, while the same file's `every spec validates` step
+  carried the comment explaining why `npx` was replaced by `npm ci` against a committed lock — *"`npx` resolved the TRANSITIVE
   tree fresh on every run with no lock and no integrity check"* — which is exactly what a repointable tag
   does for the runner's own executable dependencies. Cargo was pinned by `Cargo.lock`, npm by
   `package-lock.json`, and the actions by nothing. Each now names the commit its tag pointed at, with the
