@@ -325,7 +325,9 @@ them.
   as wide as construction can make it, and what construction cannot close — two boundaries alike in crate,
   module and kind but differing in rule — is held by `markdown_headings_are_pairwise_distinct`, over the
   rendered output rather than over an identity function, because it is the rendering that collapses.
-  `Subject`: what the observation was asked to enforce, and how much of its own corpus it reached.
+
+- **BREAKING** — **`Outcome::Clean` now carries the subject it was measured over.** `Subject` says what the
+  observation was asked to enforce, and how much of its own corpus it reached.
   `Subject::of` refuses the one combination that is a lie — *declared something, reached nothing* — so a
   participant can no longer report a sound workspace over an observation that never happened. Reaching nothing
   stays legitimate on its own: an empty semantic bundle is a static-only adoption, and
@@ -335,7 +337,10 @@ them.
   of work while carrying none of it. It was also the missing dual of `Observer::bounds`, which has no default
   body precisely so a participant must declare what it does not observe. The text rendering and the JSON
   projection now carry the figures, so a reader — or an agent reading a CI log as context — can tell a
-  workspace found sound from one that was never reached.
+  workspace found sound from one that was never reached. **What to expect on upgrade**: every
+  `Outcome::Clean` pattern stops compiling and gains a binding, which the Migration section below states in
+  full. No exit code, report shape, or recorded baseline identity moves — this is a source-level break and
+  nothing else.
 
 - **The bounds-method reader's anchor rule is one typed decision, and its behaviour is a table that runs.**
   Two callers each re-derived the rule and drifted twice — once counting trimmed-start lines against
