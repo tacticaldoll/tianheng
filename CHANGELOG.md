@@ -929,10 +929,13 @@ them.
 - **The marking rule that says which changes are breaking is paired per section, not per entry.** Filed to
   `BACKLOG.md` as `READY-PATCH` rather than repaired: `require_section_shape` is satisfied by one marked
   entry plus one `### Migration` heading anywhere in the same section, which is how an unmarked breaking
-  entry stood beside a marked one in this very release's notes with the gate green. The entry carries the
-  candidate shapes and refutes the obvious one — pairing each entry to a migration bullet needs text matching
-  between two prose bullets, and the direction that matters (*should this have been marked?*) asks whether a
-  change requires adopter action, which no reaction can decide.
+  entry stood beside a marked one in this very release's notes with the gate green. The direction that
+  matters — *should this have been marked?* — asks whether a change requires adopter action, which no
+  reaction can decide, so the entry works around it and separates the candidates by whether each rule is a
+  theorem and whether it catches the instance that produced the entry. Only one candidate is both, it is
+  a **named join** rather than a prose comparison — each migration bullet naming the entry it migrates, run
+  both ways, the shape the bound register already uses — and it is a capability rather than a tightening,
+  which is why it is filed with its trigger instead of built inside this window.
 
 - **The workflow made the pinning argument for npm and never applied it to itself.** Every `uses:` in
   `.github/workflows/ci.yml` named a mutable major tag, while the same file's `every spec validates` step
