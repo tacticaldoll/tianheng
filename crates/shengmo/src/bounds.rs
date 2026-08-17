@@ -62,7 +62,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 because: "the filter admits one rule variant, while the variant it omits governs \
                           workspace-member edges specifically and is the more natural one for this law"
                     .into(),
-            owner: Owner::Engine,
+                owner: Owner::Engine,
             }),
             "`BACKLOG.md` — *four limits of the mutual-independence check*",
         ),

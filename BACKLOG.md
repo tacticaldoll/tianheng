@@ -162,6 +162,38 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
+- **The `**BREAKING**` marking rule is paired per section, so an unmarked breaking entry beside a marked
+  one is invisible.** *Class:* READY-PATCH. *Observed pressure:* `require_section_shape` collects
+  `shape.breaking` as a set of **section names**, and requires each such section to carry a `### Migration`
+  heading. One marked entry plus one Migration heading therefore satisfies the whole section however many
+  unmarked breaking entries sit beside them. Measured on this repository's own `[0.5.0]`: two Migration
+  bullets against one marked entry, with `Outcome::Clean` → `Outcome::Clean(Subject)` — a change that stops
+  every existing `Outcome::Clean` pattern compiling — carrying its own migration instruction and no mark.
+  The gate was green throughout, before and after the correction. *Observation source:* the `v0.4.0..HEAD`
+  static review, and the correction it produced. *Current reaction or bound:* `release-coherence`'s
+  section-shape requirement, which is what this entry says is too coarse; nothing else reads the marking.
+  *Risk, bounded rather than assumed:* the information is **present but unannounced** — a reader who opens
+  `### Migration` finds the instruction either way, so the failure is an adopter skimming `### Changed` for
+  what affects them and not seeing the mark that exists to be skimmed for. It cannot make a released
+  guarantee false. *Promotion trigger:* a second unmarked breaking entry, or an adopter reporting a missed
+  migration. The first instance is recorded rather than promoted on, because the shape below is not yet
+  decided. *Version class:* patch; a repository check shipping in no crate. *Authority:*
+  `openspec/specs/release-coherence/spec.md`, and `CHANGELOG.md`'s own marking rule.
+
+  *Shape, with the obvious candidate refuted before it is proposed:* "each `**BREAKING**` entry is named by a
+  Migration bullet" needs text matching between two prose bullets, which is the prose detector this
+  repository designed, measured three times and rejected — and the direction that actually matters, *an
+  entry that should be marked and is not*, is undecidable by any reaction, because it asks whether a change
+  requires adopter action. The candidate that survives that objection is the **asymmetry**: a section whose
+  Migration bullets outnumber its marked entries. It is pure counting, reads no semantics, and would have
+  caught this exact instance. What it is not is a theorem — one breaking change may legitimately need two
+  migration steps — so it cannot be a violation without inviting the false refusal this repository forbids
+  its gates, and this repository has no warning class to put it in. The remaining direction is to leave the
+  changelog entirely and read the **published surface** instead: an enum variant changing arity is
+  structural and observable, and the dimension contracts under `tests/adopter_surface.rs` already compile
+  against it. That is a capability rather than a tightening, which is why this entry is filed at its
+  measured size rather than repaired inside the release window that found it.
+
 - **The bounds-method reader anchors on a whole-line occurrence that is not the definition.** *Class:*
   READY-PATCH. *Observed pressure:* the reader requires the signature to occur exactly once and at a line
   start, and knows nothing of comments or literals. So where the definition has moved out of the inspected
