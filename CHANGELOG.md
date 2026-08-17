@@ -934,6 +934,35 @@ them.
   one owner and the other three point at it, because correcting two sentences of four would have left the
   class open. The shell region's whole decision table is an executable case rather than a paragraph.
 
+- **The restriction that widening earned was written as a conjunct of one branch, and reached the readings
+  that happened to have a noun.** Admitting the relation-capable directions only over a positional unit is
+  what keeps a relation from being reported as a place to look — but it was a condition inside the *counted*
+  reading, so the *adverb* reading, which supplies the noun's place itself and therefore has no noun for a
+  list to admit, kept firing on any word before it. An intensifier before such a direction was read as a
+  position. Latent, since no tracked comment carried the shape, and invisible to the case table because no
+  row paired an adverb with a widened direction — the sentence claiming the restriction dropped every
+  relation phrase was held by nothing.
+
+  The pairing now travels beside the adverb rather than being decided in a branch, the way the attribution
+  marks already do, and the flag is named for the direction property it is rather than for the one branch that
+  first consumed it. Both readings gained rows, with the control that keeps the repair from over-refusing.
+
+- **A figure warranting a design decision was typed into live source with nothing to reconstruct it, and the
+  rule against that lived in three separate paragraphs.** The measurement behind the direction restriction was
+  written as a bare count: reproducing it needs both the matcher and the tree, and the commit recording it had
+  also repaired comments the sweep reads. It is now anchored to the commit and the invocation that produced
+  it, which makes it an external fact any reader can re-run rather than the state of the session that wrote
+  it — and the **judgement** over that set is marked as the half an anchor cannot bind, pointing at the rows
+  where part of it has been made inspectable.
+
+  `AGENTS.md` states the whole disposal as one decision instead of three correct paragraphs sitting apart: a
+  figure in a live document is declared by a census, anchored to its commit and command, or dropped because
+  the sentence says the same thing without it; record carriers stand outside by construction; and at review
+  the disposal is those same three rather than an argument about which rule applies. Drafting it produced four
+  violations of itself, none of which anything could have caught. `BACKLOG.md` carries the reachable remainder
+  as a `WATCH`: the figures whose producer exists and never declared them, to be found by enumerating the
+  producers and never the prose.
+
 - **`PROJECT.md` narrated a retired capability in the present tense, and the sweep written to catch that named
   two files.** `gate-shape-contract` was retired in this window; `AGENTS.md` and `BACKLOG.md` annotate it and
   `PROJECT.md`'s Decisions section did not. The retirement sweep said to grep `CHANGELOG.md` and `BACKLOG.md`,

@@ -1191,8 +1191,39 @@ const POSITIONAL_UNITS: [&str; 6] = [
     "sentence",
 ];
 
-/// The adverbs that stand in for the thing a reference should have named.
-const POSITIONAL_ADVERBS: [&str; 4] = ["just", "immediately", "directly", "right"];
+/// The adverbs that stand in for the thing a reference should have named, each with the directions it may
+/// stand before.
+///
+/// **One of them cannot stand before every direction, and the difference is a word rather than a branch.**
+/// Before a direction carrying no sense but position it locates; before a relation-capable one the same word
+/// is an intensifier, naming no position at all. Measured: this repository writes that intensifier in its own
+/// tracked Markdown, out of corpus only because whole-document prose is not a line-comment format. The other
+/// adverbs carry no second sense.
+///
+/// **The specimens are not written here**, for the reason [`POSITIONAL_UNIT_DIRECTIONS`] already records —
+/// and drafting this paragraph produced one: a locating phrase quoted in a comment lands in the corpus and
+/// this direction reported it. Both readings live on executed lines in
+/// `every_positional_shape_reacts_and_a_named_thing_does_not`.
+///
+/// The pairing travels in the same array as the adverb, so a new adverb answers the question instead of
+/// inheriting whichever answer the branch happened to apply — the shape `merge_message_gate`'s attribution
+/// marks already use, for the same reason.
+const POSITIONAL_ADVERBS: [(&str, Pairs); 4] = [
+    ("just", Pairs::EveryDirection),
+    ("immediately", Pairs::EveryDirection),
+    ("directly", Pairs::EveryDirection),
+    ("right", Pairs::PositionOnlyDirections),
+];
+
+/// Which directions an adverb stands in for a position before.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pairs {
+    /// Positional before every direction word.
+    EveryDirection,
+    /// Positional only before a direction carrying no sense but position, because this adverb has a second
+    /// sense that a relation-capable direction completes.
+    PositionOnlyDirections,
+}
 
 /// The direction words that locate a thing and mean nothing else.
 ///
@@ -1202,20 +1233,31 @@ const POSITIONAL_ADVERBS: [&str; 4] = ["just", "immediately", "directly", "right
 /// which is that shape exactly. The requirement forbids *a counted offset* and names no direction vocabulary,
 /// so a phrase counting a unit was invisible for writing `down` instead of `below`.
 ///
-/// These two admit **any noun**, because they carry no sense but position.
+/// They admit **any noun**, because they carry no sense but position.
 const POSITIONAL_DIRECTIONS: [&str; 2] = ["above", "below"];
 
 /// The direction words that locate a thing **or** name a relation, admitted only over a [`POSITIONAL_UNITS`]
 /// noun.
 ///
 /// **Split from [`POSITIONAL_DIRECTIONS`] by measurement, not by taste.** Widening the one list to include
-/// these and keeping *any noun* was written first and run: 20 offences on a green tree, and the great majority
-/// were not references at all. `one level up` and `a layer down` name a relation between two rules, not a place
-/// to look; `three levels up` counts directories. Reporting those is the false refusal
+/// these and keeping *any noun* was written first and run — measured at `afe51fd`, with these added to the
+/// then-inline direction list and no unit restriction, by
+/// `--exact no_tracked_source_names_a_position_instead_of_a_thing`: 20 offences on a tree that was green.
+/// Both halves are needed to re-run it, and the commit that recorded the measurement also repaired comments
+/// the sweep reads, so what the anchor names is a pair rather than a number.
+///
+/// **That most of them were not references is a judgement, and it is the half this split rests on.** Naming
+/// the commit binds the count and nothing else. What is inspectable is the relation shapes kept as quiet rows
+/// in `every_positional_shape_reacts_and_a_named_thing_does_not` — `one level up` and `a layer down` name a
+/// relation between two rules rather than a place to look, and `three levels up` counts directories; the rest
+/// of that majority is an adjective. Reporting a relation is the false refusal
 /// `repository-checks` already forbids this family — refuse a shape for what it is, not for what it resembles.
 ///
-/// Restricting these directions to a unit keeps exactly the phrases that *are* offsets and drops every
-/// relation phrase, because a relation is never counted in lines.
+/// **The restriction takes two forms, because the readings take a noun differently.** The counted and article
+/// readings require a [`POSITIONAL_UNITS`] noun; the adverb reading requires no noun at all, so it instead
+/// drops the adverbs carrying a second sense a relation-capable direction completes. Written as one condition
+/// on the counted branch it reached neither of the others, and an intensifier before a relation-capable
+/// direction was read as a position — latent, because no tracked comment carried the shape.
 ///
 /// **The specimens are not written here**, for the reason the counted branch already records: quoting one
 /// lands it in the corpus, where it refuses itself. A first draft of this paragraph quoted three and this
@@ -1225,9 +1267,9 @@ const POSITIONAL_UNIT_DIRECTIONS: [&str; 4] = ["up", "down", "higher", "lower"];
 
 /// Whether the direction found at `index` is a whole word rather than the tail of one.
 ///
-/// **Measured, on the first run of the widened list.** `up` matched inside `group` and `d up` inside a word
-/// break, so `gro up` and `d up` were reported as positional references — three of the 20 offences that run
-/// produced. `above` and `below` never showed it because neither is a common substring, which is why two words
+/// **Measured, on the first run of the widened list** — the run [`POSITIONAL_UNIT_DIRECTIONS`] anchors. `up`
+/// matched inside `group` and `d up` inside a word break, so `gro up` and `d up` were reported as positional
+/// references. `above` and `below` never showed it because neither is a common substring, which is why they
 /// survived without this guard. The counted branch already applies the same test to its count; the direction
 /// had no equivalent.
 fn is_whole_word(lower: &str, index: usize, direction: &str) -> bool {
@@ -1265,7 +1307,7 @@ fn after_last_break(text: &str) -> usize {
 
 fn positional_reference(line: &str) -> Option<String> {
     let lower = line.to_ascii_lowercase();
-    for (direction, needs_unit) in POSITIONAL_DIRECTIONS
+    for (direction, relation_capable) in POSITIONAL_DIRECTIONS
         .into_iter()
         .map(|d| (d, false))
         .chain(POSITIONAL_UNIT_DIRECTIONS.into_iter().map(|d| (d, true)))
@@ -1307,8 +1349,10 @@ fn positional_reference(line: &str) -> Option<String> {
             // `every_positional_shape_reacts_and_a_named_thing_does_not`, which is where this file already
             // kept them and where the discipline says they belong.
             // A direction that also names a relation is admitted only over a unit — see
-            // [`POSITIONAL_UNIT_DIRECTIONS`] for the 20-offence run that decided it.
-            let noun_admitted = !needs_unit || POSITIONAL_UNITS.contains(&noun);
+            // [`POSITIONAL_UNIT_DIRECTIONS`] for the run that decided it, and for what that run does and
+            // does not establish. This is one of the two forms that restriction takes; the adverb reading
+            // takes the other, because it requires no noun for a list to admit.
+            let noun_admitted = !relation_capable || POSITIONAL_UNITS.contains(&noun);
             let counted = noun_admitted
                 && !noun.is_empty()
                 && !count.is_empty()
@@ -1321,8 +1365,21 @@ fn positional_reference(line: &str) -> Option<String> {
             if counted || article {
                 return Some(format!("{noun} {direction}"));
             }
-            for adverb in POSITIONAL_ADVERBS {
-                if before.ends_with(adverb) {
+            // **The restriction's other form.** An adverb stands in for the thing, so this reading requires
+            // no noun — and the unit test above therefore cannot reach it. Written as a conjunct of `counted`
+            // it governed that branch alone, and an intensifier before a relation-capable direction was read
+            // as a position: the restriction reached the readings that happened to have a noun. Which adverbs a
+            // relation-capable direction admits is read from [`POSITIONAL_ADVERBS`], where the pairing sits
+            // beside the word.
+            //
+            // Whole-word on the adverb as well as on the direction: `outright above` ends with `right`.
+            for (adverb, pairs) in POSITIONAL_ADVERBS {
+                if relation_capable && pairs == Pairs::PositionOnlyDirections {
+                    continue;
+                }
+                if before.ends_with(adverb)
+                    && is_whole_word(before, before.len() - adverb.len(), adverb)
+                {
                     return Some(format!("{adverb} {direction}"));
                 }
             }
@@ -1426,6 +1483,13 @@ fn every_positional_shape_reacts_and_a_named_thing_does_not() {
         "/// reads as `NotFound` one line up (so this path runs)",
         "// the half that told them apart sat three lines lower",
         "// stated two paragraphs higher",
+        // The ADVERB reading over a relation-capable direction — the cell the unit restriction cannot reach,
+        // because this reading supplies the noun's place itself. Both rows were absent while the restriction
+        // was a conjunct of the counted branch, which is why nothing held its claim to drop every relation.
+        "// the value is set directly up from here",
+        // The control for the `right` pairing: before a direction carrying no second sense, the same word
+        // locates and must still react. Without this row, dropping `right` everywhere would pass.
+        "// the guard right above this call",
     ] {
         assert!(
             positional_reference(reacting).is_some(),
@@ -1452,6 +1516,11 @@ fn every_positional_shape_reacts_and_a_named_thing_does_not() {
         "// the same narrowing one level up from it",
         "// the ownership is inherited from a layer down",
         "// resolved three levels up from the manifest",
+        // `right` before a relation-capable direction is the intensifier English writes, not a position —
+        // this repository writes it twice in its own Markdown, out of corpus only by format.
+        "// this bubbles right up to the caller",
+        // An adverb that is the tail of a word is not an adverb, the same test the direction already gets.
+        "// an outright above-the-line claim names no position",
     ] {
         assert!(
             positional_reference(quiet).is_none(),

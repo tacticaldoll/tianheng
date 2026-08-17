@@ -667,6 +667,29 @@ consumer for an undemonstrated deduplication.
   If it is ever reacted, the reaction is more likely to be a **type** that makes the weak binding harder to
   reach than a scan that recognises it.
 
+- **WATCH: a figure a repository check already produces can be repeated in prose that declares no census, and
+  the join between producers and repetitions has never been taken.** *Class:* WATCH. *Observed pressure:* the
+  0.5.0 window, where adversarial review found figures wrong across a single change in every kind of place one
+  can live — `crates/kanhe/tests/census.rs` records how many — and the review after it, which found a figure
+  warranting a design decision written unanchored in live source. Both were found by a reader asking; nothing observed either.
+  *Observation source:* the declared census set is enumerable, and so is the set of checks that produce a
+  figure — several print one in a refusal or on a clean run. Neither side has been held against the other, and
+  the reachable subset is exactly the figures whose producer exists and never declared them. *Current reaction
+  or bound:* the declared censuses are held by `crates/kanhe/tests/census.rs`; everything outside them is the
+  declared bound
+  `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`, under-reacting and
+  engine-owned, with `AGENTS.md`'s three-state disposal as the reviewer's half. *Risk:* bounded, and the
+  bound is what makes it a WATCH rather than a patch — a repeated figure misleads a reader and is repaired in
+  a clause, and the subset a producer could close is the only part closable by construction at all. *Promotion
+  trigger:* a count finding in a window after the disposal rule was written, the rule being the control —
+  the same form the `Bind a claim to its measurement` entry states for its own, and for the same reason: the
+  instances that produced a rule cannot stand as evidence for it. *Version class:* patch; repository-internal,
+  shipping in no crate. *Authority:* `repository-checks`, which owns the shape of a check. *Shape:* enumerate
+  the **producers**, never the prose. A sweep over the digits in tracked documents fails the audit cycle's own
+  second test — *is this figure a census* cannot be generated and staleness-checked, only hand-maintained, so
+  such a sweep would produce the drifting artifact it exists to police, one level up. The checks are code and
+  therefore enumerable. Its size is deliberately not written here.
+
 - **WATCH: A third hand-written scanner of the `#### Scenario:`/`- **PINNED-BY**` grammar still disagrees with the
   other two on two edge cases.** *Class:* WATCH. *Observed pressure:* `bound_register_parse::bounds_in` and
   `bound_register_parse::citations_in` (the latter extracted from `pinning_citations` during an adversarial

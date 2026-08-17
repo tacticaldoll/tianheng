@@ -270,6 +270,30 @@ that the record change every time the tree does. And a figure written in a sente
 unheld; the declaration is the coverage, and widening the match to prose instead is the detector this
 repository designed, measured three times and rejected.
 
+**One decision, made when the figure is written.** What a census is, where one may live, and which carriers
+stand outside are each settled by this section; this states the whole of it as a single choice, because the
+parts were each correct and sat apart, and a rule that cannot be applied in one read is applied by nobody.
+Every figure in a live document is in exactly one of these states, and reaching one is the author's act rather
+than a reviewer's discovery:
+
+1. **Declared** — something here enumerates the set, so the figure is *produced* by that enumerator and the
+   sentence carrying it is declared in `crates/kanhe/tests/census.rs`. The only state that cannot drift, and
+   therefore the one to reach for first.
+2. **Anchored** — nothing enumerates the set, but the measurement is reconstructible: name the commit it was
+   taken at and the command or perturbation that produced it, in the form `BACKLOG.md`'s promotion measurement
+   already uses — *measured at `<sha>`, by `git grep` over `<paths>`*. An anchored figure is an external fact
+   any reader can re-run rather than the state of the session that wrote it, so it is not weaker than a
+   declaration, only narrower: it binds the number and nothing else. A **judgement** over the measured set —
+   *most of them were X* — is not anchored by naming the commit, however exactly its subject is named. Where
+   such a judgement carries a decision, it becomes cases rather than an adjective.
+3. **Dropped** — the sentence says the same thing without it. Most figures belong here, and the test is to
+   read the sentence with the number gone.
+
+**At review the disposal is those same three, and it is not a discussion.** A figure found in none of them is
+moved into one: ask whether an enumerator exists, then whether the sentence needs the number at all. This has
+no reaction, for the reason *Do not add a detector over prose* gives, so the sweep stays a reviewer's — and
+what it then costs is a clause, in place of an argument about which rule applies.
+
 ## A repair loop is a diagnosis, not a schedule
 
 **When a round of repairs produces its own findings, count what kind they are before deciding what to do
