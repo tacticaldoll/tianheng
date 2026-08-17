@@ -1365,6 +1365,60 @@ fn a_composed_subject_that_cannot_be_represented_is_a_constitution_error() {
     }
 }
 
+/// A violation-free `Outcome::Violations` states no subject, so the fold refuses rather than substituting a
+/// zero for a figure it does not have.
+///
+/// `Report::empty()` is public and `exit_code()` answers `0` for it, so this outcome is constructible by any
+/// participant — and `0.5.0` is the first release in which an outside `Observer` can be one. Folded against a
+/// real subject it used to contribute `nothing_declared()`, so a participant that observed a whole workspace
+/// was recorded as having looked for nothing, and the composed figure under-reported with a clean verdict.
+///
+/// Negative run: with `subject_of` answering `nothing_declared()` for the `_` arm, the first fold returns
+/// `Clean(Subject { declared: 2, reached: 3 })` — the observing participant's figure alone, stated as the
+/// figure for both — and the second returns `Clean(Subject { declared: 0, reached: 0 })`.
+#[test]
+fn a_participant_carrying_no_subject_cannot_be_folded_into_a_clean_verdict() {
+    let observed = Subject::of(2, 3).expect("declared something and reached something");
+    let silent = Outcome::Violations(guibiao::Report::empty());
+    assert_eq!(
+        silent.exit_code(),
+        0,
+        "the premise: a violation-free report is not a failing outcome, which is why it reaches this fold"
+    );
+
+    for (label, merged) in [
+        (
+            "beside a participant that did observe",
+            merge_outcomes(silent.clone(), Outcome::Clean(observed)),
+        ),
+        (
+            "beside another carrying nothing",
+            merge_outcomes(silent.clone(), silent.clone()),
+        ),
+    ] {
+        match merged {
+            Outcome::ConstitutionError(why) => assert!(
+                why.contains("reported violations while carrying none"),
+                "{label}: the refusal must name what the participant did: {why}"
+            ),
+            other => panic!(
+                "{label}: a participant stating no subject must refuse, never contribute a zero: {other:?}"
+            ),
+        }
+    }
+
+    // The control: the same fold over two outcomes that DO state a subject is still clean, so the guard
+    // refuses the missing subject rather than the folding.
+    match merge_outcomes(Outcome::Clean(observed), Outcome::Clean(observed)) {
+        Outcome::Clean(subject) => assert_eq!(
+            (subject.declared(), subject.reached()),
+            (4, 6),
+            "two stated subjects still sum"
+        ),
+        other => panic!("two stated subjects must stay clean: {other:?}"),
+    }
+}
+
 #[test]
 fn markdown_headings_are_pairwise_distinct() {
     let c = Constitution::new("t")

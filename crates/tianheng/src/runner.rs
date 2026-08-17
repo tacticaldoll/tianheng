@@ -1238,13 +1238,29 @@ fn merge_outcomes(first: Outcome, second: Outcome) -> Outcome {
         // This is also what the sentence that stood here got wrong. *The sum of two constructible subjects
         // is constructible* is true of the integers and not of `usize`, and the `None` arm below was called
         // unreachable on the strength of it.
+        // **Every side must state a subject before any of them is summed.** A participant reaching this arm
+        // is either `Clean(subject)` or a violation-free `Violations` — the second exits 0, names no subject,
+        // and used to be answered with `nothing_declared()`. That substituted a zero for a figure the engine
+        // did not have, so a participant that observed a whole workspace contributed *looked for nothing* to
+        // the composed claim, silently. The declared bound covers a participant reporting a subject LARGER
+        // than what it observed; this is the engine forgetting rather than the declarer lying, which no bound
+        // covers and no `Subject` invariant catches, since the sum stays representable.
+        let (Some(first_subject), Some(second_subject)) = (subject_of(&first), subject_of(&second))
+        else {
+            return Outcome::ConstitutionError(
+                "a participant reported violations while carrying none, so the subject it reached cannot be \
+                 stated and this fold has no honest figure for what the run covered. A violation-free \
+                 outcome is `Outcome::Clean(Subject)`"
+                    .to_string(),
+            );
+        };
         let (Some(declared), Some(reached)) = (
-            subject_of(&first)
+            first_subject
                 .declared()
-                .checked_add(subject_of(&second).declared()),
-            subject_of(&first)
+                .checked_add(second_subject.declared()),
+            first_subject
                 .reached()
-                .checked_add(subject_of(&second).reached()),
+                .checked_add(second_subject.reached()),
         ) else {
             return Outcome::ConstitutionError(
                 "the composed run's subject cannot be represented: the participants' declared or reached \
@@ -1266,15 +1282,22 @@ fn merge_outcomes(first: Outcome, second: Outcome) -> Outcome {
     }
 }
 
-/// The subject a participant's outcome carries, or an empty one where it carried none.
+/// The subject a participant's outcome carries, or `None` where it carries none.
 ///
-/// A violation or a constitution error names no subject: the first proves it had one by finding
-/// something, and the second never reached a verdict. Neither contributes to a fold that is only
-/// reached when every participant was clean.
-fn subject_of(outcome: &Outcome) -> Subject {
+/// **`None` rather than an empty subject**, because the two are opposite claims. `nothing_declared()` says
+/// *this participant was configured with nothing to enforce*, which is a real and protected shape — a
+/// static-only adoption composes the semantic dimension with an empty bundle. Answering it for an outcome
+/// that simply carries no subject makes the engine assert, on a participant's behalf, a fact the
+/// participant never stated.
+///
+/// The caller only reaches this once no side errored and no violation survived, so an outcome that is not
+/// `Clean` here is a violation-free `Outcome::Violations` — `Report::empty()` is public, `exit_code()`
+/// answers `0` for it, and the first release in which an outside `Observer` can exist is the one that makes
+/// it constructible from outside this crate.
+fn subject_of(outcome: &Outcome) -> Option<Subject> {
     match outcome {
-        Outcome::Clean(subject) => *subject,
-        _ => Subject::nothing_declared(),
+        Outcome::Clean(subject) => Some(*subject),
+        _ => None,
     }
 }
 

@@ -77,6 +77,13 @@ verdict as a whole one.
 Assembly order SHALL therefore be declared **semantically observable**: it decides which cannot-judge is
 reported when more than one observer cannot judge. Deterministic and stated, never incidental.
 
+**The fold's own refusals share the cannot-judge class, and that is a decision rather than an accident.** A
+fold can fail for reasons no observer reported: a participant that states no subject, and a composed subject
+whose figures sum past `usize`. Both are answered as [`Outcome::ConstitutionError`], the same class as a
+boundary that could not be evaluated, because all three say *this run reached no verdict you may act on* —
+and a fourth outcome variant would be a public, breaking distinction drawn for a difference an operator does
+not act on differently. The message text SHALL name which of them occurred, since the class does not.
+
 #### Scenario: One observer cannot judge and a later one would find violations
 
 - **WHEN** an observer returns a constitution error and a later observer would report violations
@@ -93,6 +100,16 @@ reported when more than one observer cannot judge. Deterministic and stated, nev
 - **WHEN** no observer reports a violation or an error
 - **THEN** the fold reports one clean outcome, and an empty observer set SHALL NOT be reported as clean —
   composing nothing is a misconfiguration, not a passing run
+
+#### Scenario: A participant reports no violations and states no subject
+
+- **WHEN** an observer returns a violation-free `Outcome::Violations` — an outcome whose exit code is `0`
+  and which names no subject — and it is folded with a participant that did observe
+- **THEN** the fold refuses as a constitution error naming what the participant did, rather than
+  substituting an empty subject. Answering `nothing_declared()` would have the engine assert, on the
+  participant's behalf, that it looked for nothing, so a participant that observed a whole workspace
+  contributes zero to the composed figure and the run states a clean verdict under-reporting its own reach
+- **PINNED-BY** `a_participant_carrying_no_subject_cannot_be_folded_into_a_clean_verdict`
 
 ### Requirement: An empty semantic observer SHALL not read workspace metadata
 

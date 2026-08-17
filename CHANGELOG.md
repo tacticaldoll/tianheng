@@ -937,6 +937,22 @@ them.
   both ways, the shape the bound register already uses — and it is a capability rather than a tightening,
   which is why it is filed with its trigger instead of built inside this window.
 
+- **A composed run no longer states a subject on a participant's behalf.** `Report::empty()` is public and
+  `Outcome::Violations` of it exits `0`, so a participant can return an outcome that is violation-free and
+  names no subject — and `0.5.0` is the first release in which an outside `Observer` can be that participant.
+  The fold answered such an outcome with `Subject::nothing_declared()`, which is not an absence but a
+  **claim**: *this participant was configured with nothing to enforce*. Folded beside a participant that had
+  observed a whole workspace, the composed verdict came back clean carrying only the other side's figure —
+  the run under-reporting its own reach, with nothing to notice it. The declared bound covers a participant
+  reporting a subject *larger* than it observed; this was the engine forgetting rather than the declarer
+  lying, which no bound covers and no `Subject` invariant catches, because the sum stays representable.
+
+  It is now a constitution error naming what the participant did. `observer-protocol` states why that class
+  is shared with a boundary that could not be evaluated rather than earning a fourth `Outcome` variant: all
+  of them say *this run reached no verdict you may act on*, and a public breaking distinction for a
+  difference an operator does not act on differently is not one worth drawing. The message names which
+  occurred, since the class does not.
+
 - **BREAKING** — **The release gate stopped reading the section the release is about, and three readers
   beside it were fixed with it.** Four defects, each with a negative run recorded against the unfixed code.
 
