@@ -75,6 +75,28 @@ consumer for an undemonstrated deduplication.
 
 ### ACCEPTED DEBT
 
+- **A commit-pinned action has no mechanism keeping it from rotting.** *Class:* ACCEPTED DEBT.
+  *Observed pressure:* pinning `.github/workflows/ci.yml`'s `uses:` entries to commits closed the one
+  ecosystem this repository resolved fresh on every run, and opened its dual — a SHA nobody refreshes drifts
+  from the upstream fix it was pinned before. *Observation source:* the `v0.4.0..HEAD` static review, which
+  found every action on a mutable major tag while `Cargo.lock` and `package-lock.json` pinned their own
+  ecosystems by digest; the refresh gap is this repair's own consequence rather than a second finding.
+  *Current reaction or bound:* none, and that is the entry. Nothing here reads the workflow, and no
+  Dependabot or Renovate configuration exists in this repository. *Risk, bounded rather than assumed:* the
+  actions are `actions/checkout` and `EmbarkStudios/cargo-deny-action`, both running under
+  `permissions: contents: read` against a repository whose CI holds no secret beyond that grant. A stale
+  checkout is a stale checkout; the failure it invites is missing an upstream fix, not executing something
+  unchosen — which is the direction the pin closed. *Promotion trigger:* a pinned action falling far enough
+  behind to miss a security advisory, or a second ecosystem arriving whose pinning would want the same
+  answer — either makes one dependency-refresh mechanism worth more than two hand-maintained pins.
+  *Compatibility class:* patch; CI configuration ships in no crate. *Authority:* this entry and the
+  workflow's own comment, which names the one-line `gh api` refresh command rather than implying automation.
+
+  Dependabot was considered and not adopted **now**, for a reason rather than by omission: it would add a
+  configuration file, a bot-authored pull-request stream, and a second squash-message author to a repository
+  whose merge path is a wrapper that judges every squash message against its pull request. That interaction
+  is real work and belongs to a change of its own, not to the pin that created the need.
+
 - **A check that never wrote a region decision is invisible.** *Class:* ACCEPTED DEBT. *Observed pressure:* the
   region classifier exists because six defects were one shape, and two more were found afterwards in a check
   that never adopted it. Those two were *wrong* decisions and a reaction can see a wrong decision; a check that

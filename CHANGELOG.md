@@ -912,6 +912,19 @@ them.
 
 ### Self-governance
 
+- **The workflow made the pinning argument for npm and never applied it to itself.** Every `uses:` in
+  `.github/workflows/ci.yml` named a mutable major tag. Twelve lines below the first of them sits the comment
+  explaining why `npx` was replaced by `npm ci` against a committed lock — *"`npx` resolved the TRANSITIVE
+  tree fresh on every run with no lock and no integrity check"* — which is exactly what a repointable tag
+  does for the runner's own executable dependencies. Cargo was pinned by `Cargo.lock`, npm by
+  `package-lock.json`, and the actions by nothing. Each now names the commit its tag pointed at, with the
+  release in a trailing comment: this changed which bytes run, not which version.
+
+  `permissions: contents: read` already bounded what a substituted action could reach, and bounding is not
+  closing — it limits the blast radius of code this repository never chose to run rather than stopping it
+  from running. The dual the pin opens, a SHA nobody refreshes, is filed as accepted debt with the reason
+  Dependabot was not adopted in the same breath.
+
 - **Declaring the `specs` mode retired a vocabulary that other paragraphs went on using.** The commit
   that adopted OpenSpec's `specs` half replaced the whole `## OpenSpec lifecycle` section — the one that had
   defined `explore → propose → apply → sync` — and touched nothing else. The section it deleted ended by

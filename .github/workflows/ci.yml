@@ -11,12 +11,32 @@ on:
 permissions:
   contents: read
 
+# Every `uses:` below names a COMMIT, with the release it was that tag's tip at in a trailing comment.
+#
+# This is the argument the `npm ci` step further down already makes, applied to the one ecosystem it was
+# not applied to. A tag is repointable by whoever owns the action, so `@v5` resolves the executed code
+# fresh on every run with no lock and no integrity check — verbatim what `npx` was doing before the
+# committed `package-lock.json` replaced it. Cargo is pinned by `Cargo.lock`, npm by
+# `package-lock.json`, and until now the runner's own executable dependencies were pinned by nothing.
+#
+# `permissions: contents: read` above bounds what a substituted action could reach, and bounding is not
+# closing: the grant limits the blast radius of code this repository never chose to run, rather than
+# stopping it from running.
+#
+# **Refreshing them is a human act with no automation behind it, deliberately** — see `BACKLOG.md`'s
+# accepted-debt entry. To move one, resolve the tag and paste the commit:
+#
+#   gh api repos/actions/checkout/git/ref/tags/v5 --jq .object.sha
+#
+# Pinning is not upgrading: each SHA below is what that major tag pointed at when it was pinned, so this
+# changed which bytes run and not which version.
+
 jobs:
   release-coherence:
     name: Release coherence
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # State classification follows the latest exact `release: X.Y.Z` commit. A shallow
           # checkout cannot observe that release spine and must not masquerade as coherent.
@@ -29,7 +49,7 @@ jobs:
     name: Definition of Done
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # The workspace suite now carries the release-coherence check, whose state classification
           # follows the latest exact `release: X.Y.Z` commit. A shallow checkout cannot see that spine and
@@ -82,7 +102,7 @@ jobs:
     name: MSRV (rust-version)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
       - name: build and test on the declared minimum supported Rust version
@@ -100,7 +120,7 @@ jobs:
     name: License texts bundled
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: every publishable crate bundles its license texts
         run: |
           # `cargo publish` packages only files inside each crate's own directory, so the
@@ -128,7 +148,7 @@ jobs:
     name: Packaged crate self-test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: every publishable crate's tests pass from its packaged tarball
         run: |
           # `cargo publish` ships only crate-local files, so a data file outside a crate's own
@@ -166,9 +186,9 @@ jobs:
     name: Supply chain (cargo-deny)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: license / advisory / bans / sources policy
-        uses: EmbarkStudios/cargo-deny-action@v2
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check
 
@@ -176,7 +196,7 @@ jobs:
     name: Tianheng reaction
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: reaction passes on a clean target
         run: cargo run -p tianheng -- check --manifest-path crates/tianheng/tests/fixtures/clean/Cargo.toml
       - name: reaction fails with exit 1 on a violating target (1, not 2 — the contract separates them)
@@ -203,7 +223,7 @@ jobs:
     name: Examples dogfood
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: every example reacts as declared
         run: |
           TIANHENG_EXAMPLES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p shengmo --test examples_suite
