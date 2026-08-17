@@ -35,9 +35,9 @@ the count of bounds nothing yet defends.
    `file` (where), then `finding` / `rule` (what tripped). Repair the code so the reason holds
    again; do not weaken the boundary to make the reaction pass.
 4. **To change the law itself — amend it deliberately.** A boundary is wrong only by a
-   human-reviewed amendment (an OpenSpec change / steward review), never by quietly editing
-   the constitution so CI turns green. Before proposing an OpenSpec change, read the law
-   projection (step 1) so the proposal reasons against the declared shape, not a guess.
+   human-reviewed amendment (a spec amendment / steward review), never by quietly editing
+   the constitution so CI turns green. Before amending, read the law
+   projection (step 1) so the amendment reasons against the declared shape, not a guess.
 
 This SOP is **orientation, not the binding mechanism**: the reaction (a failed `check`, a
 runtime probe) is what binds: reading the law first does not *grant* compliance, it just
@@ -107,6 +107,14 @@ placeholder is what keeps `openspec/changes/` itself tracked. It is not evidence
 in use — nothing has ever been written there. Nothing enforces the mode either, deliberately: a check
 that failed when a change directory appeared would prevent the adoption the placeholder is held open
 for.
+
+**The `change/<openspec-name>` branch role went with the half.** *Branching and release* below named it
+as one of two fixed roles, matching a directory nothing has ever written to, and it outlived the mode
+declaration by a whole window — the commit that retired the `changes` half described what it had just
+done and had no reason to know which other section of this same file it had just orphaned, which is the
+shape *Adversarial review stance* states outright. A capability change takes `<type>/<scope>-<slug>`
+like every other piece of work. The role is held open exactly as this directory is: adopting the half
+again needs no setup, and until then it is not a role this repository has.
 
 ## Bind a claim to its measurement — construction where you can, a reaction where you must
 
@@ -455,13 +463,13 @@ time the tree does.
 ## Branching and release
 
 `main` is release-only: it carries nothing but linear, non-merge `release: X.Y.Z` snapshot
-commits, each tagged `vX.Y.Z`. The fine-grained lifecycle commits (propose / apply / sync)
+commits, each tagged `vX.Y.Z`. The fine-grained development commits
 never land on `main` individually — they collapse through two squash stages on the
-way up: a change branch is squash-merged into `release/X.Y.Z`, and that release branch is
+way up: a development branch is squash-merged into `release/X.Y.Z`, and that release branch is
 squash-merged into `main`.
 
-Branch names encode role and intent. Two roles are fixed: `change/<openspec-name>` exactly matches
-an OpenSpec change directory, and `release/X.Y.Z` is the first squash target. All other work uses
+Branch names encode role and intent. One role is fixed — `release/X.Y.Z`, the first squash
+target — and all other work uses
 `<type>/<scope>-<slug>`, where `<type>` is the *Conventional Commit type the work will land as* (the
 same set *Commits & PRs* above admits — `fix`, `test`, `refactor`, `docs`, `feat`, `ci`, and so on),
 so a branch's role and its squash subject cannot disagree. Deriving the role from the commit type is
