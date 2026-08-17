@@ -1,7 +1,7 @@
 # Backlog
 
-Forward-looking work, deliberately deferred. Promote an item to an OpenSpec change when
-you pick it up. Every future reaction obeys the drift law:
+Forward-looking work, deliberately deferred. Promote an item to an ordinary `<type>/<scope>-<slug>`
+branch when you pick it up. Every future reaction obeys the drift law:
 
 > **No drift type without an observation source. No target type or name without a
 > reaction.**
@@ -1429,7 +1429,7 @@ that also holds a closed READY-PATCH record.
   reader comparing the two will see it.
 
   **This entry said "one OpenSpec lifecycle" and that was wrong about this repository.** Measured: the
-  `explore → propose → apply → sync` lifecycle `AGENTS.md` describes has **never run here** — zero
+  `explore → propose → apply → sync` lifecycle `AGENTS.md` then described has **never run here** — zero
   `docs(openspec): propose`/`sync` commits in the whole history, and `openspec/changes/` untouched since
   `2f903fb` (`release: 0.1.0`), which is when its `.gitkeep` was added. The `v0.4.0..0.5.0` window edited
   `openspec/specs/*/spec.md` in 151 commits, every one an ordinary `fix:`/`feat:`/`docs:`. `READY-PATCH` is a

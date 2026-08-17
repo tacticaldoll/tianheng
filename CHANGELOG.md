@@ -912,6 +912,26 @@ them.
 
 ### Self-governance
 
+- **Declaring the `specs` mode retired a vocabulary that other paragraphs went on using.** The commit
+  that adopted OpenSpec's `specs` half replaced the whole `## OpenSpec lifecycle` section — the one that had
+  defined `explore → propose → apply → sync` — and touched nothing else. The section it deleted ended by
+  pointing at *Branching and release*, and that section still named `change/<openspec-name>` as one of two
+  **fixed** branch roles "matching an OpenSpec change directory", against a directory the same file declares
+  nothing has ever been written to. Two sections of one document, one routing by a word the other had
+  retired.
+
+  This is the class `AGENTS.md`'s own *Retiring a capability requires the same sweep* rule describes, caught
+  by the sweep that rule prescribes rather than by the retiring commit — which correctly described what it
+  had just done and had no reason to know what it had orphaned. The sweep found **six** sites where a read of
+  the diff alone found two: the amendment step still routed through "an OpenSpec change", the branching
+  section carried both the retired role and the retired lifecycle vocabulary, and `BACKLOG.md` both told a
+  reader to promote work to "an OpenSpec change" and narrated `AGENTS.md` in the present tense as describing
+  a lifecycle it no longer describes.
+
+  Records are left as records: a backlog entry citing the `change/*` branch a past measurement ran on, and a
+  dated release section describing the branching rule as it then stood, are measurements of their own moment.
+  Only the live instruction is corrected.
+
 - **A reaction refusing positional references was green over five of them, because its direction vocabulary
   was two words.** `reference-integrity` forbids a reference by *counted offset* and names no direction; the
   recognizer looked for `above` and `below` alone, so `five lines down`, `one line up` and `three lines lower`
