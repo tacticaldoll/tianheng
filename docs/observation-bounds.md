@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**16 of 88 declared bounds have no pinning test.** That figure is the register's
+**17 of 89 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -260,6 +260,12 @@ fallback used where no manifest exists, which the register spec describes.
 - **pinned by**: `a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not`
 
 ## release-coherence
+
+### `release-coherence/a-dependency-declared-under-target-is-not-observed-a-stated-bound`
+
+> nothing reacts. That heading carries a quoted cfg expression, which is the grammar a line-oriented reader is likeliest to be wrong about, and admitting it on a guess would trade a silent miss for a wrong read. No manifest under `examples/` has ever carried one
+
+- **unpinned**, tracked by: `BACKLOG.md` — *a dependency declared under a target table is not observed*
 
 ### `release-coherence/prose-about-the-marker-is-read-as-a-marker-a-stated-bound`
 

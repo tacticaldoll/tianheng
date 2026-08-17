@@ -171,6 +171,32 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   equals nor is the minor series of
 - **THEN** the coherence check fails and names the example, the crate, and the version found
 
+#### Scenario: A dependency is read in either form cargo writes it
+
+- **WHEN** an example declares a family crate as a detailed table — `[dependencies.alias]` with its own
+  `package` and `version` lines, or `[dependencies.xuanji]` with a `version` line — at a version the
+  workspace version does not satisfy
+- **THEN** the check fails naming the crate. A declaration's form is cargo's to choose; a reader keyed on
+  `<crate> = …` entries saw no family crate on any line of such a table and skipped the whole declaration,
+  renamed or not
+- **PINNED-BY** `a_detailed_dependency_table_is_read_renamed_or_not`
+
+#### Scenario: A key outside a dependency table is not a dependency
+
+- **WHEN** a manifest carries a key spelled after a family crate in a table that declares no dependencies —
+  `[features]`, whose values are arrays
+- **THEN** the check reads it as nothing. Which tables hold dependencies is read from the heading, so the
+  same repair that admits the detailed form closes the direction where a non-dependency was read as one
+- **PINNED-BY** `a_feature_named_after_a_family_crate_is_not_a_pin`
+
+#### Scenario: A dependency declared under `[target.…]` is not observed — a stated bound
+
+- **WHEN** a family dependency is declared under `[target.'cfg(…)'.dependencies]` or its `.NAME` form
+- **THEN** nothing reacts. That heading carries a quoted cfg expression, which is the grammar a
+  line-oriented reader is likeliest to be wrong about, and admitting it on a guess would trade a silent miss
+  for a wrong read. No manifest under `examples/` has ever carried one
+- **UNPINNED** `BACKLOG.md` — *a dependency declared under a target table is not observed*
+
 #### Scenario: A renamed family dependency is resolved by the package it names
 
 - **WHEN** an example requires a family crate under another key — `alias = { package = "xuanji", version =
@@ -185,8 +211,14 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 - **WHEN** a release-ready repository carries `## [X.Y.Z] - ` followed by ten characters that are not an
   ISO date
 - **THEN** the check fails as missing dated release notes, because the suffix is parsed as three
-  `-`-separated all-digit fields of widths four, two and two rather than counted
+  `-`-separated all-digit fields of widths four, two and two, **each ranged** — a month in `1..=12`, a day
+  in `1..=31`. A digit test is a parse without a date's guarantee exactly as a length test is a parse
+  without a digit's, so `2026-99-99` is refused alongside `notadate!!`. Whether a day exists in its month
+  needs a calendar, which this crate's declared dependency surface does not carry, and that residue is a
+  date written wrong rather than a shape that reads as one
 - **PINNED-BY** `a_dated_heading_whose_suffix_is_not_a_date_is_a_violation`
+- **PINNED-BY** `a_dated_heading_whose_fields_are_out_of_range_is_a_violation`
+- **PINNED-BY** `a_dated_suffix_is_a_date_and_not_only_three_digit_runs`
 
 #### Scenario: A dependency whose own name carries the word `version`
 
