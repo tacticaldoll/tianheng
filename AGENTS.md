@@ -108,13 +108,10 @@ in use — nothing has ever been written there. Nothing enforces the mode either
 that failed when a change directory appeared would prevent the adoption the placeholder is held open
 for.
 
-**The `change/<openspec-name>` branch role went with the half.** *Branching and release* below named it
-as one of two fixed roles, matching a directory nothing has ever written to, and it outlived the mode
-declaration by a whole window — the commit that retired the `changes` half described what it had just
-done and had no reason to know which other section of this same file it had just orphaned, which is the
-shape *Adversarial review stance* states outright. A capability change takes `<type>/<scope>-<slug>`
-like every other piece of work. The role is held open exactly as this directory is: adopting the half
-again needs no setup, and until then it is not a role this repository has.
+**The `change/<openspec-name>` branch role went with the half.** *Branching and release* below named it as
+one of two fixed roles, matching a directory nothing has ever written to. A capability change takes
+`<type>/<scope>-<slug>` like every other piece of work. The role is held open exactly as this directory is:
+adopting the half again needs no setup, and until then it is not a role this repository has.
 
 ## Bind a claim to its measurement — construction where you can, a reaction where you must
 
@@ -463,16 +460,14 @@ time the tree does.
 ## Branching and release
 
 `main` is release-only: it carries nothing but linear, non-merge `release: X.Y.Z` snapshot
-commits, each tagged `vX.Y.Z`. The fine-grained development commits
-never land on `main` individually — they collapse through two squash stages on the
-way up: a development branch is squash-merged into `release/X.Y.Z`, and that release branch is
-squash-merged into `main`.
+commits, each tagged `vX.Y.Z`. The fine-grained development commits never land on `main` individually —
+they collapse through two squash stages on the way up: a development branch is squash-merged into
+`release/X.Y.Z`, and that release branch is squash-merged into `main`.
 
-Branch names encode role and intent. One role is fixed — `release/X.Y.Z`, the first squash
-target — and all other work uses
-`<type>/<scope>-<slug>`, where `<type>` is the *Conventional Commit type the work will land as* (the
-same set *Commits & PRs* above admits — `fix`, `test`, `refactor`, `docs`, `feat`, `ci`, and so on),
-so a branch's role and its squash subject cannot disagree. Deriving the role from the commit type is
+Branch names encode role and intent. One role is fixed — `release/X.Y.Z`, the first squash target — and all
+other work uses `<type>/<scope>-<slug>`, where `<type>` is the *Conventional Commit type the work will land
+as* (the same set *Commits & PRs* above admits — `fix`, `test`, `refactor`, `docs`, `feat`, `ci`, and so
+on), so a branch's role and its squash subject cannot disagree. Deriving the role from the commit type is
 deliberate: an enumerated list of blessed prefixes drifts from what the repository does, and a
 governance rule that has drifted is read as license rather than law. Pre-release polish therefore
 takes the type its own work lands as; there is no separate release-staging role, because a branch's
