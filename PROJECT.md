@@ -297,12 +297,15 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   is the second instance: it enumerates the same surface the register does and checks what each bound's
   stop actually *is*, which the register never governed — a slot that had accumulated many phrasings, one of
   them used by two capabilities for bounds on opposite sides of the false-negative line. `gate-shape-contract`
-  is the third, and the first to turn the cycle on **this repository's own check surface** rather than on the
+  was the third, and the first to turn the cycle on **this repository's own check surface** rather than on the
   specs: the `check_*` gates and their twins, enumerated from tracked content, with the properties that cannot be
-  mechanically checked declared as bounds. It also supplies the cycle's sharpest evidence so far that a
+  mechanically checked declared as bounds. It supplied the cycle's sharpest evidence that a
   hand-written table is not an enumeration — the backlog entry proposing it described the surface as uniform, and
   applying it found two properties that were not, one of which no twin held at all once the assertion was
-  actually observed rather than counted. `projection-register` is the fourth and turns the cycle on the
+  actually observed rather than counted. **It was retired by `5abda1f` in the same window**, once the shell
+  gates it enumerated were deleted and its subject no longer existed; `repository-checks` holds what replaced
+  them. The lesson is what the cycle keeps — the capability was the instrument, not the finding.
+  `projection-register` is the fourth and turns the cycle on the
   repository's own **generated documents**: the set of them was prose in `AGENTS.md`, so the mechanism whose whole
   purpose is to stop documents drifting was described by a document that drifted. Its lesson is narrower and
   sharper than the others' — when a check's subject is *text*, the check's own text is part of the corpus,

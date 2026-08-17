@@ -122,6 +122,34 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "`BACKLOG.md` — *a check that never wrote a region decision is invisible*",
         ),
         BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-shell-comment-opened-by-a-metacharacter-stays-in-the-executed-region-a-stated-bound",
+            ),
+            "a shell comment marker written straight after an unquoted metacharacter, where bash opens a \
+             comment and the token-start rule does not cut",
+            Extent::Reached(Reached::OverReacts {
+                because: "the rule tests for whitespace or line start, so text bash discards survives into \
+                          the executed region and commentary can satisfy a property about executed text"
+                    .into(),
+            }),
+            "a_shell_marker_after_a_metacharacter_stays_in_the_region",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound",
+            ),
+            "a shell comment marker preceded by whitespace inside a quoted string, where bash keeps it as \
+             string content and the token-start rule cuts it",
+            Extent::Reached(Reached::UnderReacts {
+                because: "executed text is deleted, so a property about it is judged over less than the line \
+                          carries — the direction the Core Contract forbids, and one a sentence in the \
+                          classifier recorded as reaching the Rust region alone while both run the same rule"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_shell_marker_inside_quotes_is_cut_from_the_region",
+        ),
+        BoundDecl::pinned(
             BoundId::new("repository-checks/files-no-capability-claims-a-stated-bound"),
             "a tracked file no capability's declared subject claims",
             Extent::Reached(Reached::UnderReacts {

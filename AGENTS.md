@@ -270,6 +270,30 @@ that the record change every time the tree does. And a figure written in a sente
 unheld; the declaration is the coverage, and widening the match to prose instead is the detector this
 repository designed, measured three times and rejected.
 
+**One decision, made when the figure is written.** What a census is, where one may live, and which carriers
+stand outside are each settled by this section; this states the whole of it as a single choice, because the
+parts were each correct and sat apart, and a rule that cannot be applied in one read is applied by nobody.
+Every figure in a live document is in exactly one of these states, and reaching one is the author's act rather
+than a reviewer's discovery:
+
+1. **Declared** — something here enumerates the set, so the figure is *produced* by that enumerator and the
+   sentence carrying it is declared in `crates/kanhe/tests/census.rs`. The only state that cannot drift, and
+   therefore the one to reach for first.
+2. **Anchored** — nothing enumerates the set, but the measurement is reconstructible: name the commit it was
+   taken at and the command or perturbation that produced it, in the form `BACKLOG.md`'s promotion measurement
+   already uses — *measured at `<sha>`, by `git grep` over `<paths>`*. An anchored figure is an external fact
+   any reader can re-run rather than the state of the session that wrote it, so it is not weaker than a
+   declaration, only narrower: it binds the number and nothing else. A **judgement** over the measured set —
+   *most of them were X* — is not anchored by naming the commit, however exactly its subject is named. Where
+   such a judgement carries a decision, it becomes cases rather than an adjective.
+3. **Dropped** — the sentence says the same thing without it. Most figures belong here, and the test is to
+   read the sentence with the number gone.
+
+**At review the disposal is those same three, and it is not a discussion.** A figure found in none of them is
+moved into one: ask whether an enumerator exists, then whether the sentence needs the number at all. This has
+no reaction, for the reason *Do not add a detector over prose* gives, so the sweep stays a reviewer's — and
+what it then costs is a clause, in place of an argument about which rule applies.
+
 ## A repair loop is a diagnosis, not a schedule
 
 **When a round of repairs produces its own findings, count what kind they are before deciding what to do
@@ -375,12 +399,20 @@ adversarial contract review reading every entry against `HEAD` rather than again
 originally closed it. The retiring commit itself is not the place this is caught: it correctly
 describes what it just did, and has no reason to know which earlier entry in the same unreleased
 window it just orphaned. Before closing a change that deletes a capability, test/module, or mechanism,
-grep `CHANGELOG.md` and `BACKLOG.md` for its name and for the commits that built it, and annotate every
+grep **every tracked live document** for its name and for the commits that built it, and annotate every
 hit that still narrates it as live — in `CHANGELOG.md`'s own established idiom (a follow-up sentence or
 `### Self-governance` entry noting the retirement, as at the "third floor... is retired" example
 above), in `BACKLOG.md`'s (a trailing note on the entry, not a rewrite of it). This has no repository
-check: both files are prose, so per *Bind a claim to its measurement*, a reaction is not the available
+check: these are prose, so per *Bind a claim to its measurement*, a reaction is not the available
 option — the sweep is stated here as the discipline in its place.
+
+**The corpus is every live document, and naming two of them was this rule's own instance of the class it
+closes.** It said `CHANGELOG.md` and `BACKLOG.md`, which are where a *narration* usually sits — and
+`PROJECT.md`'s Decisions section carried `gate-shape-contract` in the present indicative for the whole window,
+outside a sweep written for exactly that. A corpus narrower than the claim, in the paragraph about corpora
+narrower than their claims. A dated `CHANGELOG.md` section is the one exemption and it is by construction: a
+released section is a record of what was true then, so holding it to `HEAD` would demand that the record
+change every time the tree does.
 
 ## Commits & PRs
 

@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**40 of 85 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**41 of 87 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -35,6 +35,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `repository-checks/a-figure-written-in-words-at-one-hundred-or-above-is-not-matched-a-stated-bound` — owner: engine
 - `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
 - `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound` — owner: engine
+- `repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound` — owner: engine
 - `repository-checks/files-no-capability-claims-a-stated-bound` — owner: engine
 - `repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound` — owner: engine
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
@@ -333,7 +334,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (11)
+## over-reacts (12)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -383,6 +384,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `prose_about_the_marker_is_read_as_a_marker_a_stated_bound`
 
+### `repository-checks/a-shell-comment-opened-by-a-metacharacter-stays-in-the-executed-region-a-stated-bound`
+
+> a shell comment marker written straight after an unquoted metacharacter, where bash opens a comment and the token-start rule does not cut
+
+- **because**: the rule tests for whitespace or line start, so text bash discards survives into the executed region and commentary can satisfy a property about executed text
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_shell_marker_after_a_metacharacter_stays_in_the_region`
+
 ### `runtime-origin-assertion/a-composite-shape-yields-a-truncated-origin-a-stated-bound`
 
 > a registered type that is a reference, tuple, array, pointer, or function pointer
@@ -423,7 +432,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (40)
+## under-reacts (41)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -664,6 +673,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the allowlist classifies ARGUMENTS, and cargo takes the same configuration from the environment -- measured on cargo 1.96.0, `--target not-a-real-triple` and `CARGO_BUILD_TARGET=not-a-real-triple` produce the identical rustc-probe failure. Closing it is ordinary work here rather than another layer's, since the wrapper could scrub the environment before invoking cargo; it needs an allowlist over the environment, and legitimate setups export CARGO_HOME and CARGO_TARGET_DIR, so which set to admit is a decision this bound records instead of guessing
 - **its defence must show**: does not react
 - **pinned by**: `a_tool_configuration_set_in_the_environment_is_a_stated_bound`
+
+### `repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound`
+
+> a shell comment marker preceded by whitespace inside a quoted string, where bash keeps it as string content and the token-start rule cuts it
+
+- **because**: executed text is deleted, so a property about it is judged over less than the line carries — the direction the Core Contract forbids, and one a sentence in the classifier recorded as reaching the Rust region alone while both run the same rule
+- **its defence must show**: does not react
+- **pinned by**: `a_shell_marker_inside_quotes_is_cut_from_the_region`
 
 ### `repository-checks/files-no-capability-claims-a-stated-bound`
 

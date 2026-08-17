@@ -879,8 +879,9 @@ fn sync_parent_dir(path: &Path) {
 }
 
 /// `create_new`'s `O_EXCL` fails on any existing directory entry, including a dangling symlink —
-/// a baseline path whose symlink target does not exist reads as `NotFound` one line up (so this,
-/// the create-new path, runs), then hits `AlreadyExists` here, indistinguishable from a genuine
+/// a baseline path whose symlink target does not exist reads as `NotFound` to [`write_baseline`]'s
+/// own `metadata` probe (so this, the create-new path, runs), then hits `AlreadyExists` here,
+/// indistinguishable from a genuine
 /// concurrent creation without checking `symlink_metadata` explicitly. That distinction matters:
 /// a dangling symlink is a permanent state, not a race — "rerun the command" (the concurrent-
 /// creation arm's own remedy) would fail identically forever, so this earns its own diagnosis.

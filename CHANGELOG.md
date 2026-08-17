@@ -907,6 +907,68 @@ them.
 
 ### Self-governance
 
+- **A reaction refusing positional references was green over five of them, because its direction vocabulary
+  was two words.** `reference-integrity` forbids a reference by *counted offset* and names no direction; the
+  recognizer looked for `above` and `below` alone, so `five lines down`, `one line up` and `three lines lower`
+  were invisible. The recognizer's own doc records fixing this exact shape one dimension over — a list beside
+  the counted branch was *a second list beside the rule, joined to nothing and necessarily narrower than it* —
+  and left the direction in that state.
+
+  The widened list is not the naive one, because the naive one was written first and measured: 20 offences,
+  most of them not references at all. `up` matched inside `group`, so the direction must be a whole word — the
+  same test the branch already applied to its count and not to its direction. And `one level up` or `a layer
+  down` names a relation between two rules rather than a place to look, so the relation-capable directions are
+  admitted only over a positional unit; reporting the rest would be the false refusal this family forbids.
+  Writing the reaction row for a widened direction then found `POSITIONAL_UNITS` half-plural — `line` carried
+  `lines` while `paragraph` and `sentence` carried nothing.
+
+- **The shell region's rule had four owners and two of them overclaimed.** `region`'s token-start rule was
+  documented as *the shell's own* rather than an approximation of it, and the string-literal residue was
+  scoped to the Rust region while both regions run the identical rule. Measured on bash rather than reasoned
+  about: a marker after an unquoted metacharacter opens a comment that this rule does not cut, and a
+  whitespace-preceded marker inside quotes is string content that it does. The first lets commentary satisfy a
+  property about executed text; the second deletes executed text, the direction the Core Contract forbids.
+
+  Both are latent — no tracked script carries either shape on an executed line — and both are now declared
+  bounds of `repository-checks` with their pinning tests, so the register carries them. The rule itself has
+  one owner and the other three point at it, because correcting two sentences of four would have left the
+  class open. The shell region's whole decision table is an executable case rather than a paragraph.
+
+- **The restriction that widening earned was written as a conjunct of one branch, and reached the readings
+  that happened to have a noun.** Admitting the relation-capable directions only over a positional unit is
+  what keeps a relation from being reported as a place to look — but it was a condition inside the *counted*
+  reading, so the *adverb* reading, which supplies the noun's place itself and therefore has no noun for a
+  list to admit, kept firing on any word before it. An intensifier before such a direction was read as a
+  position. Latent, since no tracked comment carried the shape, and invisible to the case table because no
+  row paired an adverb with a widened direction — the sentence claiming the restriction dropped every
+  relation phrase was held by nothing.
+
+  The pairing now travels beside the adverb rather than being decided in a branch, the way the attribution
+  marks already do, and the flag is named for the direction property it is rather than for the one branch that
+  first consumed it. Both readings gained rows, with the control that keeps the repair from over-refusing.
+
+- **A figure warranting a design decision was typed into live source with nothing to reconstruct it, and the
+  rule against that lived in three separate paragraphs.** The measurement behind the direction restriction was
+  written as a bare count: reproducing it needs both the matcher and the tree, and the commit recording it had
+  also repaired comments the sweep reads. It is now anchored to the commit and the invocation that produced
+  it, which makes it an external fact any reader can re-run rather than the state of the session that wrote
+  it — and the **judgement** over that set is marked as the half an anchor cannot bind, pointing at the rows
+  where part of it has been made inspectable.
+
+  `AGENTS.md` states the whole disposal as one decision instead of three correct paragraphs sitting apart: a
+  figure in a live document is declared by a census, anchored to its commit and command, or dropped because
+  the sentence says the same thing without it; record carriers stand outside by construction; and at review
+  the disposal is those same three rather than an argument about which rule applies. Drafting it produced four
+  violations of itself, none of which anything could have caught. `BACKLOG.md` carries the reachable remainder
+  as a `WATCH`: the figures whose producer exists and never declared them, to be found by enumerating the
+  producers and never the prose.
+
+- **`PROJECT.md` narrated a retired capability in the present tense, and the sweep written to catch that named
+  two files.** `gate-shape-contract` was retired in this window; `AGENTS.md` and `BACKLOG.md` annotate it and
+  `PROJECT.md`'s Decisions section did not. The retirement sweep said to grep `CHANGELOG.md` and `BACKLOG.md`,
+  which is a corpus narrower than its claim inside the paragraph about corpora narrower than their claims. It
+  now names every tracked live document, with a dated changelog section exempt by construction.
+
 - **The one manifest reader both irreversible-act gates share was still reading raw lines, and the workspace
   version now answers in three states.** `manifest::workspace_version` decided a property over executed TOML
   without taking its corpus from the shared region classifier, which `repository-checks` requires in so many

@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**15 of 85 declared bounds have no pinning test.** That figure is the register's
+**15 of 87 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -346,6 +346,18 @@ fallback used where no manifest exists, which the register spec describes.
 > no reaction sees either. An absence is not a shape, and nothing can scan for a filter that was never written; a disagreement between two scans is visible only to something that can already recognize what a region decision is, which is the same reaction. A reaction refusing an inline region decision was designed and measured against this repository: of the sites carrying the marker, only some are this class — the rest select commentary deliberately or parse a data format whose syntax marks comments — so it would refuse more legitimate sites than defects, which is how a gate earns being turned off. The classifier's adoption is what narrows this, and the narrowing is not a closure. The bound is declared on the construction rather than on an instance: a candidate one was reported and **refuted by measurement**, and a bound resting on a refuted instance would be worse than none
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a check that never wrote a region decision is invisible*
+
+### `repository-checks/a-shell-comment-opened-by-a-metacharacter-stays-in-the-executed-region-a-stated-bound`
+
+> the region keeps it, a stated bound: the rule tests for whitespace or line start, so commentary can satisfy a property about executed text. The direction is the over-including one and closing it needs word-splitting the classifier does not do; no tracked script carries the shape on an executed line
+
+- **pinned by**: `a_shell_marker_after_a_metacharacter_stays_in_the_region`
+
+### `repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound`
+
+> the region cuts it, a stated bound: executed text is deleted, which is the direction the Core Contract forbids, and the residue was for a window recorded as reaching the Rust region alone. Closing it needs the quote tracking the TOML region has, rewritten for the shell's own quoting; no tracked script carries the shape on an executed line
+
+- **pinned by**: `a_shell_marker_inside_quotes_is_cut_from_the_region`
 
 ### `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound`
 

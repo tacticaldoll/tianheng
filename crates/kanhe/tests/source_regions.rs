@@ -298,12 +298,82 @@ fn a_toml_comment_needs_no_whitespace_before_it_and_a_hash_in_a_string_is_not_on
         "a literal string takes no escapes and still holds its `#`"
     );
 
-    // The shell keeps the token-start rule because it *is* the shell's rule: `echo a#b` prints `a#b`.
+    // The shell keeps the token-start rule as its own approximation: `echo a#b` prints `a#b`.
     let shell = Source::of("printf '%s' a#b\n");
     assert!(
         shell.shell().contains("a#b"),
         "widening TOML's rule must not widen the shell's — they share a marker, not a decision"
     );
+}
+
+/// The shell region's whole decision table, so the description of the rule *is* the run.
+///
+/// **Written because three doc paragraphs asserted the rule instead of a case asserting it**, and two of the
+/// three overclaimed — one calling the token-start rule *the shell's own*, one scoping the string-literal
+/// residue to Rust alone. A claim about what this region decides now lands as a row here, and
+/// `Rule::TokenStart` reads its table off these shapes rather than restating bash.
+///
+/// Every expectation below was measured with `bash -c` before it was written, not reasoned about.
+#[test]
+fn the_shell_region_decides_these_shapes_and_no_others() {
+    for (source, kept, why) in [
+        ("printf a#b\n", true, "glued to a word, bash prints it"),
+        ("printf a #b\n", false, "after whitespace, bash comments it"),
+        (
+            "#!/usr/bin/env bash\n",
+            false,
+            "a whole-line comment is dropped",
+        ),
+        (
+            "curl \"$url#frag\"\n",
+            true,
+            "glued inside a value, bash keeps the fragment",
+        ),
+    ] {
+        assert_eq!(
+            Source::of(source).shell().contains("#"),
+            kept,
+            "{why}: {source:?}"
+        );
+    }
+}
+
+/// A `#` opened by an unquoted metacharacter stays in the region — a declared over-inclusion.
+///
+/// Measured: `bash -c 'printf a;#b'` prints `a`, and `bash -c '(printf a)#b'` prints `a`, so bash opens a
+/// comment at both. The token-start rule tests only for whitespace or line start, so both survive into the
+/// executed region and a property over executed text can be satisfied by commentary. That is the first defect
+/// this module's own header says it exists to end, reappearing in the one language whose rule the header
+/// claimed to implement exactly.
+///
+/// Latent: no tracked script carries the shape on an executed line. Closing it needs word-splitting.
+#[test]
+fn a_shell_marker_after_a_metacharacter_stays_in_the_region() {
+    for source in ["printf a;#b\n", "(printf a)#b\n", "printf a|#b\n"] {
+        assert!(
+            Source::of(source).shell().contains("#b"),
+            "bash opens a comment here and this region does not: {source:?}"
+        );
+    }
+}
+
+/// A whitespace-preceded `#` inside quotes is cut — a declared under-inclusion, the forbidden direction.
+///
+/// Measured: `bash -c 'printf "a #b"'` prints `a #b`, so the marker is string content and not a comment. The
+/// token-start rule cuts it, deleting executed text — which `cut_tail_comment`'s own doc names as the
+/// direction the Core Contract forbids, and which a sentence in this module once scoped to `rust()` alone
+/// while `shell()` ran the identical rule.
+///
+/// Latent: no tracked script carries the shape on an executed line. Closing it needs the quote tracking
+/// `Rule::Toml` has, rewritten for the shell's own quoting.
+#[test]
+fn a_shell_marker_inside_quotes_is_cut_from_the_region() {
+    for source in ["printf \"a #b\"\n", "printf 'a #b'\n"] {
+        assert!(
+            !Source::of(source).shell().contains("#b"),
+            "bash keeps this as string content and this region cuts it: {source:?}"
+        );
+    }
 }
 
 /// A multi-line TOML string carries its `#` across the line boundary, whole-line ones included.
