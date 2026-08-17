@@ -341,6 +341,47 @@ fn each_unreadable_input_says_which_one_it_could_not_read() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// A version value this reader cannot read stops the publish, and says so in its own words.
+///
+/// Legal TOML in a form this reader does not take — a single-quoted literal. Before the reader answered in
+/// three states it reported this as *missing or malformed*, which in front of `cargo publish` sends an
+/// operator to look for a version key that is sitting in the manifest, correctly spelled for cargo.
+///
+/// The message is this gate's own rather than the release gate's. Both read the same manifest fact and each
+/// cannot decide a different thing about it, so a shared sentence would tell an operator which fact was
+/// unreadable and not which judgement it blocked.
+#[test]
+fn a_version_this_reader_cannot_read_stops_the_publish_as_a_cannot_judge() {
+    let root = scratch("unreadable-version");
+    let fixture = build_fixture(&root, "unreadable", "9.9.9");
+    // A real repository, so the worktree branch above this one is already satisfied and the refusal is about
+    // the version. Rewriting the manifest also leaves the tree dirty, which is refused *after* the version is
+    // read — so the order of `judge`'s phases is what keeps this direction about the thing it names.
+    std::fs::write(
+        fixture.repo.join("Cargo.toml"),
+        "[workspace]\nmembers = []\n\n[workspace.package]\nversion = '9.9.9'\n",
+    )
+    .expect("write");
+    let refusal = judge(&fixture.repo, &fixture.remote.display().to_string())
+        .expect_err("a version this reader cannot read must stop the publish");
+    let _ = std::fs::remove_dir_all(&root);
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal
+            .message
+            .contains("declares a workspace version this check cannot read"),
+        "{}",
+        refusal.message
+    );
+    assert!(
+        refusal
+            .message
+            .contains("which tag this tree would have to be the release snapshot of"),
+        "the refusal must name what THIS gate could not decide: {}",
+        refusal.message
+    );
+}
+
 /// An annotated tag carrying no signature at all, distinguished from one whose signature does not verify.
 ///
 /// `an_unsigned_annotated_tag_is_a_violation` asserted `contains("carries no signature") || contains("does

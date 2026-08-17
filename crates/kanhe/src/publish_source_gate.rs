@@ -14,7 +14,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::manifest::is_semver;
+use crate::manifest::{WorkspaceVersion, is_semver};
 use crate::refusal::{Refusal, cannot_judge, violation};
 
 /// The judgement's own git, isolated from everything outside the repository it judges.
@@ -268,7 +268,7 @@ pub fn classify(repo: &Path, paths: &[&str]) -> Result<String, NoClassification>
 /// The parse is [`crate::manifest::workspace_version`]; only the read is local, because this gate takes a
 /// path where its sibling already holds the text. The two used to parse it separately and disagreed about
 /// whether a `[package]` table counts — see that module for why it no longer does.
-fn workspace_version(repo: &Path) -> Result<Option<String>, String> {
+fn workspace_version(repo: &Path) -> Result<WorkspaceVersion, String> {
     let manifest = repo.join("Cargo.toml");
     let text = std::fs::read_to_string(&manifest)
         .map_err(|err| format!("could not read {}: {err}", manifest.display()))?;
@@ -292,17 +292,26 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
         ))
     })?;
 
-    let version = workspace_version(repo)
-        .map_err(cannot_judge)?
-        .unwrap_or_default();
+    // Answered in three, for the reason the sibling release gate states at its own call site: a value this
+    // reader cannot read is legal TOML in a form it does not take, and reporting it as a *missing* version in
+    // front of `cargo publish` sends an operator to look for a key that is already there.
+    let version = match workspace_version(repo).map_err(cannot_judge)? {
+        WorkspaceVersion::Declared(version) => version,
+        WorkspaceVersion::Absent => {
+            return Err(cannot_judge(
+                "workspace version is missing or malformed: <missing>",
+            ));
+        }
+        WorkspaceVersion::Unreadable(what) => {
+            return Err(cannot_judge(format!(
+                "Cargo.toml declares a workspace version this check cannot read ({what}), so which tag this \
+                 tree would have to be the release snapshot of cannot be decided"
+            )));
+        }
+    };
     if !is_semver(&version) {
         return Err(cannot_judge(format!(
-            "workspace version is missing or malformed: {}",
-            if version.is_empty() {
-                "<missing>"
-            } else {
-                &version
-            }
+            "workspace version is missing or malformed: {version}"
         )));
     }
     let tag = format!("v{version}");

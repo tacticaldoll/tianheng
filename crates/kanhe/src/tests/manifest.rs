@@ -1,4 +1,4 @@
-use crate::manifest::{is_semver, semver, workspace_version};
+use crate::manifest::{WorkspaceVersion, is_semver, semver, workspace_version};
 
 /// The two gates asked the same question about a version and answered differently.
 ///
@@ -26,23 +26,59 @@ fn a_component_too_large_to_order_is_not_a_version() {
 /// The publish gate accepted a `[package]` table where its sibling did not. The fallback was unreachable —
 /// this repository's root and both gates' fixtures declare `[workspace.package]` — so it was dropped rather
 /// than carried forward as an untested branch settling a disagreement no input could produce. A root with
-/// no workspace table is not the shape either gate judges, and both callers read `None` as a cannot-judge.
+/// no workspace table is not the shape either gate judges, and both callers read `Absent` as a cannot-judge.
 #[test]
 fn a_single_crate_root_declares_no_workspace_version() {
     let single = "[package]\nname = \"solo\"\nversion = \"9.9.9\"\n";
     assert_eq!(
         workspace_version(single),
-        None,
+        WorkspaceVersion::Absent,
         "a `[package]` version is not the workspace's, and reading it as one is what the two gates \
          disagreed about"
     );
     let workspace = "[workspace]\nmembers = []\n\n[workspace.package]\nversion = \"0.5.0\"\n";
-    assert_eq!(workspace_version(workspace), Some("0.5.0".to_string()));
+    assert_eq!(
+        workspace_version(workspace),
+        WorkspaceVersion::Declared("0.5.0".to_string())
+    );
 }
 
 /// The scan is scoped to the table, so a later table's `version` is not the workspace's.
 #[test]
 fn a_version_under_another_table_is_not_the_workspace_version() {
     let manifest = "[workspace.package]\nversion = \"0.5.0\"\n\n[package]\nversion = \"9.9.9\"\n";
-    assert_eq!(workspace_version(manifest), Some("0.5.0".to_string()));
+    assert_eq!(
+        workspace_version(manifest),
+        WorkspaceVersion::Declared("0.5.0".to_string())
+    );
+}
+
+/// The three states, each given the input that produces it and no other.
+///
+/// A comment on the table heading and a comment after the value are the two shapes the raw-line reader got
+/// wrong, in opposite directions: the first reported the version **absent**, the second reported the comment
+/// as part of the **value**. Both are legal TOML. The third row is the state the `Option` could not hold at
+/// all — a value this reader does not take, which is not a key that is missing.
+#[test]
+fn a_comment_never_becomes_the_version_and_an_unreadable_value_is_not_an_absent_one() {
+    assert_eq!(
+        workspace_version("[workspace.package] # the inherited version\nversion = \"0.5.0\"\n"),
+        WorkspaceVersion::Declared("0.5.0".to_string()),
+        "a comment on the heading closed the table before it opened"
+    );
+    assert_eq!(
+        workspace_version("[workspace.package]\nversion = \"0.5.0\"  # bumped\n"),
+        WorkspaceVersion::Declared("0.5.0".to_string()),
+        "a trailing comment was carried into the value"
+    );
+    assert_eq!(
+        workspace_version("[workspace.package]\nversion = '0.5.0'\n"),
+        WorkspaceVersion::Unreadable("'0.5.0'".to_string()),
+        "a single-quoted value is legal TOML this reader does not take — not a key that is absent"
+    );
+    assert_eq!(
+        workspace_version("[workspace.package]\n# version = \"9.9.9\"\n"),
+        WorkspaceVersion::Absent,
+        "a commented-out key declares nothing"
+    );
 }

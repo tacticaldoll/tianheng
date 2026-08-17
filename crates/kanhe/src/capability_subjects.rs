@@ -13,8 +13,9 @@ pub type Subjects = BTreeMap<String, Vec<String>>;
 
 /// What a spec's `## Subject` section declares.
 ///
-/// Three outcomes, because two of them used to be one. A bullet this reader cannot parse is not a section
-/// listing fewer globs — see [`subject_globs`].
+/// Four outcomes, because two of them used to be one and a third was not answered at all. A bullet this
+/// reader cannot parse is not a section listing fewer globs, and several sections are not the first of
+/// them — see [`subject_globs`].
 #[derive(Debug, PartialEq, Eq)]
 pub enum Declared {
     /// The spec carries no `## Subject` section.
@@ -23,6 +24,8 @@ pub enum Declared {
     Globs(Vec<String>),
     /// A bullet this reader cannot understand, quoted as written.
     Unreadable(String),
+    /// Several `## Subject` sections, so which one declares the subject is not this reader's to pick.
+    SeveralSections(usize),
 }
 
 /// What a spec's `## Subject` section declares, refusing a bullet it cannot read.
@@ -36,9 +39,23 @@ pub enum Declared {
 ///
 /// Measured when this was written: 87 subject bullets across the specs, none of them unparseable — so the
 /// silent narrowing was latent, and running the check could not have found it.
+///
+/// **And the same rule reaches the section, which `.nth(1)` did not.** Taking the text after the *first*
+/// marker made no choice about how many there are: a spec carrying two `## Subject` sections had the second
+/// one's globs dropped, so the capability governed less than it says while reading as a complete
+/// declaration — the identical narrowing the bullet loop below refuses, one level up from it, and correct
+/// only while a second section happened not to exist. The candidates are a value first now, and *how many*
+/// is answered explicitly.
+///
+/// [`crate::selection::the_only`] is deliberately not used, for the reason `package_name` records: it
+/// reports none and several as one refusal, and here they are different facts — no section means the
+/// capability declared nothing, several means it declared twice and this reader may not pick.
 pub fn subject_globs(spec: &str) -> Declared {
-    let Some(block) = spec.split("\n## Subject\n").nth(1) else {
-        return Declared::Absent;
+    let sections = crate::selection::all_of(spec.split("\n## Subject\n").skip(1));
+    let block = match sections.len() {
+        0 => return Declared::Absent,
+        1 => sections[0],
+        several => return Declared::SeveralSections(several),
     };
     let block = block.split("\n## ").next().unwrap_or(block);
     let mut globs = Vec::new();
@@ -57,13 +74,22 @@ pub fn subject_globs(spec: &str) -> Declared {
     Declared::Globs(globs)
 }
 
-/// The capability names a proposal's `## Capabilities` section mentions.
+/// The capability names a proposal's `## Capabilities` section mentions, or how many such sections there are
+/// where this reader may not pick one.
 ///
 /// Read from backticked names, because that is how the template writes them and because a bare word in the
 /// surrounding prose is not a claim about where a requirement belongs.
-pub fn proposal_capabilities(proposal: &str) -> BTreeSet<String> {
-    let Some(block) = proposal.split("\n## Capabilities\n").nth(1) else {
-        return BTreeSet::new();
+///
+/// **`Err(count)` rather than the first section's names**, for the reason [`subject_globs`] states one
+/// document over: reading past a second section drops exactly the capabilities it names, and [`join_offences`]
+/// then reports a change as having accounted for a capability it never listed. An empty set is the honest
+/// answer for a proposal carrying **no** such section — it names nothing — and that stays `Ok`.
+pub fn proposal_capabilities(proposal: &str) -> Result<BTreeSet<String>, usize> {
+    let sections = crate::selection::all_of(proposal.split("\n## Capabilities\n").skip(1));
+    let block = match sections.len() {
+        0 => return Ok(BTreeSet::new()),
+        1 => sections[0],
+        several => return Err(several),
     };
     let block = block.split("\n## ").next().unwrap_or(block);
     let mut named = BTreeSet::new();
@@ -74,7 +100,7 @@ pub fn proposal_capabilities(proposal: &str) -> BTreeSet<String> {
         named.insert(rest[..close].to_string());
         rest = &rest[close + 1..];
     }
-    named
+    Ok(named)
 }
 
 /// Every capability that claims `path`.
@@ -111,6 +137,17 @@ pub fn declaration_offences(
                      understand — the form it reads is one backticked glob and nothing else. Until it parses, \
                      what this capability governs cannot be decided, and reading past it would shrink the \
                      claim by exactly the bullet that could not be read"
+                )));
+                continue;
+            }
+            // Its own message, because the count is what an author acts on and the bullet wording above
+            // would send them looking for a bullet that parses fine.
+            Declared::SeveralSections(count) => {
+                offences.push(cannot_judge(format!(
+                    "`{capability}` carries {count} `## Subject` sections, so which one declares what it \
+                     governs is decided by whichever comes first in the file. Reading the first would drop \
+                     every glob the others claim — the silent narrowing this requirement exists to make \
+                     falsifiable — so it is reported rather than resolved"
                 )));
                 continue;
             }

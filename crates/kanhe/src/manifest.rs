@@ -24,14 +24,72 @@
 //! cannot-judge. That is the right direction for a wrapper whose publish is `--workspace`: a root with no
 //! workspace table is not the shape either gate was written to judge, and saying so beats guessing.
 
-/// The version `[workspace.package]` declares, if it declares one.
+/// A double-quoted value this reader found, or a statement that it could not read one.
+///
+/// **Not an `Option`, because every consumer of the one this replaces read `None` as *the key is absent* and
+/// skipped the line.** Single-quoted and literal TOML strings are valid and are not read here; that is a
+/// limit of this reader, not a fact about the manifest, and conflating the two let a readable-to-cargo
+/// manifest go unchecked while the surrounding function still returned `Ok`. Measured on this repository with
+/// one crate's name single-quoted, the release gate reported a clean release.
+///
+/// A type that cannot be defaulted, so the compiler asks each site which of the two it meant.
+///
+/// It lives here rather than beside one of its readers because **both** manifest facts this module owns need
+/// it, and a value-reading rule with two owners is the twin this module's header exists to close.
+pub(crate) enum Quoted {
+    /// The text between the first pair of double quotes on the line.
+    Value(String),
+    /// No double-quoted span: a single-quoted or literal value, or a shape this reader has never met.
+    Unreadable,
+}
+
+/// The text between the first pair of double quotes on `line`, or a statement that there is no such pair.
+pub(crate) fn quoted_value(line: &str) -> Quoted {
+    match line
+        .split_once('"')
+        .and_then(|(_, rest)| rest.split_once('"'))
+    {
+        Some((value, _)) => Quoted::Value(value.to_string()),
+        None => Quoted::Unreadable,
+    }
+}
+
+/// What `[workspace.package]` declares its version to be, or why this reader could not tell.
+///
+/// Three states rather than an `Option`, because both consumers read `None` as *the key is absent* and said
+/// so to an operator — over a manifest whose value is legal to cargo and merely not in a form this reader
+/// takes. The template is the sibling `PackageName` in `release_coherence_gate`, applied to the one manifest
+/// fact both git-reading gates ask for.
+#[derive(Debug, PartialEq, Eq)]
+pub enum WorkspaceVersion {
+    /// The `[workspace.package]` table's `version`.
+    Declared(String),
+    /// No `[workspace.package]` table, or no `version` key inside it.
+    Absent,
+    /// A `version` this reader cannot read — a value not in double quotes — quoted as written.
+    Unreadable(String),
+}
+
+/// The version `[workspace.package]` declares.
 ///
 /// Scoped to that table: the first `version` key inside it, and no other table's. A `[package]` table, or
 /// any other, closes the scan rather than contributing — see this module's header for why the publish
 /// gate's former fallback is gone.
-pub fn workspace_version(text: &str) -> Option<String> {
+///
+/// **Read from the shared region, not from raw lines.** `repository-checks` requires a check deciding a
+/// property over executed text to take its corpus from [`crate::region`], and this reader did not. Both
+/// directions were live and both were false refusals over legal TOML: `[workspace.package] # …` failed the
+/// heading equality, then matched `starts_with('[')` and *closed* the table before it opened, so the version
+/// read as absent; and `version = "0.5.0" # bumped` carried its comment into the value, which then parsed as
+/// no semantic version. The second is the release-prep spelling, so the reader failed at the one moment
+/// someone is most likely to annotate that line — in front of `cargo publish` and the release gate.
+///
+/// The sibling `package_name` had already been repaired this way, which left one root `Cargo.toml` scanned
+/// under two different region decisions inside a single judgement.
+pub fn workspace_version(text: &str) -> WorkspaceVersion {
+    let source = crate::region::Source::of(text);
     let mut inside = false;
-    for line in text.lines() {
+    for line in source.toml().lines() {
         let trimmed = line.trim();
         if trimmed == "[workspace.package]" {
             inside = true;
@@ -41,16 +99,22 @@ pub fn workspace_version(text: &str) -> Option<String> {
             inside = false;
             continue;
         }
-        if inside {
-            if let Some(rest) = trimmed
-                .strip_prefix("version")
-                .and_then(|rest| rest.trim_start().strip_prefix('='))
-            {
-                return Some(rest.trim().trim_matches('"').to_string());
-            }
+        if !inside {
+            continue;
         }
+        // `version` then `=`, so `version.workspace` and any other `version…` key is not this key.
+        let Some(rest) = trimmed
+            .strip_prefix("version")
+            .and_then(|rest| rest.trim_start().strip_prefix('='))
+        else {
+            continue;
+        };
+        return match quoted_value(rest) {
+            Quoted::Value(version) => WorkspaceVersion::Declared(version),
+            Quoted::Unreadable => WorkspaceVersion::Unreadable(rest.trim().to_string()),
+        };
     }
-    None
+    WorkspaceVersion::Absent
 }
 
 /// `major.minor.patch` as numbers, or `None` if `version` is not one.

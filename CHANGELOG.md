@@ -296,7 +296,10 @@ them.
   the one thing 星表 exists to keep single, since a label that shifts makes an adopter's recorded baseline match
   nothing. Public because two crates share it and a crate cannot lend a private item; it takes the manifest path
   and returns the member root files with the resolved `workspace_root`, falling back to the manifest's own
-  directory only for metadata carrying no such field.
+  directory only for metadata carrying no such field — and, where even that resolves to nothing, **returning an
+  error rather than an invented anchor**. That third state is the point of the error channel: the anchor *is*
+  baseline identity, so a guessed one mislabels every observed file at once, silently, which is worse than
+  declining to answer.
 
 - `tianheng::testing::assert_projection_matches` is the bless-and-diff rule for **any** generated document, not
   only a rendered `Constitution`. A free function rather than a method, because blessing an unrelated document has
@@ -903,6 +906,40 @@ them.
   executable: if a future parameter expansion loses its pipe, that leg fails and the bound is worth re-examining.
 
 ### Self-governance
+
+- **The one manifest reader both irreversible-act gates share was still reading raw lines, and the workspace
+  version now answers in three states.** `manifest::workspace_version` decided a property over executed TOML
+  without taking its corpus from the shared region classifier, which `repository-checks` requires in so many
+  words — so one root `Cargo.toml` was being scanned under two different region decisions inside a single
+  judgement, the sibling `package_name` having been repaired that way already.
+
+  Both directions were live and both were false refusals over legal, cargo-accepted TOML.
+  `[workspace.package] # …` failed the heading equality, then matched *starts with `[`* and closed the table
+  before it opened, so the version read as **absent**; `version = "X.Y.Z"  # bumped` carried its comment into
+  the value, so the version read as **malformed**. The second is the spelling an author reaches for while
+  bumping, which is exactly when the release gate and the publish gate both run.
+
+  The reader also answered in two states where the domain has three. A single-quoted value is legal TOML this
+  reader does not take, and reporting it as a version that is *missing* sends an operator to look for a key
+  sitting in front of them — the conflation `Quoted` was introduced to end one reader over, left standing in
+  its sibling. `WorkspaceVersion` is now `Declared` / `Absent` / `Unreadable`, both callers match
+  exhaustively, and each names the judgement **it** could not reach rather than sharing one sentence about the
+  fact. `Quoted` moved into `manifest` alongside it, since both facts that module owns need it.
+
+  Found by a static review rather than by anything running: this is the first instance of the declared class
+  *a check that never wrote a region decision is invisible*, and it falsified that entry's risk sentence,
+  which had assumed the class errs toward reporting more. `BACKLOG.md` carries the correction.
+
+- **Two section readers took the first of several candidates without answering how many there were.**
+  `capability_subjects::subject_globs` and `proposal_capabilities` each took the text after the *first*
+  `## Subject` / `## Capabilities` marker. A spec or proposal carrying two sections had the second one's
+  globs and capability names dropped, so a capability governed less than it says while reading as a complete
+  declaration, and the filing join then missed every file those globs claim — the identical silent narrowing
+  the bullet reader inside the same function already refuses, one level up from it. Both now make the
+  candidates a value and answer the count: `Declared::SeveralSections` and an `Err(count)`, each with its own
+  refusal wording, because the count is what an author acts on and the bullet message would send them looking
+  for a bullet that parses fine. Latent — no tracked spec carries two — so running the check could not have
+  found it, and it was correct only while a second section happened not to exist.
 
 - **The repair that gave the manifest region TOML's comment rule dropped a whitespace class on the way
   through.** Routing the inherit check into `region::toml()` replaced `line.trim()` then

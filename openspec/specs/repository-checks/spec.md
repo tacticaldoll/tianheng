@@ -672,6 +672,20 @@ claim by the amount it failed to read reports the narrowed claim as the whole on
   may claim exactly the right files and this reader cannot say, while a shorter glob list would be the silent
   narrowing itself
 
+**The same obligation reaches the section, and the reader SHALL answer how many there are.** Taking the text
+after the first `## Subject` marker makes no choice about the count: a spec carrying two sections had the
+second one's globs dropped, so the capability governed less than it says while reading as a complete
+declaration — the identical narrowing the bullet rule above closes, one level up from it, and correct only
+while a second section happened not to exist. Several sections SHALL be refused naming the count, which is
+what an author acts on; reusing the bullet wording would send them looking for a bullet that parses fine.
+
+#### Scenario: A capability declares its subject twice
+
+- **WHEN** a capability spec carries more than one `## Subject` section
+- **THEN** the check refuses as a **cannot-judge** naming how many, rather than reading the first: which
+  section declares what the capability governs would otherwise be decided by file order, dropping every glob
+  the others claim
+
 #### Scenario: The tracked-path enumeration fails
 
 - **WHEN** `git ls-files` fails while resolving a subject
@@ -734,6 +748,15 @@ a check that refuses one is noise rather than governance.
 
 - **WHEN** `openspec/changes/` holds no active change
 - **THEN** the check is clean, having no filing decision in front of it
+
+The capability list SHALL be read from **one** `## Capabilities` section. Several is the same unanswered
+count the subject reader now refuses, one document over: reading the first drops the capabilities the others
+name, and the join would then report a change as having accounted for a capability it never listed.
+
+#### Scenario: A proposal lists its capabilities twice
+
+- **WHEN** a proposal carries more than one `## Capabilities` section
+- **THEN** the check refuses as a cannot-judge naming how many, rather than reading the first
 
 ### Requirement: A check SHALL take the region it judges from the shared classifier
 
