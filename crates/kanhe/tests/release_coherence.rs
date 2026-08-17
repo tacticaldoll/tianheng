@@ -253,6 +253,110 @@ fn a_member_whose_name_carries_version_still_reads_its_pin() {
     );
 }
 
+/// Cargo's **detailed table** form is a dependency declaration, renamed or not.
+///
+/// `[dependencies.alias]` with its own `package` and `version` lines names no family crate on any single
+/// line, so a reader keyed on `<crate> = …` entries saw nothing at all. The stale entry sits beside a correct
+/// inline pin so the aggregate `requirements` counter cannot refuse this fixture for the wrong reason.
+///
+/// Negative run: without the heading-tracking reader both rows return `Ok`, over an example requiring
+/// `xuanji = "0.0.1"` against workspace `0.2.0`.
+#[test]
+fn a_detailed_dependency_table_is_read_renamed_or_not() {
+    for (label, table, expected) in [
+        (
+            "renamed",
+            "[dependencies.alias]\npackage = \"xuanji\"\nversion = \"0.0.1\"\n",
+            "xuanji (as `alias`)",
+        ),
+        (
+            "plainly named",
+            "[dependencies.xuanji]\nversion = \"0.0.1\"\n",
+            "xuanji",
+        ),
+    ] {
+        let root = scratch(&format!("detailed-{}", label.replace(' ', "-")));
+        let fixture = build_fixture(&root, "detailed", "0.2.0");
+        let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+        let text = std::fs::read_to_string(&manifest).expect("read");
+        std::fs::write(&manifest, format!("{text}\n{table}")).expect("write");
+        development_changelog(&fixture.repo, "0.2.0", true);
+        commit(&fixture.repo, "chore: a detailed dependency table");
+        let verdict = judge(&fixture.repo);
+        let _ = std::fs::remove_dir_all(&root);
+        let refusal =
+            verdict.expect_err(&format!("{label}: a stale detailed table must be refused"));
+        assert_eq!(
+            refusal.kind,
+            Kind::Violation,
+            "{label}: {}",
+            refusal.message
+        );
+        assert!(
+            refusal.message.contains(expected),
+            "{label}: the refusal must name the crate it is about: {}",
+            refusal.message
+        );
+    }
+}
+
+/// A key spelled after a family crate outside a dependency table is not a version requirement.
+///
+/// The other direction of the same cause: the reader looked at no heading, so `[features]` — whose values are
+/// arrays, not versions — was read as a source of pins. Left open, a feature named after a family crate would
+/// be refused for a version it never declared.
+///
+/// Negative run: without the heading-tracking reader this is a cannot-judge, *requires xuanji with a version
+/// this check cannot read (\[\])*.
+#[test]
+fn a_feature_named_after_a_family_crate_is_not_a_pin() {
+    let root = scratch("feature-named");
+    let fixture = build_fixture(&root, "feature-named", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(&manifest, format!("{text}\n[features]\nxuanji = []\n")).expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: a feature named after a family crate");
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "a `[features]` key is not a dependency and must not be read as one: {:?}",
+        verdict.err()
+    );
+}
+
+/// A dated heading's fields are ranged, not merely digits.
+///
+/// Negative run: reading only three all-digit fields of widths 4/2/2, `2026-99-99` satisfied *CHANGELOG
+/// carries dated release notes* — the same shortfall as the length test that preceded it, one level in.
+#[test]
+fn a_dated_heading_whose_fields_are_out_of_range_is_a_violation() {
+    for impossible in ["2026-99-99", "2026-00-10", "0000-00-00"] {
+        let root = scratch(&format!("range-{impossible}"));
+        let fixture = build_fixture(&root, "range", "0.2.0");
+        workspace_files(&fixture.repo, "0.2.1");
+        release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+        let path = fixture.repo.join("CHANGELOG.md");
+        let text = std::fs::read_to_string(&path).expect("read");
+        std::fs::write(
+            &path,
+            text.replace(
+                "## [0.2.1] - 2026-07-20",
+                &format!("## [0.2.1] - {impossible}"),
+            ),
+        )
+        .expect("write");
+        commit(&fixture.repo, "chore: prepare release");
+        refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "missing dated release notes for 0.2.1",
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
 #[test]
 fn a_shallow_history_cannot_be_judged() {
     let root = scratch("shallow");

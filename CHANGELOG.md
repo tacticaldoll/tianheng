@@ -937,6 +937,39 @@ them.
   both ways, the shape the bound register already uses — and it is a capability rather than a tightening,
   which is why it is filed with its trigger instead of built inside this window.
 
+- **A dependency is read in either form cargo writes it, and only where cargo writes one.** The example-pin
+  reader looked at no table heading, which cost it both directions at once. `[dependencies.alias]` — a
+  detailed table with its own `package` and `version` lines — names no family crate on any single line, so
+  the whole declaration was invisible, **renamed or not**: the rename repair one commit earlier closed the
+  inline form and left this one open. And a `[features]` key spelled after a family crate was read as a
+  version requirement, because nothing said which tables hold dependencies. Tracking the heading closes both
+  with one change.
+
+  The pin itself is now a typed four-state answer — declared, absent, unreadable, several — so the compiler
+  asks each consumer rather than one of the three collapsing them. It had: `_ => None` reported an **absent**
+  `version` as one this reader *could not read*, over the legal path-only form, which is the distinction its
+  sibling had just been repaired to make.
+
+  `[target.'cfg(…)'.dependencies]` is left out and **declared as a bound** with its own tracker: that heading
+  carries a quoted cfg expression, which is the grammar a line-oriented reader is likeliest to be wrong
+  about, and no manifest under `examples/` has ever carried one.
+
+- **A dated heading's fields are ranged, not merely digits.** The repair that replaced a length test with a
+  digit test carried its own standard only one level: *a length test is a parse without its guarantee*
+  applies again to a digit test, and `2026-99-99` — and `0000-00-00` — satisfied *carries dated release
+  notes*. A month is `1..=12`, a day `1..=31`. Whether that day exists in that month needs a calendar this
+  crate's declared dependency surface does not carry; that residue is a date written wrong rather than a
+  shape that reads as one.
+
+- **A sentence about the key recogniser was refuted by the code it described.** It claimed each half of the
+  recogniser is needed because *the first alone still admits `/version`, the second alone still admits a key
+  ending in `version`* — and the delimiter half rejects **both** of those, so the pair of examples
+  established nothing about either half. Replaced with one case per half, as runs rather than as a
+  description: the delimiter half is what rejects `rust-version` and a path component; the `=`-follows half
+  is what rejects a delimiter-preceded occurrence inside a string value. They live beside the reader in
+  `src/tests/`, because the shape the second needs is one `cargo metadata` rejects outright — the first
+  draft tried it end-to-end and failed on a duplicate-key parse error rather than on what it meant to show.
+
 - **The repair that routed a reader through `selection` built its candidates twice.** Two sites handed
   `the_only` an enumeration and then rebuilt the same one inside the `Err` arm, to tell *none* from *several*
   — `the_only` reports both as one refusal, and here they are different facts. The answer was correct and the

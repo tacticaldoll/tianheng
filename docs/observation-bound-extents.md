@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**42 of 88 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**43 of 89 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -25,6 +25,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound` — owner: inherited from the verification environment
 - `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound` — owner: engine
+- `release-coherence/a-dependency-declared-under-target-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound` — owner: engine
 - `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound` — owner: engine
 - `release-coherence/a-name-reached-only-through-a-url-a-stated-bound` — owner: engine
@@ -433,7 +434,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (42)
+## under-reacts (43)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -594,6 +595,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: a dated section records what was true at that release, so rewriting it to satisfy a rule written afterwards would falsify the record rather than repair it — the reason `docs/history/` is left alone. The leak is real and stays: an adopter reading `[0.4.0]` meets nine entries naming files they can never run, and closing it needs a form of repair that adds to the record instead of editing it
 - **its defence must show**: does not react
 - **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
+
+### `release-coherence/a-dependency-declared-under-target-is-not-observed-a-stated-bound`
+
+> a family dependency declared under `[target.'cfg(…)'.dependencies]` or its `.NAME` form
+
+- **because**: the reader decides which tables hold dependencies from the heading, and a target heading carries a quoted cfg expression -- the grammar a line-oriented reader is likeliest to be wrong about, so admitting it on a guess would trade a silent miss for a wrong read
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *a dependency declared under a target table is not observed*
 
 ### `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound`
 

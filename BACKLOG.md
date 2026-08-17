@@ -376,7 +376,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated —
   at `ee15665`, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
   **1048** lines carrying `SHALL`, across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **88 bounds across 25 capabilities** — a live figure rather than part of the measurement
+  currently holds **89 bounds across 25 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -1168,6 +1168,16 @@ consumer for an undemonstrated deduplication.
   crate. *Authority:* `observation-bound-register`, and `observation-bound-model`'s sibling bound that a
   rationale contradicting its extent is accepted — the prose beside an extent was already free to disagree with
   it, and so, until this was found, was the test beneath it.
+- **WATCH: a dependency declared under a target table is not observed.** *Observed pressure:* the
+  example-pin reader decides which tables hold dependencies from the heading, and admits
+  `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]` and their `.NAME` detailed forms.
+  `[target.'cfg(…)'.dependencies]` is not admitted. *Observation source:* the round that added heading
+  tracking, where the target form was the one grammar left out deliberately. *Risk:* a stale family pin
+  under a target table reaches a release unobserved. Bounded by there being no such table in any manifest
+  under `examples/`, ever. *Next trigger:* an example acquiring one — at which point the shape has an
+  instance to be written against rather than a guess. *Authority:* engine. *Compatibility:* patch; the
+  check ships in no crate.
+
 - **WATCH: a merge or publish made outside the wrapper is not observed.** *Observed pressure:* both
   assertions guard the sanctioned path — the wrapper's `1 passed` and the reaction pinning the identifier it
   cites. A `cargo publish` run directly, or a merge made in the browser, reaches neither. *Risk:* the record

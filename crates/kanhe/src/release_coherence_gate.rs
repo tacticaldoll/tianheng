@@ -38,7 +38,7 @@ fn read(repo: &Path, rel: &str) -> Result<String, Refusal> {
 /// A key stands alone: what precedes it is a table delimiter or whitespace, and what follows is `=` after
 /// optional space. Both halves are required — the first alone still admits `/version`, the second alone still
 /// admits a key ending in `version`.
-fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
+pub(crate) fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
     let mut found = Vec::new();
     let bytes = value.as_bytes();
     let mut at = 0;
@@ -57,19 +57,199 @@ fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
     found
 }
 
+/// Which dependency table a heading opens, if any.
+///
+/// **The reader used to look at no heading at all**, which cost it both directions at once. A
+/// `[dependencies.alias]` table declares one dependency across its own lines, and none of those lines is a
+/// `<family-crate> = …` entry, so the whole declaration — renamed or not — was invisible. And a `[features]`
+/// key spelled after a family crate was read as a version requirement, because nothing said which tables hold
+/// dependencies.
+///
+/// `[target.'cfg(…)'.dependencies]` is **not** admitted, and that is a declared bound rather than an
+/// oversight: its heading grammar carries a quoted cfg expression, which is where a line-oriented reader is
+/// likeliest to be wrong again, and no example manifest has ever carried one.
+enum Table {
+    /// `[dependencies]` and its dev/build siblings: each line names one dependency.
+    Entries,
+    /// `[dependencies.NAME]`: the whole table is one dependency, named by its heading.
+    One(String),
+    /// Any other table. Not a source of dependencies, so nothing in it is read as one.
+    Other,
+}
+
+fn dependency_table(heading: &str) -> Table {
+    let Some(inner) = heading.strip_prefix('[').and_then(|h| h.strip_suffix(']')) else {
+        return Table::Other;
+    };
+    for kind in ["dependencies", "dev-dependencies", "build-dependencies"] {
+        if inner == kind {
+            return Table::Entries;
+        }
+        if let Some(named) = inner.strip_prefix(kind).and_then(|r| r.strip_prefix('.')) {
+            if !named.is_empty() {
+                return Table::One(named.to_string());
+            }
+        }
+    }
+    Table::Other
+}
+
+/// What a dependency declares as its version requirement, or why this reader could not tell.
+///
+/// **Four states, and every consumer answers all four.** Three call sites read a dependency's pin and each
+/// decided the refusal class for itself: two matched exhaustively and the third collapsed to `_ => None`,
+/// which reported an *absent* key as one this reader *could not read* — the very distinction its sibling had
+/// just been repaired to make. A typed result makes the compiler ask each consumer when a state is added,
+/// which is the shape [`PackageName`] and [`crate::manifest::WorkspaceVersion`] already carry in this family.
+///
+/// [`crate::selection::the_only`] is deliberately not used here, for the reason `manifest.rs` records for its
+/// own reader: it reports none and several as one refusal, and here they are different facts — an absent pin
+/// is the legal `{ path = "…" }` form, and two are a table this reader may not choose from.
+#[derive(Debug, PartialEq, Eq)]
+enum Pin {
+    /// The version requirement as written.
+    Declared(String),
+    /// No `version` key. Legal: a path-only or git-only dependency declares no version.
+    Absent,
+    /// A `version` this reader cannot read — a value not in double quotes — quoted as written.
+    Unreadable(String),
+    /// More than one `version` key in one dependency. Malformed, and not this reader's to choose from.
+    Several(usize),
+}
+
+impl Pin {
+    fn of(mut values: Vec<Quoted>, written: &str) -> Self {
+        match values.len() {
+            0 => Pin::Absent,
+            1 => match values.pop() {
+                Some(Quoted::Value(version)) => Pin::Declared(version),
+                _ => Pin::Unreadable(written.trim().to_string()),
+            },
+            several => Pin::Several(several),
+        }
+    }
+}
+
+/// One dependency a manifest declares: the key it is written under, the package it names, and its pin.
+struct Dependency {
+    key: String,
+    package: String,
+    pin: Pin,
+}
+
+/// Every dependency `text` declares, in both forms cargo admits.
+///
+/// The inline form (`alias = { package = "xuanji", version = "0.5" }`, or a bare `xuanji = "0.5"`) and the
+/// detailed table (`[dependencies.alias]` with its own `package` and `version` lines) are one grammar to a
+/// reader that tracks the heading, and [`inline_assignments`] recognises a key the same way in both: at a
+/// line's start, or after a table delimiter inside a value.
+fn declared_dependencies(text: &str) -> Vec<Dependency> {
+    let mut found = Vec::new();
+    let mut table = Table::Other;
+    // A detailed table is one dependency spread over its lines, so it is emitted at the boundary that closes
+    // it — the next heading, or the end of the text.
+    let mut pending: Option<(String, Vec<Quoted>, Vec<Quoted>, String)> = None;
+    let flush = |pending: &mut Option<(String, Vec<Quoted>, Vec<Quoted>, String)>,
+                 found: &mut Vec<Dependency>| {
+        if let Some((key, packages, versions, written)) = pending.take() {
+            let package = match packages.len() {
+                1 => match &packages[0] {
+                    Quoted::Value(name) => name.clone(),
+                    Quoted::Unreadable => String::new(),
+                },
+                // No `package` key names the crate by its own heading; several is malformed and names no
+                // one crate, so it enters as unnameable rather than as the heading's own name.
+                0 => key.clone(),
+                _ => String::new(),
+            };
+            found.push(Dependency {
+                key,
+                package,
+                pin: Pin::of(versions, &written),
+            });
+        }
+    };
+    for line in crate::region::Source::of(text).toml().lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            flush(&mut pending, &mut found);
+            table = dependency_table(trimmed);
+            if let Table::One(name) = &table {
+                pending = Some((name.clone(), Vec::new(), Vec::new(), String::new()));
+            }
+            continue;
+        }
+        match &table {
+            Table::Entries => {
+                let Some((key, rest)) = trimmed.split_once('=') else {
+                    continue;
+                };
+                let key = key.trim();
+                let packages = inline_assignments(rest, "package");
+                let package = match packages.len() {
+                    1 => match &packages[0] {
+                        Quoted::Value(name) => name.clone(),
+                        Quoted::Unreadable => String::new(),
+                    },
+                    0 => key.to_string(),
+                    _ => String::new(),
+                };
+                // A bare `xuanji = "0.5"` carries its requirement as the value itself; an inline table
+                // carries it under a `version` key.
+                let versions = if rest.trim_start().starts_with('{') {
+                    inline_assignments(rest, "version")
+                } else {
+                    vec![quoted_value(rest)]
+                };
+                found.push(Dependency {
+                    key: key.to_string(),
+                    package,
+                    pin: Pin::of(versions, rest),
+                });
+            }
+            Table::One(_) => {
+                if let Some((_, packages, versions, written)) = pending.as_mut() {
+                    packages.extend(inline_assignments(trimmed, "package"));
+                    versions.extend(inline_assignments(trimmed, "version"));
+                    if !trimmed.is_empty() {
+                        written.push_str(trimmed);
+                        written.push(' ');
+                    }
+                }
+            }
+            Table::Other => {}
+        }
+    }
+    flush(&mut pending, &mut found);
+    found
+}
+
 /// Whether `suffix` is an ISO date: three `-`-separated all-digit fields of widths 4, 2 and 2.
 ///
 /// **Parsed, not counted.** The test this replaces asserted the heading was ten characters longer than its
 /// own prefix and never read them, so `## [0.5.0] - notadate!!` satisfied *CHANGELOG carries dated release
 /// notes*. A length test is a parse without its guarantee.
-fn is_iso_date(suffix: &str) -> bool {
+///
+/// **And the fields are ranged, because a digit test is that same shortfall one level in.** Reading only
+/// three all-digit fields of the right widths admitted `2026-99-99` and `0000-00-00` — shapes that pass for
+/// a date while naming none. The ranges are the calendar's outer bounds and no more: a month is `1..=12`, a
+/// day `1..=31`. Whether that day exists in that month needs a calendar, which is a dependency this crate's
+/// declared surface does not carry, and the residue — `2026-02-31` — is a date a human wrote wrong rather
+/// than a shape that reads as one.
+pub(crate) fn is_iso_date(suffix: &str) -> bool {
     let parts: Vec<&str> = suffix.split('-').collect();
     let [year, month, day] = parts.as_slice() else {
         return false;
     };
-    [(year, 4usize), (month, 2), (day, 2)]
-        .iter()
-        .all(|(part, width)| part.len() == *width && part.chars().all(|c| c.is_ascii_digit()))
+    let field = |part: &str, width: usize| {
+        (part.len() == width && part.chars().all(|c| c.is_ascii_digit()))
+            .then(|| part.parse::<u32>().ok())
+            .flatten()
+    };
+    let (Some(_), Some(month), Some(day)) = (field(year, 4), field(month, 2), field(day, 2)) else {
+        return false;
+    };
+    (1..=12).contains(&month) && (1..=31).contains(&day)
 }
 
 /// A TOML line with its whitespace removed, for a predicate that compares a whole line against one spelling.
@@ -687,67 +867,46 @@ fn require_example_pins(
             .into_owned();
         // Executed text, for the reason `require_internal_pins` records: a commented-out family pin
         // would otherwise be read as a declared one.
-        for line in crate::region::Source::of(text.as_str()).toml().lines() {
-            let trimmed = line.trim();
-            let Some((key, rest)) = trimmed.split_once('=') else {
-                continue;
-            };
-            let key = key.trim();
+        for Dependency { key, package, pin } in declared_dependencies(&text) {
             // **Which crate a dependency names is its `package` field where it has one, and its key only
             // otherwise.** Keying on the name alone was a false negative of the class the Core Contract
             // forbids: cargo renames with `alias = { package = "xuanji", version = "stale" }`, `alias` is in
             // no family, and the entry was skipped entirely — while the aggregate `requirements` counter
-            // stayed non-zero on the strength of the other examples, exactly as the comment below records for
-            // its own sub-case. The sibling `require_internal_pins` never had this hole because it keys on
-            // the PATH, which a rename cannot move; examples depend by registry version and have no path, so
-            // the identity has to be read.
-            //
-            // Absence is answered from the enumeration itself before it is consumed, for the reason
-            // `require_internal_pins` states: no `package` field is the ordinary entry named by its key,
-            // several is a table this reader may not choose from, and asking the second question by
-            // rebuilding the candidates is the shape `crate::selection` exists to discourage.
-            let renamed = inline_assignments(rest, "package");
-            let package = if renamed.is_empty() {
-                key.to_string()
-            } else {
-                match crate::selection::the_only("`package` key", renamed) {
-                    Ok(Quoted::Value(package)) => package,
-                    Ok(Quoted::Unreadable) => {
-                        return Err(cannot_judge(format!(
-                            "example {name} renames `{key}` to a package this check cannot read ({}), so \
-                             which crate it requires cannot be decided",
-                            rest.trim()
-                        )));
-                    }
-                    Err(refusal) => return Err(refusal),
-                }
-            };
+            // stayed non-zero on the strength of the other examples. The sibling `require_internal_pins`
+            // never had this hole because it keys on the PATH, which a rename cannot move; examples depend
+            // by registry version and have no path, so the identity has to be read.
+            if package.is_empty() {
+                return Err(cannot_judge(format!(
+                    "example {name} declares `{key}` with a package identity this check cannot read, so \
+                     which crate it requires cannot be decided"
+                )));
+            }
             if !family.contains(&package) {
                 continue;
             }
-            // The entry is already known to name a family crate, so a pin this reader cannot read is not a
-            // pin that is absent — skipping it left an example's requirement unexamined while the aggregate
-            // `requirements` counter stayed non-zero on the strength of the other examples.
-            let pin = if rest.trim_start().starts_with('{') {
-                match crate::selection::the_only(
-                    "`version` key",
-                    inline_assignments(rest, "version"),
-                ) {
-                    Ok(Quoted::Value(pin)) => Some(pin),
-                    _ => None,
+            // The entry is already known to name a family crate, so every way of failing to read its pin is
+            // answered on its own terms. Collapsing them was the defect: an ABSENT `version` — legal, since
+            // a path-only dependency declares none — was reported as one this reader could not read.
+            let pin = match pin {
+                Pin::Declared(pin) => pin,
+                Pin::Absent => {
+                    return Err(violation(format!(
+                        "example {name} requires {package} with no version, so nothing holds it to the \
+                         workspace version {version}"
+                    )));
                 }
-            } else {
-                match quoted_value(rest) {
-                    Quoted::Value(pin) => Some(pin),
-                    Quoted::Unreadable => None,
+                Pin::Unreadable(written) => {
+                    return Err(cannot_judge(format!(
+                        "example {name} requires {package} with a version this check cannot read \
+                         ({written}), so whether it satisfies the workspace version cannot be decided"
+                    )));
                 }
-            };
-            let Some(pin) = pin else {
-                return Err(cannot_judge(format!(
-                    "example {name} requires {package} with a version this check cannot read ({}), so \
-                     whether it satisfies the workspace version cannot be decided",
-                    rest.trim()
-                )));
+                Pin::Several(several) => {
+                    return Err(cannot_judge(format!(
+                        "example {name} declares {several} `version` keys for {package}, so which one it \
+                         requires is not this reader's to choose"
+                    )));
+                }
             };
             requirements += 1;
             if pin != minor && pin != version {
