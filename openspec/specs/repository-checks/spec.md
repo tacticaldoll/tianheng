@@ -812,6 +812,31 @@ over executed text being decided on unclassified text, not about the marker appe
   and **refuted by measurement**, and a bound resting on a refuted instance would be worse than none
 - **UNPINNED** `BACKLOG.md` — *a check that never wrote a region decision is invisible*
 
+**The classifier's shell region approximates the shell's rule, and SHALL say so where the rule is stated.** It
+cuts a marker at line start or after whitespace and nowhere else, which agrees with bash on the shapes this
+repository writes and diverges on two it does not. Three sibling paragraphs restated the rule and two
+overclaimed — one calling it the shell's own, one scoping the string-literal residue to the Rust region while
+both regions run the identical rule. The rule now has one owner and the divergences are declared below.
+
+#### Scenario: A shell comment opened by a metacharacter stays in the executed region — a stated bound
+
+- **WHEN** an executed shell line writes the comment marker straight after an unquoted metacharacter, where
+  bash opens a comment
+- **THEN** the region keeps it, a stated bound: the rule tests for whitespace or line start, so commentary can
+  satisfy a property about executed text. The direction is the over-including one and closing it needs
+  word-splitting the classifier does not do; no tracked script carries the shape on an executed line
+- **PINNED-BY** `a_shell_marker_after_a_metacharacter_stays_in_the_region`
+
+#### Scenario: A whitespace-preceded shell marker inside quotes is cut — a stated bound
+
+- **WHEN** an executed shell line carries the marker inside a quoted string with whitespace before it, where
+  bash keeps it as string content
+- **THEN** the region cuts it, a stated bound: executed text is deleted, which is the direction the Core
+  Contract forbids, and the residue was for a window recorded as reaching the Rust region alone. Closing it
+  needs the quote tracking the TOML region has, rewritten for the shell's own quoting; no tracked script
+  carries the shape on an executed line
+- **PINNED-BY** `a_shell_marker_inside_quotes_is_cut_from_the_region`
+
 **A command a tracked document hands a reader SHALL name a target that exists.** The obligation above is
 about the commands a *wrapper* runs; this is the same claim reaching the audience that cannot debug it. The
 instance: `COOKBOOK.md` told an adopter to run the examples suite under the `tianheng` package, where that

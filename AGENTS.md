@@ -375,12 +375,20 @@ adversarial contract review reading every entry against `HEAD` rather than again
 originally closed it. The retiring commit itself is not the place this is caught: it correctly
 describes what it just did, and has no reason to know which earlier entry in the same unreleased
 window it just orphaned. Before closing a change that deletes a capability, test/module, or mechanism,
-grep `CHANGELOG.md` and `BACKLOG.md` for its name and for the commits that built it, and annotate every
+grep **every tracked live document** for its name and for the commits that built it, and annotate every
 hit that still narrates it as live — in `CHANGELOG.md`'s own established idiom (a follow-up sentence or
 `### Self-governance` entry noting the retirement, as at the "third floor... is retired" example
 above), in `BACKLOG.md`'s (a trailing note on the entry, not a rewrite of it). This has no repository
-check: both files are prose, so per *Bind a claim to its measurement*, a reaction is not the available
+check: these are prose, so per *Bind a claim to its measurement*, a reaction is not the available
 option — the sweep is stated here as the discipline in its place.
+
+**The corpus is every live document, and naming two of them was this rule's own instance of the class it
+closes.** It said `CHANGELOG.md` and `BACKLOG.md`, which are where a *narration* usually sits — and
+`PROJECT.md`'s Decisions section carried `gate-shape-contract` in the present indicative for the whole window,
+outside a sweep written for exactly that. A corpus narrower than the claim, in the paragraph about corpora
+narrower than their claims. A dated `CHANGELOG.md` section is the one exemption and it is by construction: a
+released section is a record of what was true then, so holding it to `HEAD` would demand that the record
+change every time the tree does.
 
 ## Commits & PRs
 

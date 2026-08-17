@@ -138,7 +138,7 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
         // detector while the requirement says *any* violation-class exit is the false negative this file is for.
         // ONE region, read once and shared by the scan and the window below. Two scans re-deciding it is the
         // shape `kanhe::region` was written to end, and it had already cost this file a disagreement: the scan
-        // excluded comments while the window five lines down did not.
+        // excluded comments while the `positioned_lines` window did not.
         let source = Source::of(text.clone());
         let executed = source.shell();
         let sites: Vec<(usize, String)> = executed

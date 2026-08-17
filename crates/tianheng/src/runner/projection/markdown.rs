@@ -51,7 +51,7 @@ pub(super) fn boundary_markdown(boundary: &Value) -> String {
     //
     // The heading was `target` alone, which is unique for a crate boundary and is not for the others:
     // `.module("crate")` is the ordinary subtree-wide form, so five boundaries rendered the identical
-    // ``### `crate` `` while the half that told them apart — the crate — sat three lines lower. Four of them
+    // ``### `crate` `` while the half that told them apart — the crate — sat in the body. Four of them
     // were consecutive. This is the surface `AGENTS.md` step 1 points an agent at to learn the shape it must
     // not drift, and the same renderer is the shipped `tianheng list --format markdown`.
     //

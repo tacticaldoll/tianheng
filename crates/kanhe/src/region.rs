@@ -82,8 +82,11 @@ impl Source {
 
     /// Executed shell text. Shell comments beginning with `#` are excluded.
     ///
-    /// The token-start rule is the shell's own: `#` opens a comment only at the start of a word, so
-    /// `echo a#b` prints `a#b` and `curl "$url#frag"` keeps its fragment.
+    /// The rule is `Rule::TokenStart`, which states it once and states the two directions in which it
+    /// approximates the shell's rather than reproducing it. `echo a#b` prints `a#b` and `curl "$url#frag"`
+    /// keeps its fragment, which is what the approximation is for. Named rather than linked: `Rule` is
+    /// private, so an intra-doc link from this public item would not resolve without
+    /// `--document-private-items`.
     pub fn shell(&self) -> Executed<'_> {
         Executed {
             text: &self.0,
@@ -150,10 +153,34 @@ impl Source {
 /// the character before it. The rule is the decision; the marker is one language's spelling of it.
 #[derive(Clone, Copy)]
 enum Rule {
-    /// A marker opening a comment only where it **begins a token** — at line start or after whitespace.
+    /// A marker opening a comment **at line start or after whitespace**, and nowhere else.
     ///
-    /// Rust's `//` and the shell's `#`. Glued to something else it is part of that thing: `https://`, the
-    /// string `"//"`, `echo a#b`.
+    /// Glued to something else it is part of that thing: `https://`, the string `"//"`, `echo a#b`.
+    ///
+    /// **This is the one definition of the rule, and it is an approximation of both languages it serves.**
+    /// Three sibling paragraphs used to restate it and two of them overclaimed — one calling it *the shell's
+    /// own* rule, one saying the string-literal residue below applies only to [`Source::rust`]. They now point
+    /// here, because a rule with four owners is the shape this crate removes on sight, and correcting two of
+    /// the four would have left the class open.
+    ///
+    /// Where it differs from **the shell**, measured on bash 5.x rather than reasoned about:
+    ///
+    /// | shape | bash | this rule |
+    /// |---|---|---|
+    /// | `echo a#b` | prints `a#b` | not cut — agrees |
+    /// | `echo a #b` | prints `a` | cut — agrees |
+    /// | a marker after an unquoted metacharacter | opens a comment | **not cut** — over-includes |
+    /// | a whitespace-preceded marker inside quotes | prints it | **cut** — under-includes |
+    ///
+    /// The first divergence lets commentary satisfy a property about executed text; the second deletes
+    /// executed text, which is the direction the Core Contract forbids. Both are declared bounds of
+    /// `repository-checks` rather than left here, and both are **latent** — no tracked script carries either
+    /// shape on an executed line. Closing them needs word-splitting and quote tracking respectively; the
+    /// second is the machinery [`Rule::Toml`] already has, and the reason it is not simply borrowed is that
+    /// the shell's quoting is not TOML's.
+    ///
+    /// Where it differs from **Rust**: a `//` preceded by whitespace inside a string literal is cut, which
+    /// `observer-protocol` already declares.
     TokenStart(&'static str),
     /// TOML's `#`, opening a comment **wherever a string is not open**, with no whitespace required.
     Toml,
@@ -270,7 +297,8 @@ impl<'a> Executed<'a> {
     /// **Where a comment starts is the language's decision, not this function's**, so which accessor the
     /// region came from settles it. For [`rust`](Source::rust) and [`shell`](Source::shell) the marker is
     /// recognised preceded by whitespace or at line start, never bare — measured against this repository
-    /// rather than reasoned about: cutting at the first marker corrupts 26 lines here, including
+    /// rather than reasoned about: cutting at the first marker corrupted 26 lines when this was written,
+    /// including
     /// `"https://…"` constants, a string carrying `"/// …"`, and this file's own `"//"`. Requiring the head
     /// to keep non-space content was measured too and separates nothing today, so it is not adopted. For
     /// [`toml`](Source::toml) the marker needs nothing before it and everything around it: `#` wherever a
@@ -293,15 +321,18 @@ impl<'a> Executed<'a> {
     /// The instrument exists if it ever does: `guibiao::module_scan` already scans nested block comments, with
     /// a direction proving an inner `*/` does not re-expose the rest as live code.
     ///
-    /// **Residue, declared rather than approximated, and now only for [`rust`](Source::rust):** a `//`
-    /// preceded by whitespace *inside* a string literal is cut. `observer-protocol` already declares that
-    /// direction. It sits beside this region's other residues — a fence inside an open HTML comment span, and
-    /// a comment span opened inside a fence.
+    /// **Residue, declared rather than approximated:** a marker preceded by whitespace *inside* a string
+    /// literal is cut. This reaches [`rust`](Source::rust) **and** [`shell`](Source::shell) — both run the
+    /// same `Rule::TokenStart`, so both carry it, and a sentence here once scoped it to the first alone.
+    /// `observer-protocol` declares the Rust direction and `repository-checks` the shell's. It sits beside
+    /// this region's other residues — a fence inside an open HTML comment span, and a comment span opened
+    /// inside a fence.
     ///
     /// [`toml`](Source::toml) is out of that residue: it tracks strings, because TOML's `#` needs no
     /// whitespace before it and the token-start approximation was therefore not conservative in one
-    /// direction but wrong in both. [`shell`](Source::shell) keeps the token-start rule because it **is** the
-    /// shell's rule, not an approximation of one.
+    /// direction but wrong in both. [`shell`](Source::shell) keeps the token-start rule as an approximation
+    /// whose two divergences are named at `Rule::TokenStart` and declared as bounds — not because it is
+    /// the shell's rule.
     pub fn numbered_lines(&self) -> impl Iterator<Item = (usize, &'a str)> + use<'a> {
         let rule = self.rule;
         let mut toml = Toml::Code;
@@ -384,8 +415,9 @@ impl<'a> Executed<'a> {
 /// of something else — `https://`, `"//"`, `"/// …"` — and cutting there would delete executed text, which is
 /// the direction the Core Contract forbids.
 ///
-/// **This is Rust's and the shell's rule, and it is not TOML's** — [`toml_head`] is, for the language whose
-/// `#` needs no whitespace before it.
+/// **What it approximates, and where it diverges, is stated once at [`Rule::TokenStart`]** — including the two
+/// shapes bash decides differently. It is **not** TOML's rule; [`toml_head`] is, for the language whose `#`
+/// needs no whitespace before it.
 fn cut_tail_comment<'a>(line: &'a str, comment: &str) -> &'a str {
     let mut from = 0;
     while let Some(offset) = line[from..].find(comment) {
