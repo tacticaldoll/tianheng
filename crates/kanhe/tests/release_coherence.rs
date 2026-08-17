@@ -137,6 +137,122 @@ fn a_release_ready_tree_is_coherent() {
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
+/// A renamed family dependency is resolved by its `package` field, not by the key it was given.
+///
+/// **The stale pin sits beside a correct one, deliberately.** The aggregate `requirements` counter is
+/// satisfied by any example declaring any readable family pin, so a fixture carrying only the renamed entry
+/// would be refused by the vacuity guard rather than by the rule — passing for the wrong reason. Both
+/// entries live in one manifest so the guard cannot mask the miss.
+///
+/// Negative run: with identity taken from the key alone, `alias` matches no family crate, the entry is
+/// skipped, and `judge` returns `Ok` over an example requiring `xuanji = "0.0.1"` against workspace `0.2.0`.
+#[test]
+fn a_renamed_family_dependency_is_resolved_by_its_package_field() {
+    let root = scratch("renamed-dep");
+    let fixture = build_fixture(&root, "renamed-dep", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        format!("{text}alias = {{ package = \"xuanji\", version = \"0.0.1\" }}\n"),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: rename a family dependency");
+    refuse(&fixture.repo, Kind::Violation, "xuanji (as `alias`)");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The section dated for the workspace version is adopter-facing while the release is still being written.
+///
+/// Negative run: reading `## [Unreleased]` alone, this returns `Ok` — and in release-ready state that section
+/// is required to be **empty**, so the check has no subject at all during preparation.
+#[test]
+fn a_dated_section_for_the_pending_release_is_adopter_facing() {
+    let root = scratch("pending-dated");
+    let fixture = build_fixture(&root, "pending-dated", "0.2.0");
+    with_machinery(&fixture.repo);
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    let path = fixture.repo.join("CHANGELOG.md");
+    let text = std::fs::read_to_string(&path).expect("read");
+    std::fs::write(
+        &path,
+        text.replace(
+            "- Release notes.\n",
+            "### Fixed\n- A repair naming `scripts/check_fixture_gate.sh`.\n",
+        ),
+    )
+    .expect("write");
+    commit(&fixture.repo, "chore: prepare release");
+    refuse(
+        &fixture.repo,
+        Kind::Violation,
+        "names this repository's own machinery",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The dated heading's suffix is parsed as a date, not counted as ten characters.
+///
+/// Negative run: under the length test, `notadate!!` is exactly ten characters, so the heading satisfied
+/// *CHANGELOG carries dated release notes* and `judge` returned `Ok`.
+#[test]
+fn a_dated_heading_whose_suffix_is_not_a_date_is_a_violation() {
+    let root = scratch("not-a-date");
+    let fixture = build_fixture(&root, "not-a-date", "0.2.0");
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    let path = fixture.repo.join("CHANGELOG.md");
+    let text = std::fs::read_to_string(&path).expect("read");
+    std::fs::write(
+        &path,
+        text.replace("## [0.2.1] - 2026-07-20", "## [0.2.1] - notadate!!"),
+    )
+    .expect("write");
+    commit(&fixture.repo, "chore: prepare release");
+    refuse(
+        &fixture.repo,
+        Kind::Violation,
+        "missing dated release notes for 0.2.1",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A member whose own name carries `version` still has its pin read.
+///
+/// Negative run: `split("version").nth(1)` cuts at the first occurrence on the whole line — inside the
+/// dependency's own name — so the pin read as absent and the gate answered *has no version pin*, a false
+/// refusal over a correctly pinned manifest.
+#[test]
+fn a_member_whose_name_carries_version_still_reads_its_pin() {
+    let root = scratch("version-in-name");
+    let fixture = build_fixture(&root, "version-in-name", "0.2.0");
+    let manifest = fixture.repo.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        text.replace(
+            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }",
+            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }\n\
+             version-utils = { path = \"crates/version-utils\", version = \"0.2.0\" }",
+        ),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "chore: add a member whose name carries the word",
+    );
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "a pin on a line whose dependency name carries `version` must still be read: {:?}",
+        verdict.err()
+    );
+}
+
 #[test]
 fn a_shallow_history_cannot_be_judged() {
     let root = scratch("shallow");

@@ -26,6 +26,52 @@ fn read(repo: &Path, rel: &str) -> Result<String, Refusal> {
         .map_err(|err| cannot_judge(format!("could not read {rel}: {err}")))
 }
 
+/// Every value assigned to `key` inside a dependency's value text, recognised as a **table key** rather than
+/// as a substring, in the order written.
+///
+/// **The candidates are a value first, so the caller answers *how many*.** `split("version").nth(1)` read the
+/// first occurrence of the bare word on the whole line — the dependency's own name and its path included — so
+/// `version-utils = { path = "crates/version-utils", version = "0.5.0" }` answered about the wrong span and
+/// produced *has no version pin* in front of the release gate. That is the lossy-selection class
+/// [`crate::selection`] exists for, in the file that predates it.
+///
+/// A key stands alone: what precedes it is a table delimiter or whitespace, and what follows is `=` after
+/// optional space. Both halves are required — the first alone still admits `/version`, the second alone still
+/// admits a key ending in `version`.
+fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
+    let mut found = Vec::new();
+    let bytes = value.as_bytes();
+    let mut at = 0;
+    while let Some(offset) = value[at..].find(key) {
+        let start = at + offset;
+        let after = start + key.len();
+        let opens = start == 0 || matches!(bytes[start - 1], b'{' | b',' | b' ' | b'\t');
+        let rest = value[after..].trim_start();
+        if opens {
+            if let Some(assignment) = rest.strip_prefix('=') {
+                found.push(quoted_value(assignment));
+            }
+        }
+        at = after;
+    }
+    found
+}
+
+/// Whether `suffix` is an ISO date: three `-`-separated all-digit fields of widths 4, 2 and 2.
+///
+/// **Parsed, not counted.** The test this replaces asserted the heading was ten characters longer than its
+/// own prefix and never read them, so `## [0.5.0] - notadate!!` satisfied *CHANGELOG carries dated release
+/// notes*. A length test is a parse without its guarantee.
+fn is_iso_date(suffix: &str) -> bool {
+    let parts: Vec<&str> = suffix.split('-').collect();
+    let [year, month, day] = parts.as_slice() else {
+        return false;
+    };
+    [(year, 4usize), (month, 2), (day, 2)]
+        .iter()
+        .all(|(part, width)| part.len() == *width && part.chars().all(|c| c.is_ascii_digit()))
+}
+
 /// A TOML line with its whitespace removed, for a predicate that compares a whole line against one spelling.
 ///
 /// **TOML's `wschar` is `%x20` and `%x09`, and this removes exactly those.** The predicate it serves used to
@@ -310,10 +356,11 @@ fn require_changelog_state(
                     spine.state.label()
                 )));
             }
+            let prefix = format!("## [{version}] - ");
             let dated = changelog.lines().any(|line| {
-                let line = line.trim_end();
-                line.starts_with(&format!("## [{version}] - "))
-                    && line.len() == format!("## [{version}] - ").len() + 10
+                line.trim_end()
+                    .strip_prefix(&prefix)
+                    .is_some_and(is_iso_date)
             });
             if !dated {
                 return Err(violation(format!(
@@ -391,8 +438,13 @@ fn require_section_shape(changelog: &str) -> Result<(), Refusal> {
 }
 
 /// The adopter-facing narrative names none of this repository's own machinery.
-fn require_adopter_narrative(repo: &Path, changelog: &str) -> Result<(), Refusal> {
-    let leaked = adopter_cited_machinery(repo, changelog)?;
+fn require_adopter_narrative(
+    repo: &Path,
+    changelog: &str,
+    version: &str,
+    spine: &Spine,
+) -> Result<(), Refusal> {
+    let leaked = adopter_cited_machinery(repo, changelog, version, spine.state)?;
     if !leaked.is_empty() {
         return Err(violation(format!(
             "an adopter-facing CHANGELOG entry names this repository's own machinery, which ships in no \
@@ -460,7 +512,7 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     let manifests = require_version_surfaces(repo, &root_manifest, &version)?;
     require_changelog_state(repo, &changelog, &manifests, &version, &spine)?;
     require_section_shape(&changelog)?;
-    require_adopter_narrative(repo, &changelog)?;
+    require_adopter_narrative(repo, &changelog, &version, &spine)?;
 
     Ok(format!(
         "ok release coherence ({}: {version})",
@@ -535,29 +587,35 @@ fn require_internal_pins(root_manifest: &str, version: &str) -> Result<(), Refus
         if !trimmed.contains("path") || !trimmed.contains("\"crates/") || !trimmed.contains('=') {
             continue;
         }
-        let Some((name, _)) = trimmed.split_once('=') else {
+        let Some((name, value)) = trimmed.split_once('=') else {
             continue;
         };
         pins += 1;
         let name = name.trim();
-        let pin = trimmed
-            .split("version")
-            .nth(1)
-            .and_then(|rest| rest.split_once('"'))
-            .and_then(|(_, rest)| rest.split_once('"'))
-            .map(|(value, _)| value.to_string());
-        match pin {
-            None => {
+        // Read from the dependency's VALUE and by table key, never from the whole line by substring — see
+        // `inline_assignments` for the false refusal that produced.
+        let assignments = inline_assignments(value, "version");
+        let pin = match crate::selection::the_only("`version` key", assignments) {
+            Ok(Quoted::Value(pin)) => pin,
+            Ok(Quoted::Unreadable) => {
+                return Err(cannot_judge(format!(
+                    "internal dependency {name} declares a version this check cannot read, so whether it \
+                     names the workspace version cannot be decided"
+                )));
+            }
+            // None and several are different from *absent*: none is the missing pin this check exists to
+            // refuse, several is a line this reader may not choose from.
+            Err(_) if inline_assignments(value, "version").is_empty() => {
                 return Err(violation(format!(
                     "internal dependency {name} has no version pin"
                 )));
             }
-            Some(pin) if pin != version => {
-                return Err(violation(format!(
-                    "internal dependency {name} is pinned to {pin}; expected {version}"
-                )));
-            }
-            Some(_) => {}
+            Err(refusal) => return Err(refusal),
+        };
+        if pin != version {
+            return Err(violation(format!(
+                "internal dependency {name} is pinned to {pin}; expected {version}"
+            )));
         }
     }
     if pins == 0 {
@@ -631,18 +689,42 @@ fn require_example_pins(
                 continue;
             };
             let key = key.trim();
-            if !family.iter().any(|f| f == key) {
+            // **Which crate a dependency names is its `package` field where it has one, and its key only
+            // otherwise.** Keying on the name alone was a false negative of the class the Core Contract
+            // forbids: cargo renames with `alias = { package = "xuanji", version = "stale" }`, `alias` is in
+            // no family, and the entry was skipped entirely — while the aggregate `requirements` counter
+            // stayed non-zero on the strength of the other examples, exactly as the comment below records for
+            // its own sub-case. The sibling `require_internal_pins` never had this hole because it keys on
+            // the PATH, which a rename cannot move; examples depend by registry version and have no path, so
+            // the identity has to be read.
+            let renamed =
+                crate::selection::the_only("`package` key", inline_assignments(rest, "package"));
+            let package = match renamed {
+                Ok(Quoted::Value(package)) => package,
+                Ok(Quoted::Unreadable) => {
+                    return Err(cannot_judge(format!(
+                        "example {name} renames `{key}` to a package this check cannot read ({}), so which \
+                         crate it requires cannot be decided",
+                        rest.trim()
+                    )));
+                }
+                Err(_) if inline_assignments(rest, "package").is_empty() => key.to_string(),
+                Err(refusal) => return Err(refusal),
+            };
+            if !family.contains(&package) {
                 continue;
             }
-            // The key is already known to name a family crate, so a pin this reader cannot read is not a
+            // The entry is already known to name a family crate, so a pin this reader cannot read is not a
             // pin that is absent — skipping it left an example's requirement unexamined while the aggregate
             // `requirements` counter stayed non-zero on the strength of the other examples.
             let pin = if rest.trim_start().starts_with('{') {
-                rest.split("version")
-                    .nth(1)
-                    .and_then(|r| r.split_once('"'))
-                    .and_then(|(_, r)| r.split_once('"'))
-                    .map(|(v, _)| v.to_string())
+                match crate::selection::the_only(
+                    "`version` key",
+                    inline_assignments(rest, "version"),
+                ) {
+                    Ok(Quoted::Value(pin)) => Some(pin),
+                    _ => None,
+                }
             } else {
                 match quoted_value(rest) {
                     Quoted::Value(pin) => Some(pin),
@@ -651,16 +733,23 @@ fn require_example_pins(
             };
             let Some(pin) = pin else {
                 return Err(cannot_judge(format!(
-                    "example {name} requires {key} with a version this check cannot read ({}), so whether it \
-                     satisfies the workspace version cannot be decided",
+                    "example {name} requires {package} with a version this check cannot read ({}), so \
+                     whether it satisfies the workspace version cannot be decided",
                     rest.trim()
                 )));
             };
             requirements += 1;
             if pin != minor && pin != version {
+                // The package, and the key where they differ: a renamed dependency reported by its key alone
+                // sends a reader looking for a crate the manifest does not name.
+                let named = if package == key {
+                    package.clone()
+                } else {
+                    format!("{package} (as `{key}`)")
+                };
                 return Err(violation(format!(
-                    "example {name} requires {key} = \"{pin}\", which the workspace version {version} does \
-                     not satisfy"
+                    "example {name} requires {named} = \"{pin}\", which the workspace version {version} \
+                     does not satisfy"
                 )));
             }
         }
@@ -1044,9 +1133,27 @@ fn cargo_metadata(repo: &Path) -> Result<serde_json::Value, Refusal> {
 /// a command, a padded double-backtick span, and an inline span wrapped across a source line.
 ///
 /// Adopter-facing is the **complement** of `### Self-governance`, so a heading nobody anticipated reacts
-/// rather than being exempt by default. Dated sections are record: rewriting one to satisfy a rule written
-/// afterwards would falsify it.
-fn adopter_cited_machinery(repo: &Path, changelog: &str) -> Result<Vec<String>, Refusal> {
+/// rather than being exempt by default.
+///
+/// **A dated section is record only once it is a record.** The exemption's reason is that rewriting a dated
+/// section to satisfy a rule written afterwards would falsify it — and that reason does not reach the section
+/// this release is *about*. Release preparation dates it and then keeps writing into it: measured on this
+/// repository, `chore(release): prepare 0.5.0` dated `## [0.5.0]` and hundreds of lines were added to it
+/// afterwards across later commits, none of them examined, because the reader looked only at
+/// `## [Unreleased]` — which release-ready state requires to be **empty**. So during preparation the check
+/// had no subject at all.
+///
+/// The state decides it, not a version comparison. In [`State::ReleaseReady`] and [`State::Snapshot`] the
+/// section dated for the workspace version is still being written, so it is adopter-facing. In
+/// [`State::Development`] the workspace version *equals* the latest released one, so the section carrying it
+/// is genuinely record and stays exempt — a rule phrased as *versions strictly below the workspace version
+/// stay exempt* would refuse it, which is the reading this comment exists to keep anyone from adopting.
+fn adopter_cited_machinery(
+    repo: &Path,
+    changelog: &str,
+    version: &str,
+    state: State,
+) -> Result<Vec<String>, Refusal> {
     // One enumeration. A second copy lived here for one commit, built for a census that was dropped, and
     // two constructions of one set is the drift this file's own doc-comment says it exists to prevent.
     let names = machinery_names(repo)?;
@@ -1066,7 +1173,9 @@ fn adopter_cited_machinery(repo: &Path, changelog: &str) -> Result<Vec<String>, 
         if let Some(next) = line.strip_prefix("### ") {
             heading = next.trim_end().to_string();
         }
-        if section != "## [Unreleased]" || heading == "Self-governance" {
+        let being_written = matches!(state, State::ReleaseReady | State::Snapshot)
+            && section == format!("## [{version}]");
+        if (section != "## [Unreleased]" && !being_written) || heading == "Self-governance" {
             continue;
         }
         for run in

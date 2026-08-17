@@ -269,7 +269,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
 
-> nothing reacts, and the leak is real: an adopter reading `[0.4.0]` meets nine entries naming files they can never run. What is refused is the **repair**, not the diagnosis — rewriting a dated section to satisfy a rule written afterwards would falsify the record, the same reason `docs/history/` is left alone — so this is a declared false negative with an owner rather than a shape that is harmless. Closing it needs a repair that adds to the record instead of editing it
+> nothing reacts, and the leak is real: an adopter reading `[0.4.0]` meets nine entries naming files they can never run. What is refused is the **repair**, not the diagnosis — rewriting a dated section to satisfy a rule written afterwards would falsify the record, the same reason `docs/history/` is left alone — so this is a declared false negative with an owner rather than a shape that is harmless. Closing it needs a repair that adds to the record instead of editing it. **The WHEN was wider than the reason, and the gap was live.** It read *a dated section*, so the section the current release is still being written into was exempt too — where no record exists to falsify, and where release-ready state requires `[Unreleased]` to be empty, leaving the check with no subject at all during preparation. Narrowed to what the reason actually covers
 
 - **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
 

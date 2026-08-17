@@ -937,6 +937,37 @@ them.
   both ways, the shape the bound register already uses — and it is a capability rather than a tightening,
   which is why it is filed with its trigger instead of built inside this window.
 
+- **BREAKING** — **The release gate stopped reading the section the release is about, and three readers
+  beside it were fixed with it.** Four defects, each with a negative run recorded against the unfixed code.
+
+  *The adopter-narrative check had no subject during release preparation.* It read `## [Unreleased]` only —
+  and release-ready state requires that section to be **empty**. Preparation dates the new section and then
+  keeps writing into it, so hundreds of lines of adopter-facing prose passed unexamined every time. The
+  exemption's own reason is that rewriting a dated section would falsify the record, and where the section is
+  still being written there is no record to falsify. It now covers `[Unreleased]` always and, in release-ready
+  and snapshot state, the section dated for the workspace version. **The state decides it, not a version
+  comparison**: in development the workspace version equals the released one, so that section is genuine
+  record and stays exempt — a rule phrased as *strictly below the workspace version* would refuse it.
+
+  *A renamed family dependency was skipped entirely.* Cargo admits `alias = { package = "xuanji", version =
+  "0.0.1" }`; `alias` matched no family crate, so the entry was never examined, while the aggregate counter
+  stayed satisfied by other examples. Which crate a dependency names is now its `package` field where it has
+  one. The sibling reader over the root manifest never had this hole because it keys on the **path**, which a
+  rename cannot move.
+
+  *A dated heading was counted, not parsed.* `## [X.Y.Z] - notadate!!` is exactly ten characters after the
+  prefix, so it satisfied *carries dated release notes*. The suffix is now read as three `-`-separated
+  all-digit fields of widths four, two and two.
+
+  *A dependency whose own name carries `version` was refused.* The pin was read from the first occurrence of
+  the word on the whole line — the name and the path included — so `version-utils = { path =
+  "crates/version-utils", version = "…" }` produced *has no version pin*, a false refusal over a correct
+  manifest. A `version` assignment is now recognised as a table key.
+
+  **What to expect on upgrade**: nothing an adopter runs. These are this repository's own checks, shipping in
+  no package. The mark is here because the first defect closes a false negative over prose an adopter reads,
+  and because this family marks a closed false negative whatever its diff size.
+
 - **The refresh recipe written beside the pins was wrong for one of the two actions it documents.** The
   comment told a reader to resolve a tag with `git/ref/tags/<tag> --jq .object.sha`. Measured against both
   pinned actions: a lightweight tag's ref answers `object.type=commit`, but an **annotated** tag's answers

@@ -165,6 +165,36 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   lock surface names the new version
 - **THEN** release coherence passes as release-ready
 
+#### Scenario: An example requires a family crate the workspace version does not satisfy
+
+- **WHEN** a manifest under `examples/` requires a family crate at a version the workspace version neither
+  equals nor is the minor series of
+- **THEN** the coherence check fails and names the example, the crate, and the version found
+
+#### Scenario: A renamed family dependency is resolved by the package it names
+
+- **WHEN** an example requires a family crate under another key — `alias = { package = "xuanji", version =
+  "0.0.1" }`, the rename form cargo admits — and that version does not satisfy the workspace version
+- **THEN** the check fails naming the package **and** the key it was given, rather than passing over an
+  entry whose key matches no family crate. Which crate a dependency names is its `package` field where it
+  has one, and its key only otherwise
+- **PINNED-BY** `a_renamed_family_dependency_is_resolved_by_its_package_field`
+
+#### Scenario: A dated heading whose suffix is not a date
+
+- **WHEN** a release-ready repository carries `## [X.Y.Z] - ` followed by ten characters that are not an
+  ISO date
+- **THEN** the check fails as missing dated release notes, because the suffix is parsed as three
+  `-`-separated all-digit fields of widths four, two and two rather than counted
+- **PINNED-BY** `a_dated_heading_whose_suffix_is_not_a_date_is_a_violation`
+
+#### Scenario: A dependency whose own name carries the word `version`
+
+- **WHEN** an internal path dependency's name or path contains `version` and the entry is correctly pinned
+- **THEN** the check reads the pin and passes, because a `version` assignment is recognised as a table key —
+  preceded by a delimiter, followed by `=` — rather than as the first occurrence of the word on the line
+- **PINNED-BY** `a_member_whose_name_carries_version_still_reads_its_pin`
+
 #### Scenario: A stale lock entry fails release readiness
 
 - **WHEN** any Tianheng workspace package lock entry names a version other than the release-ready
@@ -184,11 +214,18 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 
 ### Requirement: Adopter narrative SHALL NOT name this repository's own machinery
 
-An entry under an adopter-facing heading of the `[Unreleased]` section SHALL NOT name this repository's
-own machinery in any of three forms: a path under `scripts/`, a bare basename that `git ls-files scripts/`
-resolves to a tracked file there, or a **directory** under `scripts/` written with its trailing slash. All
-three are derived from the one enumeration — the directories by stripping components from each enumerated
-path — so none is a list written beside it.
+An entry under an adopter-facing heading of a section **still being written** SHALL NOT name this
+repository's own machinery in any of three forms: a path under `scripts/`, a bare basename that
+`git ls-files scripts/` resolves to a tracked file there, or a **directory** under `scripts/` written with
+its trailing slash. All three are derived from the one enumeration — the directories by stripping components
+from each enumerated path — so none is a list written beside it.
+
+**Still being written** is `[Unreleased]` always, and — in release-ready and snapshot state — the section
+dated for the current workspace version. Release preparation dates that section and then keeps writing into
+it, so it is prose under review rather than record; in development state the workspace version equals the
+latest released one, so the section carrying it is genuinely record and stays exempt. The state decides it
+and not a version comparison: a rule phrased as *versions strictly below the workspace version stay exempt*
+would refuse the development case the exemption exists for.
 
 `CHANGELOG.md` is the adopter's document. It carries nine kinds of heading — `### Added`, `### Changed`,
 `### Fixed`, `### Migration`, `### Documentation`, `### Removed`, `### Compatibility`,
@@ -283,12 +320,18 @@ always enters; a convenience has to earn its place.
 
 #### Scenario: A dated release section names a gate — a stated bound
 
-- **WHEN** a dated `## [X.Y.Z] - DATE` section carries an entry naming a path under `scripts/`
+- **WHEN** a dated `## [X.Y.Z] - DATE` section for an **already released** version — one this repository is
+  no longer writing into — carries an entry naming a path under `scripts/`
 - **THEN** nothing reacts, and the leak is real: an adopter reading `[0.4.0]` meets nine entries naming
   files they can never run. What is refused is the **repair**, not the diagnosis — rewriting a dated section
   to satisfy a rule written afterwards would falsify the record, the same reason `docs/history/` is left
   alone — so this is a declared false negative with an owner rather than a shape that is harmless. Closing it
-  needs a repair that adds to the record instead of editing it
+  needs a repair that adds to the record instead of editing it.
+
+  **The WHEN was wider than the reason, and the gap was live.** It read *a dated section*, so the section the
+  current release is still being written into was exempt too — where no record exists to falsify, and where
+  release-ready state requires `[Unreleased]` to be empty, leaving the check with no subject at all during
+  preparation. Narrowed to what the reason actually covers
 - **PINNED-BY** `a_dated_section_naming_a_gate_is_a_stated_bound`
 
 #### Scenario: Machinery the judged repository tracks by nothing — a stated bound
