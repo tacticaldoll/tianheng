@@ -222,8 +222,62 @@ fn an_unreadable_subject_bullet_is_a_cannot_judge() {
     );
 }
 
+/// Two `## Subject` sections are refused, not silently read as the first.
+///
+/// The falsifier is the second section — the candidate the reader would have dropped. `.nth(1)` took the text
+/// after the first marker and bounded it at the next `## `, so a capability declaring a second section
+/// governed strictly less than it says while reading as a complete declaration, and the filing join then
+/// missed every file those globs claim. That is the same silent narrowing the bullet loop inside this
+/// function already refuses, one level up from it — and the reader was correct only while a second section
+/// happened not to exist.
+#[test]
+fn two_subject_sections_are_refused_rather_than_read_as_the_first() {
+    let spec = "# c\n\n## Subject\n\n- `crates/a/src/*.rs`\n\n## Purpose\n\np\n\n## Subject\n\n\
+                - `crates/b/src/*.rs`\n\n## Requirements\n";
+    let Declared::SeveralSections(count) = subject_globs(spec) else {
+        panic!(
+            "a second `## Subject` section was read past: {:?}",
+            subject_globs(spec)
+        );
+    };
+    assert_eq!(count, 2);
+}
+
+/// And the refusal reaches the verdict as a cannot-judge naming the count, not as the bullet message.
+#[test]
+fn several_subject_sections_are_a_cannot_judge_of_their_own() {
+    let spec = "# c\n\n## Subject\n\n- `crates/a/src/*.rs`\n\n## Purpose\n\np\n\n## Subject\n\n\
+                - `crates/b/src/*.rs`\n\n## Requirements\n";
+    let offences = declaration_offences(&specs(&[("twice", spec)]), resolves);
+    assert_eq!(offences.len(), 1, "{offences:?}");
+    assert_eq!(offences[0].kind, Kind::CannotJudge);
+    assert!(
+        offences[0].message.contains("2 `## Subject` sections"),
+        "the refusal must name the count rather than reuse the unreadable-bullet wording: {}",
+        offences[0].message
+    );
+}
+
+/// Two `## Capabilities` sections in one proposal are refused for the same reason, one document over.
+///
+/// Both markers carry a leading newline, as every real proposal's do — a section opening the file's very
+/// first line is invisible to this reader either way, which is unchanged here and is why the fixture writes
+/// a title.
+#[test]
+fn two_capabilities_sections_are_refused_rather_than_read_as_the_first() {
+    let proposal =
+        "# p\n\n## Capabilities\n\n- `first`\n\n## Why\n\nw\n\n## Capabilities\n\n- `second`\n";
+    assert_eq!(
+        proposal_capabilities(proposal),
+        Err(2),
+        "the second section's capabilities were dropped, so a change could name one and be filed as complete"
+    );
+    let single = "## Why\n\nw\n\n## Capabilities\n\n- `only`\n";
+    assert_eq!(proposal_capabilities(single), Ok(listed(&["only"])));
+}
+
 #[test]
 fn a_capability_named_outside_the_capabilities_section_is_not_read_as_named() {
     let proposal = "## Why\n\nTouching `elsewhere`.\n\n## Capabilities\n\n- `here`: a reason\n\n## Impact\n\n`later`\n";
-    assert_eq!(proposal_capabilities(proposal), listed(&["here"]));
+    assert_eq!(proposal_capabilities(proposal), Ok(listed(&["here"])));
 }

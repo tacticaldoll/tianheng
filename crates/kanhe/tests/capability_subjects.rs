@@ -96,6 +96,15 @@ fn claimed(
                      and let a change touching this capability's subject read as filed"
                 )));
             }
+            // The same refusal one level up: reading the first section would shrink the claimed set by every
+            // glob the others list, which is the identical hole the bullet arm above closes.
+            Declared::SeveralSections(count) => {
+                return Err(cannot_judge(format!(
+                    "`{capability}` carries {count} `## Subject` sections; reading the first would shrink \
+                     the claimed set by every glob the others list, and let a change touching this \
+                     capability's subject read as filed"
+                )));
+            }
         };
         for glob in globs {
             let listing = git(root, &["ls-files", "--", &glob]).map_err(|err| {
@@ -236,7 +245,15 @@ fn a_change_names_every_capability_whose_subject_it_touches() {
             .to_string();
         let proposal = std::fs::read_to_string(root.join(&proposal_path))
             .unwrap_or_else(|err| panic!("cannot read {proposal_path}: {err}"));
-        let listed = proposal_capabilities(&proposal);
+        // Several `## Capabilities` sections is a fact about the proposal this reader may not resolve:
+        // reading the first drops the capabilities the others name, and the join would then report the
+        // change as having accounted for one it never listed.
+        let listed = proposal_capabilities(&proposal).unwrap_or_else(|count| {
+            panic!(
+                "capability subjects (cannot judge): {proposal_path} carries {count} `## Capabilities` \
+                 sections, so which one lists what the change touches is decided by file order"
+            )
+        });
         // The change's own directory is what a proposal is, not what it governs.
         let own = format!("openspec/changes/{change}/");
         let touched: Vec<String> = touched_all

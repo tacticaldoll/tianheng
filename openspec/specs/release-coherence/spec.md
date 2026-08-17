@@ -50,6 +50,33 @@ time, warning windows, or hosted-CI-only variables.
 - **WHEN** no exact release commit is observable in the available git history
 - **THEN** the coherence check fails and identifies release history as unavailable
 
+**The workspace version SHALL be read from the manifest's executed region, and a value the reader cannot
+read SHALL be a distinct refusal from a key that is absent.** TOML opens a comment wherever a string is not
+open, so `[workspace.package] # …` and `version = "X.Y.Z"  # …` both declare a version and cargo accepts
+both. Read as raw lines the first closed the table before it opened and the second carried its comment into
+the value, so a legal manifest was refused for declaring no version at all — the second spelling being the
+one an author reaches for while bumping, which is exactly when this classification runs. The corpus is
+therefore the shared TOML region `repository-checks` requires of a check deciding a property over executed
+text, and the same reader serves `publish-source-integrity`, so both refusals moved together.
+
+A value the reader cannot read — a single-quoted or literal string, which cargo accepts and this reader does
+not take — names a different operator action from a missing key: one is a key to add, the other a spelling
+this check has never met. Each refusal SHALL name the value as written, and SHALL say which judgement it
+blocked rather than only which fact was unreadable, because the two gates sharing the reader cannot decide
+different things.
+
+#### Scenario: A comment on either version surface
+
+- **WHEN** the root manifest carries a comment on the `[workspace.package]` heading, or after the `version`
+  value, or both
+- **THEN** the version is read as declared and classification proceeds
+
+#### Scenario: A version value the reader cannot read
+
+- **WHEN** `[workspace.package]` declares a version in a form this reader does not take
+- **THEN** the check refuses as a cannot-judge, quoting the value as written and naming what it could not
+  decide — never as a version that is absent
+
 ### Requirement: Development carries adopter-facing release narrative
 
 Active development SHALL retain the current released workspace version, at least one changelog list

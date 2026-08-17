@@ -1311,6 +1311,80 @@ fn a_manifest_with_no_workspace_version_cannot_be_judged() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// A comment on the table heading does not close the table before it opens.
+///
+/// `[workspace.package] # …` is legal TOML. Read as a raw line it fails an equality against
+/// `[workspace.package]`, then matches "starts with `[`" and *closes* the scan — so the version is reported
+/// absent over a manifest that declares one. The refusal expected here is the **next** phase's, which is what
+/// says the version was read: this fixture has no commit, so the release history is what cannot be read.
+#[test]
+fn a_commented_table_heading_still_opens_the_workspace_package_table() {
+    let root = scratch("commented-table-heading");
+    let repo = bare(&root, "repo");
+    initialised(&repo);
+    std::fs::write(
+        repo.join("Cargo.toml"),
+        "[workspace.package] # the version every member inherits\nversion = \"0.2.0\"\n",
+    )
+    .expect("write");
+    std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
+    refuse(
+        &repo,
+        Kind::CannotJudge,
+        "could not read the release history",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A trailing comment on the version line does not become part of the version.
+///
+/// The release-prep spelling: `version = "0.3.0"  # bumped for the window`. Read as a raw line, the value
+/// carries the comment with it and no longer parses as a semantic version — a false cannot-judge over a legal
+/// manifest, at the one moment someone is most likely to annotate that line. As above, the refusal expected
+/// is the next phase's.
+#[test]
+fn a_trailing_comment_on_the_version_line_still_reads_the_version() {
+    let root = scratch("commented-version-value");
+    let repo = bare(&root, "repo");
+    initialised(&repo);
+    std::fs::write(
+        repo.join("Cargo.toml"),
+        "[workspace.package]\nversion = \"0.3.0\"  # bumped for the release window\n",
+    )
+    .expect("write");
+    std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
+    refuse(
+        &repo,
+        Kind::CannotJudge,
+        "could not read the release history",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A value this reader cannot read is not a value that is absent.
+///
+/// A single-quoted literal is valid TOML and is not a form this reader takes. Reporting it as *missing or
+/// malformed* sends an operator to look for a version key that is sitting right there, correctly spelled for
+/// cargo — the same conflation `Quoted` was introduced to end one reader over.
+#[test]
+fn a_version_value_this_reader_cannot_read_is_not_one_that_is_absent() {
+    let root = scratch("unreadable-version-value");
+    let repo = bare(&root, "repo");
+    initialised(&repo);
+    std::fs::write(
+        repo.join("Cargo.toml"),
+        "[workspace.package]\nversion = '0.4.0'\n",
+    )
+    .expect("write");
+    std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
+    refuse(
+        &repo,
+        Kind::CannotJudge,
+        "declares a workspace version this check cannot read",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A repository with no commit at all: the release history cannot be read, which is not a shallow clone.
 #[test]
 fn a_repository_with_no_commit_cannot_have_its_history_read() {

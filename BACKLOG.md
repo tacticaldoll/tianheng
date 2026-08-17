@@ -81,18 +81,41 @@ consumer for an undemonstrated deduplication.
   simply never distinguished executed text from commentary has written nothing to see. *Observation source:*
   none, which is the entry. *Current reaction or bound:* declared as
   `repository-checks/a-check-that-should-distinguish-a-region-and-does-not-a-stated-bound`; the requirement
-  obliges the classifier and the classifier's adoption is what narrows the class. *Risk:* low and bounded — a
-  check in this class reads a wider corpus than its property, so it errs toward reporting more, and this
-  repository's checks fail loud rather than passing quietly. *Promotion trigger:* a defect of this class
-  observed in the wild — a check reported clean over text its property did not cover. Note that a candidate was
-  reported during the `0.5.0` review and **refuted by measurement**, so the trigger asks for a confirmed one.
-  *Compatibility class:* patch; the checks ship in zero packages. *Authority:*
+  obliges the classifier and the classifier's adoption is what narrows the class. *Risk:* **corrected below —
+  the sentence that stood here was falsified by the first instance.** *Promotion trigger:* a defect of this
+  class observed in the wild — a check reported clean over text its property did not cover. Note that a
+  candidate was reported during the `0.5.0` review and **refuted by measurement**, so the trigger asks for a
+  confirmed one. *Compatibility class:* patch; the checks ship in zero packages. *Authority:*
   `openspec/specs/repository-checks/spec.md`'s requirement on the region a check judges.
 
   The mechanization was designed and rejected rather than deferred: refusing the inline comment marker inside
   the checks would refuse more legitimate sites than defects, because some select commentary on purpose and
   others parse a data format whose syntax marks comments. That measurement is the reason this is debt rather
   than a gap someone forgot.
+
+  **First instance, and it cost something.** A static review of the `v0.4.0..HEAD` window found
+  `kanhe::manifest::workspace_version` reading raw lines — the one manifest reader both git-reading gates
+  share, and the last one in the crate that had not adopted the classifier. Its sibling `package_name` had
+  been repaired the same way already, so one root `Cargo.toml` was being scanned under two different region
+  decisions inside a single judgement, which this requirement calls a defect by definition. Found by a
+  reviewer, as the entry predicts: the absence had written nothing for a reaction to see.
+
+  *What the instance changes:* the risk sentence, which said a check in this class **reads a wider corpus than
+  its property, so it errs toward reporting more**. That was wrong in both directions at once here.
+  `[workspace.package] # …` made the reader close the table before it opened, so the version read as
+  **absent** — a narrower corpus, not a wider one — and `version = "X.Y.Z" # …` carried the comment into the
+  value, so the version read as **malformed**. Both are legal TOML and both produced a false *refusal*, in
+  front of `cargo publish` and the release gate, on the manifest line an author is most likely to annotate
+  while bumping. So the direction is not "errs toward reporting more"; it is *whichever way the missing
+  decision happens to fall*, and a false refusal at an irreversible act is not the cheap error the old
+  sentence assumed.
+
+  *What it does not change:* the class, and the stated trigger. The trigger asks for a check that reported
+  **clean** over text its property did not cover, and this reported the opposite, so it is an instance of the
+  class without being the promotion evidence the entry asks for. The mechanization measurement has not moved
+  either — refusing the inline marker would still refuse more legitimate sites than defects — so this stays
+  ACCEPTED DEBT rather than becoming a gap with a design. Whether a falsified risk sentence alone should
+  re-open the class is a steward's call, recorded here rather than taken.
 
 - **`examples/observer-participant`'s own test fixture was not migrated to `xingbiao::claim_scratch`,
   unlike every other scratch-root claim in the workspace.** *Class:* ACCEPTED DEBT. *Observed pressure:*

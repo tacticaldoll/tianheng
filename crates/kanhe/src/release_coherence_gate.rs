@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use crate::refusal::{Refusal, cannot_judge, violation};
 
 pub use crate::hermetic_git::hermetic;
-use crate::manifest::{semver, workspace_version};
+use crate::manifest::{Quoted, WorkspaceVersion, quoted_value, semver, workspace_version};
 
 fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     crate::hermetic_git::run(repo, &[], args)
@@ -24,32 +24,6 @@ fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
 fn read(repo: &Path, rel: &str) -> Result<String, Refusal> {
     std::fs::read_to_string(repo.join(rel))
         .map_err(|err| cannot_judge(format!("could not read {rel}: {err}")))
-}
-
-/// A double-quoted value this reader found, or a statement that it could not read one.
-///
-/// **Not an `Option`, because every consumer of the one this replaces read `None` as *the key is absent* and
-/// skipped the line.** Single-quoted and literal TOML strings are valid and are not read here; that is a
-/// limit of this reader, not a fact about the manifest, and conflating the two let a readable-to-cargo
-/// manifest go unchecked while the surrounding function still returned `Ok`. Measured on this repository with
-/// one crate's name single-quoted, the release gate reported a clean release.
-///
-/// A type that cannot be defaulted, so the compiler asks each site which of the two it meant.
-enum Quoted {
-    /// The text between the first pair of double quotes on the line.
-    Value(String),
-    /// No double-quoted span: a single-quoted or literal value, or a shape this reader has never met.
-    Unreadable,
-}
-
-fn quoted_value(line: &str) -> Quoted {
-    match line
-        .split_once('"')
-        .and_then(|(_, rest)| rest.split_once('"'))
-    {
-        Some((value, _)) => Quoted::Value(value.to_string()),
-        None => Quoted::Unreadable,
-    }
 }
 
 /// A TOML line with its whitespace removed, for a predicate that compares a whole line against one spelling.
@@ -454,15 +428,27 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     })?;
 
     let root_manifest = read(repo, "Cargo.toml")?;
-    let version = workspace_version(&root_manifest).unwrap_or_default();
+    // The three states are answered separately, and the middle one is why the reader has three. A value this
+    // reader cannot read is not a key that is absent, and it is not a malformed version either: it is legal
+    // TOML in a form this reader does not take, and telling an operator their version is *missing* sends them
+    // to look for a key that is sitting in front of them.
+    let version = match workspace_version(&root_manifest) {
+        WorkspaceVersion::Declared(version) => version,
+        WorkspaceVersion::Absent => {
+            return Err(cannot_judge(
+                "workspace version is missing or malformed: <missing>",
+            ));
+        }
+        WorkspaceVersion::Unreadable(what) => {
+            return Err(cannot_judge(format!(
+                "Cargo.toml declares a workspace version this check cannot read ({what}), so whether every \
+                 release surface names one version cannot be decided"
+            )));
+        }
+    };
     let Some(version_parts) = semver(&version) else {
         return Err(cannot_judge(format!(
-            "workspace version is missing or malformed: {}",
-            if version.is_empty() {
-                "<missing>"
-            } else {
-                &version
-            }
+            "workspace version is missing or malformed: {version}"
         )));
     };
     let changelog = read(repo, "CHANGELOG.md")?;
