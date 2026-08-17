@@ -913,17 +913,18 @@ them.
 ### Self-governance
 
 - **A struct-literal field sat four columns left of its sibling, and `cargo fmt --all --check` was green
-  over it.** One declaration in `crates/shengmo/src/bounds.rs` indented `owner:` at 12 where its own
-  `because:` and its twin declaration eight lines above both sit at 16. rustfmt declines to reformat that
-  `vec![]` element, so the formatter the Definition of Done runs to own `.rs` layout does not reach it —
-  measured, not assumed: the check exits 0 both before and after the repair.
+  over it.** The `a-workspace-dependency-allowlist-is-not-examined` declaration in
+  `crates/shengmo/src/bounds.rs` indented `owner:` at 12 where its own `because:` and the sibling
+  `UnderReacts` declaration in the same list both sit at 16. rustfmt declines to reformat that `vec![]`
+  element, so the formatter the Definition of Done runs to own `.rs` layout does not reach it — measured,
+  not assumed: the check exits 0 both before and after the repair.
 
-  Deliberately **no reaction is added**. A structural scan of every tracked `.rs` for mixed field
-  indentation within one block returned two candidates and the second was a false positive — a `word:` inside
-  a string continuation — so the class has exactly one live instance, against a formatter that already
-  governs the rest. Building an indentation check beside rustfmt for that is the defensive
-  over-foolproofing the drift law forbids, and the measurement is recorded here so the next reader does not
-  have to redo it to reach the same answer.
+  Deliberately **no reaction is added**. A structural scan over `git ls-files '*.rs'`, comparing the
+  indentation of struct-literal fields within one brace depth, found this declaration and one false
+  positive — a `word:` inside a string continuation, where the real fields agree — so the class has a
+  single live instance against a formatter that already governs the rest. Building an indentation check
+  beside rustfmt for that is the defensive over-foolproofing the drift law forbids, and the scan is
+  described here rather than counted so the next reader can re-run it instead of trusting a figure.
 
 - **The marking rule that says which changes are breaking is paired per section, not per entry.** Filed to
   `BACKLOG.md` as `READY-PATCH` rather than repaired: `require_section_shape` is satisfied by one marked
