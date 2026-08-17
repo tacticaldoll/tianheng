@@ -937,6 +937,16 @@ them.
   both ways, the shape the bound register already uses — and it is a capability rather than a tightening,
   which is why it is filed with its trigger instead of built inside this window.
 
+- **The repair that routed a reader through `selection` built its candidates twice.** Two sites handed
+  `the_only` an enumeration and then rebuilt the same one inside the `Err` arm, to tell *none* from *several*
+  — `the_only` reports both as one refusal, and here they are different facts. The answer was correct and the
+  shape was the one that module exists to discourage: the candidates become a value **once**, and both
+  questions are asked of that value. Nothing observable moves, so there is no negative run to record and none
+  is claimed; the existing failure matrix is what pins the behaviour that had to stay still.
+
+  The third time in this window that a repair carried the class it was written beside, and the reason it is
+  recorded rather than folded in silently.
+
 - **The merge wrapper pinned two of its three judged inputs and left the third captured once.** It reads a
   subject, a body and a commit set, judges them, and then merges — and it had a reason written beside each
   treatment. The body travels as the **value** the gate judged, so a rewrite in between cannot reach the

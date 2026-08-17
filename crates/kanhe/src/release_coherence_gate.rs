@@ -595,19 +595,23 @@ fn require_internal_pins(root_manifest: &str, version: &str) -> Result<(), Refus
         // Read from the dependency's VALUE and by table key, never from the whole line by substring — see
         // `inline_assignments` for the false refusal that produced.
         let assignments = inline_assignments(value, "version");
+        // **Absence is answered before the enumeration is consumed, not from a second one.** `the_only`
+        // reports none and several as one refusal, and here they are different facts: none is the missing
+        // pin this check exists to name, several is a line this reader may not choose from. Reading the
+        // first from a re-run of `inline_assignments` inside the `Err` arm answered it correctly and built
+        // the candidate list twice to ask two questions about it — the shape `crate::selection` exists to
+        // discourage, in the repair that introduced the module's own call site.
+        if assignments.is_empty() {
+            return Err(violation(format!(
+                "internal dependency {name} has no version pin"
+            )));
+        }
         let pin = match crate::selection::the_only("`version` key", assignments) {
             Ok(Quoted::Value(pin)) => pin,
             Ok(Quoted::Unreadable) => {
                 return Err(cannot_judge(format!(
                     "internal dependency {name} declares a version this check cannot read, so whether it \
                      names the workspace version cannot be decided"
-                )));
-            }
-            // None and several are different from *absent*: none is the missing pin this check exists to
-            // refuse, several is a line this reader may not choose from.
-            Err(_) if inline_assignments(value, "version").is_empty() => {
-                return Err(violation(format!(
-                    "internal dependency {name} has no version pin"
                 )));
             }
             Err(refusal) => return Err(refusal),
@@ -697,19 +701,26 @@ fn require_example_pins(
             // its own sub-case. The sibling `require_internal_pins` never had this hole because it keys on
             // the PATH, which a rename cannot move; examples depend by registry version and have no path, so
             // the identity has to be read.
-            let renamed =
-                crate::selection::the_only("`package` key", inline_assignments(rest, "package"));
-            let package = match renamed {
-                Ok(Quoted::Value(package)) => package,
-                Ok(Quoted::Unreadable) => {
-                    return Err(cannot_judge(format!(
-                        "example {name} renames `{key}` to a package this check cannot read ({}), so which \
-                         crate it requires cannot be decided",
-                        rest.trim()
-                    )));
+            //
+            // Absence is answered from the enumeration itself before it is consumed, for the reason
+            // `require_internal_pins` states: no `package` field is the ordinary entry named by its key,
+            // several is a table this reader may not choose from, and asking the second question by
+            // rebuilding the candidates is the shape `crate::selection` exists to discourage.
+            let renamed = inline_assignments(rest, "package");
+            let package = if renamed.is_empty() {
+                key.to_string()
+            } else {
+                match crate::selection::the_only("`package` key", renamed) {
+                    Ok(Quoted::Value(package)) => package,
+                    Ok(Quoted::Unreadable) => {
+                        return Err(cannot_judge(format!(
+                            "example {name} renames `{key}` to a package this check cannot read ({}), so \
+                             which crate it requires cannot be decided",
+                            rest.trim()
+                        )));
+                    }
+                    Err(refusal) => return Err(refusal),
                 }
-                Err(_) if inline_assignments(rest, "package").is_empty() => key.to_string(),
-                Err(refusal) => return Err(refusal),
             };
             if !family.contains(&package) {
                 continue;
