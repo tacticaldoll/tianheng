@@ -981,6 +981,18 @@ them.
   value rather than the shape of the line it sits on — the same correction the sibling made when it stopped
   keying on the dependency's name.
 
+  **That migration then shipped four refusals with no direction over them**, in the change immediately
+  after the one whose own entry above records adding four such directions. A `path` this reader cannot
+  read, several `path` keys, a `version` it cannot read and several `version` keys were all reachable and
+  all unexercised. They have one each now, shown to fail by neutralising each arm and running against the
+  mutated reader — where the unreadable-path half reported the vacuity refusal instead, which is the
+  failure that branch exists to prevent.
+
+  The recurrence is the finding rather than the four branches. *A guard is not a guard until it has been
+  seen to fail* is stated in `AGENTS.md` and required by `repository-checks`, whose scenarios hold only the
+  clause about where a check may live; the clause about every refusal having been run against a tree
+  carrying the shape it refuses has no scenario and no reaction, and is carried by attention.
+
   A context cargo writes in front of a dependency table is stripped before the heading is classified, so
   `[target.<triple>.dependencies]` and its `.NAME` form are read like any other. That reading is narrower
   than the bound this window first declared, which named the whole target corpus: the reason it gave — *a

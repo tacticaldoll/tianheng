@@ -858,7 +858,7 @@ fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal> {
 ///
 /// The selection is the dependency's own `path` value rather than the shape of the line it sits on, which is
 /// the same correction the sibling made when it stopped keying on the dependency's name.
-fn require_internal_pins(root_manifest: &str, version: &str) -> Result<(), Refusal> {
+pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Result<(), Refusal> {
     let mut pins = 0usize;
     for Dependency {
         key,
