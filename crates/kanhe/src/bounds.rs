@@ -94,6 +94,23 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::unpinned(
             BoundId::new(
+                "publish-source-integrity/the-tree-changing-after-the-gate-passed-is-not-observed-a-stated-bound",
+            ),
+            "the repository altered between the source gate's single pass and `cargo publish` reading the \
+             tree",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the gate is one process and the act is another, and `cargo publish` takes no \
+                          argument naming the commit it must package -- there is no `--match-head-commit` \
+                          to pin what was judged, which is what closes the equivalent window on the merge \
+                          path. `cargo publish` refuses a dirty worktree, which narrows it and is weaker \
+                          than what the gate holds: a tree amended and committed is clean again"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *the window the publish wrapper can only narrow*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
                 "repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound",
             ),
             "a pull request title changing between the wrapper's post-gate re-read of it and `gh pr merge`",

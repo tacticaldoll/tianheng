@@ -1161,6 +1161,18 @@ them.
   this gate would have demanded opposite things of the same source. Latent, since every such import in the
   tree is one line today.
 
+  **The wrapper standing in front of the irreversible act declared no window, while its sibling declared
+  one.** The publish wrapper runs the source gate, then `cd`s and `exec`s `cargo publish`; between those the
+  repository can be altered and the gate's verdict is about the tree as it was. The merge wrapper declares
+  exactly this class for its own title and pins its other two inputs by construction — `cargo publish` takes
+  no argument naming the commit it must package, so the same pin does not exist here. Found by asking which
+  limits are declared on one wrapper and not on its sibling; `publish-source-integrity` had declared exactly
+  one bound, about the tag's signer.
+
+  Bounded rather than assumed: `cargo publish` refuses a dirty worktree, so reaching it needs the tree
+  amended *and* committed, and the wrapper's window is two statements wide rather than a whole `cargo test`.
+  Narrowing is the only available move and it was already taken; what was missing was saying so.
+
   **And the entry that predicted the stolen doc had its own trigger fire unnoticed.** It recorded the class,
   two instances, the risk and the condition for re-deciding — *a third instance, or any instance on a
   private item after this entry* — and both halves arrived without anything acting on them. The decision was

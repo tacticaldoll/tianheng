@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**19 of 91 declared bounds have no pinning test.** That figure is the register's
+**20 of 92 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -244,6 +244,12 @@ fallback used where no manifest exists, which the register spec describes.
 - **pinned by**: `a_third_generation_mechanism_is_not_recognized`
 
 ## publish-source-integrity
+
+### `publish-source-integrity/the-tree-changing-after-the-gate-passed-is-not-observed-a-stated-bound`
+
+> nothing reacts. The gate is one process and the act is another, and the wrapper holds no handle that ties them: `cargo publish` takes no argument naming the commit it must package, so there is no `--match-head-commit` to pin what was judged, which is what closes the equivalent window for the commit set on the merge path. What narrows it is `cargo publish`'s own refusal of a dirty worktree, which is a weaker property than the gate's — a tree amended and committed is clean again and packages a different commit under the same tag. The wrapper `cd`s once and `exec`s, so the window is two statements wide rather than a whole `cargo test`, and narrowing is all it can do
+
+- **unpinned**, tracked by: `BACKLOG.md` — *the window the publish wrapper can only narrow*
 
 ### `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound`
 
