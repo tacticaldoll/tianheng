@@ -36,19 +36,31 @@
 ///
 /// It lives here rather than beside one of its readers because **both** manifest facts this module owns need
 /// it, and a value-reading rule with two owners is the twin this module's header exists to close.
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Quoted {
-    /// The text between the first pair of double quotes on the line.
+    /// The double-quoted string the value **is**.
     Value(String),
-    /// No double-quoted span: a single-quoted or literal value, or a shape this reader has never met.
+    /// The value is not a double-quoted string: a single-quoted or literal value, a number or boolean, or a
+    /// shape this reader has never met.
     Unreadable,
 }
 
-/// The text between the first pair of double quotes on `line`, or a statement that there is no such pair.
-pub(crate) fn quoted_value(line: &str) -> Quoted {
-    match line
-        .split_once('"')
-        .and_then(|(_, rest)| rest.split_once('"'))
-    {
+/// The double-quoted string `value` is, or a statement that it is not one.
+///
+/// `value` is the text **after** the `=`, and the quote has to open it. Taking the first pair of quotes
+/// anywhere in the text instead let an unquoted value borrow the next key's: `package = xuanji, version =
+/// "0.2.0"` read its package as `0.2.0`, so an identity this reader cannot read was reported as one it
+/// could, and the entry then failed to match any family crate and was skipped in silence. `Unreadable` is
+/// the whole point of this type and it was reachable only when nothing else on the line was quoted.
+///
+/// Unifying the contract is what makes strictness possible: two `Cargo.lock` readers passed a whole line
+/// where every other caller passed the value, so a rule about where the quote sits had no single subject to
+/// be about. They split on the `=` now, like everyone else.
+pub(crate) fn quoted_value(value: &str) -> Quoted {
+    let Some(rest) = value.trim_start().strip_prefix('"') else {
+        return Quoted::Unreadable;
+    };
+    match rest.split_once('"') {
         Some((value, _)) => Quoted::Value(value.to_string()),
         None => Quoted::Unreadable,
     }

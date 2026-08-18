@@ -1895,3 +1895,114 @@ fn a_family_pin_under_a_quoted_cfg_target_is_the_declared_bound() {
     judge(&fixture.repo).expect("a cfg-guarded family pin is a declared bound, not a violation");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A `package` value this reader cannot read stops the check, and says so as itself.
+///
+/// Negative run: against the reader that carried a package identity as a `String` with the empty string for
+/// its two failure states, this refused with *package identity this check cannot read* — the same sentence it
+/// produced for a dependency declaring several `package` keys, which is a different fact.
+#[test]
+fn an_example_whose_package_value_is_unreadable_is_not_judged() {
+    let root = scratch("package-unreadable");
+    let fixture = build_fixture(&root, "package-unreadable", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        format!("{text}alias = {{ package = xuanji, version = \"0.2.0\" }}\n"),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: name a crate unreadably");
+    refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "`package` value this check cannot read",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// Several `package` keys in one dependency is not one this reader may choose from — and not the same fact
+/// as one it cannot read.
+///
+/// Negative run: both states were the empty string before, so this refused with the *cannot read* sentence.
+/// The distinction is the one its sibling field `pin` was given in this same window while this one was left
+/// as a sentinel.
+#[test]
+fn an_example_declaring_several_package_keys_is_not_judged() {
+    let root = scratch("package-several");
+    let fixture = build_fixture(&root, "package-several", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        format!(
+            "{text}alias = {{ package = \"xuanji\", package = \"hunyi\", version = \"0.2.0\" }}\n"
+        ),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: name two crates at once");
+    refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "declares 2 `package` keys",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// An example requiring a family crate with no version at all is a violation, not an unreadable pin.
+///
+/// The branch shipped in this window with no direction over it. It is legal cargo — a path-only dependency
+/// declares no version — so nothing about it is hypothetical.
+///
+/// Negative run: with the `Pin::Absent` arm replaced by `continue`, this passed; restored, it refuses.
+#[test]
+fn an_example_requiring_a_family_crate_with_no_version_is_refused() {
+    let root = scratch("pin-absent");
+    let fixture = build_fixture(&root, "pin-absent", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        format!("{text}tianheng = {{ path = \"../../crates/tianheng\" }}\n"),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: require a family crate by path alone");
+    refuse(
+        &fixture.repo,
+        Kind::Violation,
+        "requires tianheng with no version",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// Several `version` keys in one dependency is not this reader's to choose from either.
+///
+/// The other branch this window shipped unexercised, and the shape its own module header names as the
+/// example of what a real manifest cannot legally carry.
+///
+/// Negative run: with the `Pin::Several` arm replaced by `continue`, this passed; restored, it refuses.
+#[test]
+fn an_example_declaring_several_version_keys_is_not_judged() {
+    let root = scratch("pin-several");
+    let fixture = build_fixture(&root, "pin-several", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        format!(
+            "{text}machinery-under-another-name = {{ version = \"0.2.0\", version = \"0.1.0\" }}\n"
+        ),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: require one crate at two versions");
+    refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "declares 2 `version` keys",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
