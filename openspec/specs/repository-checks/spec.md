@@ -144,6 +144,16 @@ was a shell script and its refusal was an exit code, and it is why retiring the 
   is no third state: a site is held or declared. The declaration is the escape hatch and is deliberately
   expensive, because an escape hatch nothing forces you through is the prose that drifted
 
+#### Scenario: A registered construction this reader cannot parse is not counted as absent
+
+- **WHEN** a registered refusal is constructed in a shape this register's reader does not parse — the
+  constructor taken by name and called through the binding, a site arriving as a parameter, or a site
+  written as a raw string literal
+- **THEN** the register refuses for that module. Each shape was invisible to **both** of its readings: no
+  parsed site, and not counted as untriaged either, because the untriaged count reads the site-less
+  constructors. A real refusal site was then neither held, nor declared, nor reported missing. The parse is
+  counted against the calls, which turns *did not see it* into *cannot answer for this module*
+
 #### Scenario: A violation may not be declared unheld
 
 - **WHEN** a refusal that refuses as a **violation** is declared unheld

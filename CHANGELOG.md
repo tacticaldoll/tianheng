@@ -1091,6 +1091,26 @@ them.
   merely shares the name `violation` while building something else entirely. A module that constructs
   nothing was being counted as constructing one.
 
+  **The reader had three blind shapes, and each was invisible to both of its readings.** A constructor taken
+  by name and called through the binding, a site arriving as a parameter, and a site written as a raw
+  literal are none of them a direct call with an ordinary quoted literal. The parser saw no site; the
+  untriaged counter reads the *site-less* constructors and saw nothing either. A real refusal site was
+  neither held, nor declared, nor reported missing, and the register said clean. The parse is counted
+  against the calls now, so a shape it cannot read is answered as *cannot answer for this module* — and each
+  of the three is a case in the corpus.
+
+  **And the field's own doc was the one claim in this window that nothing could falsify.** It said a second
+  pair of constructors had been removed once the count reached zero, and that nothing could any longer
+  construct a refusal unable to say which branch produced it. Neither was true: the constructors were
+  restored in the change that wrote it, `violation("…")` constructs exactly that, and seventeen call sites
+  do, while the constructor's own doc in that same file correctly calls the pair a deliberate corpus
+  boundary. One file,
+  two mutually exclusive statements, and the false one on the field a reader meets first. `Site` is two
+  states now rather than a string with the empty string standing for *outside the corpus* — the same repair
+  a sibling struct's `package` field was given one cycle earlier, and the type refuses to hold the sentence.
+  What is actually true is narrower and is held by a run: no construction under `crates/kanhe/src` lacks an
+  identity.
+
   Reviewing that repair found the same class inside it. The alias detector read **lines**, and a `use` list
   long enough is wrapped by the formatter — the line carrying the alias then begins with the alias rather
   than with `use`, so the reader answered *no alias here* over the exact shape it exists to catch. It reads

@@ -1,0 +1,3 @@
+fn refuse(site: &'static str, what: &str) -> Refusal {
+    cannot_judge_at(site, what.to_string())
+}
