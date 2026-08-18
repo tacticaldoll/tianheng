@@ -169,7 +169,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean)
+    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean | no-verdict)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -224,6 +224,16 @@ printf '%s' "${TIANHENG_MERGE_COMMITS-}" > "$FAKE_COMMITS"
 if [[ -n ${FAKE_BODY_REWRITE-} ]]; then
     printf '%s' "$FAKE_BODY_REWRITE_TEXT" > "$FAKE_BODY_REWRITE"
 fi
+# The gate reports on the channel whether it agrees or refuses, so a controlled gate that only prints
+# `1 passed` is a gate that ran and judged nothing — which is what the wrapper's success path now refuses.
+# `no-verdict` is the mode that keeps that state constructible.
+#
+# Only where the channel was opened: this executable also stands in for the tool the wrapper `exec`s, and the
+# wrapper hands the channel to the gate alone — so an unguarded write would both fail under `set -u` on that
+# second invocation and recreate the file the wrapper removed one statement earlier.
+if [[ ${FAKE_GATE_VERDICT-} != none && -n ${TIANHENG_GATE_VERDICT-} ]]; then
+    printf '%s' 'Clean' > "$TIANHENG_GATE_VERDICT"
+fi
 printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'
 "##,
     );
@@ -246,6 +256,9 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
         .env("TMPDIR", &tmp);
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
+    }
+    if mode == "no-verdict" {
+        command.env("FAKE_GATE_VERDICT", "none");
     }
     if mode == "body-moved" {
         command
@@ -1011,5 +1024,41 @@ fn an_unchanged_title_still_reaches_the_merge() {
         run.gh_log.lines().any(|line| line.starts_with("pr merge")),
         "the merge must still be reached, got {:?}",
         run.gh_log
+    );
+}
+
+/// A gate that ran, passed, and judged nothing does not reach the merge.
+///
+/// **`require_one_pass` cannot see this state, and that is the point.** It asks *did the selected test pass*
+/// — which a harness returning without a verdict satisfies, and one did: a subject supplied as bytes the gate
+/// could not read printed "not judged" and returned, so `1 passed` was true and nothing had been judged. The
+/// gate now reports on the channel from its clean arm too, so *absent on success* means unjudged by
+/// construction, and this reads it rather than inferring it from an exit status.
+///
+/// The two guards catch different states and both stay: a renamed test means nothing ran, this means
+/// something ran and reached no verdict.
+#[test]
+fn a_gate_that_passes_without_judging_stops_before_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "no-verdict", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a run that judged nothing belongs to the class this wrapper could not judge, never to the one \
+         reserved for a gate that ran and refused: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.contains("pr merge"),
+        "and it must stop before the merge, which is the act that cannot be repaired: {}",
+        run.gh_log
+    );
+    assert!(
+        run.stderr.contains("without reaching a verdict"),
+        "the operator is told which of the two it met, got: {}",
+        run.stderr
     );
 }

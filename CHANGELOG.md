@@ -3851,6 +3851,36 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves; `kanhe` ships in no package.
 
+- **A gate that ran, passed, and judged nothing was indistinguishable from one that agreed.** Both wrappers
+  stood in front of an irreversible act and asked `require_one_pass` whether the gate had spoken — a question
+  it cannot answer, because it reads *did the selected test pass*, and a harness that returns without judging
+  satisfies that. One did: a subject supplied as bytes the gate could not read printed "not judged" and
+  returned, so `1 passed` was true and nothing had been judged. The channel was written only from the refusal
+  arm, so the success path had no positive evidence at all.
+
+  The verdict is now a **value**. `kanhe::verdict_channel::Verdict` has three arms — the act is not being made,
+  a verdict was reached and holds, a verdict was reached and refuses — and `deliver` is the single exit of both
+  gate harnesses. A clean verdict writes `Clean` to the channel, so *absent on success* means unjudged by
+  construction, and each wrapper reads that rather than inferring it from an exit status. The two guards catch
+  different states and both stay: `require_one_pass` sees a renamed test, where nothing ran; the new one sees a
+  test that ran, passed, and reached no verdict.
+
+  **The direction that used to guard this could only reach one exit.** It located the harness's
+  `Err(refusal) => {` arm by substring and asserted the report preceded the panic *within it*, so every other
+  exit owed nothing — which is how the unreadable subject left through a clean `return`. The pairing is now a
+  property of the type, held over the whole enum: *every verdict that fails the run reached the channel first*.
+  What is left to a text reading is the half a type cannot carry, that each gate delegates rather than deciding
+  for itself, and it also refuses a harness writing the channel directly.
+
+  Recorded because it constrained the repair: the `Verdict` failure matrix lives in `crates/kanhe/tests/`
+  rather than beside the other matrices in `src/tests/`, because a `Refusal` can only be built by a constructor
+  and the refusal register reads every construction under `crates/kanhe/src` as a site that must carry an
+  identity. A fixture's construction is indistinguishable from a branch nobody observes, and the register is
+  right to refuse it — so the matrix takes its refusals from judgements that already register their own sites.
+
+  No published API, outcome, report, exit class, or manifest moves; `kanhe` ships in no package and
+  `scripts/` reaches no tarball.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

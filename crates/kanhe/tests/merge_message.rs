@@ -14,6 +14,7 @@ use kanhe::refusal;
 
 use kanhe::merge_message_gate as gate;
 use kanhe::supplied::{self, Supplied};
+use kanhe::verdict_channel::Verdict;
 
 use gate::judge;
 use refusal::Kind;
@@ -49,8 +50,18 @@ fn refuse(subject: &str, body: &str, title: &str, kind: Kind, needle: &str) -> R
 }
 
 /// The gate, over the message a merge is about to record.
+///
+/// **One exit.** The body below returns a [`Verdict`] for every path it can take, and `deliver` is what turns
+/// that into a channel write and a failure. Before this the harness had three exits and each had to remember
+/// to report its class; one of them did not, and a subject supplied as bytes this gate cannot read left
+/// through it clean.
 #[test]
 fn the_squash_message_is_the_pull_request_it_records() {
+    kanhe::verdict_channel::deliver("merge message", the_supplied_message());
+}
+
+/// The verdict over the message `scripts/merge-pr.sh` supplied, as a value.
+fn the_supplied_message() -> Verdict {
     // **One reader for all four judged inputs.** `kanhe::supplied` answers *absent*, *the value*, and *set
     // to bytes this gate cannot read* as three states, and every input here goes through it.
     //
@@ -62,21 +73,18 @@ fn the_squash_message_is_the_pull_request_it_records() {
     // repair that closed the other three leave `TIANHENG_MERGE_SUBJECT` reading by the rule it replaced.
     let subject = match supplied::from_env("TIANHENG_MERGE_SUBJECT") {
         Supplied::Absent => {
-            eprintln!(
-                "merge message: not judged — there is no proposed message until a merge is being made. \
-                 `scripts/merge-pr.sh` supplies one and asks for this verdict at that moment."
+            return Verdict::NotAsked(
+                "there is no proposed message until a merge is being made. `scripts/merge-pr.sh` supplies \
+                 one and asks for this verdict at that moment"
+                    .to_string(),
             );
-            return;
         }
         Supplied::Unreadable => {
-            kanhe::verdict_channel::report(Kind::CannotJudge);
-            panic!(
-                "merge message ({:?}): TIANHENG_MERGE_SUBJECT was supplied as bytes this gate cannot read, so \
-                 the subject the merge would record was never judged. That is neither a subject that \
-                 disagrees nor an absent one — a merge IS being made, and this gate could not read what it \
-                 would record",
-                Kind::CannotJudge
-            );
+            return Verdict::Refused(refusal::cannot_judge(
+                "TIANHENG_MERGE_SUBJECT was supplied as bytes this gate cannot read, so the subject the \
+                 merge would record was never judged. That is neither a subject that disagrees nor an \
+                 absent one — a merge IS being made, and this gate could not read what it would record",
+            ));
         }
         Supplied::Value(subject) => subject,
     };
@@ -93,7 +101,6 @@ fn the_squash_message_is_the_pull_request_it_records() {
             (body, title, commits)
         }
         (body, title, commits) => {
-            kanhe::verdict_channel::report(Kind::CannotJudge);
             let mut unsupplied = Vec::new();
             let mut unreadable = Vec::new();
             for (name, state) in [
@@ -114,12 +121,11 @@ fn the_squash_message_is_the_pull_request_it_records() {
             if !unreadable.is_empty() {
                 said.push(format!("{} is not UTF-8", unreadable.join(", ")));
             }
-            panic!(
-                "merge message ({:?}): {}, so there is nothing to judge — a merge is being made, because the \
-                 subject is here, and this is an incomplete set rather than a message that disagrees",
-                Kind::CannotJudge,
+            return Verdict::Refused(refusal::cannot_judge(format!(
+                "{}, so there is nothing to judge — a merge is being made, because the subject is here, and \
+                 this is an incomplete set rather than a message that disagrees",
                 said.join("; ")
-            );
+            )));
         }
     };
     // The pull request's own commit subjects, newline-separated. Empty, the judgement refuses rather than
@@ -130,13 +136,8 @@ fn the_squash_message_is_the_pull_request_it_records() {
         .map(str::to_string)
         .collect();
     match judge(&subject, &body, &title, &supplied) {
-        Ok(report) => eprintln!("{report}"),
-        Err(refusal) => {
-            // The class travels on its own channel, written before this fails, so a wrapper reads a verdict
-            // rather than searching this message for one. See `kanhe::verdict_channel`.
-            kanhe::verdict_channel::report(refusal.kind);
-            panic!("merge message ({:?}): {}", refusal.kind, refusal.message)
-        }
+        Ok(report) => Verdict::Clean(report),
+        Err(refusal) => Verdict::Refused(refusal),
     }
 }
 
@@ -584,9 +585,9 @@ fn a_subject_supplied_as_bytes_this_gate_cannot_read_is_not_an_absent_subject() 
 
     let (control_ok, control_verdict) = gate_over(std::ffi::OsStr::new(OK_SUBJECT));
     assert!(
-        control_ok && control_verdict.is_empty(),
-        "the control must reach a clean verdict, or the two runs below differ for a reason other than the \
-         subject's bytes: exited zero = {control_ok}, channel = {control_verdict:?}"
+        control_ok && control_verdict == kanhe::verdict_channel::CLEAN,
+        "the control must reach a clean verdict and say so on the channel, or the two runs below differ for \
+         a reason other than the subject's bytes: exited zero = {control_ok}, channel = {control_verdict:?}"
     );
 
     let unreadable = std::ffi::OsStr::from_bytes(b"fix(kanhe): \xff\xfe not utf-8");
