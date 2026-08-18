@@ -1047,6 +1047,13 @@ them.
   while `release: next` is a malformed **version**, and both render the same message. A message-shaped
   assertion cannot tell those apart, and every one of them was found by running rather than by reading.
 
+  **Seven of the twenty-nine are closed**, each with a fixture and a mutation run: a workspace version that
+  is present and not a version, a crate manifest declaring no package name and one declaring a name this
+  reader cannot take, an example pin it cannot take, and all three vacuity guards — no internal path
+  dependency, no example manifest at all, and examples requiring no family crate. The three vacuity guards
+  were the ones worth having: with each replaced by `Ok(())`, its fixture passed, which is a release
+  reported clean over a check that judged nothing.
+
   Two holes in the register's own reader surfaced while it was doing this, both making its figure smaller
   than the truth. It counted `violation(` rather than the identifier, so `map_err(cannot_judge)` — a
   constructor used as a value — was a live site invisible to the register built to count sites; found only
