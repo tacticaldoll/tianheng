@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**44 of 90 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**45 of 91 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -32,6 +32,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound` — owner: engine
 - `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound` — owner: engine
 - `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound` — owner: engine
+- `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound` — owner: engine
 - `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
 - `repository-checks/a-figure-written-in-words-at-one-hundred-or-above-is-not-matched-a-stated-bound` — owner: engine
 - `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
@@ -435,7 +436,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (44)
+## under-reacts (45)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -652,6 +653,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the corpus is tracked Markdown, and widening it was measured rather than reasoned about: this repository's Rust sources carry census phrases as fixture input, where the figures are a parser's expected output and deliberately arbitrary, so admitting them would report a test asserting its own parser as a drifted document. The narrow corpus is what keeps every report actionable
 - **its defence must show**: does not react
 - **pinned by**: `a_census_outside_markdown_is_a_stated_bound`
+
+### `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound`
+
+> a registered refusal constructed in a shape the register's reader models as neither a parsed construction nor an unparseable one
+
+- **because**: the reader is text over Rust and is not exhaustive over the language. Its two sides fail in opposite directions -- a missed citation reports a site as unobserved and fails loud, a missed construction reports clean over a site nothing holds -- and only the second is unsafe. Closing it means the compiler enumerating the sites, which is a change to what a site is rather than one more shape taught to a scanner
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *the register's reader is text over a language it does not model exhaustively*
 
 ### `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
 

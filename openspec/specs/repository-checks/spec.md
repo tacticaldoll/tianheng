@@ -126,6 +126,17 @@ was a shell script and its refusal was an exit code, and it is why retiring the 
   is held by the compiler and reported as zero on every clean run; the reaction remains because a
   constructor re-introduced is the shape it exists to see
 
+#### Scenario: A construction shape the register's reader does not model — a stated bound
+
+- **WHEN** a registered refusal is constructed in a shape this register's reader recognises as neither a
+  parsed construction nor an unparseable one — a shape its model of Rust does not reach at all
+- **THEN** the site is produced and unreported. The reader is text over Rust and is not exhaustive over the
+  language, and the two sides of it fail in opposite directions: a missed **citation** reports a site as
+  unobserved and fails loud, while a missed **construction** reports clean over a site nothing holds. Only
+  the second is unsafe, and closing it means the compiler enumerating the sites rather than a reader —
+  which is a change to what a site *is*, not another shape added to a scanner
+- **UNPINNED** `BACKLOG.md` — *the register's reader is text over a language it does not model exhaustively*
+
 #### Scenario: A refusal constructed outside the register's corpus is not triaged — a stated bound
 
 - **WHEN** a refusal is constructed by a gate implemented under `crates/kanhe/tests`, where the judgement
