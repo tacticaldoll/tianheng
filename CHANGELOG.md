@@ -1161,6 +1161,13 @@ them.
   this gate would have demanded opposite things of the same source. Latent, since every such import in the
   tree is one line today.
 
+  The merge harness's own repair then collapsed two facts one layer beneath the one it separated.
+  `env::var` answers *not set* and *set but not UTF-8* with the same `Err`, and the wrapper passes the body
+  as `$(cat -- "$body_file")` — whatever bytes that file holds. A body that is not UTF-8 was reported as one
+  the wrapper never supplied, which sends an operator to look for a variable they did set. Both are
+  cannot-judge, so the class was right and the sentence was not. `var_os` separates them, measured against a
+  real non-UTF-8 value.
+
   The doc for that shared walker then spent one change attached to the wrong function. Inserting the
   visibility helper above it put the helper between `imports_and_rest` and its own explanation, so the
   explanation described a function two items away and `imports_and_rest` had none — two valid doc blocks
