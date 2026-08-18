@@ -1223,6 +1223,25 @@ consumer for an undemonstrated deduplication.
   moving such a judgement out of its test file, at which point it enters the corpus and is triaged like
   every other. *Authority:* engine. *Compatibility:* patch; the checks ship in no crate.
 
+- **WATCH: a promotion trigger is evaluated by whoever next reads the entry.** *Class:* WATCH. *Observed
+  pressure:* an entry in this document recorded a class, its instances, its risk and its own promotion
+  trigger — *a third instance, or any instance on a private item after this entry* — and both halves fired
+  on 2026-08-18 without anything acting on them. The entry sat unchanged through a full round of review and
+  was reached sideways, from an unrelated finding, rather than by anyone asking whether it had triggered.
+  *Observation source:* that miss, and then a sweep of this document run on purpose the same day: of the
+  triggers phrased as a count or an instance, two already carried a recorded **Not fired.**, one had fired
+  and was re-decided, and the rest were evaluated and had not. A third scanner of the scenario grammar is
+  still three — the two further matches are fixture text and prose, read to check. A third governance member
+  has not arrived. A second orphaned corpus has not: every tracked fixture corpus is referenced. A second
+  ecosystem pinning by digest has not, because the one this repository cannot refresh *is* the entry's
+  subject. *Risk:* an entry states the condition under which a decision must be re-taken, and the condition
+  arrives silently — which is the same shape as a requirement whose clause has no reaction, one document
+  over, and the only way this class of entry fails. Bounded by the entries themselves: each names its
+  trigger, so the sweep is possible and cheap; what is missing is anything that runs it. *Next trigger:* a
+  second trigger found to have fired unnoticed, at which point the answer is a reaction over this document
+  rather than a sweep run on purpose — the same escalation the orphaned-corpus entry declares for itself.
+  *Authority:* engine. *Compatibility:* patch; this document ships in no crate.
+
 - **WATCH: a tracked declaration nothing reads.** *Observed pressure:*
   `crates/kanhe/tests/fixtures/refusal_scan/` was tracked on 2026-08-10 and referenced by nothing until
   2026-08-18 — a case corpus naming exactly what a refusal-construction reader must handle, three of whose
