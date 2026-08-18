@@ -25,7 +25,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound` — owner: inherited from the verification environment
 - `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound` — owner: engine
-- `release-coherence/a-dependency-declared-under-target-is-not-observed-a-stated-bound` — owner: engine
+- `release-coherence/a-dependency-declared-under-a-quoted-cfg-target-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound` — owner: engine
 - `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound` — owner: engine
 - `release-coherence/a-name-reached-only-through-a-url-a-stated-bound` — owner: engine
@@ -596,13 +596,13 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
 
-### `release-coherence/a-dependency-declared-under-target-is-not-observed-a-stated-bound`
+### `release-coherence/a-dependency-declared-under-a-quoted-cfg-target-is-not-observed-a-stated-bound`
 
 > a family dependency declared under `[target.'cfg(…)'.dependencies]` or its `.NAME` form
 
-- **because**: the reader decides which tables hold dependencies from the heading, and a target heading carries a quoted cfg expression -- the grammar a line-oriented reader is likeliest to be wrong about, so admitting it on a guess would trade a silent miss for a wrong read
+- **because**: the reader decides which tables hold dependencies from the heading, and this heading's second key is a quoted cfg expression -- reading which configurations it selects is a grammar of its own rather than a context in front of a dependency table. The bare-triple sibling is read, because two bare TOML keys need nothing guessed
 - **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *a dependency declared under a target table is not observed*
+- **unpinned**, tracked by: `BACKLOG.md` — *a dependency declared under a quoted cfg target is not observed*
 
 ### `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound`
 

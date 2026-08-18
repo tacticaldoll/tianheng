@@ -189,13 +189,16 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   same repair that admits the detailed form closes the direction where a non-dependency was read as one
 - **PINNED-BY** `a_feature_named_after_a_family_crate_is_not_a_pin`
 
-#### Scenario: A dependency declared under `[target.…]` is not observed — a stated bound
+#### Scenario: A dependency declared under a quoted cfg target is not observed — a stated bound
 
 - **WHEN** a family dependency is declared under `[target.'cfg(…)'.dependencies]` or its `.NAME` form
-- **THEN** nothing reacts. That heading carries a quoted cfg expression, which is the grammar a
-  line-oriented reader is likeliest to be wrong about, and admitting it on a guess would trade a silent miss
-  for a wrong read. No manifest under `examples/` has ever carried one
-- **UNPINNED** `BACKLOG.md` — *a dependency declared under a target table is not observed*
+- **THEN** nothing reacts. That heading's second key is a **quoted** cfg expression, and reading which
+  configurations it selects is a grammar of its own rather than a context in front of a dependency table.
+  The sibling form is read: a bare target triple is two bare TOML keys, and a bare key carries no dot, so
+  the triple runs to the next dot with nothing guessed. This bound named both forms until that was
+  measured — the reason it gives is about the quoted grammar, and it had been used to skip the whole target
+  corpus
+- **UNPINNED** `BACKLOG.md` — *a dependency declared under a quoted cfg target is not observed*
 
 #### Scenario: A renamed family dependency is resolved by the package it names
 

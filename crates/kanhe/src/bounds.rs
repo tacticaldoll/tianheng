@@ -43,18 +43,19 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::unpinned(
             BoundId::new(
-                "release-coherence/a-dependency-declared-under-target-is-not-observed-a-stated-bound",
+                "release-coherence/a-dependency-declared-under-a-quoted-cfg-target-is-not-observed-a-stated-bound",
             ),
             "a family dependency declared under `[target.'cfg(…)'.dependencies]` or its `.NAME` form",
             Extent::Reached(Reached::UnderReacts {
-                because: "the reader decides which tables hold dependencies from the heading, and a target \
-                          heading carries a quoted cfg expression -- the grammar a line-oriented reader is \
-                          likeliest to be wrong about, so admitting it on a guess would trade a silent miss \
-                          for a wrong read"
+                because: "the reader decides which tables hold dependencies from the heading, and this \
+                          heading's second key is a quoted cfg expression -- reading which configurations \
+                          it selects is a grammar of its own rather than a context in front of a \
+                          dependency table. The bare-triple sibling is read, because two bare TOML keys \
+                          need nothing guessed"
                     .into(),
                 owner: Owner::Engine,
             }),
-            "`BACKLOG.md` — *a dependency declared under a target table is not observed*",
+            "`BACKLOG.md` — *a dependency declared under a quoted cfg target is not observed*",
         ),
         BoundDecl::unpinned(
             BoundId::new(

@@ -65,9 +65,10 @@ pub(crate) fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
 /// key spelled after a family crate was read as a version requirement, because nothing said which tables hold
 /// dependencies.
 ///
-/// `[target.'cfg(…)'.dependencies]` is **not** admitted, and that is a declared bound rather than an
-/// oversight: its heading grammar carries a quoted cfg expression, which is where a line-oriented reader is
-/// likeliest to be wrong again, and no example manifest has ever carried one.
+/// A context cargo writes in front of a dependency table is stripped before the heading is classified, so
+/// `[target.<triple>.dependencies]` and its `.NAME` form are read like any other. `[target.'cfg(…)'.…]` is
+/// **not**, and that is a declared bound rather than an oversight: its second key is a quoted cfg
+/// expression, and which configurations it selects is a grammar of its own. See [`past_the_context`].
 enum Table {
     /// `[dependencies]` and its dev/build siblings: each line names one dependency.
     Entries,
@@ -77,8 +78,33 @@ enum Table {
     Other,
 }
 
+/// `inner` past the context cargo may write in front of a dependency table, or `None` where the heading
+/// names a context this reader is declared not to read.
+///
+/// **Quoting is the discriminator, and TOML guarantees it rather than this reader guessing it.** A cfg
+/// expression has to be a *quoted* key — parentheses, spaces and `=` are not bare-key bytes — and a bare key
+/// cannot carry a dot, because a dot is what separates one key from the next. So a target segment that does
+/// not open with a quote runs to the next dot and is a triple, which is a context like any other; one that
+/// does open with a quote is the grammar the declared bound is about. The reason that bound gives —
+/// *the heading carries a quoted cfg expression, the grammar a line-oriented reader is likeliest to be wrong
+/// about* — was written from the hard case and then used to skip the whole corpus, and the easy case needed
+/// no guess at all.
+fn past_the_context(inner: &str) -> Option<&str> {
+    let Some(rest) = inner.strip_prefix("target.") else {
+        return Some(inner);
+    };
+    if rest.starts_with('\'') || rest.starts_with('"') {
+        return None;
+    }
+    // No further dot is no dependency table — `[target.some-triple]` declares nothing on its own.
+    rest.split_once('.').map(|(_triple, past)| past)
+}
+
 fn dependency_table(heading: &str) -> Table {
     let Some(inner) = heading.strip_prefix('[').and_then(|h| h.strip_suffix(']')) else {
+        return Table::Other;
+    };
+    let Some(inner) = past_the_context(inner) else {
         return Table::Other;
     };
     for kind in ["dependencies", "dev-dependencies", "build-dependencies"] {
