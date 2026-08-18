@@ -1006,6 +1006,48 @@ instance is what a repeated class refuses — the rule is stated once and each i
 - **THEN** nothing reacts, and the constant states that its set is not enumerable and what stays a reviewer's
   obligation — a silence that is written is not the same as a silence that was never considered
 
+### Requirement: A token with a constant owner SHALL be spelled once inside that owner's reach
+
+Where a constant exists so that one token has one owner, that value SHALL appear **exactly once** in the
+executed text of every module able to reach the constant, and that one appearance SHALL be the declaration
+itself. A second spelling is a second owner: the two can disagree about one token, and a change to the
+constant leaves the copy behind.
+
+The corpus SHALL be **the reach of the constant** — the owning crate and every workspace member depending on
+it — and that set SHALL be derived from the manifests rather than listed, or listed and held against them
+both ways under the requirement above. A member outside that reach spells the token itself because the
+dependency edge would close a cycle; that is a fact about the graph, so it sits outside the subject rather
+than inside it as an exemption, and the check SHALL say so where a reader meets the constant.
+
+Exemption SHALL be by **declaration**, never by file. Skipping the owner's whole file exempts more than the
+declaration it means to, and a second constant carrying the same value beside the first then reads as clean —
+which is the corpus-narrower-than-the-claim shape this check exists to refuse, in the check itself.
+
+An enumeration that cannot be read SHALL refuse rather than shrink the corpus: a module this check could not
+open is one it did not compare, which is not a module without a second spelling.
+
+#### Scenario: A second spelling inside the reach
+
+- **WHEN** a module able to reach the constant carries the constant's value as a literal
+- **THEN** the check refuses, naming every site and the constant that owns the token
+
+#### Scenario: A second declaration beside the first
+
+- **WHEN** the owner's own file carries a second constant with the same value
+- **THEN** the check refuses, because the exemption is the declaration and not the file
+
+#### Scenario: The declared corpus and the dependency graph disagree
+
+- **WHEN** a member is added to the graph and not to the corpus, or left in the corpus after it stopped
+  depending on the owner
+- **THEN** the comparison fails in whichever direction disagrees, naming both sets
+
+#### Scenario: A spelling outside the constant's reach
+
+- **WHEN** a crate that cannot depend on the owner spells the token itself
+- **THEN** it is outside the corpus rather than an exemption inside it, and the constant's own documentation
+  states which crates those are and why the edge cannot exist
+
 ### Requirement: A gate a wrapper asks for SHALL be observed to have run, and the name it is asked for by SHALL be pinned
 
 A wrapper that asks for a check by test name SHALL treat *the filter matched nothing* as a failure of the

@@ -3960,6 +3960,29 @@ no adopter runs. They are here rather than under the adopter headings above beca
   spellings` was seven when it was typed. Both are removed rather than repaired — nothing enumerates those
   sets, so a figure there is a census with no producer.
 
+- **The check that holds one token to one owner had a hand-written corpus and exempted a file where it meant
+  a declaration.** Both are the shape it exists to refuse, in itself. Its corpus was a typed list of
+  directories while its own header argued from the dependency graph, so a member added to the graph — or
+  `shengmo` gaining a `kanhe` edge — would have put new sites outside the corpus while the check reported
+  clean. And skipping the owner's whole **file** exempted more than the owner **declaration**: a second
+  constant carrying the same value beside the first read as clean.
+
+  The corpus is now derived from the manifests and the declared list is held against it **in both
+  directions**, which `repository-checks` already required of any constant a check judges by — a requirement
+  whose own text records that this class had come through three doors before. This was the fourth. Exemption
+  is now by declaration: the value must appear exactly once in the whole reachable corpus, and that once must
+  be the declaration.
+
+  The check also gains the requirement it shipped without. `repository-checks` now states the unique-spelling
+  property, the derived corpus, exemption-by-declaration, the dependency-based residue, and the refusal on an
+  unreadable enumeration — with a scenario each.
+
+  Both new assertions were run against the code without them: adding `shengmo` to the corpus of a constant
+  `shengmo` cannot reach fails with `left: {"kanhe", "shengmo"} right: {"kanhe"}`, and a second constant of
+  the same value in `region.rs` fails naming both lines, `2` against `1`.
+
+  No published API, outcome, report, exit class, or manifest moves.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
