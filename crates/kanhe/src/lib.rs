@@ -44,6 +44,7 @@ pub mod release_coherence_gate;
 pub mod restatement;
 pub mod selection;
 pub mod supplied;
+pub mod twins;
 pub mod verdict_channel;
 
 #[cfg(test)]
