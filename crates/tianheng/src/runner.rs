@@ -161,7 +161,7 @@ impl<'a> Run<'a> {
         if matches!(self.accumulated, Some(Outcome::ConstitutionError(_))) {
             return self;
         }
-        let next = observer.observe(self.manifest_path);
+        let next = stated(observer.observe(self.manifest_path));
         self.accumulated = Some(match self.accumulated.take() {
             Some(previous) => merge_outcomes(previous, next),
             None => next,
@@ -201,7 +201,9 @@ fn evaluate_constitution(
     // supersedes the accumulated verdict, and otherwise violations merge into one report.
     let (static_outcome, observed_coverage) =
         check_and_cover(constitution.static_boundaries(), manifest_path);
-    let mut outcome = static_outcome;
+    // Every outcome entering this path is stated, exactly as `Run::observe` states each one entering the
+    // protocol's. Two ways in, one rule, applied where an outcome arrives.
+    let mut outcome = stated(static_outcome);
     if !matches!(outcome, Outcome::ConstitutionError(_)) {
         // The built-in path obtains this dimension's outcome BY INVOKING its observer, which is what makes the
         // two composition paths' equality construction-held here rather than measured. Note what it is not:
@@ -212,8 +214,10 @@ fn evaluate_constitution(
         // on that. The cost is one clone of the declared bundle per run, paid deliberately.
         outcome = merge_outcomes(
             outcome,
-            SemanticObserver::new(constitution.semantic_boundaries().clone())
-                .observe(manifest_path),
+            stated(
+                SemanticObserver::new(constitution.semantic_boundaries().clone())
+                    .observe(manifest_path),
+            ),
         );
     }
 
@@ -232,7 +236,10 @@ fn evaluate_constitution(
         // that the fixture's runtime boundary actually reacted.
         outcome = merge_outcomes(
             outcome,
-            RuntimeObserver::new(constitution.runtime_boundaries().to_vec()).observe(manifest_path),
+            stated(
+                RuntimeObserver::new(constitution.runtime_boundaries().to_vec())
+                    .observe(manifest_path),
+            ),
         );
     }
 
@@ -1238,13 +1245,12 @@ fn merge_outcomes(first: Outcome, second: Outcome) -> Outcome {
         // This is also what the sentence that stood here got wrong. *The sum of two constructible subjects
         // is constructible* is true of the integers and not of `usize`, and the `None` arm below was called
         // unreachable on the strength of it.
-        // **Every side must state a subject before any of them is summed.** A participant reaching this arm
-        // is either `Clean(subject)` or a violation-free `Violations` — the second exits 0, names no subject,
-        // and used to be answered with `nothing_declared()`. That substituted a zero for a figure the engine
-        // did not have, so a participant that observed a whole workspace contributed *looked for nothing* to
-        // the composed claim, silently. The declared bound covers a participant reporting a subject LARGER
-        // than what it observed; this is the engine forgetting rather than the declarer lying, which no bound
-        // covers and no `Subject` invariant catches, since the sum stays representable.
+        // **A CONSEQUENCE of `stated`, not a second site.** Every outcome reaching this fold has passed
+        // `stated` where it entered its run — `Run::observe` for the protocol's path, `evaluate_constitution`
+        // for the built-in one — so no input can take the refusal below. It stays because this function takes
+        // two `Outcome` values and nothing in its signature says they were stated: what makes the claim true
+        // is the check, not a caller's discipline. Guarding only here was the first repair, and it left the
+        // one-observer run untouched, since `Run::observe` stores the first outcome verbatim.
         let (Some(first_subject), Some(second_subject)) = (subject_of(&first), subject_of(&second))
         else {
             return Outcome::ConstitutionError(
@@ -1279,6 +1285,29 @@ fn merge_outcomes(first: Outcome, second: Outcome) -> Outcome {
         }
     } else {
         Outcome::Violations(Report::new(violations))
+    }
+}
+
+/// One outcome, as it enters a run — or the refusal that it states nothing a run can carry.
+///
+/// **Checked where an outcome ARRIVES, not where two are combined.** The first repair guarded
+/// [`merge_outcomes`], which a run composing one observer never reaches: [`Run::observe`] stores the first
+/// outcome verbatim, so `Run::over(m).observe(o).verdict()` still answered `Violations(Report::empty())` —
+/// exit code `0`, no subject, no refusal. Every outcome passes here exactly once, on both paths into the
+/// fold, which is what makes the guard inside it a consequence rather than a second site.
+///
+/// A violation-free `Outcome::Violations` is the one shape this refuses. `Report::empty()` is public and
+/// `exit_code()` answers `0` for it, so it is constructible by any participant — and `0.5.0` is the first
+/// release in which an outside `Observer` can be one.
+fn stated(outcome: Outcome) -> Outcome {
+    match outcome {
+        Outcome::Violations(report) if report.violations.is_empty() => Outcome::ConstitutionError(
+            "a participant reported violations while carrying none, so the subject it reached cannot be \
+             stated and this run has no honest figure for what it covered. A violation-free outcome is \
+             `Outcome::Clean(Subject)`"
+                .to_string(),
+        ),
+        stated => stated,
     }
 }
 

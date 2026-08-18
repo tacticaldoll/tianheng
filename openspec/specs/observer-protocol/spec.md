@@ -104,11 +104,19 @@ not act on differently. The message text SHALL name which of them occurred, sinc
 #### Scenario: A participant reports no violations and states no subject
 
 - **WHEN** an observer returns a violation-free `Outcome::Violations` — an outcome whose exit code is `0`
-  and which names no subject — and it is folded with a participant that did observe
-- **THEN** the fold refuses as a constitution error naming what the participant did, rather than
+  and which names no subject — **whether it is the run's only participant or one of several**
+- **THEN** the run refuses as a constitution error naming what the participant did, rather than
   substituting an empty subject. Answering `nothing_declared()` would have the engine assert, on the
   participant's behalf, that it looked for nothing, so a participant that observed a whole workspace
-  contributes zero to the composed figure and the run states a clean verdict under-reporting its own reach
+  contributes zero to the composed figure and the run states a clean verdict under-reporting its own reach.
+
+  The check SHALL sit where an outcome **enters** a run, which every outcome passes exactly once on both
+  paths into the fold. A first repair guarded the fold alone, and a run composing one observer never reaches
+  it — the first outcome is stored verbatim — so the scenario's own WHEN, written as *folded with a
+  participant that did observe*, described the half that was covered. The fold's guard is then a
+  **consequence** rather than a second site: it stays because that function takes two outcomes and nothing
+  in its signature says they were checked, but no input can reach its refusal
+- **PINNED-BY** `a_lone_participant_carrying_no_subject_cannot_reach_a_verdict`
 - **PINNED-BY** `a_participant_carrying_no_subject_cannot_be_folded_into_a_clean_verdict`
 
 ### Requirement: An empty semantic observer SHALL not read workspace metadata
