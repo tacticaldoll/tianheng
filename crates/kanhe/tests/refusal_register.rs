@@ -109,7 +109,24 @@ fn executed_rust(text: &str) -> String {
         .join("\n")
 }
 
-/// Whether `text` imports a refusal constructor under another name.
+/// How many registered constructions in `text` this reader could not parse.
+///
+/// **Counted against the calls, because parsing alone cannot report what it did not see.** The parser reads
+/// a direct call whose first argument is an ordinary quoted literal, and three shapes are not that: a
+/// constructor taken by name and called through the binding, a wrapper whose site arrives as a parameter,
+/// and a raw string literal. Each was invisible to *both* halves of this register — no parsed site, and not
+/// counted as unregistered either, since the unregistered counter reads the site-less constructors — so a
+/// real refusal site was neither held, declared, nor reported missing. Comparing the two readings is what
+/// turns *did not see it* into *cannot answer for this module*.
+fn unparsed_constructions(text: &str) -> usize {
+    let executed = executed_rust(text);
+    let called = calls(&executed, "violation_at") + calls(&executed, "cannot_judge_at");
+    let parsed = first_literal_args(&executed, "violation_at(").len()
+        + first_literal_args(&executed, "cannot_judge_at(").len();
+    called.saturating_sub(parsed)
+}
+
+/// Whether `text` imports a refusal constructor under another name./// Whether `text` imports a refusal constructor under another name.
 ///
 /// A reader that matches names cannot follow an alias: `use crate::refusal::cannot_judge as cj;` makes every
 /// later `cj(…)` invisible, and invisible reads as *this module constructs no refusal*. The corpus written
@@ -244,6 +261,12 @@ fn read(root: &Path) -> Register {
         // call through `use … as cj` is invisible to a reader that matches names, so a module that aliases a
         // constructor would be counted as constructing none. Refused rather than counted, in the class this
         // repository reserves for a source it could not read.
+        assert_eq!(
+            unparsed_constructions(&text),
+            0,
+            "{name} constructs a registered refusal in a shape this register cannot read — a site taken by \
+             name, arriving as a parameter, or written as a raw literal is invisible to both halves of it"
+        );
         assert!(
             !aliases_a_constructor(&text),
             "{name} imports a refusal constructor under another name, so every construction through that \
@@ -631,6 +654,24 @@ fn the_reader_answers_the_corpus_written_for_it() {
     // **The one case that is not a count.** An aliased import makes every later call invisible to a reader
     // that matches names, so the honest answer is that this file cannot be counted at all — which is a
     // different fact from counting zero, and the same distinction every gate in this repository draws.
+    // The shapes a parser cannot read, answered as *cannot answer* rather than as zero.
+    for case in [
+        "a_siteful_constructor_taken_by_name",
+        "a_siteful_call_that_wraps",
+        "a_raw_literal_site",
+    ] {
+        assert_eq!(
+            unparsed_constructions(&read(case)),
+            1,
+            "{case}: a registered construction this reader cannot parse went unreported"
+        );
+    }
+    assert_eq!(
+        unparsed_constructions(&read("two_on_one_line")),
+        0,
+        "the control: constructions this reader does parse must not be reported as unread"
+    );
+
     for case in ["an_aliased_import", "a_wrapped_aliased_import"] {
         assert!(
             aliases_a_constructor(&read(case)),
@@ -659,9 +700,15 @@ fn the_reader_answers_the_corpus_written_for_it() {
         .iter()
         .map(|(case, _)| (*case).to_string())
         .chain(
-            ["an_aliased_import", "a_wrapped_aliased_import"]
-                .into_iter()
-                .map(str::to_string),
+            [
+                "an_aliased_import",
+                "a_wrapped_aliased_import",
+                "a_siteful_constructor_taken_by_name",
+                "a_siteful_call_that_wraps",
+                "a_raw_literal_site",
+            ]
+            .into_iter()
+            .map(str::to_string),
         )
         .collect();
     assert_eq!(
