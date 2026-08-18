@@ -950,6 +950,25 @@ them.
   `version` as one this reader *could not read*, over the legal path-only form, which is the distinction its
   sibling had just been repaired to make.
 
+  **And the field beside it stayed a sentinel through that same repair.** Which crate a dependency names was
+  a `String` with the empty string standing for *a `package` value this reader cannot read* **and** for
+  *several `package` keys* — one field typed, its sibling in the same struct left to collapse exactly the
+  distinction the typing was for, and not injective either, since a literal `package = ""` is a third fact
+  that read as the same state. It is `Named`, `Unreadable` or `Several` now, resolved in one function
+  instead of the two byte-identical arms the inline and detailed forms each carried.
+
+  **Writing a direction over that state found a wider one underneath it.** `quoted_value` took the first
+  pair of double quotes anywhere in the text it was given, so a value that is not a string borrowed the next
+  key's: `alias = { package = xuanji, version = "0.2.0" }` read its package as `0.2.0`, matched no family
+  crate, and was skipped in silence. `Unreadable` is the state that type exists for and it was reachable
+  only when nothing else on the line was quoted. The quote has to open the value now — which needed one
+  contract rather than two, so the two `Cargo.lock` readers that passed a whole line where every other
+  caller passed the value split on the `=` like everyone else.
+
+  Four refusals this window shipped with no direction over them — an absent pin, several pins, and both
+  package-identity failures — now have one each. The two that already worked were shown to fail by
+  neutralising their arm and running the direction against the mutated reader.
+
   A context cargo writes in front of a dependency table is stripped before the heading is classified, so
   `[target.<triple>.dependencies]` and its `.NAME` form are read like any other. That reading is narrower
   than the bound this window first declared, which named the whole target corpus: the reason it gave — *a

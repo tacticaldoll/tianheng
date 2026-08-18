@@ -156,10 +156,49 @@ impl Pin {
     }
 }
 
+/// Which crate a dependency names, or why this reader cannot say.
+///
+/// **Three states and not four, because absence is not unnameability here.** A dependency declaring no
+/// `package` key names the crate by its own key — that is cargo's rule, not a gap — so absence resolves to a
+/// name rather than to a missing one. What is left are the two ways an identity is present and unreadable.
+///
+/// It was a `String` with the empty string standing for both of those, in the same struct whose `pin` field
+/// had just been given `Pin::{Absent, Unreadable, Several}` for exactly this distinction: one field was typed
+/// and its sibling was left as a sentinel, so *several `package` keys* and *a `package` value this reader
+/// cannot read* reached the operator as one sentence. The sentinel was not injective either — a literal
+/// `package = ""` is a third fact that read as the same state.
+#[derive(Debug, PartialEq, Eq)]
+enum Package {
+    /// The crate this dependency names: its `package` value, or its own key where it declares none.
+    Named(String),
+    /// A `package` value this reader cannot read — a value not in double quotes.
+    Unreadable,
+    /// More than one `package` key in one dependency. Malformed, and not this reader's to choose from.
+    Several(usize),
+}
+
+impl Package {
+    /// The identity `values` names for a dependency written under `key`.
+    ///
+    /// One function rather than the two arms that stood in `declared_dependencies` — the inline form and the
+    /// detailed table each resolved this themselves, byte-identical, which is the shape that lets two
+    /// readers of one rule disagree.
+    fn of(mut values: Vec<Quoted>, key: &str) -> Self {
+        match values.len() {
+            0 => Package::Named(key.to_string()),
+            1 => match values.pop() {
+                Some(Quoted::Value(name)) => Package::Named(name),
+                _ => Package::Unreadable,
+            },
+            several => Package::Several(several),
+        }
+    }
+}
+
 /// One dependency a manifest declares: the key it is written under, the package it names, and its pin.
 struct Dependency {
     key: String,
-    package: String,
+    package: Package,
     pin: Pin,
 }
 
@@ -178,16 +217,7 @@ fn declared_dependencies(text: &str) -> Vec<Dependency> {
     let flush = |pending: &mut Option<(String, Vec<Quoted>, Vec<Quoted>, String)>,
                  found: &mut Vec<Dependency>| {
         if let Some((key, packages, versions, written)) = pending.take() {
-            let package = match packages.len() {
-                1 => match &packages[0] {
-                    Quoted::Value(name) => name.clone(),
-                    Quoted::Unreadable => String::new(),
-                },
-                // No `package` key names the crate by its own heading; several is malformed and names no
-                // one crate, so it enters as unnameable rather than as the heading's own name.
-                0 => key.clone(),
-                _ => String::new(),
-            };
+            let package = Package::of(packages, &key);
             found.push(Dependency {
                 key,
                 package,
@@ -211,15 +241,7 @@ fn declared_dependencies(text: &str) -> Vec<Dependency> {
                     continue;
                 };
                 let key = key.trim();
-                let packages = inline_assignments(rest, "package");
-                let package = match packages.len() {
-                    1 => match &packages[0] {
-                        Quoted::Value(name) => name.clone(),
-                        Quoted::Unreadable => String::new(),
-                    },
-                    0 => key.to_string(),
-                    _ => String::new(),
-                };
+                let package = Package::of(inline_assignments(rest, "package"), key);
                 // A bare `xuanji = "0.5"` carries its requirement as the value itself; an inline table
                 // carries it under a `version` key.
                 let versions = if rest.trim_start().starts_with('{') {
@@ -909,12 +931,21 @@ fn require_example_pins(
             // stayed non-zero on the strength of the other examples. The sibling `require_internal_pins`
             // never had this hole because it keys on the PATH, which a rename cannot move; examples depend
             // by registry version and have no path, so the identity has to be read.
-            if package.is_empty() {
-                return Err(cannot_judge(format!(
-                    "example {name} declares `{key}` with a package identity this check cannot read, so \
-                     which crate it requires cannot be decided"
-                )));
-            }
+            let package = match package {
+                Package::Named(package) => package,
+                Package::Unreadable => {
+                    return Err(cannot_judge(format!(
+                        "example {name} declares `{key}` with a `package` value this check cannot read, so \
+                         which crate it requires cannot be decided"
+                    )));
+                }
+                Package::Several(several) => {
+                    return Err(cannot_judge(format!(
+                        "example {name} declares {several} `package` keys for `{key}`, so which crate it \
+                         requires is not this reader's to choose"
+                    )));
+                }
+            };
             if !family.contains(&package) {
                 continue;
             }
@@ -1028,7 +1059,7 @@ fn require_lock_versions(
             // An unreadable name defaulted to the empty string, which the `!name.is_empty()` guard below
             // then read as *no package here* — so that entry's version never entered the map and the
             // workspace lookup reported it missing, or found a stale one under the previous name.
-            match quoted_value(trimmed) {
+            match quoted_value(trimmed.split_once('=').map(|(_, v)| v).unwrap_or_default()) {
                 Quoted::Value(value) => name = value,
                 Quoted::Unreadable => {
                     return Err(cannot_judge(format!(
@@ -1039,7 +1070,7 @@ fn require_lock_versions(
                 }
             }
         } else if trimmed.starts_with("version") && trimmed.contains('=') && !name.is_empty() {
-            match quoted_value(trimmed) {
+            match quoted_value(trimmed.split_once('=').map(|(_, v)| v).unwrap_or_default()) {
                 Quoted::Value(value) => {
                     version_of = Some(value);
                 }

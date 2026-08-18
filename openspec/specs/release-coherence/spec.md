@@ -209,6 +209,35 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   has one, and its key only otherwise
 - **PINNED-BY** `a_renamed_family_dependency_is_resolved_by_its_package_field`
 
+#### Scenario: A dependency identity the reader cannot read is not one it can
+
+- **WHEN** an example declares a dependency whose `package` value is not a double-quoted string, or declares
+  more than one `package` key for one dependency
+- **THEN** the check refuses as a cannot-judge saying which of the two it met. Which crate a dependency
+  names is `Named`, `Unreadable` or `Several` — the distinction its sibling `version` field already carried,
+  where an identity held as a string with the empty string for both failures reported *several* as
+  *unreadable*, and read a literal `package = ""` as both
+- **PINNED-BY** `an_example_whose_package_value_is_unreadable_is_not_judged`
+- **PINNED-BY** `an_example_declaring_several_package_keys_is_not_judged`
+
+#### Scenario: A value that is not a string does not borrow the next one
+
+- **WHEN** a dependency's `package` or `version` value is not a double-quoted string while a later key on
+  the same line is — `alias = { package = xuanji, version = "0.2.0" }`
+- **THEN** the value reads as unreadable. The quote SHALL open the value; taking the first pair of quotes
+  anywhere in the text answered one key with the next key's string, which made the unreadable state
+  reachable only when nothing else on the line was quoted
+- **PINNED-BY** `a_value_that_is_not_a_string_does_not_borrow_the_next_one`
+
+#### Scenario: An example requires a family crate with no version at all
+
+- **WHEN** an example declares a family crate with no `version` key — the legal path-only or git-only form —
+  or with more than one
+- **THEN** the check refuses: a violation for the absent pin, because nothing holds it to the workspace
+  version, and a cannot-judge for several, because which one is required is not this reader's to choose
+- **PINNED-BY** `an_example_requiring_a_family_crate_with_no_version_is_refused`
+- **PINNED-BY** `an_example_declaring_several_version_keys_is_not_judged`
+
 #### Scenario: A dated heading whose suffix is not a date
 
 - **WHEN** a release-ready repository carries `## [X.Y.Z] - ` followed by ten characters that are not an

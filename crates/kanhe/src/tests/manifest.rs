@@ -1,4 +1,6 @@
-use crate::manifest::{WorkspaceVersion, is_semver, semver, workspace_version};
+use crate::manifest::{
+    Quoted, WorkspaceVersion, is_semver, quoted_value, semver, workspace_version,
+};
 
 /// The two gates asked the same question about a version and answered differently.
 ///
@@ -80,5 +82,27 @@ fn a_comment_never_becomes_the_version_and_an_unreadable_value_is_not_an_absent_
         workspace_version("[workspace.package]\n# version = \"9.9.9\"\n"),
         WorkspaceVersion::Absent,
         "a commented-out key declares nothing"
+    );
+}
+
+/// An unquoted value does not borrow the quoted one that follows it.
+///
+/// The reader took the first pair of double quotes anywhere in the text it was given, so a value that is not
+/// a string at all was answered with the *next* key's string. `Unreadable` is the state this type exists for,
+/// and it was reachable only when nothing else on the line was quoted.
+///
+/// Both halves, because either alone reads as the other's defect: the quote must open the value, and a value
+/// it does open is still read to its closing quote with whatever follows discarded.
+#[test]
+fn a_value_that_is_not_a_string_does_not_borrow_the_next_one() {
+    assert_eq!(
+        quoted_value(" xuanji, version = \"0.2.0\" }"),
+        Quoted::Unreadable,
+        "an unquoted value read the following key's string as its own"
+    );
+    assert_eq!(
+        quoted_value(" \"0.2.0\", package = \"xuanji\" }"),
+        Quoted::Value("0.2.0".to_string()),
+        "a value that does open with a quote is still read to its closing quote"
     );
 }
