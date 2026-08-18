@@ -1102,6 +1102,14 @@ them.
   merely shares the name `violation` while building something else entirely. A module that constructs
   nothing was being counted as constructing one.
 
+  **The same class was found in a second gate by sweeping the corpus no review had swept.** Five rounds of
+  findings all came from reading the code the previous repair produced, while the integration tests — where
+  several of these gates keep both their judgement and their cases — had never been read as a corpus. The
+  first sweep of it found `workspace_isolation` refusing over a manifest it could not read: mapped through a
+  default the file declares no `[workspace]` table, so an unread file is reported as a **violation**,
+  measured. Its vacuity guard, which refuses a repository carrying none of the manifests it judges, had no
+  case either. Both have one now.
+
   **An input the wrapper never supplied was judged as a message that disagrees.** The merge gate's harness
   respected the subject's absence — no subject, no merge being made — and read the other three judged inputs
   with a default, so absence arrived as emptiness. The gate answers emptiness on its own terms: an empty
