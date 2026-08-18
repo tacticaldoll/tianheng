@@ -2210,3 +2210,206 @@ fn a_stale_internal_pin_in_a_detailed_table_is_a_violation() {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A workspace version that is present and not a version is not an absent one.
+///
+/// Negative run: this branch had no direction. With it replaced by `Ok`, the fixture reached the changelog
+/// checks and refused there instead, naming a surface the operator had not touched.
+#[test]
+fn a_workspace_version_that_is_not_a_version_cannot_be_judged() {
+    let root = scratch("version-malformed");
+    let repo = root.join("repo");
+    std::fs::create_dir_all(&repo).expect("create");
+    initialised(&repo);
+    std::fs::write(
+        repo.join("Cargo.toml"),
+        "[workspace.package]\nversion = \"banana\"\n",
+    )
+    .expect("write");
+    std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
+    refusal::expect(
+        "release-coherence#workspace-version-malformed",
+        &refuse(&repo, Kind::CannotJudge, "missing or malformed: banana"),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A crate manifest declaring no package name stops the example-pin check rather than shrinking its family.
+///
+/// A family member that drops out of the family is one every example may then pin at any version at all,
+/// which is the partial case an aggregate vacuity guard is exactly unable to see.
+///
+/// Negative run: with the arm replaced by a `continue`, the fixture passed — the remaining members satisfied
+/// the counters and the nameless one went unchecked.
+#[test]
+fn a_crate_manifest_declaring_no_package_name_stops_the_example_check() {
+    let root = scratch("crate-nameless");
+    let fixture = build_fixture(&root, "crate-nameless", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("crates/xuanji/Cargo.toml"),
+        "[package]\nversion.workspace = true\nedition = \"2024\"\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: leave a member unnamed");
+    refusal::expect(
+        "release-coherence#crate-package-name-absent",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "declares no `[package]` name",
+        ),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// And a package name this reader cannot take is not an absent one.
+///
+/// Single-quoted TOML strings are legal and this reader does not read them — a limit of the reader rather
+/// than a fact about the manifest, which is the distinction `Quoted` exists to keep.
+///
+/// Negative run: with the arm replaced by a `continue`, the fixture passed.
+#[test]
+fn a_crate_package_name_this_reader_cannot_take_stops_the_example_check() {
+    let root = scratch("crate-unreadable-name");
+    let fixture = build_fixture(&root, "crate-unreadable-name", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("crates/xuanji/Cargo.toml"),
+        "[package]\nname = 'xuanji'\nversion.workspace = true\nedition = \"2024\"\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: name a member unreadably");
+    refusal::expect(
+        "release-coherence#crate-package-name-unreadable",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "declares a `[package]` name this check cannot read",
+        ),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// An example pin this reader cannot take is not one that satisfies the workspace version.
+///
+/// Negative run: with the `Declared::Unreadable` arm replaced by a `continue`, the entry was skipped and the
+/// remaining example requirement satisfied the vacuity guard, so the fixture passed.
+#[test]
+fn an_example_pin_this_reader_cannot_take_is_not_one_that_satisfies() {
+    let root = scratch("example-pin-unreadable");
+    let fixture = build_fixture(&root, "example-pin-unreadable", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        format!("{text}tianheng = {{ version = '0.2.0' }}\n"),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: pin a family crate unreadably");
+    refusal::expect(
+        "release-coherence#example-pin-unreadable",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "with a version this check cannot read",
+        ),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A root manifest declaring no internal path dependency is a check reporting over nothing.
+///
+/// The vacuity guard: the declaration form is cargo's to change, and a reader that found none would
+/// otherwise pass every release while judging no pin at all.
+///
+/// Negative run: with the guard replaced by `Ok(())`, this fixture passed — a release with no internal pin
+/// checked at all, reported clean.
+#[test]
+fn a_root_manifest_with_no_internal_path_dependency_reports_over_nothing() {
+    let root = scratch("no-internal-pin");
+    let fixture = build_fixture(&root, "no-internal-pin", "0.2.0");
+    let manifest = fixture.repo.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        text.replace(
+            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }\n",
+            "serde_json = \"1\"\n",
+        ),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: declare no internal path dependency");
+    refusal::expect(
+        "release-coherence#no-internal-path-dependency-found",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "found no internal path dependency",
+        ),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// An `examples/` that holds no manifest at all is the layout having changed, not every example passing.
+///
+/// Its sibling direction covers one example directory holding no manifest while others do; this covers the
+/// aggregate reaching zero, which is what the counter exists for.
+///
+/// Negative run: with the guard replaced by `Ok(())`, this fixture passed.
+#[test]
+fn an_examples_directory_holding_no_manifest_at_all_reports_over_nothing() {
+    let root = scratch("no-example-manifests");
+    let fixture = build_fixture(&root, "no-example-manifests", "0.2.0");
+    std::fs::remove_file(fixture.repo.join("examples/adopter/Cargo.toml")).expect("remove");
+    std::fs::write(
+        fixture.repo.join("examples/adopter/README.md"),
+        "no manifest\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: leave examples/ carrying no manifest");
+    refusal::expect(
+        "release-coherence#no-example-manifests-found",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "found no example manifests under examples/",
+        ),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// Examples that require no family crate are examples this check has nothing to say about.
+///
+/// The second vacuity guard, and the one the first cannot cover: manifests were read and none of them
+/// declared a family dependency, so every example pin would be reported over an empty set.
+///
+/// Negative run: with the guard replaced by `Ok(())`, this fixture passed.
+#[test]
+fn examples_requiring_no_family_crate_report_over_nothing() {
+    let root = scratch("no-family-requirement");
+    let fixture = build_fixture(&root, "no-family-requirement", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("examples/adopter/Cargo.toml"),
+        "[package]\nname = \"adopter\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
+         [dependencies]\nserde_json = \"1\"\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "chore: require no family crate from any example",
+    );
+    refusal::expect(
+        "release-coherence#no-family-requirement-in-examples",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "found no family dependency requirement",
+        ),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

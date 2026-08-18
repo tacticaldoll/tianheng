@@ -812,9 +812,10 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
         }
     };
     let Some(version_parts) = semver(&version) else {
-        return Err(cannot_judge(format!(
-            "workspace version is missing or malformed: {version}"
-        )));
+        return Err(cannot_judge_at(
+            "release-coherence#workspace-version-malformed",
+            format!("workspace version is missing or malformed: {version}"),
+        ));
     };
     let changelog = read(repo, "CHANGELOG.md")?;
 
@@ -974,7 +975,8 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
         }
     }
     if pins == 0 {
-        return Err(cannot_judge(
+        return Err(cannot_judge_at(
+            "release-coherence#no-internal-path-dependency-found",
             "found no internal path dependency in Cargo.toml — the declaration form changed, so pin \
              coherence would be reported over nothing",
         ));
@@ -997,15 +999,21 @@ fn require_example_pins(
         match package_name(text) {
             PackageName::Named(name) => family.push(name),
             PackageName::Absent => {
-                return Err(cannot_judge(format!(
-                    "{path} declares no `[package]` name, so whether an example pins it cannot be decided"
-                )));
+                return Err(cannot_judge_at(
+                    "release-coherence#crate-package-name-absent",
+                    format!(
+                        "{path} declares no `[package]` name, so whether an example pins it cannot be decided"
+                    ),
+                ));
             }
             PackageName::Unreadable(what) => {
-                return Err(cannot_judge(format!(
-                    "{path} declares a `[package]` name this check cannot read ({what}), so whether an \
+                return Err(cannot_judge_at(
+                    "release-coherence#crate-package-name-unreadable",
+                    format!(
+                        "{path} declares a `[package]` name this check cannot read ({what}), so whether an \
                      example pins it cannot be decided"
-                )));
+                    ),
+                ));
             }
         }
     }
@@ -1094,10 +1102,13 @@ fn require_example_pins(
                     ));
                 }
                 Declared::Unreadable(written) => {
-                    return Err(cannot_judge(format!(
-                        "example {name} requires {package} with a version this check cannot read \
+                    return Err(cannot_judge_at(
+                        "release-coherence#example-pin-unreadable",
+                        format!(
+                            "example {name} requires {package} with a version this check cannot read \
                          ({written}), so whether it satisfies the workspace version cannot be decided"
-                    )));
+                        ),
+                    ));
                 }
                 Declared::Several(several) => {
                     return Err(cannot_judge_at(
@@ -1129,15 +1140,19 @@ fn require_example_pins(
         }
     }
     if example_manifests == 0 {
-        return Err(cannot_judge(
+        return Err(cannot_judge_at(
+            "release-coherence#no-example-manifests-found",
             "found no example manifests under examples/ — the layout changed or is absent",
         ));
     }
     if requirements == 0 {
-        return Err(cannot_judge(format!(
-            "read {example_manifests} example manifest(s) and found no family dependency requirement in any \
+        return Err(cannot_judge_at(
+            "release-coherence#no-family-requirement-in-examples",
+            format!(
+                "read {example_manifests} example manifest(s) and found no family dependency requirement in any \
              of them — the declaration form changed, so example pins would be reported over nothing"
-        )));
+            ),
+        ));
     }
     Ok(())
 }

@@ -105,10 +105,13 @@ pub fn cannot_judge_at(site: &'static str, message: impl Into<String>) -> Refusa
 ///
 /// When the refusal came from a different site, or from one not yet registered.
 pub fn expect(site: &'static str, refusal: &Refusal) {
-    assert_eq!(
-        refusal.site,
-        Site::Named(site),
-        "this direction cites {site:?}, and the refusal it observed came from elsewhere: {}",
+    let met = match refusal.site {
+        Site::Named(met) if met == site => return,
+        Site::Named(met) => format!("came from {met:?}"),
+        Site::Unregistered => "came from a site that carries no identity yet".to_string(),
+    };
+    panic!(
+        "this direction cites {site:?}, and the refusal it observed {met}: {}",
         refusal.message
     );
 }
