@@ -144,6 +144,14 @@ was a shell script and its refusal was an exit code, and it is why retiring the 
   is no third state: a site is held or declared. The declaration is the escape hatch and is deliberately
   expensive, because an escape hatch nothing forces you through is the prose that drifted
 
+#### Scenario: The constructors are the only way to build a refusal
+
+- **WHEN** a refusal is built as a struct literal rather than through a constructor
+- **THEN** it does not compile. The register counts calls, so a literal would produce a registered site that
+  is unheld by any direction, undeclared, and unreported, while the projection said no other construction
+  exists. The field the register is about is private, which makes the compiler refuse the shape rather than
+  a reader detect it
+
 #### Scenario: A registered construction this reader cannot parse is not counted as absent
 
 - **WHEN** a registered refusal is constructed in a shape this register's reader does not parse — the

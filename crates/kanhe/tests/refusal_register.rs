@@ -101,12 +101,50 @@ fn first_literal_args(text: &str, call: &str) -> Vec<(String, usize)> {
 /// constructors in one `use`, and the bare identifiers there were counted as two more unregistered sites —
 /// a figure two above the truth in the module where the truth is what the migration is steering by.
 fn executed_rust(text: &str) -> String {
-    Source::of(text)
-        .rust()
-        .lines()
-        .filter(|line| !line.trim_start().starts_with("use "))
-        .collect::<Vec<_>>()
-        .join("\n")
+    imports_and_rest(text).1
+}
+
+/// A file's `use` **statements**, and everything else, split once.
+///
+/// **One implementation, because two readers ask this and one of them was wrong.** Where a `use` statement
+/// ends is a fact about Rust, and it lived twice here: the alias detector accumulated to the `;` while its
+/// neighbour, fifteen lines up and reading the same input, dropped the line that *opens* a statement and
+/// kept every continuation. A wrapped import naming `cannot_judge_at` on a line of its own then counted as
+/// a call with nothing to parse, and the register refused a module that constructs nothing — a shape
+/// `cargo fmt` produces the moment an import list grows too wide, which would have put two gates in this
+/// repository's Definition of Done in direct contradiction. Asked once now, by both.
+fn imports_and_rest(text: &str) -> (Vec<String>, String) {
+    let source = Source::of(text);
+    let executed = source.rust();
+    let mut imports = Vec::new();
+    let mut rest = Vec::new();
+    let mut open: Option<String> = None;
+    for line in executed.lines() {
+        let trimmed = line.trim_start();
+        let statement = match open.as_mut() {
+            Some(statement) => {
+                statement.push(' ');
+                statement.push_str(trimmed);
+                statement
+            }
+            None if trimmed.starts_with("use ") => {
+                open = Some(trimmed.to_string());
+                open.as_mut().expect("just assigned")
+            }
+            None => {
+                rest.push(line);
+                continue;
+            }
+        };
+        if statement.contains(';') {
+            imports.push(std::mem::take(statement));
+            open = None;
+        }
+    }
+    if let Some(unterminated) = open {
+        imports.push(unterminated);
+    }
+    (imports, rest.join("\n"))
 }
 
 /// How many registered constructions in `text` this reader could not parse.
@@ -126,52 +164,17 @@ fn unparsed_constructions(text: &str) -> usize {
     called.saturating_sub(parsed)
 }
 
-/// Whether `text` imports a refusal constructor under another name./// Whether `text` imports a refusal constructor under another name.
+/// Whether `text` imports a refusal constructor under another name.
 ///
 /// A reader that matches names cannot follow an alias: `use crate::refusal::cannot_judge as cj;` makes every
 /// later `cj(…)` invisible, and invisible reads as *this module constructs no refusal*. The corpus written
 /// for this reader names that case, and the answer is not a count — it is that this file cannot be counted,
 /// which is the same distinction between *disagrees* and *could not be read* that every gate here draws.
 fn aliases_a_constructor(text: &str) -> bool {
-    // **The statement, not the line.** A `use` list long enough is wrapped by the formatter, and the line
-    // carrying the alias then begins with the alias rather than with `use` — so a per-line reader answered
-    // *no alias here* over the exact shape it exists to catch. The corpus written for this reader had the
-    // one-line form only; the wrapped one was found by running this reader against a statement `cargo fmt`
-    // would produce, and it is a case in that corpus now.
-    // Executed Rust, and a statement that **opens** a line: `use ` inside a sentence is prose about
-    // importing, and a first draft read one such sentence as a statement running to the next semicolon —
-    // which then carried an alias and a constructor name from two different paragraphs.
-    let executed = Source::of(text)
-        .rust()
-        .lines()
-        .collect::<Vec<_>>()
-        .join("\n");
-    let mut statement: Option<String> = None;
-    for line in executed.lines() {
-        let trimmed = line.trim();
-        let carry = match statement.as_mut() {
-            Some(open) => {
-                open.push(' ');
-                open.push_str(trimmed);
-                open
-            }
-            None if trimmed.starts_with("use ") => {
-                statement = Some(trimmed.to_string());
-                statement.as_mut().expect("just assigned")
-            }
-            None => continue,
-        };
-        if !carry.contains(';') {
-            continue;
-        }
-        let whole = carry.clone();
-        statement = None;
-        if whole.contains(" as ") && (whole.contains("violation") || whole.contains("cannot_judge"))
-        {
-            return true;
-        }
-    }
-    false
+    imports_and_rest(text).0.iter().any(|statement| {
+        statement.contains(" as ")
+            && (statement.contains("violation") || statement.contains("cannot_judge"))
+    })
 }
 
 /// Whether `text` has a site identity's shape: `<capability>#<slug>`, lowercase and hyphenated.
@@ -666,11 +669,17 @@ fn the_reader_answers_the_corpus_written_for_it() {
             "{case}: a registered construction this reader cannot parse went unreported"
         );
     }
-    assert_eq!(
-        unparsed_constructions(&read("two_on_one_line")),
-        0,
-        "the control: constructions this reader does parse must not be reported as unread"
-    );
+    for case in [
+        "two_on_one_line",
+        "a_wrapped_import_that_constructs_nothing",
+    ] {
+        assert_eq!(
+            unparsed_constructions(&read(case)),
+            0,
+            "{case}: the controls — a construction this reader parses, and an import that constructs \
+             nothing — must not be reported as unread"
+        );
+    }
 
     for case in ["an_aliased_import", "a_wrapped_aliased_import"] {
         assert!(
@@ -706,6 +715,7 @@ fn the_reader_answers_the_corpus_written_for_it() {
                 "a_siteful_constructor_taken_by_name",
                 "a_siteful_call_that_wraps",
                 "a_raw_literal_site",
+                "a_wrapped_import_that_constructs_nothing",
             ]
             .into_iter()
             .map(str::to_string),

@@ -1102,6 +1102,26 @@ them.
   merely shares the name `violation` while building something else entirely. A module that constructs
   nothing was being counted as constructing one.
 
+  **The repair for those shapes then put two of this repository's own gates in contradiction.** The reader
+  that strips imports dropped the line that *opens* a `use` statement and kept every continuation, so an
+  import naming `cannot_judge_at` on a line of its own counted as a call with nothing to parse — and the
+  register refused a module that constructs nothing. That shape is what `cargo fmt` produces the moment an
+  import list grows too wide, and `cargo fmt --all --check` is in the Definition of Done: formatting and
+  this gate would have demanded opposite things of the same source. Latent, since every such import in the
+  tree is one line today.
+
+  The cause was one repair short of its own lesson. The same commit taught the *alias* detector to
+  accumulate a statement to its `;` and left its neighbour — fifteen lines up, reading the same input —
+  splitting on lines. Where a `use` statement ends is a fact about Rust, and it now has one implementation
+  that both readers ask.
+
+  **And a struct literal walked past all of it.** With every field public, `Refusal { site:
+  Site::Registered("x#y"), … }` builds a registered refusal without calling anything, and the register
+  counts calls: the site would be produced, unheld, undeclared and unreported, while the projection said no
+  other construction exists. Detecting literals in text was the alternative; the field the register is about
+  is private instead, so the compiler refuses the shape — measured, `field `site` of struct `Refusal` is
+  private`.
+
   **The reader had three blind shapes, and each was invisible to both of its readings.** A constructor taken
   by name and called through the binding, a site arriving as a parameter, and a site written as a raw
   literal are none of them a direct call with an ordinary quoted literal. The parser saw no site; the
