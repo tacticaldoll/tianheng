@@ -13,6 +13,7 @@
 //! to fix, so they sit outside this check's subject rather than inside it as exceptions. No count is given:
 //! nothing enumerates that set, so a figure here would be a census with no producer.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use kanhe::region::{DO_NOT_EDIT, Source};
@@ -23,6 +24,65 @@ fn workspace_root() -> Option<PathBuf> {
         |root| root.join("crates/kanhe/src/region.rs").is_file(),
         shengmo::workspace::marker_set(),
     )
+}
+
+/// Every workspace member that can reach `owner`'s crate — the crate itself and everything depending on it,
+/// directly or through another member.
+///
+/// **The list this holds is not removed, it is given an adversary.** `repository-checks` requires a constant a
+/// check judges by to be compared with whatever enumerates its set, **in both directions**, and its own text
+/// records why: a one-directional comparison catches an omission and misses an entry that has outlived its
+/// subject. Measured elsewhere in this repository — removing a member from a hand-kept dimension list left a
+/// coverage assertion green because the assertion filtered on the literal.
+///
+/// Path dependencies are what the family declares between members, so the manifests are the graph.
+fn members_reaching(root: &Path, crate_name: &str) -> BTreeSet<String> {
+    let manifest =
+        std::fs::read_to_string(root.join("Cargo.toml")).expect("the workspace manifest");
+    let members: Vec<String> = manifest
+        .lines()
+        .find(|line| line.trim_start().starts_with("members = ["))
+        .expect("the workspace manifest declares its members on one line")
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect();
+    assert!(
+        members.len() > 2,
+        "read {} workspace member(s), which is not a graph this reader can be about",
+        members.len()
+    );
+    let mut edges: Vec<(String, String)> = Vec::new();
+    for member in &members {
+        let text = std::fs::read_to_string(root.join(member).join("Cargo.toml"))
+            .unwrap_or_else(|err| panic!("cannot read {member}/Cargo.toml ({err})"));
+        let name = text
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("name = "))
+            .map(|value| value.trim().trim_matches('"').to_string())
+            .unwrap_or_else(|| panic!("{member}/Cargo.toml declares no package name"));
+        for other in &members {
+            let dep = other.rsplit('/').next().unwrap_or(other);
+            if dep != name && text.contains(&format!("path = \"../{dep}\"")) {
+                edges.push((name.clone(), dep.to_string()));
+            }
+        }
+    }
+    let mut reaching: BTreeSet<String> = BTreeSet::from([crate_name.to_string()]);
+    loop {
+        let grown: BTreeSet<String> = edges
+            .iter()
+            .filter(|(_, to)| reaching.contains(to))
+            .map(|(from, _)| from.clone())
+            .collect();
+        let before = reaching.len();
+        reaching.extend(grown);
+        if reaching.len() == before {
+            break;
+        }
+    }
+    reaching
 }
 
 /// Every tracked `.rs` file under `dirs`, as `(path, text)`.
@@ -69,36 +129,58 @@ fn a_token_with_a_constant_owner_has_no_second_spelling_in_reach() {
     let Some(root) = workspace_root() else {
         return;
     };
-    for (constant, value, owner, dirs) in [
+    for (constant, value, owner, owning_crate, dirs) in [
         (
             "kanhe::region::DO_NOT_EDIT",
             DO_NOT_EDIT,
             "crates/kanhe/src/region.rs",
+            "kanhe",
             &["crates/kanhe"][..],
         ),
         (
             "shengmo::workspace::MARKER",
             shengmo::workspace::MARKER,
             "crates/shengmo/src/workspace.rs",
+            "shengmo",
             &["crates/kanhe", "crates/shengmo"][..],
         ),
     ] {
-        let mut offences = Vec::new();
+        // The declared corpus, against what the manifests produce — both directions.
+        let declared: BTreeSet<String> = dirs
+            .iter()
+            .map(|dir| dir.rsplit('/').next().unwrap_or(dir).to_string())
+            .collect();
+        let reaching = members_reaching(&root, owning_crate);
+        assert_eq!(
+            declared, reaching,
+            "`{constant}`'s declared corpus and the members the manifests say can reach `{owning_crate}` \
+             disagree. A member added to the graph and not to the list goes unchecked; one left in the list \
+             after it stopped depending has outlived its subject"
+        );
+
+        // **Every occurrence, the owner's included.** Skipping the owner FILE exempted more than the owner
+        // DECLARATION: a second constant carrying the same value beside it read as clean, which is the
+        // corpus-narrower-than-the-claim shape this check exists to refuse.
+        let mut sites = Vec::new();
         for (path, text) in tracked(&root, dirs) {
-            if path == owner {
-                continue;
-            }
-            for (number, line) in Source::of(text).rust().numbered_lines() {
+            for (number, line) in Source::of(text.clone()).rust().numbered_lines() {
                 if line.contains(value) {
-                    offences.push(format!("  {path}:{number}"));
+                    sites.push(format!("{path}:{number}"));
                 }
             }
         }
+        assert_eq!(
+            sites.len(),
+            1,
+            "`{value}` is spelled {} time(s) inside `{constant}`'s reach; exactly one may exist and it is the \
+             declaration itself:\n  {}",
+            sites.len(),
+            sites.join("\n  ")
+        );
         assert!(
-            offences.is_empty(),
-            "these sites spell `{value}` as a literal while `{constant}` owns it, so the two can disagree \
-             about one token and a change to the constant would leave them behind:\n{}",
-            offences.join("\n")
+            sites[0].starts_with(owner),
+            "the one spelling of `{value}` is at {} rather than in its owner {owner}",
+            sites[0]
         );
     }
 }
