@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::refusal::{Refusal, cannot_judge, violation};
+use crate::refusal::{Refusal, cannot_judge_at, violation_at};
 
 /// The globs one capability declares, in the order it declares them.
 pub type Subjects = BTreeMap<String, Vec<String>>;
@@ -123,7 +123,9 @@ pub fn declaration_offences(
     for (capability, spec) in specs {
         let globs = match subject_globs(spec) {
             Declared::Absent => {
-                offences.push(violation(format!(
+                offences.push(violation_at(
+                    "repository-checks#capability-declares-no-subject",
+                    format!(
                     "`{capability}` declares no `## Subject`, so which files it governs is unfalsifiable and \
                      every requirement filed under it is filed by a name read loosely"
                 )));
@@ -132,7 +134,9 @@ pub fn declaration_offences(
             // A cannot-judge, not a violation: the section may well claim exactly the right files, and this
             // reader cannot say. Reporting it as a shorter list would be the silent narrowing itself.
             Declared::Unreadable(bullet) => {
-                offences.push(cannot_judge(format!(
+                offences.push(cannot_judge_at(
+                    "repository-checks#capability-subject-bullet-unreadable",
+                    format!(
                     "`{capability}` lists the subject bullet `{bullet}`, which this reader does not \
                      understand — the form it reads is one backticked glob and nothing else. Until it parses, \
                      what this capability governs cannot be decided, and reading past it would shrink the \
@@ -143,7 +147,9 @@ pub fn declaration_offences(
             // Its own message, because the count is what an author acts on and the bullet wording above
             // would send them looking for a bullet that parses fine.
             Declared::SeveralSections(count) => {
-                offences.push(cannot_judge(format!(
+                offences.push(cannot_judge_at(
+                    "repository-checks#capability-declares-several-subjects",
+                    format!(
                     "`{capability}` carries {count} `## Subject` sections, so which one declares what it \
                      governs is decided by whichever comes first in the file. Reading the first would drop \
                      every glob the others claim — the silent narrowing this requirement exists to make \
@@ -154,7 +160,9 @@ pub fn declaration_offences(
             Declared::Globs(globs) => globs,
         };
         if globs.is_empty() {
-            offences.push(violation(format!(
+            offences.push(violation_at(
+                "repository-checks#capability-subject-lists-no-glob",
+                format!(
                 "`{capability}` carries a `## Subject` section listing no glob, which claims nothing while \
                  reading as a declaration"
             )));
@@ -162,10 +170,14 @@ pub fn declaration_offences(
         }
         for glob in globs {
             match resolve(&glob) {
-                Err(err) => offences.push(cannot_judge(format!(
+                Err(err) => offences.push(cannot_judge_at(
+                    "repository-checks#capability-subject-glob-unresolvable",
+                    format!(
                     "could not resolve `{capability}`'s subject glob `{glob}`: {err}"
                 ))),
-                Ok(paths) if paths.is_empty() => offences.push(violation(format!(
+                Ok(paths) if paths.is_empty() => offences.push(violation_at(
+                    "repository-checks#capability-subject-glob-matches-nothing",
+                    format!(
                     "`{capability}` declares the subject glob `{glob}`, which matches no tracked path — a \
                      glob matching nothing is a claim about nothing"
                 ))),
@@ -205,7 +217,9 @@ pub fn join_offences(
         if unaccounted.is_empty() {
             continue;
         }
-        offences.push(violation(format!(
+        offences.push(violation_at(
+            "repository-checks#change-touches-a-governed-path-unaccounted",
+            format!(
             "`{change}` touches `{path}`, which `{}` governs without being accounted for, and its proposal \
              names {}. Name each in the Capabilities section — as modified, or with the reason its \
              requirements do not change",

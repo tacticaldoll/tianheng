@@ -33,6 +33,10 @@ fn a_capability_that_declares_no_subject_is_refused() {
     );
     assert_eq!(offences.len(), 1);
     assert_eq!(offences[0].kind, Kind::Violation);
+    crate::refusal::expect(
+        "repository-checks#capability-declares-no-subject",
+        &offences[0],
+    );
     assert!(offences[0].message.contains("declares no `## Subject`"));
 }
 
@@ -47,6 +51,10 @@ fn a_subject_section_listing_no_glob_is_refused() {
     );
     assert_eq!(offences.len(), 1);
     assert_eq!(offences[0].kind, Kind::Violation);
+    crate::refusal::expect(
+        "repository-checks#capability-subject-lists-no-glob",
+        &offences[0],
+    );
     assert!(offences[0].message.contains("listing no glob"));
 }
 
@@ -55,6 +63,10 @@ fn a_glob_matching_no_tracked_path_is_refused() {
     let offences = declaration_offences(&specs(&[("dead", WITH_SUBJECT)]), resolves_nothing);
     assert_eq!(offences.len(), 1);
     assert_eq!(offences[0].kind, Kind::Violation);
+    crate::refusal::expect(
+        "repository-checks#capability-subject-glob-matches-nothing",
+        &offences[0],
+    );
     assert!(offences[0].message.contains("matches no tracked path"));
 }
 
@@ -65,6 +77,10 @@ fn an_enumeration_that_fails_is_a_cannot_judge() {
     });
     assert_eq!(offences.len(), 1);
     assert_eq!(offences[0].kind, Kind::CannotJudge);
+    crate::refusal::expect(
+        "repository-checks#capability-subject-glob-unresolvable",
+        &offences[0],
+    );
     assert!(offences[0].message.contains("could not resolve"));
 }
 
@@ -101,6 +117,10 @@ fn a_shell_wrapper_filed_under_the_rust_reaction_capability_is_refused() {
     );
     assert_eq!(offences.len(), 1);
     assert_eq!(offences[0].kind, Kind::Violation);
+    crate::refusal::expect(
+        "repository-checks#change-touches-a-governed-path-unaccounted",
+        &offences[0],
+    );
     assert!(offences[0].message.contains("publish-source-integrity"));
     assert!(offences[0].message.contains("scripts/publish.sh"));
 }
@@ -165,6 +185,10 @@ fn a_proposal_naming_nothing_says_so_rather_than_naming_an_empty_list() {
     );
     assert_eq!(offences.len(), 1);
     assert_eq!(offences[0].kind, Kind::Violation);
+    crate::refusal::expect(
+        "repository-checks#change-touches-a-governed-path-unaccounted",
+        &offences[0],
+    );
     assert!(offences[0].message.contains("names no capability"));
 }
 
@@ -215,6 +239,10 @@ fn an_unreadable_subject_bullet_is_a_cannot_judge() {
     let offences = declaration_offences(&specs, |_| Ok(vec!["crates/a/src/lib.rs".to_string()]));
     assert_eq!(offences.len(), 1, "{offences:?}");
     assert_eq!(offences[0].kind, Kind::CannotJudge);
+    crate::refusal::expect(
+        "repository-checks#capability-subject-bullet-unreadable",
+        &offences[0],
+    );
     assert!(
         offences[0].message.contains("does not understand"),
         "{}",
@@ -251,6 +279,10 @@ fn several_subject_sections_are_a_cannot_judge_of_their_own() {
     let offences = declaration_offences(&specs(&[("twice", spec)]), resolves);
     assert_eq!(offences.len(), 1, "{offences:?}");
     assert_eq!(offences[0].kind, Kind::CannotJudge);
+    crate::refusal::expect(
+        "repository-checks#capability-declares-several-subjects",
+        &offences[0],
+    );
     assert!(
         offences[0].message.contains("2 `## Subject` sections"),
         "the refusal must name the count rather than reuse the unreadable-bullet wording: {}",
