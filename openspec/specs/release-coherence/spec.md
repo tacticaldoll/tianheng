@@ -194,6 +194,16 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 - **PINNED-BY** `an_internal_pin_written_as_a_detailed_table_is_read`
 - **PINNED-BY** `a_stale_internal_pin_in_a_detailed_table_is_a_violation`
 
+#### Scenario: An internal dependency this reader cannot resolve is not one it may skip
+
+- **WHEN** the root manifest declares an internal dependency whose `path` or `version` is not a
+  double-quoted string, or declares more than one of either key
+- **THEN** the check refuses as a cannot-judge saying which key and which of the two it met. An unreadable
+  **path** is the one that cannot be answered by skipping the entry, because whether the entry is an
+  internal dependency at all is what could not be read
+- **PINNED-BY** `a_path_or_a_version_this_reader_cannot_read_is_a_cannot_judge`
+- **PINNED-BY** `several_paths_or_several_versions_in_one_dependency_are_not_chosen_between`
+
 #### Scenario: A key outside a dependency table is not a dependency
 
 - **WHEN** a manifest carries a key spelled after a family crate in a table that declares no dependencies —

@@ -8,7 +8,8 @@
 //! predicate over text.
 
 use crate::manifest::Quoted;
-use crate::release_coherence_gate::{inline_assignments, is_iso_date};
+use crate::refusal::Kind;
+use crate::release_coherence_gate::{inline_assignments, is_iso_date, require_internal_pins};
 
 /// The readable values `inline_assignments` found, so a direction asserts what was read rather than a shape.
 fn versions_in(value: &str) -> Vec<String> {
@@ -74,4 +75,73 @@ fn a_dated_suffix_is_a_date_and_not_only_three_digit_runs() {
             "{wrong_shape} is not even the shape"
         );
     }
+}
+
+/// Several `path` or several `version` keys in one internal dependency are not this reader's to choose from.
+///
+/// Here rather than end-to-end for the reason this module's header gives: a duplicate key is a shape cargo
+/// rejects outright, so a fixture carrying one fails on the parse rather than on what it means to observe.
+///
+/// Negative run: with each arm replaced by `continue`, the matching half returned `Ok`.
+#[test]
+fn several_paths_or_several_versions_in_one_dependency_are_not_chosen_between() {
+    let several_paths = "[workspace.dependencies]\n\
+                         xuanji = { path = \"crates/xuanji\", path = \"crates/other\", version = \"0.2.0\" }\n";
+    let refusal = require_internal_pins(several_paths, "0.2.0")
+        .expect_err("two paths name two places and this reader may pick neither");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("declares 2 `path` keys"),
+        "the refusal must say how many paths, got: {}",
+        refusal.message
+    );
+
+    let several_versions = "[workspace.dependencies]\n\
+                            xuanji = { path = \"crates/xuanji\", version = \"0.2.0\", version = \"0.1.0\" }\n";
+    let refusal = require_internal_pins(several_versions, "0.2.0")
+        .expect_err("two versions are two requirements and this reader may pick neither");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("declares 2 `version` keys"),
+        "the refusal must say how many versions, got: {}",
+        refusal.message
+    );
+}
+
+/// A `path` or a `version` this reader cannot read is a cannot-judge, and the two say which they are.
+///
+/// Single-quoted TOML strings are legal and this reader does not take them, which is a limit of the reader
+/// rather than a fact about the manifest — the distinction `Quoted` exists to keep. The unreadable **path**
+/// is the one that matters most: it cannot be answered by skipping the entry, because whether the entry is
+/// an internal dependency at all is the thing that could not be read.
+///
+/// Negative run: with the `Declared::Unreadable` arms replaced by `continue`, the path half reported the
+/// vacuity refusal — *found no internal path dependency* — and the version half returned `Ok`.
+#[test]
+fn a_path_or_a_version_this_reader_cannot_read_is_a_cannot_judge() {
+    let path = "[workspace.dependencies]\n\
+                xuanji = { path = 'crates/xuanji', version = \"0.2.0\" }\n";
+    let refusal = require_internal_pins(path, "0.2.0")
+        .expect_err("a path this reader cannot take is not a path it may ignore");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal
+            .message
+            .contains("declares a `path` this check cannot read"),
+        "got: {}",
+        refusal.message
+    );
+
+    let version = "[workspace.dependencies]\n\
+                   xuanji = { path = \"crates/xuanji\", version = '0.2.0' }\n";
+    let refusal = require_internal_pins(version, "0.2.0")
+        .expect_err("a version this reader cannot take is not one that satisfies");
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal
+            .message
+            .contains("declares a version this check cannot read"),
+        "got: {}",
+        refusal.message
+    );
 }
