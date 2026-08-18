@@ -390,11 +390,16 @@ fn a_registered_site_is_owned_by_a_capability() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let capabilities: BTreeSet<String> = std::fs::read_dir(root.join("openspec/specs"))
-        .expect("read the spec directories")
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.path().join("spec.md").is_file())
-        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+    let capabilities: BTreeSet<String> = entries_of(&root.join("openspec/specs"))
+        .into_iter()
+        .filter(|entry| entry.join("spec.md").is_file())
+        .map(|entry| {
+            entry
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned()
+        })
         .collect();
     assert!(
         !capabilities.is_empty(),
@@ -539,6 +544,31 @@ fn a_site_declared_unheld_exists_and_is_not_observed() {
         "these sites are declared more than once, so which declaration owns them is not decided:\n  {}",
         twice.join("\n  ")
     );
+}
+
+/// Every entry of `dir`, or a loud failure naming what could not be read.
+///
+/// **An entry that fails after the directory itself opened is not an entry that is absent.** Both readers
+/// here reached for `filter_map(|entry| entry.ok())`, which encodes a failure as a missing member — so an
+/// unreadable capability directory would have reported an orphan site, and an unreadable fixture would have
+/// reported a case nothing names. One rule, one implementation, and failure is a refusal rather than a
+/// silence.
+fn entries_of(dir: &Path) -> Vec<PathBuf> {
+    let listing = std::fs::read_dir(dir)
+        .unwrap_or_else(|err| panic!("cannot enumerate {} ({err}), so this direction would hold over a corpus it could not read", dir.display()));
+    listing
+        .map(|entry| {
+            entry
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "an entry of {} could not be read ({err}); a member this reader could not open is \
+                         not a member that is absent",
+                        dir.display()
+                    )
+                })
+                .path()
+        })
+        .collect()
 }
 
 /// No refusal site is untriaged.
@@ -726,12 +756,12 @@ fn the_reader_answers_the_corpus_written_for_it() {
 
     // Every case is used, so a case added to the corpus and forgotten is reported rather than sitting unread
     // the way the whole corpus did.
-    let cases: BTreeSet<String> = std::fs::read_dir(&dir)
-        .expect("read the case directory")
-        .filter_map(|entry| entry.ok())
+    let cases: BTreeSet<String> = entries_of(&dir)
+        .into_iter()
         .filter_map(|entry| {
             entry
                 .file_name()
+                .unwrap_or_default()
                 .to_string_lossy()
                 .strip_suffix(".rs.txt")
                 .map(str::to_string)

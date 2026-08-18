@@ -3883,8 +3883,9 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
 - **Two constants existed so that one token would have one owner, and both were written out again as
   literals.** `kanhe::region::DO_NOT_EDIT` is the marker a generated document declares itself with, and
-  `shengmo::workspace::MARKER` names the variable saying a run must find a repository. Seven owners and nine
-  respectively — the producers and the recognizer of the first on opposite sides of it, which is the shape
+  `shengmo::workspace::MARKER` names the variable saying a run must find a repository. Both were written out
+  again as literals in every module that could reach them — the producers and the recognizer of the first on
+  opposite sides of it, which is the shape
   `verdict_channel` spent a window closing between a shell script and Rust and which had stayed open between
   Rust and Rust.
 
@@ -3935,6 +3936,29 @@ no adopter runs. They are here rather than under the adopter headings above beca
   stale the moment its window closes — and that sweep follows separately.
 
   No published API, outcome, report, exit class, or manifest moves.
+
+- **Correction: the verification recorded for the constant-owner change did not happen the way it is
+  written.** The squash commit `f62a7b9` and its pull request say the check "was written first and run against
+  the tree before any convergence", that it "named all seven `DO_NOT_EDIT` sites", and that "the count went
+  from nine to fifteen and then to zero". None of the three holds. The check was written **after** the
+  `DO_NOT_EDIT` convergence and its first run named five sites, all `MARKER`. Run against `e0d8500` its own
+  criterion names **six** `DO_NOT_EDIT` sites — the seventh is `crates/shengmo/src/law.rs`, which that check's
+  corpus **excludes by design** — and **seven** `MARKER` sites, thirteen in total. No run produced nine or
+  fifteen.
+
+  The correction lives here because a merged squash is a record: amending it changes its hash, and the pull
+  request's merge record cites that hash. What the entry says about the change itself stands — the
+  convergences landed and the projections are byte-identical.
+
+  **The cause is worth more than the correction.** Every other negative run in that window was pasted verbatim
+  from the terminal and every one of them is accurate. This one was composed from the plan — *the check goes
+  first, it will name the twins* — and it is the only one that is false. `AGENTS.md` gains the rule in the
+  same window: a negative run's record is pasted from the run's output, never written from the intention.
+
+  Two figures typed in the same window are corrected with it: `seven owners and nine` mixed two denominators
+  (one counting literal spellings, the other counting those plus the constant), and `Six of the MARKER
+  spellings` was seven when it was typed. Both are removed rather than repaired — nothing enumerates those
+  sets, so a figure there is a census with no producer.
 
 ## [0.4.0] - 2026-08-04
 

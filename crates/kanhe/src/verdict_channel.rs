@@ -1,4 +1,4 @@
-//! The channel a gate reports its refusal class on, separate from everything else it prints.
+//! The channel a gate reports **whether it reached a verdict, and which**, separate from everything else it prints.
 //!
 //! A wrapper standing in front of an irreversible act must tell a **disagreement** from an input it
 //! **could not read**, because the two demand different operator actions. The judgement already types that in
@@ -105,17 +105,4 @@ fn report_reached(class: &str) -> bool {
         return false;
     };
     std::fs::write(Path::new(&path), class).is_ok()
-}
-
-/// Report `kind` on the channel, if the caller opened one.
-///
-/// Called by a gate at the moment it has a verdict and before it fails, so the file exists exactly when a
-/// judgement was reached. A gate run outside a wrapper sets no variable and writes nothing.
-///
-/// A write that fails is **not** reported as a verdict: the wrapper reads an absent or unreadable file as
-/// unjudged, which is the direction that errs toward telling an operator to look at the output rather than at
-/// their message. Returning the outcome lets a direction assert that, rather than inferring it from a file that
-/// is missing for either reason.
-pub fn report(kind: Kind) -> bool {
-    report_reached(&rendered(kind))
 }
