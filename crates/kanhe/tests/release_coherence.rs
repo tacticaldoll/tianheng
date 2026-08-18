@@ -78,7 +78,13 @@ fn with_machinery(repo: &Path) {
     .expect("write");
 }
 
-fn refuse(repo: &Path, kind: Kind, needle: &str) {
+/// A refusal of `kind` saying `needle`, returned so the direction can cite the site it came from.
+///
+/// **The site, and not only the message.** A needle is a phrase inside a rendered message: it cannot tell a
+/// branch that was never exercised from one whose wording moved, which is what the refusal register replaces
+/// with a citation compared by running. The needle stays, because what the operator is told is the whole of
+/// what a refusal delivers.
+fn refuse(repo: &Path, kind: Kind, needle: &str) -> refusal::Refusal {
     let refusal = judge(repo).expect_err(&format!("expected a refusal containing {needle:?}"));
     assert_eq!(refusal.kind, kind, "{}", refusal.message);
     assert!(
@@ -86,6 +92,7 @@ fn refuse(repo: &Path, kind: Kind, needle: &str) {
         "expected a refusal containing {needle:?}, got: {}",
         refusal.message
     );
+    refusal
 }
 
 /// The gate, over this repository.
@@ -159,7 +166,10 @@ fn a_renamed_family_dependency_is_resolved_by_its_package_field() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: rename a family dependency");
-    refuse(&fixture.repo, Kind::Violation, "xuanji (as `alias`)");
+    refusal::expect(
+        "release-coherence#example-pin-disagrees",
+        &refuse(&fixture.repo, Kind::Violation, "xuanji (as `alias`)"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -185,10 +195,13 @@ fn a_dated_section_for_the_pending_release_is_adopter_facing() {
     )
     .expect("write");
     commit(&fixture.repo, "chore: prepare release");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "names this repository's own machinery",
+    refusal::expect(
+        "release-coherence#adopter-entry-names-own-machinery",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "names this repository's own machinery",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -211,10 +224,13 @@ fn a_dated_heading_whose_suffix_is_not_a_date_is_a_violation() {
     )
     .expect("write");
     commit(&fixture.repo, "chore: prepare release");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "missing dated release notes for 0.2.1",
+    refusal::expect(
+        "release-coherence#dated-release-notes-missing",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "missing dated release notes for 0.2.1",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -348,10 +364,13 @@ fn a_dated_heading_whose_fields_are_out_of_range_is_a_violation() {
         )
         .expect("write");
         commit(&fixture.repo, "chore: prepare release");
-        refuse(
-            &fixture.repo,
-            Kind::Violation,
-            "missing dated release notes for 0.2.1",
+        refusal::expect(
+            "release-coherence#dated-release-notes-missing",
+            &refuse(
+                &fixture.repo,
+                Kind::Violation,
+                "missing dated release notes for 0.2.1",
+            ),
         );
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -369,7 +388,10 @@ fn a_shallow_history_cannot_be_judged() {
     workspace_files(&repo, "0.2.0");
     development_changelog(&repo, "0.2.0", true);
     commit(&repo, "chore: initial import");
-    refuse(&repo, Kind::CannotJudge, "release history is unavailable");
+    refusal::expect(
+        "release-coherence#release-history-shallow",
+        &refuse(&repo, Kind::CannotJudge, "release history is unavailable"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -379,10 +401,13 @@ fn a_malformed_release_subject_is_a_violation() {
     let fixture = build_fixture(&root, "malformed", "0.2.0");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "release: next");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "malformed release history subject",
+    refusal::expect(
+        "release-coherence#release-history-version-malformed",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "malformed release history subject",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -394,10 +419,13 @@ fn a_regressed_workspace_version_is_a_violation() {
     workspace_files(&fixture.repo, "0.1.9");
     development_changelog(&fixture.repo, "0.1.9", true);
     commit(&fixture.repo, "chore: regress version");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "is older than latest release 0.2.0",
+    refusal::expect(
+        "release-coherence#workspace-version-behind-latest-release",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "is older than latest release 0.2.0",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -408,10 +436,13 @@ fn development_with_no_release_narrative_is_a_violation() {
     let fixture = build_fixture(&root, "empty-development", "0.2.0");
     development_changelog(&fixture.repo, "0.2.0", false);
     commit(&fixture.repo, "chore: omit release note");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "requires adopter-facing release narrative",
+    refusal::expect(
+        "release-coherence#unreleased-has-no-adopter-narrative",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "requires adopter-facing release narrative",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -427,10 +458,13 @@ fn a_manifest_that_does_not_inherit_the_workspace_version_is_a_violation() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: pin a member directly");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "must inherit version.workspace = true",
+    refusal::expect(
+        "release-coherence#member-does-not-inherit-workspace-version",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "must inherit version.workspace = true",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -448,7 +482,10 @@ fn an_internal_pin_that_disagrees_is_a_violation() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: stale the internal pin");
-    refuse(&fixture.repo, Kind::Violation, "is pinned to 0.1.0");
+    refusal::expect(
+        "release-coherence#internal-pin-disagrees",
+        &refuse(&fixture.repo, Kind::Violation, "is pinned to 0.1.0"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -463,7 +500,10 @@ fn an_example_pin_the_workspace_version_does_not_satisfy_is_a_violation() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: stale an example pin");
-    refuse(&fixture.repo, Kind::Violation, "requires xuanji = \"0.9\"");
+    refusal::expect(
+        "release-coherence#example-pin-disagrees",
+        &refuse(&fixture.repo, Kind::Violation, "requires xuanji = \"0.9\""),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -485,10 +525,13 @@ fn a_stale_lock_entry_for_the_second_package_is_a_violation() {
     )
     .expect("write");
     commit(&fixture.repo, "chore: leave the second package stale");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "Cargo.lock package xuanji is 0.2.0",
+    refusal::expect(
+        "release-coherence#lock-package-version-disagrees",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "Cargo.lock package xuanji is 0.2.0",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -503,7 +546,10 @@ fn a_release_section_repeating_a_heading_is_a_violation() {
         "### Changed\n- An adopter-facing change.\n\n### Changed\n- A second block of the same name.",
     );
     commit(&fixture.repo, "chore: split one section in two");
-    refuse(&fixture.repo, Kind::Violation, "repeats a heading");
+    refusal::expect(
+        "release-coherence#changelog-section-repeats-a-heading",
+        &refuse(&fixture.repo, Kind::Violation, "repeats a heading"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -517,7 +563,10 @@ fn a_break_with_nowhere_to_read_what_to_do_is_a_violation() {
         "### Changed\n- **BREAKING** a change with nowhere to read what to do.",
     );
     commit(&fixture.repo, "chore: mark a break with no migration");
-    refuse(&fixture.repo, Kind::Violation, "carries no `### Migration`");
+    refusal::expect(
+        "release-coherence#breaking-without-migration-section",
+        &refuse(&fixture.repo, Kind::Violation, "carries no `### Migration`"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -559,7 +608,10 @@ fn prose_about_the_marker_is_read_as_a_marker_a_stated_bound() {
         "### Changed\n- A diagnostic whose exit code does not move, so it earns no **BREAKING** mark.",
     );
     commit(&fixture.repo, "chore: discuss the marker without using it");
-    refuse(&fixture.repo, Kind::Violation, "carries no `### Migration`");
+    refusal::expect(
+        "release-coherence#breaking-without-migration-section",
+        &refuse(&fixture.repo, Kind::Violation, "carries no `### Migration`"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -576,10 +628,13 @@ fn an_adopter_heading_naming_a_gate_is_a_violation() {
         "### Fixed\n- A repair naming `scripts/check_fixture_gate.sh`.",
     );
     commit(&fixture.repo, "docs: name a gate under an adopter heading");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "names this repository's own machinery",
+    refusal::expect(
+        "release-coherence#adopter-entry-names-own-machinery",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "names this repository's own machinery",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -666,10 +721,13 @@ fn a_gate_named_in_any_word_form_is_a_violation() {
         with_machinery(&fixture.repo);
         unreleased_body(&fixture.repo, body);
         commit(&fixture.repo, "docs: name a gate");
-        refuse(
-            &fixture.repo,
-            Kind::Violation,
-            "names this repository's own machinery",
+        refusal::expect(
+            "release-coherence#adopter-entry-names-own-machinery",
+            &refuse(
+                &fixture.repo,
+                Kind::Violation,
+                "names this repository's own machinery",
+            ),
         );
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -865,7 +923,10 @@ fn two_source_less_entries_under_one_name_cannot_be_judged() {
     let twin = "version = 4\n\n[[package]]\nname = \"xuanji\"\nversion = \"9.9.9\"\n";
     std::fs::write(&lock, text.replacen("version = 4\n\n", twin, 1)).expect("write");
     commit(&fixture.repo, "chore: add a second source-less entry");
-    refuse(&fixture.repo, Kind::CannotJudge, "with no source");
+    refusal::expect(
+        "release-coherence#lock-several-sourceless-entries",
+        &refuse(&fixture.repo, Kind::CannotJudge, "with no source"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -1003,10 +1064,13 @@ fn a_member_whose_only_inherit_line_is_commented_out_is_refused() {
     )
     .expect("write");
     commit(&fixture.repo, "chore: comment out the inherit line");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "must inherit version.workspace",
+    refusal::expect(
+        "release-coherence#member-does-not-inherit-workspace-version",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "must inherit version.workspace",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1244,10 +1308,13 @@ fn two_unreleased_sections_are_a_violation() {
     )
     .expect("write");
     commit(&fixture.repo, "chore: grow a second unreleased section");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "exactly one [Unreleased] section",
+    refusal::expect(
+        "release-coherence#unreleased-section-not-exactly-one",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "exactly one [Unreleased] section",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1271,10 +1338,13 @@ fn a_snapshot_whose_unreleased_carries_an_item_is_a_violation() {
         &fixture.repo,
         &["commit", "-q", "--amend", "-m", "release: 0.2.0"],
     );
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "must be empty in snapshot state",
+    refusal::expect(
+        "release-coherence#unreleased-not-empty-in-state",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "must be empty in snapshot state",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1286,10 +1356,13 @@ fn a_release_with_no_dated_notes_is_a_violation() {
     workspace_files(&fixture.repo, "0.2.1");
     development_changelog(&fixture.repo, "0.2.1", false);
     commit(&fixture.repo, "chore: prepare without notes");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "missing dated release notes for 0.2.1",
+    refusal::expect(
+        "release-coherence#dated-release-notes-missing",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "missing dated release notes for 0.2.1",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1303,10 +1376,13 @@ fn an_unreleased_comparison_link_that_does_not_start_at_the_version_is_a_violati
     let text = std::fs::read_to_string(&path).expect("read");
     std::fs::write(&path, text.replace("v0.2.0...HEAD", "v0.1.0...HEAD")).expect("write");
     commit(&fixture.repo, "chore: point the link at the wrong version");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "comparison link must start at v0.2.0",
+    refusal::expect(
+        "release-coherence#unreleased-comparison-link-wrong",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "comparison link must start at v0.2.0",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1321,7 +1397,10 @@ fn a_dated_comparison_link_that_does_not_start_at_the_previous_release_is_a_viol
         &fixture.repo,
         "chore: point the release link at the wrong predecessor",
     );
-    refuse(&fixture.repo, Kind::Violation, "must start at v0.2.0");
+    refusal::expect(
+        "release-coherence#release-comparison-link-wrong",
+        &refuse(&fixture.repo, Kind::Violation, "must start at v0.2.0"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -1342,10 +1421,13 @@ fn a_lockfile_missing_a_workspace_package_is_a_violation() {
     )
     .expect("write");
     commit(&fixture.repo, "chore: drop a package from the lockfile");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "Cargo.lock is missing workspace package xuanji",
+    refusal::expect(
+        "release-coherence#lock-missing-workspace-package",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "Cargo.lock is missing workspace package xuanji",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1366,7 +1448,10 @@ fn an_internal_dependency_with_no_version_pin_is_a_violation() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: drop the internal pin");
-    refuse(&fixture.repo, Kind::Violation, "has no version pin");
+    refusal::expect(
+        "release-coherence#internal-pin-absent",
+        &refuse(&fixture.repo, Kind::Violation, "has no version pin"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -1394,10 +1479,13 @@ fn a_release_subject_with_no_space_is_a_violation() {
     let fixture = build_fixture(&root, "no-space-subject", "0.2.0");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "release:0.3.0");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "malformed release history subject",
+    refusal::expect(
+        "release-coherence#release-history-subject-malformed",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "malformed release history subject",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1488,7 +1576,10 @@ fn initialised(repo: &Path) {
 fn a_root_without_a_manifest_cannot_be_judged() {
     let root = scratch("no-manifest");
     let repo = bare(&root, "repo");
-    refuse(&repo, Kind::CannotJudge, "has no Cargo.toml");
+    refusal::expect(
+        "release-coherence#repository-root-has-no-manifest",
+        &refuse(&repo, Kind::CannotJudge, "has no Cargo.toml"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -1497,7 +1588,10 @@ fn a_root_without_a_changelog_cannot_be_judged() {
     let root = scratch("no-changelog");
     let repo = bare(&root, "repo");
     std::fs::write(repo.join("Cargo.toml"), "[workspace]\n").expect("write");
-    refuse(&repo, Kind::CannotJudge, "has no CHANGELOG.md");
+    refusal::expect(
+        "release-coherence#repository-root-has-no-changelog",
+        &refuse(&repo, Kind::CannotJudge, "has no CHANGELOG.md"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -1508,7 +1602,10 @@ fn a_root_that_is_not_a_worktree_cannot_be_judged() {
     let repo = bare(&root, "repo");
     std::fs::write(repo.join("Cargo.toml"), "[workspace]\n").expect("write");
     std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
-    refuse(&repo, Kind::CannotJudge, "has no git history");
+    refusal::expect(
+        "release-coherence#git-unrunnable",
+        &refuse(&repo, Kind::CannotJudge, "has no git history"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -1523,10 +1620,13 @@ fn a_manifest_with_no_workspace_version_cannot_be_judged() {
     )
     .expect("write");
     std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
-    refuse(
-        &repo,
-        Kind::CannotJudge,
-        "workspace version is missing or malformed",
+    refusal::expect(
+        "release-coherence#workspace-version-absent",
+        &refuse(
+            &repo,
+            Kind::CannotJudge,
+            "workspace version is missing or malformed",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1548,10 +1648,13 @@ fn a_commented_table_heading_still_opens_the_workspace_package_table() {
     )
     .expect("write");
     std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
-    refuse(
-        &repo,
-        Kind::CannotJudge,
-        "could not read the release history",
+    refusal::expect(
+        "release-coherence#release-history-unreadable",
+        &refuse(
+            &repo,
+            Kind::CannotJudge,
+            "could not read the release history",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1573,10 +1676,13 @@ fn a_trailing_comment_on_the_version_line_still_reads_the_version() {
     )
     .expect("write");
     std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
-    refuse(
-        &repo,
-        Kind::CannotJudge,
-        "could not read the release history",
+    refusal::expect(
+        "release-coherence#release-history-unreadable",
+        &refuse(
+            &repo,
+            Kind::CannotJudge,
+            "could not read the release history",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1597,10 +1703,13 @@ fn a_version_value_this_reader_cannot_read_is_not_one_that_is_absent() {
     )
     .expect("write");
     std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
-    refuse(
-        &repo,
-        Kind::CannotJudge,
-        "declares a workspace version this check cannot read",
+    refusal::expect(
+        "release-coherence#workspace-version-unreadable",
+        &refuse(
+            &repo,
+            Kind::CannotJudge,
+            "declares a workspace version this check cannot read",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1617,10 +1726,13 @@ fn a_repository_with_no_commit_cannot_have_its_history_read() {
     )
     .expect("write");
     std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
-    refuse(
-        &repo,
-        Kind::CannotJudge,
-        "could not read the release history",
+    refusal::expect(
+        "release-coherence#release-history-unreadable",
+        &refuse(
+            &repo,
+            Kind::CannotJudge,
+            "could not read the release history",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1632,10 +1744,13 @@ fn a_lockfile_that_is_a_directory_cannot_be_read() {
     let fixture = build_fixture(&root, "lock-directory", "0.2.0");
     std::fs::remove_file(fixture.repo.join("Cargo.lock")).expect("remove the lockfile");
     std::fs::create_dir(fixture.repo.join("Cargo.lock")).expect("put a directory in its place");
-    refuse(
-        &fixture.repo,
-        Kind::CannotJudge,
-        "could not read Cargo.lock",
+    refusal::expect(
+        "release-coherence#changelog-or-manifest-unreadable",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "could not read Cargo.lock",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1645,10 +1760,13 @@ fn an_absent_crate_directory_cannot_be_enumerated() {
     let root = scratch("no-crates");
     let fixture = build_fixture(&root, "no-crates", "0.2.0");
     std::fs::remove_dir_all(fixture.repo.join("crates")).expect("remove crates/");
-    refuse(
-        &fixture.repo,
-        Kind::CannotJudge,
-        "found no enumerable directory at",
+    refusal::expect(
+        "release-coherence#directory-not-enumerable",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "found no enumerable directory at",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1660,10 +1778,13 @@ fn a_crate_directory_holding_no_manifest_cannot_be_enumerated() {
     let fixture = build_fixture(&root, "empty-crates", "0.2.0");
     std::fs::remove_dir_all(fixture.repo.join("crates")).expect("remove crates/");
     std::fs::create_dir(fixture.repo.join("crates")).expect("recreate it empty");
-    refuse(
-        &fixture.repo,
-        Kind::CannotJudge,
-        "found no workspace crate manifests under crates/",
+    refusal::expect(
+        "release-coherence#no-crate-manifests-found",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "found no workspace crate manifests under crates/",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1691,7 +1812,10 @@ fn machinery_that_cannot_be_enumerated_cannot_be_judged() {
     let root = scratch("unreadable-index");
     let fixture = build_fixture(&root, "unreadable-index", "0.2.0");
     std::fs::write(fixture.repo.join(".git/index"), b"not an index").expect("corrupt the index");
-    refuse(&fixture.repo, Kind::CannotJudge, "could not enumerate");
+    refusal::expect(
+        "release-coherence#directory-listing-unreadable",
+        &refuse(&fixture.repo, Kind::CannotJudge, "could not enumerate"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -1708,10 +1832,13 @@ fn an_example_manifest_that_is_not_text_cannot_be_read() {
     assert!(manifest.is_file(), "the fixture builds an example manifest");
     std::fs::write(&manifest, [0x5b, 0x70, 0xff, 0xfe, 0x5d])
         .expect("write bytes that are not UTF-8");
-    refuse(
-        &fixture.repo,
-        Kind::CannotJudge,
-        "could not read the example manifest",
+    refusal::expect(
+        "release-coherence#example-manifest-unreadable",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "could not read the example manifest",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1762,7 +1889,10 @@ fn a_glued_comment_cannot_supply_an_internal_version_pin() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: glue the pin into a comment");
-    refuse(&fixture.repo, Kind::Violation, "has no version pin");
+    refusal::expect(
+        "release-coherence#internal-pin-absent",
+        &refuse(&fixture.repo, Kind::Violation, "has no version pin"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -1865,10 +1995,13 @@ fn a_family_pin_under_a_target_triple_is_read() {
         &fixture.repo,
         "chore: depend on a family crate for one target",
     );
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "requires xuanji = \"0.0.1\"",
+    refusal::expect(
+        "release-coherence#example-pin-disagrees",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "requires xuanji = \"0.0.1\"",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1914,10 +2047,13 @@ fn an_example_whose_package_value_is_unreadable_is_not_judged() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: name a crate unreadably");
-    refuse(
-        &fixture.repo,
-        Kind::CannotJudge,
-        "`package` value this check cannot read",
+    refusal::expect(
+        "release-coherence#example-package-value-unreadable",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "`package` value this check cannot read",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1943,10 +2079,13 @@ fn an_example_declaring_several_package_keys_is_not_judged() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: name two crates at once");
-    refuse(
-        &fixture.repo,
-        Kind::CannotJudge,
-        "declares 2 `package` keys",
+    refusal::expect(
+        "release-coherence#example-declares-several-packages",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "declares 2 `package` keys",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1970,10 +2109,13 @@ fn an_example_requiring_a_family_crate_with_no_version_is_refused() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: require a family crate by path alone");
-    refuse(
-        &fixture.repo,
-        Kind::Violation,
-        "requires tianheng with no version",
+    refusal::expect(
+        "release-coherence#example-pin-absent",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "requires tianheng with no version",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -1999,10 +2141,13 @@ fn an_example_declaring_several_version_keys_is_not_judged() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: require one crate at two versions");
-    refuse(
-        &fixture.repo,
-        Kind::CannotJudge,
-        "declares 2 `version` keys",
+    refusal::expect(
+        "release-coherence#example-declares-several-pins",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "declares 2 `version` keys",
+        ),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -2059,6 +2204,9 @@ fn a_stale_internal_pin_in_a_detailed_table_is_a_violation() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: leave an internal pin behind");
-    refuse(&fixture.repo, Kind::Violation, "is pinned to 0.0.1");
+    refusal::expect(
+        "release-coherence#internal-pin-disagrees",
+        &refuse(&fixture.repo, Kind::Violation, "is pinned to 0.0.1"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }

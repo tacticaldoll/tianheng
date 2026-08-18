@@ -89,6 +89,10 @@ fn several_paths_or_several_versions_in_one_dependency_are_not_chosen_between() 
                          xuanji = { path = \"crates/xuanji\", path = \"crates/other\", version = \"0.2.0\" }\n";
     let refusal = require_internal_pins(several_paths, "0.2.0")
         .expect_err("two paths name two places and this reader may pick neither");
+    crate::refusal::expect(
+        "release-coherence#dependency-declares-several-paths",
+        &refusal,
+    );
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("declares 2 `path` keys"),
@@ -100,6 +104,7 @@ fn several_paths_or_several_versions_in_one_dependency_are_not_chosen_between() 
                             xuanji = { path = \"crates/xuanji\", version = \"0.2.0\", version = \"0.1.0\" }\n";
     let refusal = require_internal_pins(several_versions, "0.2.0")
         .expect_err("two versions are two requirements and this reader may pick neither");
+    crate::refusal::expect("release-coherence#internal-pin-several", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("declares 2 `version` keys"),
@@ -123,6 +128,7 @@ fn a_path_or_a_version_this_reader_cannot_read_is_a_cannot_judge() {
                 xuanji = { path = 'crates/xuanji', version = \"0.2.0\" }\n";
     let refusal = require_internal_pins(path, "0.2.0")
         .expect_err("a path this reader cannot take is not a path it may ignore");
+    crate::refusal::expect("release-coherence#dependency-path-unreadable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal
@@ -136,6 +142,7 @@ fn a_path_or_a_version_this_reader_cannot_read_is_a_cannot_judge() {
                    xuanji = { path = \"crates/xuanji\", version = '0.2.0' }\n";
     let refusal = require_internal_pins(version, "0.2.0")
         .expect_err("a version this reader cannot take is not one that satisfies");
+    crate::refusal::expect("release-coherence#internal-pin-unreadable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal
