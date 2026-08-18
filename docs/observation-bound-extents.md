@@ -682,7 +682,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 - **because**: the wrapper pins two of its three judged inputs by construction -- the body travels as the value the gate judged, and the commit set is pinned through `--match-head-commit`, which the server decides atomically. `gh` offers no equivalent for the title, so a re-read shrinks the exposure from a whole `cargo test` to one API call rather than closing it
 - **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
+- **unpinned**, tracked by: `BACKLOG.md` — *the title race the wrapper can only narrow*
 
 ### `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound`
 

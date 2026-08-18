@@ -992,6 +992,20 @@ before that.
   rather than using it unguarded
 - **UNPINNED** `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
 
+The subject SHALL be re-read against the pull request's title **after** the gate, and a title that moved
+SHALL be a **cannot-judge**. The wrapper judges three inputs and pins two of them by construction — the body
+travels as the value the gate judged, and the commit set through `--match-head-commit`, which the server
+decides atomically. The title was captured once, so an edit during the gate left the merge recording a
+subject that is no longer the title. The class is cannot-judge rather than violation because the gate did not
+find the subject wrong: it found it right, against a title that no longer exists.
+
+#### Scenario: A title edited while the gate ran
+
+- **WHEN** the pull request's title differs between the wrapper's evidence read and its post-gate re-read
+- **THEN** the wrapper stops before `gh pr merge`, exits `2`, and names both titles
+- **PINNED-BY** `a_title_edited_while_the_gate_ran_stops_before_the_merge`
+- **PINNED-BY** `an_unchanged_title_still_reaches_the_merge`
+
 #### Scenario: A title edited inside the re-read itself — a stated bound
 
 - **WHEN** the pull request's title changes between the wrapper's post-gate re-read of it and `gh pr merge`
@@ -1001,7 +1015,7 @@ before that.
   decides atomically. `gh` offers no `--match-title`, so the third can only be re-read, which shrinks the
   exposure from a whole `cargo test` to one API call rather than closing it. Closing it needs a
   server-decided precondition this tool does not offer
-- **UNPINNED** `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
+- **UNPINNED** `BACKLOG.md` — *the title race the wrapper can only narrow*
 
 ### Requirement: The squash-message gate SHALL refuse a shape by what it is, not by what it resembles
 
