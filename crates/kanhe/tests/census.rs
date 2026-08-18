@@ -8,7 +8,8 @@ use kanhe::bound_register_parse as register;
 use kanhe::census;
 
 use census::{Census, sweep};
-use kanhe::refusal::Kind;
+use kanhe::refusal;
+use refusal::Kind;
 use register::{Citation, parse_bounds, workspace_root};
 use std::collections::BTreeSet;
 
@@ -99,6 +100,7 @@ fn a_tracked_document_the_sweep_cannot_read_is_a_cannot_judge() {
         1,
         "an unreadable tracked document must produce exactly one refusal, got {offences:?}"
     );
+    refusal::expect("repository-checks#census-document-unreadable", &offences[0]);
     assert_eq!(
         offences[0].kind,
         Kind::CannotJudge,
@@ -138,6 +140,7 @@ fn the_sweep_names_a_disagreement_it_is_shown() {
         "the sweep found no disagreement against figures that are deliberately wrong, so its agreement above \
          is silence rather than a verdict"
     );
+    refusal::expect("repository-checks#census-figure-disagrees", &offences[0]);
 }
 
 /// `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`

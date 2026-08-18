@@ -1017,7 +1017,9 @@ them.
   diff nobody could read, so the unregistered constructors stand beside their registered siblings while
   modules cross over. Two constructors for one rule is a shape this repository closes, and it is carried
   here deliberately: it is counted, it is named in the projection, and it is deleted when the count reaches
-  zero. `merge_message_gate` is the first module across, all ten of its sites registered and observed.
+  zero. `merge_message_gate` is the first module across, all ten of its sites registered and observed, with
+  `selection` and `census` following — four more sites, each already observed by a direction that now names
+  it. The projection carries what remains.
 
   Negative runs: each of the register's four directions was run against a tree carrying exactly the shape it
   refuses — a citation renamed to a site nothing produces, two sites given one identity, a site given a

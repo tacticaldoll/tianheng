@@ -9,6 +9,7 @@ use crate::selection::{all_of, the_only};
 fn the_only_refuses_none_and_several_and_says_which() {
     let none = the_only("widget", Vec::<u8>::new()).expect_err("none is not one");
     assert_eq!(none.kind, Kind::CannotJudge, "{}", none.message);
+    crate::refusal::expect("repository-checks#the-only-found-none", &none);
     assert!(
         none.message.contains("found none"),
         "the refusal must say the count was zero: {}",
@@ -17,6 +18,7 @@ fn the_only_refuses_none_and_several_and_says_which() {
 
     let several = the_only("widget", vec![1u8, 2, 3]).expect_err("several is not one");
     assert_eq!(several.kind, Kind::CannotJudge, "{}", several.message);
+    crate::refusal::expect("repository-checks#the-only-found-several", &several);
     assert!(
         several.message.contains("found 3"),
         "the refusal must say how many, since two and twenty are different facts: {}",

@@ -6,14 +6,12 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 
 ## Not registered yet
 
-**106 refusal sites are not registered yet**, across 6 module(s). They are constructed through `refusal::violation` and `refusal::cannot_judge`, whose only remaining purpose is to be deleted when this figure reaches zero. The module paths are below this heading rather than above it, because the header is where the projection register reads which single unit holds this document.
+**102 refusal sites are not registered yet**, across 4 module(s). They are constructed through `refusal::violation` and `refusal::cannot_judge`, whose only remaining purpose is to be deleted when this figure reaches zero. The module paths are below this heading rather than above it, because the header is where the projection register reads which single unit holds this document.
 
 - `crates/kanhe/src/capability_subjects.rs` — 7
-- `crates/kanhe/src/census.rs` — 2
 - `crates/kanhe/src/gate_identity.rs` — 5
 - `crates/kanhe/src/publish_source_gate.rs` — 29
 - `crates/kanhe/src/release_coherence_gate.rs` — 61
-- `crates/kanhe/src/selection.rs` — 2
 
 ## Registered
 
@@ -21,6 +19,16 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 
 - produced in `crates/kanhe/src/merge_message_gate.rs`
 - observed by `crates/kanhe/tests/merge_message.rs`
+
+### `repository-checks#census-document-unreadable`
+
+- produced in `crates/kanhe/src/census.rs`
+- observed by `crates/kanhe/tests/census.rs`
+
+### `repository-checks#census-figure-disagrees`
+
+- produced in `crates/kanhe/src/census.rs`
+- observed by `crates/kanhe/tests/census.rs`
 
 ### `repository-checks#squash-body-is-a-bare-commit-list`
 
@@ -66,3 +74,13 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 
 - produced in `crates/kanhe/src/merge_message_gate.rs`
 - observed by `crates/kanhe/tests/merge_message.rs`
+
+### `repository-checks#the-only-found-none`
+
+- produced in `crates/kanhe/src/selection.rs`
+- observed by `crates/kanhe/src/tests/selection.rs`
+
+### `repository-checks#the-only-found-several`
+
+- produced in `crates/kanhe/src/selection.rs`
+- observed by `crates/kanhe/src/tests/selection.rs`
