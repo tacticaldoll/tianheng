@@ -391,6 +391,18 @@ fn two_admitted_type_anchors_cannot_be_read() {
         several.message
     );
 
+    // An anchor ending the contract: the clause after it is empty, which is the input the unreachable
+    // *no sentence after its anchor* branch claimed. It names no backticked type, which is both true of it
+    // and the only fact a reader can act on.
+    let ends = format!("prose. {ANCHOR}");
+    let ended = kanhe::merge_message_gate::admitted_types(&ends)
+        .expect_err("an anchor with nothing after it states no list");
+    assert!(
+        ended.message.contains("names no backticked type"),
+        "an anchor ending the contract must be reported as stating no list, got: {}",
+        ended.message
+    );
+
     let none = kanhe::merge_message_gate::admitted_types("no anchor at all")
         .expect_err("no anchor is still unreadable");
     assert!(

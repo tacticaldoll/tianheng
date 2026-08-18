@@ -1299,6 +1299,14 @@ fn merge_outcomes(first: Outcome, second: Outcome) -> Outcome {
 /// A violation-free `Outcome::Violations` is the one shape this refuses. `Report::empty()` is public and
 /// `exit_code()` answers `0` for it, so it is constructible by any participant — and `0.5.0` is the first
 /// release in which an outside `Observer` can be one.
+///
+/// **On the built-in path that shape is construction-held, and it is still stated here.** The composition
+/// beneath the CLI runs three concrete family observers, and each of them builds `Outcome::Violations` only
+/// in the `else` of an `if violations.is_empty()` — so none of them can produce it. Applying this to that
+/// path anyway is deliberate: the alternative applies one rule at one arrival out of four and rests the
+/// other three on a whole-family invariant that nothing checks and that a later edit to any of those three
+/// crates would quietly end. A rule stated once and applied wherever an outcome arrives costs three words;
+/// the argument for applying it selectively would have to stay true by review.
 fn stated(outcome: Outcome) -> Outcome {
     match outcome {
         Outcome::Violations(report) if report.violations.is_empty() => Outcome::ConstitutionError(

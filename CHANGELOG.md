@@ -990,6 +990,22 @@ them.
   still left out and **declared as a bound** with its own tracker; the bound and its tracker are narrowed to
   say so.
 
+- **A refusal nothing could produce.** `admitted_types` guarded `str::split(…).next()` with an `else`
+  saying *the clause has no sentence after its anchor* — and splitting any string yields at least one item,
+  `"".split(". ").next()` being `Some("")`, measured on a real compiler rather than reasoned about. The
+  branch was unreachable, so a diagnostic the reader appeared to draw was one it could never render, and the
+  input it named — an anchor ending the contract — fell to *names no backticked type*, which is true of it.
+  `split_once` with an explicit fallback replaces it, and that input now has a direction.
+
+  Recorded rather than fixed, because looking for its siblings found one that is not this: the three
+  `stated(…)` applications on the built-in composition path also guard a shape no concrete family observer
+  can build, since all four production constructions of `Outcome::Violations` are the `else` of an
+  `if violations.is_empty()`. They stay. Removing them would apply one rule at one arrival out of four and
+  rest the other three on a whole-family invariant nothing checks — the argument for selective application
+  would have to stay true by review, which is what a rule applied where an outcome arrives exists to avoid.
+  The distinction is written where the rule lives: on that path it is construction-held, and on the protocol
+  path — which takes any `Observer` — it is observable.
+
 - **A dated heading's fields are ranged, not merely digits.** The repair that replaced a length test with a
   digit test carried its own standard only one level: *a length test is a parse without its guarantee*
   applies again to a digit test, and `2026-99-99` — and `0000-00-00` — satisfied *carries dated release
