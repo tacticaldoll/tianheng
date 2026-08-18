@@ -1073,6 +1073,13 @@ them.
   merely shares the name `violation` while building something else entirely. A module that constructs
   nothing was being counted as constructing one.
 
+  Reviewing that repair found the same class inside it. The alias detector read **lines**, and a `use` list
+  long enough is wrapped by the formatter — the line carrying the alias then begins with the alias rather
+  than with `use`, so the reader answered *no alias here* over the exact shape it exists to catch. It reads
+  statements now, in executed Rust and opening a line; the first draft of that repair scanned raw text and
+  took a sentence containing the word *use* as a statement running to the next semicolon, which then carried
+  an alias and a constructor name from two different paragraphs. The wrapped form is a case in the corpus.
+
   The fourteenth is not a count. An **aliased import** — `use crate::refusal::cannot_judge as cj;` — makes
   every later call invisible to a reader that matches names, and invisible reads as *this module constructs
   no refusal*. The register refuses such a module now rather than counting it, in the class this repository

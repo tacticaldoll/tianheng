@@ -1192,7 +1192,8 @@ consumer for an undemonstrated deduplication.
 
 - **WATCH: a tracked declaration nothing reads.** *Observed pressure:*
   `crates/kanhe/tests/fixtures/refusal_scan/` was tracked on 2026-08-10 and referenced by nothing until
-  2026-08-18 — fourteen cases naming exactly what a refusal-construction reader must handle, three of which
+  2026-08-18 — a case corpus naming exactly what a refusal-construction reader must handle, three of whose
+  cases
   were rediscovered the hard way in the meantime and one of which had not been. *Observation source:* the
   register's own reader, which the corpus was written for. *Risk:* a declaration written and then orphaned
   reads as coverage to anyone who finds it and holds nothing. Bounded by measurement: every tracked fixture
