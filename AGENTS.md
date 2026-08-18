@@ -423,6 +423,30 @@ this file already names — a commit message, a dated `CHANGELOG.md` section, `d
 measurement of the moment it was taken, so holding one to `HEAD` would demand that the record change every
 time the tree does.
 
+**An extraction's corpus is the pair of modules, not the function you came for.** Two extractions in
+`crates/kanhe` each closed a twin and each left a sibling behind, and both say so in their own headers:
+`hermetic_git`'s names a command builder that "lived twice, byte-identical, in `publish_source_gate` and
+`release_coherence_gate`", and `manifest`'s names "two more twins left behind in that extraction" — the same
+pair of files, twice. A later review found four more instances of the class in one sweep: a fixture `run()`,
+a `WorkspaceVersion` consumption, and two tokens with a constant owner and a literal copy elsewhere
+(`TIANHENG_WORKSPACE_TESTS`, `Do not edit by hand`). Converging the first of those then exposed a fifth, an
+`add`-then-`commit` helper one module had written and its sibling had not.
+
+So when an extraction is made, the thing to read is **everything those two modules share**, not the one
+function that prompted it. Do it before the extraction lands, because the moment it does, the remainder
+stops looking like a class and starts looking like ordinary code.
+
+This has **no repository check**, and the reason is measured rather than assumed. A reaction was built for
+it and deleted in the same change: over `crates/{kanhe,shengmo}/src` a window of four executed lines
+carrying at least two executed statements reports the two structural twins and nothing else — but it sees
+neither of the token-level instances, it reports a call's arguments as statements wherever rustfmt wrapped
+one, and every tightening measured against that false positive also removed a true one. Worse, the
+convergence it asks for is refused elsewhere: `refusal_register` registers a site by the string literal
+opening the constructor's argument list, so two gates sharing a refusal arm **cannot** converge it without
+either losing six per-capability identities or producing constructions the register cannot parse. An
+instrument covering one instance of four, needing three declared bounds, and asking for a repair another
+gate forbids is not the available option. The sweep is.
+
 ## Commits & PRs
 
 - **Conventional Commits.** Every non-release subject is

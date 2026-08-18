@@ -3812,6 +3812,45 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves — `kanhe` ships in no package — so
   released adopters take no action.
 
+- **Three twins, and the reaction built to find them was deleted in the same change.** Two extractions in
+  `crates/kanhe` each closed a duplicated helper and each left a sibling behind, and both say so in their own
+  headers — `hermetic_git`'s names a command builder that "lived twice, byte-identical, in
+  `publish_source_gate` and `release_coherence_gate`", `manifest`'s names "two more twins left behind in that
+  extraction". The same pair of files, twice, because the corpus of an extraction was the function someone had
+  noticed rather than what those two modules share.
+
+  Converged here: the fixture-side `run()`, which lived in both gates differing only in whether the program
+  was its own argument or `args[0]` — the second spelling also panicking on an empty slice where the first
+  could not, so the twin had begun to diverge. Then, exposed by that convergence, an `add`-then-`commit`
+  helper `release_coherence_gate` had written for itself and `publish_source_gate` had not. And the three
+  sentences both gates tell an operator about a workspace version that is absent, unreadable, or not a
+  semantic version.
+
+  **The version arms themselves stay twinned, and by a constraint rather than an oversight.**
+  `refusal_register` registers a site by the string literal that *opens* the constructor's argument list, so a
+  site id arriving as a variable is a construction it cannot parse — and it holds that count at zero.
+  Collapsing the two arms would instead fold six per-capability identities into two, which is what the
+  register exists to prevent. So what moved is what was genuinely duplicable: the sentences have one owner and
+  each gate keeps its own literal identity.
+
+  **A reaction was built for the class and did not earn its place**, and that is recorded because the
+  measurement is the useful part. Over `crates/{kanhe,shengmo}/src`, a window of four executed lines carrying
+  at least two executed statements reports the two structural twins and nothing else — the corpus rule that
+  makes it usable being *executed statements, not item declarations*, without which the same window also
+  reports `#[cfg(test)] mod tests { use super::*;` across four modules. Two other instruments were measured
+  and rejected: normalized function-body similarity puts the live twin at `0.62` against a noise floor of
+  `0.56`, and restricting to same-named functions widens that margin to `0.20` while going blind to the
+  `WorkspaceVersion` pair, a 25-line block inside two 200-line functions that dilutes to `0.30`.
+
+  It was deleted anyway. It sees neither token-level instance the same review found; it reports a call's
+  arguments as statements wherever rustfmt wrapped one, and every tightening measured against that false
+  positive removed a true one; and the convergence it asks for is the one `refusal_register` forbids. An
+  instrument covering one instance of four, needing three declared bounds, and demanding a repair another gate
+  refuses is not the available option — so `AGENTS.md` gains *An extraction's corpus is the pair of modules,
+  not the function you came for*, which covers all four shapes and states outright that it has no reaction.
+
+  No published API, outcome, report, exit class, or manifest moves; `kanhe` ships in no package.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

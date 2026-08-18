@@ -129,6 +129,33 @@ pub fn workspace_version(text: &str) -> WorkspaceVersion {
     WorkspaceVersion::Absent
 }
 
+/// What both git-reading gates tell an operator when `[workspace.package]` names no version.
+///
+/// **The text is shared; the site is not, and cannot be.** This sentence and the two arms around it were
+/// written out in both gates. Converging the whole arm is the obvious repair and the refusal register
+/// forbids it: a site is registered by the string literal that **opens** the constructor's argument list, so
+/// a site id arriving as a variable is a construction the register cannot parse — and it holds that count at
+/// zero. Collapsing the arms instead would fold six per-capability identities into two, which is the thing
+/// the register exists to prevent. So the arms stay twinned by that constraint, and only what was genuinely
+/// duplicable moved.
+///
+/// So what moves is what was actually duplicated. Each gate keeps its own constructor call with its own
+/// literal identity, and the sentence those calls carry has one owner.
+pub const VERSION_ABSENT: &str = "workspace version is missing or malformed: <missing>";
+
+/// What both gates say for a version this reader cannot read, with each gate's own consequence appended.
+///
+/// `tail` is the half that genuinely differs — what the caller could not decide as a result — and it is a
+/// parameter rather than a second copy of the sentence.
+pub fn version_unreadable(what: &str, tail: &str) -> String {
+    format!("Cargo.toml declares a workspace version this check cannot read ({what}), so {tail}")
+}
+
+/// What both gates say for a version that is present, readable, and not a semantic version.
+pub fn version_malformed(version: &str) -> String {
+    format!("workspace version is missing or malformed: {version}")
+}
+
 /// `major.minor.patch` as numbers, or `None` if `version` is not one.
 ///
 /// **Parsed, not pattern-matched**, and that is the divergence this replaces. A digit check answers *does

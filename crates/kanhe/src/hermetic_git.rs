@@ -60,6 +60,51 @@ pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure
     }
 }
 
+/// Run `program` in `dir` through [`hermetic`] and assert it succeeded — the fixture side of this module.
+///
+/// **It lived twice too, and the extraction that took [`hermetic`] and [`run`] walked past it.** The two
+/// copies sat in the same pair of files this module's header already names, differing only in how the
+/// program was passed: one took it as its own argument, the other read `args[0]` and sliced the rest. The
+/// second spelling also panicked on an empty slice where the first could not, so the twin had begun to
+/// diverge in the way `manifest`'s header describes for its own pair.
+///
+/// The explicit signature is the one kept. `args[0]` makes the program a value the caller has to get right
+/// inside a list, and there is no shape of that list a type refuses.
+///
+/// # Panics
+///
+/// When the process cannot be started, or exits non-zero. This builds a fixture rather than judging one, so
+/// a failure here is the harness being unable to construct its own subject.
+pub fn fixture(dir: &Path, program: &str, args: &[&str]) {
+    let out = hermetic(program)
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap_or_else(|err| panic!("cannot run {program} {args:?}: {err}"));
+    assert!(
+        out.status.success(),
+        "{program} {args:?} failed: {}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// Stage everything in a fixture and commit it under one subject.
+///
+/// **The third instance of this module's own class, and converging [`fixture`] is what exposed it.** With the
+/// command builder shared, both fixture builders were left spelling `git add .` and then a commit — while
+/// `release_coherence_gate` had already written exactly this helper for itself and `publish_source_gate` had
+/// not. One module holding the extraction and its sibling not is the same shape the two earlier extractions
+/// left behind, one layer down, and it was invisible until the layer above it closed.
+///
+/// # Panics
+///
+/// As [`fixture`] does: this builds a subject rather than judging one.
+pub fn commit(repo: &Path, subject: &str) {
+    fixture(repo, "git", &["add", "."]);
+    fixture(repo, "git", &["commit", "-qm", subject]);
+}
+
 /// Why a `git` read produced no output.
 ///
 /// **Two facts, folded into one `Err(String)` until a review named the cost.** *git could not be run at all*
