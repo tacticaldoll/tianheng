@@ -1054,6 +1054,14 @@ them.
   were the ones worth having: with each replaced by `Ok(())`, its fixture passed, which is a release
   reported clean over a check that judged nothing.
 
+  **And two of the twenty-nine turned out to be branches nothing can reach.** The lock reader re-read every
+  workspace manifest's `[package]` name and carried its own refusals for a name that is absent or
+  unreadable — over a list that exists only because the example-pin reader resolved every one of those names
+  first and refused otherwise. Trying to register them is what exposed it: a branch no input reaches can
+  have no direction, and the register asks for one. They are deleted rather than declared, and the
+  duplication under them is gone with them — the example-pin reader returns what it resolved, and the lock
+  reader consumes it instead of asking the same question of the same input a second time.
+
   Two holes in the register's own reader surfaced while it was doing this, both making its figure smaller
   than the truth. It counted `violation(` rather than the identifier, so `map_err(cannot_judge)` — a
   constructor used as a value — was a live site invisible to the register built to count sites; found only
