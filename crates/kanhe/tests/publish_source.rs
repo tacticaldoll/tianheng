@@ -16,8 +16,8 @@ use kanhe::refusal;
 use kanhe::publish_source_gate as gate;
 
 use gate::{
-    NoClassification, build_fixture, hermetic, hidden_by_the_checkout, hidden_by_the_checkout_with,
-    judge,
+    NoClassification, Tracked, build_fixture, hermetic, hidden_by_the_checkout,
+    hidden_by_the_checkout_with, judge,
 };
 use refusal::Kind;
 use std::path::{Path, PathBuf};
@@ -697,7 +697,7 @@ fn an_exclusion_classifier_that_cannot_run_cannot_be_judged() {
                 "check-ignore exploded".to_string(),
             ))
         },
-        |_, _| true,
+        |_, _| Tracked::Yes,
     )
     .expect_err("a classifier that could not run must refuse rather than answer");
     let _ = std::fs::remove_dir_all(&root);
@@ -721,7 +721,7 @@ fn an_exclusion_classifier_that_matched_nothing_still_answers() {
     let hidden = hidden_by_the_checkout_with(
         &repo,
         |_, _| Err(NoClassification::MatchedNothing),
-        |_, _| true,
+        |_, _| Tracked::Yes,
     )
     .expect("matching nothing is an answer, not a failure to read");
     let _ = std::fs::remove_dir_all(&root);
@@ -859,11 +859,15 @@ fn the_tracked_question_is_asked_once_per_source_not_once_per_path() {
     let asked = std::sync::atomic::AtomicUsize::new(0);
     let hidden = hidden_by_the_checkout_with(&repo, gate::classify, |repo, source| {
         asked.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        gate::hermetic("git")
+        match gate::hermetic("git")
             .args(["ls-files", "--error-unmatch", "-z", "--", source])
             .current_dir(repo)
             .output()
-            .is_ok_and(|out| out.status.success())
+        {
+            Ok(out) if out.status.success() => Tracked::Yes,
+            Ok(_) => Tracked::No,
+            Err(err) => Tracked::Unreadable(err.to_string()),
+        }
     })
     .expect("the classifier reads this repository");
     let _ = std::fs::remove_dir_all(&root);
@@ -939,6 +943,39 @@ fn a_worktree_the_checkout_hides_is_a_violation() {
     assert!(
         refusal.message.contains("only this checkout hides"),
         "{}",
+        refusal.message
+    );
+}
+
+/// A source whose tracked-ness could not be read refuses, rather than counting as untracked.
+///
+/// `ls-files --error-unmatch` exits non-zero for *this path is untracked* — the question — and also when git
+/// cannot be run at all. Folded into a boolean by `.is_ok()`, the second answered the first: a machine
+/// without git reported every exclusion source as untracked and the gate refused with *hidden by X, which
+/// this repository does not track*. That is an **exit 1**, a disagreement, for a fact never read, in front of
+/// the one act that cannot be undone — and this repository reserves `1` for a source that disagrees.
+///
+/// Negative run: with `tracks` answering a bool, this returns the hidden-file **violation** rather than a
+/// cannot-judge, naming a repository fact it never established.
+#[test]
+fn a_source_whose_tracking_cannot_be_read_is_not_untracked() {
+    let (root, repo) = crowded("unreadable-tracking", 3);
+    let refusal = hidden_by_the_checkout_with(&repo, gate::classify, |_, source| {
+        Tracked::Unreadable(format!("git is not on this machine (asked about {source})"))
+    })
+    .expect_err("a tracked question that could not be asked must refuse");
+    let _ = std::fs::remove_dir_all(&root);
+    assert_eq!(
+        refusal.kind,
+        Kind::CannotJudge,
+        "an unread fact is not a disagreement: {}",
+        refusal.message
+    );
+    assert!(
+        refusal
+            .message
+            .contains("could not decide whether this repository tracks"),
+        "the refusal must say the question went unasked, got: {}",
         refusal.message
     );
 }

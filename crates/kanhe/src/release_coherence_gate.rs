@@ -17,7 +17,7 @@ use crate::refusal::{Refusal, cannot_judge, violation};
 pub use crate::hermetic_git::hermetic;
 use crate::manifest::{Quoted, WorkspaceVersion, quoted_value, semver, workspace_version};
 
-fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
+fn git(repo: &Path, args: &[&str]) -> Result<String, crate::hermetic_git::Failure> {
     crate::hermetic_git::run(repo, &[], args)
 }
 
@@ -652,11 +652,19 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
             repo.display()
         )));
     }
-    git(repo, &["rev-parse", "--is-inside-work-tree"]).map_err(|_| {
-        cannot_judge(format!(
-            "repository root {} has no git history",
-            repo.display()
-        ))
+    // The cause travels, for the reason its sibling in `publish_source_gate` records: a machine without git
+    // was told the repository has no history.
+    git(repo, &["rev-parse", "--is-inside-work-tree"]).map_err(|err| {
+        cannot_judge(match err {
+            crate::hermetic_git::Failure::Spawn(why) => format!(
+                "git could not be run at all ({why}), so whether {} has a history was never asked",
+                repo.display()
+            ),
+            crate::hermetic_git::Failure::Exit(stderr) => format!(
+                "repository root {} has no git history: {stderr}",
+                repo.display()
+            ),
+        })
     })?;
 
     let root_manifest = read(repo, "Cargo.toml")?;

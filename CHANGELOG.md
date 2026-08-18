@@ -970,6 +970,22 @@ them.
   `src/tests/`, because the shape the second needs is one `cargo metadata` rejects outright — the first
   draft tried it end-to-end and failed on a duplicate-key parse error rather than on what it meant to show.
 
+- **A git failure says which failure it was, and a source whose tracking could not be read is not
+  "untracked".** Two diagnostics that answered a question they had never asked.
+
+  `hermetic_git::run` folded *git could not be run at all* and *git ran and refused* into one `Err(String)`
+  carrying only stderr, and two callers then discarded even that with `map_err(|_| …)`. On a machine without
+  git, the operator standing in front of `cargo publish` was told **`repository root X is not a git
+  worktree`** — a sentence about the repository, for a fact about the machine. The failure is typed now, and
+  both callers say which one they met.
+
+  The sharper half is `tracks()`. `ls-files --error-unmatch` exits non-zero for *this path is untracked* —
+  the question — and also when git cannot be run at all; `.is_ok()` made the second answer the first. Every
+  exclusion source then read as untracked and the gate refused with *hidden by X, which this repository does
+  not track*: an **exit 1**, a disagreement, over a fact it never established, in front of the one act that
+  cannot be undone. This repository reserves `1` for a source that disagrees and `2` for one that could not
+  be read. It is three-state now, and the unreadable answer refuses as a cannot-judge.
+
 - **A mark that asked nothing of anyone, and a refusal that would not say which way.** Two corrections to
   this window's own entries.
 
