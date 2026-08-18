@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 
 use crate::refusal::{Refusal, cannot_judge_at, violation_at};
 
+use crate::hermetic_git::fixture as run;
 pub use crate::hermetic_git::hermetic;
 use crate::manifest::{Quoted, WorkspaceVersion, quoted_value, semver, workspace_version};
 
@@ -800,15 +801,15 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
         WorkspaceVersion::Absent => {
             return Err(cannot_judge_at(
                 "release-coherence#workspace-version-absent",
-                "workspace version is missing or malformed: <missing>",
+                crate::manifest::VERSION_ABSENT,
             ));
         }
         WorkspaceVersion::Unreadable(what) => {
             return Err(cannot_judge_at(
                 "release-coherence#workspace-version-unreadable",
-                format!(
-                    "Cargo.toml declares a workspace version this check cannot read ({what}), so whether every \
-                 release surface names one version cannot be decided"
+                crate::manifest::version_unreadable(
+                    &what,
+                    "whether every release surface names one version cannot be decided",
                 ),
             ));
         }
@@ -816,7 +817,7 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     let Some(version_parts) = semver(&version) else {
         return Err(cannot_judge_at(
             "release-coherence#workspace-version-malformed",
-            format!("workspace version is missing or malformed: {version}"),
+            crate::manifest::version_malformed(&version),
         ));
     };
     let changelog = read(repo, "CHANGELOG.md")?;
@@ -1643,20 +1644,6 @@ pub struct Fixture {
     pub repo: PathBuf,
 }
 
-fn run(dir: &Path, args: &[&str]) {
-    let out = hermetic(args[0])
-        .args(&args[1..])
-        .current_dir(dir)
-        .output()
-        .unwrap_or_else(|err| panic!("cannot run {args:?}: {err}"));
-    assert!(
-        out.status.success(),
-        "{args:?} failed: {}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
-
 fn write(path: PathBuf, body: &str) {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).expect("the fixture directory is writable");
@@ -1757,40 +1744,28 @@ pub fn release_changelog(repo: &Path, version: &str, previous: &str) {
 pub fn build_fixture(root: &Path, name: &str, version: &str) -> Fixture {
     let repo = root.join(name);
     std::fs::create_dir_all(&repo).expect("the fixture root is writable");
-    run(&repo, &["git", "init", "-q", "-b", "main"]);
+    run(&repo, "git", &["init", "-q", "-b", "main"]);
     run(
         &repo,
-        &["git", "config", "user.name", "Release Coherence Test"],
+        "git",
+        &["config", "user.name", "Release Coherence Test"],
     );
     run(
         &repo,
-        &[
-            "git",
-            "config",
-            "user.email",
-            "release-coherence@example.invalid",
-        ],
+        "git",
+        &["config", "user.email", "release-coherence@example.invalid"],
     );
-    run(&repo, &["git", "config", "commit.gpgsign", "false"]);
+    run(&repo, "git", &["config", "commit.gpgsign", "false"]);
 
     workspace_files(&repo, "0.1.0");
     release_changelog(&repo, "0.1.0", "0.0.0");
-    run(&repo, &["git", "add", "."]);
-    run(&repo, &["git", "commit", "-qm", "release: 0.1.0"]);
+    commit(&repo, "release: 0.1.0");
 
     workspace_files(&repo, version);
     release_changelog(&repo, version, "0.1.0");
-    run(&repo, &["git", "add", "."]);
-    run(
-        &repo,
-        &["git", "commit", "-qm", &format!("release: {version}")],
-    );
+    commit(&repo, &format!("release: {version}"));
 
     Fixture { repo }
 }
 
-/// Commit everything in the fixture under one subject, with hermetic identity and no signing.
-pub fn commit(repo: &Path, subject: &str) {
-    run(repo, &["git", "add", "."]);
-    run(repo, &["git", "commit", "-qm", subject]);
-}
+pub use crate::hermetic_git::commit;

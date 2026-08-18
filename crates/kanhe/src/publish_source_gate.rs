@@ -383,15 +383,15 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
         WorkspaceVersion::Absent => {
             return Err(cannot_judge_at(
                 "publish-source-integrity#workspace-version-absent",
-                "workspace version is missing or malformed: <missing>",
+                crate::manifest::VERSION_ABSENT,
             ));
         }
         WorkspaceVersion::Unreadable(what) => {
             return Err(cannot_judge_at(
                 "publish-source-integrity#workspace-version-unreadable",
-                format!(
-                    "Cargo.toml declares a workspace version this check cannot read ({what}), so which tag this \
-                 tree would have to be the release snapshot of cannot be decided"
+                crate::manifest::version_unreadable(
+                    &what,
+                    "which tag this tree would have to be the release snapshot of cannot be decided",
                 ),
             ));
         }
@@ -399,7 +399,7 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
     if !is_semver(&version) {
         return Err(cannot_judge_at(
             "publish-source-integrity#workspace-version-malformed",
-            format!("workspace version is missing or malformed: {version}"),
+            crate::manifest::version_malformed(&version),
         ));
     }
     let tag = format!("v{version}");
@@ -783,20 +783,7 @@ pub struct Fixture {
 }
 
 pub use crate::hermetic_git::hermetic;
-
-fn run(dir: &Path, program: &str, args: &[&str]) {
-    let out = hermetic(program)
-        .args(args)
-        .current_dir(dir)
-        .output()
-        .unwrap_or_else(|err| panic!("cannot run {program} {args:?}: {err}"));
-    assert!(
-        out.status.success(),
-        "{program} {args:?} failed: {}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
+use crate::hermetic_git::{commit, fixture as run};
 
 /// Build a [`Fixture`] under `root`, in the shape a publish is allowed to run from.
 ///
@@ -850,12 +837,7 @@ pub fn build_fixture(root: &Path, name: &str, version: &str) -> Fixture {
         format!("[workspace]\nmembers = []\n\n[workspace.package]\nversion = \"{version}\"\n"),
     )
     .expect("write the fixture manifest");
-    run(&repo, "git", &["add", "."]);
-    run(
-        &repo,
-        "git",
-        &["commit", "-qm", &format!("release: {version}")],
-    );
+    commit(&repo, &format!("release: {version}"));
     run(
         &repo,
         "git",
