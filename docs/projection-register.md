@@ -36,8 +36,9 @@ forgetting it.
 | `docs/observation-bound-extents.md` | `crates/kanhe/tests/observation_bound_model.rs` | `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test observation_bound_model` |
 | `docs/observation-bounds.md` | `crates/kanhe/tests/bound_register.rs` | `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register` |
 | `docs/projection-register.md` | `crates/kanhe/tests/projection_register.rs` | `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test projection_register` |
+| `docs/refusal-register.md` | `crates/kanhe/tests/refusal_register.rs` | `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_register` |
 
-4 documents.
+5 documents.
 
 ## The checks holding them
 
@@ -47,6 +48,7 @@ by the document and the call site is the fact:
 - `crates/kanhe/tests/bound_register.rs`
 - `crates/kanhe/tests/observation_bound_model.rs`
 - `crates/kanhe/tests/projection_register.rs`
+- `crates/kanhe/tests/refusal_register.rs`
 - `crates/shengmo/tests/self_governance.rs`
 
-4 checks.
+5 checks.

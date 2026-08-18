@@ -16,6 +16,7 @@ use kanhe::merge_message_gate as gate;
 
 use gate::judge;
 use refusal::Kind;
+use refusal::Refusal;
 
 const OK_SUBJECT: &str = "feat(tianheng): hold the squash message to its pull request";
 /// Commit subjects a body could be the concatenation of, for directions not about that question.
@@ -28,7 +29,13 @@ fn commits() -> Vec<String> {
 
 const OK_BODY: &str = "Why this exists and what contract it preserves.\n";
 
-fn refuse(subject: &str, body: &str, title: &str, kind: Kind, needle: &str) {
+/// A refusal from `site`, of `kind`, saying `needle`.
+///
+/// **The site, and not only the message.** A needle is a phrase inside a rendered message: it cannot tell a
+/// branch that was never exercised from one whose wording moved, and it is what the refusal register
+/// replaces with a citation the run compares. The needle stays because what the operator is told is the
+/// whole of what a refusal delivers, and the site says which branch told them.
+fn refuse(subject: &str, body: &str, title: &str, kind: Kind, needle: &str) -> Refusal {
     let refusal = judge(subject, body, title, &commits())
         .expect_err(&format!("expected a refusal containing {needle:?}"));
     assert_eq!(refusal.kind, kind, "{}", refusal.message);
@@ -37,6 +44,7 @@ fn refuse(subject: &str, body: &str, title: &str, kind: Kind, needle: &str) {
         "expected a refusal containing {needle:?}, got: {}",
         refusal.message
     );
+    refusal
 }
 
 /// The gate, over the message a merge is about to record.
@@ -82,12 +90,16 @@ fn a_subject_that_is_its_title_with_a_body_is_accepted() {
 /// The defect this check was built for, in the exact shape it took.
 #[test]
 fn a_subject_carrying_a_pull_request_serial_is_a_violation() {
-    refuse(
+    let refusal = refuse(
         &format!("{OK_SUBJECT} (#447)"),
         OK_BODY,
         OK_SUBJECT,
         Kind::Violation,
         "ends in a pull request serial",
+    );
+    refusal::expect(
+        "repository-checks#squash-subject-carries-a-serial",
+        &refusal,
     );
 }
 
@@ -95,35 +107,44 @@ fn a_subject_carrying_a_pull_request_serial_is_a_violation() {
 #[test]
 fn a_serial_in_both_the_subject_and_the_title_is_still_the_serial() {
     let with_serial = format!("{OK_SUBJECT} (#447)");
-    refuse(
+    let refusal = refuse(
         &with_serial,
         OK_BODY,
         &with_serial,
         Kind::Violation,
         "ends in a pull request serial",
     );
+    refusal::expect(
+        "repository-checks#squash-subject-carries-a-serial",
+        &refusal,
+    );
 }
 
 #[test]
 fn a_subject_that_is_not_the_title_is_a_violation() {
-    refuse(
+    let refusal = refuse(
         "feat(tianheng): something else entirely",
         OK_BODY,
         OK_SUBJECT,
         Kind::Violation,
         "is not the pull request's title",
     );
+    refusal::expect(
+        "repository-checks#squash-subject-is-not-the-title",
+        &refusal,
+    );
 }
 
 #[test]
 fn a_title_that_cannot_be_read_cannot_be_judged() {
-    refuse(
+    let refusal = refuse(
         OK_SUBJECT,
         OK_BODY,
         "   ",
         Kind::CannotJudge,
         "title is unavailable",
     );
+    refusal::expect("repository-checks#squash-title-unavailable", &refusal);
 }
 
 #[test]
@@ -135,12 +156,16 @@ fn a_subject_that_is_not_a_conventional_commit_is_a_violation() {
         "feat(tianheng):",
         "chore: ",
     ] {
-        refuse(
+        let refusal = refuse(
             subject,
             OK_BODY,
             subject,
             Kind::Violation,
             "is not a Conventional Commit",
+        );
+        refusal::expect(
+            "repository-checks#squash-subject-is-not-conventional",
+            &refusal,
         );
     }
 }
@@ -148,12 +173,16 @@ fn a_subject_that_is_not_a_conventional_commit_is_a_violation() {
 #[test]
 fn a_breaking_subject_with_no_migration_footer_is_a_violation() {
     let subject = "refactor(tianheng)!: move the observer surface";
-    refuse(
+    let refusal = refuse(
         subject,
         OK_BODY,
         subject,
         Kind::Violation,
         "names no `BREAKING CHANGE:` footer",
+    );
+    refusal::expect(
+        "repository-checks#squash-breaking-without-a-migration-footer",
+        &refusal,
     );
     let with_footer = format!("{OK_BODY}\nBREAKING CHANGE: adopters regenerate their baseline.\n");
     assert!(judge(subject, &with_footer, subject, &commits()).is_ok());
@@ -179,22 +208,30 @@ fn a_line_that_is_an_agent_attribution_is_a_violation() {
         "generated with a tool",
         "🤖 made this",
     ] {
-        refuse(
+        let refusal = refuse(
             OK_SUBJECT,
             &format!("{OK_BODY}\n{line}\n"),
             OK_SUBJECT,
             Kind::Violation,
             "is the agent attribution",
         );
+        refusal::expect(
+            "repository-checks#squash-message-carries-an-attribution",
+            &refusal,
+        );
     }
     // The glyph is refused wherever it sits, including mid-subject: it has no legitimate use here, and reading it
     // by position would have let this exact shape through — the false negative the first draft opened.
-    refuse(
+    let refusal = refuse(
         "fix(kanhe): 🤖 wrote this",
         OK_BODY,
         "fix(kanhe): 🤖 wrote this",
         Kind::Violation,
         "is the agent attribution",
+    );
+    refusal::expect(
+        "repository-checks#squash-message-carries-an-attribution",
+        &refusal,
     );
 }
 
@@ -245,6 +282,7 @@ fn a_bullet_body_that_is_not_the_commit_subjects_is_accepted() {
 fn a_body_judged_without_the_commit_subjects_cannot_be_judged() {
     let refusal = judge(OK_SUBJECT, "- a bullet\n", OK_SUBJECT, &[])
         .expect_err("no commit subjects is a refusal to judge, not a fallback");
+    refusal::expect("repository-checks#squash-commits-unavailable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge);
     assert!(
         refusal.message.contains("commit subjects are unavailable"),
@@ -255,23 +293,28 @@ fn a_body_judged_without_the_commit_subjects_cannot_be_judged() {
 
 #[test]
 fn an_empty_body_is_a_violation() {
-    refuse(
+    let refusal = refuse(
         OK_SUBJECT,
         "  \n\n",
         OK_SUBJECT,
         Kind::Violation,
         "body is empty",
     );
+    refusal::expect("repository-checks#squash-body-is-empty", &refusal);
 }
 
 #[test]
 fn a_body_that_is_a_bare_commit_list_is_a_violation() {
-    refuse(
+    let refusal = refuse(
         OK_SUBJECT,
         &format!("* {}\n* {}\n", commits()[0], commits()[1]),
         OK_SUBJECT,
         Kind::Violation,
         "bare list of commit subjects",
+    );
+    refusal::expect(
+        "repository-checks#squash-body-is-a-bare-commit-list",
+        &refusal,
     );
 }
 
@@ -397,6 +440,10 @@ fn two_admitted_type_anchors_cannot_be_read() {
     let ends = format!("prose. {ANCHOR}");
     let ended = kanhe::merge_message_gate::admitted_types(&ends)
         .expect_err("an anchor with nothing after it states no list");
+    refusal::expect(
+        "repository-checks#admitted-types-clause-names-no-type",
+        &ended,
+    );
     assert!(
         ended.message.contains("names no backticked type"),
         "an anchor ending the contract must be reported as stating no list, got: {}",

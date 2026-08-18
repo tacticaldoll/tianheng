@@ -14,7 +14,7 @@
 //! The verdict is the shared kinded [`Refusal`], so *the message disagrees* stays separate from *the title
 //! could not be read*. The focused failure matrix asserts both observable outcomes and their actionable text.
 
-use crate::refusal::{Refusal, cannot_judge, violation};
+use crate::refusal::{Refusal, cannot_judge_at, violation_at};
 
 /// The Conventional Commit types `AGENTS.md` admits.
 const TYPES: [&str; 9] = [
@@ -147,30 +147,40 @@ pub fn judge(
     commits: &[String],
 ) -> Result<String, Refusal> {
     if title.trim().is_empty() {
-        return Err(cannot_judge(
+        return Err(cannot_judge_at(
+            "repository-checks#squash-title-unavailable",
             "the pull request's title is unavailable, so whether the subject is that title cannot be \
              decided — which is not the same fact as a subject that disagrees",
         ));
     }
     if carries_a_serial(subject) {
-        return Err(violation(format!(
-            "the squash subject ends in a pull request serial: {subject:?}. GitHub appends `(#N)` to the \
+        return Err(violation_at(
+            "repository-checks#squash-subject-carries-a-serial",
+            format!(
+                "the squash subject ends in a pull request serial: {subject:?}. GitHub appends `(#N)` to the \
              default subject and neither value of the repository's squash-title setting suppresses it, so \
              the subject is passed explicitly — without the serial"
-        )));
+            ),
+        ));
     }
     if subject != title {
-        return Err(violation(format!(
-            "the squash subject is not the pull request's title.\n  subject: {subject:?}\n  title:   \
+        return Err(violation_at(
+            "repository-checks#squash-subject-is-not-the-title",
+            format!(
+                "the squash subject is not the pull request's title.\n  subject: {subject:?}\n  title:   \
              {title:?}\nThe title is what review saw; a subject saying something else makes the record \
              disagree with what was approved"
-        )));
+            ),
+        ));
     }
     if !is_conventional(subject) {
-        return Err(violation(format!(
-            "the squash subject is not a Conventional Commit: {subject:?}. Expected \
+        return Err(violation_at(
+            "repository-checks#squash-subject-is-not-conventional",
+            format!(
+                "the squash subject is not a Conventional Commit: {subject:?}. Expected \
              `<type>(<scope>)!?: <summary>` with a lowercase type from {TYPES:?}"
-        )));
+            ),
+        ));
     }
     // The head, not the whole subject: a summary may carry an exclamation mark for its own reasons, and the
     // shape check above already reads the head to strip a trailing `!` before matching the type.
@@ -178,35 +188,42 @@ pub fn judge(
         .split_once(": ")
         .is_some_and(|(head, _)| head.ends_with('!'));
     if head_is_breaking && !body.contains("BREAKING CHANGE:") {
-        return Err(violation(
+        return Err(violation_at(
+            "repository-checks#squash-breaking-without-a-migration-footer",
             "the squash subject is marked breaking and the body names no `BREAKING CHANGE:` footer, so the \
              record announces a migration it does not describe",
         ));
     }
     for (mark, shape) in ATTRIBUTION {
         if carries(subject, mark, shape) || carries(body, mark, shape) {
-            return Err(violation(format!(
-                "a line of the squash message is the agent attribution {mark:?}, which this repository's commit \
+            return Err(violation_at(
+                "repository-checks#squash-message-carries-an-attribution",
+                format!(
+                    "a line of the squash message is the agent attribution {mark:?}, which this repository's commit \
                  messages and pull request descriptions do not carry. Naming the mark inside a sentence is not \
                  carrying it; a line that begins with it is"
-            )));
+                ),
+            ));
         }
     }
     if body.trim().is_empty() {
-        return Err(violation(
+        return Err(violation_at(
+            "repository-checks#squash-body-is-empty",
             "the squash body is empty; a commit body carries why the change exists and what contract it \
              preserves, and the branch's fine-grained commits are review provenance rather than this record",
         ));
     }
     if commits.is_empty() {
-        return Err(cannot_judge(
+        return Err(cannot_judge_at(
+            "repository-checks#squash-commits-unavailable",
             "the pull request's commit subjects are unavailable, so whether this body is the default \
              concatenation of them cannot be decided — falling back to refusing every bulleted body is the \
              false refusal this reads them to avoid",
         ));
     }
     if is_a_bare_commit_list(body, commits) {
-        return Err(violation(
+        return Err(violation_at(
+            "repository-checks#squash-body-is-a-bare-commit-list",
             "the squash body is a bare list of commit subjects, which is the default this rule exists to \
              replace with something self-contained",
         ));
@@ -255,7 +272,8 @@ pub fn admitted_types(agents: &str) -> Result<Vec<String>, Refusal> {
         .map(str::to_string)
         .collect();
     if types.is_empty() {
-        return Err(cannot_judge(
+        return Err(cannot_judge_at(
+            "repository-checks#admitted-types-clause-names-no-type",
             "the admitted-types clause names no backticked type, so the contract states no list for the \
              gate's own to be compared against",
         ));
