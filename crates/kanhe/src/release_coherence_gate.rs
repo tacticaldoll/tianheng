@@ -12,7 +12,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use crate::refusal::{Refusal, cannot_judge, violation};
+use crate::refusal::{Refusal, cannot_judge, cannot_judge_at, violation, violation_at};
 
 pub use crate::hermetic_git::hermetic;
 use crate::manifest::{Quoted, WorkspaceVersion, quoted_value, semver, workspace_version};
@@ -22,8 +22,12 @@ fn git(repo: &Path, args: &[&str]) -> Result<String, crate::hermetic_git::Failur
 }
 
 fn read(repo: &Path, rel: &str) -> Result<String, Refusal> {
-    std::fs::read_to_string(repo.join(rel))
-        .map_err(|err| cannot_judge(format!("could not read {rel}: {err}")))
+    std::fs::read_to_string(repo.join(rel)).map_err(|err| {
+        cannot_judge_at(
+            "release-coherence#changelog-or-manifest-unreadable",
+            format!("could not read {rel}: {err}"),
+        )
+    })
 }
 
 /// Every value assigned to `key` inside a dependency's value text, recognised as a **table key** rather than
@@ -471,8 +475,12 @@ fn release_spine(
     version: &str,
     version_parts: (u64, u64, u64),
 ) -> Result<Spine, Refusal> {
-    let subjects = git(repo, &["log", "--format=%H%x09%s"])
-        .map_err(|err| cannot_judge(format!("could not read the release history: {err}")))?;
+    let subjects = git(repo, &["log", "--format=%H%x09%s"]).map_err(|err| {
+        cannot_judge_at(
+            "release-coherence#release-history-unreadable",
+            format!("could not read the release history: {err}"),
+        )
+    })?;
     let mut history: Vec<(String, String)> = Vec::new();
     // HEAD's own commit is the first line this log produced, so asking git for it again would be a second
     // read of something already in hand — and a refusal guarding that second read is a branch no input can
@@ -487,19 +495,22 @@ fn release_spine(
         }
         if let Some(rest) = subject.strip_prefix("release: ") {
             if semver(rest).is_none() {
-                return Err(violation(format!(
-                    "malformed release history subject: {subject}"
-                )));
+                return Err(violation_at(
+                    "release-coherence#release-history-version-malformed",
+                    format!("malformed release history subject: {subject}"),
+                ));
             }
             history.push((commit.to_string(), rest.to_string()));
         } else if subject.starts_with("release:") {
-            return Err(violation(format!(
-                "malformed release history subject: {subject}"
-            )));
+            return Err(violation_at(
+                "release-coherence#release-history-subject-malformed",
+                format!("malformed release history subject: {subject}"),
+            ));
         }
     }
     let Some((release_commit, release_version)) = history.first().cloned() else {
-        return Err(cannot_judge(
+        return Err(cannot_judge_at(
+            "release-coherence#release-history-shallow",
             "exact release history is unavailable; fetch full history containing release: X.Y.Z — a shallow \
              clone cannot see the release spine, which is not the same as surfaces that disagree",
         ));
@@ -522,9 +533,12 @@ fn release_spine(
             semver(&release_version).expect("the history holds only well-formed versions");
         match version_parts.cmp(&released) {
             std::cmp::Ordering::Less => {
-                return Err(violation(format!(
-                    "workspace version {version} is older than latest release {release_version}"
-                )));
+                return Err(violation_at(
+                    "release-coherence#workspace-version-behind-latest-release",
+                    format!(
+                        "workspace version {version} is older than latest release {release_version}"
+                    ),
+                ));
             }
             std::cmp::Ordering::Equal => State::Development,
             std::cmp::Ordering::Greater => State::ReleaseReady,
@@ -569,9 +583,10 @@ fn require_version_surfaces(
             .lines()
             .any(|line| without_wschar(line) == "version.workspace=true");
         if !inherits {
-            return Err(violation(format!(
-                "workspace package {name} must inherit version.workspace = true"
-            )));
+            return Err(violation_at(
+                "release-coherence#member-does-not-inherit-workspace-version",
+                format!("workspace package {name} must inherit version.workspace = true"),
+            ));
         }
     }
     require_internal_pins(root_manifest, version)?;
@@ -592,7 +607,8 @@ fn require_changelog_state(
         .filter(|line| line.trim_end() == "## [Unreleased]")
         .count();
     if unreleased_sections != 1 {
-        return Err(violation(
+        return Err(violation_at(
+            "release-coherence#unreleased-section-not-exactly-one",
             "CHANGELOG must contain exactly one [Unreleased] section".to_string(),
         ));
     }
@@ -600,24 +616,31 @@ fn require_changelog_state(
     match spine.state {
         State::Development => {
             if !has_item {
-                return Err(violation(
+                return Err(violation_at(
+                    "release-coherence#unreleased-has-no-adopter-narrative",
                     "development requires adopter-facing release narrative under [Unreleased]"
                         .to_string(),
                 ));
             }
             let link = format!("[Unreleased]: {COMPARE}/v{version}...HEAD");
             if !changelog.lines().any(|line| line.trim_end() == link) {
-                return Err(violation(format!(
-                    "[Unreleased] comparison link must start at v{version} and end at HEAD"
-                )));
+                return Err(violation_at(
+                    "release-coherence#unreleased-comparison-link-wrong",
+                    format!(
+                        "[Unreleased] comparison link must start at v{version} and end at HEAD"
+                    ),
+                ));
             }
         }
         State::ReleaseReady | State::Snapshot => {
             if has_item {
-                return Err(violation(format!(
-                    "[Unreleased] must be empty in {} state",
-                    spine.state.label()
-                )));
+                return Err(violation_at(
+                    "release-coherence#unreleased-not-empty-in-state",
+                    format!(
+                        "[Unreleased] must be empty in {} state",
+                        spine.state.label()
+                    ),
+                ));
             }
             let prefix = format!("## [{version}] - ");
             let dated = changelog.lines().any(|line| {
@@ -626,9 +649,10 @@ fn require_changelog_state(
                     .is_some_and(is_iso_date)
             });
             if !dated {
-                return Err(violation(format!(
-                    "CHANGELOG is missing dated release notes for {version}"
-                )));
+                return Err(violation_at(
+                    "release-coherence#dated-release-notes-missing",
+                    format!("CHANGELOG is missing dated release notes for {version}"),
+                ));
             }
             let from = if spine.state == State::ReleaseReady {
                 Some(spine.release_version.clone())
@@ -640,12 +664,17 @@ fn require_changelog_state(
                 None => format!("[{version}]: {RELEASES}/v{version}"),
             };
             if !changelog.lines().any(|line| line.trim_end() == expected) {
-                return Err(violation(match &from {
-                    Some(previous) => {
-                        format!("CHANGELOG comparison link for {version} must start at v{previous}")
-                    }
-                    None => format!("first release CHANGELOG link must target v{version}"),
-                }));
+                return Err(violation_at(
+                    "release-coherence#release-comparison-link-wrong",
+                    match &from {
+                        Some(previous) => {
+                            format!(
+                                "CHANGELOG comparison link for {version} must start at v{previous}"
+                            )
+                        }
+                        None => format!("first release CHANGELOG link must target v{version}"),
+                    },
+                ));
             }
             require_lock_versions(repo, manifests, version)?;
         }
@@ -670,10 +699,13 @@ fn require_section_shape(changelog: &str) -> Result<(), Refusal> {
         .collect();
     duplicates.sort();
     if !duplicates.is_empty() {
-        return Err(violation(format!(
-            "a CHANGELOG release section repeats a heading, so entries that belong together are split:\n{}",
-            duplicates.join("\n")
-        )));
+        return Err(violation_at(
+            "release-coherence#changelog-section-repeats-a-heading",
+            format!(
+                "a CHANGELOG release section repeats a heading, so entries that belong together are split:\n{}",
+                duplicates.join("\n")
+            ),
+        ));
     }
     let mut missing: Vec<&String> = shape
         .breaking
@@ -687,15 +719,18 @@ fn require_section_shape(changelog: &str) -> Result<(), Refusal> {
         .collect();
     missing.sort();
     if !missing.is_empty() {
-        return Err(violation(format!(
-            "a CHANGELOG section marks a change **BREAKING** and carries no `### Migration` section, so what \
+        return Err(violation_at(
+            "release-coherence#breaking-without-migration-section",
+            format!(
+                "a CHANGELOG section marks a change **BREAKING** and carries no `### Migration` section, so what \
              an adopter must do is scattered through the entries or absent:\n{}",
-            missing
-                .iter()
-                .map(|s| format!("  {s}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        )));
+                missing
+                    .iter()
+                    .map(|s| format!("  {s}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ),
+        ));
     }
     Ok(())
 }
@@ -709,12 +744,15 @@ fn require_adopter_narrative(
 ) -> Result<(), Refusal> {
     let leaked = adopter_cited_machinery(repo, changelog, version, spine.state)?;
     if !leaked.is_empty() {
-        return Err(violation(format!(
-            "an adopter-facing CHANGELOG entry names this repository's own machinery, which ships in no \
+        return Err(violation_at(
+            "release-coherence#adopter-entry-names-own-machinery",
+            format!(
+                "an adopter-facing CHANGELOG entry names this repository's own machinery, which ships in no \
              package and which an adopter can never run — move it under `### Self-governance`, or, where the \
              adopter-relevant fact is genuinely there, state the guarantee and drop the filename:\n{}",
-            leaked.join("\n")
-        )));
+                leaked.join("\n")
+            ),
+        ));
     }
     Ok(())
 }
@@ -724,21 +762,21 @@ fn require_adopter_narrative(
 /// Read-only: it never bumps, commits, tags, or publishes.
 pub fn judge(repo: &Path) -> Result<String, Refusal> {
     if !repo.join("Cargo.toml").is_file() {
-        return Err(cannot_judge(format!(
-            "repository root {} has no Cargo.toml",
-            repo.display()
-        )));
+        return Err(cannot_judge_at(
+            "release-coherence#repository-root-has-no-manifest",
+            format!("repository root {} has no Cargo.toml", repo.display()),
+        ));
     }
     if !repo.join("CHANGELOG.md").is_file() {
-        return Err(cannot_judge(format!(
-            "repository root {} has no CHANGELOG.md",
-            repo.display()
-        )));
+        return Err(cannot_judge_at(
+            "release-coherence#repository-root-has-no-changelog",
+            format!("repository root {} has no CHANGELOG.md", repo.display()),
+        ));
     }
     // The cause travels, for the reason its sibling in `publish_source_gate` records: a machine without git
     // was told the repository has no history.
     git(repo, &["rev-parse", "--is-inside-work-tree"]).map_err(|err| {
-        cannot_judge(match err {
+        cannot_judge_at("release-coherence#git-unrunnable", match err {
             crate::hermetic_git::Failure::Spawn(why) => format!(
                 "git could not be run at all ({why}), so whether {} has a history was never asked",
                 repo.display()
@@ -758,15 +796,19 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     let version = match workspace_version(&root_manifest) {
         WorkspaceVersion::Declared(version) => version,
         WorkspaceVersion::Absent => {
-            return Err(cannot_judge(
+            return Err(cannot_judge_at(
+                "release-coherence#workspace-version-absent",
                 "workspace version is missing or malformed: <missing>",
             ));
         }
         WorkspaceVersion::Unreadable(what) => {
-            return Err(cannot_judge(format!(
-                "Cargo.toml declares a workspace version this check cannot read ({what}), so whether every \
+            return Err(cannot_judge_at(
+                "release-coherence#workspace-version-unreadable",
+                format!(
+                    "Cargo.toml declares a workspace version this check cannot read ({what}), so whether every \
                  release surface names one version cannot be decided"
-            )));
+                ),
+            ));
         }
     };
     let Some(version_parts) = semver(&version) else {
@@ -798,7 +840,7 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
 /// serves both enumerations, because two calls carrying one message would be shadowing.
 fn entries_of(dir: &Path) -> Result<Vec<PathBuf>, Refusal> {
     let listing = std::fs::read_dir(dir).map_err(|err| {
-        cannot_judge(format!(
+        cannot_judge_at("release-coherence#directory-not-enumerable", format!(
             "found no enumerable directory at {}: {err} — the layout changed or is absent, so what it holds \
              cannot be judged",
             dir.display()
@@ -838,7 +880,8 @@ fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal> {
         }
     }
     if out.is_empty() {
-        return Err(cannot_judge(
+        return Err(cannot_judge_at(
+            "release-coherence#no-crate-manifests-found",
             "found no workspace crate manifests under crates/ — the crate layout changed or is absent",
         ));
     }
@@ -874,16 +917,22 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
             Declared::Value(path) => path,
             Declared::Absent => continue,
             Declared::Unreadable(written) => {
-                return Err(cannot_judge(format!(
-                    "dependency {key} declares a `path` this check cannot read ({written}), so whether it \
+                return Err(cannot_judge_at(
+                    "release-coherence#dependency-path-unreadable",
+                    format!(
+                        "dependency {key} declares a `path` this check cannot read ({written}), so whether it \
                      is an internal dependency cannot be decided"
-                )));
+                    ),
+                ));
             }
             Declared::Several(several) => {
-                return Err(cannot_judge(format!(
-                    "dependency {key} declares {several} `path` keys, so where it points is not this \
+                return Err(cannot_judge_at(
+                    "release-coherence#dependency-declares-several-paths",
+                    format!(
+                        "dependency {key} declares {several} `path` keys, so where it points is not this \
                      reader's to choose"
-                )));
+                    ),
+                ));
             }
         };
         if !path.starts_with("crates/") {
@@ -893,26 +942,34 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
         match pin {
             Declared::Value(pin) if pin == version => {}
             Declared::Value(pin) => {
-                return Err(violation(format!(
-                    "internal dependency {key} is pinned to {pin}; expected {version}"
-                )));
+                return Err(violation_at(
+                    "release-coherence#internal-pin-disagrees",
+                    format!("internal dependency {key} is pinned to {pin}; expected {version}"),
+                ));
             }
             Declared::Absent => {
-                return Err(violation(format!(
-                    "internal dependency {key} has no version pin"
-                )));
+                return Err(violation_at(
+                    "release-coherence#internal-pin-absent",
+                    format!("internal dependency {key} has no version pin"),
+                ));
             }
             Declared::Unreadable(written) => {
-                return Err(cannot_judge(format!(
-                    "internal dependency {key} declares a version this check cannot read ({written}), so \
+                return Err(cannot_judge_at(
+                    "release-coherence#internal-pin-unreadable",
+                    format!(
+                        "internal dependency {key} declares a version this check cannot read ({written}), so \
                      whether it names the workspace version cannot be decided"
-                )));
+                    ),
+                ));
             }
             Declared::Several(several) => {
-                return Err(cannot_judge(format!(
-                    "internal dependency {key} declares {several} `version` keys, so which one it names is \
+                return Err(cannot_judge_at(
+                    "release-coherence#internal-pin-several",
+                    format!(
+                        "internal dependency {key} declares {several} `version` keys, so which one it names is \
                      not this reader's to choose"
-                )));
+                    ),
+                ));
             }
         }
     }
@@ -968,10 +1025,13 @@ fn require_example_pins(
             continue;
         }
         let text = std::fs::read_to_string(&manifest).map_err(|err| {
-            cannot_judge(format!(
-                "could not read the example manifest {}: {err}",
-                manifest.display()
-            ))
+            cannot_judge_at(
+                "release-coherence#example-manifest-unreadable",
+                format!(
+                    "could not read the example manifest {}: {err}",
+                    manifest.display()
+                ),
+            )
         })?;
         example_manifests += 1;
         let name = dir
@@ -998,16 +1058,22 @@ fn require_example_pins(
             let package = match package {
                 Package::Named(package) => package,
                 Package::Unreadable => {
-                    return Err(cannot_judge(format!(
-                        "example {name} declares `{key}` with a `package` value this check cannot read, so \
+                    return Err(cannot_judge_at(
+                        "release-coherence#example-package-value-unreadable",
+                        format!(
+                            "example {name} declares `{key}` with a `package` value this check cannot read, so \
                          which crate it requires cannot be decided"
-                    )));
+                        ),
+                    ));
                 }
                 Package::Several(several) => {
-                    return Err(cannot_judge(format!(
-                        "example {name} declares {several} `package` keys for `{key}`, so which crate it \
+                    return Err(cannot_judge_at(
+                        "release-coherence#example-declares-several-packages",
+                        format!(
+                            "example {name} declares {several} `package` keys for `{key}`, so which crate it \
                          requires is not this reader's to choose"
-                    )));
+                        ),
+                    ));
                 }
             };
             if !family.contains(&package) {
@@ -1019,10 +1085,13 @@ fn require_example_pins(
             let pin = match pin {
                 Declared::Value(pin) => pin,
                 Declared::Absent => {
-                    return Err(violation(format!(
-                        "example {name} requires {package} with no version, so nothing holds it to the \
+                    return Err(violation_at(
+                        "release-coherence#example-pin-absent",
+                        format!(
+                            "example {name} requires {package} with no version, so nothing holds it to the \
                          workspace version {version}"
-                    )));
+                        ),
+                    ));
                 }
                 Declared::Unreadable(written) => {
                     return Err(cannot_judge(format!(
@@ -1031,10 +1100,13 @@ fn require_example_pins(
                     )));
                 }
                 Declared::Several(several) => {
-                    return Err(cannot_judge(format!(
-                        "example {name} declares {several} `version` keys for {package}, so which one it \
+                    return Err(cannot_judge_at(
+                        "release-coherence#example-declares-several-pins",
+                        format!(
+                            "example {name} declares {several} `version` keys for {package}, so which one it \
                          requires is not this reader's to choose"
-                    )));
+                        ),
+                    ));
                 }
             };
             requirements += 1;
@@ -1046,10 +1118,13 @@ fn require_example_pins(
                 } else {
                     format!("{package} (as `{key}`)")
                 };
-                return Err(violation(format!(
-                    "example {name} requires {named} = \"{pin}\", which the workspace version {version} \
+                return Err(violation_at(
+                    "release-coherence#example-pin-disagrees",
+                    format!(
+                        "example {name} requires {named} = \"{pin}\", which the workspace version {version} \
                      does not satisfy"
-                )));
+                    ),
+                ));
             }
         }
     }
@@ -1178,22 +1253,27 @@ fn require_lock_versions(
         let first = local.next();
         let extra = local.count();
         if extra > 0 {
-            return Err(cannot_judge(format!(
-                "Cargo.lock carries {} entries for {package} with no source, so which one is the workspace \
+            return Err(cannot_judge_at(
+                "release-coherence#lock-several-sourceless-entries",
+                format!(
+                    "Cargo.lock carries {} entries for {package} with no source, so which one is the workspace \
                  member is not decided",
-                extra + 1
-            )));
+                    extra + 1
+                ),
+            ));
         }
         match first {
             None => {
-                return Err(violation(format!(
-                    "Cargo.lock is missing workspace package {package}"
-                )));
+                return Err(violation_at(
+                    "release-coherence#lock-missing-workspace-package",
+                    format!("Cargo.lock is missing workspace package {package}"),
+                ));
             }
             Some(found) if found != version => {
-                return Err(violation(format!(
-                    "Cargo.lock package {package} is {found}; expected {version}"
-                )));
+                return Err(violation_at(
+                    "release-coherence#lock-package-version-disagrees",
+                    format!("Cargo.lock package {package} is {found}; expected {version}"),
+                ));
             }
             Some(_) => {}
         }
@@ -1340,8 +1420,12 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
             )));
         };
         let unpublished = package["publish"].as_array().is_some_and(|r| r.is_empty());
-        let listing = git(repo, &["ls-files", directory])
-            .map_err(|err| cannot_judge(format!("could not enumerate {directory}: {err}")))?;
+        let listing = git(repo, &["ls-files", directory]).map_err(|err| {
+            cannot_judge_at(
+                "release-coherence#directory-listing-unreadable",
+                format!("could not enumerate {directory}: {err}"),
+            )
+        })?;
         for path in listing.lines().filter(|l| !l.is_empty()) {
             enumerated += 1;
             if unpublished {

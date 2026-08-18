@@ -1035,6 +1035,18 @@ them.
   verify*, because a tag message quoting a signature block is text rather than a signature. Reading the
   messages said otherwise, which is the failure mode the register exists to end.
 
+  **The release gate is the last module, and the whole ledger is now measured.** Of its sixty-one sites,
+  thirty-nine are observed and twenty-two are not, so **twenty-nine refusal branches in this repository have
+  never been seen to fail** — seven in the gate before `cargo publish` and twenty-two in the gate before a
+  release. That figure is produced by running, and it is the first time it has existed: the question was
+  asked five times of the text and answered differently every time.
+
+  Four more citations were caught wrong by the citation itself. Two were a swapped pair — the `[Unreleased]`
+  comparison link and the dated release link say nearly the same sentence — and two were sites whose
+  identities this change had named backwards: a `release:` subject with no space is a malformed **subject**,
+  while `release: next` is a malformed **version**, and both render the same message. A message-shaped
+  assertion cannot tell those apart, and every one of them was found by running rather than by reading.
+
   Two holes in the register's own reader surfaced while it was doing this, both making its figure smaller
   than the truth. It counted `violation(` rather than the identifier, so `map_err(cannot_judge)` — a
   constructor used as a value — was a live site invisible to the register built to count sites; found only
