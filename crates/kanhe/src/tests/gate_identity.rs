@@ -96,6 +96,10 @@ fn a_citation_naming_a_leaf_inside_a_module_is_a_violation() {
     });
     assert_eq!(refusals.len(), 1, "{refusals:?}");
     assert_eq!(refusals[0].kind, Kind::Violation);
+    crate::refusal::expect(
+        "repository-checks#citation-names-an-unregistered-gate",
+        &refusals[0],
+    );
     assert!(
         refusals[0].message.contains("does not register"),
         "{}",
@@ -127,6 +131,10 @@ fn a_gate_the_target_does_not_register_is_a_violation() {
     );
     assert_eq!(refusals.len(), 1);
     assert_eq!(refusals[0].kind, Kind::Violation);
+    crate::refusal::expect(
+        "repository-checks#citation-names-an-unregistered-gate",
+        &refusals[0],
+    );
     assert!(refusals[0].message.contains("does not register"));
 }
 
@@ -138,6 +146,10 @@ fn a_gate_registered_twice_is_a_violation() {
     );
     assert_eq!(refusals.len(), 1);
     assert_eq!(refusals[0].kind, Kind::Violation);
+    crate::refusal::expect(
+        "repository-checks#citation-names-a-gate-registered-several-times",
+        &refusals[0],
+    );
     assert!(refusals[0].message.contains("registers 2 times"));
 }
 
@@ -149,6 +161,10 @@ fn an_identifier_with_no_target_cannot_be_judged() {
     );
     assert_eq!(refusals.len(), 1);
     assert_eq!(refusals[0].kind, Kind::CannotJudge);
+    crate::refusal::expect(
+        "repository-checks#citation-names-no-test-target",
+        &refusals[0],
+    );
     assert!(refusals[0].message.contains("names no `--test <target>`"));
 }
 
@@ -160,6 +176,10 @@ fn a_listing_that_cannot_be_read_cannot_be_judged() {
     );
     assert_eq!(refusals.len(), 1);
     assert_eq!(refusals[0].kind, Kind::CannotJudge);
+    crate::refusal::expect(
+        "repository-checks#citation-target-listing-unreadable",
+        &refusals[0],
+    );
     assert!(refusals[0].message.contains("could not list"));
 }
 
@@ -183,6 +203,7 @@ fn a_script_citing_no_gate_is_named() {
     )]);
     assert_eq!(refusals.len(), 1);
     assert_eq!(refusals[0].kind, Kind::Violation);
+    crate::refusal::expect("repository-checks#wrapper-cites-no-gate", &refusals[0]);
     assert!(refusals[0].message.contains("scripts/check_something.sh"));
     assert!(refusals[0].message.contains("`--exact`"));
 }
@@ -200,6 +221,7 @@ fn a_sibling_citing_twice_does_not_cover_a_script_citing_none() {
         ("scripts/lib/helper.sh", "#!/usr/bin/env bash\nset -eu\n"),
     ]);
     assert_eq!(refusals.len(), 1);
+    crate::refusal::expect("repository-checks#wrapper-cites-no-gate", &refusals[0]);
     assert!(refusals[0].message.contains("scripts/lib/helper.sh"));
 }
 
@@ -219,6 +241,7 @@ fn a_script_whose_only_invocation_is_commented_out_is_named() {
         .collect();
     let refusals = uncited_scripts([("scripts/probe.sh", commented.as_str())]);
     assert_eq!(refusals.len(), 1);
+    crate::refusal::expect("repository-checks#wrapper-cites-no-gate", &refusals[0]);
     assert!(refusals[0].message.contains("scripts/probe.sh"));
 }
 

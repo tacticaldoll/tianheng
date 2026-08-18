@@ -5,7 +5,7 @@
 //! by holding the identifier to the target it is cited against — a test identifier is a reference into this
 //! repository exactly as a path is, and the reference gate matches paths only.
 
-use crate::refusal::{Refusal, cannot_judge, violation};
+use crate::refusal::{Refusal, cannot_judge_at, violation_at};
 use crate::region::Source;
 
 /// One `--exact` citation found in a script: the identifier, and the invocation it belongs to.
@@ -134,7 +134,9 @@ pub fn offences(
     let mut offences = Vec::new();
     for citation in citations {
         let (Some(package), Some(target)) = (&citation.package, &citation.target) else {
-            offences.push(cannot_judge(format!(
+            offences.push(cannot_judge_at(
+                "repository-checks#citation-names-no-test-target",
+                format!(
                 "{}: `--exact {}` names no `--test <target>` in its invocation, so the identifier cannot be \
                  bound to the harness that would register it — an identifier this check cannot resolve is \
                  not one it resolved as fine",
@@ -145,7 +147,9 @@ pub fn offences(
         let listing = match list(package, target) {
             Ok(listing) => listing,
             Err(err) => {
-                offences.push(cannot_judge(format!(
+                offences.push(cannot_judge_at(
+                    "repository-checks#citation-target-listing-unreadable",
+                    format!(
                     "{}: could not list the tests `{target}` registers in `{package}`, so whether it carries \
                      `{}` is unread rather than answered: {err}",
                     citation.script, citation.identifier
@@ -159,12 +163,16 @@ pub fn offences(
             .count();
         match matches {
             1 => {}
-            0 => offences.push(violation(format!(
+            0 => offences.push(violation_at(
+                "repository-checks#citation-names-an-unregistered-gate",
+                format!(
                 "{}: `--exact {}` names a test `{target}` does not register, so the gate this wrapper asks \
                  for selects nothing — and `libtest` exits 0 for a filter that matches nothing",
                 citation.script, citation.identifier
             ))),
-            many => offences.push(violation(format!(
+            many => offences.push(violation_at(
+                "repository-checks#citation-names-a-gate-registered-several-times",
+                format!(
                 "{}: `--exact {}` names a test `{target}` registers {many} times, so the wrapper's citation \
                  names a set rather than the one gate it stands in front of",
                 citation.script, citation.identifier
@@ -198,7 +206,9 @@ pub fn uncited_scripts<'a>(scripts: impl IntoIterator<Item = (&'a str, &'a str)>
         .into_iter()
         .filter(|(path, text)| citations(path, text).is_empty())
         .map(|(path, _)| {
-            violation(format!(
+            violation_at(
+                "repository-checks#wrapper-cites-no-gate",
+                format!(
                 "{path}: names no gate by `--exact`, so it renders its own verdict rather than deferring to a \
                  Rust check. Every tracked script here is a wrapper: it gathers evidence and orders the act, \
                  and the judgement lives in `crates/kanhe`. A script that is not a wrapper belongs outside \

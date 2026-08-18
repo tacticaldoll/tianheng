@@ -6,10 +6,8 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 
 ## Not registered yet
 
-**102 refusal sites are not registered yet**, across 4 module(s). They are constructed through `refusal::violation` and `refusal::cannot_judge`, whose only remaining purpose is to be deleted when this figure reaches zero. The module paths are below this heading rather than above it, because the header is where the projection register reads which single unit holds this document.
+**90 refusal sites are not registered yet**, across 2 module(s). They are constructed through `refusal::violation` and `refusal::cannot_judge`, whose only remaining purpose is to be deleted when this figure reaches zero. The module paths are below this heading rather than above it, because the header is where the projection register reads which single unit holds this document.
 
-- `crates/kanhe/src/capability_subjects.rs` — 7
-- `crates/kanhe/src/gate_identity.rs` — 5
 - `crates/kanhe/src/publish_source_gate.rs` — 29
 - `crates/kanhe/src/release_coherence_gate.rs` — 61
 
@@ -20,6 +18,36 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - produced in `crates/kanhe/src/merge_message_gate.rs`
 - observed by `crates/kanhe/tests/merge_message.rs`
 
+### `repository-checks#capability-declares-no-subject`
+
+- produced in `crates/kanhe/src/capability_subjects.rs`
+- observed by `crates/kanhe/src/tests/capability_subjects.rs`
+
+### `repository-checks#capability-declares-several-subjects`
+
+- produced in `crates/kanhe/src/capability_subjects.rs`
+- observed by `crates/kanhe/src/tests/capability_subjects.rs`
+
+### `repository-checks#capability-subject-bullet-unreadable`
+
+- produced in `crates/kanhe/src/capability_subjects.rs`
+- observed by `crates/kanhe/src/tests/capability_subjects.rs`
+
+### `repository-checks#capability-subject-glob-matches-nothing`
+
+- produced in `crates/kanhe/src/capability_subjects.rs`
+- observed by `crates/kanhe/src/tests/capability_subjects.rs`
+
+### `repository-checks#capability-subject-glob-unresolvable`
+
+- produced in `crates/kanhe/src/capability_subjects.rs`
+- observed by `crates/kanhe/src/tests/capability_subjects.rs`
+
+### `repository-checks#capability-subject-lists-no-glob`
+
+- produced in `crates/kanhe/src/capability_subjects.rs`
+- observed by `crates/kanhe/src/tests/capability_subjects.rs`
+
 ### `repository-checks#census-document-unreadable`
 
 - produced in `crates/kanhe/src/census.rs`
@@ -29,6 +57,31 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 
 - produced in `crates/kanhe/src/census.rs`
 - observed by `crates/kanhe/tests/census.rs`
+
+### `repository-checks#change-touches-a-governed-path-unaccounted`
+
+- produced in `crates/kanhe/src/capability_subjects.rs`
+- observed by `crates/kanhe/src/tests/capability_subjects.rs`
+
+### `repository-checks#citation-names-a-gate-registered-several-times`
+
+- produced in `crates/kanhe/src/gate_identity.rs`
+- observed by `crates/kanhe/src/tests/gate_identity.rs`
+
+### `repository-checks#citation-names-an-unregistered-gate`
+
+- produced in `crates/kanhe/src/gate_identity.rs`
+- observed by `crates/kanhe/src/tests/gate_identity.rs`
+
+### `repository-checks#citation-names-no-test-target`
+
+- produced in `crates/kanhe/src/gate_identity.rs`
+- observed by `crates/kanhe/src/tests/gate_identity.rs`
+
+### `repository-checks#citation-target-listing-unreadable`
+
+- produced in `crates/kanhe/src/gate_identity.rs`
+- observed by `crates/kanhe/src/tests/gate_identity.rs`
 
 ### `repository-checks#squash-body-is-a-bare-commit-list`
 
@@ -84,3 +137,8 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 
 - produced in `crates/kanhe/src/selection.rs`
 - observed by `crates/kanhe/src/tests/selection.rs`
+
+### `repository-checks#wrapper-cites-no-gate`
+
+- produced in `crates/kanhe/src/gate_identity.rs`
+- observed by `crates/kanhe/src/tests/gate_identity.rs`
