@@ -13,6 +13,7 @@
 use kanhe::refusal;
 
 use kanhe::merge_message_gate as gate;
+use kanhe::supplied::{self, Supplied};
 
 use gate::judge;
 use refusal::Kind;
@@ -50,72 +51,80 @@ fn refuse(subject: &str, body: &str, title: &str, kind: Kind, needle: &str) -> R
 /// The gate, over the message a merge is about to record.
 #[test]
 fn the_squash_message_is_the_pull_request_it_records() {
-    let Ok(subject) = std::env::var("TIANHENG_MERGE_SUBJECT") else {
-        eprintln!(
-            "merge message: not judged — there is no proposed message until a merge is being made. \
-             `scripts/merge-pr.sh` supplies one and asks for this verdict at that moment."
-        );
-        return;
+    // **One reader for all four judged inputs.** `kanhe::supplied` answers *absent*, *the value*, and *set
+    // to bytes this gate cannot read* as three states, and every input here goes through it.
+    //
+    // Three of the four already did. The fourth — the subject, whose absence means **no merge is being
+    // made** — was read with `env::var`, which answers *not set* and *not UTF-8* with one `Err`. The wrapper
+    // takes the subject from `argv`, where arbitrary bytes are expressible, so a subject it did supply took
+    // the arm that returns clean: the run exited `0`, `require_one_pass` saw `1 passed`, and
+    // `exec gh pr merge` recorded a subject no judgement had read. Two spellings of one rule is what let the
+    // repair that closed the other three leave `TIANHENG_MERGE_SUBJECT` reading by the rule it replaced.
+    let subject = match supplied::from_env("TIANHENG_MERGE_SUBJECT") {
+        Supplied::Absent => {
+            eprintln!(
+                "merge message: not judged — there is no proposed message until a merge is being made. \
+                 `scripts/merge-pr.sh` supplies one and asks for this verdict at that moment."
+            );
+            return;
+        }
+        Supplied::Unreadable => {
+            kanhe::verdict_channel::report(Kind::CannotJudge);
+            panic!(
+                "merge message ({:?}): TIANHENG_MERGE_SUBJECT was supplied as bytes this gate cannot read, so \
+                 the subject the merge would record was never judged. That is neither a subject that \
+                 disagrees nor an absent one — a merge IS being made, and this gate could not read what it \
+                 would record",
+                Kind::CannotJudge
+            );
+        }
+        Supplied::Value(subject) => subject,
     };
-    // **Absence and emptiness are different facts at this boundary too.** The subject's absence means no
-    // merge is being made and this returns; the other three were read with `unwrap_or_default()`, so an
-    // input the wrapper never supplied arrived as an empty one. The gate answers empty on its own terms —
-    // an empty title and an empty commit list are cannot-judge, and an empty **body** is a violation — so a
-    // body that was never supplied was reported as a body written wrongly, at exit 1, the class this
-    // repository reserves for a gate that ran and disagreed.
-    //
-    // `scripts/merge-pr.sh` carries the other half of this same defect in its own comment, and closed it:
-    // an unreadable body file left its variable empty and the gate judged an empty body. The wrapper's half
-    // was repaired and this half was not, which is why the two named sites here — *title unavailable* and
-    // *commits unavailable* — could be reached by an empty value and never by the absence they name.
-    //
     // A merge is being made once the subject is here, so a missing input is the wrapper supplying an
-    // incomplete set, which is unjudgeable rather than untrue. `var` separates the two: an empty variable
-    // that was set is `Ok("")`.
-    // **`var_os`, because `var` answers absence and unreadability with the same `Err`.** The wrapper passes
-    // the body as `$(cat -- "$body_file")`, which carries whatever bytes that file holds, and a body that is
-    // not UTF-8 would have been reported as one the wrapper never supplied — the same collapse this block
-    // exists to undo, one layer beneath it. Both are cannot-judge, so the class was right and the sentence
-    // was not, and a sentence sending an operator to look for a variable they did set is the defect either
-    // way.
-    let mut unreadable = Vec::new();
-    let mut unsupplied = Vec::new();
-    for name in [
-        "TIANHENG_MERGE_BODY",
-        "TIANHENG_MERGE_TITLE",
-        "TIANHENG_MERGE_COMMITS",
-    ] {
-        match std::env::var_os(name) {
-            None => unsupplied.push(name),
-            Some(value) => {
-                if value.into_string().is_err() {
-                    unreadable.push(name);
+    // incomplete set, which is unjudgeable rather than untrue. An empty value that *was* supplied keeps its
+    // own meaning: the gate answers an empty title and an empty commit list as cannot-judge and an empty body
+    // as a violation, and those are its verdicts to reach.
+    let (body, title, commits) = match (
+        supplied::from_env("TIANHENG_MERGE_BODY"),
+        supplied::from_env("TIANHENG_MERGE_TITLE"),
+        supplied::from_env("TIANHENG_MERGE_COMMITS"),
+    ) {
+        (Supplied::Value(body), Supplied::Value(title), Supplied::Value(commits)) => {
+            (body, title, commits)
+        }
+        (body, title, commits) => {
+            kanhe::verdict_channel::report(Kind::CannotJudge);
+            let mut unsupplied = Vec::new();
+            let mut unreadable = Vec::new();
+            for (name, state) in [
+                ("TIANHENG_MERGE_BODY", body),
+                ("TIANHENG_MERGE_TITLE", title),
+                ("TIANHENG_MERGE_COMMITS", commits),
+            ] {
+                match state {
+                    Supplied::Value(_) => {}
+                    Supplied::Absent => unsupplied.push(name),
+                    Supplied::Unreadable => unreadable.push(name),
                 }
             }
+            let mut said = Vec::new();
+            if !unsupplied.is_empty() {
+                said.push(format!("{} not supplied", unsupplied.join(", ")));
+            }
+            if !unreadable.is_empty() {
+                said.push(format!("{} is not UTF-8", unreadable.join(", ")));
+            }
+            panic!(
+                "merge message ({:?}): {}, so there is nothing to judge — a merge is being made, because the \
+                 subject is here, and this is an incomplete set rather than a message that disagrees",
+                Kind::CannotJudge,
+                said.join("; ")
+            );
         }
-    }
-    if !unsupplied.is_empty() || !unreadable.is_empty() {
-        kanhe::verdict_channel::report(Kind::CannotJudge);
-        let mut said = Vec::new();
-        if !unsupplied.is_empty() {
-            said.push(format!("{} not supplied", unsupplied.join(", ")));
-        }
-        if !unreadable.is_empty() {
-            said.push(format!("{} is not UTF-8", unreadable.join(", ")));
-        }
-        panic!(
-            "merge message ({:?}): {}, so there is nothing to judge — a merge is being made, because the \
-             subject is here, and this is an incomplete set rather than a message that disagrees",
-            Kind::CannotJudge,
-            said.join("; ")
-        );
-    }
-    let body = std::env::var("TIANHENG_MERGE_BODY").unwrap_or_default();
-    let title = std::env::var("TIANHENG_MERGE_TITLE").unwrap_or_default();
+    };
     // The pull request's own commit subjects, newline-separated. Empty, the judgement refuses rather than
     // falling back to refusing every bulleted body.
-    let supplied: Vec<String> = std::env::var("TIANHENG_MERGE_COMMITS")
-        .unwrap_or_default()
+    let supplied: Vec<String> = commits
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(str::to_string)
@@ -509,5 +518,88 @@ fn two_admitted_type_anchors_cannot_be_read() {
         none.message.contains("found none"),
         "and this one must say there were none, got: {}",
         none.message
+    );
+}
+
+// --- the harness boundary, driven as the wrapper drives it -------------------------------------------------
+
+/// The gate re-run in a child process with the four judged inputs supplied, and the class it reported.
+///
+/// **A direction over the harness cannot read the harness's own environment.** The four inputs arrive as
+/// process environment, a parallel test run shares one, and `set_var` mutates it for every sibling — so the
+/// only way to give this gate an input is to be a different process. The test binary re-executes itself with
+/// `--exact`, which is the same selection `scripts/merge-pr.sh` uses and therefore the same code path.
+///
+/// Returns `(the child exited zero, what it wrote to the verdict channel)`. An absent channel file is an empty
+/// string, which is what a wrapper reads as *no verdict was reached*.
+fn gate_over(subject: &std::ffi::OsStr) -> (bool, String) {
+    let scratch = std::env::temp_dir().join(format!(
+        "kanhe-merge-subject-{}-{}",
+        std::process::id(),
+        SUBJECT_PROBE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_dir_all(&scratch);
+    xingbiao::claim_scratch(&scratch)
+        .expect("claim a scratch root for the child's verdict channel");
+    let verdict = scratch.join("verdict");
+
+    let out = std::process::Command::new(
+        std::env::current_exe()
+            .expect("this test binary's own path, to re-run one direction in a child"),
+    )
+    .args([
+        "--exact",
+        "the_squash_message_is_the_pull_request_it_records",
+    ])
+    .env(kanhe::verdict_channel::ENV, &verdict)
+    .env("TIANHENG_MERGE_SUBJECT", subject)
+    .env("TIANHENG_MERGE_TITLE", OK_SUBJECT)
+    .env("TIANHENG_MERGE_BODY", OK_BODY)
+    .env("TIANHENG_MERGE_COMMITS", commits().join("\n"))
+    .output()
+    .expect("re-run this binary's gate direction in a child process");
+
+    let reported = std::fs::read_to_string(&verdict).unwrap_or_default();
+    let _ = std::fs::remove_dir_all(&scratch);
+    (out.status.success(), reported)
+}
+
+static SUBJECT_PROBE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// A subject the wrapper supplied but this gate cannot read is not a subject it was never given.
+///
+/// `scripts/merge-pr.sh` takes the subject from `argv` — `--subject <text>` — which on this platform carries
+/// arbitrary bytes. Read with `env::var`, *not set* and *set but not UTF-8* are one `Err`, and the arm that
+/// answers it means **no merge is being made**: the gate prints "not judged", returns, and the run exits `0`.
+/// The wrapper's `require_one_pass` then sees `1 passed`, and `exec gh pr merge` records a subject no
+/// judgement ever read — the one direction the Core Contract forbids, in front of a record that cannot be
+/// amended.
+///
+/// The control below is what makes this a measurement rather than a coincidence: the same four inputs with a
+/// readable subject reach a verdict, so the child is exercising the gate and the two runs differ **only** in
+/// the subject's bytes.
+#[test]
+fn a_subject_supplied_as_bytes_this_gate_cannot_read_is_not_an_absent_subject() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (control_ok, control_verdict) = gate_over(std::ffi::OsStr::new(OK_SUBJECT));
+    assert!(
+        control_ok && control_verdict.is_empty(),
+        "the control must reach a clean verdict, or the two runs below differ for a reason other than the \
+         subject's bytes: exited zero = {control_ok}, channel = {control_verdict:?}"
+    );
+
+    let unreadable = std::ffi::OsStr::from_bytes(b"fix(kanhe): \xff\xfe not utf-8");
+    let (exited_zero, reported) = gate_over(unreadable);
+    assert!(
+        !exited_zero,
+        "a subject supplied as bytes this gate cannot read must stop the run; it exited zero, so \
+         `require_one_pass` would see a pass and the merge would record a subject nothing judged"
+    );
+    assert_eq!(
+        reported,
+        kanhe::verdict_channel::rendered(Kind::CannotJudge),
+        "and it must report cannot-judge on the channel: the wrapper supplied this input, so it is not a \
+         message that disagrees"
     );
 }

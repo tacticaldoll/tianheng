@@ -3788,6 +3788,30 @@ no adopter runs. They are here rather than under the adopter headings above beca
   registry-side arguments (`--registry`, `--index`, `--token`) change the publish's destination rather than
   its source and stay forwarded.
 
+- **The one merge-gate input whose absence means "no merge is being made" was the one still reading absence
+  and unreadability as the same fact.** `scripts/merge-pr.sh` takes the squash subject from `argv` — where
+  arbitrary bytes are expressible — and hands it to the gate as environment. Read with `env::var`, *not set*
+  and *set but not UTF-8* are one `Err`, and the arm answering it returns **clean**: the gate printed "not
+  judged", the run exited `0`, the wrapper's `require_one_pass` saw `1 passed`, and `exec gh pr merge`
+  recorded a subject no judgement had read. Every other stop in that wrapper fails closed; this one failed
+  open, in front of a record that cannot be amended, because a merged squash's hash is what the pull
+  request's merge record cites.
+
+  The repair that closed this collapse for the other three inputs landed one commit earlier and did not
+  reach the fourth. Two spellings of one rule is how: the three went through `var_os` and a match, the
+  subject kept `var`. So the rule now has **one implementation** — `kanhe::supplied` answers *absent*, *the
+  value*, and *set to bytes this gate cannot read* as three states, and all four inputs go through it. A
+  fifth input cannot be added under a different rule, because there is no second rule to add it under.
+
+  Measured rather than argued, and the control is what makes it a measurement: the direction re-executes the
+  test binary with all four inputs supplied and asserts the class on the verdict channel. With a readable
+  subject the child reaches a clean verdict; with `\xff\xfe` in the subject it exited `0` and wrote nothing
+  before this change, and refuses as a cannot-judge after it. The two runs differ only in the subject's
+  bytes.
+
+  No published API, outcome, report, exit class, or manifest moves — `kanhe` ships in no package — so
+  released adopters take no action.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
