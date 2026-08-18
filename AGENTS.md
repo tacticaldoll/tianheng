@@ -406,6 +406,14 @@ syscall sequence), and where a test genuinely cannot reach it, say so in the PR 
 evidence stands in its place instead of leaving the reader to assume a green suite covered it. A
 test kept for the contract rather than the change earns a comment saying which it is.
 
+**A negative run's record is pasted from the run's output, never written from the intention.** Composing it
+from what the change was *going to* do reads identically and is not evidence: measured in the 0.5.0 window,
+one `## Verification` block was written that way and was wrong in three ways at once — the order, the figure
+it cited, and the progression it narrated — while every other negative run in the same window was pasted
+verbatim and every one of those is accurate. Nothing can react to this: a check can require a `## Verification`
+block's *shape*, never that it is true of a run. What would close it is the runner emitting its own transcript
+to a path the record cites, so the evidence is generated rather than restated.
+
 **A mechanical rewrite over code matches an exact literal and asserts it occurred once.** Rewriting ~44 call
 sites here with a non-greedy pattern and the dot-matches-newline flag, the match crossed a statement boundary
 and turned an unrelated `assert_eq!(outcome.exit_code(), 0, "…")` into `matches!(outcome.exit_code(), 0, …)`.

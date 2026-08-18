@@ -326,7 +326,7 @@ fn fixture_negative_testing_observes_violating_fixture() {
 
 /// The real shell dependency boundary reacts to a direct edge into the lower metadata substrate.
 ///
-/// The boundary is selected from [`tianheng_constitution`] instead of restating its allowlist here. Exactly one
+/// The boundary is selected from [`crate::law::constitution`] instead of restating its allowlist here. Exactly one
 /// match is required so a duplicate or renamed shell declaration cannot turn this into evidence about an
 /// arbitrary boundary. The isolated fixture carries no other dependency, so its violation cannot be satisfied
 /// by a different forbidden edge.

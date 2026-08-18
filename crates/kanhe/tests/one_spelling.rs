@@ -2,15 +2,16 @@
 //!
 //! Two constants exist because one token had to have one owner — `kanhe::region::DO_NOT_EDIT`, the marker a
 //! generated document declares itself with, and `shengmo::workspace::MARKER`, the variable saying a run must
-//! find a repository. Both were then written out as literals elsewhere, seven owners and nine respectively,
-//! which is the shape `verdict_channel` spent a window closing between a shell script and Rust and which had
-//! stayed open between Rust and Rust.
+//! find a repository. Both were then written out again as literals in every module that could reach them,
+//! which is the shape `verdict_channel` closed between a shell script and Rust and which had stayed open
+//! between Rust and Rust.
 //!
-//! **The corpus is what can reach the constant, and nothing wider.** Six of the `MARKER` spellings live in
-//! `tianheng`, `louke` and `xuanji` — published crates that cannot depend on `shengmo`, because `shengmo`
-//! depends on `tianheng` and the edge would close a cycle. One more lives in `shengmo`'s own law projection
-//! header, which cannot reach `kanhe`. Those are facts about the dependency graph rather than sites anyone
-//! declined to fix, so they sit outside this check's subject rather than inside it as exceptions.
+//! **The corpus is what can reach the constant, and nothing wider.** `MARKER` is spelled out in `tianheng`,
+//! `louke` and `xuanji` — published crates that cannot depend on `shengmo`, because `shengmo` depends on
+//! `tianheng` and the edge would close a cycle — and `DO_NOT_EDIT` in `shengmo`'s own law projection header,
+//! which cannot reach `kanhe`. Those are facts about the dependency graph rather than sites anyone declined
+//! to fix, so they sit outside this check's subject rather than inside it as exceptions. No count is given:
+//! nothing enumerates that set, so a figure here would be a census with no producer.
 
 use std::path::{Path, PathBuf};
 

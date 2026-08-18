@@ -5,7 +5,7 @@
 Put Tianheng's **own enforced self-law** into an agent's context as a faithful, imitable,
 staleness-checked Markdown artifact. The published binary's `list` projects a *demo*
 constitution, so an agent working on this repo never naturally sees the self-law that
-actually reacts (`tianheng_constitution()` in `self_governance.rs`). This capability closes
+actually reacts (`shengmo::law::constitution()`). This capability closes
 that entry-point gap — the first dogfood of the 潛移 (gravity) face (see `PROJECT.md`): the
 declared law, rendered where an agent reads it, so its continuations imitate the real shape
 rather than the demo. Two contracts are kept distinct: the **repo artifact** must not drift
@@ -78,13 +78,13 @@ prose, which this repository has measured and rejected.
 
 ### Requirement: A staleness test reacts when the checked-in projection drifts
 
-A test SHALL fail when the checked-in projection artifact differs, byte for byte, from the live projection generated from `tianheng_constitution()`. The comparison SHALL cover the **entire** artifact — both the generated boundary projection and any fixed preamble (the preamble being a generated constant, never hand-edited prose) — so no part of the artifact can drift unnoticed. The test SHALL follow the repository's existing repo-only discipline: it SHALL skip when run outside a workspace checkout (e.g. a packaged crate tarball), and SHALL fail loudly rather than skip when a workspace is expected but absent (the `TIANHENG_WORKSPACE_TESTS` signal). A one-command regeneration path SHALL overwrite the checked-in artifact from the live projection instead of asserting.
+A test SHALL fail when the checked-in projection artifact differs, byte for byte, from the live projection generated from `shengmo::law::constitution()`. The comparison SHALL cover the **entire** artifact — both the generated boundary projection and any fixed preamble (the preamble being a generated constant, never hand-edited prose) — so no part of the artifact can drift unnoticed. The test SHALL follow the repository's existing repo-only discipline: it SHALL skip when run outside a workspace checkout (e.g. a packaged crate tarball), and SHALL fail loudly rather than skip when a workspace is expected but absent (the `TIANHENG_WORKSPACE_TESTS` signal). A one-command regeneration path SHALL overwrite the checked-in artifact from the live projection instead of asserting.
 
 The byte-check reaction itself SHALL be a **reusable public helper** so an adopter can gate their own projected constitution with the same mechanism (the 潛移 adoption face) rather than hand-rolling it: given the **live** projection string, the artifact **path**, a **regenerate** command string, and a **bless** flag, the helper SHALL — when `bless` is true — overwrite the file with the live projection (creating any missing parent directories) and succeed; otherwise it SHALL compare the checked-in file to the live projection and **fail** when they differ, when the file is **missing**, or when it is **unreadable**, returning an actionable error that names **both the artifact path and the regenerate command**. A write failure under `bless`, or a read failure otherwise, SHALL be returned as an error, never a silent success. The helper SHALL NOT itself read the environment — the **caller** supplies `bless` (so the helper is a pure function of its arguments, with no process-global env dependency and no parallel-test hazard); Tianheng's own self-law staleness test reads its `BLESS` signal and passes it in, and is one caller of this helper.
 
 #### Scenario: A stale checked-in projection fails the test
 
-- **WHEN** the checked-in projection artifact no longer matches the live projection of `tianheng_constitution()`
+- **WHEN** the checked-in projection artifact no longer matches the live projection of `shengmo::law::constitution()`
 - **THEN** the staleness test fails, naming the artifact and instructing to regenerate it
 
 #### Scenario: Regeneration refreshes the artifact instead of asserting

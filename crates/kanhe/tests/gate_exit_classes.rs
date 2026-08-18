@@ -126,18 +126,8 @@ fn each_gate_leaves_through_the_verdict_channel() {
             "{gate} does not deliver its verdict through the channel, so what it reports on failure and \
              what it reports on success are its own decisions rather than one"
         );
-        // And no other exit decides a class for itself: a harness reporting directly is a harness that can
-        // forget to, which is the shape the type removed.
-        let direct = executed
-            .rust()
-            .lines()
-            .filter(|line| line.contains("verdict_channel::report("))
-            .count();
-        assert_eq!(
-            direct, 0,
-            "{gate} writes the channel directly at {direct} site(s); the verdict travels as a value and \
-             `deliver` is what writes it, so a new exit cannot be added that writes nothing"
-        );
+        // A harness writing the channel itself is now unconstructible rather than forbidden: the only
+        // writer is private to `verdict_channel`, so this asked a question the module boundary answers.
     }
 }
 
