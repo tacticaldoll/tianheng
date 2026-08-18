@@ -43,16 +43,45 @@ pub fn hermetic(program: &str) -> Command {
 /// doc comment already names for [`hermetic`]. `flags` are spliced in before `args` — `&[]` for
 /// `release_coherence_gate`, `&["-c", "core.excludesFile=/dev/null"]` for `publish_source_gate`, which must
 /// also close the last ambient row this module's doc table leaves open.
-pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, String> {
+pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure> {
     let out = hermetic("git")
         .args(flags)
         .args(args)
         .current_dir(repo)
         .output()
-        .map_err(|err| format!("cannot run git {args:?}: {err}"))?;
+        .map_err(|err| Failure::Spawn(format!("cannot run git {args:?}: {err}")))?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
     } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim_end().to_string())
+        Err(Failure::Exit(
+            String::from_utf8_lossy(&out.stderr).trim_end().to_string(),
+        ))
+    }
+}
+
+/// Why a `git` read produced no output.
+///
+/// **Two facts, folded into one `Err(String)` until a review named the cost.** *git could not be run at all*
+/// and *git ran and refused* read identically to a caller, and they are not the same fact for an operator:
+/// the first means the tool is absent or the directory cannot be entered, the second means the repository
+/// answered. With them folded, a machine without git reached `cargo publish`'s gate and was told
+/// `repository root X is not a git worktree` — a sentence about the repository, for a fact about the machine.
+///
+/// [`Display`](std::fmt::Display) renders the cause, so a caller that only wants to say what went wrong is
+/// unchanged by the split; a caller that wants to tell the two apart now can.
+#[derive(Debug)]
+pub enum Failure {
+    /// The process could not be started: git is absent, or `repo` is not a directory this process can enter.
+    Spawn(String),
+    /// git ran and exited non-zero. Carries its stderr.
+    Exit(String),
+}
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Failure::Spawn(why) => write!(f, "{why}"),
+            Failure::Exit(stderr) => write!(f, "{stderr}"),
+        }
     }
 }

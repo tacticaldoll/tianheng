@@ -34,7 +34,7 @@ use crate::refusal::{Refusal, cannot_judge, violation};
 /// Routing through the builder and stopping there would have read as a repair while the XDG default still hid
 /// files. What the third row costs is handled by [`hidden_by_the_checkout`], which classifies rather than
 /// refuses.
-fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
+fn git(repo: &Path, args: &[&str]) -> Result<String, crate::hermetic_git::Failure> {
     crate::hermetic_git::run(repo, &["-c", "core.excludesFile=/dev/null"], args)
 }
 
@@ -77,8 +77,29 @@ pub fn hidden_by_the_checkout(repo: &Path) -> Result<Vec<String>, Refusal> {
 ///
 /// A free function rather than a closure inline below so the caller that counts its calls and the caller
 /// that answers them are the same shape.
-fn tracks(repo: &Path, source: &str) -> bool {
-    git(repo, &["ls-files", "--error-unmatch", "-z", "--", source]).is_ok()
+///
+/// **Three answers, because `.is_ok()` gave two and one of them was a lie.** `ls-files --error-unmatch`
+/// exits non-zero for *this path is untracked*, which is the question — and it also fails when git cannot be
+/// run at all. Folded into a boolean, a machine without git reported every exclusion source as untracked,
+/// and the gate refused with *hidden by X, which this repository does not track*: an **exit 1**, a
+/// disagreement, for a fact it never read. This repository's own contract reserves `1` for a source that
+/// disagrees and `2` for one that could not be read.
+fn tracks(repo: &Path, source: &str) -> Tracked {
+    match git(repo, &["ls-files", "--error-unmatch", "-z", "--", source]) {
+        Ok(_) => Tracked::Yes,
+        Err(crate::hermetic_git::Failure::Exit(_)) => Tracked::No,
+        Err(crate::hermetic_git::Failure::Spawn(why)) => Tracked::Unreadable(why),
+    }
+}
+
+/// Whether this repository tracks a file, or why that could not be decided.
+pub enum Tracked {
+    /// `ls-files` found it.
+    Yes,
+    /// `ls-files` ran and did not find it — the ordinary answer this question expects.
+    No,
+    /// git could not be run, so the question was never asked.
+    Unreadable(String),
 }
 
 /// The judgement above, with the exclusion classifier and the tracked-source question supplied.
@@ -93,7 +114,7 @@ fn tracks(repo: &Path, source: &str) -> bool {
 pub fn hidden_by_the_checkout_with(
     repo: &Path,
     classify: impl Fn(&Path, &[&str]) -> Result<String, NoClassification>,
-    mut tracks: impl FnMut(&Path, &str) -> bool,
+    mut tracks: impl FnMut(&Path, &str) -> Tracked,
 ) -> Result<Vec<String>, Refusal> {
     let unexcluded = read_worktree(repo, &["ls-files", "-z", "--others"], "untracked files")?;
     let visible = read_worktree(
@@ -148,10 +169,25 @@ pub fn hidden_by_the_checkout_with(
     let mut hidden = Vec::new();
     for path in excluded {
         let source = sources.get(path).copied().unwrap_or("<unshown>");
-        let tracked = source != "<unshown>"
-            && *answered
-                .entry(source)
-                .or_insert_with(|| tracks(repo, source));
+        // The three answers stay apart: an unreadable one refuses rather than counting as untracked, which
+        // would report a disagreement about a file whose status was never read.
+        if source != "<unshown>" && !answered.contains_key(source) {
+            match tracks(repo, source) {
+                Tracked::Yes => {
+                    answered.insert(source, true);
+                }
+                Tracked::No => {
+                    answered.insert(source, false);
+                }
+                Tracked::Unreadable(why) => {
+                    return Err(cannot_judge(format!(
+                        "could not decide whether this repository tracks {source} ({why}), so an exclusion \
+                         it owns cannot be told from one this checkout added"
+                    )));
+                }
+            }
+        }
+        let tracked = source != "<unshown>" && answered.get(source).copied().unwrap_or(false);
         if !tracked {
             hidden.push(format!(
                 "  {path} — hidden by {source}, which this repository does not track"
@@ -285,11 +321,20 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
             repo.display()
         )));
     }
-    git(repo, &["rev-parse", "--is-inside-work-tree"]).map_err(|_| {
-        cannot_judge(format!(
-            "repository root {} is not a git worktree",
-            repo.display()
-        ))
+    // The cause travels. Folding it away told an operator on a machine WITHOUT git that the repository root
+    // "is not a git worktree" — a sentence about the repository, for a fact about the machine, in front of
+    // `cargo publish`. `Failure` now separates the two and this says which it met.
+    git(repo, &["rev-parse", "--is-inside-work-tree"]).map_err(|err| {
+        cannot_judge(match err {
+            crate::hermetic_git::Failure::Spawn(why) => format!(
+                "git could not be run at all ({why}), so whether {} is a worktree was never asked",
+                repo.display()
+            ),
+            crate::hermetic_git::Failure::Exit(stderr) => format!(
+                "repository root {} is not a git worktree: {stderr}",
+                repo.display()
+            ),
+        })
     })?;
 
     // Answered in three, for the reason the sibling release gate states at its own call site: a value this
