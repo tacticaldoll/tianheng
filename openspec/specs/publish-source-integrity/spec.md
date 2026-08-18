@@ -151,6 +151,14 @@ A classification that could not be produced SHALL be a cannot-judge naming what 
 empty classification. `check-ignore` exiting non-zero because it could not run is not the same fact as
 `check-ignore` matching nothing, and treating them alike lets a failed classifier read as an answer.
 
+That rule is about **every git read this gate makes whose answer is an exit status**, not about
+`check-ignore` alone. Where a subcommand answers with a status, the gate SHALL read the status that is the
+answer and treat every other non-zero as a refusal to answer. Stated over the class because it arrived
+through a second door: `ls-files --error-unmatch` exits `1` for *this path is not tracked* and `128` for a
+directory that is no repository or an index it cannot parse, and a reader that asked only *did git fail*
+reported the second as the first — one repair after the sibling rule above was written, and one exit status
+outside the split that repair made.
+
 #### Scenario: A file with special bytes is ignored by tracked repository content
 
 - **WHEN** a tracked `.gitignore` ignores a file whose name git prints quoted
@@ -162,3 +170,10 @@ empty classification. `check-ignore` exiting non-zero because it could not run i
 - **WHEN** `check-ignore` fails rather than reporting no match
 - **THEN** the gate refuses as a cannot-judge naming the paths it could not classify, rather than treating an
   unusable classifier as one that found nothing
+
+#### Scenario: The tracking read cannot be made
+
+- **WHEN** `ls-files --error-unmatch` exits for a reason other than the path being untracked — the directory
+  is no repository, or its index cannot be parsed
+- **THEN** the gate refuses as a cannot-judge saying which status it met, rather than reading it as the
+  answer that the path is untracked

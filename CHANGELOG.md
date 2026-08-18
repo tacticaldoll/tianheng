@@ -986,6 +986,14 @@ them.
   cannot be undone. This repository reserves `1` for a source that disagrees and `2` for one that could not
   be read. It is three-state now, and the unreadable answer refuses as a cannot-judge.
 
+  **And that three-state repair stopped one door short of its own argument.** It separated *git could not be
+  started* from *git ran*, and git running is not git answering: `--error-unmatch` answers the question with
+  exit `1`, and reserves the rest for declining to read the repository at all — `128`, measured, both for a
+  directory that is no repository and for an index that cannot be parsed. Every one of those reached
+  `Tracked::No` and refused as a disagreement, which is the same defect one exit status over, surviving the
+  fix written against it. `Failure::Exit` carries its status now, so a caller can ask which non-zero it met,
+  and `tracks()` reads exactly one of them as the answer.
+
 - **A mark that asked nothing of anyone, and a refusal that would not say which way.** Two corrections to
   this window's own entries.
 
