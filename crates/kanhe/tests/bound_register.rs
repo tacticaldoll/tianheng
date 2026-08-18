@@ -19,6 +19,8 @@
 //! the warm target directory instead of paying for one of its own.
 
 use kanhe::bound_register_parse as parse;
+use kanhe::region::DO_NOT_EDIT;
+use shengmo::workspace::MARKER;
 
 use parse::{
     Bound, Citation, bounds_in, must, parse_bounds, pinning_citations, search, workspace_root,
@@ -557,8 +559,8 @@ named shape, so that shape is governed policy rather than a defect.
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
-Generated from `openspec/specs/*/spec.md` by `crates/kanhe/tests/bound_register.rs`. **Do not edit by hand** —
-regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register`. A stale projection fails that gate.
+Generated from `openspec/specs/*/spec.md` by `crates/kanhe/tests/bound_register.rs`. **{DO_NOT_EDIT}** —
+regenerate with `BLESS=1 {MARKER}=1 cargo test -p kanhe --test bound_register`. A stale projection fails that gate.
 
 **What this document does not claim.** It lists the bounds the specs *state in a recognizable form*: a
 scenario whose heading marks it a bound. The undeclared-prose direction that keeps this list honest has known
@@ -690,8 +692,10 @@ fn the_projection_s_disclosures_are_asserted_not_only_its_freshness() {
         "same pinning test",
         // The retired third floor, recorded rather than silently removed.
         "retired",
-        // Generated-document provenance, matching AGENTS.self-law.md's own convention.
-        "Do not edit by hand",
+        // Generated-document provenance, matching AGENTS.self-law.md's own convention. Read from the
+        // constant the recognizer uses, so the disclosure this demands and the marker that is recognised
+        // cannot become two spellings.
+        DO_NOT_EDIT,
     ];
     let missing: Vec<&str> = required_disclosures
         .into_iter()

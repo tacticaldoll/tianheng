@@ -14,6 +14,15 @@
 use std::path::{Path, PathBuf};
 
 /// Set where a repository is expected, so an absent layout is a defect rather than a skip.
+///
+/// **One owner within its reach**, which `crates/kanhe/tests/one_spelling.rs` holds — including the
+/// regeneration commands the generated documents carry in their headers, where a rename would otherwise
+/// leave every projection telling a reader a command that silently skips the gate it names.
+///
+/// What it cannot reach: six sites in `tianheng`, `louke` and `xuanji`. Those are published crates and
+/// cannot depend on this one, because this one depends on `tianheng` and the edge would close a cycle. A
+/// rename therefore has to be made in seven places, and six of them no check can see — a fact about the
+/// dependency graph rather than a site anyone declined to fix.
 pub const MARKER: &str = "TIANHENG_WORKSPACE_TESTS";
 
 /// Whether the marker says this run must find a repository.

@@ -1061,8 +1061,9 @@ fn composition_introduces_no_trait_object() {
     let src = root.join("crates/tianheng/src");
     if !src.is_dir() {
         assert!(
-            std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
-            "{src:?} expected but absent while TIANHENG_WORKSPACE_TESTS is set"
+            std::env::var_os(shengmo::workspace::MARKER).is_none(),
+            "{src:?} expected but absent while {} is set",
+            shengmo::workspace::MARKER
         );
         return;
     }
