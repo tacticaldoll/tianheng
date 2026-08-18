@@ -1054,6 +1054,17 @@ them.
   were the ones worth having: with each replaced by `Ok(())`, its fixture passed, which is a release
   reported clean over a check that judged nothing.
 
+  Three more, all about the subject rather than about the machine: a release snapshot naming one version
+  while the surfaces declare another, a member manifest that is not text, and a workspace version the publish
+  gate finds genuinely absent. Fourteen of the twenty-nine are closed and fifteen remain.
+
+  The compiler then said something about the fifteen that no one had asked it. With the last of these
+  registered, `violation` became an unused import in the release gate: **every branch still unobserved
+  there is a cannot-judge**. That is the split named when this work was planned — a refusal about the
+  *subject* against one about the *reading of it failing* — arriving as a fact rather than as a judgement.
+  A branch that can only say *this could not be read* is one whose fixture must simulate a broken tool, and
+  a fixture that simulates a tool tests the simulation.
+
   Two more are closed. One needed no new direction at all: the lock reader's unreadable-name refusal was
   already observed, by a direction whose assertion was the phrase *cannot read* — too generic for any needle
   map to attribute, which is the same weakness in message-shaped assertions the register replaces. It cites

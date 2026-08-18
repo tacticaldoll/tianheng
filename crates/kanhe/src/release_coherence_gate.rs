@@ -12,7 +12,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use crate::refusal::{Refusal, cannot_judge, cannot_judge_at, violation, violation_at};
+use crate::refusal::{Refusal, cannot_judge, cannot_judge_at, violation_at};
 
 pub use crate::hermetic_git::hermetic;
 use crate::manifest::{Quoted, WorkspaceVersion, quoted_value, semver, workspace_version};
@@ -523,9 +523,12 @@ fn release_spine(
 
     let state = if head == release_commit {
         if version != release_version {
-            return Err(violation(format!(
-                "release snapshot subject is {release_version} but workspace version is {version}"
-            )));
+            return Err(violation_at(
+                "release-coherence#release-snapshot-version-disagrees",
+                format!(
+                    "release snapshot subject is {release_version} but workspace version is {version}"
+                ),
+            ));
         }
         State::Snapshot
     } else {
@@ -867,8 +870,12 @@ fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal> {
     for dir in dirs {
         let manifest = dir.join("Cargo.toml");
         if manifest.is_file() {
-            let text = std::fs::read_to_string(&manifest)
-                .map_err(|err| cannot_judge(format!("could not read {manifest:?}: {err}")))?;
+            let text = std::fs::read_to_string(&manifest).map_err(|err| {
+                cannot_judge_at(
+                    "release-coherence#crate-manifest-unreadable",
+                    format!("could not read {manifest:?}: {err}"),
+                )
+            })?;
             out.push((
                 manifest
                     .strip_prefix(repo)

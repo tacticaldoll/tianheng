@@ -2449,3 +2449,58 @@ fn a_lock_version_this_reader_cannot_take_stops_the_comparison() {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A release snapshot naming one version while the workspace declares another.
+///
+/// HEAD *is* the release commit, so the tree claims to be that release; the version surfaces say otherwise.
+/// Nothing downstream can be judged after that, because which of the two the release is has no answer.
+///
+/// Negative run: with the arm replaced by `State::Snapshot`, the fixture went on to be judged as a snapshot
+/// of the version its own release commit does not name.
+#[test]
+fn a_release_snapshot_naming_another_version_is_a_violation() {
+    let root = scratch("snapshot-disagrees");
+    let fixture = build_fixture(&root, "snapshot-disagrees", "0.2.0");
+    release_changelog(&fixture.repo, "0.2.0", "0.1.0");
+    // The release commit has to carry a change, and what it carries is beside the point: what this observes
+    // is the subject of the commit HEAD sits on against the version the surfaces declare.
+    std::fs::write(fixture.repo.join("NOTES.md"), "prepared\n").expect("write");
+    commit(&fixture.repo, "release: 0.3.0");
+    refusal::expect(
+        "release-coherence#release-snapshot-version-disagrees",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "release snapshot subject is 0.3.0 but workspace version is 0.2.0",
+        ),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A crate manifest that is not text stops the enumeration rather than shrinking it.
+///
+/// The sibling of the example-manifest direction, on the corpus that decides the family: a manifest skipped
+/// here is a member that drops out of every downstream comparison while the counters stay satisfied.
+///
+/// Negative run: with the read replaced by a skip, the fixture passed — one member's pins, lock entry and
+/// version inheritance all unjudged, reported clean.
+#[test]
+fn a_crate_manifest_that_is_not_text_cannot_be_read() {
+    let root = scratch("crate-not-text");
+    let fixture = build_fixture(&root, "crate-not-text", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("crates/xuanji/Cargo.toml"),
+        [0x66, 0x6f, 0xff, 0xfe],
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "chore: write a member manifest that is not text",
+    );
+    refusal::expect(
+        "release-coherence#crate-manifest-unreadable",
+        &refuse(&fixture.repo, Kind::CannotJudge, "could not read"),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

@@ -381,7 +381,8 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
     })? {
         WorkspaceVersion::Declared(version) => version,
         WorkspaceVersion::Absent => {
-            return Err(cannot_judge(
+            return Err(cannot_judge_at(
+                "publish-source-integrity#workspace-version-absent",
                 "workspace version is missing or malformed: <missing>",
             ));
         }
