@@ -1161,6 +1161,12 @@ them.
   this gate would have demanded opposite things of the same source. Latent, since every such import in the
   tree is one line today.
 
+  The doc for that shared walker then spent one change attached to the wrong function. Inserting the
+  visibility helper above it put the helper between `imports_and_rest` and its own explanation, so the
+  explanation described a function two items away and `imports_and_rest` had none — two valid doc blocks
+  fused into one, which is why `cargo doc -D warnings` passes over it and why nothing mechanical caught it.
+  Inserting before an item whose doc sits above it is a hazard of the edit rather than of the code.
+
   The cause was one repair short of its own lesson. The same commit taught the *alias* detector to
   accumulate a statement to its `;` and left its neighbour — fifteen lines up, reading the same input —
   splitting on lines. Where a `use` statement ends is a fact about Rust, and it now has one implementation

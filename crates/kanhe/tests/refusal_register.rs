@@ -104,15 +104,6 @@ fn executed_rust(text: &str) -> String {
     imports_and_rest(text).1
 }
 
-/// A file's `use` **statements**, and everything else, split once.
-///
-/// **One implementation, because two readers ask this and one of them was wrong.** Where a `use` statement
-/// ends is a fact about Rust, and it lived twice here: the alias detector accumulated to the `;` while its
-/// neighbour, fifteen lines up and reading the same input, dropped the line that *opens* a statement and
-/// kept every continuation. A wrapped import naming `cannot_judge_at` on a line of its own then counted as
-/// a call with nothing to parse, and the register refused a module that constructs nothing — a shape
-/// `cargo fmt` produces the moment an import list grows too wide, which would have put two gates in this
-/// repository's Definition of Done in direct contradiction. Asked once now, by both.
 /// Whether `trimmed` opens a `use` item — including one carrying a visibility.
 ///
 /// **The item, not one textual prefix.** `pub use` and `pub(crate) use` are imports and construct nothing,
@@ -141,6 +132,15 @@ fn opens_a_use(trimmed: &str) -> bool {
     rest.starts_with("use ")
 }
 
+/// A file's `use` **statements**, and everything else, split once.
+///
+/// **One implementation, because two readers ask this and one of them was wrong.** Where a `use` statement
+/// ends is a fact about Rust, and it lived twice here: the alias detector accumulated to the `;` while its
+/// neighbour, fifteen lines up and reading the same input, dropped the line that *opens* a statement and
+/// kept every continuation. A wrapped import naming `cannot_judge_at` on a line of its own then counted as
+/// a call with nothing to parse, and the register refused a module that constructs nothing — a shape
+/// `cargo fmt` produces the moment an import list grows too wide, which would have put two gates in this
+/// repository's Definition of Done in direct contradiction. Asked once now, by both.
 fn imports_and_rest(text: &str) -> (Vec<String>, String) {
     let source = Source::of(text);
     let executed = source.rust();
