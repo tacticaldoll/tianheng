@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**45 of 91 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**46 of 92 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -22,6 +22,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound` — owner: adopter
 - `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound` — owner: engine
 - `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound` — owner: engine
+- `publish-source-integrity/the-tree-changing-after-the-gate-passed-is-not-observed-a-stated-bound` — owner: engine
 - `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound` — owner: inherited from the verification environment
 - `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound` — owner: engine
@@ -436,7 +437,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (45)
+## under-reacts (46)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -573,6 +574,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: it is absent from both sides of the correspondence, so that correspondence holds over a surface missing a member and the register reports itself complete
 - **its defence must show**: does not react
 - **pinned by**: `a_third_generation_mechanism_is_not_recognized`
+
+### `publish-source-integrity/the-tree-changing-after-the-gate-passed-is-not-observed-a-stated-bound`
+
+> the repository altered between the source gate's single pass and `cargo publish` reading the tree
+
+- **because**: the gate is one process and the act is another, and `cargo publish` takes no argument naming the commit it must package -- there is no `--match-head-commit` to pin what was judged, which is what closes the equivalent window on the merge path. `cargo publish` refuses a dirty worktree, which narrows it and is weaker than what the gate holds: a tree amended and committed is clean again
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *the window the publish wrapper can only narrow*
 
 ### `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound`
 

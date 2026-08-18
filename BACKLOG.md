@@ -376,7 +376,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated —
   at `ee15665`, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
   **1048** lines carrying `SHALL`, across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **91 bounds across 25 capabilities** — a live figure rather than part of the measurement
+  currently holds **92 bounds across 25 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -1265,6 +1265,20 @@ consumer for an undemonstrated deduplication.
   that can supply a failing tool without the fixture becoming a test of that harness — a recorded process
   boundary rather than a fake binary on the path. *Authority:* engine. *Compatibility:* patch; the checks
   ship in no crate.
+
+- **WATCH: the window the publish wrapper can only narrow.** *Observed pressure:* the publish wrapper runs
+  the source gate, then `cd`s and `exec`s `cargo publish`. Between those the repository can be altered — a
+  commit, an amend, a tag moved, the remote's `main` advancing — and the gate's verdict is about the tree as
+  it was. *Observation source:* a sweep for limits declared on one wrapper and not on its sibling. The merge
+  wrapper declares this class for its own title and pins its other two inputs by construction; the publish
+  wrapper, standing in front of the act that cannot be undone, declared nothing. *Risk:* a version is
+  uploaded from a commit the gate never judged, permanently, which is the failure this whole capability
+  exists to prevent. Bounded by what `cargo publish` re-checks for itself — it refuses a dirty worktree, so
+  reaching this needs the tree amended *and* committed — and by the window being two statements wide rather
+  than a whole `cargo test`. *Next trigger:* cargo gaining an argument that names the commit a publish must
+  package, which is what closes the equivalent window on the merge path; until then narrowing is the only
+  available move and it is already taken. *Authority:* engine. *Compatibility:* patch; the wrapper ships in
+  no crate.
 
 - **WATCH: the title race the wrapper can only narrow.** *Observed pressure:* the merge wrapper judges three
   inputs and pins two by construction — the body travels as the value the gate judged, and the commit set
