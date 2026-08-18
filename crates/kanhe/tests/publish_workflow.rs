@@ -432,7 +432,7 @@ fn no_temporary_file_survives_the_wrapper() {
 /// rather than read off its help, and the arrival matrix above is where that measurement lives. Five of the
 /// thirteen the parser admits were covered; the other eight were admitted on reasoning alone.
 ///
-/// The parser is the allowlist — the specification says so, and `AGENTS.md` was corrected this window to point
+/// The parser is the allowlist — the specification says so, and `AGENTS.md` was corrected the 0.5.0 window to point
 /// at it instead of half-listing it. So the parser is the enumerator here and the matrix is held against it,
 /// never the reverse: a flag the parser stops accepting must leave the matrix too, or the matrix would assert
 /// the arrival of something that can no longer be passed.

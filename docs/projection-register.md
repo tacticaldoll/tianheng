@@ -23,7 +23,7 @@ rule. A document generated some other way, whose author also omitted the marker,
 sides of the correspondence — a declared false negative owned by this engine, not a limit of what it
 can read.
 
-A second was recognized until this window: a `check_*` gate writing its projection under `BLESS`. No
+A second was recognized until the 0.5.0 window: a `check_*` gate writing its projection under `BLESS`. No
 tracked unit is one, so that arm asserts its own emptiness rather than being pruned — if such a unit
 exists again the check says so, which is the difference between retiring a recognizer and
 forgetting it.

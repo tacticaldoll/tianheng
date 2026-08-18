@@ -3983,6 +3983,25 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves.
 
+- **Every reference to *this window* named a window that closes.** Sixteen doc comments across ten modules,
+  plus one inside a generated projection, said *this window* — a moving reference, stale the moment the
+  release cuts and meaningless to a reader who arrives after it. They now name the window: `the 0.5.0 window`,
+  which is an immutable historical fact and the one form the versioning rule admits in long-lived prose.
+
+  This is the single enumerable row of the doc-comment criterion added in the same window. The rest of that
+  criterion is applied by a reader; a relative anchor is not, because what makes it wrong is structural
+  rather than a matter of judgement.
+
+- **`BACKLOG.md`'s promotion-trigger annotations carry the moment they were evaluated.** They were written as
+  present-tense assertions — a bare *not fired* — so a reader could not tell one evaluated today from one
+  written when the entry was filed and unread since. The entry that records *a promotion trigger is evaluated
+  by whoever next reads it* declares its own escalation on **a second trigger found to have fired unnoticed**,
+  and *unnoticed* had no observable meaning while the annotations carried no time: the condition could arrive
+  and nothing could show it had. Every annotation now reads `**Not fired** (evaluated <date>)`, so the next
+  sweep compares dates rather than re-reading every entry, and the entry's own trigger becomes decidable.
+
+  No published API, outcome, report, exit class, or manifest moves.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

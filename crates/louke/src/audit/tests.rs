@@ -2986,7 +2986,7 @@ fn a_nested_absolute_path_literal_now_agrees_across_checkouts() {
 /// `Path::display()` is lossy — it replaces each byte it cannot decode with U+FFFD — so two source
 /// paths differing only in invalid-UTF-8 bytes rendered to ONE label, hence one `UnauditableProbe`
 /// identity: baselining the first would silently suppress the second's never-accepted violation.
-/// That is the injectivity class this window closed at five other identity sites; the `file`
+/// That is the injectivity class the 0.5.0 window closed at five other identity sites; the `file`
 /// component of this identity is the same kind of component.
 ///
 /// Unix-only because this is where such a path can be constructed: on Windows the analogous input is

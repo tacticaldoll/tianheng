@@ -122,7 +122,7 @@ fn blessing_call_sites(source: &Source) -> usize {
                     line.match_indices(call)
                         // A call site is not preceded by a quote. THIS file declares the call names as string
                         // data, so counting the bare string counted its own constant — the fourth self-reference
-                        // trap in this window, and the fourth time position rather than the string was the answer.
+                        // trap in the 0.5.0 window, and the fourth time position rather than the string was the answer.
                         .filter(|(at, _)| *at == 0 || !line[..*at].ends_with('"'))
                         .count()
                 })
@@ -461,7 +461,7 @@ fn render(documents: &BTreeMap<String, Registered>, holders: &[String]) -> Strin
          rule. A document generated some other way, whose author also omitted the marker, is absent from both\n\
          sides of the correspondence — a declared false negative owned by this engine, not a limit of what it\n\
          can read.\n\n\
-         A second was recognized until this window: a `check_*` gate writing its projection under `BLESS`. No\n\
+         A second was recognized until the 0.5.0 window: a `check_*` gate writing its projection under `BLESS`. No\n\
          tracked unit is one, so that arm asserts its own emptiness rather than being pruned — if such a unit\n\
          exists again the check says so, which is the difference between retiring a recognizer and\n\
          forgetting it.\n\n",
