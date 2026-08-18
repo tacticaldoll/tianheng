@@ -39,7 +39,14 @@ pub enum Site {
 #[derive(Debug, Clone)]
 pub struct Refusal {
     /// The branch this came from, where the register's corpus reaches it.
-    pub site: Site,
+    ///
+    /// **Private, so the constructors are the only way in.** With every field public, a struct literal —
+    /// `Refusal { site: Site::Registered("x#y"), … }` — builds a registered refusal without calling
+    /// anything, and the register counts calls: the site would be produced, unheld by any direction,
+    /// undeclared, and unreported, while the projection said no other construction exists. Detecting struct
+    /// literals in text was the alternative; one private field means the compiler refuses them instead, and
+    /// this is the field the register is about.
+    site: Site,
     /// Whether the source disagreed, or could not be judged at all.
     pub kind: Kind,
     /// What the operator is told, which is the whole of what a refusal delivers.
