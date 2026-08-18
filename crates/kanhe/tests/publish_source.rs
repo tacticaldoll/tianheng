@@ -1054,3 +1054,36 @@ fn a_source_whose_tracking_cannot_be_read_is_not_untracked() {
         refusal.message
     );
 }
+
+/// A manifest declaring no workspace version at all is not the same fact as one this gate cannot read.
+///
+/// The sibling of the direction above, on the other side of the three-state answer: `<missing>` is what an
+/// operator sees when the key is genuinely absent, and pointing them at a key that is already there — or at
+/// a read failure that never happened — is the collapse that answer exists to prevent, in front of an act
+/// that cannot be undone.
+///
+/// Negative run: with the arm replaced by a version of `0.0.0`, the gate went on to judge the snapshot
+/// against a version no surface declares.
+#[test]
+fn a_manifest_declaring_no_workspace_version_stops_the_publish() {
+    let root = scratch("absent-version");
+    let fixture = build_fixture(&root, "absent-version", "9.9.9");
+    std::fs::write(
+        fixture.repo.join("Cargo.toml"),
+        "[workspace]\nmembers = []\n\n[workspace.package]\nedition = \"2024\"\n",
+    )
+    .expect("write a manifest declaring no workspace version");
+    let refusal = judge(&fixture.repo, &fixture.remote.display().to_string())
+        .expect_err("a workspace version that is absent must stop the publish");
+    refusal::expect(
+        "publish-source-integrity#workspace-version-absent",
+        &refusal,
+    );
+    let _ = std::fs::remove_dir_all(&root);
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("<missing>"),
+        "an absent version must be reported as absent rather than as unread: {}",
+        refusal.message
+    );
+}
