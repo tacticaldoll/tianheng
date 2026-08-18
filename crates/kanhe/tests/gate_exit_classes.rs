@@ -63,21 +63,31 @@ fn each_wrapper_uses_the_channel_the_gates_report_on() {
         // token the assertion below already pins against `verdict_channel::ENV` — dead in the shell, and
         // held alive here by an assertion demanding it exist. Both are gone; the pin that does the work
         // stays.
-        let name = "GATE_VIOLATION_CLASS";
-        let expected = verdict_channel::rendered(Kind::Violation);
-        let declared = text
-            .lines()
-            .find_map(|line| line.trim().strip_prefix(&format!("{name}=")))
-            .unwrap_or_else(|| {
-                panic!(
-                    "{wrapper} declares no `{name}`, so the class it reports for a failing gate rests on \
-                     nothing this check can compare"
-                )
-            });
-        assert_eq!(
-            declared, expected,
-            "{wrapper} uses `{declared}` for {name} while `kanhe::verdict_channel` defines `{expected}`"
-        );
+        // **Both classes, because both decide something.** The violation class decides which exit a failing
+        // gate produces; the clean class decides whether a *passing* run judged anything at all. The second
+        // was missing while the gate wrote nothing on its clean arm, and a run that returned without judging
+        // was indistinguishable from one that agreed.
+        for (name, expected) in [
+            (
+                "GATE_VIOLATION_CLASS",
+                verdict_channel::rendered(Kind::Violation),
+            ),
+            ("GATE_CLEAN_CLASS", verdict_channel::CLEAN.to_string()),
+        ] {
+            let declared = text
+                .lines()
+                .find_map(|line| line.trim().strip_prefix(&format!("{name}=")))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{wrapper} declares no `{name}`, so the class it reads off the channel rests on \
+                         nothing this check can compare"
+                    )
+                });
+            assert_eq!(
+                declared, expected,
+                "{wrapper} uses `{declared}` for {name} while `kanhe::verdict_channel` defines `{expected}`"
+            );
+        }
         // The variable must actually be handed to the gate, not merely declared. Declared and unused would make
         // the file absent for every run, so every violation would report as unjudged.
         assert!(
@@ -87,13 +97,19 @@ fn each_wrapper_uses_the_channel_the_gates_report_on() {
     }
 }
 
-/// Each gate reports on the channel before it fails.
+/// Each gate leaves through the one exit that reports.
 ///
-/// The other half. The scalars could match perfectly while no gate ever wrote the file, which would make every
-/// failing gate read as unjudged — and the direction above would still pass. Held by position, not by the bare
-/// call: the report must sit in the arm that has a refusal, above the failure.
+/// **This replaced a scan for an arm, and the replacement is why.** It located `Err(refusal) => {` by
+/// substring and asserted the report preceded the panic *within that arm* — so every other exit of the
+/// harness owed nothing, and a subject supplied as bytes the gate could not read left through a clean
+/// `return`, writing no class, exiting `0`, and reaching `gh pr merge`.
+///
+/// The pairing of *reached the channel* with *fails the run* is now a property of
+/// `kanhe::verdict_channel::Verdict`, held over the whole enum by `every_refusing_verdict_reaches_the
+/// channel`. What is left for this direction is the half a type cannot carry: that each gate actually
+/// delegates to it, rather than deciding for itself.
 #[test]
-fn each_gate_reports_its_class_before_it_fails() {
+fn each_gate_leaves_through_the_verdict_channel() {
     let Some(root) = workspace_root() else {
         return;
     };
@@ -102,19 +118,25 @@ fn each_gate_reports_its_class_before_it_fails() {
         "crates/kanhe/tests/publish_source.rs",
     ] {
         let text = read(&root, gate);
-        let arm = text.find("Err(refusal) => {").unwrap_or_else(|| {
-            panic!("{gate} has no refusal arm for a wrapper to read a class from")
-        });
-        let rest = &text[arm..];
-        let reported = rest
-            .find("verdict_channel::report(refusal.kind)")
-            .unwrap_or_else(|| panic!("{gate} does not report its refusal class on the channel"));
-        let failed = rest
-            .find("panic!")
-            .unwrap_or_else(|| panic!("{gate}'s refusal arm does not fail"));
+        let executed = Source::of(text.clone());
+        // The gate's own `#[test]` body, which must be one delegation and nothing else. Read from the
+        // executed region, so a commented-out call cannot satisfy it.
         assert!(
-            reported < failed,
-            "{gate} fails before reporting its class, so the wrapper would find no verdict"
+            executed.rust().contains("kanhe::verdict_channel::deliver("),
+            "{gate} does not deliver its verdict through the channel, so what it reports on failure and \
+             what it reports on success are its own decisions rather than one"
+        );
+        // And no other exit decides a class for itself: a harness reporting directly is a harness that can
+        // forget to, which is the shape the type removed.
+        let direct = executed
+            .rust()
+            .lines()
+            .filter(|line| line.contains("verdict_channel::report("))
+            .count();
+        assert_eq!(
+            direct, 0,
+            "{gate} writes the channel directly at {direct} site(s); the verdict travels as a value and \
+             `deliver` is what writes it, so a new exit cannot be added that writes nothing"
         );
     }
 }

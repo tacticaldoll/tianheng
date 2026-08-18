@@ -21,7 +21,7 @@
 
 use std::path::Path;
 
-use crate::refusal::Kind;
+use crate::refusal::{Kind, Refusal};
 
 /// The environment variable naming the file a gate writes its refusal class to.
 ///
@@ -31,6 +31,80 @@ pub const ENV: &str = "TIANHENG_GATE_VERDICT";
 /// The class as it travels: [`Kind`]'s own rendering, so there is no second spelling to keep in step.
 pub fn rendered(kind: Kind) -> String {
     format!("{kind:?}")
+}
+
+/// The rendering a **clean** verdict travels as.
+///
+/// A gate that judged and agreed writes this. Nothing wrote anything before, so a wrapper's success path had
+/// no positive evidence a verdict had been reached at all — `require_one_pass` answered *a test passed*,
+/// which is a different question and is satisfied by a harness that returned without judging.
+pub const CLEAN: &str = "Clean";
+
+/// What a gate harness reached, and **the only way one exits**.
+///
+/// Three separate exits is what this replaces, each of which had to remember to report its class before
+/// failing. Remembering is what a construction removes: every arm of this enum is a value, so a harness
+/// cannot leave without producing one, and [`deliver`] is the single place that decides what each means.
+///
+/// The direction that guarded the old shape could only reach one exit — it located the `Err(refusal)` arm by
+/// substring and asserted the report preceded the panic *within it* — so any other exit owed nothing. That is
+/// how a subject supplied as unreadable bytes left through a clean return.
+#[derive(Debug)]
+pub enum Verdict {
+    /// The act this gate stands in front of is not being made, so there is nothing to judge. Carries what to
+    /// tell a reader who ran the suite rather than the wrapper.
+    NotAsked(String),
+    /// A verdict was reached and the subject holds.
+    Clean(String),
+    /// A verdict was reached and the subject disagrees, or could not be read.
+    Refused(Refusal),
+}
+
+/// What the channel must carry for `verdict`, and `None` where **no verdict was reached**.
+///
+/// Pure, and separated from [`deliver`] for the reason every split in this crate is: the channel is a file a
+/// wrapper names through the process environment, which a parallel test run shares, so a direction asserting
+/// what gets written could not otherwise construct the cases.
+pub fn reached(verdict: &Verdict) -> Option<String> {
+    match verdict {
+        Verdict::NotAsked(_) => None,
+        Verdict::Clean(_) => Some(CLEAN.to_string()),
+        Verdict::Refused(refusal) => Some(rendered(refusal.kind)),
+    }
+}
+
+/// Whether `verdict` must fail the run.
+pub fn refuses(verdict: &Verdict) -> bool {
+    matches!(verdict, Verdict::Refused(_))
+}
+
+/// Report `verdict` on the channel and fail where it refuses — the single exit of a gate harness.
+///
+/// `gate` names the judgement in the diagnostic, which is the one thing the two harnesses do not share.
+///
+/// # Panics
+///
+/// Where `verdict` refuses, **after** the channel has been written. [`reached`] and [`refuses`] are what a
+/// direction holds that pairing with, rather than reading this body.
+pub fn deliver(gate: &str, verdict: Verdict) {
+    if let Some(class) = reached(&verdict) {
+        report_reached(&class);
+    }
+    match verdict {
+        Verdict::NotAsked(why) => eprintln!("{gate}: not judged — {why}"),
+        Verdict::Clean(report) => eprintln!("{gate}: {report}"),
+        Verdict::Refused(refusal) => {
+            panic!("{gate} ({:?}): {}", refusal.kind, refusal.message)
+        }
+    }
+}
+
+/// Write `class` to the channel, if the caller opened one.
+fn report_reached(class: &str) -> bool {
+    let Some(path) = std::env::var_os(ENV) else {
+        return false;
+    };
+    std::fs::write(Path::new(&path), class).is_ok()
 }
 
 /// Report `kind` on the channel, if the caller opened one.
@@ -43,8 +117,5 @@ pub fn rendered(kind: Kind) -> String {
 /// their message. Returning the outcome lets a direction assert that, rather than inferring it from a file that
 /// is missing for either reason.
 pub fn report(kind: Kind) -> bool {
-    let Some(path) = std::env::var_os(ENV) else {
-        return false;
-    };
-    std::fs::write(Path::new(&path), rendered(kind)).is_ok()
+    report_reached(&rendered(kind))
 }

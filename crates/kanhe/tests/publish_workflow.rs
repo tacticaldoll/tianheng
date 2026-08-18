@@ -92,6 +92,16 @@ set -eu
 # environment, so a bare `contains` for the value passed while the publish had been scrubbed — measured, the
 # negative run for the environment bound did not fire until this became one line.
 printf '%s |env CARGO_BUILD_TARGET=[%s]\n' "$*" "${CARGO_BUILD_TARGET-}" >> "$FAKE_CARGO_LOG"
+# The gate reports on the channel whether it agrees or refuses, so a controlled gate that only prints
+# `1 passed` is a gate that ran and judged nothing — which is what the wrapper's success path now refuses.
+# `no-verdict` is the mode that keeps that state constructible.
+#
+# Only where the channel was opened: this executable also stands in for the tool the wrapper `exec`s, and the
+# wrapper hands the channel to the gate alone — so an unguarded write would both fail under `set -u` on that
+# second invocation and recreate the file the wrapper removed one statement earlier.
+if [[ ${FAKE_GATE_VERDICT-} != none && -n ${TIANHENG_GATE_VERDICT-} ]]; then
+    printf '%s' 'Clean' > "$TIANHENG_GATE_VERDICT"
+fi
 printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'
 "##,
     );
@@ -544,5 +554,38 @@ fn an_unguarded_failure_exits_the_unjudged_class() {
         stderr.contains("without reaching a verdict"),
         "the wrapper must say what happened in its own voice — unguarded, this path exits 1 with no output \
          at all, which is the shape that made it invisible: {stderr}"
+    );
+}
+
+/// A gate that ran, passed, and judged nothing does not reach `cargo publish`.
+///
+/// The sibling of `merge_workflow`'s direction of the same shape, in front of the act that cannot be undone
+/// at all: a published version is yankable, never replaceable.
+#[test]
+fn a_gate_that_passes_without_judging_stops_before_the_publish() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper_with_env(&root, &[], &[("FAKE_GATE_VERDICT", "none")]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a run that judged nothing is the class this wrapper could not judge: {}",
+        run.stderr
+    );
+    // The invocation, not the substring: the gate's own `cargo test … --test publish_source` carries
+    // `publish` too, so a bare `contains` passes for a wrapper that reached the upload and fails for one
+    // that did not. Measured — this direction was written the loose way first and refused a correct run.
+    assert!(
+        !run.cargo_log
+            .lines()
+            .any(|line| line.starts_with("publish ") || line.trim() == "publish"),
+        "and it must stop before the upload: {}",
+        run.cargo_log
+    );
+    assert!(
+        run.stderr.contains("without reaching a verdict"),
+        "the operator is told which of the two it met, got: {}",
+        run.stderr
     );
 }

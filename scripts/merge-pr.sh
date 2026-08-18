@@ -336,6 +336,29 @@ fi
 # judgement wrote. A file the gate writes only when it has a verdict makes *absent* mean unjudged by
 # construction.
 GATE_VIOLATION_CLASS=Violation
+# The class a gate reports when it JUDGED AND AGREED, and the guard that requires it on the success path.
+#
+# **`require_one_pass` answers a different question and cannot cover this one.** It asks *did the selected
+# test pass* — which a harness that returned without judging satisfies, and one did: a subject supplied as
+# bytes the gate could not read took an arm that printed "not judged" and returned, so `1 passed` was true
+# and nothing had been judged. The two guards catch different states and both stay: `require_one_pass` sees a
+# renamed test (nothing ran), this sees a test that ran, passed, and reached no verdict.
+#
+# The gate now writes the channel on its clean arm too, so *absent on success* means unjudged by
+# construction rather than by a wrapper remembering to check. Held against `kanhe::verdict_channel::CLEAN` by
+# `crates/kanhe/tests/gate_exit_classes.rs`, so neither spelling can drift from the gate's side.
+GATE_CLEAN_CLASS=Clean
+
+require_a_verdict() {
+    local reached=""
+    if [[ -f $verdict_file ]]; then
+        reached=$(cat -- "$verdict_file") || reached=""
+    fi
+    if [[ $reached != "$GATE_CLEAN_CLASS" ]]; then
+        cannot_judge \
+            "the gate ran and passed without reaching a verdict — the channel carries ${reached:-nothing}, and a run that judged nothing is not a run that agreed. This is the class a passing test cannot distinguish on its own, which is why it is read rather than inferred"
+    fi
+}
 
 verdict_file=$(mktemp) || cannot_judge \
     "cannot open a file for the gate to report its refusal class on, so a failing gate could not be told from \
@@ -395,6 +418,7 @@ gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
     exit 2
 }
 require_one_pass "$gate_output"
+require_a_verdict
 
 # The title is re-read, because it is the OTHER END OF A RELATION rather than a value being recorded.
 #

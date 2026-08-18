@@ -14,6 +14,7 @@
 use kanhe::refusal;
 
 use kanhe::publish_source_gate as gate;
+use kanhe::verdict_channel::Verdict;
 
 use gate::{
     NoClassification, Tracked, build_fixture, hermetic, hidden_by_the_checkout,
@@ -54,26 +55,32 @@ fn git(repo: &Path, args: &[&str]) {
 }
 
 /// The gate, over this repository, at publish time only.
+///
+/// **One exit**, for the reason its sibling in `merge_message.rs` records: three exits each had to remember
+/// to report their class before failing, and the direction guarding that could only reach one of them.
 #[test]
 fn the_publish_source_is_the_signed_release_snapshot() {
+    kanhe::verdict_channel::deliver("publish source", the_publish_source());
+}
+
+/// The verdict over the tree `scripts/publish.sh` is about to publish, as a value.
+fn the_publish_source() -> Verdict {
     let Some(root) = workspace_root() else {
-        return;
+        return Verdict::NotAsked(
+            "there is no repository layout here to judge, so this is not a checkout a publish runs from"
+                .to_string(),
+        );
     };
     if std::env::var_os("TIANHENG_PUBLISH_SOURCE").is_none() {
-        eprintln!(
-            "publish source: not judged — no development checkout is a release snapshot, so a pre-flight run \
-             could only ever refuse. `scripts/publish.sh` sets TIANHENG_PUBLISH_SOURCE=1 before publishing."
+        return Verdict::NotAsked(
+            "no development checkout is a release snapshot, so a pre-flight run could only ever refuse. \
+             `scripts/publish.sh` sets TIANHENG_PUBLISH_SOURCE=1 before publishing"
+                .to_string(),
         );
-        return;
     }
     match judge(&root, "origin") {
-        Ok(report) => eprintln!("{report}"),
-        Err(refusal) => {
-            // The class travels on its own channel, written before this fails, so a wrapper reads a verdict
-            // rather than searching this message for one. See `kanhe::verdict_channel`.
-            kanhe::verdict_channel::report(refusal.kind);
-            panic!("publish source ({:?}): {}", refusal.kind, refusal.message)
-        }
+        Ok(report) => Verdict::Clean(report),
+        Err(refusal) => Verdict::Refused(refusal),
     }
 }
 
