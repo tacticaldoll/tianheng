@@ -1161,6 +1161,20 @@ them.
   this gate would have demanded opposite things of the same source. Latent, since every such import in the
   tree is one line today.
 
+  **And the entry that predicted the stolen doc had its own trigger fire unnoticed.** It recorded the class,
+  two instances, the risk and the condition for re-deciding — *a third instance, or any instance on a
+  private item after this entry* — and both halves arrived without anything acting on them. The decision was
+  re-taken and stands, on a measurement rather than on the count it had been bound to: the only lint that
+  closes the private half reports 785 undocumented private items over `kanhe` alone.
+
+  A sweep of every trigger phrased as a count or an instance followed, run on purpose. Two already carried a
+  recorded *Not fired.*, one had fired, and the rest had not — a third scanner of the scenario grammar is
+  still three, a third governance member has not arrived, a second orphaned corpus has not, and the
+  ecosystem the entry names as unrefreshable is the only one of its kind. That sweep is now an entry of its
+  own, because what failed is not any single trigger: nothing evaluates them, so an entry states the
+  condition for re-deciding and the condition arrives silently. It is the shape this whole window began
+  with — a clause with no reaction — one document over.
+
   The merge harness's own repair then collapsed two facts one layer beneath the one it separated.
   `env::var` answers *not set* and *set but not UTF-8* with the same `Err`, and the wrapper passes the body
   as `$(cat -- "$body_file")` — whatever bytes that file holds. A body that is not UTF-8 was reported as one
