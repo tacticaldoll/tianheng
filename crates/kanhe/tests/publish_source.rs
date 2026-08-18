@@ -97,6 +97,7 @@ fn a_dirty_worktree_is_a_violation() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a dirty worktree must be refused");
+    refusal::expect("publish-source-integrity#worktree-is-not-clean", &refusal);
     assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
     assert!(
         refusal.message.contains("worktree is not clean"),
@@ -116,6 +117,10 @@ fn a_head_that_is_not_the_release_snapshot_is_a_violation() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a non-release HEAD must be refused");
+    refusal::expect(
+        "publish-source-integrity#head-is-not-the-release-snapshot",
+        &refusal,
+    );
     assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
     assert!(
         refusal
@@ -134,6 +139,7 @@ fn an_untagged_snapshot_is_a_violation() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("an untagged snapshot must be refused");
+    refusal::expect("publish-source-integrity#release-tag-absent", &refusal);
     assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
     assert!(
         refusal.message.contains("there is no tag"),
@@ -151,6 +157,10 @@ fn a_lightweight_tag_is_a_violation() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a lightweight tag must be refused");
+    refusal::expect(
+        "publish-source-integrity#release-tag-is-lightweight",
+        &refusal,
+    );
     assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
     assert!(
         refusal.message.contains("lightweight tag"),
@@ -182,6 +192,10 @@ fn an_unsigned_annotated_tag_is_a_violation() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("an unsigned annotated tag must be refused");
+    refusal::expect(
+        "publish-source-integrity#signature-does-not-verify",
+        &refusal,
+    );
     assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
     assert!(
         refusal.message.contains("carries no signature")
@@ -207,6 +221,10 @@ fn a_tag_pointing_elsewhere_than_head_is_a_violation() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a tag that does not name HEAD must be refused");
+    refusal::expect(
+        "publish-source-integrity#release-tag-does-not-name-head",
+        &refusal,
+    );
     assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
     assert!(
         refusal.message.contains("publish the commit the tag names"),
@@ -235,6 +253,10 @@ fn a_snapshot_that_is_not_the_tip_of_main_is_a_violation() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a snapshot behind main must be refused");
+    refusal::expect(
+        "publish-source-integrity#head-is-not-the-tip-of-main",
+        &refusal,
+    );
     assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
     assert!(
         refusal.message.contains("is not the tip of"),
@@ -266,6 +288,10 @@ fn an_unreadable_source_cannot_be_judged_rather_than_refused() {
     .expect("write a malformed manifest");
     let malformed = judge(&fixture.repo, &fixture.remote.display().to_string())
         .expect_err("a malformed version is unjudgeable");
+    refusal::expect(
+        "publish-source-integrity#workspace-version-malformed",
+        &malformed,
+    );
     let _ = std::fs::remove_dir_all(&root);
     assert_eq!(malformed.kind, Kind::CannotJudge, "{}", malformed.message);
     assert!(
@@ -287,6 +313,10 @@ fn a_manifest_this_gate_cannot_read_is_not_judged_as_though_its_version_is_missi
         .expect("write invalid utf-8 in place of the manifest");
     let refusal = judge(&fixture.repo, &fixture.remote.display().to_string())
         .expect_err("a manifest this gate cannot read must not be judged as though absent");
+    refusal::expect(
+        "publish-source-integrity#workspace-manifest-unreadable",
+        &refusal,
+    );
     let _ = std::fs::remove_dir_all(&root);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
@@ -315,6 +345,10 @@ fn each_unreadable_input_says_which_one_it_could_not_read() {
     let bare = root.join("no-manifest");
     std::fs::create_dir_all(&bare).expect("create");
     let refusal = judge(&bare, "origin").expect_err("a directory with no manifest is unjudgeable");
+    refusal::expect(
+        "publish-source-integrity#repository-root-has-no-manifest",
+        &refusal,
+    );
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("has no Cargo.toml"),
@@ -364,6 +398,10 @@ fn a_version_this_reader_cannot_read_stops_the_publish_as_a_cannot_judge() {
     .expect("write");
     let refusal = judge(&fixture.repo, &fixture.remote.display().to_string())
         .expect_err("a version this reader cannot read must stop the publish");
+    refusal::expect(
+        "publish-source-integrity#workspace-version-unreadable",
+        &refusal,
+    );
     let _ = std::fs::remove_dir_all(&root);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
@@ -404,6 +442,14 @@ fn a_tag_with_no_signature_block_is_named_as_such() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("an annotated tag carrying no signature must be refused");
+    refusal::expect(
+        "publish-source-integrity#release-tag-carries-no-signature",
+        &refusal,
+    );
+    refusal::expect(
+        "publish-source-integrity#release-tag-carries-no-signature",
+        &refusal,
+    );
     assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
     assert!(
         refusal.message.contains("carries no signature"),
@@ -431,6 +477,10 @@ fn a_signature_this_gate_cannot_read_cannot_be_judged() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a signature this gate cannot read must be refused");
+    refusal::expect(
+        "publish-source-integrity#signature-armour-unverifiable",
+        &refusal,
+    );
     assert_eq!(
         refusal.kind,
         Kind::CannotJudge,
@@ -458,6 +508,7 @@ fn a_remote_that_cannot_be_read_cannot_be_judged() {
     let verdict = judge(&fixture.repo, &absent.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("an unreadable remote must be refused");
+    refusal::expect("publish-source-integrity#remote-main-unreadable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal
@@ -495,6 +546,7 @@ fn a_remote_without_main_is_named_as_missing_the_ref() {
     );
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a remote without main must be refused");
+    refusal::expect("publish-source-integrity#remote-has-no-main", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("has no refs/heads/main"),
@@ -518,6 +570,10 @@ fn a_worktree_state_that_cannot_be_read_cannot_be_judged() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("an unreadable worktree state must be refused");
+    refusal::expect(
+        "publish-source-integrity#worktree-state-unreadable",
+        &refusal,
+    );
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal
@@ -562,6 +618,7 @@ fn a_tag_whose_object_is_missing_cannot_be_read() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a missing tag object must be refused");
+    refusal::expect("publish-source-integrity#tag-object-unreadable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("could not read the tag object"),
@@ -587,6 +644,7 @@ fn a_head_whose_ancestor_is_missing_cannot_have_its_subject_read() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a missing ancestor object must be refused");
+    refusal::expect("publish-source-integrity#head-subject-unreadable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("could not read HEAD's subject"),
@@ -623,6 +681,7 @@ fn a_tag_whose_commit_is_missing_cannot_be_resolved() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a tag naming a missing commit must be refused");
+    refusal::expect("publish-source-integrity#tag-commit-unresolvable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("could not resolve"),
@@ -700,6 +759,10 @@ fn an_exclusion_classifier_that_cannot_run_cannot_be_judged() {
         |_, _| Tracked::Yes,
     )
     .expect_err("a classifier that could not run must refuse rather than answer");
+    refusal::expect(
+        "publish-source-integrity#exclusion-classifier-cannot-run",
+        &refusal,
+    );
     let _ = std::fs::remove_dir_all(&root);
     assert_eq!(refusal.kind, Kind::CannotJudge);
     assert!(
@@ -905,6 +968,10 @@ fn a_scratch_path_another_user_could_own_is_refused_rather_than_written_through(
 
     let refusal = gate::claim_scratch(&claimed)
         .expect_err("a path this process did not create must not be adopted as its scratch");
+    refusal::expect(
+        "publish-source-integrity#signature-scratch-unclaimable",
+        &refusal,
+    );
     assert_eq!(
         refusal.kind,
         Kind::CannotJudge,
@@ -939,6 +1006,10 @@ fn a_worktree_the_checkout_hides_is_a_violation() {
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
     let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a file only this checkout hides must be refused");
+    refusal::expect(
+        "publish-source-integrity#worktree-hides-untracked-files",
+        &refusal,
+    );
     assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
     assert!(
         refusal.message.contains("only this checkout hides"),
@@ -964,6 +1035,10 @@ fn a_source_whose_tracking_cannot_be_read_is_not_untracked() {
         Tracked::Unreadable(format!("git is not on this machine (asked about {source})"))
     })
     .expect_err("a tracked question that could not be asked must refuse");
+    refusal::expect(
+        "publish-source-integrity#tracking-question-unaskable",
+        &refusal,
+    );
     let _ = std::fs::remove_dir_all(&root);
     assert_eq!(
         refusal.kind,

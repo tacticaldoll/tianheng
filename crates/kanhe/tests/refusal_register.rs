@@ -20,6 +20,7 @@
 //! site is a commitment that a direction observes it — a registered site no direction names refuses here —
 //! so coverage cannot lag behind the migration.
 
+use kanhe::region::Source;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -93,6 +94,21 @@ fn first_literal_args(text: &str, call: &str) -> Vec<(String, usize)> {
     found
 }
 
+/// `text` with its comments, string literals and imports removed, so neither a name in prose nor a name in
+/// a `use` list is read as a construction.
+///
+/// The import line was the second way a count could be wrong: a module holding both forms names all four
+/// constructors in one `use`, and the bare identifiers there were counted as two more unregistered sites —
+/// a figure two above the truth in the module where the truth is what the migration is steering by.
+fn executed_rust(text: &str) -> String {
+    Source::of(text)
+        .rust()
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("use "))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Whether `text` has a site identity's shape: `<capability>#<slug>`, lowercase and hyphenated.
 ///
 /// **`#` and not `/`, because `<capability>/<slug>` is already an identity here.** The bound register
@@ -114,22 +130,32 @@ fn is_a_site(text: &str) -> bool {
     word(capability) && word(slug)
 }
 
-/// Occurrences of `call` in `text` that this reader counts as a call rather than as part of a longer name.
-fn calls(text: &str, call: &str) -> usize {
+/// Occurrences of the constructor named `name` in `text`, however it is reached.
+///
+/// **The identifier, not `name(`.** Counting the call syntax missed a constructor used as a value:
+/// `workspace_version(repo).map_err(cannot_judge)` has no opening parenthesis after the name, so a live
+/// refusal site was invisible to the register built to count them — found by migrating the module the site
+/// was in, and only because the compiler then objected to the import. A register whose corpus reader can be
+/// stepped around by a point-free call is one that reports a smaller number than the truth, which is the
+/// direction that matters.
+///
+/// Both boundaries, so `cannot_judge_at` is not counted as `cannot_judge`.
+fn calls(text: &str, name: &str) -> usize {
+    let boundary = |byte: u8| !(byte.is_ascii_alphanumeric() || byte == b'_');
     let mut count = 0;
     let mut at = 0;
-    while let Some(offset) = text[at..].find(call) {
+    while let Some(offset) = text[at..].find(name) {
         let start = at + offset;
-        at = start + call.len();
+        at = start + name.len();
         let before = if start == 0 {
             b' '
         } else {
             text.as_bytes()[start - 1]
         };
-        if before.is_ascii_alphanumeric() || before == b'_' {
-            continue;
+        let after = text.as_bytes().get(at).copied().unwrap_or(b' ');
+        if boundary(before) && boundary(after) {
+            count += 1;
         }
-        count += 1;
     }
     count
 }
@@ -166,7 +192,12 @@ fn read(root: &Path) -> Register {
                     .push((name.clone(), line));
             }
         }
-        let open = calls(&text, "violation(") + calls(&text, "cannot_judge(");
+        // **Executed Rust, not the file.** Counting the bare identifier over the whole text counted every
+        // doc comment naming a constructor — this repository's prose names them constantly, and the figure
+        // jumped by four modules that construct no refusal at all. `region` is the module written so that
+        // forgetting to ask was not possible, and the same reader the gates themselves use.
+        let executed = executed_rust(&text);
+        let open = calls(&executed, "violation") + calls(&executed, "cannot_judge");
         if open > 0 {
             unregistered.insert(name, open);
         }

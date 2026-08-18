@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::manifest::{WorkspaceVersion, is_semver};
-use crate::refusal::{Refusal, cannot_judge, violation};
+use crate::refusal::{Refusal, cannot_judge, cannot_judge_at, violation_at};
 
 /// The judgement's own git, isolated from everything outside the repository it judges.
 ///
@@ -43,8 +43,12 @@ fn git(repo: &Path, args: &[&str]) -> Result<String, crate::hermetic_git::Failur
 /// Keeping the read and its error mapping together gives the focused failure matrix one observable source for
 /// this diagnostic; the caller supplies only what it was reading.
 fn read_worktree(repo: &Path, args: &[&str], what: &str) -> Result<String, Refusal> {
-    git(repo, args)
-        .map_err(|err| cannot_judge(format!("could not read the worktree {what}: {err}")))
+    git(repo, args).map_err(|err| {
+        cannot_judge_at(
+            "publish-source-integrity#worktree-state-unreadable",
+            format!("could not read the worktree {what}: {err}"),
+        )
+    })
 }
 
 /// Untracked files hidden by this **checkout** rather than by the repository.
@@ -167,11 +171,14 @@ pub fn hidden_by_the_checkout_with(
         Ok(classified) => classified,
         Err(NoClassification::MatchedNothing) => String::new(),
         Err(NoClassification::Failed(err)) => {
-            return Err(cannot_judge(format!(
-                "could not classify which exclusion hides {} untracked path(s): {err}. An unusable \
+            return Err(cannot_judge_at(
+                "publish-source-integrity#exclusion-classifier-cannot-run",
+                format!(
+                    "could not classify which exclusion hides {} untracked path(s): {err}. An unusable \
                  classifier is not one that found nothing",
-                excluded.len()
-            )));
+                    excluded.len()
+                ),
+            ));
         }
     };
 
@@ -203,10 +210,13 @@ pub fn hidden_by_the_checkout_with(
                     answered.insert(source, false);
                 }
                 Tracked::Unreadable(why) => {
-                    return Err(cannot_judge(format!(
-                        "could not decide whether this repository tracks {source} ({why}), so an exclusion \
+                    return Err(cannot_judge_at(
+                        "publish-source-integrity#tracking-question-unaskable",
+                        format!(
+                            "could not decide whether this repository tracks {source} ({why}), so an exclusion \
                          it owns cannot be told from one this checkout added"
-                    )));
+                        ),
+                    ));
                 }
             }
         }
@@ -339,10 +349,10 @@ fn workspace_version(repo: &Path) -> Result<WorkspaceVersion, String> {
 /// `remote` names the remote whose `main` the snapshot must be the live tip of.
 pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
     if !repo.join("Cargo.toml").is_file() {
-        return Err(cannot_judge(format!(
-            "repository root {} has no Cargo.toml",
-            repo.display()
-        )));
+        return Err(cannot_judge_at(
+            "publish-source-integrity#repository-root-has-no-manifest",
+            format!("repository root {} has no Cargo.toml", repo.display()),
+        ));
     }
     // The cause travels. Folding it away told an operator on a machine WITHOUT git that the repository root
     // "is not a git worktree" — a sentence about the repository, for a fact about the machine, in front of
@@ -363,7 +373,12 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
     // Answered in three, for the reason the sibling release gate states at its own call site: a value this
     // reader cannot read is legal TOML in a form it does not take, and reporting it as a *missing* version in
     // front of `cargo publish` sends an operator to look for a key that is already there.
-    let version = match workspace_version(repo).map_err(cannot_judge)? {
+    let version = match workspace_version(repo).map_err(|why| {
+        cannot_judge_at(
+            "publish-source-integrity#workspace-manifest-unreadable",
+            why,
+        )
+    })? {
         WorkspaceVersion::Declared(version) => version,
         WorkspaceVersion::Absent => {
             return Err(cannot_judge(
@@ -371,16 +386,20 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
             ));
         }
         WorkspaceVersion::Unreadable(what) => {
-            return Err(cannot_judge(format!(
-                "Cargo.toml declares a workspace version this check cannot read ({what}), so which tag this \
+            return Err(cannot_judge_at(
+                "publish-source-integrity#workspace-version-unreadable",
+                format!(
+                    "Cargo.toml declares a workspace version this check cannot read ({what}), so which tag this \
                  tree would have to be the release snapshot of cannot be decided"
-            )));
+                ),
+            ));
         }
     };
     if !is_semver(&version) {
-        return Err(cannot_judge(format!(
-            "workspace version is missing or malformed: {version}"
-        )));
+        return Err(cannot_judge_at(
+            "publish-source-integrity#workspace-version-malformed",
+            format!("workspace version is missing or malformed: {version}"),
+        ));
     }
     let tag = format!("v{version}");
 
@@ -391,17 +410,23 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
         "state",
     )?;
     if !dirty.is_empty() {
-        return Err(violation(format!(
-            "worktree is not clean, so HEAD does not describe what would be packaged:\n{dirty}"
-        )));
+        return Err(violation_at(
+            "publish-source-integrity#worktree-is-not-clean",
+            format!(
+                "worktree is not clean, so HEAD does not describe what would be packaged:\n{dirty}"
+            ),
+        ));
     }
     let hidden = hidden_by_the_checkout(repo)?;
     if !hidden.is_empty() {
-        return Err(violation(format!(
-            "worktree carries untracked files that only this checkout hides, so the same commit would be \
+        return Err(violation_at(
+            "publish-source-integrity#worktree-hides-untracked-files",
+            format!(
+                "worktree carries untracked files that only this checkout hides, so the same commit would be \
              judged differently elsewhere:\n{}",
-            hidden.join("\n")
-        )));
+                hidden.join("\n")
+            ),
+        ));
     }
 
     // Shares the read site above. Once `clean` is defined by the repository, a clean worktree with an
@@ -409,13 +434,20 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
     // checkout hides or a staged one `status` reports — so a refusal of its own would be a branch no input
     // can take.
     let head_commit = read_worktree(repo, &["rev-parse", "HEAD"], "HEAD")?;
-    let head_subject = git(repo, &["log", "-1", "--format=%s", "HEAD"])
-        .map_err(|err| cannot_judge(format!("could not read HEAD's subject: {err}")))?;
+    let head_subject = git(repo, &["log", "-1", "--format=%s", "HEAD"]).map_err(|err| {
+        cannot_judge_at(
+            "publish-source-integrity#head-subject-unreadable",
+            format!("could not read HEAD's subject: {err}"),
+        )
+    })?;
     if head_subject != format!("release: {version}") {
-        return Err(violation(format!(
-            "HEAD is not this version's release snapshot: its subject is \"{head_subject}\", expected \
+        return Err(violation_at(
+            "publish-source-integrity#head-is-not-the-release-snapshot",
+            format!(
+                "HEAD is not this version's release snapshot: its subject is \"{head_subject}\", expected \
              \"release: {version}\""
-        )));
+            ),
+        ));
     }
 
     if git(
@@ -424,9 +456,10 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
     )
     .is_err()
     {
-        return Err(violation(format!(
-            "there is no tag {tag}; the release snapshot is tagged before it is published"
-        )));
+        return Err(violation_at(
+            "publish-source-integrity#release-tag-absent",
+            format!("there is no tag {tag}; the release snapshot is tagged before it is published"),
+        ));
     }
     // The tag object, read **once**. Asking git for its type and then for its content is two reads of one
     // object, and the second cannot fail once the first has answered — a branch no input can take, which is
@@ -437,33 +470,45 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
         Err(err) => {
             let kind = git(repo, &["cat-file", "-t", &format!("refs/tags/{tag}")]);
             return Err(match kind.as_deref() {
-                Ok("tag") | Err(_) => {
-                    cannot_judge(format!("could not read the tag object for {tag}: {err}"))
-                }
-                Ok(_) => violation(format!(
-                    "{tag} is a lightweight tag; the release tags are annotated (`git tag -s`)"
-                )),
+                Ok("tag") | Err(_) => cannot_judge_at(
+                    "publish-source-integrity#tag-object-unreadable",
+                    format!("could not read the tag object for {tag}: {err}"),
+                ),
+                Ok(_) => violation_at(
+                    "publish-source-integrity#release-tag-is-lightweight",
+                    format!(
+                        "{tag} is a lightweight tag; the release tags are annotated (`git tag -s`)"
+                    ),
+                ),
             });
         }
     };
 
     verify_tag_signature(repo, &tag, &tag_object)?;
 
-    let tag_commit = git(repo, &["rev-list", "-n", "1", &tag])
-        .map_err(|err| cannot_judge(format!("could not resolve {tag} to a commit: {err}")))?;
+    let tag_commit = git(repo, &["rev-list", "-n", "1", &tag]).map_err(|err| {
+        cannot_judge_at(
+            "publish-source-integrity#tag-commit-unresolvable",
+            format!("could not resolve {tag} to a commit: {err}"),
+        )
+    })?;
     if tag_commit != head_commit {
-        return Err(violation(format!(
-            "{tag} points at {tag_commit} but HEAD is {head_commit}; publish the commit the tag names"
-        )));
+        return Err(violation_at(
+            "publish-source-integrity#release-tag-does-not-name-head",
+            format!(
+                "{tag} points at {tag_commit} but HEAD is {head_commit}; publish the commit the tag names"
+            ),
+        ));
     }
 
     // A failed live read and a successful read of no `main` are different facts. Preserve the command's cause
     // before parsing its output; defaulting the error to an empty string makes both branches say the ref is
     // absent and sends an operator looking at repository state when the remote was actually unreadable.
     let listing = git(repo, &["ls-remote", remote, "refs/heads/main"]).map_err(|err| {
-        cannot_judge(format!(
-            "could not read refs/heads/main from remote \"{remote}\": {err}"
-        ))
+        cannot_judge_at(
+            "publish-source-integrity#remote-main-unreadable",
+            format!("could not read refs/heads/main from remote \"{remote}\": {err}"),
+        )
     })?;
     let remote_main = listing
         .lines()
@@ -472,16 +517,22 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
         .unwrap_or_default()
         .to_string();
     if remote_main.is_empty() {
-        return Err(cannot_judge(format!(
-            "remote \"{remote}\" has no refs/heads/main, so whether HEAD is the released snapshot cannot \
+        return Err(cannot_judge_at(
+            "publish-source-integrity#remote-has-no-main",
+            format!(
+                "remote \"{remote}\" has no refs/heads/main, so whether HEAD is the released snapshot cannot \
              be decided"
-        )));
+            ),
+        ));
     }
     if remote_main != head_commit {
-        return Err(violation(format!(
-            "HEAD {head_commit} is not the tip of {remote}/main ({remote_main}); `main` is the release-only \
+        return Err(violation_at(
+            "publish-source-integrity#head-is-not-the-tip-of-main",
+            format!(
+                "HEAD {head_commit} is not the tip of {remote}/main ({remote_main}); `main` is the release-only \
              branch a publish runs from"
-        )));
+            ),
+        ));
     }
 
     Ok(format!(
@@ -515,7 +566,7 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
 /// that did not.
 pub fn claim_scratch(path: &Path) -> Result<(), Refusal> {
     std::fs::create_dir(path).map_err(|err| {
-        cannot_judge(format!(
+        cannot_judge_at("publish-source-integrity#signature-scratch-unclaimable", format!(
             "could not claim a signature scratch directory at {} ({err}). After `remove_dir_all` an existing \
              path is an anomaly rather than a leftover, and `mkdir` refuses a symlink instead of writing \
              through it — so a signature verdict is declined rather than reached somewhere another user \
@@ -575,15 +626,19 @@ fn verify_tag_signature(repo: &Path, tag: &str, tag_object: &str) -> Result<(), 
     .map_err(|err| cannot_judge(format!("could not read {tag}'s signature block: {err}")))?;
 
     if signature.trim().is_empty() {
-        return Err(violation(format!(
-            "{tag} carries no signature; the release tags are signed (`git tag -s`)"
-        )));
+        return Err(violation_at(
+            "publish-source-integrity#release-tag-carries-no-signature",
+            format!("{tag} carries no signature; the release tags are signed (`git tag -s`)"),
+        ));
     }
     if !signature.starts_with("-----BEGIN SSH SIGNATURE-----") {
-        return Err(cannot_judge(format!(
-            "{tag} carries a signature this gate cannot verify — it reads SSH signatures, and this block is \
+        return Err(cannot_judge_at(
+            "publish-source-integrity#signature-armour-unverifiable",
+            format!(
+                "{tag} carries a signature this gate cannot verify — it reads SSH signatures, and this block is \
              something else"
-        )));
+            ),
+        ));
     }
     let Some(payload) = tag_object.strip_suffix(signature.trim_end()) else {
         return Err(cannot_judge(format!(
@@ -599,10 +654,13 @@ fn verify_tag_signature(repo: &Path, tag: &str, tag_object: &str) -> Result<(), 
     let verified = check_novalidate(payload, &sig_path);
     drop(guard);
     if !verified {
-        return Err(violation(format!(
-            "{tag}'s signature does not verify over the tag object; a signature block quoted in a tag \
+        return Err(violation_at(
+            "publish-source-integrity#signature-does-not-verify",
+            format!(
+                "{tag}'s signature does not verify over the tag object; a signature block quoted in a tag \
              message is text, not a signature"
-        )));
+            ),
+        ));
     }
     Ok(())
 }
