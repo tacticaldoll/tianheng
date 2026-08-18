@@ -1839,3 +1839,59 @@ fn an_inherit_line_spelled_with_tabs_still_inherits() {
         );
     }
 }
+
+/// A family pin under a **bare-triple** target table is read like any other dependency.
+///
+/// `[target.x86_64-unknown-linux-gnu.dependencies]` is a dependency table with a context in front of it, and
+/// the context is two bare TOML keys. The reason the sibling cfg form is left alone — that a quoted cfg
+/// expression is the grammar a line-oriented reader is likeliest to be wrong about — says nothing about this
+/// one, and reading it needs no guess: TOML bare keys carry no dot, so the triple runs to the next dot.
+///
+/// Negative run: before the reader learned the context, this returned `Ok` — the stale pin sat in a table the
+/// heading test classified as `Other` and no dependency was read from it at all.
+#[test]
+fn a_family_pin_under_a_target_triple_is_read() {
+    let root = scratch("target-triple");
+    let fixture = build_fixture(&root, "target-triple", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        format!("{text}\n[target.x86_64-unknown-linux-gnu.dependencies]\nxuanji = \"0.0.1\"\n"),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "chore: depend on a family crate for one target",
+    );
+    refuse(
+        &fixture.repo,
+        Kind::Violation,
+        "requires xuanji = \"0.0.1\"",
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A family pin under a **quoted cfg** target table is still not read, which is the declared bound.
+///
+/// The control for the direction above: it holds against a reader that stopped where the bound says, and
+/// fails against one that admitted every `[target.…]` heading alike. It is not a negative run — it passed
+/// before the change too — and it is here because the change it guards is a change to where the reader
+/// stops, which only a pair of cases can locate.
+#[test]
+fn a_family_pin_under_a_quoted_cfg_target_is_the_declared_bound() {
+    let root = scratch("target-cfg");
+    let fixture = build_fixture(&root, "target-cfg", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        format!("{text}\n[target.'cfg(unix)'.dependencies]\nxuanji = \"0.0.1\"\n"),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: depend on a family crate under a cfg");
+    judge(&fixture.repo).expect("a cfg-guarded family pin is a declared bound, not a violation");
+    let _ = std::fs::remove_dir_all(&root);
+}

@@ -1168,15 +1168,16 @@ consumer for an undemonstrated deduplication.
   crate. *Authority:* `observation-bound-register`, and `observation-bound-model`'s sibling bound that a
   rationale contradicting its extent is accepted — the prose beside an extent was already free to disagree with
   it, and so, until this was found, was the test beneath it.
-- **WATCH: a dependency declared under a target table is not observed.** *Observed pressure:* the
+- **WATCH: a dependency declared under a quoted cfg target is not observed.** *Observed pressure:* the
   example-pin reader decides which tables hold dependencies from the heading, and admits
-  `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]` and their `.NAME` detailed forms.
-  `[target.'cfg(…)'.dependencies]` is not admitted. *Observation source:* the round that added heading
-  tracking, where the target form was the one grammar left out deliberately. *Risk:* a stale family pin
-  under a target table reaches a release unobserved. Bounded by there being no such table in any manifest
-  under `examples/`, ever. *Next trigger:* an example acquiring one — at which point the shape has an
-  instance to be written against rather than a guess. *Authority:* engine. *Compatibility:* patch; the
-  check ships in no crate.
+  `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, their `.NAME` detailed forms, and any of
+  those under a bare target triple. `[target.'cfg(…)'.dependencies]` is not admitted. *Observation
+  source:* the round that read the bare-triple form, which found the wider entry this replaces had taken a
+  reason about the quoted grammar and applied it to the whole target corpus. *Risk:* a stale family pin
+  under a cfg-guarded target table reaches a release unobserved. Bounded by there being no target table in
+  any manifest in this repository, ever. *Next trigger:* an example acquiring one — at which point the
+  shape has an instance to be written against rather than a guess. *Authority:* engine.
+  *Compatibility:* patch; the check ships in no crate.
 
 - **WATCH: the title race the wrapper can only narrow.** *Observed pressure:* the merge wrapper judges three
   inputs and pins two by construction — the body travels as the value the gate judged, and the commit set

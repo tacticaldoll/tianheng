@@ -950,9 +950,14 @@ them.
   `version` as one this reader *could not read*, over the legal path-only form, which is the distinction its
   sibling had just been repaired to make.
 
-  `[target.'cfg(…)'.dependencies]` is left out and **declared as a bound** with its own tracker: that heading
-  carries a quoted cfg expression, which is the grammar a line-oriented reader is likeliest to be wrong
-  about, and no manifest under `examples/` has ever carried one.
+  A context cargo writes in front of a dependency table is stripped before the heading is classified, so
+  `[target.<triple>.dependencies]` and its `.NAME` form are read like any other. That reading is narrower
+  than the bound this window first declared, which named the whole target corpus: the reason it gave — *a
+  quoted cfg expression is the grammar a line-oriented reader is likeliest to be wrong about* — was written
+  from the hard case and then used to skip the easy one, and a bare triple is two bare TOML keys with
+  nothing to guess, because a bare key cannot carry the dot that separates keys. `[target.'cfg(…)'.…]` is
+  still left out and **declared as a bound** with its own tracker; the bound and its tracker are narrowed to
+  say so.
 
 - **A dated heading's fields are ranged, not merely digits.** The repair that replaced a length test with a
   digit test carried its own standard only one level: *a length test is a parse without its guarantee*

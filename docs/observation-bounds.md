@@ -261,11 +261,11 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## release-coherence
 
-### `release-coherence/a-dependency-declared-under-target-is-not-observed-a-stated-bound`
+### `release-coherence/a-dependency-declared-under-a-quoted-cfg-target-is-not-observed-a-stated-bound`
 
-> nothing reacts. That heading carries a quoted cfg expression, which is the grammar a line-oriented reader is likeliest to be wrong about, and admitting it on a guess would trade a silent miss for a wrong read. No manifest under `examples/` has ever carried one
+> nothing reacts. That heading's second key is a **quoted** cfg expression, and reading which configurations it selects is a grammar of its own rather than a context in front of a dependency table. The sibling form is read: a bare target triple is two bare TOML keys, and a bare key carries no dot, so the triple runs to the next dot with nothing guessed. This bound named both forms until that was measured — the reason it gives is about the quoted grammar, and it had been used to skip the whole target corpus
 
-- **unpinned**, tracked by: `BACKLOG.md` — *a dependency declared under a target table is not observed*
+- **unpinned**, tracked by: `BACKLOG.md` — *a dependency declared under a quoted cfg target is not observed*
 
 ### `release-coherence/prose-about-the-marker-is-read-as-a-marker-a-stated-bound`
 
