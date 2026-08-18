@@ -231,19 +231,34 @@ pub fn judge(
 /// reporting agreement. That is the same silent-narrowing this function's own doc argues against for an
 /// empty parse, one level up from it, and `crate::selection` is what answers *how many* rather than
 /// inheriting one.
-pub fn admitted_types(agents: &str) -> Option<Vec<String>> {
+pub fn admitted_types(agents: &str) -> Result<Vec<String>, Refusal> {
     const ANCHOR: &str = "Use the narrowest honest type:";
-    let clause =
-        crate::selection::the_only("admitted-types anchor", agents.split(ANCHOR).skip(1)).ok()?;
+    // The refusal travels, rather than collapsing to one absence. `the_only` names WHICH way the count was
+    // wrong — found none, found N — and `.ok()?` threw that away, so a maintainer who restated the rule in
+    // `AGENTS.md` was sent to look for a missing anchor while there were two. The sibling reader repaired in
+    // this same window argued the opposite for the identical distinction: *none and several are different
+    // facts*. One rule, two readers, and only one of them was following it.
+    let clause = crate::selection::the_only("admitted-types anchor", agents.split(ANCHOR).skip(1))?;
     // The run ends at the sentence's period, so a later backticked word — `!`, `BREAKING CHANGE:` — is outside.
-    let run = clause.split(". ").next()?;
+    let Some(run) = clause.split(". ").next() else {
+        return Err(cannot_judge(
+            "the admitted-types clause has no sentence after its anchor, so the contract's own list cannot \
+             be read",
+        ));
+    };
     let types: Vec<String> = run
         .split('`')
         .skip(1)
         .step_by(2)
         .map(str::to_string)
         .collect();
-    if types.is_empty() { None } else { Some(types) }
+    if types.is_empty() {
+        return Err(cannot_judge(
+            "the admitted-types clause names no backticked type, so the contract states no list for the \
+             gate's own to be compared against",
+        ));
+    }
+    Ok(types)
 }
 
 /// The types this gate judges by, for a direction that holds them against the contract.

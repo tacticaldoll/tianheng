@@ -970,6 +970,23 @@ them.
   `src/tests/`, because the shape the second needs is one `cargo metadata` rejects outright — the first
   draft tried it end-to-end and failed on a duplicate-key parse error rather than on what it meant to show.
 
+- **A mark that asked nothing of anyone, and a refusal that would not say which way.** Two corrections to
+  this window's own entries.
+
+  The release-gate entry carried `**BREAKING**` and, in its own next sentence, *nothing an adopter runs*.
+  *Closing a false negative earns a minor* is a rule about a **product reaction**, and the reason it gives is
+  that the adopter's recorded baseline goes stale. A repository check ships in no package and produces no
+  finding that reaches anyone's baseline, so nothing is owed. The mark read the rule by its first clause and
+  not by the reason that clause gives — under `### Self-governance`, the heading the adopter-narrative check
+  exempts precisely because it is not adopter-facing.
+
+  And `admitted_types` collapsed `the_only`'s refusal with `.ok()?`, so **no anchor** and **two anchors**
+  reached the caller as one absence. A maintainer who restated the rule in `AGENTS.md` — the shape prose
+  acquires the moment a rule is worth repeating — was sent to look for a missing anchor while there were two
+  of them. The sibling reader repaired in this same window argued the opposite for the identical distinction:
+  *none and several are different facts*. One rule, two readers, one of them following it. The refusal now
+  travels, and the direction that had **pinned the collapse** asserts the message instead of the absence.
+
 - **The repair that routed a reader through `selection` built its candidates twice.** Two sites handed
   `the_only` an enumeration and then rebuilt the same one inside the `Err` arm, to tell *none* from *several*
   — `the_only` reports both as one refusal, and here they are different facts. The answer was correct and the
@@ -1054,8 +1071,8 @@ them.
   difference an operator does not act on differently is not one worth drawing. The message names which
   occurred, since the class does not.
 
-- **BREAKING** — **The release gate stopped reading the section the release is about, and three readers
-  beside it were fixed with it.** Four defects, each with a negative run recorded against the unfixed code.
+- **The release gate stopped reading the section the release is about, and three readers beside it were
+  fixed with it.** Four defects, each with a negative run recorded against the unfixed code.
 
   *The adopter-narrative check had no subject during release preparation.* It read `## [Unreleased]` only —
   and release-ready state requires that section to be **empty**. Preparation dates the new section and then
@@ -1081,9 +1098,17 @@ them.
   "crates/version-utils", version = "…" }` produced *has no version pin*, a false refusal over a correct
   manifest. A `version` assignment is now recognised as a table key.
 
-  **What to expect on upgrade**: nothing an adopter runs. These are this repository's own checks, shipping in
-  no package. The mark is here because the first defect closes a false negative over prose an adopter reads,
-  and because this family marks a closed false negative whatever its diff size.
+  **No adopter action, and no `**BREAKING**` mark** — which the first draft of this entry carried. *Closing a
+  false negative earns a minor* is a rule about a **product reaction**, and its stated reason is that the
+  adopter's recorded baseline goes stale. These checks ship in no package and produce no finding that reaches
+  anyone's baseline, so nothing is owed. Marking them read the rule by its first clause and not by the reason
+  the clause gives, in an entry sitting under `### Self-governance` — the heading the adopter-narrative check
+  exempts precisely because it is not adopter-facing — and saying in its own next sentence that nothing an
+  adopter runs changes. Three documents contradicting each other.
+
+  Two commit subjects in this window carry `!` and a `BREAKING CHANGE:` footer for the same over-application.
+  They are merged squashes, and a merged squash is record: amending one changes its hash and decouples it
+  from the pull request whose merge record cites it. The correction lives here, where the adopter reads.
 
 - **The refresh recipe written beside the pins was wrong for one of the two actions it documents.** The
   comment told a reader to resolve a tag with `git/ref/tags/<tag> --jq .object.sha`. Measured against both
