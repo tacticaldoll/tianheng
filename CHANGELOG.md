@@ -969,6 +969,18 @@ them.
   package-identity failures — now have one each. The two that already worked were shown to fail by
   neutralising their arm and running the direction against the mutated reader.
 
+  **The migration that reader belonged to had covered one of its two call sites.** `require_internal_pins`
+  kept a line-oriented scan while its sibling moved to the shared reader, and the two then disagreed
+  observably: against `[workspace.dependencies.xuanji]` with `path` and `version` on their own lines — what
+  cargo writes — the scan selected the **path** line, because it carries `path`, `"crates/` and `=`, split
+  it at its `=`, and took `path` for the dependency's name. The `version` line carried neither marker and
+  was never read. `internal dependency path has no version pin`: a false refusal in front of the release
+  gate over a manifest cargo reads correctly. The loop is gone rather than repaired, because two readers of
+  one rule is the thing that failed, and `[workspace.dependencies]` is a dependency table with a context in
+  front of it exactly as a target table is. Which dependencies are internal is now each one's own `path`
+  value rather than the shape of the line it sits on — the same correction the sibling made when it stopped
+  keying on the dependency's name.
+
   A context cargo writes in front of a dependency table is stripped before the heading is classified, so
   `[target.<triple>.dependencies]` and its `.NAME` form are read like any other. That reading is narrower
   than the bound this window first declared, which named the whole target corpus: the reason it gave — *a

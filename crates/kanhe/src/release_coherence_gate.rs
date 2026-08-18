@@ -90,6 +90,9 @@ enum Table {
 /// about* — was written from the hard case and then used to skip the whole corpus, and the easy case needed
 /// no guess at all.
 fn past_the_context(inner: &str) -> Option<&str> {
+    // The root manifest declares the family under `[workspace.dependencies]`, which is a dependency table
+    // with a context in front of it exactly as a target table is.
+    let inner = inner.strip_prefix("workspace.").unwrap_or(inner);
     let Some(rest) = inner.strip_prefix("target.") else {
         return Some(inner);
     };
@@ -132,26 +135,27 @@ fn dependency_table(heading: &str) -> Table {
 /// own reader: it reports none and several as one refusal, and here they are different facts — an absent pin
 /// is the legal `{ path = "…" }` form, and two are a table this reader may not choose from.
 #[derive(Debug, PartialEq, Eq)]
-enum Pin {
-    /// The version requirement as written.
-    Declared(String),
-    /// No `version` key. Legal: a path-only or git-only dependency declares no version.
+enum Declared {
+    /// The value as written.
+    Value(String),
+    /// The key is absent. Legal for both of this reader's keys: a path-only dependency declares no
+    /// `version`, and a registry dependency declares no `path`.
     Absent,
-    /// A `version` this reader cannot read — a value not in double quotes — quoted as written.
+    /// A value this reader cannot read — one not in double quotes — quoted as written.
     Unreadable(String),
-    /// More than one `version` key in one dependency. Malformed, and not this reader's to choose from.
+    /// More than one such key in one dependency. Malformed, and not this reader's to choose from.
     Several(usize),
 }
 
-impl Pin {
+impl Declared {
     fn of(mut values: Vec<Quoted>, written: &str) -> Self {
         match values.len() {
-            0 => Pin::Absent,
+            0 => Declared::Absent,
             1 => match values.pop() {
-                Some(Quoted::Value(version)) => Pin::Declared(version),
-                _ => Pin::Unreadable(written.trim().to_string()),
+                Some(Quoted::Value(version)) => Declared::Value(version),
+                _ => Declared::Unreadable(written.trim().to_string()),
             },
-            several => Pin::Several(several),
+            several => Declared::Several(several),
         }
     }
 }
@@ -163,7 +167,7 @@ impl Pin {
 /// name rather than to a missing one. What is left are the two ways an identity is present and unreadable.
 ///
 /// It was a `String` with the empty string standing for both of those, in the same struct whose `pin` field
-/// had just been given `Pin::{Absent, Unreadable, Several}` for exactly this distinction: one field was typed
+/// had just been given `Declared::{Absent, Unreadable, Several}` for exactly this distinction: one field was typed
 /// and its sibling was left as a sentinel, so *several `package` keys* and *a `package` value this reader
 /// cannot read* reached the operator as one sentence. The sentinel was not injective either — a literal
 /// `package = ""` is a third fact that read as the same state.
@@ -199,7 +203,20 @@ impl Package {
 struct Dependency {
     key: String,
     package: Package,
-    pin: Pin,
+    pin: Declared,
+    path: Declared,
+}
+
+/// A detailed dependency table being read: one dependency spread over its own lines.
+///
+/// A named struct rather than a tuple because every field is a `Vec<Quoted>` or a `String`, and a reader
+/// arriving at `pending.2` has to count to know which key it holds.
+struct Detailed {
+    key: String,
+    packages: Vec<Quoted>,
+    versions: Vec<Quoted>,
+    paths: Vec<Quoted>,
+    written: String,
 }
 
 /// Every dependency `text` declares, in both forms cargo admits.
@@ -213,15 +230,14 @@ fn declared_dependencies(text: &str) -> Vec<Dependency> {
     let mut table = Table::Other;
     // A detailed table is one dependency spread over its lines, so it is emitted at the boundary that closes
     // it — the next heading, or the end of the text.
-    let mut pending: Option<(String, Vec<Quoted>, Vec<Quoted>, String)> = None;
-    let flush = |pending: &mut Option<(String, Vec<Quoted>, Vec<Quoted>, String)>,
-                 found: &mut Vec<Dependency>| {
-        if let Some((key, packages, versions, written)) = pending.take() {
-            let package = Package::of(packages, &key);
+    let mut pending: Option<Detailed> = None;
+    let flush = |pending: &mut Option<Detailed>, found: &mut Vec<Dependency>| {
+        if let Some(table) = pending.take() {
             found.push(Dependency {
-                key,
-                package,
-                pin: Pin::of(versions, &written),
+                package: Package::of(table.packages, &table.key),
+                key: table.key,
+                pin: Declared::of(table.versions, &table.written),
+                path: Declared::of(table.paths, &table.written),
             });
         }
     };
@@ -231,7 +247,13 @@ fn declared_dependencies(text: &str) -> Vec<Dependency> {
             flush(&mut pending, &mut found);
             table = dependency_table(trimmed);
             if let Table::One(name) = &table {
-                pending = Some((name.clone(), Vec::new(), Vec::new(), String::new()));
+                pending = Some(Detailed {
+                    key: name.clone(),
+                    packages: Vec::new(),
+                    versions: Vec::new(),
+                    paths: Vec::new(),
+                    written: String::new(),
+                });
             }
             continue;
         }
@@ -244,24 +266,37 @@ fn declared_dependencies(text: &str) -> Vec<Dependency> {
                 let package = Package::of(inline_assignments(rest, "package"), key);
                 // A bare `xuanji = "0.5"` carries its requirement as the value itself; an inline table
                 // carries it under a `version` key.
-                let versions = if rest.trim_start().starts_with('{') {
+                let inline = rest.trim_start().starts_with('{');
+                let versions = if inline {
                     inline_assignments(rest, "version")
                 } else {
                     vec![quoted_value(rest)]
                 };
+                // A bare `xuanji = "0.5"` declares no path at all; only an inline table can carry one.
+                let paths = if inline {
+                    inline_assignments(rest, "path")
+                } else {
+                    Vec::new()
+                };
                 found.push(Dependency {
                     key: key.to_string(),
                     package,
-                    pin: Pin::of(versions, rest),
+                    pin: Declared::of(versions, rest),
+                    path: Declared::of(paths, rest),
                 });
             }
             Table::One(_) => {
-                if let Some((_, packages, versions, written)) = pending.as_mut() {
-                    packages.extend(inline_assignments(trimmed, "package"));
-                    versions.extend(inline_assignments(trimmed, "version"));
+                if let Some(table) = pending.as_mut() {
+                    table
+                        .packages
+                        .extend(inline_assignments(trimmed, "package"));
+                    table
+                        .versions
+                        .extend(inline_assignments(trimmed, "version"));
+                    table.paths.extend(inline_assignments(trimmed, "path"));
                     if !trimmed.is_empty() {
-                        written.push_str(trimmed);
-                        written.push(' ');
+                        table.written.push_str(trimmed);
+                        table.written.push(' ');
                     }
                 }
             }
@@ -810,52 +845,75 @@ fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal> {
     Ok(out)
 }
 
+/// Every internal path dependency in the root manifest names the workspace version.
+///
+/// **One reader, and no loop beside it.** This held its own line-oriented scan while the sibling that judges
+/// example pins was migrated to `declared_dependencies` in the same window, so the two disagreed
+/// observably: the new reader knows the detailed table cargo writes and the old loop did not. Against
+/// `[workspace.dependencies.xuanji]` with `path` and `version` on their own lines, the loop selected the
+/// **path** line — it carries `path`, `"crates/` and `=` — split it at its `=`, and took `path` for the
+/// dependency's name, while the `version` line carrying neither marker was never read. The result was
+/// *internal dependency path has no version pin*: a false refusal in front of the release gate, over a
+/// manifest cargo reads correctly. Which dependencies exist is one question, and it now has one answer.
+///
+/// The selection is the dependency's own `path` value rather than the shape of the line it sits on, which is
+/// the same correction the sibling made when it stopped keying on the dependency's name.
 fn require_internal_pins(root_manifest: &str, version: &str) -> Result<(), Refusal> {
     let mut pins = 0usize;
-    // Executed manifest text, not raw lines. A commented-out internal dependency —
-    // `# xuanji = { path = "crates/xuanji" }` — satisfies every predicate this filter applies, so it was counted as
-    // a pin and then refused for having no version: a **false refusal** in front of the release gate, and
-    // one that also inflated the vacuity guard with text declaring nothing. The sibling four hundred lines
-    // up already stripped `#` by hand; this module now asks `region` instead, which is the module written
-    // so that forgetting was not possible, and which this file imported nowhere.
-    for line in crate::region::Source::of(root_manifest).toml().lines() {
-        let trimmed = line.trim();
-        if !trimmed.contains("path") || !trimmed.contains("\"crates/") || !trimmed.contains('=') {
-            continue;
-        }
-        let Some((name, value)) = trimmed.split_once('=') else {
-            continue;
-        };
-        pins += 1;
-        let name = name.trim();
-        // Read from the dependency's VALUE and by table key, never from the whole line by substring — see
-        // `inline_assignments` for the false refusal that produced.
-        let assignments = inline_assignments(value, "version");
-        // **Absence is answered before the enumeration is consumed, not from a second one.** `the_only`
-        // reports none and several as one refusal, and here they are different facts: none is the missing
-        // pin this check exists to name, several is a line this reader may not choose from. Reading the
-        // first from a re-run of `inline_assignments` inside the `Err` arm answered it correctly and built
-        // the candidate list twice to ask two questions about it — the shape `crate::selection` exists to
-        // discourage, in the repair that introduced the module's own call site.
-        if assignments.is_empty() {
-            return Err(violation(format!(
-                "internal dependency {name} has no version pin"
-            )));
-        }
-        let pin = match crate::selection::the_only("`version` key", assignments) {
-            Ok(Quoted::Value(pin)) => pin,
-            Ok(Quoted::Unreadable) => {
+    for Dependency {
+        key,
+        package: _,
+        pin,
+        path,
+    } in declared_dependencies(root_manifest)
+    {
+        // A dependency with no path is not an internal one; one whose path this reader cannot name might be,
+        // and *might be* is not an answer. The old selection asked whether the **line** carried `path` and
+        // `"crates/`, which is why it could not tell a path from the key of the dependency declaring it.
+        let path = match path {
+            Declared::Value(path) => path,
+            Declared::Absent => continue,
+            Declared::Unreadable(written) => {
                 return Err(cannot_judge(format!(
-                    "internal dependency {name} declares a version this check cannot read, so whether it \
-                     names the workspace version cannot be decided"
+                    "dependency {key} declares a `path` this check cannot read ({written}), so whether it \
+                     is an internal dependency cannot be decided"
                 )));
             }
-            Err(refusal) => return Err(refusal),
+            Declared::Several(several) => {
+                return Err(cannot_judge(format!(
+                    "dependency {key} declares {several} `path` keys, so where it points is not this \
+                     reader's to choose"
+                )));
+            }
         };
-        if pin != version {
-            return Err(violation(format!(
-                "internal dependency {name} is pinned to {pin}; expected {version}"
-            )));
+        if !path.starts_with("crates/") {
+            continue;
+        }
+        pins += 1;
+        match pin {
+            Declared::Value(pin) if pin == version => {}
+            Declared::Value(pin) => {
+                return Err(violation(format!(
+                    "internal dependency {key} is pinned to {pin}; expected {version}"
+                )));
+            }
+            Declared::Absent => {
+                return Err(violation(format!(
+                    "internal dependency {key} has no version pin"
+                )));
+            }
+            Declared::Unreadable(written) => {
+                return Err(cannot_judge(format!(
+                    "internal dependency {key} declares a version this check cannot read ({written}), so \
+                     whether it names the workspace version cannot be decided"
+                )));
+            }
+            Declared::Several(several) => {
+                return Err(cannot_judge(format!(
+                    "internal dependency {key} declares {several} `version` keys, so which one it names is \
+                     not this reader's to choose"
+                )));
+            }
         }
     }
     if pins == 0 {
@@ -923,7 +981,13 @@ fn require_example_pins(
             .into_owned();
         // Executed text, for the reason `require_internal_pins` records: a commented-out family pin
         // would otherwise be read as a declared one.
-        for Dependency { key, package, pin } in declared_dependencies(&text) {
+        for Dependency {
+            key,
+            package,
+            pin,
+            path: _,
+        } in declared_dependencies(&text)
+        {
             // **Which crate a dependency names is its `package` field where it has one, and its key only
             // otherwise.** Keying on the name alone was a false negative of the class the Core Contract
             // forbids: cargo renames with `alias = { package = "xuanji", version = "stale" }`, `alias` is in
@@ -953,20 +1017,20 @@ fn require_example_pins(
             // answered on its own terms. Collapsing them was the defect: an ABSENT `version` — legal, since
             // a path-only dependency declares none — was reported as one this reader could not read.
             let pin = match pin {
-                Pin::Declared(pin) => pin,
-                Pin::Absent => {
+                Declared::Value(pin) => pin,
+                Declared::Absent => {
                     return Err(violation(format!(
                         "example {name} requires {package} with no version, so nothing holds it to the \
                          workspace version {version}"
                     )));
                 }
-                Pin::Unreadable(written) => {
+                Declared::Unreadable(written) => {
                     return Err(cannot_judge(format!(
                         "example {name} requires {package} with a version this check cannot read \
                          ({written}), so whether it satisfies the workspace version cannot be decided"
                     )));
                 }
-                Pin::Several(several) => {
+                Declared::Several(several) => {
                     return Err(cannot_judge(format!(
                         "example {name} declares {several} `version` keys for {package}, so which one it \
                          requires is not this reader's to choose"
