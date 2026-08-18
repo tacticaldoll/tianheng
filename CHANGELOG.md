@@ -1061,6 +1061,17 @@ them.
   is held, and saying otherwise understates the coverage — and requires the count of sites carrying no
   identity to be **zero**.
 
+  **A second was misclassified, and re-reading the reasons against the rule is what found it.** *No tracked
+  file was found for any member* was declared with the reason *a repository shape rather than a release
+  surface* — an argument about what is worth reacting to, where the table's criterion is that only a broken
+  tool reaches the branch. A workspace cargo loads from paths git does not track is a repository, and one
+  `git rm --cached` reaches it. It is held by a direction now. A reason that does not fit the category it is
+  filed under is the shape a table of declarations is least able to see about itself, since every entry
+  reads as a reason.
+
+  Two other reasons were checked the same way and hold. A member manifest outside the workspace root is
+  refused by cargo outright — *is not hierarchical*, measured — so no workspace cargo loads can produce it.
+
   **One of the fifteen was misclassified, and the residual found it.** `cargo metadata failed` was declared
   reachable only through a broken tool. It is not: the line readers judge version surfaces, pins and the
   lock, and none of them resolves a member's path dependencies — so a member declaring `{ path = "../nope" }`
