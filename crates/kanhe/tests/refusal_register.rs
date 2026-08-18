@@ -116,11 +116,45 @@ fn executed_rust(text: &str) -> String {
 /// for this reader names that case, and the answer is not a count — it is that this file cannot be counted,
 /// which is the same distinction between *disagrees* and *could not be read* that every gate here draws.
 fn aliases_a_constructor(text: &str) -> bool {
-    text.lines()
-        .map(str::trim_start)
-        .filter(|line| line.starts_with("use "))
-        .filter(|line| line.contains(" as "))
-        .any(|line| line.contains("violation") || line.contains("cannot_judge"))
+    // **The statement, not the line.** A `use` list long enough is wrapped by the formatter, and the line
+    // carrying the alias then begins with the alias rather than with `use` — so a per-line reader answered
+    // *no alias here* over the exact shape it exists to catch. The corpus written for this reader had the
+    // one-line form only; the wrapped one was found by running this reader against a statement `cargo fmt`
+    // would produce, and it is a case in that corpus now.
+    // Executed Rust, and a statement that **opens** a line: `use ` inside a sentence is prose about
+    // importing, and a first draft read one such sentence as a statement running to the next semicolon —
+    // which then carried an alias and a constructor name from two different paragraphs.
+    let executed = Source::of(text)
+        .rust()
+        .lines()
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut statement: Option<String> = None;
+    for line in executed.lines() {
+        let trimmed = line.trim();
+        let carry = match statement.as_mut() {
+            Some(open) => {
+                open.push(' ');
+                open.push_str(trimmed);
+                open
+            }
+            None if trimmed.starts_with("use ") => {
+                statement = Some(trimmed.to_string());
+                statement.as_mut().expect("just assigned")
+            }
+            None => continue,
+        };
+        if !carry.contains(';') {
+            continue;
+        }
+        let whole = carry.clone();
+        statement = None;
+        if whole.contains(" as ") && (whole.contains("violation") || whole.contains("cannot_judge"))
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// Whether `text` has a site identity's shape: `<capability>#<slug>`, lowercase and hyphenated.
@@ -575,10 +609,12 @@ fn the_reader_answers_the_corpus_written_for_it() {
     // **The one case that is not a count.** An aliased import makes every later call invisible to a reader
     // that matches names, so the honest answer is that this file cannot be counted at all — which is a
     // different fact from counting zero, and the same distinction every gate in this repository draws.
-    assert!(
-        aliases_a_constructor(&read("an_aliased_import")),
-        "an aliased import went unnoticed, so every call through the alias would read as absent"
-    );
+    for case in ["an_aliased_import", "a_wrapped_aliased_import"] {
+        assert!(
+            aliases_a_constructor(&read(case)),
+            "{case}: an aliased import went unnoticed, so every call through the alias would read as absent"
+        );
+    }
     assert!(
         !aliases_a_constructor(&read("a_call_and_a_definition")),
         "the control: a case with no alias must not be read as one"
@@ -600,7 +636,11 @@ fn the_reader_answers_the_corpus_written_for_it() {
     let named: BTreeSet<String> = expected
         .iter()
         .map(|(case, _)| (*case).to_string())
-        .chain(std::iter::once("an_aliased_import".to_string()))
+        .chain(
+            ["an_aliased_import", "a_wrapped_aliased_import"]
+                .into_iter()
+                .map(str::to_string),
+        )
         .collect();
     assert_eq!(
         cases, named,
