@@ -53,9 +53,10 @@ pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
     } else {
-        Err(Failure::Exit(
-            String::from_utf8_lossy(&out.stderr).trim_end().to_string(),
-        ))
+        Err(Failure::Exit {
+            code: out.status.code(),
+            stderr: String::from_utf8_lossy(&out.stderr).trim_end().to_string(),
+        })
     }
 }
 
@@ -73,15 +74,29 @@ pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure
 pub enum Failure {
     /// The process could not be started: git is absent, or `repo` is not a directory this process can enter.
     Spawn(String),
-    /// git ran and exited non-zero. Carries its stderr.
-    Exit(String),
+    /// git ran and exited non-zero. Carries its status and its stderr.
+    ///
+    /// **The status, because non-zero is not one fact.** A git subcommand answers some questions *with* an
+    /// exit status — `ls-files --error-unmatch` exits `1` for *this path is not tracked*, which is the
+    /// answer — and reserves the rest for declining to read the repository at all. Measured on this
+    /// machine's git: `1` for an absent path, `128` both for a directory that is no repository and for an
+    /// index that cannot be parsed. With the status dropped, a caller could only ask *did git succeed*, and
+    /// the publish gate answered *this repository does not track it* for a repository it had never read.
+    ///
+    /// `None` where a signal ended the process, which is no answer either.
+    Exit {
+        /// The exit status, where the process exited rather than being signalled.
+        code: Option<i32>,
+        /// What git wrote to stderr.
+        stderr: String,
+    },
 }
 
 impl std::fmt::Display for Failure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Failure::Spawn(why) => write!(f, "{why}"),
-            Failure::Exit(stderr) => write!(f, "{stderr}"),
+            Failure::Exit { stderr, .. } => write!(f, "{stderr}"),
         }
     }
 }

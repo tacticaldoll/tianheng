@@ -660,7 +660,7 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
                 "git could not be run at all ({why}), so whether {} has a history was never asked",
                 repo.display()
             ),
-            crate::hermetic_git::Failure::Exit(stderr) => format!(
+            crate::hermetic_git::Failure::Exit { stderr, .. } => format!(
                 "repository root {} has no git history: {stderr}",
                 repo.display()
             ),

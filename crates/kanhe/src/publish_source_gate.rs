@@ -84,15 +84,38 @@ pub fn hidden_by_the_checkout(repo: &Path) -> Result<Vec<String>, Refusal> {
 /// and the gate refused with *hidden by X, which this repository does not track*: an **exit 1**, a
 /// disagreement, for a fact it never read. This repository's own contract reserves `1` for a source that
 /// disagrees and `2` for one that could not be read.
-fn tracks(repo: &Path, source: &str) -> Tracked {
+///
+/// **Three answers were not enough, because *git ran* is not *git answered*.** The split above separated
+/// spawning from running and stopped there, so the same defect survived one exit status over: a directory
+/// that is no repository and an index that cannot be parsed both exit `128`, and both reached the *untracked*
+/// answer. Which non-zero status is the answer is a fact about the subcommand, so it is read here rather than
+/// inferred from failure — see [`crate::hermetic_git::Failure::Exit`].
+pub(crate) fn tracks(repo: &Path, source: &str) -> Tracked {
     match git(repo, &["ls-files", "--error-unmatch", "-z", "--", source]) {
         Ok(_) => Tracked::Yes,
-        Err(crate::hermetic_git::Failure::Exit(_)) => Tracked::No,
+        // **One status is the answer; every other one is git declining to give it.** `--error-unmatch`
+        // exits `1` for *this path is not tracked*, which is the question. `128` is what a directory that
+        // is no repository and an index that cannot be parsed both produce, and reading those as the
+        // answer reported a fact this gate never asked for — as a **violation**, in front of
+        // `cargo publish`, where `1` is reserved for a source that disagrees. The split that introduced
+        // `Tracked` stopped one door short: it separated *git could not be started* from *git ran*, and
+        // git running is not git answering.
+        Err(crate::hermetic_git::Failure::Exit { code: Some(1), .. }) => Tracked::No,
+        Err(crate::hermetic_git::Failure::Exit { code, stderr }) => {
+            let status = match code {
+                Some(code) => format!("exited {code}"),
+                None => "was ended by a signal".to_string(),
+            };
+            Tracked::Unreadable(format!(
+                "git ls-files {status} rather than answering whether {source} is tracked: {stderr}"
+            ))
+        }
         Err(crate::hermetic_git::Failure::Spawn(why)) => Tracked::Unreadable(why),
     }
 }
 
 /// Whether this repository tracks a file, or why that could not be decided.
+#[derive(Debug)]
 pub enum Tracked {
     /// `ls-files` found it.
     Yes,
@@ -330,7 +353,7 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
                 "git could not be run at all ({why}), so whether {} is a worktree was never asked",
                 repo.display()
             ),
-            crate::hermetic_git::Failure::Exit(stderr) => format!(
+            crate::hermetic_git::Failure::Exit { stderr, .. } => format!(
                 "repository root {} is not a git worktree: {stderr}",
                 repo.display()
             ),

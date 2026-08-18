@@ -8,6 +8,7 @@ mod capability_subjects;
 mod gate_identity;
 mod hermetic_git;
 mod manifest;
+mod publish_source_gate;
 mod release_coherence_gate;
 mod restatement;
 mod selection;
