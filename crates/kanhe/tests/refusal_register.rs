@@ -216,6 +216,8 @@ fn calls(text: &str, name: &str) -> usize {
 struct Register {
     /// Registered site to the module and line of each branch producing it.
     registered: BTreeMap<String, Vec<(String, usize)>>,
+    /// Registered site to whether it is a violation, as against a cannot-judge.
+    disagrees: BTreeMap<String, bool>,
     /// Sites still constructed through the unregistered form, by module.
     unregistered: BTreeMap<String, usize>,
     /// Sites named by a direction, to the test files naming them.
@@ -224,6 +226,7 @@ struct Register {
 
 fn read(root: &Path) -> Register {
     let mut registered: BTreeMap<String, Vec<(String, usize)>> = BTreeMap::new();
+    let mut disagrees: BTreeMap<String, bool> = BTreeMap::new();
     let mut unregistered: BTreeMap<String, usize> = BTreeMap::new();
     for path in tracked(root, "crates/kanhe/src") {
         let text = std::fs::read_to_string(&path)
@@ -248,6 +251,7 @@ fn read(root: &Path) -> Register {
         );
         for call in ["violation_at(", "cannot_judge_at("] {
             for (site, line) in first_literal_args(&text, call) {
+                disagrees.insert(site.clone(), call.starts_with("violation"));
                 registered
                     .entry(site)
                     .or_default()
@@ -287,6 +291,7 @@ fn read(root: &Path) -> Register {
     }
     Register {
         registered,
+        disagrees,
         unregistered,
         cited,
     }
@@ -447,6 +452,23 @@ fn a_site_declared_unheld_exists_and_is_not_observed() {
         "these sites are declared unheld and a direction observes them — they are held, and the \
          declaration understates what this repository has:\n  {}",
         observed.join("\n  ")
+    );
+    // **A violation may not be declared unheld.** The declaration exists because a refusal about the
+    // *reading* failing can only be reached by breaking the machine, and its fixture would test that break.
+    // A refusal about the **subject** has no such excuse: its fixture is the defect it names, and if the
+    // shape cannot be built then the branch is not about the subject after all. Without this, *declare it*
+    // is available to any branch whose fixture is merely inconvenient, which is the escape hatch this table
+    // is otherwise unable to close — the split was measured before it was a rule, and it is a rule now.
+    let disagreeing: Vec<&str> = declared
+        .iter()
+        .map(|entry| entry.site)
+        .filter(|site| register.disagrees.get(*site).copied().unwrap_or(false))
+        .collect();
+    assert!(
+        disagreeing.is_empty(),
+        "these sites are declared unheld and refuse as a **violation** — a disagreement with the judged \
+         subject, whose fixture is the defect it names:\n  {}",
+        disagreeing.join("\n  ")
     );
     let twice: Vec<String> = {
         let mut seen = BTreeSet::new();

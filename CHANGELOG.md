@@ -1061,9 +1061,18 @@ them.
   is held, and saying otherwise understates the coverage — and requires the count of sites carrying no
   identity to be **zero**.
 
-  The escape hatch is deliberately expensive: typed, counted, projected, owned. What it cannot do is decide
-  its own membership, which stays a reviewer's obligation and is stated rather than implied by a table that
-  looks complete.
+  The escape hatch is deliberately expensive: typed, counted, projected, owned. **And half of what looked
+  unmechanizable turned out not to be.** A refusal that refuses as a *violation* may not be declared unheld
+  at all: the declaration exists because a refusal about the reading failing can only be reached by breaking
+  the machine, and a refusal about the subject has no such excuse — its fixture is the defect it names, and
+  a shape that cannot be built is one the branch is not about. Every declared site being a cannot-judge was
+  a measurement first; it is a rule now, which is what stops *declare it* from being available to any branch
+  whose fixture is merely inconvenient. What remains a reviewer's obligation is narrower: which
+  cannot-judge, not whether.
+
+  That rule shipped inert on its first run. The edit recording each site's kind never landed — a mechanical
+  replacement written without asserting that it applied, over a chain the formatter had since rewrapped — so
+  the map it reads was always empty and the check always passed. The mutation run is what said so.
 
   **A tracked fixture corpus for exactly this reader had been sitting unread since 10 August, and running
   it found three more holes.** `crates/kanhe/tests/fixtures/refusal_scan/` holds fourteen cases that nothing

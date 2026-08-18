@@ -144,6 +144,15 @@ was a shell script and its refusal was an exit code, and it is why retiring the 
   is no third state: a site is held or declared. The declaration is the escape hatch and is deliberately
   expensive, because an escape hatch nothing forces you through is the prose that drifted
 
+#### Scenario: A violation may not be declared unheld
+
+- **WHEN** a refusal that refuses as a **violation** is declared unheld
+- **THEN** the register refuses. The declaration exists because a refusal about the *reading* failing can
+  only be reached by breaking the machine, and its fixture would test that break. A refusal about the
+  **subject** has no such excuse: its fixture is the defect it names, and a shape that cannot be built is
+  one the branch is not about. Without this the declaration is available to any branch whose fixture is
+  merely inconvenient, which is the half of the escape hatch a table cannot close by describing itself
+
 #### Scenario: A declaration names a site, and a declared site is not observed
 
 - **WHEN** a declaration names a refusal no site produces, or names one a direction does observe
