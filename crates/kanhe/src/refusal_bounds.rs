@@ -84,11 +84,6 @@ pub fn unheld() -> Vec<Unheld> {
             "cargo absent from the path of a process cargo is running",
         ),
         tool(
-            "release-coherence#cargo-metadata-failed",
-            "cargo exiting non-zero over a workspace this gate has already read as well-formed; the shapes \
-             that make cargo fail are refused earlier by readers that do have directions",
-        ),
-        tool(
             "release-coherence#cargo-metadata-not-json",
             "cargo emitting something that is not JSON, which is a fake cargo by construction",
         ),

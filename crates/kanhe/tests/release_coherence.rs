@@ -2504,3 +2504,33 @@ fn a_crate_manifest_that_is_not_text_cannot_be_read() {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// `cargo metadata` failing over a repository whose surfaces this gate has already read.
+///
+/// **Not a broken tool.** The line readers judge version surfaces, pins and the lock, and none of them
+/// resolves a member's path dependencies — so a member declaring `{ path = "../nope" }` passes every one of
+/// them and cargo refuses the workspace. That is a defect in the judged repository, which makes this a
+/// refusal about the subject: its fixture is the defect it names, and it was declared unheld on the reading
+/// that only a broken tool reaches it.
+///
+/// Negative run: with the arm replaced by an empty corpus, the gate went on to judge the machinery set over
+/// a workspace cargo cannot load, and passed.
+#[test]
+fn a_metadata_failure_the_subject_caused_is_reported() {
+    let root = scratch("metadata-subject");
+    let fixture = build_fixture(&root, "metadata-subject", "0.2.0");
+    let manifest = fixture.repo.join("crates/xuanji/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        format!("{text}\n[dependencies]\nabsent = {{ path = \"../nowhere\" }}\n"),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: depend on a path that is not there");
+    refusal::expect(
+        "release-coherence#cargo-metadata-failed",
+        &refuse(&fixture.repo, Kind::CannotJudge, "cargo metadata failed"),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

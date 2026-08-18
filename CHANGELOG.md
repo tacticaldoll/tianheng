@@ -1061,6 +1061,15 @@ them.
   is held, and saying otherwise understates the coverage — and requires the count of sites carrying no
   identity to be **zero**.
 
+  **One of the fifteen was misclassified, and the residual found it.** `cargo metadata failed` was declared
+  reachable only through a broken tool. It is not: the line readers judge version surfaces, pins and the
+  lock, and none of them resolves a member's path dependencies — so a member declaring `{ path = "../nope" }`
+  passes every one of them and cargo refuses the workspace. Measured against a real workspace before it was
+  claimed. That is a defect in the judged repository, so the refusal is about the subject, its fixture is
+  the defect it names, and it is held by a direction now rather than declared. With the branch disabled the
+  gate blamed the tool — *cargo metadata is not JSON* — for a repository that is wrong, which is the
+  diagnosis this branch exists to give correctly.
+
   The escape hatch is deliberately expensive: typed, counted, projected, owned. **And half of what looked
   unmechanizable turned out not to be.** A refusal that refuses as a *violation* may not be declared unheld
   at all: the declaration exists because a refusal about the reading failing can only be reached by breaking

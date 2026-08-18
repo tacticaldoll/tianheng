@@ -6,7 +6,7 @@ A site that no direction holds is **declared unheld**, with why, an owner and a 
 
 Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.rs`. **Do not edit by hand** — regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_register`. A stale projection fails that gate.
 
-**15 of 115 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
+**14 of 115 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
 
 ## Declared unheld
 
@@ -49,12 +49,6 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 ### `release-coherence#cargo-metadata-unrunnable`
 
 - because cargo absent from the path of a process cargo is running
-- owner: Engine
-- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
-
-### `release-coherence#cargo-metadata-failed`
-
-- because cargo exiting non-zero over a workspace this gate has already read as well-formed; the shapes that make cargo fail are refused earlier by readers that do have directions
 - owner: Engine
 - tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
 
@@ -228,6 +222,11 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
 ### `release-coherence#breaking-without-migration-section`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
+
+### `release-coherence#cargo-metadata-failed`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
