@@ -155,6 +155,15 @@ was a shell script and its refusal was an exit code, and it is why retiring the 
   is no third state: a site is held or declared. The declaration is the escape hatch and is deliberately
   expensive, because an escape hatch nothing forces you through is the prose that drifted
 
+#### Scenario: An input the wrapper never supplied is not a message that disagrees
+
+- **WHEN** the merge gate's harness is invoked with a subject but without one of the other judged inputs
+- **THEN** it refuses as a cannot-judge naming the input. A merge is being made once the subject is there,
+  so a missing input is the wrapper supplying an incomplete set. Read with a default, absence arrived as
+  emptiness, and the gate answers emptiness on its own terms — an empty **body** is a violation — so an
+  input never supplied was reported at the exit class reserved for a gate that ran and disagreed. An empty
+  value that *was* supplied keeps its own meaning
+
 #### Scenario: The constructors are the only way to build a refusal
 
 - **WHEN** a refusal is built as a struct literal rather than through a constructor
