@@ -6,10 +6,10 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 
 ## Not registered yet
 
-**20 refusal sites are not registered yet**, across 2 module(s). They are constructed through `refusal::violation` and `refusal::cannot_judge`, whose only remaining purpose is to be deleted when this figure reaches zero. The module paths are below this heading rather than above it, because the header is where the projection register reads which single unit holds this document.
+**18 refusal sites are not registered yet**, across 2 module(s). They are constructed through `refusal::violation` and `refusal::cannot_judge`, whose only remaining purpose is to be deleted when this figure reaches zero. The module paths are below this heading rather than above it, because the header is where the projection register reads which single unit holds this document.
 
 - `crates/kanhe/src/publish_source_gate.rs` — 7
-- `crates/kanhe/src/release_coherence_gate.rs` — 13
+- `crates/kanhe/src/release_coherence_gate.rs` — 11
 
 ## Registered
 
@@ -248,12 +248,22 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
+### `release-coherence#lock-package-name-unreadable`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
+
 ### `release-coherence#lock-package-version-disagrees`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
 ### `release-coherence#lock-several-sourceless-entries`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
+
+### `release-coherence#lock-version-unreadable`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
