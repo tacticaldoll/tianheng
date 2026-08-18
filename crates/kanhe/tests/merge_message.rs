@@ -334,10 +334,13 @@ fn the_gate_admits_exactly_the_types_the_contract_does() {
     };
     let agents = std::fs::read_to_string(root.join("AGENTS.md"))
         .expect("AGENTS.md is the contract this gate answers to and must be readable");
-    let contract = kanhe::merge_message_gate::admitted_types(&agents).unwrap_or_else(|| {
+    // The refusal's own message travels into the panic: it names WHICH way the count was wrong, which is
+    // what a maintainer acts on. A collapsed `None` sent one looking for a missing anchor while there were two.
+    let contract = kanhe::merge_message_gate::admitted_types(&agents).unwrap_or_else(|refusal| {
         panic!(
-            "cannot read the admitted Conventional Commit types from AGENTS.md — the clause naming the \
-             narrowest honest type is the anchor, and an unparsed contract is not an empty one"
+            "cannot read the admitted Conventional Commit types from AGENTS.md: {} — the clause naming the \
+             narrowest honest type is the anchor, and an unparsed contract is not an empty one",
+            refusal.message
         )
     });
     let contract: std::collections::BTreeSet<String> = contract.into_iter().collect();
@@ -371,21 +374,28 @@ fn two_admitted_type_anchors_cannot_be_read() {
     const ANCHOR: &str = "Use the narrowest honest type:";
     let one = format!("prose. {ANCHOR} `feat`, `fix`. more prose");
     assert_eq!(
-        kanhe::merge_message_gate::admitted_types(&one),
-        Some(vec!["feat".to_string(), "fix".to_string()]),
+        kanhe::merge_message_gate::admitted_types(&one).expect("one anchor reads its own run"),
+        vec!["feat".to_string(), "fix".to_string()],
         "the control: one anchor reads its own run"
     );
 
+    // **The message, not only the absence.** Both counts were `None` before, so a maintainer who restated
+    // the rule was told the anchor was missing while there were two of them — and pinning the collapse is
+    // what would have kept the diagnostic from improving.
     let two = format!("{one}\n\nrestated: {ANCHOR} `refactor`. and on");
-    assert_eq!(
-        kanhe::merge_message_gate::admitted_types(&two),
-        None,
-        "two anchors are a contract this reader may not choose between — not the first one's list"
+    let several = kanhe::merge_message_gate::admitted_types(&two)
+        .expect_err("two anchors are a contract this reader may not choose between");
+    assert!(
+        several.message.contains("found 2"),
+        "the refusal must say there were two, got: {}",
+        several.message
     );
 
-    assert_eq!(
-        kanhe::merge_message_gate::admitted_types("no anchor at all"),
-        None,
-        "and no anchor is still unreadable, as it was"
+    let none = kanhe::merge_message_gate::admitted_types("no anchor at all")
+        .expect_err("no anchor is still unreadable");
+    assert!(
+        none.message.contains("found none"),
+        "and this one must say there were none, got: {}",
+        none.message
     );
 }
