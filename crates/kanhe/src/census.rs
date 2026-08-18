@@ -16,7 +16,7 @@
 
 use std::path::Path;
 
-use crate::refusal::{Refusal, cannot_judge, violation};
+use crate::refusal::{Refusal, cannot_judge_at, violation_at};
 
 /// One census: a set some check enumerates, and the sentence its figures are written in.
 pub struct Census {
@@ -228,7 +228,9 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusa
         let text = match std::fs::read_to_string(root.join(path)) {
             Ok(text) => text,
             Err(err) => {
-                offences.push(cannot_judge(format!(
+                offences.push(cannot_judge_at(
+                    "repository-checks#census-document-unreadable",
+                    format!(
                     "  {path} is tracked and could not be read ({err}), so its censuses were never compared \
                      — an unread document is not a document without one"
                 )));
@@ -239,7 +241,9 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusa
             for census in declared {
                 for written in figures_in(line, census.phrase) {
                     if written != census.figures {
-                        offences.push(violation(format!(
+                        offences.push(violation_at(
+                            "repository-checks#census-figure-disagrees",
+                            format!(
                             "  {path}:{} writes {written:?} for {} where the check that enumerates it \
                              produces {:?} — a census is produced, never typed",
                             index + 1,

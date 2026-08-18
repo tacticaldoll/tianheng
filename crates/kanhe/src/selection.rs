@@ -20,7 +20,7 @@
 //! **This module binds only the call sites that use it.** Nothing enumerates the readers that should — see
 //! `BACKLOG.md`'s entry on a reader's corpus being narrower than its claim, which owns that residue.
 
-use crate::refusal::{Refusal, cannot_judge};
+use crate::refusal::{Refusal, cannot_judge_at};
 
 /// Exactly one candidate, or a refusal saying which way the count was wrong.
 ///
@@ -29,18 +29,24 @@ use crate::refusal::{Refusal, cannot_judge};
 pub fn the_only<T>(what: &str, candidates: impl IntoIterator<Item = T>) -> Result<T, Refusal> {
     let mut found = candidates.into_iter();
     let Some(first) = found.next() else {
-        return Err(cannot_judge(format!(
-            "expected exactly one {what} and found none, so there is nothing to judge rather than a \
+        return Err(cannot_judge_at(
+            "repository-checks#the-only-found-none",
+            format!(
+                "expected exactly one {what} and found none, so there is nothing to judge rather than a \
              disagreement to report"
-        )));
+            ),
+        ));
     };
     let extra = found.count();
     if extra > 0 {
-        return Err(cannot_judge(format!(
-            "expected exactly one {what} and found {}; taking the first would report a verdict over a subject \
+        return Err(cannot_judge_at(
+            "repository-checks#the-only-found-several",
+            format!(
+                "expected exactly one {what} and found {}; taking the first would report a verdict over a subject \
              this reader did not read",
-            extra + 1
-        )));
+                extra + 1
+            ),
+        ));
     }
     Ok(first)
 }
