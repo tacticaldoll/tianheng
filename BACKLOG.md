@@ -1178,6 +1178,21 @@ consumer for an undemonstrated deduplication.
   instance to be written against rather than a guess. *Authority:* engine. *Compatibility:* patch; the
   check ships in no crate.
 
+- **WATCH: the title race the wrapper can only narrow.** *Observed pressure:* the merge wrapper judges three
+  inputs and pins two by construction — the body travels as the value the gate judged, and the commit set
+  through `--match-head-commit`, which GitHub decides atomically. The title is the third, and `gh` offers no
+  `--match-title`, so it can only be re-read after the gate. That shrinks the window from a whole `cargo
+  test` to one API call and leaves it open inside that call. *Observation source:* the round that added the
+  re-read, and the review that found the residue cited a tracker whose trigger — *an act reaching either
+  without the wrapper* — can never fire for a race reached only by going through it. *Current reaction or
+  bound:* `repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound`, and the re-read
+  itself, pinned by `a_title_edited_while_the_gate_ran_stops_before_the_merge`. *Risk:* the squash records a
+  subject that is no longer the title, in the one act that cannot be repaired — bounded by the window being
+  a single API round trip and by the editor being a collaborator rather than an adversary. *Next trigger:*
+  `gh` gaining a `--match-title`, or another judged input arriving that can only be re-read — the second
+  would make this a shape rather than an instance. *Authority:* engine. *Compatibility:* patch; the wrapper
+  ships in no crate.
+
 - **WATCH: a merge or publish made outside the wrapper is not observed.** *Observed pressure:* both
   assertions guard the sanctioned path — the wrapper's `1 passed` and the reaction pinning the identifier it
   cites. A `cargo publish` run directly, or a merge made in the browser, reaches neither. *Risk:* the record

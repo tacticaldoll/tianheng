@@ -70,7 +70,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                     .into(),
                 owner: Owner::Engine,
             }),
-            "`BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*",
+            "`BACKLOG.md` — *the title race the wrapper can only narrow*",
         ),
         BoundDecl::pinned(
             BoundId::new(

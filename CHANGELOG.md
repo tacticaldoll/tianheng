@@ -980,6 +980,19 @@ them.
   The third time in this window that a repair carried the class it was written beside, and the reason it is
   recorded rather than folded in silently.
 
+- **The title guard shipped without a run that could tell it from its absence.** The wrapper's controlled
+  `gh` answered the same title on every call, and no direction anywhere exercised a moved one — so the guard
+  added for the third judged input had no negative run, in a repository whose rule is that *a guard is not a
+  guard until it has been seen to fail*. The stub now answers differently on its second `--json title` call,
+  a counter on disk making *second* mean second across two processes, and two directions hold it: a moved
+  title stops before the merge and exits `2`, an unchanged one still reaches `gh pr merge`. Without the
+  re-read the first reports exit `0` and an empty stderr — the merge simply happening.
+
+  Its bound also cited a tracker that could never close it: *a merge or publish made outside the wrapper*,
+  whose trigger is an act reaching either **without** the wrapper, for a race reached only by going
+  **through** it. The debt had an owner on paper and no condition that discharges it. It has its own entry
+  now, whose trigger is `gh` gaining a `--match-title` or a second judged input that can only be re-read.
+
 - **The merge wrapper pinned two of its three judged inputs and left the third captured once.** It reads a
   subject, a body and a commit set, judges them, and then merges — and it had a reason written beside each
   treatment. The body travels as the **value** the gate judged, so a rewrite in between cannot reach the

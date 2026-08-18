@@ -381,7 +381,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 > nothing observes it, and the merge records the subject the gate approved against a title that has since moved. The wrapper judges three inputs and pins two of them by construction — the body travels as the value the gate judged, and the commit set is pinned through `--match-head-commit`, which GitHub decides atomically. `gh` offers no `--match-title`, so the third can only be re-read, which shrinks the exposure from a whole `cargo test` to one API call rather than closing it. Closing it needs a server-decided precondition this tool does not offer
 
-- **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
+- **unpinned**, tracked by: `BACKLOG.md` — *the title race the wrapper can only narrow*
 
 ### `repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound`
 

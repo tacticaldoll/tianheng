@@ -136,7 +136,18 @@ printf '%s\n' "${argv//$'\n'/\\n}" >> "$FAKE_GH_LOG"
 if [[ $1 == repo && $2 == view ]]; then
     printf '%s\n' 'tacticaldoll/tianheng'
 elif [[ $1 == pr && $2 == view && $* == *"--json title"* ]]; then
-    printf '%s\n' 'fix(kanhe): harden workflow evidence'
+    # The wrapper reads the title TWICE: once as evidence for the gate, once after it, so the subject it is
+    # about to record is still the title. Answering the same string both times is what left the second read
+    # unexercised — the guard was shipped without a direction that could tell it apart from its absence.
+    # A counter on disk is what makes "the second call" mean second across two separate processes.
+    calls=$(cat "$FAKE_TITLE_CALLS" 2>/dev/null || printf '0')
+    calls=$((calls + 1))
+    printf '%s' "$calls" > "$FAKE_TITLE_CALLS"
+    if [[ $FAKE_GH_MODE == title-moved ]] && ((calls >= 2)); then
+        printf '%s\n' 'fix(kanhe): a title edited while the gate ran'
+    else
+        printf '%s\n' 'fix(kanhe): harden workflow evidence'
+    fi
 elif [[ $1 == pr && $2 == view && $* == *"--json number"* ]]; then
     if [[ $FAKE_GH_MODE == invalid-number ]]; then
         printf '%s\n' 'not-a-number'
@@ -158,7 +169,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head | unreadable-body | body-moved)
+    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -231,6 +242,7 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
         .env("FAKE_GH_BODY", &gh_body)
         .env("FAKE_CARGO_LOG", &cargo_log)
         .env("FAKE_COMMITS", &commits)
+        .env("FAKE_TITLE_CALLS", scratch.join("title-calls"))
         .env("TMPDIR", &tmp);
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
@@ -938,5 +950,66 @@ fn the_merge_records_the_body_the_gate_judged_not_the_file_it_came_from() {
          move while the gate runs, and the record cannot be amended afterwards",
         run.gh_body,
         judged_value()
+    );
+}
+
+/// A title edited while the gate ran stops the wrapper, as a cannot-judge.
+///
+/// **The guard this exercises was shipped without one.** The wrapper judges three inputs and pins two of them
+/// by construction — the body travels as the value the gate judged, the commit set through
+/// `--match-head-commit` — and the third was captured once. Re-reading it closed that, and the controlled
+/// `gh` answered the same string on every call, so no direction could tell the guard from its absence.
+///
+/// The class is a **cannot-judge**, not a disagreement: the gate did not find the subject wrong, it found it
+/// right against a title that no longer exists, so what the wrapper holds is a verdict about a vanished
+/// input. Asserting the code and not merely the failure is what separates the two.
+///
+/// Negative run: with the post-gate re-read removed, the wrapper reaches `pr merge` and exits 0.
+#[test]
+fn a_title_edited_while_the_gate_ran_stops_before_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "title-moved", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a moved title is a cannot-judge, not a disagreement; got {:?} with stderr {:?}",
+        run.status.code(),
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("harden workflow evidence")
+            && run.stderr.contains("a title edited while the gate ran"),
+        "the refusal must name both titles so an operator can see what moved, got {:?}",
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.lines().any(|line| line.starts_with("pr merge")),
+        "the merge must not be reached, got {:?}",
+        run.gh_log
+    );
+}
+
+/// The control: an unchanged title still reaches the merge.
+///
+/// Without it the direction above is satisfied by a wrapper that refuses every run, and the re-read would be
+/// indistinguishable from a stop-everything guard.
+#[test]
+fn an_unchanged_title_still_reaches_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "clean", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(0),
+        "an unchanged title must not be refused; stderr {:?}",
+        run.stderr
+    );
+    assert!(
+        run.gh_log.lines().any(|line| line.starts_with("pr merge")),
+        "the merge must still be reached, got {:?}",
+        run.gh_log
     );
 }
