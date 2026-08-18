@@ -4026,6 +4026,23 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves.
 
+- **A repair reintroduced the class it repaired, one call further along.** The fail-loud directory enumerator
+  that replaced two `filter_map(|entry| entry.ok())` returned `PathBuf`, which turns the infallible
+  `DirEntry::file_name` into `Path::file_name`'s `Option` — and both callers then defaulted it, encoding an
+  absent name as an empty member. That is the encoding the enumerator exists to remove. It returns the
+  entries now, so the infallible accessor survives the call.
+
+  Latent rather than live: `read_dir` gives every entry a name. Recorded because the shape is what matters —
+  a repair that moves an encoding rather than removing it reads as a repair and is not one.
+
+- **Correction: `3c679af` claims no `Three-Layer Architecture` remains in the tree, and one does.** It sits in
+  that same commit's own `CHANGELOG` entry, which cannot describe the retired vocabulary without naming it.
+  The sentence was true when the `grep` ran and false by the time the commit landed. The tree is right; the
+  claim was the wrong shape — a completeness claim over a sweep must name the corpus it swept and exclude the
+  record describing it, and `AGENTS.md` now says so beside the rule about composed verification.
+
+  No published API, outcome, report, exit class, or manifest moves.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

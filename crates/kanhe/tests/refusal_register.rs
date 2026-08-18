@@ -392,14 +392,8 @@ fn a_registered_site_is_owned_by_a_capability() {
     };
     let capabilities: BTreeSet<String> = entries_of(&root.join("openspec/specs"))
         .into_iter()
-        .filter(|entry| entry.join("spec.md").is_file())
-        .map(|entry| {
-            entry
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned()
-        })
+        .filter(|entry| entry.path().join("spec.md").is_file())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
         .collect();
     assert!(
         !capabilities.is_empty(),
@@ -553,20 +547,23 @@ fn a_site_declared_unheld_exists_and_is_not_observed() {
 /// unreadable capability directory would have reported an orphan site, and an unreadable fixture would have
 /// reported a case nothing names. One rule, one implementation, and failure is a refusal rather than a
 /// silence.
-fn entries_of(dir: &Path) -> Vec<PathBuf> {
+///
+/// **It returns the entries, not their paths, and that is the second half of the same rule.** The first
+/// draft returned `PathBuf`, which turns the infallible `DirEntry::file_name` into `Path::file_name`'s
+/// `Option` — and the callers then defaulted it, encoding an absent name as an empty member. That is the
+/// class this function exists to remove, reintroduced one call further along by the repair for it.
+fn entries_of(dir: &Path) -> Vec<std::fs::DirEntry> {
     let listing = std::fs::read_dir(dir)
         .unwrap_or_else(|err| panic!("cannot enumerate {} ({err}), so this direction would hold over a corpus it could not read", dir.display()));
     listing
         .map(|entry| {
-            entry
-                .unwrap_or_else(|err| {
-                    panic!(
-                        "an entry of {} could not be read ({err}); a member this reader could not open is \
-                         not a member that is absent",
-                        dir.display()
-                    )
-                })
-                .path()
+            entry.unwrap_or_else(|err| {
+                panic!(
+                    "an entry of {} could not be read ({err}); a member this reader could not open is \
+                     not a member that is absent",
+                    dir.display()
+                )
+            })
         })
         .collect()
 }
@@ -761,7 +758,6 @@ fn the_reader_answers_the_corpus_written_for_it() {
         .filter_map(|entry| {
             entry
                 .file_name()
-                .unwrap_or_default()
                 .to_string_lossy()
                 .strip_suffix(".rs.txt")
                 .map(str::to_string)
