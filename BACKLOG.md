@@ -376,7 +376,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated —
   at `ee15665`, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
   **1048** lines carrying `SHALL`, across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **89 bounds across 25 capabilities** — a live figure rather than part of the measurement
+  currently holds **90 bounds across 25 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -1178,6 +1178,28 @@ consumer for an undemonstrated deduplication.
   any manifest in this repository, ever. *Next trigger:* an example acquiring one — at which point the
   shape has an instance to be written against rather than a guess. *Authority:* engine.
   *Compatibility:* patch; the check ships in no crate.
+
+- **WATCH: a gate that is its own test is outside the refusal register.** *Observed pressure:* several
+  gates are implemented under `crates/kanhe/tests`, where the judgement and the directions over it share a
+  file; their refusals carry no site identity, because *which direction observes this branch* has no answer
+  when every direction in the file can see it. *Observation source:* the refusal register, whose corpus is
+  `crates/kanhe/src` — measured when deleting the site-less constructors broke those files and not the
+  registered ones. *Risk:* a refusal in one of those gates is unexercised and nothing says so, which is the
+  gap the register closed everywhere else. Bounded by those files being both judgement and test, so a
+  refusal with no direction over it is visible to anyone reading the file it lives in. *Next trigger:*
+  moving such a judgement out of its test file, at which point it enters the corpus and is triaged like
+  every other. *Authority:* engine. *Compatibility:* patch; the checks ship in no crate.
+
+- **WATCH: a tracked declaration nothing reads.** *Observed pressure:*
+  `crates/kanhe/tests/fixtures/refusal_scan/` was tracked on 2026-08-10 and referenced by nothing until
+  2026-08-18 — fourteen cases naming exactly what a refusal-construction reader must handle, three of which
+  were rediscovered the hard way in the meantime and one of which had not been. *Observation source:* the
+  register's own reader, which the corpus was written for. *Risk:* a declaration written and then orphaned
+  reads as coverage to anyone who finds it and holds nothing. Bounded by measurement: every tracked fixture
+  corpus in this repository is referenced by at least one reader — eight of eight, swept the day this was
+  written — so this is one instance rather than a class. *Next trigger:* a second orphan, at which point the
+  shape changes and a reaction enumerates them instead of a sweep run on purpose. *Authority:* engine.
+  *Compatibility:* patch.
 
 - **WATCH: a refusal reachable only by a broken tool is not observed.** *Observed pressure:* fifteen refusal
   sites are declared unheld in `crates/kanhe/src/refusal_bounds.rs` — every one of them a cannot-judge

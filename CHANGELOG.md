@@ -1080,8 +1080,15 @@ them.
   bijection, so a case added and forgotten is reported rather than sitting unread the way all fourteen did.
 
   The register reads `crates/kanhe/src`. Several gates live in `crates/kanhe/tests`, where the judgement and
-  its directions share a file, and their constructions carry no identity because nothing asks them to. That
-  is a stated corpus boundary rather than a gap in the count, and the site-less constructors remain for it.
+  its directions share a file, and their constructions carry no identity because *which direction observes
+  this branch* has no answer when every direction in the file can see it. That is now a **declared
+  observation bound** with its own tracker rather than a sentence in a doc comment — a limit stated in prose
+  and held by nothing is the shape this whole change exists to end, and it would have been one more.
+
+  The orphaned corpus got a tracker too, with the measurement that keeps it one instance rather than a
+  class: every tracked fixture corpus in this repository is referenced by at least one reader, eight of
+  eight, swept on the day it was written. A second orphan changes the shape from a sweep run on purpose to a
+  reaction that enumerates them.
 
   Three more, all about the subject rather than about the machine: a release snapshot naming one version
   while the surfaces declare another, a member manifest that is not text, and a workspace version the publish

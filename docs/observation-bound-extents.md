@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**43 of 89 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**44 of 90 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -35,6 +35,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
 - `repository-checks/a-figure-written-in-words-at-one-hundred-or-above-is-not-matched-a-stated-bound` — owner: engine
 - `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
+- `repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound` — owner: engine
 - `repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound` — owner: engine
 - `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound` — owner: engine
@@ -434,7 +435,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (43)
+## under-reacts (44)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -675,6 +676,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: both assertions guard the sanctioned path -- the wrapper requiring its gate to report one passing test, and the check pinning the identifier it cites. Reaching further would mean observing the operator's shell or GitHub's servers rather than this repository
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
+
+### `repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound`
+
+> a refusal constructed by a gate implemented under `crates/kanhe/tests`, beside the directions over it
+
+- **because**: the register reads `crates/kanhe/src`, where a construction is held by a named direction or declared unheld. A gate whose judgement and directions share a file has no answer to *which direction observes this branch*, because every direction in the file can see it -- so triaging it means first deciding where such gates belong, which is a question about their location rather than about this register
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *a gate that is its own test is outside the refusal register*
 
 ### `repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound`
 
