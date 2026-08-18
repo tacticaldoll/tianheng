@@ -143,3 +143,75 @@ fn the_refusal_classes_are_distinct() {
     let _ = std::fs::remove_dir_all(&root);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
 }
+
+/// A repository this enumeration can read, carrying none of the manifests it judges.
+///
+/// The vacuity guard. Its sibling above covers an enumeration that could not be *made*; this covers one that
+/// was made and returned nothing, which is a different fact and the one that would let this check pass over
+/// a layout that moved. Both are cannot-judge, and neither is a manifest that disagrees.
+///
+/// Negative run: with the guard replaced by `Ok(0)`, this returned a clean count of zero — the check
+/// reporting agreement over a set it never had.
+#[test]
+fn a_repository_carrying_none_of_the_judged_manifests_holds_over_nothing() {
+    let root = std::env::temp_dir().join(format!("kanhe-isolation-empty-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("create");
+    let git = |args: &[&str]| {
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(&root)
+            .output()
+            .expect("run git");
+        assert!(out.status.success(), "git {args:?} failed in the fixture");
+    };
+    git(&["init", "-q", "."]);
+    std::fs::write(
+        root.join("README.md"),
+        "a repository with no judged manifest\n",
+    )
+    .expect("write");
+    git(&["add", "README.md"]);
+
+    let refusal = judge(&root).expect_err("a repository carrying none of them holds over nothing");
+    let _ = std::fs::remove_dir_all(&root);
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("would hold over nothing"),
+        "the refusal must name the emptiness rather than a manifest: {}",
+        refusal.message
+    );
+}
+
+/// A tracked manifest this check cannot read is not a manifest that declares no workspace.
+///
+/// Negative run: with the read's failure mapped to an empty string, the manifest declared no `[workspace]`
+/// table and was reported as a **violation** — a file that could not be read, shown to an operator as one
+/// they had written wrongly.
+#[test]
+fn a_tracked_manifest_that_cannot_be_read_is_not_one_that_disagrees() {
+    let root = std::env::temp_dir().join(format!("kanhe-isolation-unread-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("create");
+    let git = |args: &[&str]| {
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(&root)
+            .output()
+            .expect("run git");
+        assert!(out.status.success(), "git {args:?} failed in the fixture");
+    };
+    git(&["init", "-q", "."]);
+    std::fs::create_dir_all(root.join("examples/adopter")).expect("create");
+    std::fs::write(root.join("examples/adopter/Cargo.toml"), [0xff, 0xfe, 0xfd]).expect("write");
+    git(&["add", "examples/adopter/Cargo.toml"]);
+
+    let refusal = judge(&root).expect_err("a manifest this check cannot read is not one it read");
+    let _ = std::fs::remove_dir_all(&root);
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("could not read"),
+        "the refusal must name the read failure: {}",
+        refusal.message
+    );
+}
