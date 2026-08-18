@@ -352,3 +352,12 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   second place for requirements to live. That has not happened; the discriminator is reviewability, not size
   of intent. Nothing enforces the mode, deliberately — a reaction that failed when a change directory
   appeared would prevent adopting the other half, which is the freezing this decision exists to avoid.
+- **繩墨 and 勘合 are two crates because they answer to different subjects, and the dependency law states only
+  what it can observe.** 繩墨 holds the law 天衡 declares over itself and the dogfood gates running the
+  delivered product's reactions against this workspace; 勘合 holds this repository's record against itself and
+  reaches no product contract. Keeping them apart is what stops a claim about the law being read as a claim
+  about document hygiene, and it is why 繩墨 is an adopter of the shell rather than a member of the family it
+  governs — exercising exactly the surface an adopter has. **None of that is observable by a dependency
+  rule**, so it lives here: the two `restrict_dependencies_to` boundaries state only their allowlists and the
+  dimension edges those forbid, which is their whole observable perimeter. The roles are the reason the
+  boundaries were formed; the boundaries react to the edges.

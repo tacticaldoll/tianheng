@@ -4002,6 +4002,30 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves.
 
+- **Two self-law boundaries carried reasons a dependency rule cannot observe, and neither had been seen to
+  bite its own target.** `restrict_dependencies_to` observes one thing: which packages a crate declares. The
+  reasons on the `shengmo` and `kanhe` boundaries also asserted that 繩墨 *is an adopter rather than a member
+  of the family it governs*, that it *exercises exactly the surface an adopter has*, that 勘合 *governs no
+  product contract*, and that keeping the two apart *stops a claim about the law being read as a claim about
+  document hygiene*. Those are roles, uses and reader cognition — prose prescription with no backstop, which
+  the reason rule forbids outright.
+
+  Both reasons now state only their perimeter: the allowlist, and the dimension edges it forbids. The roles
+  move to `PROJECT.md`'s Decisions, which is where the reason rule sends them.
+
+  **And each boundary is now seen to bite its own target.** The self-governance suite proved the machinery;
+  it had never shown these two formations refusing anything. Four perturbations, run and recorded: a
+  forbidden dimension edge on `shengmo` refuses with `target: "shengmo", finding: "guibiao"`, the same on
+  `kanhe` with `target: "kanhe", finding: "guibiao"`, and removing a legal member from each allowlist refuses
+  the **existing** edge — `finding: "serde_json"` for 繩墨, `finding: "shengmo"` for 勘合 — which is what
+  shows the rule reads each target's real edges rather than passing over them.
+
+  **What remains for a human**: these two boundaries were added under a commit stating "the law itself did not
+  change". They are formations, not a relocation, and formation carries its own acceptance. The evidence
+  above is what that acceptance would rest on; the acceptance itself is not something a repair can supply.
+
+  No published API, outcome, report, exit class, or manifest moves.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
