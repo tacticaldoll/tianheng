@@ -697,12 +697,30 @@ consumer for an undemonstrated deduplication.
   and its item leaves the original with zero docs, whichever of the two carries a doc of its own — measured by
   reproducing `604a4e1`'s exact shape, which the lint refuses naming the victim. It does not reach private
   items. *Risk:* a doc describes the wrong function while reading as though it describes the right one, which
-  is worse than an absent doc; a reader is actively misled. *Promotion trigger:* a third instance, or any
-  instance on a private item after this entry. *Version class:* patch; both crates ship in no package.
-  *Authority:* none — this is a lint policy, not a Tianheng boundary or a repository check. *Shape:*
-  `clippy::missing_docs_in_private_items` is the only mechanism that closes the private half, and it demands a
-  doc on **every** private item, which is heavier than this repository's minimalism warrants for a class with
-  two instances. Filed rather than adopted, so the choice is recorded instead of rediscovered.
+  is worse than an absent doc; a reader is actively misled. *Version class:* patch; both crates ship in no
+  package. *Authority:* none — this is a lint policy, not a Tianheng boundary or a repository check.
+
+  **The trigger fired, and the decision was re-taken on a measurement rather than on the count.** A third
+  instance arrived on 2026-08-18 — `imports_and_rest` in `crates/kanhe/tests/refusal_register.rs`, private,
+  in a test binary, after this entry — satisfying both halves of the trigger this entry had written down:
+  *a third instance, or any instance on a private item after this entry*. The reason recorded here for not
+  adopting the lint was bound to the count (*a class with two instances*), so the count moving obliged a
+  re-decision rather than a restatement.
+
+  Re-decided: **still not adopted**, and now for a measured reason instead of a claimed one.
+  `clippy::missing_docs_in_private_items` over `kanhe` alone reports **785** undocumented private items
+  across its library and test binaries — measured the day this was re-taken. The lint is the only mechanism
+  that closes the private half, and it closes it by demanding a doc on every private item; that cost is not
+  proportionate to a class whose instances are individually cheap to repair and whose damage is a misleading
+  doc rather than a wrong verdict. *Promotion trigger,* restated so it does not rest on a count nothing
+  produces: an instance where the stolen doc changed what a reader **did**, rather than what they would have
+  read — a repair made against the wrong function, or a bound declared from a doc describing something else.
+
+  **What this entry could not do for itself.** Its trigger was written, both halves fired, and the entry sat
+  unchanged for a full round of review — because nothing evaluates a promotion trigger. A `WATCH` is carried
+  by whoever next reads it, which is the same shape as a requirement whose clause has no reaction, and it is
+  the way this class of entry fails. It was caught by a review arriving at it sideways from an unrelated
+  finding.
 
 - **WATCH: A reader's corpus can be narrower than the requirement it serves, and this repository's own dimensions
   cannot see the shape.** *Class:* WATCH. *Observed pressure:* the dominant class of the 0.5.0 window. Live

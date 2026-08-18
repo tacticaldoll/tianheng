@@ -72,22 +72,42 @@ fn the_squash_message_is_the_pull_request_it_records() {
     // A merge is being made once the subject is here, so a missing input is the wrapper supplying an
     // incomplete set, which is unjudgeable rather than untrue. `var` separates the two: an empty variable
     // that was set is `Ok("")`.
-    let unsupplied: Vec<&str> = [
+    // **`var_os`, because `var` answers absence and unreadability with the same `Err`.** The wrapper passes
+    // the body as `$(cat -- "$body_file")`, which carries whatever bytes that file holds, and a body that is
+    // not UTF-8 would have been reported as one the wrapper never supplied — the same collapse this block
+    // exists to undo, one layer beneath it. Both are cannot-judge, so the class was right and the sentence
+    // was not, and a sentence sending an operator to look for a variable they did set is the defect either
+    // way.
+    let mut unreadable = Vec::new();
+    let mut unsupplied = Vec::new();
+    for name in [
         "TIANHENG_MERGE_BODY",
         "TIANHENG_MERGE_TITLE",
         "TIANHENG_MERGE_COMMITS",
-    ]
-    .into_iter()
-    .filter(|name| std::env::var(name).is_err())
-    .collect();
-    if !unsupplied.is_empty() {
+    ] {
+        match std::env::var_os(name) {
+            None => unsupplied.push(name),
+            Some(value) => {
+                if value.into_string().is_err() {
+                    unreadable.push(name);
+                }
+            }
+        }
+    }
+    if !unsupplied.is_empty() || !unreadable.is_empty() {
         kanhe::verdict_channel::report(Kind::CannotJudge);
+        let mut said = Vec::new();
+        if !unsupplied.is_empty() {
+            said.push(format!("{} not supplied", unsupplied.join(", ")));
+        }
+        if !unreadable.is_empty() {
+            said.push(format!("{} is not UTF-8", unreadable.join(", ")));
+        }
         panic!(
-            "merge message ({:?}): {} not supplied, so there is nothing to judge — a merge is being made, \
-             because the subject is here, and this is an incomplete set rather than a message that \
-             disagrees",
+            "merge message ({:?}): {}, so there is nothing to judge — a merge is being made, because the \
+             subject is here, and this is an incomplete set rather than a message that disagrees",
             Kind::CannotJudge,
-            unsupplied.join(", ")
+            said.join("; ")
         );
     }
     let body = std::env::var("TIANHENG_MERGE_BODY").unwrap_or_default();
