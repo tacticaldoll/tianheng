@@ -406,6 +406,12 @@ syscall sequence), and where a test genuinely cannot reach it, say so in the PR 
 evidence stands in its place instead of leaving the reader to assume a green suite covered it. A
 test kept for the contract rather than the change earns a comment saying which it is.
 
+**A sweep's completeness claim names the corpus it swept, and excludes the record describing it.** *"No `X`
+remains in the tree"* cannot be true of a change that documents what it removed: the entry explaining the
+retirement has to name the retired thing. Measured — that exact sentence was written after a `grep` returned
+nothing and was false by the time the same commit landed, because its own `CHANGELOG` entry quotes the term.
+Say which corpus was swept.
+
 **A negative run's record is pasted from the run's output, never written from the intention.** Composing it
 from what the change was *going to* do reads identically and is not evidence: measured in the 0.5.0 window,
 one `## Verification` block was written that way and was wrong in three ways at once — the order, the figure
