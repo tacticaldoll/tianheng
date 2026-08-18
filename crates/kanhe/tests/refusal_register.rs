@@ -310,15 +310,20 @@ fn a_registered_site_and_the_directions_that_observe_it_agree() {
         !register.registered.is_empty(),
         "found no registered refusal site, so this comparison would hold over nothing"
     );
+    let declared: BTreeSet<&str> = kanhe::refusal_bounds::unheld()
+        .into_iter()
+        .map(|entry| entry.site)
+        .collect();
     let unobserved: Vec<&String> = register
         .registered
         .keys()
         .filter(|slug| !register.cited.contains_key(*slug))
+        .filter(|slug| !declared.contains(slug.as_str()))
         .collect();
     assert!(
         unobserved.is_empty(),
-        "these refusal sites are registered and no direction observes them — registering a site is the \
-         commitment that one does:\n  {}",
+        "these refusal sites are registered, no direction observes them, and nothing declares them \
+         unheld — a site is one or the other:\n  {}",
         unobserved
             .iter()
             .map(|s| s.as_str())
@@ -344,6 +349,85 @@ fn a_registered_site_and_the_directions_that_observe_it_agree() {
     );
 }
 
+/// A site declared unheld exists, and no direction observes it.
+///
+/// Both ways. A declaration naming no site is prose about nothing — the drift this whole register was built
+/// to end, one level up. And a declared site that a direction *does* observe is held: saying otherwise
+/// understates the coverage, and the honest record is the one a reader can act on.
+#[test]
+fn a_site_declared_unheld_exists_and_is_not_observed() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let register = read(&root);
+    let declared = kanhe::refusal_bounds::unheld();
+    assert!(
+        !declared.is_empty(),
+        "nothing is declared unheld, so this comparison would hold over nothing"
+    );
+    let orphans: Vec<&str> = declared
+        .iter()
+        .map(|entry| entry.site)
+        .filter(|site| !register.registered.contains_key(*site))
+        .collect();
+    assert!(
+        orphans.is_empty(),
+        "these declarations name a refusal site nothing produces:\n  {}",
+        orphans.join("\n  ")
+    );
+    let observed: Vec<&str> = declared
+        .iter()
+        .map(|entry| entry.site)
+        .filter(|site| register.cited.contains_key(*site))
+        .collect();
+    assert!(
+        observed.is_empty(),
+        "these sites are declared unheld and a direction observes them — they are held, and the \
+         declaration understates what this repository has:\n  {}",
+        observed.join("\n  ")
+    );
+    let twice: Vec<String> = {
+        let mut seen = BTreeSet::new();
+        declared
+            .iter()
+            .filter(|entry| !seen.insert(entry.site))
+            .map(|entry| entry.site.to_string())
+            .collect()
+    };
+    assert!(
+        twice.is_empty(),
+        "these sites are declared more than once, so which declaration owns them is not decided:\n  {}",
+        twice.join("\n  ")
+    );
+}
+
+/// No refusal site is untriaged.
+///
+/// **This is the teeth.** Every site is observed by a direction or declared unheld with an owner and a
+/// tracker; *not yet looked at* is not a state this repository keeps. The declaration is the escape hatch
+/// and it is deliberately expensive — typed, counted, projected, owned — but an escape hatch that nothing
+/// forces you through is just the prose that drifted.
+#[test]
+fn no_refusal_site_is_untriaged() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let register = read(&root);
+    let remaining: usize = register.unregistered.values().sum();
+    assert_eq!(
+        remaining,
+        0,
+        "these modules construct refusals that carry no identity, so nothing can say whether a direction \
+         observes them:\n{}",
+        register
+            .unregistered
+            .iter()
+            .map(|(module, count)| format!("  {module} — {count}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
 /// The register, and how much of it has not moved yet, as a document rather than as a claim.
 ///
 /// The count of unregistered sites is **produced**, which is the whole reason it can be trusted to fall: a
@@ -357,45 +441,53 @@ fn the_register_projection_is_fresh() {
     };
     let register = read(&root);
     let remaining: usize = register.unregistered.values().sum();
+    let declared = kanhe::refusal_bounds::unheld();
     let mut out = String::from(
-        "# Refusal register\n\nEvery **registered** refusal site, and the direction that observes it. A \
-         site is registered by being constructed through `refusal::violation_at` or \
-         `refusal::cannot_judge_at`, and observed by a direction calling `refusal::expect` with the same \
-         identity — compared by running, because a message is a template and a direction asserts a \
-         rendering of it.\n\nGenerated from `crates/kanhe/src/**.rs` by \
+        "# Refusal register\n\nEvery refusal site in this repository, and what holds it. A site is \
+         registered by being constructed through `refusal::violation_at` or `refusal::cannot_judge_at` — \
+         which every construction is, since nothing else exists — and **held** by a direction calling \
+         `refusal::expect` with the same identity, compared by running rather than by reading a message.\n\n\
+         A site that no direction holds is **declared unheld**, with why, an owner and a tracker, in the \
+         table this register reads. There is no third state: a site is held or declared, and the register \
+         refuses anything else.\n\nGenerated from `crates/kanhe/src/**.rs` by \
          `crates/kanhe/tests/refusal_register.rs`. **Do not edit by hand** — regenerate with `BLESS=1 \
          TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_register`. A stale projection fails \
          that gate.\n\n",
     );
     out.push_str(&format!(
-        "## Not registered yet\n\n**{remaining} refusal sites are not registered yet**, across {} \
-         module(s). They are constructed through `refusal::violation` and `refusal::cannot_judge`, whose \
-         only remaining purpose is to be deleted when this figure reaches zero. The module paths are below \
-         this heading rather than above it, because the header is where the projection register reads which \
-         single unit holds this document.\n\n",
-        register.unregistered.len()
+        "**{} of {} refusal sites are declared unheld.** {remaining} carry no identity at all, which is a \
+         state this repository does not keep — the register refuses a non-zero figure here.\n\n",
+        declared.len(),
+        register.registered.len(),
     ));
-    for (module, count) in &register.unregistered {
-        out.push_str(&format!("- `{module}` — {count}\n"));
+    out.push_str("## Declared unheld\n\n");
+    for entry in &declared {
+        out.push_str(&format!(
+            "### `{}`\n\n- because {}\n- owner: {:?}\n- tracked by {}\n\n",
+            entry.site, entry.because, entry.owner, entry.tracker
+        ));
     }
-    out.push_str("\n## Registered\n\n");
+    out.push_str("## Held\n\n");
     for (slug, sites) in &register.registered {
+        if declared.iter().any(|entry| entry.site == slug.as_str()) {
+            continue;
+        }
         let cited = register
             .cited
             .get(slug)
             .map(|files| files.iter().cloned().collect::<Vec<_>>().join(", "))
             .unwrap_or_default();
-        // **The module, never the line.** A reference naming a position is refused in tracked content
-        // here, and this document is tracked content: a line number is right at the moment it is written
-        // and wrong after the next edit above it. The identity is the slug; the module says where to look.
+        // **The module, never the line.** A reference naming a position is refused in tracked content here,
+        // and this document is tracked content: a line number is right at the moment it is written and wrong
+        // after the next edit above it. The identity is the slug; the module says where to look.
         let modules: BTreeSet<&str> = sites.iter().map(|(module, _)| module.as_str()).collect();
         out.push_str(&format!(
             "### `{slug}`\n\n- produced in `{}`\n- observed by `{cited}`\n\n",
             modules.iter().copied().collect::<Vec<_>>().join("`, `")
         ));
     }
-    // One trailing newline and no blank line before it, which is the whitespace this repository keeps —
-    // the per-entry blocks are separated by one, and the last of them would otherwise leave two.
+    // One trailing newline and no blank line before it, which is the whitespace this repository keeps — the
+    // per-entry blocks are separated by one, and the last of them would otherwise leave two.
     while out.ends_with("\n\n") {
         out.pop();
     }

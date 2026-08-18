@@ -12,7 +12,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use crate::refusal::{Refusal, cannot_judge, cannot_judge_at, violation_at};
+use crate::refusal::{Refusal, cannot_judge_at, violation_at};
 
 pub use crate::hermetic_git::hermetic;
 use crate::manifest::{Quoted, WorkspaceVersion, quoted_value, semver, workspace_version};
@@ -852,10 +852,13 @@ fn entries_of(dir: &Path) -> Result<Vec<PathBuf>, Refusal> {
     let mut paths = Vec::new();
     for entry in listing {
         let entry = entry.map_err(|err| {
-            cannot_judge(format!(
-                "an entry of {} could not be read while enumerating it: {err}",
-                dir.display()
-            ))
+            cannot_judge_at(
+                "release-coherence#directory-entry-unreadable",
+                format!(
+                    "an entry of {} could not be read while enumerating it: {err}",
+                    dir.display()
+                ),
+            )
         })?;
         paths.push(entry.path());
     }
@@ -1409,7 +1412,8 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
     // `workspace_root` is cargo's own answer for the tree it just described, so the two strings cannot
     // disagree about spelling.
     let Some(root) = metadata["workspace_root"].as_str() else {
-        return Err(cannot_judge(
+        return Err(cannot_judge_at(
+            "release-coherence#metadata-has-no-workspace-root",
             "cargo metadata reported no workspace_root, so no member directory can be resolved",
         ));
     };
@@ -1425,7 +1429,8 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
         // source whose basenames then enter the machinery set and refuse honest adopter prose.
         // `cargo metadata` answers this exactly — `manifest_path` is the member's own `Cargo.toml`.
         let Some(manifest) = package["manifest_path"].as_str() else {
-            return Err(cannot_judge(
+            return Err(cannot_judge_at(
+                "release-coherence#metadata-package-has-no-manifest-path",
                 "a package in cargo metadata carries no manifest_path, so its directory cannot be resolved",
             ));
         };
@@ -1436,9 +1441,12 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
             // `--no-deps` lists workspace members only, so every manifest sits under the root cargo reported
             // alongside them. One that does not is this gate's two sources describing different trees, which
             // is a fact to report rather than a member to skip — skipping is what kept the collapse silent.
-            return Err(cannot_judge(format!(
-                "member manifest {manifest} is not under the workspace root {root} cargo reported for it"
-            )));
+            return Err(cannot_judge_at(
+                "release-coherence#member-manifest-outside-workspace-root",
+                format!(
+                    "member manifest {manifest} is not under the workspace root {root} cargo reported for it"
+                ),
+            ));
         };
         let unpublished = package["publish"].as_array().is_some_and(|r| r.is_empty());
         let listing = git(repo, &["ls-files", directory]).map_err(|err| {
@@ -1468,14 +1476,21 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
     // repository's git does not share — the same collapse by another route, and `scripts/` alone would still
     // look like an answer.
     if enumerated == 0 {
-        return Err(cannot_judge(format!(
-            "no tracked file was found for any of the {} workspace members under {root}, so the machinery set \
+        return Err(cannot_judge_at(
+            "release-coherence#no-tracked-file-for-any-member",
+            format!(
+                "no tracked file was found for any of the {} workspace members under {root}, so the machinery set \
              would be `scripts/` alone and this check would pass over its own subject",
-            metadata["packages"].as_array().map_or(0, Vec::len)
-        )));
+                metadata["packages"].as_array().map_or(0, Vec::len)
+            ),
+        ));
     }
-    let scripts = git(repo, &["ls-files", "scripts/"])
-        .map_err(|err| cannot_judge(format!("could not enumerate scripts/: {err}")))?;
+    let scripts = git(repo, &["ls-files", "scripts/"]).map_err(|err| {
+        cannot_judge_at(
+            "release-coherence#scripts-not-enumerable",
+            format!("could not enumerate scripts/: {err}"),
+        )
+    })?;
     machinery.extend(
         scripts
             .lines()
@@ -1516,16 +1531,28 @@ fn cargo_metadata(repo: &Path) -> Result<serde_json::Value, Refusal> {
         .args(["metadata", "--no-deps", "--format-version", "1"])
         .current_dir(repo)
         .output()
-        .map_err(|err| cannot_judge(format!("could not run cargo metadata: {err}")))?;
+        .map_err(|err| {
+            cannot_judge_at(
+                "release-coherence#cargo-metadata-unrunnable",
+                format!("could not run cargo metadata: {err}"),
+            )
+        })?;
     if !out.status.success() {
-        return Err(cannot_judge(format!(
-            "cargo metadata failed for {}: {}",
-            repo.display(),
-            String::from_utf8_lossy(&out.stderr).trim()
-        )));
+        return Err(cannot_judge_at(
+            "release-coherence#cargo-metadata-failed",
+            format!(
+                "cargo metadata failed for {}: {}",
+                repo.display(),
+                String::from_utf8_lossy(&out.stderr).trim()
+            ),
+        ));
     }
-    serde_json::from_slice(&out.stdout)
-        .map_err(|err| cannot_judge(format!("cargo metadata is not JSON: {err}")))
+    serde_json::from_slice(&out.stdout).map_err(|err| {
+        cannot_judge_at(
+            "release-coherence#cargo-metadata-not-json",
+            format!("cargo metadata is not JSON: {err}"),
+        )
+    })
 }
 
 /// Every adopter-facing `[Unreleased]` entry naming this repository's own machinery.

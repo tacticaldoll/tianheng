@@ -1,17 +1,106 @@
 # Refusal register
 
-Every **registered** refusal site, and the direction that observes it. A site is registered by being constructed through `refusal::violation_at` or `refusal::cannot_judge_at`, and observed by a direction calling `refusal::expect` with the same identity — compared by running, because a message is a template and a direction asserts a rendering of it.
+Every refusal site in this repository, and what holds it. A site is registered by being constructed through `refusal::violation_at` or `refusal::cannot_judge_at` — which every construction is, since nothing else exists — and **held** by a direction calling `refusal::expect` with the same identity, compared by running rather than by reading a message.
+
+A site that no direction holds is **declared unheld**, with why, an owner and a tracker, in the table this register reads. There is no third state: a site is held or declared, and the register refuses anything else.
 
 Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.rs`. **Do not edit by hand** — regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_register`. A stale projection fails that gate.
 
-## Not registered yet
+**15 of 115 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
 
-**15 refusal sites are not registered yet**, across 2 module(s). They are constructed through `refusal::violation` and `refusal::cannot_judge`, whose only remaining purpose is to be deleted when this figure reaches zero. The module paths are below this heading rather than above it, because the header is where the projection register reads which single unit holds this document.
+## Declared unheld
 
-- `crates/kanhe/src/publish_source_gate.rs` — 6
-- `crates/kanhe/src/release_coherence_gate.rs` — 9
+### `release-coherence#directory-entry-unreadable`
 
-## Registered
+- because a directory entry that errors while the directory itself enumerates is produced by the filesystem between two syscalls, and a fixture would have to hold that window open
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `release-coherence#metadata-has-no-workspace-root`
+
+- because cargo emits `workspace_root` for every workspace it can load, so reaching this means replacing cargo with something that answers differently — the direction would then observe the replacement
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `release-coherence#metadata-package-has-no-manifest-path`
+
+- because same corpus as its sibling above: a package cargo reports without a manifest path is not a shape cargo produces, so the fixture is a fake cargo
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `release-coherence#member-manifest-outside-workspace-root`
+
+- because cargo resolves member paths against the root it reports, so a member outside it is a disagreement inside cargo rather than a shape a manifest can carry
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `release-coherence#no-tracked-file-for-any-member`
+
+- because every member having no tracked file requires a workspace cargo can load from paths git does not track, which is a repository shape rather than a release surface — the guard stays because the enumeration it protects is the one that decides the machinery corpus
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `release-coherence#scripts-not-enumerable`
+
+- because `git ls-files` failing while the same process already read the repository is a git failure mid-run, and simulating it means putting a fake git on the path
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `release-coherence#cargo-metadata-unrunnable`
+
+- because cargo absent from the path of a process cargo is running
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `release-coherence#cargo-metadata-failed`
+
+- because cargo exiting non-zero over a workspace this gate has already read as well-formed; the shapes that make cargo fail are refused earlier by readers that do have directions
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `release-coherence#cargo-metadata-not-json`
+
+- because cargo emitting something that is not JSON, which is a fake cargo by construction
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `publish-source-integrity#repository-root-is-not-a-worktree`
+
+- because git failing to *start*, as against git running and refusing — the refusing half is observed. Reaching this means a machine without git, and a fixture that removes git from the path tests the path manipulation
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `publish-source-integrity#ssh-keygen-unavailable`
+
+- because the same shape one tool over, and with the same fixture: `ssh-keygen` removed from the path
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `publish-source-integrity#signature-mechanism-round-trip-failed`
+
+- because the gate's own probe signs and verifies a payload before trusting its verdict; reaching this means an `ssh-keygen` that signs and then fails to verify its own signature
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `publish-source-integrity#signature-block-unreadable`
+
+- because git failing to read a tag object it has already resolved, mid-run
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `publish-source-integrity#signature-is-not-the-tag-object-suffix`
+
+- because a tag object whose signature block is not its own suffix is one git does not write, so the fixture would be a hand-assembled object testing this reader against that assembly
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `publish-source-integrity#signature-unwritable`
+
+- because a scratch directory this process created and cannot write to. Running as root defeats the fixture outright, which makes the direction's own result depend on who runs it
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+## Held
 
 ### `publish-source-integrity#exclusion-classifier-cannot-run`
 

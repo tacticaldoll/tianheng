@@ -38,6 +38,7 @@ pub mod merge_message_gate;
 pub mod prelude_promise;
 pub mod publish_source_gate;
 pub mod refusal;
+pub mod refusal_bounds;
 pub mod region;
 pub mod release_coherence_gate;
 pub mod restatement;
