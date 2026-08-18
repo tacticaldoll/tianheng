@@ -3906,6 +3906,36 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves; neither crate ships in a package.
 
+- **One governance vocabulary named two structures, with two of its three terms inverted between them.**
+  `AGENTS.md` opened *Three-Layer Architecture* with the reaction backstop at Layer 1; `COOKBOOK.md` opened a
+  paragraph under the same name with the reaction backstop at Layer 3; and `self-law-projection`'s own `SHALL`
+  defines *Three-Layer Agent Law* as preamble, generated body, Rust law source — agreeing with `COOKBOOK.md`
+  and not with `AGENTS.md`. Two documents, one name, `Layer 1` and `Layer 3` swapped.
+
+  It surfaced from an ordering question rather than from a review. Two external reports argued that historical
+  prose should leave doc comments **by citing Layer 3**, and the ruling against them cited Layer 3 too — three
+  parties reasoning from a term with two live referents, and five review rounds over this window had not named
+  it. The ordinals now have one owner: the `SHALL` keeps them, `COOKBOOK.md`'s paragraph is renamed to the
+  structure it was already teaching, and `AGENTS.md`'s three carriers are **named** rather than numbered,
+  because they were never an ordering.
+
+- **`AGENTS.md` gains *What earns a place in a doc comment*.** The test is whether a passage carries an
+  **observation source or a falsifier** for a claim the item makes — not whether its verbs are past tense.
+  `Measured: bash -c 'printf a;#b' prints a` is the observation source for a declared over-inclusion, and
+  deleting it leaves an assertion nothing can falsify; `fixed in round 6` names when rather than what. The
+  rule tabulates the shapes a review actually files, so the same categories do not have to be adjudicated
+  again.
+
+  **No reaction, and the measurement behind that decision is recorded rather than left to be re-taken.** The
+  decidable subset is small and collides with itself — `crates/` carries 5 `PR #N` and 7 bare `#NNN`, two of
+  the latter being the **fixture** for the squash-serial check, so a detector for the shape would refuse the
+  check that forbids it. The rest is not decidable: 20 `round N` and 16 `this window`, each needing the
+  criterion applied per site, which is the judgement over prose this repository has designed, measured three
+  times and rejected. One row of the table *is* enumerable — a relative anchor names a moving reference and is
+  stale the moment its window closes — and that sweep follows separately.
+
+  No published API, outcome, report, exit class, or manifest moves.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

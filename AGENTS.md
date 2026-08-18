@@ -50,12 +50,58 @@ drift law keeps it here, not in `Constitution`.
 A boundary's `because(...)` is read twice: once by a human, and — projected into an agent's
 context by `list` — once by an autoregressive model that *imitates* it (see PROJECT.md, 潛移).
 
-Governance follows a **Three-Layer Architecture**:
-1. **Layer 1: Reaction Backstop (Code)** — Functional boundaries (`restrict_dependencies_to`, `must_not_call_inline`) enforce hard invariants in code. Minimalism forbids redundant reactions (do not add a denylist for a prohibition an allowlist already enforces).
-2. **Layer 2: Qiányí Gravity Pull (Prose Reason & Projection)** — `because(...)` reasons project into `AGENTS.self-law.md` to condition LLM continuations. Write reasons strictly in a **forward voice** ("the kernel depends inward only"), never as a backward justification or historical debrief ("we once hit a cycle in 0.2.2"): **provenance belongs in `PROJECT.md` decisions and git history, not in the live context reason.**
-3. **Layer 3: Provenance & History (Doc)** — Historical rationale, lessons learned, and decision context stay in `PROJECT.md` decisions and commit history, keeping live context dense and noise-free.
+Governance has **three carriers**, and which one a claim belongs to is decided by what can hold it:
+
+- **The reaction (code)** — functional boundaries (`restrict_dependencies_to`, `must_not_call_inline`) enforce
+  hard invariants. Minimalism forbids redundant reactions (do not add a denylist for a prohibition an
+  allowlist already enforces).
+- **The reason (prose, projected)** — `because(...)` reasons project into `AGENTS.self-law.md` to condition
+  LLM continuations. Write reasons strictly in a **forward voice** ("the kernel depends inward only"), never
+  as a backward justification or historical debrief ("we once hit a cycle in 0.2.2"): **provenance belongs in
+  `PROJECT.md` decisions and git history, not in the live context reason.**
+- **The provenance (record)** — historical rationale, lessons learned, and decision context stay in
+  `PROJECT.md` decisions and commit history, keeping live context dense and noise-free.
+
+**Named, not numbered, because the numbering collided.** `COOKBOOK.md` and `self-law-projection`'s own
+`SHALL` both use *Layer 1 / 2 / 3* for the **Three-Layer Agent Law** — the anatomy of the projected document:
+preamble, generated body, Rust law source. This paragraph used the same three ordinals for a different
+subject and put the reaction backstop at Layer 1 where the other two put it at Layer 3. One vocabulary, two
+referents, inverted — which is the shape this repository removes on sight, in the governance documents
+themselves. The ordinals now have one owner; these three have names.
 
 Keep every reason **within the boundary's observable perimeter** — a reason must never assert structure the law does not react to (that is prose prescription, an open loop with no backstop). Forward voice, bounded to what reacts, minimal in reactions.
+
+## What earns a place in a doc comment
+
+A `///` or `//!` passage carries the item's contract. **The test is whether the passage carries an
+observation source or a falsifier for a claim the item makes.** Where it does, it stays and is load-bearing;
+where it is only *how the code got here*, it is provenance and belongs with the record.
+
+That distinction, and not a ban on past-tense verbs, is what separates the two. `Measured:
+bash -c 'printf a;#b' prints a, so bash opens a comment there` is the **observation source** for a declared
+over-inclusion — delete it and what remains is an assertion nothing can falsify, which is the defect class
+this file spends four rules closing. `fixed in round 6` is provenance: it names when, not what, and nothing
+downstream reads it.
+
+Applied to the shapes a review is likely to file:
+
+| shape | disposition |
+|---|---|
+| a measurement, with the command or the corpus that produced it | **stays** — it is the observation source |
+| a rejected alternative **with** what measuring it showed | **stays** — it is what stops the next person re-running it |
+| a version range or sweep that *found* something | the finding stays; the sweep's identity is provenance |
+| a past defect described **with** the invariant it violated | keep the invariant, drop the debrief |
+| a review round number, a pull request number | provenance |
+| a rejected alternative with no measurement | provenance |
+| **a relative anchor — `this window`, `the previous round`** | neither: it names a moving reference, so it is stale the moment the window closes. Anchor it to the moment, or drop it |
+
+**No reaction, and the measurement behind that is recorded rather than left to be re-taken.** The decidable
+subset is small and its corpus collides with itself: `crates/` carries 5 `PR #N` and 7 bare `#NNN`, and two of
+the latter are the **fixture** for the squash-serial check — a detector for that shape would refuse the very
+check that forbids it. The larger classes are not decidable at all: 20 `round N` and 16 `this window`, each
+needing the criterion applied per site, which is a judgement over prose this repository has designed, measured
+three times and rejected. So the criterion is the instrument, and the relative-anchor row is the one a sweep
+can enumerate.
 
 ## Document authority & provenance
 
