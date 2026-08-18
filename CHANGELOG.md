@@ -1022,6 +1022,26 @@ them.
   across five modules, each already observed by a direction that now names it. The projection carries what
   remains.
 
+  **The publish gate is the first module where the register found something.** Of its thirty refusal sites,
+  twenty-three are observed and **seven are not**: the root that is no worktree, an absent workspace version,
+  and five of the signature path — `ssh-keygen` unavailable, the signing mechanism failing its own
+  round-trip, a signature block that cannot be read, an extracted signature that is not the tag object's
+  suffix, and a signature that cannot be written for checking. They stay unregistered and counted rather
+  than registered on a promise, because registering a site is the commitment that a direction observes it.
+  This is the gate that stands in front of `cargo publish`.
+
+  Three of the twenty-three were caught being cited wrongly, by the citation itself, at run time. The
+  sharpest: an **unsigned annotated tag** does not reach *carries no signature* — it reaches *does not
+  verify*, because a tag message quoting a signature block is text rather than a signature. Reading the
+  messages said otherwise, which is the failure mode the register exists to end.
+
+  Two holes in the register's own reader surfaced while it was doing this, both making its figure smaller
+  than the truth. It counted `violation(` rather than the identifier, so `map_err(cannot_judge)` — a
+  constructor used as a value — was a live site invisible to the register built to count sites; found only
+  because migrating the module made the compiler object to the import. And counting the identifier over the
+  whole file then counted every doc comment naming a constructor, and every `use` list. It reads executed
+  Rust with imports excluded now, through the same `region` module the gates use.
+
   Negative runs: each of the register's four directions was run against a tree carrying exactly the shape it
   refuses — a citation renamed to a site nothing produces, two sites given one identity, a site given a
   capability no spec declares — and each failed on its own perturbation while its siblings stayed green.

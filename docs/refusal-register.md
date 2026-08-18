@@ -6,12 +6,127 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 
 ## Not registered yet
 
-**90 refusal sites are not registered yet**, across 2 module(s). They are constructed through `refusal::violation` and `refusal::cannot_judge`, whose only remaining purpose is to be deleted when this figure reaches zero. The module paths are below this heading rather than above it, because the header is where the projection register reads which single unit holds this document.
+**68 refusal sites are not registered yet**, across 2 module(s). They are constructed through `refusal::violation` and `refusal::cannot_judge`, whose only remaining purpose is to be deleted when this figure reaches zero. The module paths are below this heading rather than above it, because the header is where the projection register reads which single unit holds this document.
 
-- `crates/kanhe/src/publish_source_gate.rs` — 29
+- `crates/kanhe/src/publish_source_gate.rs` — 7
 - `crates/kanhe/src/release_coherence_gate.rs` — 61
 
 ## Registered
+
+### `publish-source-integrity#exclusion-classifier-cannot-run`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#head-is-not-the-release-snapshot`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#head-is-not-the-tip-of-main`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#head-subject-unreadable`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#release-tag-absent`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#release-tag-carries-no-signature`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#release-tag-does-not-name-head`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#release-tag-is-lightweight`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#remote-has-no-main`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#remote-main-unreadable`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#repository-root-has-no-manifest`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#signature-armour-unverifiable`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#signature-does-not-verify`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#signature-scratch-unclaimable`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#tag-commit-unresolvable`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#tag-object-unreadable`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#tracking-question-unaskable`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#workspace-manifest-unreadable`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#workspace-version-malformed`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#workspace-version-unreadable`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#worktree-hides-untracked-files`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#worktree-is-not-clean`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#worktree-state-unreadable`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
 
 ### `repository-checks#admitted-types-clause-names-no-type`
 
