@@ -389,3 +389,55 @@ fn the_parked_misfiling_is_refused_against_the_declared_subjects() {
         offences.iter().map(|r| &r.message).collect::<Vec<_>>()
     );
 }
+
+/// Building the claimed set refuses over a subject it cannot read, rather than claiming less.
+///
+/// Both of this reader's non-glob answers, because they shrink the claimed set by different amounts and for
+/// the same reason: a bullet it cannot parse drops that bullet's paths, and a second `## Subject` section
+/// drops every glob the others list. A claimed set quietly one glob short lets a change touching that
+/// capability's subject read as filed — which is the whole fact this file exists to decide.
+///
+/// The three live call sites pass the repository's own specs, which are well formed, so neither branch had
+/// ever been reached. `subject_globs` is the shared reader and its own states are exercised beside it; these
+/// are this consumer's answers to them.
+///
+/// Negative run: with each arm replaced by `Vec::new()` — the `unwrap_or_default()` shape this reader's own
+/// comment records as the defect it replaced — the claimed set came back one capability short and the
+/// direction failed.
+#[test]
+fn a_subject_the_claimed_set_cannot_read_is_refused_rather_than_shrunk() {
+    let root = std::env::temp_dir().join(format!("kanhe-claimed-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("create");
+
+    for (name, spec, needle) in [
+        (
+            "an unreadable bullet",
+            "# Probe\n\n## Subject\n\n- not a backticked glob\n",
+            "cannot be read as one backticked glob",
+        ),
+        (
+            "two subject sections",
+            "# Probe\n\n## Subject\n\n- `crates/a/**`\n\n## Subject\n\n- `crates/b/**`\n",
+            "reading the first would shrink",
+        ),
+    ] {
+        let specs: BTreeMap<String, String> = [("probe".to_string(), spec.to_string())]
+            .into_iter()
+            .collect();
+        let refusal = claimed(&root, &specs)
+            .expect_err("a subject this reader cannot read is not a subject claiming less");
+        assert_eq!(
+            refusal.kind,
+            Kind::CannotJudge,
+            "{name}: {}",
+            refusal.message
+        );
+        assert!(
+            refusal.message.contains(needle),
+            "{name}: the refusal must name what it could not read, got: {}",
+            refusal.message
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
