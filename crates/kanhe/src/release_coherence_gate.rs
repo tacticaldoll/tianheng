@@ -590,8 +590,7 @@ fn require_version_surfaces(
         }
     }
     require_internal_pins(root_manifest, version)?;
-    require_example_pins(repo, &manifests, version)?;
-    Ok(manifests)
+    require_example_pins(repo, &manifests, version)
 }
 
 /// The changelog surfaces whose required shape depends on which phase of the ritual this is.
@@ -984,20 +983,23 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
     Ok(())
 }
 
+/// Returns the `(path, package)` each workspace manifest names, because resolving them is the first thing
+/// this does and the lock reader needed exactly that list. It re-read the manifests instead, which gave it
+/// two refusals for a name this reader had already refused on — branches nothing could reach.
 fn require_example_pins(
     repo: &Path,
     manifests: &[(String, String)],
     version: &str,
-) -> Result<(), Refusal> {
+) -> Result<Vec<(String, String)>, Refusal> {
     // A manifest whose package this reader cannot name is not a crate the examples may quietly skip: it would
     // drop out of `family`, and every example pinning it would then pass the `!family.iter().any(…)` filter
     // below without being examined. The two vacuity guards in this function are aggregate, so seven of eight
     // crates parsing keeps them silent while the eighth goes unchecked — which is the partial case a vacuity
     // guard is exactly unable to see.
-    let mut family: Vec<String> = Vec::new();
+    let mut members: Vec<(String, String)> = Vec::new();
     for (path, text) in manifests {
         match package_name(text) {
-            PackageName::Named(name) => family.push(name),
+            PackageName::Named(name) => members.push((path.clone(), name)),
             PackageName::Absent => {
                 return Err(cannot_judge_at(
                     "release-coherence#crate-package-name-absent",
@@ -1017,6 +1019,7 @@ fn require_example_pins(
             }
         }
     }
+    let family: Vec<String> = members.iter().map(|(_, name)| name.clone()).collect();
     let minor = version
         .rsplit_once('.')
         .map(|(head, _)| head)
@@ -1154,12 +1157,17 @@ fn require_example_pins(
             ),
         ));
     }
-    Ok(())
+    Ok(members)
 }
 
+/// **Names resolved once, by the reader that already had to resolve them.** This re-read every manifest's
+/// `[package]` name and carried its own refusals for a name that is absent or unreadable — branches no input
+/// could reach, because `manifests` exists only if the example-pin reader resolved every one of those names
+/// first and refused otherwise. Two readers asking one question of one input is the shape this file has
+/// spent the window removing; the dead branches were what it looked like from inside.
 fn require_lock_versions(
     repo: &Path,
-    manifests: &[(String, String)],
+    members: &[(String, String)],
     version: &str,
 ) -> Result<(), Refusal> {
     let lock = read(repo, "Cargo.lock")?;
@@ -1240,23 +1248,8 @@ fn require_lock_versions(
     }
     close(&mut name, &mut version_of, &mut sourced, &mut entries);
 
-    for (path, text) in manifests {
-        // Skipping an unnameable package left its `Cargo.lock` version unchecked while this function still
-        // returned `Ok` — and nothing above proves every entry parses, only that the list is non-empty.
-        let package = match package_name(text) {
-            PackageName::Named(name) => name,
-            PackageName::Absent => {
-                return Err(cannot_judge(format!(
-                    "{path} declares no `[package]` name, so its lock entry cannot be looked up"
-                )));
-            }
-            PackageName::Unreadable(what) => {
-                return Err(cannot_judge(format!(
-                    "{path} declares a `[package]` name this check cannot read ({what}), so its lock entry \
-                     cannot be looked up"
-                )));
-            }
-        };
+    for (_path, package) in members {
+        let package = package.clone();
         // A workspace member is the entry with no `source`. Selecting by name alone would compare against a
         // registry entry that merely shares the name, which reads as a version disagreement that is not one.
         let mut local = entries
