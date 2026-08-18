@@ -1054,6 +1054,11 @@ them.
   were the ones worth having: with each replaced by `Ok(())`, its fixture passed, which is a release
   reported clean over a check that judged nothing.
 
+  Two more are closed. One needed no new direction at all: the lock reader's unreadable-name refusal was
+  already observed, by a direction whose assertion was the phrase *cannot read* — too generic for any needle
+  map to attribute, which is the same weakness in message-shaped assertions the register replaces. It cites
+  the site now. Its sibling, an unreadable lock **version**, had no direction and has one.
+
   **And two of the twenty-nine turned out to be branches nothing can reach.** The lock reader re-read every
   workspace manifest's `[package]` name and carried its own refusals for a name that is absent or
   unreadable — over a list that exists only because the example-pin reader resolved every one of those names

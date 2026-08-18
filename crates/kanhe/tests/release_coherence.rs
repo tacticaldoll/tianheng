@@ -844,7 +844,10 @@ fn a_lock_name_this_reader_cannot_read_is_a_cannot_judge() {
     let text = std::fs::read_to_string(&lock).expect("read the fixture lock");
     std::fs::write(&lock, text.replace("name = \"xuanji\"", "name = 'xuanji'")).expect("write");
     commit(&fixture.repo, "chore: quote a lock name the other way");
-    refuse(&fixture.repo, Kind::CannotJudge, "cannot read");
+    refusal::expect(
+        "release-coherence#lock-package-name-unreadable",
+        &refuse(&fixture.repo, Kind::CannotJudge, "cannot read"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -2409,6 +2412,39 @@ fn examples_requiring_no_family_crate_report_over_nothing() {
             &fixture.repo,
             Kind::CannotJudge,
             "found no family dependency requirement",
+        ),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// And a version it cannot take is not a version that disagrees.
+///
+/// Negative run: with the arm replaced by a `continue`, the entry was filed with no version and the member
+/// reported missing from the lock — the same wrong sentence its sibling above produced.
+#[test]
+fn a_lock_version_this_reader_cannot_take_stops_the_comparison() {
+    let root = scratch("lock-version-unread");
+    let fixture = build_fixture(&root, "lock-version-unreadable", "0.2.0");
+    with_machinery(&fixture.repo);
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    let lock = fixture.repo.join("Cargo.lock");
+    let text = std::fs::read_to_string(&lock).expect("read");
+    std::fs::write(
+        &lock,
+        text.replace(
+            "name = \"xuanji\"\nversion = \"0.2.1\"",
+            "name = \"xuanji\"\nversion = '0.2.1'",
+        ),
+    )
+    .expect("write");
+    commit(&fixture.repo, "release: 0.2.1");
+    refusal::expect(
+        "release-coherence#lock-version-unreadable",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "records a version for xuanji that this check cannot read",
         ),
     );
     let _ = std::fs::remove_dir_all(&root);

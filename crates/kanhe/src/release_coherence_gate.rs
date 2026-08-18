@@ -1224,11 +1224,14 @@ fn require_lock_versions(
             match quoted_value(trimmed.split_once('=').map(|(_, v)| v).unwrap_or_default()) {
                 Quoted::Value(value) => name = value,
                 Quoted::Unreadable => {
-                    return Err(cannot_judge(format!(
-                        "Cargo.lock carries a package name this check cannot read ({}), so the versions it \
+                    return Err(cannot_judge_at(
+                        "release-coherence#lock-package-name-unreadable",
+                        format!(
+                            "Cargo.lock carries a package name this check cannot read ({}), so the versions it \
                          records cannot be compared",
-                        trimmed
-                    )));
+                            trimmed
+                        ),
+                    ));
                 }
             }
         } else if trimmed.starts_with("version") && trimmed.contains('=') && !name.is_empty() {
@@ -1237,11 +1240,14 @@ fn require_lock_versions(
                     version_of = Some(value);
                 }
                 Quoted::Unreadable => {
-                    return Err(cannot_judge(format!(
-                        "Cargo.lock records a version for {name} that this check cannot read ({}), so \
+                    return Err(cannot_judge_at(
+                        "release-coherence#lock-version-unreadable",
+                        format!(
+                            "Cargo.lock records a version for {name} that this check cannot read ({}), so \
                          whether it matches the workspace cannot be decided",
-                        trimmed
-                    )));
+                            trimmed
+                        ),
+                    ));
                 }
             }
         }
