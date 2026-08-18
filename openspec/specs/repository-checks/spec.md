@@ -62,6 +62,13 @@ Every check judging this repository SHALL be a `#[test]` living **outside every 
 every refusal it holds SHALL have been run against a tree carrying the shape it refuses, with that failure
 recorded in the change that introduced it.
 
+**The second clause is held by a register rather than by attention.** A refusal SHALL carry the identity of
+the branch that produced it, and a direction observing that branch SHALL name the same identity, so the two
+are compared by running. Identity in the message alone could not be measured: a message is a template and a
+direction asserts a rendering of it, and five textual predicates written against that gap were each wrong in
+a different direction. The corpus is this repository's own check crate; sites not yet carrying an identity
+are counted in a produced projection that falls to zero.
+
 Shipping in zero packages is what this capability already gives as the criterion separating governance from
 product — the reason `scripts/` and `docs/` count as governance. Measured before this change, the checks
 themselves failed it: `cargo package --list -p tianheng` carried all 50 files under `tests/`, so every
@@ -83,6 +90,33 @@ separable at all.
 A Rust test's failure mode is asserted **inline** — the expected value sits beside the observation — so a
 check needs no separate failure matrix to be defended. That is what the twin obligation bought when a gate
 was a shell script and its refusal was an exit code, and it is why retiring the pairing loses no coverage.
+
+#### Scenario: A refusal site is registered and no direction observes it
+
+- **WHEN** a refusal is constructed through the registered form and no direction names its identity
+- **THEN** the register refuses. Registering a site is the commitment that a direction observes it, which is
+  what keeps the migration from outrunning the coverage it exists to measure
+
+#### Scenario: A direction cites a site no refusal produces
+
+- **WHEN** a direction names a refusal identity that no site constructs
+- **THEN** the register refuses. Both directions are held, because either alone is satisfiable by doing
+  nothing: a register nobody cites passes a one-way check, and so does a citation of a site that has since
+  moved
+
+#### Scenario: Two refusal sites share one identity
+
+- **WHEN** two branches are registered under the same identity
+- **THEN** the register refuses, because one direction's citation would then vouch for a branch it never
+  reached — the same non-injective identity this repository has already recorded once, where a finding not
+  qualified by its owner let a baseline mask a new violation
+
+#### Scenario: Sites not yet registered are counted rather than assumed
+
+- **WHEN** a refusal is constructed through the unregistered form
+- **THEN** it is counted in a **produced** projection naming its module, and any change to that count — in
+  either direction — has to be blessed. A figure typed into prose is one nothing measures; this one falls as
+  modules migrate and cannot rise quietly, and when it reaches zero the unregistered constructors are deleted
 
 #### Scenario: A check inside a published package
 

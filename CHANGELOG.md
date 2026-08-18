@@ -989,9 +989,39 @@ them.
   failure that branch exists to prevent.
 
   The recurrence is the finding rather than the four branches. *A guard is not a guard until it has been
-  seen to fail* is stated in `AGENTS.md` and required by `repository-checks`, whose scenarios hold only the
+  seen to fail* is stated in `AGENTS.md` and required by `repository-checks`, whose scenarios held only the
   clause about where a check may live; the clause about every refusal having been run against a tree
-  carrying the shape it refuses has no scenario and no reaction, and is carried by attention.
+  carrying the shape it refuses had no scenario and no reaction, and was carried by attention — which is
+  what the next entry replaces.
+
+- **A refusal names the site that produced it, and a register holds that a direction observed it.** The
+  clause above now has a reaction.
+
+  **Why nothing held it before.** A refusal's identity lived only in its message, and a message is a
+  *template* while a direction asserts a *rendering* of it. Five textual predicates were written against
+  that gap and measured against the whole corpus; each was wrong in a different direction, over-reporting
+  or under-reporting by a different mechanism, and none could tell a branch that was never exercised from
+  one whose wording had moved. Whether a branch was observed is a question about running a program, which
+  is what `pin_bites` already says about whether a test bites. So the site travels in the value:
+  `refusal::violation_at` and `cannot_judge_at` take it, and a direction names the same identity through
+  `refusal::expect`.
+
+  Four things are held. A registered site no direction observes refuses — registering is the commitment
+  that one does. A citation naming a site nothing produces refuses, because a one-way check is satisfiable
+  by doing nothing in whichever direction it does not look. Two branches sharing one identity refuse, since
+  one direction's citation would vouch for a branch it never reached. And the count of sites **not yet**
+  registered is produced into a projection whose every change has to be blessed, so it falls as modules
+  migrate and cannot rise quietly.
+
+  **The migration is visible rather than instantaneous.** Rewriting every site in one change would be one
+  diff nobody could read, so the unregistered constructors stand beside their registered siblings while
+  modules cross over. Two constructors for one rule is a shape this repository closes, and it is carried
+  here deliberately: it is counted, it is named in the projection, and it is deleted when the count reaches
+  zero. `merge_message_gate` is the first module across, all ten of its sites registered and observed.
+
+  Negative runs: each of the register's four directions was run against a tree carrying exactly the shape it
+  refuses — a citation renamed to a site nothing produces, two sites given one identity, a site given a
+  capability no spec declares — and each failed on its own perturbation while its siblings stayed green.
 
   A context cargo writes in front of a dependency table is stripped before the heading is classified, so
   `[target.<triple>.dependencies]` and its `.NAME` form are read like any other. That reading is narrower
