@@ -2576,3 +2576,52 @@ fn a_symlink_is_reported_dangling_only_when_its_target_does_not_resolve() {
         ),
     }
 }
+
+/// A run composing ONE observer refuses an outcome that states no subject.
+///
+/// The first repair guarded `merge_outcomes`, which this path never reaches: `Run::observe` stores the first
+/// outcome verbatim, so a single participant's violation-free `Outcome::Violations` travelled all the way to
+/// `verdict()` — exit code `0`, no subject, no refusal. The check now sits where an outcome *arrives*, which
+/// every outcome passes exactly once on both paths into the fold.
+///
+/// Negative run: without `stated` in `Run::observe`, `verdict()` answers
+/// `Violations(Report { violations: [] })` and the assertion below fails on it.
+#[test]
+fn a_lone_participant_carrying_no_subject_cannot_reach_a_verdict() {
+    struct Silent;
+    impl Observer for Silent {
+        fn observe(&self, _: &Path) -> Outcome {
+            Outcome::Violations(guibiao::Report::empty())
+        }
+        fn bounds(&self) -> Vec<guibiao::BoundDecl> {
+            Vec::new()
+        }
+    }
+
+    let manifest = Path::new("Cargo.toml");
+    match Run::over(manifest).observe(Silent).verdict() {
+        Outcome::ConstitutionError(why) => assert!(
+            why.contains("reported violations while carrying none"),
+            "the refusal must name what the participant did: {why}"
+        ),
+        other => panic!(
+            "one observer stating no subject must refuse, not reach a verdict carrying nothing: {other:?}"
+        ),
+    }
+
+    // The control: a lone participant that DOES state a subject still reaches its verdict unchanged, so the
+    // guard refuses the missing subject rather than the single-observer shape.
+    struct Speaking;
+    impl Observer for Speaking {
+        fn observe(&self, _: &Path) -> Outcome {
+            Outcome::Clean(Subject::of(2, 3).expect("declared and reached"))
+        }
+        fn bounds(&self) -> Vec<guibiao::BoundDecl> {
+            Vec::new()
+        }
+    }
+    match Run::over(manifest).observe(Speaking).verdict() {
+        Outcome::Clean(subject) => assert_eq!((subject.declared(), subject.reached()), (2, 3)),
+        other => panic!("a stated subject must survive a one-observer run: {other:?}"),
+    }
+}

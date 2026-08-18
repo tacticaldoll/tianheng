@@ -1013,6 +1013,18 @@ them.
   itself — dead in the shell, and held alive by an assertion demanding it exist. Both are gone; the pin that
   does the work stays.
 
+- **The subject check moved to where an outcome enters a run, because a one-observer run never reached the
+  fold it first guarded.** `Run::observe` stores the first outcome verbatim — `None => next` — so
+  `Run::over(m).observe(o).verdict()` still answered a violation-free `Outcome::Violations`: exit code `0`,
+  no subject, no refusal. The repair below closed the composed path and left the commonest one open, and the
+  scenario written with it said *and it is folded with a participant that did observe*, which described the
+  half that was covered rather than the property.
+
+  Every outcome now passes the check exactly once, on both ways in — `Run::observe` for the protocol's path,
+  `evaluate_constitution` for the built-in one. The fold's own guard stays as a **consequence**: it takes two
+  outcomes and nothing in its signature says they were checked, so the claim is held by the check rather than
+  by a caller's discipline — but no input can now reach its refusal.
+
 - **A composed run no longer states a subject on a participant's behalf.** `Report::empty()` is public and
   `Outcome::Violations` of it exits `0`, so a participant can return an outcome that is violation-free and
   names no subject — and `0.5.0` is the first release in which an outside `Observer` can be that participant.
