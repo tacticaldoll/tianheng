@@ -69,12 +69,6 @@ pub fn unheld() -> Vec<Unheld> {
              disagreement inside cargo rather than a shape a manifest can carry",
         ),
         tool(
-            "release-coherence#no-tracked-file-for-any-member",
-            "every member having no tracked file requires a workspace cargo can load from paths git does \
-             not track, which is a repository shape rather than a release surface — the guard stays because \
-             the enumeration it protects is the one that decides the machinery corpus",
-        ),
-        tool(
             "release-coherence#scripts-not-enumerable",
             "`git ls-files` failing while the same process already read the repository is a git failure \
              mid-run, and simulating it means putting a fake git on the path",

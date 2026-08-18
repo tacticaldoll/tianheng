@@ -2534,3 +2534,37 @@ fn a_metadata_failure_the_subject_caused_is_reported() {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A workspace whose members carry no tracked file at all.
+///
+/// **A repository shape, not a broken tool.** cargo loads the workspace from the worktree while git tracks
+/// nothing under the members, so the enumeration that derives the machinery corpus finds no file to
+/// classify. It was declared unheld on a reason that does not fit the table it sat in — *a repository shape
+/// rather than a release surface* is an argument about what is worth reacting to, and that table's criterion
+/// is that only a broken tool reaches the branch.
+///
+/// Negative run: with the guard replaced by `Ok(())`, this passed — the machinery corpus derived from no
+/// member at all, and an adopter-facing entry naming a gate would be judged against it.
+#[test]
+fn a_workspace_whose_members_are_untracked_reports_over_nothing() {
+    let root = scratch("members-untracked");
+    let fixture = build_fixture(&root, "members-untracked", "0.2.0");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: prepare");
+    // Through git directly, because the fixture's `commit` stages everything and would put the members
+    // straight back.
+    git(&fixture.repo, &["rm", "-r", "--cached", "-q", "crates"]);
+    git(
+        &fixture.repo,
+        &["commit", "-qm", "chore: stop tracking every member"],
+    );
+    refusal::expect(
+        "release-coherence#no-tracked-file-for-any-member",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "no tracked file was found",
+        ),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
