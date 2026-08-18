@@ -537,6 +537,16 @@ impl<'a> Prose<'a> {
 }
 
 /// The warning a generated document carries in its header.
+///
+/// **One owner, and the reach of that owner is where it is held.** Every generator under `crates/kanhe`
+/// wrote this out as a literal — seven owners for one token, with the producers and the recognizer
+/// ([`declares_itself_generated`]) on opposite sides of it. `one_spelling.rs` holds the corpus that can
+/// reach here.
+///
+/// What it cannot reach: `crates/shengmo`'s own law-projection header, which spells the marker itself
+/// because `shengmo` cannot depend on `kanhe` — `kanhe` depends on `shengmo`, and the edge would close a
+/// cycle. That is a fact about the dependency graph rather than a site anyone declined to fix, which is why
+/// it sits outside that check's subject rather than inside it as an exemption.
 pub const DO_NOT_EDIT: &str = "Do not edit by hand";
 
 /// Whether a document declares itself generated: the marker, bolded, in its header.

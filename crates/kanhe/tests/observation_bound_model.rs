@@ -11,6 +11,8 @@
 //! projection directions. This check owns one obligation — that every declared bound is classified, and every
 //! classification names a declared bound.
 
+use kanhe::region::DO_NOT_EDIT;
+use shengmo::workspace::MARKER;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -396,7 +398,7 @@ fn derived_ids_agree_with_the_register_projection() {
         offences.is_empty(),
         "the ids this check derives differ from the ids `crates/kanhe/tests/bound_register.rs` wrote into \
          {projection:?}, so the projection is stale:\n  {}\nRegenerate with \
-         `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register`.",
+         `BLESS=1 {MARKER}=1 cargo test -p kanhe --test bound_register`.",
         offences.join("\n  ")
     );
 }
@@ -445,11 +447,11 @@ fn render_extents(code: &BTreeMap<String, BoundDecl>) -> String {
         }
     }
 
-    out.push_str(
+    out.push_str(&format!(
         "\nGenerated from each dimension's `observation_bounds()` by \
-         `crates/kanhe/tests/observation_bound_model.rs`. **Do not edit by hand** — regenerate with\n\
-         `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test observation_bound_model`.\n\n",
-    );
+         `crates/kanhe/tests/observation_bound_model.rs`. **{DO_NOT_EDIT}** — regenerate with\n\
+         `BLESS=1 {MARKER}=1 cargo test -p kanhe --test observation_bound_model`.\n\n"
+    ));
     out.push_str(
         "**What this document does not claim.** The classification is *authored*: the type refuses a \
          contradiction and derives what each bound's defence must demonstrate, but nothing verifies that a \

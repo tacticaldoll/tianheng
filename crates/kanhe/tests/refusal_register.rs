@@ -20,7 +20,9 @@
 //! site is a commitment that a direction observes it — a registered site no direction names refuses here —
 //! so coverage cannot lag behind the migration.
 
+use kanhe::region::DO_NOT_EDIT;
 use kanhe::region::Source;
+use shengmo::workspace::MARKER;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -580,7 +582,7 @@ fn the_register_projection_is_fresh() {
     let register = read(&root);
     let remaining: usize = register.unregistered.values().sum();
     let declared = kanhe::refusal_bounds::unheld();
-    let mut out = String::from(
+    let mut out = format!(
         "# Refusal register\n\nEvery refusal site in this repository, and what holds it. A site is \
          registered by being constructed through `refusal::violation_at` or `refusal::cannot_judge_at` — \
          which every construction is, since nothing else exists — and **held** by a direction calling \
@@ -588,9 +590,9 @@ fn the_register_projection_is_fresh() {
          A site that no direction holds is **declared unheld**, with why, an owner and a tracker, in the \
          table this register reads. There is no third state: a site is held or declared, and the register \
          refuses anything else.\n\nGenerated from `crates/kanhe/src/**.rs` by \
-         `crates/kanhe/tests/refusal_register.rs`. **Do not edit by hand** — regenerate with `BLESS=1 \
-         TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_register`. A stale projection fails \
-         that gate.\n\n",
+         `crates/kanhe/tests/refusal_register.rs`. **{DO_NOT_EDIT}** — regenerate with `BLESS=1 \
+         {MARKER}=1 cargo test -p kanhe --test refusal_register`. A stale projection fails \
+         that gate.\n\n"
     );
     out.push_str(&format!(
         "**{} of {} refusal sites are declared unheld.** {remaining} carry no identity at all, which is a \

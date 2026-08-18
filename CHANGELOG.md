@@ -3881,6 +3881,31 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; `kanhe` ships in no package and
   `scripts/` reaches no tarball.
 
+- **Two constants existed so that one token would have one owner, and both were written out again as
+  literals.** `kanhe::region::DO_NOT_EDIT` is the marker a generated document declares itself with, and
+  `shengmo::workspace::MARKER` names the variable saying a run must find a repository. Seven owners and nine
+  respectively — the producers and the recognizer of the first on opposite sides of it, which is the shape
+  `verdict_channel` spent a window closing between a shell script and Rust and which had stayed open between
+  Rust and Rust.
+
+  **The marker's second spellings included every projection's regeneration command**, and that half fails
+  quietly rather than loudly: a renamed variable leaves each generated document telling a reader a command
+  that runs the gate with the marker unset, so the gate skips and the reader takes the skip for freshness.
+  The document-marker half fails loudly instead — the recognizer stops recognizing and the freshness gate
+  refuses — which is why it was the smaller risk of the two despite being the more visible duplication.
+
+  Both are converged within the reach of their constant, held by a check whose corpus is exactly that reach.
+  What lies outside it is named where a reader meets it rather than declared as a bound: `shengmo`'s own law
+  projection cannot reach `kanhe`, and six `MARKER` spellings live in `tianheng`, `louke` and `xuanji`, which
+  are published crates that cannot depend on `shengmo` without closing a cycle. A rename still has to be made
+  in seven places and six of them no check can see — a fact about the dependency graph rather than a site
+  anyone declined to fix.
+
+  The projections are byte-identical after the change, which is what makes it a convergence rather than an
+  edit: the interpolated constants render exactly what the literals did.
+
+  No published API, outcome, report, exit class, or manifest moves; neither crate ships in a package.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
