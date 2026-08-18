@@ -1110,6 +1110,12 @@ them.
   measured. Its vacuity guard, which refuses a repository carrying none of the manifests it judges, had no
   case either. Both have one now.
 
+  Two more in the same corpus: building the claimed set refuses over a subject it cannot read — an
+  unparseable bullet, or a second `## Subject` section — and neither branch had a case, because all three
+  call sites pass the repository's own well-formed specs. Collapsed to an empty claim, which is the
+  `unwrap_or_default()` shape that reader's own comment records as the defect it replaced, the claimed set
+  comes back short and a change touching that capability's subject reads as filed.
+
   **An input the wrapper never supplied was judged as a message that disagrees.** The merge gate's harness
   respected the subject's absence — no subject, no merge being made — and read the other three judged inputs
   with a default, so absence arrived as emptiness. The gate answers emptiness on its own terms: an empty
