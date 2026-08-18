@@ -509,7 +509,7 @@ fn a_mid_line_mention_anchors_nothing() {
 
 /// The bounds-method reader declines an ambiguous anchor too, and its safe direction depends on that.
 ///
-/// The reader that survives and the one this window retired both used [`function_body`], so both inherited
+/// The reader that survives and the one the 0.5.0 window retired both used [`function_body`], so both inherited
 /// the decoy hole — and for this one the consequence
 /// was sharper: its bound records the moved extent as *over-reacting*, safe because an exact one-statement
 /// equality refuses a conforming body. A decoy copy inverts that. The extent becomes the decoy's conforming

@@ -894,7 +894,7 @@ consumer for an undemonstrated deduplication.
   evidence in the same change) **is** followed, and `openspec/changes/archive/.gitkeep` is tracked exactly as
   described. So the disposition is audit-then-dissolve/convert/keep per claim, not removal. *Promotion
   trigger:* a decision on whether the lifecycle is being restored or is being acknowledged as abandoned —
-  a human call about intent, not a defect to repair. **Not fired.** *Version class:* not release-affecting.
+  a human call about intent, not a defect to repair. **Not fired** (evaluated 2026-08-18). *Version class:* not release-affecting.
   *Authority:* `AGENTS.md` itself.
 
 - **WATCH: the family-coverage reaction credits ownership by type NAME, so a profile is invisible to it.**
@@ -915,7 +915,7 @@ consumer for an undemonstrated deduplication.
   closure is not a longer name list but asking what a profile *expands to*, which means evaluating
   constructor bodies rather than reading declarations — a different instrument from the one this reaction
   is. *Promotion trigger:* a family whose only adopter-shaped owner declares it through a profile, or a
-  second profile reaching a family no bare declaration names. **Not fired.** *Version class:* patch;
+  second profile reaching a family no bare declaration names. **Not fired** (evaluated 2026-08-18). *Version class:* patch;
   repository-internal, shipping in no crate. *Authority:* `governance-dogfood`.
 
 - **WATCH: the capability-subject filing join observes nothing under the declared OpenSpec mode.** *Class:*
@@ -936,7 +936,7 @@ consumer for an undemonstrated deduplication.
   `specs` mode there is no independent declaration to compare against — reading the set from the touched
   spec paths is near-tautological, since touching a spec is naming its capability. *Promotion trigger:* a
   requirement found filed under the wrong capability, or the `changes` half being adopted, which makes the
-  join start working with no edit. **Not fired.** *Version class:* patch; repository-internal, shipping in
+  join start working with no edit. **Not fired** (evaluated 2026-08-18). *Version class:* patch; repository-internal, shipping in
   no crate. *Authority:* `capability-subjects`, and `PROJECT.md`'s adoption-mode decision.
 
 - **WATCH: nine structural findings the merged-review campaign deliberately did not take.** *Observed
@@ -951,7 +951,7 @@ consumer for an undemonstrated deduplication.
   *Risk:* low and legible. These are pure structural changes to gate code that stabilised inside the window
   that found them, and the risk of moving it is not symmetric with the risk of leaving it long. *Promotion
   trigger:* a defect found in one of the named sites whose diagnosis was made harder by its length — not the
-  length itself, which is the measurement that already exists and is not the evidence. **Not fired.**
+  length itself, which is the measurement that already exists and is not the evidence. **Not fired** (evaluated 2026-08-18).
   *One of the twelve left this list on its own evidence, not on the trigger:*
   `examples/observer-participant`'s `observe` was split, because a second review pointed out that
   `COOKBOOK.md` sends adopters to it as the runnable version of its recipe — so a design whose layers cannot
@@ -1000,7 +1000,7 @@ consumer for an undemonstrated deduplication.
   path-checked and none content-checked. Filing this entry as a smaller problem than before would have been
   the comfortable reading and the false one. *Promotion trigger:* a claim in `PROJECT.md` about the tree
   found false **after** this entry — the three found before it are the control and cannot stand as evidence
-  for themselves. **Not fired.** *Version class:* not release-affecting. *Authority:* `projection-register`,
+  for themselves. **Not fired** (evaluated 2026-08-18). *Version class:* not release-affecting. *Authority:* `projection-register`,
   which already enumerates the documents a claim could cite, and `self-law-projection`, which owns the one
   carrying the architecture. *Shape, if it fires:* not a detector over prose — that instrument was measured
   three times and rejected. The reachable direction is to make more of what the file asserts **citable**, so
@@ -1091,7 +1091,7 @@ consumer for an undemonstrated deduplication.
   one-directional — the adopter reads a paragraph about housekeeping, never a wrong claim about what they get.
   *Promotion trigger:* an entry of this shape carrying a claim an adopter could **act on** — a version, a
   migration step, a behaviour change — rather than a description of internals. That is a property of one
-  entry and decidable by reading it, unlike a threshold on a population nothing counts. **Not fired**: every
+  entry and decidable by reading it, unlike a threshold on a population nothing counts. **Not fired** (evaluated 2026-08-18): every
   instance found so far describes this repository's own machinery and asks nothing of a reader. *Version class:* patch; a
   document and a `scripts/` reaction of this repository. *Authority:* `release-coherence`. *Shape:* closing it
   needs a judgement over the entry's **subject** rather than its references, which is the prose detector
@@ -1229,7 +1229,7 @@ consumer for an undemonstrated deduplication.
   on 2026-08-18 without anything acting on them. The entry sat unchanged through a full round of review and
   was reached sideways, from an unrelated finding, rather than by anyone asking whether it had triggered.
   *Observation source:* that miss, and then a sweep of this document run on purpose the same day: of the
-  triggers phrased as a count or an instance, two already carried a recorded **Not fired.**, one had fired
+  triggers phrased as a count or an instance, two already carried a recorded *not fired*, one had fired
   and was re-decided, and the rest were evaluated and had not. A third scanner of the scenario grammar is
   still three — the two further matches are fixture text and prose, read to check. A third governance member
   has not arrived. A second orphaned corpus has not: every tracked fixture corpus is referenced. A second
@@ -1240,7 +1240,11 @@ consumer for an undemonstrated deduplication.
   trigger, so the sweep is possible and cheap; what is missing is anything that runs it. *Next trigger:* a
   second trigger found to have fired unnoticed, at which point the answer is a reaction over this document
   rather than a sweep run on purpose — the same escalation the orphaned-corpus entry declares for itself.
-  *Authority:* engine. *Compatibility:* patch; this document ships in no crate.
+  **That trigger is decidable only because the annotations now carry a moment.** They were written as
+  present-tense assertions — a bare *not fired* — so a reader could not tell one evaluated today from one
+  written when the entry was filed and unread since, and *unnoticed* had no observable meaning. Every
+  annotation now reads `**Not fired** (evaluated <date>)`, and a sweep compares dates rather than re-reading
+  every entry. *Authority:* engine. *Compatibility:* patch; this document ships in no crate.
 
 - **WATCH: a tracked declaration nothing reads.** *Observed pressure:*
   `crates/kanhe/tests/fixtures/refusal_scan/` was tracked on 2026-08-10 and referenced by nothing until

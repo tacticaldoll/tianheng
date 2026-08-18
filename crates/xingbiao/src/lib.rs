@@ -120,7 +120,7 @@ pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
 ///
 /// Without this, one commit produced `src/lib.rs` on Linux and `src\lib.rs` on Windows, and a baseline
 /// recorded by CI matched nothing for a Windows contributor — every entry re-firing as new. That is the
-/// checkout-dependence class this window closed five times, along the one axis none of those five
+/// checkout-dependence class the 0.5.0 window closed five times, along the one axis none of those five
 /// covered: not where the repository sits, but which platform read it.
 ///
 /// **Bytes.** Every byte that is not part of a valid UTF-8 sequence is percent-escaped, and a literal

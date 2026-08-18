@@ -631,7 +631,7 @@ fn qualified_offence(
 ///
 /// Several tracked files carrying it says nothing about which was meant, and one means the reference
 /// resolves. NONE is the case the spec left open, and discarding it made this whole form inert — extracted
-/// and thrown away, which is why twenty-odd references to files this window deleted survived the sweep.
+/// and thrown away, which is why twenty-odd references to files the 0.5.0 window deleted survived the sweep.
 ///
 /// The decidable split: a name that WAS tracked, somewhere other than a change directory, is a stale
 /// reference to something deleted. A name tracked only under `openspec/changes/` is the lifecycle's own
@@ -758,7 +758,7 @@ fn offences_in(
             // `docs/history/` used to be exempt the same way, as a whole directory. It is not any more. The
             // facts a record must keep are shas, dates, versions and counts — **not paths** — and measured,
             // the exemption hid exactly one reference: a present-tense pointer at a gate that had moved
-            // crates inside this window, in the document the CHANGELOG advertises to adopters as the
+            // crates inside the 0.5.0 window, in the document the CHANGELOG advertises to adopters as the
             // provenance authority. Fourteen of the directory's fifteen path references already resolved,
             // so the blindness protected nothing and cost the one thing it was covering.
             //
@@ -826,7 +826,7 @@ fn offences_in(
 /// that shape survives every detector being deleted — measured on all four forms, each disabled in turn,
 /// green every time. The claim that they had been "disabled in turn" was therefore unfalsifiable, and one of
 /// the four was in fact inert: the bare-basename branch extracted its references and discarded them, which is
-/// why twenty-odd references to files this window deleted survived the sweep.
+/// why twenty-odd references to files the 0.5.0 window deleted survived the sweep.
 #[test]
 fn every_extraction_form_is_seen_when_it_names_something_absent() {
     let Some(root) = workspace_root() else {
@@ -868,7 +868,7 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
             "The `check_dod_coherence.sh` gate says so.\n",
         ),
         (
-            // A bare RUST basename, which the form excluded until this window: the extension list admitted
+            // A bare RUST basename, which the form excluded until the 0.5.0 window: the extension list admitted
             // the governance extensions only, so the branch below was inert for every Rust file this
             // repository has ever deleted. Its own row rather than trust in the `.sh` one, because what was
             // missing was an extension rather than a branch, and a row per branch cannot see that.
@@ -910,7 +910,7 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
 /// Rust test "normalizes a link target with portable shell" — a human falsifying a record to satisfy a check.
 ///
 /// Why it stops there. `docs/history/` was exempt the same way, as a whole directory, and measured, that hid
-/// exactly one reference: a present-tense pointer at a gate that had moved crates inside this window, in the
+/// exactly one reference: a present-tense pointer at a gate that had moved crates inside the 0.5.0 window, in the
 /// document the CHANGELOG advertises to adopters as the provenance authority. Fourteen of the directory's
 /// fifteen path references already resolved. The facts a record must keep are shas, dates, versions and
 /// counts, and none of those is a path.

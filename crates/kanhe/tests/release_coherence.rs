@@ -2095,7 +2095,7 @@ fn an_example_declaring_several_package_keys_is_not_judged() {
 
 /// An example requiring a family crate with no version at all is a violation, not an unreadable pin.
 ///
-/// The branch shipped in this window with no direction over it. It is legal cargo — a path-only dependency
+/// The branch shipped in the 0.5.0 window with no direction over it. It is legal cargo — a path-only dependency
 /// declares no version — so nothing about it is hypothetical.
 ///
 /// Negative run: with the `Pin::Absent` arm replaced by `continue`, this passed; restored, it refuses.
@@ -2125,7 +2125,7 @@ fn an_example_requiring_a_family_crate_with_no_version_is_refused() {
 
 /// Several `version` keys in one dependency is not this reader's to choose from either.
 ///
-/// The other branch this window shipped unexercised, and the shape its own module header names as the
+/// The other branch the 0.5.0 window shipped unexercised, and the shape its own module header names as the
 /// example of what a real manifest cannot legally carry.
 ///
 /// Negative run: with the `Pin::Several` arm replaced by `continue`, this passed; restored, it refuses.
