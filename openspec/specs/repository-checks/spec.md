@@ -126,6 +126,17 @@ was a shell script and its refusal was an exit code, and it is why retiring the 
   is held by the compiler and reported as zero on every clean run; the reaction remains because a
   constructor re-introduced is the shape it exists to see
 
+#### Scenario: A refusal constructed outside the register's corpus is not triaged — a stated bound
+
+- **WHEN** a refusal is constructed by a gate implemented under `crates/kanhe/tests`, where the judgement
+  and the directions over it share a file
+- **THEN** nothing triages it. The register reads `crates/kanhe/src`, and a construction there is either
+  held by a direction or declared unheld; a construction beside its own directions is neither, because
+  *which direction observes this branch* has no answer when every direction in the file can see it. Reaching
+  further means deciding what a file that is both judgement and test is being asked, which is a question
+  about where those gates should live rather than about this register
+- **UNPINNED** `BACKLOG.md` — *a gate that is its own test is outside the refusal register*
+
 #### Scenario: A site no direction holds is declared, not left
 
 - **WHEN** a refusal site is registered and no direction observes it

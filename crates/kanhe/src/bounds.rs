@@ -10,6 +10,23 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
     vec![
         BoundDecl::unpinned(
             BoundId::new(
+                "repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound",
+            ),
+            "a refusal constructed by a gate implemented under `crates/kanhe/tests`, beside the directions \
+             over it",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the register reads `crates/kanhe/src`, where a construction is held by a named \
+                          direction or declared unheld. A gate whose judgement and directions share a file \
+                          has no answer to *which direction observes this branch*, because every direction \
+                          in the file can see it -- so triaging it means first deciding where such gates \
+                          belong, which is a question about their location rather than about this register"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *a gate that is its own test is outside the refusal register*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
                 "observation-bound-register/whether-a-citation-demonstrates-the-direction-its-bound-declares-a-stated-bound",
             ),
             "a declared bound citing a test that bites, while demonstrating a different direction from the one \
