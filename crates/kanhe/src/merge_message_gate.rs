@@ -239,13 +239,15 @@ pub fn admitted_types(agents: &str) -> Result<Vec<String>, Refusal> {
     // this same window argued the opposite for the identical distinction: *none and several are different
     // facts*. One rule, two readers, and only one of them was following it.
     let clause = crate::selection::the_only("admitted-types anchor", agents.split(ANCHOR).skip(1))?;
-    // The run ends at the sentence's period, so a later backticked word — `!`, `BREAKING CHANGE:` — is outside.
-    let Some(run) = clause.split(". ").next() else {
-        return Err(cannot_judge(
-            "the admitted-types clause has no sentence after its anchor, so the contract's own list cannot \
-             be read",
-        ));
-    };
+    // The run ends at the sentence's period, so a later backticked word — `!`, `BREAKING CHANGE:` — is
+    // outside.
+    //
+    // **`split_once`, because the `else` this replaced was a refusal nothing could produce.** `str::split`
+    // always yields at least one item — `"".split(". ").next()` is `Some("")`, measured — so the branch
+    // saying *the clause has no sentence after its anchor* was unreachable, and an anchor at the very end of
+    // the contract falls where it belongs: it names no backticked type, which is what the refusal below
+    // says and is true of it. A diagnostic that cannot be produced is not a distinction the reader draws.
+    let (run, _) = clause.split_once(". ").unwrap_or((clause, ""));
     let types: Vec<String> = run
         .split('`')
         .skip(1)
