@@ -1065,12 +1065,19 @@ them.
   its own membership, which stays a reviewer's obligation and is stated rather than implied by a table that
   looks complete.
 
-  **A tracked fixture corpus for exactly this reader has been sitting unread since 10 August.**
-  `crates/kanhe/tests/fixtures/refusal_scan/` holds fourteen cases and nothing references any of them. Their
-  names are the holes this window found the hard way — a constructor taken by name, a longer identifier, a
-  comment — and one it has not: an **aliased import**, which this reader would miss entirely. Recorded here
-  rather than repaired, because a reader repaired against a corpus it has not been run over is a claim, and
-  running it is the next change.
+  **A tracked fixture corpus for exactly this reader had been sitting unread since 10 August, and running
+  it found three more holes.** `crates/kanhe/tests/fixtures/refusal_scan/` holds fourteen cases that nothing
+  referenced. Three name holes this window had already hit the hard way — a constructor taken by name, a
+  longer identifier, a comment. Running the reader over the rest reported **a definition as a construction**
+  in three cases: the constructor's own `fn cannot_judge(…)`, its multi-line sibling, and a function that
+  merely shares the name `violation` while building something else entirely. A module that constructs
+  nothing was being counted as constructing one.
+
+  The fourteenth is not a count. An **aliased import** — `use crate::refusal::cannot_judge as cj;` — makes
+  every later call invisible to a reader that matches names, and invisible reads as *this module constructs
+  no refusal*. The register refuses such a module now rather than counting it, in the class this repository
+  reserves for a source it could not read. The direction also holds the corpus and the cases it answers in a
+  bijection, so a case added and forgotten is reported rather than sitting unread the way all fourteen did.
 
   The register reads `crates/kanhe/src`. Several gates live in `crates/kanhe/tests`, where the judgement and
   its directions share a file, and their constructions carry no identity because nothing asks them to. That
