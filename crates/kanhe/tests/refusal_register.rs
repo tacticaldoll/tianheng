@@ -109,6 +109,20 @@ fn executed_rust(text: &str) -> String {
         .join("\n")
 }
 
+/// Whether `text` imports a refusal constructor under another name.
+///
+/// A reader that matches names cannot follow an alias: `use crate::refusal::cannot_judge as cj;` makes every
+/// later `cj(…)` invisible, and invisible reads as *this module constructs no refusal*. The corpus written
+/// for this reader names that case, and the answer is not a count — it is that this file cannot be counted,
+/// which is the same distinction between *disagrees* and *could not be read* that every gate here draws.
+fn aliases_a_constructor(text: &str) -> bool {
+    text.lines()
+        .map(str::trim_start)
+        .filter(|line| line.starts_with("use "))
+        .filter(|line| line.contains(" as "))
+        .any(|line| line.contains("violation") || line.contains("cannot_judge"))
+}
+
 /// Whether `text` has a site identity's shape: `<capability>#<slug>`, lowercase and hyphenated.
 ///
 /// **`#` and not `/`, because `<capability>/<slug>` is already an identity here.** The bound register
@@ -153,7 +167,12 @@ fn calls(text: &str, name: &str) -> usize {
             text.as_bytes()[start - 1]
         };
         let after = text.as_bytes().get(at).copied().unwrap_or(b' ');
-        if boundary(before) && boundary(after) {
+        // **A definition is not a construction.** `fn violation(…) -> Refusal` declares the constructor and
+        // `fn violation(target, rule, …) -> Violation` merely shares its name; counting either as a use
+        // reported a module that constructs nothing as constructing one. Both are named in the corpus
+        // written for this reader, and both were read wrong until it was run.
+        let defines = text[..start].trim_end().ends_with("fn");
+        if boundary(before) && boundary(after) && !defines {
             count += 1;
         }
     }
@@ -184,6 +203,15 @@ fn read(root: &Path) -> Register {
         if name.ends_with("src/refusal.rs") {
             continue;
         }
+        // **An alias makes this reader unable to answer, which is not the same as answering zero.** Every
+        // call through `use … as cj` is invisible to a reader that matches names, so a module that aliases a
+        // constructor would be counted as constructing none. Refused rather than counted, in the class this
+        // repository reserves for a source it could not read.
+        assert!(
+            !aliases_a_constructor(&text),
+            "{name} imports a refusal constructor under another name, so every construction through that \
+             alias is invisible to this register — which would read as a module that constructs none"
+        );
         for call in ["violation_at(", "cannot_judge_at("] {
             for (site, line) in first_literal_args(&text, call) {
                 registered
@@ -492,4 +520,90 @@ fn the_register_projection_is_fresh() {
         out.pop();
     }
     tianheng::testing::assert_projection_matches(&root, PROJECTION, &out);
+}
+
+/// The reader, run over the corpus written for it.
+///
+/// **This corpus was tracked and unread.** `crates/kanhe/tests/fixtures/refusal_scan/` entered this
+/// repository on 10 August and nothing referenced any of its fourteen cases. Three of them name holes this
+/// reader hit the hard way and closed one at a time — a constructor taken by name, a longer identifier, a
+/// comment — and running them is how the rest were found rather than rediscovered.
+///
+/// The cases are text rather than compiled units, because what is being tested is a reader over text and a
+/// case that had to compile could not carry a second `Refusal` type or a half-written call.
+#[test]
+fn the_reader_answers_the_corpus_written_for_it() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let dir = root.join("crates/kanhe/tests/fixtures/refusal_scan");
+    // Each case, and how many refusal constructions it holds. A **definition** of a constructor is not a
+    // construction, and neither is a function that merely shares a name with one.
+    let expected: &[(&str, usize)] = &[
+        ("a_call_and_a_definition", 1),
+        ("a_call_that_wraps", 1),
+        ("a_comment", 0),
+        ("a_constructor_taken_by_name", 1),
+        ("a_longer_identifier", 0),
+        ("an_unrelated_violation_builder", 0),
+        ("a_second_cannot_judge_variant", 0),
+        ("a_second_constructor", 0),
+        ("a_second_constructor_wrapped", 0),
+        ("a_second_refusal_type", 0),
+        ("a_vocabulary_under_other_names", 0),
+        ("naming_the_shared_kind", 0),
+        ("two_on_one_line", 2),
+    ];
+    let read = |case: &str| {
+        std::fs::read_to_string(dir.join(format!("{case}.rs.txt")))
+            .unwrap_or_else(|err| panic!("cannot read the case {case}: {err}"))
+    };
+    let mut wrong = Vec::new();
+    for (case, want) in expected {
+        let executed = executed_rust(&read(case));
+        let got = calls(&executed, "violation") + calls(&executed, "cannot_judge");
+        if got != *want {
+            wrong.push(format!("  {case}: expected {want}, read {got}"));
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "the reader disagrees with the corpus written for it:\n{}",
+        wrong.join("\n")
+    );
+
+    // **The one case that is not a count.** An aliased import makes every later call invisible to a reader
+    // that matches names, so the honest answer is that this file cannot be counted at all — which is a
+    // different fact from counting zero, and the same distinction every gate in this repository draws.
+    assert!(
+        aliases_a_constructor(&read("an_aliased_import")),
+        "an aliased import went unnoticed, so every call through the alias would read as absent"
+    );
+    assert!(
+        !aliases_a_constructor(&read("a_call_and_a_definition")),
+        "the control: a case with no alias must not be read as one"
+    );
+
+    // Every case is used, so a case added to the corpus and forgotten is reported rather than sitting unread
+    // the way the whole corpus did.
+    let cases: BTreeSet<String> = std::fs::read_dir(&dir)
+        .expect("read the case directory")
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .strip_suffix(".rs.txt")
+                .map(str::to_string)
+        })
+        .collect();
+    let named: BTreeSet<String> = expected
+        .iter()
+        .map(|(case, _)| (*case).to_string())
+        .chain(std::iter::once("an_aliased_import".to_string()))
+        .collect();
+    assert_eq!(
+        cases, named,
+        "the corpus and the cases this direction runs disagree, so a case exists that nothing answers"
+    );
 }
