@@ -1102,6 +1102,20 @@ them.
   merely shares the name `violation` while building something else entirely. A module that constructs
   nothing was being counted as constructing one.
 
+  **An input the wrapper never supplied was judged as a message that disagrees.** The merge gate's harness
+  respected the subject's absence — no subject, no merge being made — and read the other three judged inputs
+  with a default, so absence arrived as emptiness. The gate answers emptiness on its own terms: an empty
+  title and an empty commit list are cannot-judge, and an empty **body** is a violation. A body that was
+  never supplied was therefore reported at exit 1, the class this repository reserves for a gate that ran
+  and disagreed, and the two sites named *unavailable* could be reached by an empty value and never by the
+  absence they name.
+
+  `scripts/merge-pr.sh` carries the other half of this same defect in its own comment and closed it — an
+  unreadable body file left its variable empty and the gate judged an empty body. The wrapper's half was
+  repaired; this half was not. The process boundary was the last place in this crate where *absent* and
+  *empty* were one fact, with `Quoted`, `WorkspaceVersion`, `PackageName`, `Declared`, `Package`, `Tracked`,
+  `Failure` and `Site` all drawing it inside `src`.
+
   **The repair for that put the reader on the other side of its own asymmetry.** `imports_and_rest`
   recognised a `use` item by one textual prefix, so `pub use` and `pub(crate) use` — imports, constructing
   nothing — stayed in the executed text, and the constructor names they carry counted as calls. The register

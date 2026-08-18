@@ -57,9 +57,42 @@ fn the_squash_message_is_the_pull_request_it_records() {
         );
         return;
     };
+    // **Absence and emptiness are different facts at this boundary too.** The subject's absence means no
+    // merge is being made and this returns; the other three were read with `unwrap_or_default()`, so an
+    // input the wrapper never supplied arrived as an empty one. The gate answers empty on its own terms —
+    // an empty title and an empty commit list are cannot-judge, and an empty **body** is a violation — so a
+    // body that was never supplied was reported as a body written wrongly, at exit 1, the class this
+    // repository reserves for a gate that ran and disagreed.
+    //
+    // `scripts/merge-pr.sh` carries the other half of this same defect in its own comment, and closed it:
+    // an unreadable body file left its variable empty and the gate judged an empty body. The wrapper's half
+    // was repaired and this half was not, which is why the two named sites here — *title unavailable* and
+    // *commits unavailable* — could be reached by an empty value and never by the absence they name.
+    //
+    // A merge is being made once the subject is here, so a missing input is the wrapper supplying an
+    // incomplete set, which is unjudgeable rather than untrue. `var` separates the two: an empty variable
+    // that was set is `Ok("")`.
+    let unsupplied: Vec<&str> = [
+        "TIANHENG_MERGE_BODY",
+        "TIANHENG_MERGE_TITLE",
+        "TIANHENG_MERGE_COMMITS",
+    ]
+    .into_iter()
+    .filter(|name| std::env::var(name).is_err())
+    .collect();
+    if !unsupplied.is_empty() {
+        kanhe::verdict_channel::report(Kind::CannotJudge);
+        panic!(
+            "merge message ({:?}): {} not supplied, so there is nothing to judge — a merge is being made, \
+             because the subject is here, and this is an incomplete set rather than a message that \
+             disagrees",
+            Kind::CannotJudge,
+            unsupplied.join(", ")
+        );
+    }
     let body = std::env::var("TIANHENG_MERGE_BODY").unwrap_or_default();
     let title = std::env::var("TIANHENG_MERGE_TITLE").unwrap_or_default();
-    // The pull request's own commit subjects, newline-separated. Absent, the judgement refuses rather than
+    // The pull request's own commit subjects, newline-separated. Empty, the judgement refuses rather than
     // falling back to refusing every bulleted body.
     let supplied: Vec<String> = std::env::var("TIANHENG_MERGE_COMMITS")
         .unwrap_or_default()
