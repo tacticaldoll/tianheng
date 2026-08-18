@@ -1179,6 +1179,18 @@ consumer for an undemonstrated deduplication.
   shape has an instance to be written against rather than a guess. *Authority:* engine.
   *Compatibility:* patch; the check ships in no crate.
 
+- **WATCH: a refusal reachable only by a broken tool is not observed.** *Observed pressure:* fifteen refusal
+  sites are declared unheld in `crates/kanhe/src/refusal_bounds.rs` — every one of them a cannot-judge
+  reachable only when a tool this repository invokes fails mid-run. *Observation source:* the refusal
+  register, which measured which sites a direction observes by running rather than by reading their
+  messages; five textual predicates asked the same question first and answered differently every time.
+  *Risk:* one of those fifteen refuses with the wrong sentence, or the wrong exit class, and nothing says
+  so. Bounded by all fifteen being cannot-judge: the class reserved for *this could not be read*, so the
+  worst case is an unhelpful sentence rather than a defect reaching a release. *Next trigger:* a harness
+  that can supply a failing tool without the fixture becoming a test of that harness — a recorded process
+  boundary rather than a fake binary on the path. *Authority:* engine. *Compatibility:* patch; the checks
+  ship in no crate.
+
 - **WATCH: the title race the wrapper can only narrow.** *Observed pressure:* the merge wrapper judges three
   inputs and pins two by construction — the body travels as the value the gate judged, and the commit set
   through `--match-head-commit`, which GitHub decides atomically. The title is the third, and `gh` offers no

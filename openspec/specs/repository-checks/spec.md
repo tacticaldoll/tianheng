@@ -62,6 +62,14 @@ Every check judging this repository SHALL be a `#[test]` living **outside every 
 every refusal it holds SHALL have been run against a tree carrying the shape it refuses, with that failure
 recorded in the change that introduced it.
 
+**A refusal about the reading failing is not a refusal about the subject.** Where a refusal can be reached
+only by breaking the tool that reads — a process that will not run, a directory that will not enumerate,
+output that is not the format its producer emits — a direction over it must simulate that tool, and a
+fixture that simulates a tool tests the simulation. Such a site SHALL be declared unheld rather than given a
+fabricated fixture, because a fixture that passes for the wrong reason is a false green and a false green is
+worse than a declared gap. The distinction is not difficulty: every site so declared is a **cannot-judge**,
+which the compiler established before it was claimed.
+
 **The second clause is held by a register rather than by attention.** A refusal SHALL carry the identity of
 the branch that produced it, and a direction observing that branch SHALL name the same identity, so the two
 are compared by running. Identity in the message alone could not be measured: a message is a template and a
@@ -111,12 +119,26 @@ was a shell script and its refusal was an exit code, and it is why retiring the 
   reached — the same non-injective identity this repository has already recorded once, where a finding not
   qualified by its owner let a baseline mask a new violation
 
-#### Scenario: Sites not yet registered are counted rather than assumed
+#### Scenario: No refusal site is untriaged
 
-- **WHEN** a refusal is constructed through the unregistered form
-- **THEN** it is counted in a **produced** projection naming its module, and any change to that count — in
-  either direction — has to be blessed. A figure typed into prose is one nothing measures; this one falls as
-  modules migrate and cannot rise quietly, and when it reaches zero the unregistered constructors are deleted
+- **WHEN** a refusal is constructed by anything that does not carry a site identity
+- **THEN** the register refuses. The count reached zero and the site-less constructors were deleted, so this
+  is held by the compiler and reported as zero on every clean run; the reaction remains because a
+  constructor re-introduced is the shape it exists to see
+
+#### Scenario: A site no direction holds is declared, not left
+
+- **WHEN** a refusal site is registered and no direction observes it
+- **THEN** it SHALL be declared unheld — with why, an owner and a tracker — or the register refuses. There
+  is no third state: a site is held or declared. The declaration is the escape hatch and is deliberately
+  expensive, because an escape hatch nothing forces you through is the prose that drifted
+
+#### Scenario: A declaration names a site, and a declared site is not observed
+
+- **WHEN** a declaration names a refusal no site produces, or names one a direction does observe
+- **THEN** the register refuses. A declaration about nothing is prose about nothing, one level up from the
+  drift this register ends; and a declared site a direction observes is **held**, so the declaration
+  understates what the repository has
 
 #### Scenario: A check inside a published package
 

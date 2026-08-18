@@ -1054,6 +1054,28 @@ them.
   were the ones worth having: with each replaced by `Ok(())`, its fixture passed, which is a release
   reported clean over a check that judged nothing.
 
+  **A site is now held or declared, and nothing is untriaged.** The fifteen refusals no direction reaches
+  are declared unheld in a table carrying, for each, why a direction over it would test something other than
+  that branch, an owner, and a tracker. The register holds the table and the sites in a bijection, refuses a
+  declaration naming a site nothing produces, refuses a declared site a direction *does* observe — that one
+  is held, and saying otherwise understates the coverage — and requires the count of sites carrying no
+  identity to be **zero**.
+
+  The escape hatch is deliberately expensive: typed, counted, projected, owned. What it cannot do is decide
+  its own membership, which stays a reviewer's obligation and is stated rather than implied by a table that
+  looks complete.
+
+  **A tracked fixture corpus for exactly this reader has been sitting unread since 10 August.**
+  `crates/kanhe/tests/fixtures/refusal_scan/` holds fourteen cases and nothing references any of them. Their
+  names are the holes this window found the hard way — a constructor taken by name, a longer identifier, a
+  comment — and one it has not: an **aliased import**, which this reader would miss entirely. Recorded here
+  rather than repaired, because a reader repaired against a corpus it has not been run over is a claim, and
+  running it is the next change.
+
+  The register reads `crates/kanhe/src`. Several gates live in `crates/kanhe/tests`, where the judgement and
+  its directions share a file, and their constructions carry no identity because nothing asks them to. That
+  is a stated corpus boundary rather than a gap in the count, and the site-less constructors remain for it.
+
   Three more, all about the subject rather than about the machine: a release snapshot naming one version
   while the surfaces declare another, a member manifest that is not text, and a workspace version the publish
   gate finds genuinely absent. Fourteen of the twenty-nine are closed and fifteen remain.
