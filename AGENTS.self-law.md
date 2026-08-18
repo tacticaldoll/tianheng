@@ -63,14 +63,14 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `shengmo` (crate)
 
-> 繩墨 is an adopter of 天衡, not a member of the family it governs: it declares this law through the shell's published surface and reaches no dimension directly, so the repository's own governance exercises exactly the surface an adopter has. serde_json is the one addition, for reading cargo's own message stream where a reaction's corpus must come from the build rather than from a list
+> 繩墨 declares this law through the shell alone: the allowlist is 天衡 and serde_json, so no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist and every boundary here is stated through the surface the shell publishes. serde_json reads cargo's own message stream, where a reaction's corpus comes from the build rather than from a list
 
 - **rule**: restrict dependencies to (only: tianheng, serde_json)
 - **kind**: crate · **severity**: enforce
 
 ### `kanhe` (crate)
 
-> 勘合 fits this repository's record against itself and governs no product contract: it reaches the shell's published surface and the law's own locator, never a dimension. Keeping it distinct from 繩墨 is what stops a claim about the law being read as a claim about document hygiene
+> 勘合 names the shell, the law's own locator and serde_json, never a dimension: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist, so a repository check reads the record through the same published surface an adopter has rather than through an observation engine
 
 - **rule**: restrict dependencies to (only: shengmo, tianheng, serde_json)
 - **kind**: crate · **severity**: enforce
