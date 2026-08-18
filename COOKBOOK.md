@@ -650,7 +650,7 @@ and cannot be tested a layer at a time.
 
 *Intent: publish your declared governance as a 3-layer imitable Agent Law (`AGENTS.md` / `AGENTS.self-law.md`) so AI agents imitate your architecture by gravity (潛移) — and gate it in `cargo test` so the projection never rots.*
 
-Governance follows a **Three-Layer Architecture**:
+Governance follows the **Three-Layer Agent Law**, which is this document's anatomy:
 1. **Layer 1: Universal Preamble** — meta-instructions and working agreements only (`PREAMBLE` discipline; never crate-specific or un-reacted architectural claims).
 2. **Layer 2: Qiányí Gravity Pull (Prose Reason & Projection Body)** — `because(...)` reasons projected directly from your declared `Constitution` into `AGENTS.self-law.md` to condition LLM continuations.
 3. **Layer 3: Reaction Backstop (Rust Law Source)** — functional boundaries (`restrict_dependencies_to`, `must_not_call_inline`) in code, protected by `.github/CODEOWNERS` and verified by `cargo test`.
