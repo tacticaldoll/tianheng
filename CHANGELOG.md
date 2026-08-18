@@ -1102,6 +1102,20 @@ them.
   merely shares the name `violation` while building something else entirely. A module that constructs
   nothing was being counted as constructing one.
 
+  **And the reader's own limit is declared, because patching shapes cannot terminate.** Every round of
+  review has found another Rust shape this reading does not reach — a constructor taken by name, an aliased
+  import, an alias the formatter wrapped, a raw literal, a site arriving as a parameter, a wrapped import, a
+  struct literal. The case corpus grew from fourteen to nineteen in this window, five of them arriving as
+  defects rather than as foresight, with no fall in the rate. Rust's grammar is not enumerable by a scanner,
+  so the honest statement is a bound rather than a claim that the next patch is the last.
+
+  What that bound says is narrower than *the reader is incomplete*, because the two sides of it fail in
+  opposite directions. A missed **citation** reports a site as unobserved and fails loud. A missed
+  **construction** reports clean over a site nothing holds. Only the second is unsafe, and closing it means
+  the compiler enumerating the sites instead of a reader — a change to what a site *is*, filed with the
+  trigger that names it. Bounded meanwhile by the corpus: `kanhe` ships in no package, so the worst case is
+  a refusal site in this repository going untriaged.
+
   **The repair for those shapes then put two of this repository's own gates in contradiction.** The reader
   that strips imports dropped the line that *opens* a `use` statement and kept every continuation, so an
   import naming `cannot_judge_at` on a line of its own counted as a call with nothing to parse — and the

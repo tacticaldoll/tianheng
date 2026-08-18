@@ -10,6 +10,24 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
     vec![
         BoundDecl::unpinned(
             BoundId::new(
+                "repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound",
+            ),
+            "a registered refusal constructed in a shape the register's reader models as neither a parsed \
+             construction nor an unparseable one",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the reader is text over Rust and is not exhaustive over the language. Its two \
+                          sides fail in opposite directions -- a missed citation reports a site as \
+                          unobserved and fails loud, a missed construction reports clean over a site \
+                          nothing holds -- and only the second is unsafe. Closing it means the compiler \
+                          enumerating the sites, which is a change to what a site is rather than one more \
+                          shape taught to a scanner"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *the register's reader is text over a language it does not model exhaustively*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
                 "repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound",
             ),
             "a refusal constructed by a gate implemented under `crates/kanhe/tests`, beside the directions \

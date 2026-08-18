@@ -376,7 +376,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated —
   at `ee15665`, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
   **1048** lines carrying `SHALL`, across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **90 bounds across 25 capabilities** — a live figure rather than part of the measurement
+  currently holds **91 bounds across 25 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -1178,6 +1178,21 @@ consumer for an undemonstrated deduplication.
   any manifest in this repository, ever. *Next trigger:* an example acquiring one — at which point the
   shape has an instance to be written against rather than a guess. *Authority:* engine.
   *Compatibility:* patch; the check ships in no crate.
+
+- **WATCH: the register's reader is text over a language it does not model exhaustively.** *Observed
+  pressure:* the refusal register decides which sites exist by reading source text, and every round of
+  review has found another Rust shape that reading does not reach — a constructor taken by name, an aliased
+  import, an alias the formatter wrapped, a raw literal, a site arriving as a parameter, a wrapped import,
+  a struct literal. *Observation source:* `crates/kanhe/tests/fixtures/refusal_scan/`, which grew from
+  fourteen cases to nineteen in the window ending 2026-08-18, five of them arriving as defects rather than
+  as foresight, with no fall in the rate. *Risk:* the two sides of the reader fail in opposite directions —
+  a missed citation reports a site as unobserved and fails loud, a missed **construction** reports clean
+  over a site nothing holds — and patching shapes cannot terminate, because Rust's grammar is not
+  enumerable by a scanner. Bounded by the corpus: `kanhe` ships in no package, so the worst case is a
+  refusal site in this repository going untriaged rather than anything reaching an adopter. *Next trigger:*
+  making the site a closed type, so the compiler enumerates the sites and the unsafe direction has no text
+  reading in it at all; the citation side may stay text, because its failures are loud. *Authority:*
+  engine. *Compatibility:* patch; the checks ship in no crate.
 
 - **WATCH: a gate that is its own test is outside the refusal register.** *Observed pressure:* several
   gates are implemented under `crates/kanhe/tests`, where the judgement and the directions over it share a

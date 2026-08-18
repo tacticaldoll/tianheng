@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**18 of 90 declared bounds have no pinning test.** That figure is the register's
+**19 of 91 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -316,6 +316,12 @@ fallback used where no manifest exists, which the register spec describes.
 - **pinned by**: `a_directory_named_without_its_slash_is_a_stated_bound`
 
 ## repository-checks
+
+### `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound`
+
+> the site is produced and unreported. The reader is text over Rust and is not exhaustive over the language, and the two sides of it fail in opposite directions: a missed **citation** reports a site as unobserved and fails loud, while a missed **construction** reports clean over a site nothing holds. Only the second is unsafe, and closing it means the compiler enumerating the sites rather than a reader — which is a change to what a site *is*, not another shape added to a scanner
+
+- **unpinned**, tracked by: `BACKLOG.md` — *the register's reader is text over a language it does not model exhaustively*
 
 ### `repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound`
 
