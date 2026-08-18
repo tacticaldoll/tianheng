@@ -181,6 +181,19 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   renamed or not
 - **PINNED-BY** `a_detailed_dependency_table_is_read_renamed_or_not`
 
+#### Scenario: Both pin readers read dependencies the same way
+
+- **WHEN** the root manifest writes an internal pin as a detailed table — `[workspace.dependencies.xuanji]`
+  with `path` and `version` on their own lines
+- **THEN** the check reads it and passes, and refuses a stale one in that same form. Which dependencies a
+  manifest declares SHALL have one reader: the example-pin check was migrated to it while the internal-pin
+  check kept a line-oriented scan, and the two then disagreed over a manifest cargo reads correctly — the
+  scan selected any line carrying `path`, `"crates/` and `=`, so it took `path` for the dependency's name
+  and never read the `version` line, refusing with *internal dependency path has no version pin*. Which
+  dependencies are internal is read from each one's own `path` value rather than from the shape of a line
+- **PINNED-BY** `an_internal_pin_written_as_a_detailed_table_is_read`
+- **PINNED-BY** `a_stale_internal_pin_in_a_detailed_table_is_a_violation`
+
 #### Scenario: A key outside a dependency table is not a dependency
 
 - **WHEN** a manifest carries a key spelled after a family crate in a table that declares no dependencies —

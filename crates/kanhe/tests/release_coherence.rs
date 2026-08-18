@@ -2006,3 +2006,59 @@ fn an_example_declaring_several_version_keys_is_not_judged() {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// An internal pin written as a detailed table is read, not refused for the shape of its first line.
+///
+/// `[workspace.dependencies.xuanji]` with `path` and `version` on their own lines is what cargo writes, and
+/// the line-oriented loop this replaced selected any line carrying `path`, `"crates/` and `=` — so the
+/// **path** line was split at its `=` and `path` became the dependency's name, while the `version` line,
+/// carrying neither `path` nor `"crates/`, was never read at all.
+///
+/// Negative run: before the migration this refused with *internal dependency path has no version pin*, a
+/// false refusal in front of the release gate over a manifest cargo reads correctly.
+#[test]
+fn an_internal_pin_written_as_a_detailed_table_is_read() {
+    let root = scratch("internal-detailed");
+    let fixture = build_fixture(&root, "internal-detailed", "0.2.0");
+    let manifest = fixture.repo.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        text.replace(
+            "[workspace.dependencies]\nxuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }\n",
+            "[workspace.dependencies.xuanji]\npath = \"crates/xuanji\"\nversion = \"0.2.0\"\n",
+        ),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "chore: write an internal pin as a detailed table",
+    );
+    judge(&fixture.repo).expect("a detailed internal dependency table is one cargo writes");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// And a stale pin in that same form is still a violation, so the migration did not buy its silence.
+///
+/// The control for the direction above: without it, a reader that had simply stopped seeing detailed tables
+/// would satisfy both.
+#[test]
+fn a_stale_internal_pin_in_a_detailed_table_is_a_violation() {
+    let root = scratch("internal-detailed-stale");
+    let fixture = build_fixture(&root, "internal-detailed-stale", "0.2.0");
+    let manifest = fixture.repo.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        text.replace(
+            "[workspace.dependencies]\nxuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }\n",
+            "[workspace.dependencies.xuanji]\npath = \"crates/xuanji\"\nversion = \"0.0.1\"\n",
+        ),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: leave an internal pin behind");
+    refuse(&fixture.repo, Kind::Violation, "is pinned to 0.0.1");
+    let _ = std::fs::remove_dir_all(&root);
+}
