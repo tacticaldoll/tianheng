@@ -1102,6 +1102,15 @@ them.
   merely shares the name `violation` while building something else entirely. A module that constructs
   nothing was being counted as constructing one.
 
+  **The repair for that put the reader on the other side of its own asymmetry.** `imports_and_rest`
+  recognised a `use` item by one textual prefix, so `pub use` and `pub(crate) use` — imports, constructing
+  nothing — stayed in the executed text, and the constructor names they carry counted as calls. The register
+  refused a module over an import. That is an **over**-reaction, on the side whose failures were supposed to
+  be the loud harmless ones, and it is outside the bound declared for the other side: a gate that refuses
+  correct source is a defect, not a limit. A `use` item is a visibility and the keyword now, and the space
+  after `use` is load-bearing, because `impl Iterator<…> + use<'a>` is precise capturing and this repository
+  writes it.
+
   **And the reader's own limit is declared, because patching shapes cannot terminate.** Every round of
   review has found another Rust shape this reading does not reach — a constructor taken by name, an aliased
   import, an alias the formatter wrapped, a raw literal, a site arriving as a parameter, a wrapped import, a

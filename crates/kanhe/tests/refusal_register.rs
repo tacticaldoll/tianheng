@@ -113,6 +113,34 @@ fn executed_rust(text: &str) -> String {
 /// a call with nothing to parse, and the register refused a module that constructs nothing — a shape
 /// `cargo fmt` produces the moment an import list grows too wide, which would have put two gates in this
 /// repository's Definition of Done in direct contradiction. Asked once now, by both.
+/// Whether `trimmed` opens a `use` item — including one carrying a visibility.
+///
+/// **The item, not one textual prefix.** `pub use` and `pub(crate) use` are imports and construct nothing,
+/// and a reader matching `use ` alone left them in the executed text, counted the constructor names they
+/// carry as calls, and refused a module over an import. That is an **over**-reaction, on the side of this
+/// reader whose failures were supposed to be the loud harmless ones, and it is outside the bound declared
+/// for the other side — which is about constructions the reader misses. A gate that refuses correct source
+/// is a defect, not a limit.
+///
+/// The space after `use` is load-bearing: `impl Iterator<…> + use<'a>` is precise capturing rather than an
+/// import, and this repository writes it.
+fn opens_a_use(trimmed: &str) -> bool {
+    let rest = match trimmed.strip_prefix("pub") {
+        Some(after) => {
+            let after = after.trim_start();
+            match after.strip_prefix('(') {
+                Some(scope) => match scope.find(')') {
+                    Some(close) => scope[close + 1..].trim_start(),
+                    None => return false,
+                },
+                None => after,
+            }
+        }
+        None => trimmed,
+    };
+    rest.starts_with("use ")
+}
+
 fn imports_and_rest(text: &str) -> (Vec<String>, String) {
     let source = Source::of(text);
     let executed = source.rust();
@@ -127,7 +155,7 @@ fn imports_and_rest(text: &str) -> (Vec<String>, String) {
                 statement.push_str(trimmed);
                 statement
             }
-            None if trimmed.starts_with("use ") => {
+            None if opens_a_use(trimmed) => {
                 open = Some(trimmed.to_string());
                 open.as_mut().expect("just assigned")
             }
@@ -672,6 +700,8 @@ fn the_reader_answers_the_corpus_written_for_it() {
     for case in [
         "two_on_one_line",
         "a_wrapped_import_that_constructs_nothing",
+        "a_public_import_that_constructs_nothing",
+        "a_scoped_public_import_wrapped",
     ] {
         assert_eq!(
             unparsed_constructions(&read(case)),
@@ -716,6 +746,8 @@ fn the_reader_answers_the_corpus_written_for_it() {
                 "a_siteful_call_that_wraps",
                 "a_raw_literal_site",
                 "a_wrapped_import_that_constructs_nothing",
+                "a_public_import_that_constructs_nothing",
+                "a_scoped_public_import_wrapped",
             ]
             .into_iter()
             .map(str::to_string),
