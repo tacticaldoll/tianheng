@@ -4043,6 +4043,33 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves.
 
+- **A verdict the gate reached and could not write left the same absent file a verdict never reached leaves.**
+  `deliver` called the channel writer and discarded its outcome, so *absent means unjudged* — which this
+  module and `repository-checks` both claim **by construction** — had two causes and observed only one. A
+  `Refused` whose write failed arrived at the wrapper as exit `2`, the class for what could not be judged,
+  where the gate had found exit `1`. That is the class collapse the channel exists to end, reached through a
+  different door.
+
+  It is a guarantee that was **removed rather than missing**. The predecessor this routing replaced returned
+  the write's outcome and said why in its own doc — *"Returning the outcome lets a direction assert that,
+  rather than inferring it from a file that is missing for either reason"* — and folding every gate into one
+  exit dropped the return. The writer now answers three states like everything else in this crate: no channel
+  opened, written, or opened and failed. The third fails loudly, naming the path and the error.
+
+  Held by a direction that re-executes the gate with the channel under a directory that does not exist.
+  Permissions were the obvious fixture and are the wrong one: `publish-source-integrity#signature-unwritable`
+  is declared unheld precisely because a permission-based fixture answers differently for root, which makes
+  the direction's own result depend on who runs it. A missing parent fails the same way for everyone.
+
+- **An in-band sentinel occupied the same type as a real exclusion source.** `"<unshown>"` stood for *the
+  classifier named no source*, was tested back by string comparison twice, and reached an operator diagnostic
+  as `hidden by <unshown>, which this repository does not track` — reading as though a file of that name were
+  the ignore source. A gitignore literally named `<unshown>` is a legal filename, so the placeholder was also
+  a shape the judged tree could forge. It is an `Option` now, and the diagnostic states the fact instead of
+  rendering a stand-in as a filename.
+
+  No published API, outcome, report, exit class, or manifest moves.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

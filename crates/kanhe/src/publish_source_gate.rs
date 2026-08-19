@@ -198,10 +198,17 @@ pub fn hidden_by_the_checkout_with(
     let mut answered: std::collections::BTreeMap<&str, bool> = std::collections::BTreeMap::new();
     let mut hidden = Vec::new();
     for path in excluded {
-        let source = sources.get(path).copied().unwrap_or("<unshown>");
+        // **`Option`, not a sentinel.** `"<unshown>"` occupied the same type as a real source path and was
+        // tested back by string comparison twice — and it reached an operator diagnostic reading *hidden by
+        // <unshown>, which this repository does not track*, as though a file of that name were the ignore
+        // source. A gitignore named `<unshown>` is a legal filename, so the sentinel was also a shape the
+        // subject could forge. The combination that would be a lie is unconstructible now.
+        let source = sources.get(path).copied();
         // The three answers stay apart: an unreadable one refuses rather than counting as untracked, which
         // would report a disagreement about a file whose status was never read.
-        if source != "<unshown>" && !answered.contains_key(source) {
+        if let Some(source) = source
+            && !answered.contains_key(source)
+        {
             match tracks(repo, source) {
                 Tracked::Yes => {
                     answered.insert(source, true);
@@ -220,11 +227,15 @@ pub fn hidden_by_the_checkout_with(
                 }
             }
         }
-        let tracked = source != "<unshown>" && answered.get(source).copied().unwrap_or(false);
-        if !tracked {
-            hidden.push(format!(
+        match source {
+            Some(source) if answered.get(source).copied().unwrap_or(false) => {}
+            Some(source) => hidden.push(format!(
                 "  {path} — hidden by {source}, which this repository does not track"
-            ));
+            )),
+            None => hidden.push(format!(
+                "  {path} — the exclusion classifier named no source for it, so the exclusion is this \
+                 checkout's rather than the repository's"
+            )),
         }
     }
     Ok(hidden)

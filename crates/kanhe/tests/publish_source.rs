@@ -795,9 +795,16 @@ fn an_exclusion_classifier_that_matched_nothing_still_answers() {
     )
     .expect("matching nothing is an answer, not a failure to read");
     let _ = std::fs::remove_dir_all(&root);
+    // **The fact, not a placeholder.** This asserted the sentinel `<unshown>` — a string that occupied the
+    // same type as a real source path and rendered into the diagnostic as though a file of that name were
+    // the ignore source. The state is an `Option`'s `None` now, so the direction reads the sentence the
+    // operator is given rather than the token that stood in for one.
     assert!(
-        hidden.iter().any(|line| line.contains("<unshown>")),
-        "an unshown source is the checkout's: {hidden:?}"
+        hidden
+            .iter()
+            .any(|line| line.contains("named no source for it")),
+        "an unshown source is the checkout's, and the diagnostic says so rather than naming a placeholder: \
+         {hidden:?}"
     );
 }
 

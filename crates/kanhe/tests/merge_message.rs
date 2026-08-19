@@ -10,6 +10,8 @@
 //! each shape — and to refusing it with its **own** message, so that no two sites can stand in for each
 //! other.
 
+use std::path::Path;
+
 use kanhe::refusal;
 
 use kanhe::merge_message_gate as gate;
@@ -534,6 +536,11 @@ fn two_admitted_type_anchors_cannot_be_read() {
 /// Returns `(the child exited zero, what it wrote to the verdict channel)`. An absent channel file is an empty
 /// string, which is what a wrapper reads as *no verdict was reached*.
 fn gate_over(subject: &std::ffi::OsStr) -> (bool, String) {
+    gate_over_channel(subject, None)
+}
+
+/// The same, with the channel pointed somewhere of the caller's choosing.
+fn gate_over_channel(subject: &std::ffi::OsStr, channel: Option<&Path>) -> (bool, String) {
     let scratch = std::env::temp_dir().join(format!(
         "kanhe-merge-subject-{}-{}",
         std::process::id(),
@@ -552,7 +559,10 @@ fn gate_over(subject: &std::ffi::OsStr) -> (bool, String) {
         "--exact",
         "the_squash_message_is_the_pull_request_it_records",
     ])
-    .env(kanhe::verdict_channel::ENV, &verdict)
+    .env(
+        kanhe::verdict_channel::ENV,
+        channel.unwrap_or(verdict.as_path()),
+    )
     .env("TIANHENG_MERGE_SUBJECT", subject)
     .env("TIANHENG_MERGE_TITLE", OK_SUBJECT)
     .env("TIANHENG_MERGE_BODY", OK_BODY)
@@ -602,5 +612,44 @@ fn a_subject_supplied_as_bytes_this_gate_cannot_read_is_not_an_absent_subject() 
         kanhe::verdict_channel::rendered(Kind::CannotJudge),
         "and it must report cannot-judge on the channel: the wrapper supplied this input, so it is not a \
          message that disagrees"
+    );
+}
+
+/// A verdict reached and lost is not a verdict never reached.
+///
+/// **The channel write's outcome used to be discarded.** `deliver` called the writer and dropped its
+/// `bool`, so a `Refused` whose write failed left the same absent file a run that judged nothing leaves —
+/// and the wrapper, reading absence as unjudged, reported exit 2 where the gate had found exit 1. The
+/// module and `repository-checks` both claim *absent means unjudged by construction*; with the outcome
+/// dropped, absence had two causes and only one of them was that.
+///
+/// **The channel is made unwritable by naming a path under a directory that does not exist**, not by
+/// permissions: `publish-source-integrity#signature-unwritable` is declared unheld precisely because a
+/// permission-based fixture answers differently for root, which makes the direction's own result depend on
+/// who runs it. A missing parent fails the same way for everyone.
+#[test]
+fn a_verdict_that_cannot_reach_the_channel_is_not_an_absent_one() {
+    let unwritable = std::env::temp_dir()
+        .join(format!("kanhe-no-such-dir-{}", std::process::id()))
+        .join("verdict");
+    assert!(
+        !unwritable
+            .parent()
+            .expect("the probe path has a parent")
+            .exists(),
+        "the probe depends on the parent being absent, or it measures something else"
+    );
+
+    let (exited_zero, reported) =
+        gate_over_channel(std::ffi::OsStr::new(OK_SUBJECT), Some(&unwritable));
+    assert!(
+        !exited_zero,
+        "a verdict the gate reached and could not put on the channel must stop the run; silently leaving \
+         the file absent is what makes `absent means unjudged` false"
+    );
+    assert!(
+        reported.is_empty(),
+        "and nothing may be on the channel, which is the state this refuses to let stand for a verdict: \
+         {reported:?}"
     );
 }
