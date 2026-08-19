@@ -931,7 +931,40 @@ pub(super) fn workspace_member_names_are_the_no_deps_packages() {
     });
     assert_eq!(
         workspace_member_names(&metadata),
-        vec!["adapters".to_string(), "core".to_string()],
+        Members::Read(vec!["adapters".to_string(), "core".to_string()]),
+    );
+}
+
+/// An unreadable membership is not an empty one, in either of the two ways it can be unreadable.
+///
+/// **Both consumers read empty as *nothing to govern*.** Coverage computed `total = 0` with an empty
+/// uncovered list and rendered it as complete coverage over a membership it never read; the evaluation
+/// refused, but with the sentence for a workspace that genuinely declares no member — the wrong fact
+/// about the wrong thing. This crate already states the rule on `workspace_member_src_dirs`: *an
+/// unreadable workspace is a constitution error, never a silent empty set*.
+#[test]
+pub(super) fn an_unreadable_membership_is_not_an_empty_one() {
+    // No `packages` array at all.
+    let absent = serde_json::json!({ "workspace_root": "/w" });
+    let Members::Unreadable(why) = workspace_member_names(&absent) else {
+        panic!("metadata carrying no `packages` array cannot be read as a membership");
+    };
+    assert!(why.contains("no `packages` array"), "got: {why}");
+
+    // A package this reader cannot name: dropping it would shrink the set the workspace rule compares
+    // against, so every unlisted member of a partly-unreadable set would read as governed.
+    let unnamed = serde_json::json!({
+        "packages": [ { "name": "core" }, { "version": "0.1.0" } ]
+    });
+    let Members::Unreadable(why) = workspace_member_names(&unnamed) else {
+        panic!("a package whose name cannot be read leaves the membership incomplete");
+    };
+    assert!(why.contains("`name` is absent"), "got: {why}");
+
+    // And a workspace that genuinely declares none is read, not refused — the third state stays its own.
+    assert_eq!(
+        workspace_member_names(&serde_json::json!({ "packages": [] })),
+        Members::Read(vec![])
     );
 }
 

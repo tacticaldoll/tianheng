@@ -85,7 +85,13 @@ pub fn check(constitution: &Constitution, manifest_path: &Path) -> Outcome {
 /// [`check_and_cover`]). An unresolvable target or a scan error is a constitution
 /// error, never a silent pass.
 fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
-    let workspace = workspace_member_names(metadata);
+    // The membership is an input like any other: read it, or say it could not be read. An empty set
+    // reached both consumers as *nothing to govern*, which is the silent pass this function's own doc
+    // forbids where it says a scan error is a constitution error.
+    let workspace = match workspace_member_names(metadata) {
+        Members::Read(names) => names,
+        Members::Unreadable(why) => return Outcome::ConstitutionError(why),
+    };
     let mut violations = Vec::new();
     for boundary in constitution.boundaries() {
         match boundary {
@@ -165,8 +171,14 @@ pub fn check_and_cover(
             );
         }
     };
-    let coverage = coverage_from(workspace_member_names(&metadata), constitution);
-    (evaluate(constitution, &metadata), Some(coverage))
+    // Coverage over a membership that could not be read is coverage over nothing: `total = 0` with an
+    // empty uncovered list renders as complete. The evaluation below reports the same fact as a
+    // constitution error, so the advisory is withheld rather than fabricated.
+    let coverage = match workspace_member_names(&metadata) {
+        Members::Read(names) => Some(coverage_from(names, constitution)),
+        Members::Unreadable(_) => None,
+    };
+    (evaluate(constitution, &metadata), coverage)
 }
 
 /// Resolve every workspace member's source-root directory from the target workspace at

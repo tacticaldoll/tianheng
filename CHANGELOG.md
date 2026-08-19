@@ -4195,6 +4195,32 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves.
 
+- **The workspace membership reader answered three different facts with one empty set, in shipped code.**
+  `workspace_member_names` returned an empty `Vec` when `cargo metadata` carried no `packages` array, when a
+  package's `name` could not be read (dropped one at a time by a `filter_map`), and when a workspace genuinely
+  declares no member. Both consumers read empty as *nothing to govern*.
+
+  **The two halves fail differently.** Coverage computed `total = 0` with an empty uncovered list and rendered
+  it as **complete coverage over a membership it never read**. Evaluation refused — `Subject::of` already
+  declines a positive boundary count against zero members — but with the sentence for *a workspace that
+  declares no member to observe them over*, which is the wrong fact about the wrong thing when the metadata is
+  what could not be read. The first is a silent pass; the second is the absent-versus-unreadable collapse this
+  window drew eight times in the repository machinery.
+
+  This crate states the rule itself, on `workspace_member_src_dirs`: *an unreadable workspace is a constitution
+  error, never a silent empty set*. The membership reader is the same question about the same metadata and did
+  not follow it. It now answers `Members::{Read, Unreadable}`; a package whose `name` cannot be read refuses
+  rather than being dropped, and coverage is withheld rather than fabricated when the membership is unreadable.
+
+  **Recorded because of where it was, not what it was.** Every three-state reader this window built —
+  `Quoted`, `WorkspaceVersion`, `PackageName`, `Declared`, `Package`, `Tracked`, `Failure`, `Site`, `Supplied`,
+  `Delivery` — is in the unpublished repository machinery. This is the first of the class found in code an
+  adopter runs, and it was found by first entering that corpus rather than by re-reading a repair.
+
+  Observable only for metadata cargo does not produce: `cargo metadata` emits a `name` for every package and a
+  `packages` array for every workspace it can load. No published signature, outcome kind, exit class, identity
+  shape, or manifest moves, and no recorded baseline is affected.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
