@@ -154,6 +154,17 @@ elif [[ $1 == pr && $2 == view && $* == *"--json number"* ]]; then
     else
         printf '%s\n' '42'
     fi
+elif [[ $1 == pr && $2 == view && $* == *"--json statusCheckRollup"* ]]; then
+    # What CI said about this pull request. The wrapper asks twice with different filters — which checks
+    # disagree, and how many have not answered — so this mode answers by which query it was handed rather
+    # than by call order, which would tie the fake to the wrapper's statement sequence.
+    if [[ $* == *"conclusion == null"* ]]; then
+        if [[ $FAKE_GH_MODE == ci-pending ]]; then printf '%s\n' '1'; else printf '%s\n' '0'; fi
+    elif [[ $FAKE_GH_MODE == ci-red ]]; then
+        printf '%s\n' 'MSRV (rust-version)'
+    else
+        printf '%s\n' ''
+    fi
 elif [[ $1 == pr && $2 == view && $* == *"--json headRefOid"* ]]; then
     if [[ $FAKE_GH_MODE == unreadable-head ]]; then
         printf '%s\n' ''
@@ -169,7 +180,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean | no-verdict)
+    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-pending)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -1032,6 +1043,69 @@ fn an_unchanged_title_still_reaches_the_merge() {
 /// **`require_one_pass` cannot see this state, and that is the point.** It asks *did the selected test pass*
 /// — which a harness returning without a verdict satisfies, and one did: a subject supplied as bytes the gate
 /// could not read printed "not judged" and returned, so `1 passed` was true and nothing had been judged. The
+/// A pull request whose checks disagree stops before the merge.
+///
+/// **This wrapper merged nineteen consecutive red runs.** Every local gate reported green each time, because
+/// the Definition of Done is the LOCAL pre-flight list and CI runs a superset of it — one job in that
+/// superset, the MSRV build, is not in the local list because it installs a toolchain and rebuilds the
+/// workspace. A single let-chain the default toolchain accepts and 1.85 refuses was red there and green here,
+/// for nineteen merges, until the job was run by hand. So the wrapper reads CI's answer the way it already
+/// reads its own gate's: as a verdict rather than an inference.
+#[test]
+fn a_pull_request_whose_checks_disagree_stops_before_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "ci-red", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a suite this wrapper could not get agreement from is a cannot-judge, not a gate that refused: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.contains("pr merge"),
+        "and it must stop before the merge, which is the act that cannot be repaired: {}",
+        run.gh_log
+    );
+    assert!(
+        run.stderr.contains("MSRV (rust-version)"),
+        "the operator is told WHICH check disagreed, not merely that one did: {}",
+        run.stderr
+    );
+}
+
+/// A pull request whose checks have not finished stops too, and for a different reason.
+///
+/// **Three states, and the middle one is why a boolean would not do.** A run still in flight is not a run
+/// that failed; merging on *not success* would refuse a pull request nobody has answered yet, and merging on
+/// *not failure* would merge one nobody has answered yet. The wrapper says which of the two it met.
+#[test]
+fn a_pull_request_whose_checks_have_not_finished_stops_before_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "ci-pending", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "an unfinished suite is a cannot-judge: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.contains("pr merge"),
+        "and it must stop before the merge: {}",
+        run.gh_log
+    );
+    assert!(
+        run.stderr.contains("have not finished"),
+        "an unfinished run is reported as unfinished rather than as a disagreement: {}",
+        run.stderr
+    );
+}
+
 /// gate now reports on the channel from its clean arm too, so *absent on success* means unjudged by
 /// construction, and this reads it rather than inferring it from an exit status.
 ///
