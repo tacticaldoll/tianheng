@@ -622,7 +622,11 @@ If a change makes a self-governance test fail, **fix the change**, not the test.
 
 ## Definition of Done
 
-Run these from the workspace root before checking off an apply task, syncing, or reporting a change done. This is the single source for the local pre-flight gate list (so other docs need not restate it); CI runs a superset of it:
+Run these from the workspace root before checking off an apply task, syncing, or reporting a change done. **The phrase names this list.** Writing *"Definition of Done all green"* over a
+subset is a completeness claim about a set someone can count, and it was made ten times in one window over
+runs of six commands and records naming one — the wording constant while what backed it eroded from twelve
+kinds to one. Run the whole list and say so, or name the commands that ran and do not use the phrase. The
+rule against a sweep claiming more than its corpus is the same rule; this list is a corpus with a name. This is the single source for the local pre-flight gate list (so other docs need not restate it); CI runs a superset of it:
 
 **`git add` any file the change CREATED before running these.** The tree-wide gates take their path list from
 `git ls-files` and their content from disk, so the two halves see different things — measured, both
