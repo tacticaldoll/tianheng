@@ -4753,6 +4753,27 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
 
+- **A record reached the release branch and the work did not.** `4cd8bee` asserts seven repairs across five
+  files and its tree is byte-identical to its parent's. The content had been committed onto the release
+  branch itself while the branch the pull request named still pointed at an already-merged commit, so the
+  pull request's diff was empty — and every guard the merge wrapper has was satisfied: the live commit set
+  was non-empty, the message gate judged it against that set, CI was green because nothing had changed, and
+  the head pin named a real commit. The only copy of the work was then discarded by a reset to the remote,
+  and it survived as a dangling object.
+
+  It is recovered whole and lands here, so the seven claims are true of the tree. `4cd8bee` is left standing:
+  it is on the remote and a merged squash is a record, which is the same reasoning this window has applied
+  four times — the correction lives beside it rather than in it.
+
+  **And the wrapper now reads what it had been inferring.** A pull request's changed-file count is the one
+  question it did not ask, and nothing anywhere holds a merged squash's tree against its parent. 勘合's own
+  name is a document made in two halves proven genuine by fitting them together; this is the case where one
+  half is empty. A count of zero refuses, and a count it cannot read refuses separately — never as a count of
+  some. `repository-checks` gains the requirement with both scenarios.
+
+  The message being curated apart from the tree is deliberate and stays: it is what lets a squash message be
+  the record. The pull request's diff is the only thing tying the two together, and now something reads it.
+
 - **The region defect closed; the figure was wrong three times, so it is gone.** `calls` takes a corpus by
   type now and the compiler holds it — that repair was right. What it did not reach is one layer inside the
   guarantee: the reader's own doc claimed it removed *comments, string literals and imports* and its body

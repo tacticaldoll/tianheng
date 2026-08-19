@@ -1461,3 +1461,31 @@ carry because it installs a toolchain and rebuilds the workspace.
 - **WHEN** reading the pull request's check conclusions fails
 - **THEN** the wrapper refuses as a cannot-judge, because a rollup it could not read is not a suite that
   agreed
+
+### Requirement: A merge records a message about work the pull request carries
+
+The wrapper standing in front of `gh pr merge` SHALL read how many files the pull request changes and refuse
+to reach the tool when that count is zero. A count it cannot read SHALL be its own refusal, never treated as
+a count of some.
+
+Measured: this wrapper merged a squash whose message asserted seven repairs across five files and whose tree
+was byte-identical to its parent's. The content had been committed onto the release branch itself while the
+branch the pull request named still pointed at an already-merged commit, so every other guard was satisfied —
+the live commit set was non-empty, the message gate judged it against that set, CI was green because nothing
+had changed, and the head pin named a real commit. The message is curated separately from the tree and
+travels through `argv`, which is what lets the squash message be the record; the pull request's diff is the
+only thing tying the two together, and nothing read it.
+
+#### Scenario: The pull request changes no file
+
+- **WHEN** the pull request about to be merged has a changed-file count of zero
+- **THEN** the wrapper refuses as a cannot-judge saying the message describes work that is not in it, and
+  `gh pr merge` is never reached
+- **PINNED-BY** `a_pull_request_that_changes_no_file_stops_before_the_merge`
+
+#### Scenario: The changed-file count cannot be read
+
+- **WHEN** the changed-file count is unreadable or is not a number
+- **THEN** the wrapper refuses as a cannot-judge, because a count it cannot read is not a count of zero and
+  not a count of some
+- **PINNED-BY** `an_unreadable_changed_file_count_stops_before_the_merge`

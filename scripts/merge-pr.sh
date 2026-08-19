@@ -376,6 +376,36 @@ require_a_verdict() {
 # `--json` rather than the human table, because the table is a display this wrapper does not own. An empty
 # conclusion is a check still running; a missing rollup is a head no workflow has claimed, which is its own
 # cannot-judge rather than a pass — a pull request nothing has checked is not a pull request that checked out.
+# **A pull request that changes no file records a message about work that is not in it.**
+#
+# Measured: this wrapper merged one. The content was committed onto the release branch itself, the branch the
+# pull request named still pointed at an already-merged commit, and the pull request's diff was therefore
+# empty — so every guard here was satisfied. The live commit set was non-empty, the gate judged the message
+# against it, CI was green because nothing had changed, `--match-head-commit` pinned a head that was real,
+# and the squash recorded a message asserting seven repairs across five files while carrying none of them.
+# The only copy of the work was then discarded by a reset to origin.
+#
+# Nothing anywhere holds a merged squash's tree against its parent, and 勘合's own name is a document made in
+# two halves proven genuine by fitting them together. This is the case where one half is empty, and it is
+# read rather than inferred, like the gate's verdict and CI's beside it.
+require_changed_files() {
+    local changed
+    changed=$(gh pr view "$pr_number" --repo "$repository" --json changedFiles -q '.changedFiles') \
+        || cannot_judge \
+            "cannot read how many files this pull request changes, which is not the same fact as a pull \
+request that changes some"
+    if [[ ! $changed =~ ^[0-9]+$ ]]; then
+        cannot_judge \
+            "the changed-file count read as \`${changed}\`, which is not a number — a count this wrapper \
+cannot read is not a count of zero"
+    fi
+    if ((changed == 0)); then
+        cannot_judge \
+            "this pull request changes no file, so the message about to be recorded describes work that is \
+not in it. Check that the branch you pushed is the branch holding the commits"
+    fi
+}
+
 require_ci_green() {
     # **One read, three states derived from it.** The first form asked two independent jq filters about
     # `statusCheckRollup`, and a pull request with *no checks at all* is a value neither can produce: the
@@ -490,6 +520,7 @@ gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
 require_one_pass "$gate_output"
 require_a_verdict
 require_ci_green
+require_changed_files
 
 # The title is re-read, because it is the OTHER END OF A RELATION rather than a value being recorded.
 #
