@@ -95,13 +95,18 @@ Applied to the shapes a review is likely to file:
 | a rejected alternative with no measurement | provenance |
 | **a relative anchor — `this window`, `the previous round`** | neither: it names a moving reference, so it is stale the moment the window closes. Anchor it to the moment, or drop it |
 
-**No reaction, and the measurement behind that is recorded rather than left to be re-taken.** The decidable
-subset is small and its corpus collides with itself: `crates/` carries 5 `PR #N` and 7 bare `#NNN`, and two of
-the latter are the **fixture** for the squash-serial check — a detector for that shape would refuse the very
-check that forbids it. The larger classes are not decidable at all: 20 `round N` and 16 `this window`, each
-needing the criterion applied per site, which is a judgement over prose this repository has designed, measured
-three times and rejected. So the criterion is the instrument, and the relative-anchor row is the one a sweep
-can enumerate.
+**No reaction, and the reason is structural rather than a count.** The decidable subset collides with itself:
+the bare `#NNN` shape a detector would match includes the **fixture** for the squash-serial check, so a
+detector for that shape would refuse the very check that forbids it. The larger classes are not decidable at
+all — each needs the criterion applied per site, which is a judgement over prose this repository has designed,
+measured three times and rejected. So the criterion is the instrument, and the relative-anchor row is the one a
+sweep can enumerate.
+
+**No figures are given here, and what stood here is why.** Four counts sat in this paragraph with no producer
+and no anchor, inside the section whose own subject is that hand-written figures drift. Three were wrong by the
+time two independent reviews measured them — and wrong *because* sweeps in the same window, from the same run
+that typed them, had moved what they counted. A census belongs where something enumerates it, and this
+paragraph enumerates nothing.
 
 ## Document authority & provenance
 
@@ -623,10 +628,10 @@ If a change makes a self-governance test fail, **fix the change**, not the test.
 ## Definition of Done
 
 Run these from the workspace root before checking off an apply task, syncing, or reporting a change done. **The phrase names this list.** Writing *"Definition of Done all green"* over a
-subset is a completeness claim about a set someone can count, and it was made ten times in one window over
-runs of six commands and records naming one — the wording constant while what backed it eroded from twelve
-kinds to one. Run the whole list and say so, or name the commands that ran and do not use the phrase. The
-rule against a sweep claiming more than its corpus is the same rule; this list is a corpus with a name. This is the single source for the local pre-flight gate list (so other docs need not restate it); CI runs a superset of it:
+subset is a completeness claim about a set someone can count. Run the whole list and say so, or name the
+commands that ran and do not use the phrase. The rule against a sweep claiming more than its corpus is the
+same rule; this list is a corpus with a name, and the record of how often that was got wrong belongs in the
+`CHANGELOG` entry that measured it, not here. This is the single source for the local pre-flight gate list (so other docs need not restate it); CI runs a superset of it:
 
 **`git add` any file the change CREATED before running these.** The tree-wide gates take their path list from
 `git ls-files` and their content from disk, so the two halves see different things — measured, both

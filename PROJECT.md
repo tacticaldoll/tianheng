@@ -344,7 +344,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   first and not the second. A requirement change is written directly onto its spec, in the same branch and
   pull request as the reaction that answers it. *(Recorded 2026-08: the mode had been chosen in practice from
   the beginning and stated nowhere — measured, zero change directories have ever existed, while seven whole
-  capabilities were specified in this window alone, four of them under `feat:`. `AGENTS.md` meanwhile
+  capabilities were specified in the 0.5.0 window alone, four of them under `feat:`. `AGENTS.md` meanwhile
   described the `changes` workflow in the present indicative, and the cost was observed rather than
   hypothesised: an agent reading it first, as that file instructs, planned work through a mode this project
   does not use, three times in one session, before anyone measured.)* **What would change it:** a change too
