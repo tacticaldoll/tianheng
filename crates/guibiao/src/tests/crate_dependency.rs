@@ -1065,8 +1065,7 @@ pub(super) fn no_dependency_rule_ever_flags_a_crates_own_self_referential_depend
 
 #[test]
 pub(super) fn every_crate_rule_still_flags_a_same_named_but_externally_sourced_dependency() {
-    // 0.3.1 adversarial-sweep finding, closed by PR #159 ("圭表 manifest/deps"):
-    // `is_self_dependency` matched by NAME ALONE, so a package `foo` depending on a *different*,
+    // `is_self_dependency` once matched by NAME ALONE, so a package `foo` depending on a *different*,
     // externally-sourced package that merely shares its own name (a real wrapper/fork/
     // self-comparison pattern — verified against real cargo: `foo = { git = "…" }` reads
     // `{"name":"foo","source":"git+…"}`, no error) was wrongly swallowed by the identical

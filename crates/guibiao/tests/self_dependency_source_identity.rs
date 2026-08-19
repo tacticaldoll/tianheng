@@ -1,5 +1,4 @@
-//! 0.3.1 adversarial-sweep finding, closed by PR #159 ("圭表 manifest/deps"):
-//! `is_self_dependency` matched a dependency edge by NAME ALONE, so a same-named but
+//! `is_self_dependency` once matched a dependency edge by NAME ALONE, so a same-named but
 //! EXTERNALLY-sourced dependency (a real wrapper/fork/self-comparison pattern, e.g.
 //! `foo = { git = "…" }` declared by package `foo`) was wrongly swallowed by the exemption meant
 //! only for the genuine null-source self-referential path idiom (`main = { path = "." }`), and

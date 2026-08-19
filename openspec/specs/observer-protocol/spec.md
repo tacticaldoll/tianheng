@@ -215,7 +215,7 @@ that dimension holds **by construction rather than by observation**, and the spe
 those are — otherwise a reader takes a constructed equality for a measured one. The list is now held to that:
 a reaction reads the built-in path's own source and refuses if a dimension it declares construction-held is
 not constructed there, or if a dimension it does not declare so is. This was true in only one direction until
-this window: the list named runtime alone, the shell's semantic arm changed under it, and the list was
+the 0.5.0 window: the list named runtime alone, the shell's semantic arm changed under it, and the list was
 repaired by hand — a membership claim about a set with an enumerator, which is the shape this family refuses
 everywhere else. What answers it is textual rather than a perturbed build: for a construction-held dimension
 the built-in path does not call some *other* function that happens to agree with the observer today, it
