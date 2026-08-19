@@ -4156,6 +4156,26 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves.
 
+- **Correction: "Definition of Done all green" was written ten times in this window over runs that were a
+  subset of it, and the subset shrank while the wording did not.** The Definition of Done is a named list of
+  fifteen commands. Audited across the window's fourteen pull requests, the command **kinds** each record
+  names run 12, 9, 8, 8, 6, 6, 3, 5, 3, 4, 1, 2, 1, 2 — and ten of the fourteen call that *the Definition of
+  Done*. Two of them name a single command while claiming the whole list; both actually ran six of fifteen.
+
+  **No merge was red.** The full list is green on the release branch, all fifteen commands, and the one commit
+  deliberately committed red — the twin detector, red on its own by design — was discarded by its squash and
+  is not in the branch's history. What is wrong is the record, not the tree, and a green tree does not make
+  those sentences true after the fact.
+
+  It is the same class this window named repeatedly and the sharpest instance of it, because the rule
+  forbidding it was added mid-window by the same run: *a completeness claim over a sweep names the corpus it
+  swept*. The commands were named, which is the only reason the audit was possible — and the phrase
+  *Definition of Done* is itself the completeness claim, over a corpus that has a name and can be counted.
+  `AGENTS.md` now says so where the list is defined: run the whole list and say so, or name what ran and drop
+  the phrase.
+
+  No published API, outcome, report, exit class, or manifest moves.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
