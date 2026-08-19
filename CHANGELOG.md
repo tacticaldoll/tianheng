@@ -4097,6 +4097,36 @@ no adopter runs. They are here rather than under the adopter headings above beca
   change". They are formations, not a relocation, and formation carries its own acceptance. The evidence
   above is what that acceptance would rest on; the acceptance itself is not something a repair can supply.
 
+  **The evidence is replayable, and here it is in full.** A review read the record above and found it
+  summarised rather than reproducible: no exact command, no process status per run, no source delta, and a
+  partial reaction identity. All four perturbations were re-run for that reason. The command is the same one
+  every time — `TIANHENG_WORKSPACE_TESTS=1 cargo test -p shengmo --test self_governance
+  tianheng_governs_itself` — and every perturbed run exits **101**, the clean run **0**.
+
+  | delta applied | `target` | `finding` | `rule_key.allowed` |
+  |---|---|---|---|
+  | 繩墨's allowlist loses `serde_json` | `shengmo` | `serde_json` | `["tianheng"]` |
+  | 勘合's allowlist loses `shengmo` | `kanhe` | `shengmo` | `["serde_json","tianheng"]` |
+  | `guibiao = { path = "../guibiao" }` added to 繩墨's manifest | `shengmo` | `guibiao` | `["serde_json","tianheng"]` |
+  | the same line added to 勘合's manifest | `kanhe` | `guibiao` | `["serde_json","shengmo","tianheng"]` |
+
+  Every one carries the same identity shape, quoted from the run: `rule: "restrict dependencies to"`,
+  `rule_type: "tianheng.rule/guibiao/restrict-dependencies-to"`,
+  `fact_type: "tianheng.fact/guibiao/dependency"`, `shape: "dependency-edge"` with
+  `fields: {"kind": "normal", "package": <the finding>}`, `severity: Enforce`, `baselined: false`,
+  `polarity: Some(AllowlistGap)`, and the boundary's own `reason` verbatim. The `reason` field is what makes
+  these witnesses about **these two formations** rather than about the rule in general: it is the sentence
+  each boundary declares, carried into the violation the boundary produced.
+
+  The two kinds are not the same witness. Removing a legal member shows the rule reading a **real, existing**
+  edge of that target; adding a forbidden edge shows it reading a **new** one. Both fire under a perturbed
+  subject, so both are violating witnesses; the precision witness remains the clean run at exit `0`, where
+  繩墨's real `tianheng` and `serde_json` edges and 勘合's real `shengmo`, `tianheng` and `serde_json` edges
+  all pass with the law unchanged.
+
+  The tree is byte-identical after the replay, `Cargo.lock` included. What still remains for a human is
+  unchanged: the acceptance itself.
+
   No published API, outcome, report, exit class, or manifest moves.
 
 - **A repair reintroduced the class it repaired, one call further along.** The fail-loud directory enumerator
