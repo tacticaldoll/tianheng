@@ -603,6 +603,28 @@ construction rather than by a default. The variable name and the class spelling 
 compared against the wrappers by a repository check, and a direction SHALL hold that each gate reports before it
 fails — the scalars can agree while no gate ever writes, which leaves every failing gate reading as unjudged.
 
+**A channel that was opened and cannot be written SHALL fail the gate loudly**, naming the path and the error.
+Absence is the unjudged class, and a discarded write outcome gives absence a second cause — a verdict the gate
+reached and lost — which makes *unjudged by construction* false while leaving it stated. The gate SHALL NOT
+report a class it could not deliver, and it SHALL NOT continue as though it had.
+
+**What this SHALL NOT be read as claiming.** A refused verdict whose write fails still reaches the wrapper as
+the unjudged class, because the channel is absent either way; the wrapper's exit class is unchanged by this
+requirement. What the requirement buys is that the gate says which of the two facts the operator has, in its own
+output, rather than failing on the refusal alone and leaving the absent channel to be read as a run that never
+judged.
+
+#### Scenario: The channel is opened and cannot be written
+
+- **WHEN** a wrapper names a channel the gate cannot write to, and the gate reaches a verdict
+- **THEN** the gate fails naming the channel and the error, rather than continuing with the class discarded
+
+#### Scenario: A refused verdict whose class could not be delivered
+
+- **WHEN** the verdict that could not be delivered is a refusal
+- **THEN** the wrapper still reads the unjudged class and exits `2` — the channel is absent either way, so the
+  gate's own output is what distinguishes a verdict lost from a verdict never reached
+
 Reading the class out of the gate's output was the first attempt and it was the wrong channel twice over. It put
 the delimiter in the shell and the variant name in Rust, so a check pinning the rendering's *arguments* stayed
 green while a changed format string made the pattern match nothing — every violation then reporting as unjudged,
