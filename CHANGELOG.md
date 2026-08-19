@@ -4176,6 +4176,25 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves.
 
+- **Correction: the "7 mechanically removable" review-round tokens were a regex artifact, and the real count
+  is zero.** The split recorded with the doc-comment criterion measured 88 sites by **shape** — 7 parenthetical
+  or comma-set, 68 grammatically embedded. Read in place, the 7 sit in paragraphs that also carry an embedded
+  token: removing `(round 9's fix)` leaves *the identical failure mode **round 9** closed* three lines on,
+  and removing `(round 6)` leaves *the **round-6/7** grouping* on the next. Taking only the parenthetical
+  orphans the reference and produces worse text than leaving both.
+
+  **The shape a regex sees is not the shape a removal has to respect**, and the first measurement reported the
+  former as the latter. The correction moves the decline from "mostly not mechanical" to "not mechanical
+  anywhere", which is a stronger statement than the one it replaces — the instrument was wrong in the
+  direction that made the class look easier than it is.
+
+  This is the fourth instrument of this run to be wrong before it was right: a brace counter that read `{` inside
+  a `panic!` string, a commented-out-code detector that matched English sentences opening with `let` and
+  `impl`, a test-file filter that missed `tests.rs` and inflated a panic census from 16 to 347, and now a
+  shape split read as a separability split.
+
+  No published API, outcome, report, exit class, or manifest moves.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
