@@ -365,9 +365,11 @@ the next round finds the next sentence; change the shape and the class ends.
 prose rule has no backstop and then leaving it as prose is how the same rule keeps costing: the measurement is
 the expensive part and it is already done. Two rules in this repository were measured un-reacted in one window
 and only one of them was answered — `.github/CODEOWNERS`'s *a merge cannot relax the law without a human
-accepting it*, measured against `main`'s protection as `require_code_owner_reviews: false`, got the reaction it
-was missing; the reason-perimeter falsifier, measured over four rounds and eight corrections, did not, and was
-noticed only because a review put the two side by side. Filing counts as answering — a class with a measured
+accepting it*, measured against `main`'s protection as `require_code_owner_reviews: false`. What got a reaction
+there is its **naming** half: a structural amendment must now produce a second explicit artifact. The
+acceptance half is a judgement boundary, recorded as one, because a single-steward repository has no
+mechanical second party. The reason-perimeter falsifier, measured over four rounds and eight corrections, got
+neither, and was noticed only because a review put the two side by side. Filing counts as answering — a class with a measured
 cost and a recorded trigger is not the same as one nobody has priced — but silence does not. Say which of the
 two the change is doing.
 

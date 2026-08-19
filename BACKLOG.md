@@ -288,7 +288,7 @@ consumer for an undemonstrated deduplication.
   *Version class:* patch; repository-internal, shipping in no crate. *Authority:* `gate-shape-contract`, whose
   requirement is the shape to copy, and `observation-bound-model`, which would carry it.
   *Shape:* lift the derived-disclosure requirement into `observation-bound-model`, and give it a holder
-  mirroring `the_projection_discloses_every_declared_bound` — declared headings read from the spec, held
+  of the same shape — declared headings read from the spec, held
   set-equal to what the projection discloses, both directions, with the empty-enumeration guard.
 
 - **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
@@ -667,6 +667,32 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **WATCH: A backticked identifier in a live document is resolved by nothing.** *Class:* WATCH. *Observed
+  pressure:* `reference_integrity` resolves paths and `bound_register` resolves pinning-test names; a bare
+  identifier cited in prose is resolved by no reaction. Two survived a full pre-release review and four review
+  rounds in live governance text: `BACKLOG.md`'s Shape clause — the actionable half of a READY-PATCH entry —
+  instructed an implementer to mirror `the_projection_discloses_every_declared_bound`, a test retired with
+  `gate-shape-contract` in this same window; and a live WATCH entry named the self-law generator
+  `tianheng_constitution()`, which has never existed, two files from the projection header that spells it
+  correctly. Both are repaired. *Observation source:* measured at `965f804` on 2026-08-19 over
+  `AGENTS.md`, `PROJECT.md`, `BACKLOG.md`, `COOKBOOK.md`, `README.md` and `docs/`, extracting every backticked
+  `snake_case` token and resolving it against every tracked path and every tracked file outside that set:
+  **369 tokens, six unresolved, and all six legitimate** — four are explicitly past-tense (*since removed*,
+  *is replaced by*, *was one*), one is in `docs/history/`, and one sits in an entry whose preceding line says
+  it is kept for its reproduction record and names the surviving test. *Current reaction or bound:* none.
+  *Risk:* a dead pointer in the actionable half of an entry sends an implementer to a name that is not there —
+  and the class it belongs to is one this repository declares: *an entry that still describes the retired
+  mechanism in the present tense is exactly as stale as one naming a retired term*. *Promotion trigger:* a
+  third live instance, or a convention that makes the exemption decidable. *Version class:* patch; governance
+  documents only. *Authority:* `repository-checks`. *Shape:* filed rather than built, and the measurement is
+  why. The token and the question are both decidable — *does this name exist in tracked code* — but every one
+  of the six exemptions is a name cited **as history**, and recognizing that is prose judgement, which this
+  repository has designed, measured and rejected three times. What would make it buildable is exemption by
+  **declaration** — the idiom `one_spelling` already uses — requiring a retired name cited in a live document
+  to carry a marker. That is a change to how entries are written, not a detector, which is why it is filed
+  with its measurement rather than half-built. The probe also needs the `name()` form, which the run above
+  did not match.
+
 - **WATCH: The reason-perimeter rule is prose applied by hand, and four rounds of applying it produced eight
   corrections.** *Class:* WATCH. *Observed pressure:* the falsifier in `constitution()`'s header — *delete
   what the clause asserts; if the boundary stays green while the clause turns false, the clause is outside* —
@@ -678,7 +704,11 @@ consumer for an undemonstrated deduplication.
   shape*, and the third pass explicitly withdrew an exemption the second had written. *Observation source:*
   the one decidable subset a review proposed — *a reason naming a family crate that is neither its own target
   nor in its own allowlist* — was implemented against the current projection before being adopted, and
-  measured: **8 of 13 boundaries fire, all 8 false positives, 0 true positives.** Every hit is a legitimate
+  measured at `1fa86d1` on 2026-08-19, over the thirteen boundaries the projection then rendered, by extracting
+  each section's heading, reason and allowlist and reporting every family crate named in a reason that is
+  neither its target nor in its allowlist: **eight boundaries fired, every one a false positive, none a true
+  one.** The figures are anchored to that run rather than kept current — the prototype was not retained, and a
+  census with no producer is what this entry is about. Every hit is a legitimate
   prohibition entailed by the allowlist (繩墨's and 勘合's *no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist*,
   圭表's *must not depend on the 天衡 shell*) or a module boundary naming the crate it must resolve through.
   And it reaches only one of the three shapes the third pass moved: 天衡's *remains the outward composition
@@ -687,8 +717,8 @@ consumer for an undemonstrated deduplication.
   the identity — but says nothing about whether a reason is inside its rule's perimeter. *Risk:* the
   projection teaches every agent that loads `AGENTS.self-law.md`, so a reason asserting structure the law does
   not react to is a false statement of the law, at its most widely read surface. Bounded by four passes having
-  been run. *Promotion trigger:* a fifth pass finding a ninth clause, or a decidable subset that measures
-  better than 8 false positives to 0 true ones. *Version class:* patch; both crates ship in no package.
+  been run. *Promotion trigger:* a fifth pass finding a ninth clause, or a decidable subset whose first run
+  over the projection produces a true positive. *Version class:* patch; both crates ship in no package.
   *Authority:* `governance-dogfood`. *Shape:* what would end the class is constructing the entailed half of a
   reason rather than writing it, leaving only a genuinely additional clause by hand — a design change, not a
   detector, which is why this is filed rather than half-built.
@@ -1050,7 +1080,7 @@ consumer for an undemonstrated deduplication.
   same way — asserting a location or an absence without sweeping for it. Classifying that file's claims
   against the generated projections splits them in two. The **architectural** ones are already carried:
   which crates exist, what each may depend on, that no dimension names a sibling — all projected from
-  `tianheng_constitution()` into `AGENTS.self-law.md` and staleness-checked, and since
+  `shengmo::law::constitution()` into `AGENTS.self-law.md` and staleness-checked, and since
   `mutual-independence-reacts-to-membership` the last of those is asserted rather than merely projected.
   Two classes are carried by nothing: a **location** claim, the class that falsified the second attempt, and
   a **count**. *Observation source:* that classification, run against the projections and the file on
