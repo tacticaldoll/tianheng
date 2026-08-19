@@ -135,7 +135,7 @@ pub fn workspace_version(text: &str) -> WorkspaceVersion {
 /// written out in both gates. Converging the whole arm is the obvious repair and the refusal register
 /// forbids it: a site is registered by the string literal that **opens** the constructor's argument list, so
 /// a site id arriving as a variable is a construction the register cannot parse — and it holds that count at
-/// zero. Collapsing the arms instead would fold six per-capability identities into two, which is the thing
+/// zero. Collapsing the arms instead would fold each gate's own identity into a shared one, which is the thing
 /// the register exists to prevent. So the arms stay twinned by that constraint, and only what was genuinely
 /// duplicable moved.
 ///

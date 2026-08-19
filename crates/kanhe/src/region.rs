@@ -539,7 +539,7 @@ impl<'a> Prose<'a> {
 /// The warning a generated document carries in its header.
 ///
 /// **One owner, and the reach of that owner is where it is held.** Every generator under `crates/kanhe`
-/// wrote this out as a literal — seven owners for one token, with the producers and the recognizer
+/// wrote this out as a literal, with the producers and the recognizer
 /// ([`declares_itself_generated`]) on opposite sides of it. `one_spelling.rs` holds the corpus that can
 /// reach here.
 ///
