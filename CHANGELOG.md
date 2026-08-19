@@ -4753,6 +4753,48 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
 
+- **The literal scanner had no arm for the tokens that can also hold a quote.** It read `"…"` and `r#"…"#`
+  and nothing else, so a char literal spelling a quote — `if c == '"'` — opened a string at that quote and
+  ran to the next one anywhere after it. Both directions fail from there: a construction between two of them
+  is swallowed, which is the false negative the unregistered count exists to catch, and a literal's contents
+  after one are exposed as code. Five modules of the reader's own corpus carry the shape, and a byte-prefixed
+  raw string, `br#"…"#`, was read as an ordinary string because the `r` sat behind a `b`.
+
+  The arms are enumerated now rather than added one per defect — char literal, raw string with or without a
+  byte prefix, string with or without one — and a lifetime is told from a char literal by looking for the
+  close before consuming anything. Five shapes join the direction: a construction between two quote char
+  literals, a literal after one, an escaped quote char literal, a lifetime, and a byte string raw or plain.
+
+  **The two figures this reader does produce were true and are now true by construction.** `0 carry no
+  identity at all`, which the register refuses a non-zero figure for, and the per-module
+  `unparsed_constructions == 0` were both correct before this — by which tokens the desync happened to
+  expose, not because the scanner was right. That gap is this crate's whole subject.
+
+  **And publishing no count was what contained it.** Had a figure been rendered from the previous reader the
+  projection would carry a fourth wrong number. The recorded reason — three readers, three answers, no two
+  agreeing — now has its cause: no literal handling, literals stripped after comments, and literals stripped
+  before comments but with no char-literal arm.
+
+- **The sentence that caused all of it was still there.** `executed_rust`'s doc said it removed *comments,
+  string literals and imports* while its body removed two of the three, and the type introduced beside it
+  said the opposite one screen down. It survived two repairs aimed at exactly that half, because both read
+  the body to find the defect and neither re-read the sentence. It now says what it does and points at the
+  corpus that removes literals.
+
+- **A direction asserted an exit class and not the message, and the two refusals it separates collapse
+  without it.** `(( changed == 0 ))` is *true* for `not-a-number` — bash arithmetic resolves an unset
+  identifier to zero — so deleting the shape guard left that direction green while the wrapper told the
+  operator the pull request changes no file, which is the other refusal about a different fact. The message
+  is asserted now, as its five siblings already did, and the negative run fails without the guard.
+
+  Two readability repairs go with them: the changed-file guard had been inserted between `require_ci_green`
+  and its own header, so three paragraphs about reading CI read as documentation for it and the function they
+  belong to had none; and a `Vec<char>` was named `bytes` in the one function whose correctness turns on that
+  distinction.
+
+  No published API, outcome, report, exit class, or manifest moves; every site is in a crate or a script that
+  ships in no package.
+
 - **A record reached the release branch and the work did not.** `4cd8bee` asserts seven repairs across five
   files and its tree is byte-identical to its parent's. The content had been committed onto the release
   branch itself while the branch the pull request named still pointed at an already-merged commit, so the
