@@ -96,8 +96,14 @@ fn first_literal_args(text: &str, call: &str) -> Vec<(String, usize)> {
     found
 }
 
-/// `text` with its comments, string literals and imports removed, so neither a name in prose nor a name in
-/// a `use` list is read as a construction.
+/// `text` with its comments and imports removed, so neither a name in prose nor a name in a `use` list is
+/// read as a construction. **Not its string literals** — see [`countable`] for the corpus that removes
+/// those, which a count reads and a parse must not.
+///
+/// That sentence said *comments, string literals and imports* while this body removed two of the three, and
+/// it is the claim that misled a repair into rendering a figure counting every doc comment naming a
+/// constructor. It survived two repairs aimed at exactly that half, because both read the body to find the
+/// defect and neither re-read the sentence.
 ///
 /// The import line was the second way a count could be wrong: a module holding both forms names all four
 /// constructors in one `use`, and the bare identifiers there were counted as two more unregistered sites —
@@ -162,6 +168,36 @@ fn a_name_written_as_a_literal_is_not_a_construction() {
         1,
         "a comment names them and constructs nothing"
     );
+
+    // **The shapes a hand-written scanner desynchronises on.** A quote inside a char literal is not an open
+    // quote; the first form read it as one and ran to the next `"` anywhere after it, so a construction
+    // between two of them vanished and a literal after one was exposed. Both directions are held, because a
+    // scanner that is wrong desynchronises in both.
+    assert_eq!(
+        counted("fn a() { if c == '\"' {} }\nfn g() { violation(x); }\nfn b() { if c == '\"' {} }"),
+        1,
+        "a construction between two quote char literals is not swallowed"
+    );
+    assert_eq!(
+        counted("fn a() { if c == '\"' {} }\nfn c() { let t = \"violation\"; }"),
+        0,
+        "a literal after a quote char literal is still a literal"
+    );
+    assert_eq!(
+        counted("fn f() { let c = '\\''; violation(x); }"),
+        1,
+        "an escaped quote char literal closes, and what follows is code"
+    );
+    assert_eq!(
+        counted("fn f<'a>(x: &'a str) { violation(x); }"),
+        1,
+        "a lifetime is not a char literal and opens nothing"
+    );
+    assert_eq!(
+        counted("fn f() { g(br#\"violation\"#); g(b\"cannot_judge\"); }"),
+        0,
+        "a byte string is a literal, raw or not — the `b` does not stop the arm from seeing it"
+    );
 }
 
 /// A corpus with comments, imports and string literals removed.
@@ -185,50 +221,86 @@ struct Countable(String);
 /// A raw string is handled by its own arm: `r"…"`, `r#"…"#` and any hash count, since a `\` inside one
 /// escapes nothing and a naive escape-aware scan would run past the closing quote.
 fn without_string_literals(text: &str) -> String {
-    let bytes: Vec<char> = text.chars().collect();
+    let chars: Vec<char> = text.chars().collect();
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
     let mut out = String::with_capacity(text.len());
     let mut i = 0;
-    while i < bytes.len() {
-        let c = bytes[i];
-        // A raw string opens with `r` then any number of `#` then `"`, and closes on `"` followed by the
-        // same number of `#`.
-        if c == 'r' && !(i > 0 && (bytes[i - 1].is_alphanumeric() || bytes[i - 1] == '_')) {
-            let mut hashes = 0;
+    while i < chars.len() {
+        let c = chars[i];
+
+        // **A char literal can hold a quote**, and the first form had no arm for one: `'"'` opened a string
+        // at that quote and ran to the next `"` anywhere after it, so a construction between two of them
+        // was swallowed and a literal's contents after one were exposed as code. Five modules of this
+        // reader's own corpus carry the shape.
+        //
+        // A lifetime is not a char literal and has no closing `'`, so the close is looked for before
+        // anything is consumed. `\u{…}` runs to its brace; every other escape is one char.
+        if c == '\'' && !(i > 0 && ident(chars[i - 1])) {
             let mut at = i + 1;
-            while at < bytes.len() && bytes[at] == '#' {
-                hashes += 1;
+            if chars.get(at) == Some(&'\\') {
                 at += 1;
+                if chars.get(at) == Some(&'u') {
+                    while at < chars.len() && chars[at] != '}' {
+                        at += 1;
+                    }
+                }
             }
-            if at < bytes.len() && bytes[at] == '"' {
-                out.push_str("\"\"");
-                at += 1;
-                while at < bytes.len() {
-                    if bytes[at] == '"'
-                        && bytes[at + 1..]
+            at += 1;
+            if chars.get(at) == Some(&'\'') {
+                out.push_str("''");
+                i = at + 1;
+                continue;
+            }
+            // No close: a lifetime. Fall through and emit it unchanged.
+        }
+
+        // **A raw string, with or without a byte prefix.** `br#"…"#` was read as an ordinary string by the
+        // first form, because the `r` sat behind a `b` and the arm required `r` to open the token.
+        let mut at = i;
+        let opens_here = !(i > 0 && ident(chars[i - 1]));
+        if chars[at] == 'b' && opens_here {
+            at += 1;
+        }
+        if opens_here && chars.get(at) == Some(&'r') {
+            let mut hashes = 0;
+            let mut scan = at + 1;
+            while chars.get(scan) == Some(&'#') {
+                hashes += 1;
+                scan += 1;
+            }
+            if chars.get(scan) == Some(&'"') {
+                scan += 1;
+                while scan < chars.len() {
+                    if chars[scan] == '"'
+                        && chars[scan + 1..]
                             .iter()
                             .take(hashes)
                             .filter(|h| **h == '#')
                             .count()
                             == hashes
                     {
-                        at += 1 + hashes;
+                        scan += 1 + hashes;
                         break;
                     }
-                    at += 1;
+                    scan += 1;
                 }
-                i = at;
+                out.push_str("\"\"");
+                i = scan;
                 continue;
             }
         }
-        if c == '"' {
+
+        // **A string, with or without a byte prefix.** `\` escapes one char, which is what keeps `\"` from
+        // closing it.
+        if opens_here && chars.get(at) == Some(&'"') {
             out.push_str("\"\"");
-            i += 1;
-            while i < bytes.len() {
-                if bytes[i] == '\\' {
+            i = at + 1;
+            while i < chars.len() {
+                if chars[i] == '\\' {
                     i += 2;
                     continue;
                 }
-                if bytes[i] == '"' {
+                if chars[i] == '"' {
                     i += 1;
                     break;
                 }
@@ -236,6 +308,7 @@ fn without_string_literals(text: &str) -> String {
             }
             continue;
         }
+
         out.push(c);
         i += 1;
     }
@@ -466,7 +539,8 @@ fn read(root: &Path) -> Register {
         // doc comment naming a constructor — this repository's prose names them constantly, and the figure
         // jumped by four modules that construct no refusal at all. `region` is the module written so that
         // forgetting to ask was not possible, and the same reader the gates themselves use.
-        let open = calls(&countable(&text), "violation") + calls(&countable(&text), "cannot_judge");
+        let countable = countable(&text);
+        let open = calls(&countable, "violation") + calls(&countable, "cannot_judge");
         if open > 0 {
             unregistered.insert(name, open);
         }
@@ -862,8 +936,10 @@ fn the_reader_answers_the_corpus_written_for_it() {
     let mut wrong = Vec::new();
     for (case, want) in expected {
         let source = read(case);
-        let got =
-            calls(&countable(&source), "violation") + calls(&countable(&source), "cannot_judge");
+        let got = {
+            let countable = countable(&source);
+            calls(&countable, "violation") + calls(&countable, "cannot_judge")
+        };
         if got != *want {
             wrong.push(format!("  {case}: expected {want}, read {got}"));
         }

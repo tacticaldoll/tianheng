@@ -1135,6 +1135,15 @@ fn an_unreadable_changed_file_count_stops_before_the_merge() {
         "and it must stop before the merge: {}",
         run.gh_log
     );
+    // **The message is asserted because the two refusals collapse without it.** `(( changed == 0 ))` is
+    // *true* for `not-a-number` — bash arithmetic resolves an unset identifier to zero — so deleting the
+    // shape guard leaves this direction green while the wrapper tells the operator the pull request changes
+    // no file, which is the other refusal and a different fact.
+    assert!(
+        run.stderr.contains("not a number"),
+        "a count this wrapper cannot read is reported as unreadable, not as a count of zero: {}",
+        run.stderr
+    );
 }
 
 /// A pull request no workflow has claimed stops before the merge.
