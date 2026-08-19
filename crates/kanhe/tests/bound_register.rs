@@ -20,6 +20,7 @@
 
 use kanhe::bound_register_parse as parse;
 use kanhe::region::DO_NOT_EDIT;
+use kanhe::selection::all_of;
 use shengmo::workspace::MARKER;
 
 use parse::{
@@ -492,12 +493,22 @@ fn every_unpinned_bound_names_a_tracked_tracker() {
         let Citation::Unpinned(tracker) = &bound.citation else {
             continue;
         };
-        let named = tracker
-            .split('`')
-            .nth(1)
-            .map(str::to_string)
-            .unwrap_or_default();
-        if named.is_empty() || !tracked.contains(&named) {
+        // **How many names the tracker holds, not its first.** A tracker naming two documents had only the
+        // first checked, so a second, untracked name passed — in the check whose whole subject is that debt
+        // filed where nobody looks is debt nobody owns. Every backticked name is taken and each is held
+        // against the tracked set.
+        let names: Vec<String> = all_of(tracker.split('`').skip(1).step_by(2).map(str::to_string));
+        let untracked: Vec<&String> = names.iter().filter(|n| !tracked.contains(*n)).collect();
+        if names.is_empty() || !untracked.is_empty() {
+            let named = if names.is_empty() {
+                String::new()
+            } else {
+                untracked
+                    .iter()
+                    .map(|n| n.as_str())
+                    .collect::<Vec<_>>()
+                    .join("`, `")
+            };
             offences.push(format!(
                 "  {} ({}:{}) is UNPINNED against `{named}`, which this repository does not track — debt \
                  filed where nobody looks is debt nobody owns",

@@ -691,7 +691,11 @@ consumer for an undemonstrated deduplication.
   **declaration** — the idiom `one_spelling` already uses — requiring a retired name cited in a live document
   to carry a marker. That is a change to how entries are written, not a detector, which is why it is filed
   with its measurement rather than half-built. The probe also needs the `name()` form, which the run above
-  did not match.
+  did not match. A second constraint, measured over the remaining sixty live documents by a later review:
+  **a negative requirement cites the name it forbids** — `adopter-surface`'s *the obsolete public `FindingKey`
+  SHALL be removed* and *SHALL NOT promise a `Dimension`/`ObservedFact` plugin trait* — so a resolver keyed on
+  the bare name refuses exactly the requirements being honoured. Recognize by position and shape, never by the
+  bare token, which is `projection-register`'s own recorded lesson arriving a third time.
 
 - **WATCH: The reason-perimeter rule is prose applied by hand, and four rounds of applying it produced eight
   corrections.** *Class:* WATCH. *Observed pressure:* the falsifier in `constitution()`'s header — *delete
