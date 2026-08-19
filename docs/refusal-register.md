@@ -2,7 +2,7 @@
 
 Every refusal site in this repository, and what holds it. A site is registered by being constructed through `refusal::violation_at` or `refusal::cannot_judge_at`, and **held** by a direction calling `refusal::expect` with the same identity, compared by running rather than by reading a message.
 
-**What this document does not claim.** `refusal::violation` and `refusal::cannot_judge` construct a refusal carrying no site identity — `Site::OutsideRegister` — so this register does not see them: **18** such constructions stand in `crates/kanhe/src`, and none is registered, held, or declared here. Whether one of them should have taken an identity is a judgement this document does not make.
+**What this document does not claim.** `refusal::violation` and `refusal::cannot_judge` construct a refusal carrying no site identity — `Site::OutsideRegister` — so this register does not see them. Its corpus, `crates/kanhe/src`, holds none of them, which is the figure beside *carry no identity at all* above. **40** stand in `crates/kanhe/tests`, which this corpus excludes: none is registered, held, or declared here, and whether any of them should have taken an identity is a judgement this document does not make.
 
 A site that no direction holds is **declared unheld**, with why, an owner and a tracker, in the table this register reads. There is no third state among *registered* sites: one is held or declared, and the register refuses anything else.
 

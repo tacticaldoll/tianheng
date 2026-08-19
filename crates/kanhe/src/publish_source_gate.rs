@@ -429,10 +429,20 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
         "state",
     )?;
     if !dirty.is_empty() {
+        // **The flag changed the stream's shape, so the reader of that stream changes with it.** `-z`
+        // separates records with NUL, and interpolating the raw value ran a dirty worktree's entries
+        // together on one line where `--porcelain=v1` alone printed one each — `trim_end` does not strip
+        // NUL, since U+0000 is not white space, so the trailing separator survived too. The `-z` change was
+        // made for how this diagnostic renders a quoted path, and then left the diagnostic alone.
+        let shown = dirty
+            .split('\0')
+            .filter(|record| !record.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
         return Err(violation_at(
             "publish-source-integrity#worktree-is-not-clean",
             format!(
-                "worktree is not clean, so HEAD does not describe what would be packaged:\n{dirty}"
+                "worktree is not clean, so HEAD does not describe what would be packaged:\n{shown}"
             ),
         ));
     }

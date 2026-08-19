@@ -13,13 +13,19 @@
 //! It is **not** self-governance either. 繩墨 holds the law 天衡 declares over itself and the dogfood gates that
 //! run the delivered product's reactions against this workspace; what lives here judges the repository's
 //! *record*. It **reads** the product's declared surface where a record is held against it — the bound
-//! register, the prelude promise, the observer protocol — and runs no product reaction against this
-//! workspace, which is 繩墨's. Keeping the two apart is the point: a claim about one was read as a claim
-//! about both for as long as they shared a directory.
+//! register, the prelude promise, the observer protocol — and where it runs a product reaction over this
+//! workspace it does so with the **workspace as its subject**, to compare two composition paths for
+//! equality over a non-trivial input. It never runs one to *enforce* the law over this workspace, which is
+//! 繩墨's. The two ask different questions through the same call, and that is the line. Keeping them apart
+//! is the point: a claim about one was read as a claim about both for as long as they shared a directory.
 //!
-//! That sentence said *reaches no product contract at all* until a review read it against the manifest. The
-//! `tianheng` edge and its consumers in `src/` arrived after the paragraph and nothing re-read it — the same
-//! prose-boundary drift the split exists to end, in the paragraph declaring the split.
+//! **That sentence has now been wrong twice, in the paragraph declaring the split.** It said *reaches no
+//! product contract at all* until a review read it against the manifest — the `tianheng` edge and its
+//! consumers in `src/` arrived after the paragraph and nothing re-read it. Its replacement said *runs no
+//! product reaction against this workspace*, and the next review found `observer_protocol` calling
+//! `tianheng::check_constitution` over this workspace's own manifest. Both repairs removed a false absolute
+//! and wrote another without sweeping the crate for it. Nothing resolves a boundary sentence here, which is
+//! why reading is what has caught both.
 //!
 //! Like 繩墨 it ships in no package, and for the same reason.
 //!
