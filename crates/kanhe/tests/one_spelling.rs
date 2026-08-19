@@ -111,54 +111,89 @@ fn package_name(text: &str) -> Option<String> {
     None
 }
 
-/// Every crate a manifest declares a dependency on, however the dependency is spelled.
+/// Every crate a manifest declares a dependency on, across the table forms cargo admits.
 ///
-/// **Not a substring over one layout.** The first draft recognised an edge by
-/// `text.contains("path = \"../{dep}\"")`, which is one spelling of one form: `path="../x"` without the
-/// spaces declares the same edge and was invisible, and `alias = { package = "x", path = "../x" }` — cargo's
-/// rename, which this repository's own release gate already reads for exactly this reason — was invisible
-/// twice over. An edge missed on both sides of a two-way comparison is a corpus that shrinks while agreeing
-/// with itself, which is the shape the comparison exists to refuse.
+/// **Two readers preceded this one and each was a guess at a layout.** The first recognised an edge by
+/// `text.contains("path = \"../{dep}\"")`, so `path="../x"` without the spaces was invisible. The second
+/// read `key = value` lines and looked for the word `package` anywhere in the value — which missed
+/// `[dependencies.alias]`, where the heading names the dependency and no key does, and **deleted** a real
+/// edge from `{ path = "…", features = ["package"] }`, because the word appears as a feature name and the
+/// rename branch then found no `=` after it. An edge lost on both sides of a two-way comparison is a corpus
+/// that shrinks while agreeing with itself.
+///
+/// So the table is read as a table. A heading ending in `dependencies` opens a table whose **keys** are
+/// dependencies; a heading carrying `dependencies.` opens **one** dependency's own table, named by the
+/// heading unless a `package` key inside renames it. A `package` is recognised as a key of the inline table,
+/// never as a substring of its value.
 ///
 /// The corpus is `crate::region`'s TOML region, so a commented-out dependency is not a dependency and a `#`
 /// inside a string is not a comment — the same reader every other manifest question in this repository uses.
-/// A dependency is its **key** unless a `package` field renames it, and both dependency tables are read.
 fn declared_dependencies(text: &str) -> Vec<String> {
+    /// Which table the scan stands in.
+    enum Table {
+        /// Not a dependency table.
+        Other,
+        /// A dependency table: every key is a dependency.
+        Keys,
+        /// One dependency's own table, named by its heading until a `package` key renames it.
+        One(String),
+    }
+
+    /// The value of a `package` **key**, whether the table is inline or its own.
+    ///
+    /// Split on `,` and compared as a key, so `features = ["package"]` is a feature named `package` rather
+    /// than a rename — the shape that deleted an edge from the reader this replaces.
+    fn renamed_to(value: &str) -> Option<String> {
+        value
+            .trim()
+            .trim_start_matches('{')
+            .trim_end_matches('}')
+            .split(',')
+            .filter_map(|field| field.split_once('='))
+            .find(|(key, _)| key.trim() == "package")
+            .map(|(_, name)| name.trim().trim_matches('"').to_string())
+    }
+
     let source = Source::of(text);
     let mut found = Vec::new();
-    let mut inside = false;
+    let mut table = Table::Other;
+    let mut named: Option<String> = None;
+    let close = |table: &Table, named: &mut Option<String>, found: &mut Vec<String>| {
+        if let Table::One(heading) = table {
+            found.push(named.take().unwrap_or_else(|| heading.clone()));
+        }
+        *named = None;
+    };
     for line in source.toml().lines() {
         let trimmed = line.trim();
         if trimmed.starts_with('[') {
-            // `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]` and their
-            // `[target.'cfg(...)'.dependencies]` forms — the tables an edge can be declared in.
-            inside = trimmed.trim_end_matches(']').ends_with("dependencies");
-            continue;
-        }
-        if !inside || trimmed.is_empty() {
+            close(&table, &mut named, &mut found);
+            let heading = trimmed.trim_start_matches('[').trim_end_matches(']');
+            table = if heading.ends_with("dependencies") {
+                Table::Keys
+            } else if let Some((_, one)) = heading.rsplit_once("dependencies.") {
+                Table::One(one.trim_matches('"').to_string())
+            } else {
+                Table::Other
+            };
             continue;
         }
         let Some((key, value)) = trimmed.split_once('=') else {
             continue;
         };
-        // A rename names the real crate in `package`; otherwise the key is the crate.
-        match value.split_once("package") {
-            Some((_, rest)) => {
-                if let Some(renamed) = rest.trim_start().strip_prefix('=') {
-                    found.push(
-                        renamed
-                            .trim_start()
-                            .trim_start_matches('"')
-                            .split('"')
-                            .next()
-                            .unwrap_or_default()
-                            .to_string(),
-                    );
+        match &table {
+            Table::Other => {}
+            Table::Keys => found.push(
+                renamed_to(value).unwrap_or_else(|| key.trim().trim_matches('"').to_string()),
+            ),
+            Table::One(_) => {
+                if key.trim() == "package" {
+                    named = Some(value.trim().trim_matches('"').to_string());
                 }
             }
-            None => found.push(key.trim().trim_matches('"').to_string()),
         }
     }
+    close(&table, &mut named, &mut found);
     found
 }
 
@@ -301,6 +336,26 @@ fn every_spelling_of_a_dependency_edge_is_read() {
         (
             "a target-scoped table is still a dependency table",
             "[target.'cfg(unix)'.dependencies]\nshengmo = { path = \"../shengmo\" }\n",
+            "shengmo",
+        ),
+        (
+            "one dependency's own table, named by its heading",
+            "[dependencies.shengmo]\npath = \"../shengmo\"\n",
+            "shengmo",
+        ),
+        (
+            "one dependency's own table, renamed by a `package` key inside it",
+            "[dependencies.alias]\npackage = \"shengmo\"\npath = \"../shengmo\"\n",
+            "shengmo",
+        ),
+        (
+            "a feature literally named `package` is a feature, not a rename",
+            "[dependencies]\nshengmo = { path = \"../shengmo\", features = [\"package\"] }\n",
+            "shengmo",
+        ),
+        (
+            "and it is a feature even in a list beside others",
+            "[dependencies]\nshengmo = { path = \"../x\", features = [\"a\", \"package\"] }\n",
             "shengmo",
         ),
     ] {

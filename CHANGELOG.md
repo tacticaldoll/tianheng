@@ -4221,6 +4221,34 @@ no adopter runs. They are here rather than under the adopter headings above beca
   `packages` array for every workspace it can load. No published signature, outcome kind, exit class, identity
   shape, or manifest moves, and no recorded baseline is affected.
 
+- **Correction: the verdict-channel repair did not end the exit-class collapse it said it ended.** `01fbf93`
+  records that a `Refused` whose channel write failed "arrived at the wrapper as exit `2` … where the gate had
+  found exit `1`", and that the repair closes that. It does not. The channel is absent either way, so the
+  wrapper reads unjudged either way and exits `2` before and after. What the repair buys is that the gate now
+  **names the channel and the error** instead of failing on the refusal alone — the operator is told which of
+  the two facts they have, and the exit class is not what carries it.
+
+  The direction that shipped with it used a clean subject, so it proved the clean arm and was cited for the
+  refused one. A direction for the refused arm lands here, asserting what actually happens rather than what was
+  claimed, and `repository-checks` gains both scenarios — the gate failing loudly on an unwritable channel, and
+  the explicit statement that a refused verdict's exit class is unchanged by it.
+
+- **A dependency table is read as a table.** The manifest reader that derives the constant-owner corpus read
+  `key = value` lines and looked for the word `package` anywhere in the value. That missed
+  `[dependencies.alias]`, where the heading names the dependency and no key does — and it **deleted** a real
+  edge from `{ path = "…", features = ["package"] }`, because the word appears as a feature name and the rename
+  branch then found no `=` after it. Both returned an empty set, and an edge lost on both sides of a two-way
+  comparison is a corpus that shrinks while agreeing with itself. Nine spellings are now held, including the
+  two that broke it.
+
+- **The test helper for the verdict channel named one path and read another.** Its env and its read-back were
+  two expressions, so a caller supplying a channel had the child write there while the helper read the default
+  scratch file. Every caller passed an **unwritable** path, where empty is also the correct answer — so the
+  mismatch was invisible and the assertion over it passed for the wrong reason. One path, decided once, and a
+  direction with a writable channel is the one input that tells the two apart.
+
+  No published API, outcome, report, exit class, or manifest moves.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

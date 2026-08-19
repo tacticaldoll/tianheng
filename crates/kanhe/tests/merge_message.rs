@@ -541,6 +541,10 @@ fn gate_over(subject: &std::ffi::OsStr) -> (bool, String) {
 
 /// The same, with the channel pointed somewhere of the caller's choosing.
 fn gate_over_channel(subject: &std::ffi::OsStr, channel: Option<&Path>) -> (bool, String) {
+    // **One path, decided once.** The env and the read-back were two expressions: a caller supplying a
+    // channel had the child write there while this read the default scratch file, so the returned class was
+    // always empty. Its only caller passed an unwritable path, where empty is also the right answer — so the
+    // mismatch was invisible, and the direction asserting `reported.is_empty()` passed for the wrong reason.
     let scratch = std::env::temp_dir().join(format!(
         "kanhe-merge-subject-{}-{}",
         std::process::id(),
@@ -550,6 +554,7 @@ fn gate_over_channel(subject: &std::ffi::OsStr, channel: Option<&Path>) -> (bool
     xingbiao::claim_scratch(&scratch)
         .expect("claim a scratch root for the child's verdict channel");
     let verdict = scratch.join("verdict");
+    let channel_path = channel.unwrap_or(verdict.as_path());
 
     let out = std::process::Command::new(
         std::env::current_exe()
@@ -559,10 +564,7 @@ fn gate_over_channel(subject: &std::ffi::OsStr, channel: Option<&Path>) -> (bool
         "--exact",
         "the_squash_message_is_the_pull_request_it_records",
     ])
-    .env(
-        kanhe::verdict_channel::ENV,
-        channel.unwrap_or(verdict.as_path()),
-    )
+    .env(kanhe::verdict_channel::ENV, channel_path)
     .env("TIANHENG_MERGE_SUBJECT", subject)
     .env("TIANHENG_MERGE_TITLE", OK_SUBJECT)
     .env("TIANHENG_MERGE_BODY", OK_BODY)
@@ -570,7 +572,7 @@ fn gate_over_channel(subject: &std::ffi::OsStr, channel: Option<&Path>) -> (bool
     .output()
     .expect("re-run this binary's gate direction in a child process");
 
-    let reported = std::fs::read_to_string(&verdict).unwrap_or_default();
+    let reported = std::fs::read_to_string(channel_path).unwrap_or_default();
     let _ = std::fs::remove_dir_all(&scratch);
     (out.status.success(), reported)
 }
@@ -651,5 +653,63 @@ fn a_verdict_that_cannot_reach_the_channel_is_not_an_absent_one() {
         reported.is_empty(),
         "and nothing may be on the channel, which is the state this refuses to let stand for a verdict: \
          {reported:?}"
+    );
+}
+
+/// A **refused** verdict that cannot reach the channel, and what the wrapper still sees.
+///
+/// **This is the case the repair's own record over-claimed.** It said a `Refused` whose write failed reached
+/// the wrapper as exit `2` where the gate had found exit `1`, and that the repair ended that collapse. It does
+/// not: the channel is absent either way, so the wrapper reads unjudged either way. What changed is that the
+/// gate now names the channel and the error instead of failing on the refusal alone — the operator is told
+/// which of the two facts they have, and the exit class is not what carries it.
+///
+/// Held here because the direction that shipped with the repair used a clean verdict, so it proved the clean
+/// arm and was cited for the refused one.
+#[test]
+fn a_refused_verdict_that_cannot_reach_the_channel_still_reads_as_unjudged() {
+    let unwritable = std::env::temp_dir()
+        .join(format!("kanhe-no-such-dir-refused-{}", std::process::id()))
+        .join("verdict");
+
+    // A subject that is not the title is a violation — the gate's own `Refused`.
+    let (exited_zero, reported) = gate_over_channel(
+        std::ffi::OsStr::new("fix(kanhe): a subject that is not the title"),
+        Some(&unwritable),
+    );
+    assert!(!exited_zero, "a refused verdict must fail the run");
+    assert!(
+        reported.is_empty(),
+        "and the channel carries nothing, which is what a wrapper reads as unjudged — the exit class it \
+         then reports is 2, the same as before this was repaired: {reported:?}"
+    );
+}
+
+/// The channel this helper names is the channel it reads.
+///
+/// **The falsifier for a mismatch its only caller could not see.** With the env and the read-back as two
+/// expressions, a caller supplying a channel had the child write there while the helper read the default
+/// scratch file — and every caller passed an unwritable path, where empty is also the correct answer. A
+/// writable custom channel is the one input that tells the two apart.
+#[test]
+fn the_channel_this_helper_names_is_the_one_it_reads() {
+    let scratch = std::env::temp_dir().join(format!(
+        "kanhe-channel-roundtrip-{}-{}",
+        std::process::id(),
+        SUBJECT_PROBE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_dir_all(&scratch);
+    xingbiao::claim_scratch(&scratch).expect("claim a scratch root for a writable channel");
+    let channel = scratch.join("elsewhere");
+
+    let (exited_zero, reported) =
+        gate_over_channel(std::ffi::OsStr::new(OK_SUBJECT), Some(&channel));
+    let _ = std::fs::remove_dir_all(&scratch);
+
+    assert!(exited_zero, "a clean verdict does not fail the run");
+    assert_eq!(
+        reported,
+        kanhe::verdict_channel::CLEAN,
+        "the class must come back from the channel the caller named, not from the default one"
     );
 }
