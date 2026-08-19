@@ -13,24 +13,57 @@ pub(crate) use xingbiao::{
     member_src_dirs,
 };
 
+/// The membership set, or why it could not be read.
+///
+/// **Three states, because an empty answer had three causes and reported one.** A `packages` array
+/// that is absent or is not an array, a package whose `name` this reader cannot take, and a workspace
+/// that genuinely has no member all produced the same empty `Vec` — and both consumers read empty as
+/// *nothing to govern*. Coverage rendered `total = 0, uncovered = []` as complete coverage over a
+/// membership it never read.
+///
+/// The sibling rule is stated in this crate already, on
+/// [`crate::workspace_member_src_dirs`]: *an unreadable workspace is a constitution error, never a
+/// silent empty set*. This reader is the same question about the same metadata and did not follow it.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Members {
+    /// The workspace's member names, sorted and deduplicated. Empty means the workspace declares none.
+    Read(Vec<String>),
+    /// The membership could not be read, and saying so is not the same fact as reading none.
+    Unreadable(String),
+}
+
 /// The names of the workspace's member crates. Because Modou runs
 /// `cargo metadata --no-deps`, the `packages` array contains exactly the workspace
 /// members (no transitive dependencies), so their names are the membership set used
 /// by the workspace-scoped rule and by coverage. A `path` dependency that points
 /// outside the workspace is therefore absent here, as intended.
-pub(crate) fn workspace_member_names(metadata: &Value) -> Vec<String> {
-    let mut names: Vec<String> = metadata["packages"]
-        .as_array()
-        .map(|packages| {
-            packages
-                .iter()
-                .filter_map(|package| package["name"].as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default();
+///
+/// A package whose `name` is absent or is not a string **refuses** rather than being dropped: a
+/// member this reader could not name is one it did not compare, which is not a member that is absent.
+pub(crate) fn workspace_member_names(metadata: &Value) -> Members {
+    let Some(packages) = metadata["packages"].as_array() else {
+        return Members::Unreadable(
+            "cargo metadata carries no `packages` array, so which crates are workspace members \
+             cannot be decided"
+                .to_string(),
+        );
+    };
+    let mut names: Vec<String> = Vec::with_capacity(packages.len());
+    for package in packages {
+        match package["name"].as_str() {
+            Some(name) => names.push(name.to_string()),
+            None => {
+                return Members::Unreadable(
+                    "cargo metadata carries a package whose `name` is absent or is not a string, \
+                     so the membership set this reader would compare against is incomplete"
+                        .to_string(),
+                );
+            }
+        }
+    }
     names.sort();
     names.dedup();
-    names
+    Members::Read(names)
 }
 
 /// Whether a `cargo metadata` dependency belongs to the selected table. `kind` is
