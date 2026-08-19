@@ -4645,6 +4645,63 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; the repaired line is in a crate that ships
   in no package.
 
+- **The guard written for the nineteen red merges could not reach its own third state.** `require_ci_green`
+  asked two independent filters about the check rollup, and a pull request with **no checks at all** is a
+  value neither can produce: the disagreement filter answers the empty string it gives for *nothing
+  disagreed*, and the unfinished filter answers the zero it gives for *nothing is pending*. Neither refused,
+  and the merge ran — the same false-negative direction the guard was written to close, arriving through the
+  guard. Its own comment asserted the opposite, and the fake answered `''` and `0` for a clean pull request
+  too, so the two cases were byte-identical and no direction could have told them apart.
+
+  All three states are derived from **one** read now, and the fake answers nothing for a mode of its own. Two
+  more defects in that function go with it: a failed read of the pending count was inferred as *no unfinished
+  checks* while every other acquisition in the wrapper routes failure to a cannot-judge, and the disagreement
+  read folded the tool's stderr into the value it then tested for emptiness — so a notice on a **successful**
+  call would have been reported as a check that disagreed, naming one that does not exist. One stderr
+  discipline for the read, and the tool's own cause reaches the operator.
+
+  `repository-checks` gains the one-read requirement, the stderr discipline, and the third scenario.
+
+- **The wrapper chose its exit class at every argument arm, against its own clause.** `repository-checks` says
+  the classification SHALL be chosen in one place per wrapper; `publish.sh` routes every refusal through a
+  helper and `merge-pr.sh` spelled `printf … >&2; exit 2` inline at each arm. It has that helper now, and its
+  arms go through it. The pair is filed with the measurement a review made of it — 65 of `publish.sh`'s 110
+  code lines byte-identical to its sibling, five whole named constructs among them — and with why the
+  extraction waits: the two wrappers stand in front of the two acts that cannot be undone, and a refactor's
+  own risk outweighs the drift it removes until the release is out.
+
+- **A crate's boundary paragraph outlived the edge it denied.** `kanhe`'s module header said what lives there
+  *reaches no product contract at all*, in the same paragraph arguing that keeping product and record apart
+  is the point. Its manifest declares a `tianheng` edge, four modules under `src/` reach `tianheng::`, and a
+  test target composes the observer protocol against it. The paragraph predates the edge and nothing re-read
+  it. It now draws the distinction the manifest comment already drew — `kanhe` **reads** the product's
+  declared surface where a record is held against it, and runs no product reaction against this workspace,
+  which is 繩墨's — and says that it was wrong, since the drift happened in the paragraph declaring the split.
+
+- **A refusal named a fact the rule does not test, and a projection asserted the negation of its own source.**
+  The example-pin diagnostic said a pin *the workspace version does not satisfy* while the rule is string
+  equality against two spellings, so `= "^0.5"` — which `0.5.0` genuinely satisfies — was refused with a
+  sentence sending a maintainer to check semver instead of changing the spelling. It now says what was
+  measured, and the spec scenario's heading matches its own WHEN.
+
+  The refusal register's header claimed every refusal is constructed through the site-carrying forms *since
+  nothing else exists*. `refusal::violation` and `refusal::cannot_judge` do exist — `Site::OutsideRegister`
+  exists for them. Every figure in that document is computed from the register value and this one sentence
+  was a literal, which is why it was the one that was false. It is computed too now, and reads as the floor
+  its sibling projections carry: **18** such constructions stand in the corpus, and the register does not see
+  them.
+
+- **Three git listings were read without `-z`.** `machinery_names` builds the set `adopter_cited_machinery`
+  refuses CHANGELOG citations against, and `core.quotePath` defaults on while `hermetic()` neutralises the
+  config that could turn it off — so a tracked path carrying non-ASCII bytes would enter that set in its
+  escaped spelling, its real name absent, and a record citing it would go unrecognised. Latent: no tracked
+  path needs quoting today. Closed rather than declared because the sibling capability already raises the
+  class to a SHALL, measured on a fixture named `ignored-普通`. The one `status` call without `-z` is closed
+  with them, where the consequence was confined to how a diagnostic renders.
+
+  No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
+  script that ships in no package.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

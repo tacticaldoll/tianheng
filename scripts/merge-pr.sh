@@ -62,6 +62,16 @@ cannot_judge() {
     exit 2
 }
 
+# **The classification is chosen in one place, which its governing clause requires and this wrapper did not
+# do.** Its argument arms each spelled `printf … >&2; exit 2` inline while its sibling routed every one
+# through a helper of exactly this shape. `repository-checks` says the class SHALL be chosen once per
+# wrapper, and two wrappers growing separate idioms for one lifecycle is the drift a review found by reading
+# them side by side.
+refuse() {
+    printf 'merge message: %s\n' "refusing \`$1\`: $2" >&2
+    exit 2
+}
+
 # **The class a wrapper exits is now decided by construction, not by a sweep that must be exhaustive.**
 #
 # Under `set -e` any unguarded failure exits with the TOOL's status, and this repository reserves `1` for a
@@ -179,72 +189,63 @@ while (($#)); do
     # either way. They exist to say WHY, because a refusal an operator cannot act on is a refusal they work
     # around. Each pattern covers gh's glued and equals forms too: `-t`, `-t=x` and `-tx` are one flag.
     --subject=* | --body-file=* | --body | --body=* | -t* | -F* | -b*)
-        printf 'merge message: %s\n' \
-            "refusing \`$1\`: the message this wrapper hands to the gate is the message the merge records, and \
+        refuse "$1" \
+            "the message this wrapper hands to the gate is the message the merge records, and \
 gh takes the last spelling of a repeated flag — so this would have the gate judge one message and the merge \
-write another. Pass the subject as \`--subject <text>\` and the body as \`--body-file <path>\`" >&2
-        exit 2
+write another. Pass the subject as \`--subject <text>\` and the body as \`--body-file <path>\`"
         ;;
     --repo | --repo=* | -R*)
-        printf 'merge message: %s\n' \
-            "refusing \`$1\`: this wrapper reads the title, the pull request number, the head it pins the merge \
+        refuse "$1" \
+            "this wrapper reads the title, the pull request number, the head it pins the merge \
 to and the live commit subjects from the repository it is run in — and refuses to run at all unless its gate \
 comes from that same worktree. A repository selector would move the evidence off the one tree all of it is \
 required to share, so the gate would judge one pull request and the merge record another. Run it from a \
-checkout of the repository whose pull request you are merging" >&2
-        exit 2
+checkout of the repository whose pull request you are merging"
         ;;
     --merge | --rebase | --squash | -m* | -r* | -s*)
-        printf 'merge message: %s\n' \
-            "refusing \`$1\`: a development pull request lands on a release branch as one squash, and this \
-gate judges that squash's message" >&2
-        exit 2
+        refuse "$1" \
+            "a development pull request lands on a release branch as one squash, and this \
+gate judges that squash's message"
         ;;
     --delete-branch | -d)
-        printf 'merge message: %s\n' \
-            "refusing \`$1\`: it is not part of the merge, it is an act **after** it — and the one with an \
+        refuse "$1" \
+            "it is not part of the merge, it is an act **after** it — and the one with an \
 effect no rerun undoes. Deleting a branch another pull request targets auto-closes that pull request, and \
 GitHub refuses to reopen it once the branch is gone and the head has moved; this repository has paid for that \
 already. Every other admitted argument changes whether the merge proceeds; none changes what happens \
 afterwards, which is the criterion this allowlist states. Delete the branch yourself once you can see nothing \
-was stacked on it" >&2
-        exit 2
+was stacked on it"
         ;;
     --auto)
-        printf 'merge message: %s\n' \
-            "refusing \`$1\`: it does not merge now, it merges LATER — gh: \"Automatically merge only after \
+        refuse "$1" \
+            "it does not merge now, it merges LATER — gh: \"Automatically merge only after \
 necessary requirements are met\". The gate judged this body against the pull request's live commit subjects as \
 they are at this moment; a commit pushed before the deferred merge lands changes that set while the captured \
 subject and body do not, so what gets recorded would no longer be what was judged. Merge when the requirements \
-are met, and this wrapper will judge the set that exists then" >&2
-        exit 2
+are met, and this wrapper will judge the set that exists then"
         ;;
     --disable-auto)
-        printf 'merge message: %s\n' \
-            "refusing \`$1\`: it is not a merge — it turns auto-merge off and returns. This wrapper would run \
+        refuse "$1" \
+            "it is not a merge — it turns auto-merge off and returns. This wrapper would run \
 the gate, reach gh, and exit 0 having merged nothing, reporting success for an act that did not happen. Run \
-\`gh pr merge --disable-auto\` directly; there is no record for a gate to hold" >&2
-        exit 2
+\`gh pr merge --disable-auto\` directly; there is no record for a gate to hold"
         ;;
     --match-head-commit | --match-head-commit=*)
-        printf 'merge message: %s\n' \
-            "refusing \`$1\`: this wrapper supplies it itself, pinning the head the gate actually read its \
+        refuse "$1" \
+            "this wrapper supplies it itself, pinning the head the gate actually read its \
 evidence from, and gh takes the last spelling of a repeated flag — so a caller-supplied SHA would replace \
-exactly the link this guard exists to make" >&2
-        exit 2
+exactly the link this guard exists to make"
         ;;
     --author-email | --author-email=* | -A*)
-        printf 'merge message: %s\n' \
-            "refusing \`$1\`: this wrapper holds what the merge is about to record, and the author it records \
-is part of that" >&2
-        exit 2
+        refuse "$1" \
+            "this wrapper holds what the merge is about to record, and the author it records \
+is part of that"
         ;;
     *)
-        printf 'merge message: %s\n' \
-            "refusing \`$1\`: this wrapper forwards only the flags that change whether the merge may proceed, \
+        refuse "$1" \
+            "this wrapper forwards only the flags that change whether the merge may proceed, \
 never what it would record, and this is not one of them. An argument it does not know is refused rather than \
-passed on, because the record it stands in front of cannot be repaired" >&2
-        exit 2
+passed on, because the record it stands in front of cannot be repaired"
         ;;
     esac
 done
@@ -376,26 +377,56 @@ require_a_verdict() {
 # conclusion is a check still running; a missing rollup is a head no workflow has claimed, which is its own
 # cannot-judge rather than a pass — a pull request nothing has checked is not a pull request that checked out.
 require_ci_green() {
+    # **One read, three states derived from it.** The first form asked two independent jq filters about
+    # `statusCheckRollup`, and a pull request with *no checks at all* is a value neither can produce: the
+    # disagreement filter answers the empty string and the unfinished filter answers zero, so nothing refused
+    # and the merge ran. That is the same false-negative direction as the nineteen red merges this guard was
+    # written for, reintroduced by the guard — and unreachable by construction rather than by omission, which
+    # is why the states are now read off one answer instead of asked for separately.
+    #
+    # `\t` between the conclusion and the name because a check name carries spaces (`MSRV (rust-version)`),
+    # and stderr is left on the terminal rather than folded into the value: the first form captured it with
+    # `2>&1` and then tested the value for emptiness, so a notice on a SUCCESSFUL call would have been
+    # reported as `CI has not agreed about this pull request: <notice>` — a refusal naming a check that does
+    # not exist. The pending read handled the same stream the opposite way, discarding it entirely, and that
+    # disagreement between the two is what made the pair worth reading as one.
     local rollup
-    rollup=$(gh pr view "$pr_number" --repo "$repository" \
-        --json statusCheckRollup \
-        -q '[.statusCheckRollup[]? | select(.conclusion != null and .conclusion != "" and .conclusion != "SUCCESS" and .conclusion != "NEUTRAL" and .conclusion != "SKIPPED") | .name] | join(", ")' \
-        2>&1) || cannot_judge \
-        "cannot read what CI said about this pull request ($rollup), which is not the same fact as CI having \
-agreed"
-    if [[ -n $rollup ]]; then
+    rollup=$(gh pr view "$pr_number" --repo "$repository" --json statusCheckRollup \
+        -q '[.statusCheckRollup[]? | ((.conclusion // "") + "\t" + (.name // "?"))] | join("\n")') \
+        || cannot_judge \
+            "cannot read what CI said about this pull request, which is not the same fact as CI having agreed"
+
+    if [[ -z ${rollup//[[:space:]]/} ]]; then
         cannot_judge \
-            "CI has not agreed about this pull request: $rollup. A local Definition of Done is the pre-flight \
-list and CI runs a superset of it, so a green local run is not a green suite — measured, this wrapper merged \
-nineteen consecutive red runs on exactly that difference"
+            "no workflow has claimed this head, so nothing has checked this pull request — which is not the \
+same fact as a suite that agreed"
     fi
-    local pending
-    pending=$(gh pr view "$pr_number" --repo "$repository" \
-        --json statusCheckRollup -q '[.statusCheckRollup[]? | select(.conclusion == null or .conclusion == "")] | length' 2>/dev/null) || pending=0
-    if [[ ${pending:-0} -gt 0 ]]; then
+
+    # Split by parameter expansion rather than by `read`'s field splitting: a tab is IFS whitespace, so
+    # `IFS=$'\t' read -r conclusion name` strips the LEADING tab of an unfinished check's line and reads its
+    # name as the conclusion — measured, the unfinished direction reported a disagreement.
+    local disagreeing="" unfinished="" line conclusion name
+    while IFS= read -r line; do
+        [[ -z ${line//[[:space:]]/} ]] && continue
+        conclusion=${line%%$'\t'*}
+        name=${line#*$'\t'}
+        case $conclusion in
+        SUCCESS | NEUTRAL | SKIPPED) ;;
+        "") unfinished+="${unfinished:+, }${name}" ;;
+        *) disagreeing+="${disagreeing:+, }${name} (${conclusion})" ;;
+        esac
+    done <<<"$rollup"
+
+    if [[ -n $disagreeing ]]; then
         cannot_judge \
-            "$pending check(s) on this pull request have not finished, and a run still in flight is not a run \
-that agreed. Wait for them rather than merging on their silence"
+            "CI has not agreed about this pull request: $disagreeing. A local Definition of Done is the \
+pre-flight list and CI runs a superset of it, so a green local run is not a green suite — measured, this \
+wrapper merged nineteen consecutive red runs on exactly that difference"
+    fi
+    if [[ -n $unfinished ]]; then
+        cannot_judge \
+            "these checks have not finished: $unfinished. A run still in flight is not a run that agreed; \
+wait for it rather than merging on its silence"
     fi
 }
 

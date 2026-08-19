@@ -667,6 +667,29 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **WATCH: The two irreversible-act wrappers are one lifecycle written twice.** *Class:* WATCH. *Observed
+  pressure:* `scripts/merge-pr.sh` and `scripts/publish.sh` share a whole shape — resolve the repository root,
+  parse an argument allowlist, open a verdict channel, run the gate, read the class, clean up, `exec` the
+  tool — and a review measured the overlap at 65 of `publish.sh`'s 110 code lines byte-identical to its
+  sibling, including five whole named constructs (`cannot_judge`, `require_a_verdict`, `require_one_pass`, the
+  ERR trap with its bash-5 measurement paragraph, and the mktemp/EXIT-trap/pre-exec `rm` sequence) plus both
+  class constants and their diagnostics. *Observation source:* that review, plus the drift it already
+  produced and which is repaired with it — `publish.sh` routed every argument refusal through a `refuse()`
+  helper while `merge-pr.sh` spelled `printf … >&2; exit 2` inline at every arm, against
+  `repository-checks`'s own clause that *the classification SHALL be chosen in one place per wrapper*.
+  `merge-pr.sh` now has that helper. *Current reaction or bound:* `gate_exit_classes` holds the class
+  constants and the presence of `require_one_pass` across both wrappers, with set equality in both
+  directions — so the **identities** cannot drift; nothing holds the bodies or the reasoning, which is what
+  did. *Risk:* the cost is recorded verbatim by `hermetic_git.rs`'s own header for its own extraction — *the
+  undocumented copy was then given a doc written without reading the other, and that doc overclaimed*.
+  *Promotion trigger:* a second divergence between the two wrappers' shared constructs, or a defect found in
+  one copy and not the other. *Version class:* patch; both scripts reach no tarball. *Authority:*
+  `repository-checks`. *Shape:* one sourced library under `scripts/` holding the shared constructs and the
+  verdict-file lifecycle, with `gate_exit_classes` widened to assert **one** definition site rather than two
+  agreeing copies. Filed rather than done because the extraction lands at a release cut and the two
+  wrappers stand in front of the two acts that cannot be undone — the one place where a refactor's own risk
+  outweighs the drift it removes until the release is out.
+
 - **WATCH: A backticked identifier in a live document is resolved by nothing.** *Class:* WATCH. *Observed
   pressure:* `reference_integrity` resolves paths and `bound_register` resolves pinning-test names; a bare
   identifier cited in prose is resolved by no reaction. Two survived a full pre-release review and four review

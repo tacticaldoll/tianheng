@@ -155,16 +155,16 @@ elif [[ $1 == pr && $2 == view && $* == *"--json number"* ]]; then
         printf '%s\n' '42'
     fi
 elif [[ $1 == pr && $2 == view && $* == *"--json statusCheckRollup"* ]]; then
-    # What CI said about this pull request. The wrapper asks twice with different filters — which checks
-    # disagree, and how many have not answered — so this mode answers by which query it was handed rather
-    # than by call order, which would tie the fake to the wrapper's statement sequence.
-    if [[ $* == *"conclusion == null"* ]]; then
-        if [[ $FAKE_GH_MODE == ci-pending ]]; then printf '%s\n' '1'; else printf '%s\n' '0'; fi
-    elif [[ $FAKE_GH_MODE == ci-red ]]; then
-        printf '%s\n' 'MSRV (rust-version)'
-    else
-        printf '%s\n' ''
-    fi
+    # What CI said, as the wrapper now reads it: one answer, `<conclusion>\t<name>` per check. A mode that
+    # answers NOTHING is distinct from the clean one, because a pull request with no checks and a pull
+    # request whose checks all passed were byte-identical to the first form and no direction could tell
+    # them apart — which is exactly how its third state came to be unreachable.
+    case $FAKE_GH_MODE in
+    ci-red) printf '%b\n' 'FAILURE\tMSRV (rust-version)' 'SUCCESS\tDefinition of Done' ;;
+    ci-pending) printf '%b\n' '\tMSRV (rust-version)' 'SUCCESS\tDefinition of Done' ;;
+    ci-unclaimed) : ;;
+    *) printf '%b\n' 'SUCCESS\tDefinition of Done' 'SKIPPED\tExamples dogfood' ;;
+    esac
 elif [[ $1 == pr && $2 == view && $* == *"--json headRefOid"* ]]; then
     if [[ $FAKE_GH_MODE == unreadable-head ]]; then
         printf '%s\n' ''
@@ -180,7 +180,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-pending)
+    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-pending | ci-unclaimed)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -1072,6 +1072,38 @@ fn a_pull_request_whose_checks_disagree_stops_before_the_merge() {
     assert!(
         run.stderr.contains("MSRV (rust-version)"),
         "the operator is told WHICH check disagreed, not merely that one did: {}",
+        run.stderr
+    );
+}
+
+/// A pull request no workflow has claimed stops before the merge.
+///
+/// **The third state, which the first form could not reach.** It asked two independent filters about the
+/// rollup, and a pull request with no checks at all is a value neither can produce — the disagreement filter
+/// answers the empty string and the unfinished filter answers zero, so nothing refused and the merge ran.
+/// The fake answers nothing here rather than reusing `clean`, because clean and no-checks were byte-identical
+/// to that form and no direction could have told them apart.
+#[test]
+fn a_pull_request_no_workflow_has_claimed_stops_before_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "ci-unclaimed", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a pull request nothing has checked is not one that checked out: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.contains("pr merge"),
+        "and it must stop before the merge: {}",
+        run.gh_log
+    );
+    assert!(
+        run.stderr.contains("no workflow has claimed"),
+        "the operator is told this head was never checked, not that a check disagreed: {}",
         run.stderr
     );
 }

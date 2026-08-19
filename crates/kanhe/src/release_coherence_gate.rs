@@ -1145,9 +1145,14 @@ fn require_example_pins(
                 };
                 return Err(violation_at(
                     "release-coherence#example-pin-disagrees",
+                    // **What was measured, not what a reader might infer.** The rule is string equality
+                    // against the two spellings the release surfaces are held to; it does not evaluate a
+                    // semver requirement. So `= "^0.5"`, which `0.5.0` genuinely satisfies, is refused —
+                    // correctly by the rule and falsely by a sentence saying it is not satisfied, which
+                    // sends a maintainer to check semver instead of changing the spelling.
                     format!(
-                        "example {name} requires {named} = \"{pin}\", which the workspace version {version} \
-                     does not satisfy"
+                        "example {name} requires {named} = \"{pin}\"; this check admits only \"{version}\" \
+                     or \"{minor}\", the two spellings the release surfaces are held to"
                     ),
                 ));
             }
@@ -1450,13 +1455,19 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
             ));
         };
         let unpublished = package["publish"].as_array().is_some_and(|r| r.is_empty());
-        let listing = git(repo, &["ls-files", directory]).map_err(|err| {
+        // **`-z`, because git quotes a path it cannot write plainly.** `core.quotePath` defaults on and
+        // `hermetic()` neutralises the config that could turn it off, so a tracked path carrying non-ASCII
+        // bytes enters this set in its ESCAPED spelling and its real name is absent — after which
+        // `adopter_cited_machinery` cannot recognise a record citing that file, a false negative in the
+        // release gate. Latent today (no tracked path needs quoting) and the sibling capability already
+        // raises the class to a SHALL, which is why it is closed rather than declared.
+        let listing = git(repo, &["ls-files", "-z", directory]).map_err(|err| {
             cannot_judge_at(
                 "release-coherence#directory-listing-unreadable",
                 format!("could not enumerate {directory}: {err}"),
             )
         })?;
-        for path in listing.lines().filter(|l| !l.is_empty()) {
+        for path in listing.split('\0').filter(|l| !l.is_empty()) {
             enumerated += 1;
             if unpublished {
                 machinery.push(path.to_string());
@@ -1486,7 +1497,7 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
             ),
         ));
     }
-    let scripts = git(repo, &["ls-files", "scripts/"]).map_err(|err| {
+    let scripts = git(repo, &["ls-files", "-z", "scripts/"]).map_err(|err| {
         cannot_judge_at(
             "release-coherence#scripts-not-enumerable",
             format!("could not enumerate scripts/: {err}"),
@@ -1494,7 +1505,7 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
     })?;
     machinery.extend(
         scripts
-            .lines()
+            .split('\0')
             .filter(|l| !l.is_empty())
             .map(str::to_string),
     );
