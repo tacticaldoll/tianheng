@@ -12,8 +12,14 @@
 //!
 //! It is **not** self-governance either. 繩墨 holds the law 天衡 declares over itself and the dogfood gates that
 //! run the delivered product's reactions against this workspace; what lives here judges the repository's
-//! *record*, and reaches no product contract at all. Keeping the two apart is the point: a claim
-//! about one was read as a claim about both for as long as they shared a directory.
+//! *record*. It **reads** the product's declared surface where a record is held against it — the bound
+//! register, the prelude promise, the observer protocol — and runs no product reaction against this
+//! workspace, which is 繩墨's. Keeping the two apart is the point: a claim about one was read as a claim
+//! about both for as long as they shared a directory.
+//!
+//! That sentence said *reaches no product contract at all* until a review read it against the manifest. The
+//! `tianheng` edge and its consumers in `src/` arrived after the paragraph and nothing re-read it — the same
+//! prose-boundary drift the split exists to end, in the paragraph declaring the split.
 //!
 //! Like 繩墨 it ships in no package, and for the same reason.
 //!

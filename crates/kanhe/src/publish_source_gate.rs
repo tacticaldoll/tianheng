@@ -421,7 +421,11 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
     // HEAD describes what would be packaged only if nothing is uncommitted or untracked.
     let dirty = read_worktree(
         repo,
-        &["status", "--porcelain=v1", "--untracked-files=all"],
+        // `-z` for the same reason every other listing here carries it: the spec's SHALL enumerates
+        // `status` beside `ls-files` and `check-ignore`, and this was the one call without it. Only
+        // emptiness is tested, so the consequence was confined to how the diagnostic renders a quoted
+        // path — a narrower cost than the sibling's, and the same rule.
+        &["status", "--porcelain=v1", "--untracked-files=all", "-z"],
         "state",
     )?;
     if !dirty.is_empty() {

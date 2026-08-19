@@ -165,7 +165,7 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   lock surface names the new version
 - **THEN** release coherence passes as release-ready
 
-#### Scenario: An example requires a family crate the workspace version does not satisfy
+#### Scenario: An example pins a family crate at neither the workspace version nor its minor series
 
 - **WHEN** a manifest under `examples/` requires a family crate at a version the workspace version neither
   equals nor is the minor series of

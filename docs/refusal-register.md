@@ -1,8 +1,10 @@
 # Refusal register
 
-Every refusal site in this repository, and what holds it. A site is registered by being constructed through `refusal::violation_at` or `refusal::cannot_judge_at` — which every construction is, since nothing else exists — and **held** by a direction calling `refusal::expect` with the same identity, compared by running rather than by reading a message.
+Every refusal site in this repository, and what holds it. A site is registered by being constructed through `refusal::violation_at` or `refusal::cannot_judge_at`, and **held** by a direction calling `refusal::expect` with the same identity, compared by running rather than by reading a message.
 
-A site that no direction holds is **declared unheld**, with why, an owner and a tracker, in the table this register reads. There is no third state: a site is held or declared, and the register refuses anything else.
+**What this document does not claim.** `refusal::violation` and `refusal::cannot_judge` construct a refusal carrying no site identity — `Site::OutsideRegister` — so this register does not see them: **18** such constructions stand in `crates/kanhe/src`, and none is registered, held, or declared here. Whether one of them should have taken an identity is a judgement this document does not make.
+
+A site that no direction holds is **declared unheld**, with why, an owner and a tracker, in the table this register reads. There is no third state among *registered* sites: one is held or declared, and the register refuses anything else.
 
 Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.rs`. **Do not edit by hand** — regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_register`. A stale projection fails that gate.
 

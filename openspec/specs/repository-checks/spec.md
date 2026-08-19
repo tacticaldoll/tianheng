@@ -1421,6 +1421,14 @@ reach the tool unless every finished check agrees. It SHALL separate three state
 check that has not finished, and a head no workflow has claimed — an unfinished run is not a failed one, and
 merging on *not success* would refuse a pull request nobody has answered yet.
 
+All three SHALL be **derived from one read** of the rollup. Asking a separate filter per state makes the
+third unreachable by construction: a pull request with no checks at all produces the empty answer the
+disagreement filter gives for *nothing disagreed* and the zero the unfinished filter gives for *nothing is
+pending*, so neither refuses and the merge runs — the same false-negative direction this requirement exists
+to close, arriving through the guard that closes it. The read SHALL leave the tool's stderr on the terminal
+rather than folding it into the value the states are derived from, since a notice on a **successful** call
+would otherwise be reported as a check that disagreed.
+
 The refusal SHALL name **which** check disagreed. Both refusals are cannot-judge, exit `2`: a suite this
 wrapper could not get agreement from is not a gate that ran and refused.
 
@@ -1440,6 +1448,13 @@ carry because it installs a toolchain and rebuilds the workspace.
 - **WHEN** a pull request carries a check with no conclusion yet
 - **THEN** the wrapper refuses as a cannot-judge saying the run is unfinished rather than that it disagreed
 - **PINNED-BY** `a_pull_request_whose_checks_have_not_finished_stops_before_the_merge`
+
+#### Scenario: No workflow has claimed the head
+
+- **WHEN** a pull request carries no checks at all
+- **THEN** the wrapper refuses as a cannot-judge saying nothing has checked it, because a pull request nothing
+  has checked is not one that checked out
+- **PINNED-BY** `a_pull_request_no_workflow_has_claimed_stops_before_the_merge`
 
 #### Scenario: The check rollup cannot be read
 

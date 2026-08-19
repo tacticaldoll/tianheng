@@ -609,14 +609,32 @@ fn the_register_projection_is_fresh() {
     let register = read(&root);
     let remaining: usize = register.unregistered.values().sum();
     let declared = kanhe::refusal_bounds::unheld();
+    // **The floor is computed, like every figure beside it.** The header used to say every construction goes
+    // through the `_at` forms "since nothing else exists". `refusal::violation` and `refusal::cannot_judge`
+    // do exist — they carry `Site::OutsideRegister` precisely because they take no identity — so the one
+    // hand-typed sentence in a document whose every number is produced was the one that was false.
+    let outside: usize = tracked(&root, "crates/kanhe/src")
+        .iter()
+        .filter(|path| !path.ends_with("refusal.rs"))
+        .map(|path| {
+            let text = std::fs::read_to_string(path)
+                .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
+            calls(&text, "violation") + calls(&text, "cannot_judge")
+        })
+        .sum();
     let mut out = format!(
         "# Refusal register\n\nEvery refusal site in this repository, and what holds it. A site is \
-         registered by being constructed through `refusal::violation_at` or `refusal::cannot_judge_at` — \
-         which every construction is, since nothing else exists — and **held** by a direction calling \
-         `refusal::expect` with the same identity, compared by running rather than by reading a message.\n\n\
+         registered by being constructed through `refusal::violation_at` or `refusal::cannot_judge_at`, and \
+         **held** by a direction calling `refusal::expect` with the same identity, compared by running \
+         rather than by reading a message.\n\n\
+         **What this document does not claim.** `refusal::violation` and `refusal::cannot_judge` construct a \
+         refusal carrying no site identity — `Site::OutsideRegister` — so this register does not see them: \
+         **{outside}** such constructions stand in `crates/kanhe/src`, and none is registered, held, or \
+         declared here. Whether one of them should have taken an identity is a judgement this document does \
+         not make.\n\n\
          A site that no direction holds is **declared unheld**, with why, an owner and a tracker, in the \
-         table this register reads. There is no third state: a site is held or declared, and the register \
-         refuses anything else.\n\nGenerated from `crates/kanhe/src/**.rs` by \
+         table this register reads. There is no third state among *registered* sites: one is held or \
+         declared, and the register refuses anything else.\n\nGenerated from `crates/kanhe/src/**.rs` by \
          `crates/kanhe/tests/refusal_register.rs`. **{DO_NOT_EDIT}** — regenerate with `BLESS=1 \
          {MARKER}=1 cargo test -p kanhe --test refusal_register`. A stale projection fails \
          that gate.\n\n"
