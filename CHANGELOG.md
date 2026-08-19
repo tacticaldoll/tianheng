@@ -4129,6 +4129,33 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves.
 
+- **Pull-request tokens leave the tree, and the relative anchor's sweep reaches the corpus it had missed.**
+  Five `PR #N` references sat in test headers where the provenance led and the observation followed — *closed
+  by PR #159: `is_self_dependency` matched by NAME ALONE, so a package depending on a different,
+  externally-sourced package sharing its name was wrongly swallowed*. The lead clause names when; the rest is
+  the falsifier, and only the lead is gone. One kept a sibling suite's path, which is a cross-reference rather
+  than a serial and stays.
+
+  And two `this window` references in `openspec/specs/` now name the window. The sweep that removed them from
+  `crates/` stated the corpus it swept — the rule this window added — so the claim was not false, but the
+  class was wider than the sweep. It is zero across the whole tree now.
+
+  **The review-round token is measured and left, which is the part worth recording.** A sweep proposal put it
+  at 88 sites; split by shape, **7 are parenthetical provenance and 68 are grammatically embedded** — *round 9
+  closed*, *the round-12 fix that closed the identical gap* — where the round is the sentence's subject.
+  Removing those is 68 sentences rewritten by hand, each while keeping the observation source it carries,
+  which is the per-site prose judgement this repository has designed, measured three times and rejected. The
+  split is in `AGENTS.md` so the next proposal starts from it rather than from the count.
+
+  **Two categories of that proposal are declined against rules this window landed**, and recorded here rather
+  than re-adjudicated later. Removing prose by verb tense contradicts the criterion — the test is whether a
+  passage carries an observation source or a falsifier, and the proposal's own largest target,
+  `hunyi::exposure`'s branch-index derivation, is a worked counterexample carrying both. And removing version
+  literals contradicts the versioning rule, which admits them for an immutable historical fact — one of the
+  named targets is a `PROJECT.md` Decision's own subject.
+
+  No published API, outcome, report, exit class, or manifest moves.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

@@ -80,7 +80,7 @@ which lines to read, so a format could sit in one and not the other — and shel
 the marker rule had known `#` all along. The files that left unread are the sanctioned merge and publish
 wrappers, which cite the Rust gate they sequence *by path*, where a renamed test target is exactly what rots a
 citation; YAML, where this repository's own gate list is duplicated, was unread the same way. Adding one
-extension per discovery is the denylist shape this window replaced twice elsewhere. A tracked script's shebang
+extension per discovery is the denylist shape the 0.5.0 window replaced twice elsewhere. A tracked script's shebang
 SHALL NOT be a reference: it names an absolute path outside every prefix this gate recognizes. Before judging references it SHALL require the repository's
 governance-document surface, at least one tracked workspace member under `crates/`, and at least one inspected
 source; absence of any prerequisite SHALL fail loudly rather than read as clean.
