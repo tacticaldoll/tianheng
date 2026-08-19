@@ -972,6 +972,53 @@ them.
 
   No published API, outcome, report, exit class, or manifest moves; `kanhe` ships in no package.
 
+- **The amendment check's identity omitted the field the cheapest relaxation moves.** It carried each
+  boundary's heading and rule. Lowering a boundary from `enforce` to `warn` changes neither — and it turns a
+  run-failing violation into an advisory, which is the most dangerous amendment there is per character moved.
+  Run against that form with 璇璣 lowered to `warn` and the projection re-blessed, **all nine self-governance
+  assertions and the amendment check passed**. The check was one window old and had already been given a
+  falsifier it could not survive.
+
+  The identity now carries the boundary's **heading, reason, rule and severity**. `reason` for the same defect
+  from the other side: this window moved three of them, and a check blind to reasons would report an amendment
+  named while the sentence a reader takes the law's meaning from is exactly what changed. Both are run:
+  lowering 璇璣 to `warn` now fails naming `enforce` against `warn`, and rewriting 星表's reason fails naming
+  `metadata substrate` against `metadata layer`. A repeat on either side is refused before the comparison,
+  because the earlier form built a set and a set folds a duplicate away.
+
+  **And its claim was stronger than what it observes.** `PROJECT.md` said editing the declaration is what
+  accepting an amendment consists of. It is not: one actor can change the law, re-bless the projection and
+  edit the declaration in a single commit and pass everything, which shows the amendment was **named**. What
+  the check establishes is that a structural delta produces a second explicit artifact in a steward-routed
+  file. Acceptance rests on a steward decision, and a single-steward repository has no mechanical second party
+  to carry it, since a pull request's author cannot approve their own. That is recorded as a judgement
+  boundary rather than renamed — a same-author constant edit called acceptance is the overclaim the reason
+  rule refuses.
+
+- **Two governance rules were measured as un-reacted in one window and only one was answered.**
+  `.github/CODEOWNERS`'s *a merge cannot relax the law without a human accepting it* was measured against
+  `main`'s protection and given the reaction it lacked. The reason-perimeter falsifier is in the same state
+  and was not: applied by hand across four rounds it produced **eight** corrections and moved no allowlist,
+  which is `a repair loop is a diagnosis, not a schedule`'s third class dominating, whose stated remedy is to
+  change the shape rather than add a round. The two were noticed as one only when a review put them side by
+  side, so `AGENTS.md` gains the binding rule: a governance rule measured as un-reacted is given a reaction or
+  filed, in the same change, and the change says which.
+
+  Filed, because the one decidable subset was measured and refuses. *A reason naming a family crate that is
+  neither its own target nor in its own allowlist* was implemented against the current projection before being
+  adopted: **8 of 13 boundaries fire, all 8 false positives, 0 true positives.** Every hit is a legitimate
+  prohibition the allowlist entails — 繩墨's and 勘合's *no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist*, 圭表's
+  *must not depend on the 天衡 shell* — or a module boundary naming the crate it must resolve through. It also
+  reaches only one of the three shapes the fourth pass moved: 天衡's *remains the outward composition layer*
+  names no crate, and 渾儀's *quarantined* names `syn`, which **is** in its allowlist. What would end the class
+  is constructing the entailed half of a reason instead of writing it, which is a design change rather than a
+  detector — filed with that shape, its cost, and its promotion trigger.
+
+  `repository-checks` gains the widened identity, the duplicate refusal, the naming-not-acceptance limit, and
+  three scenarios.
+
+  No published API, outcome, report, exit class, or manifest moves; `kanhe` ships in no package.
+
 - **A reason about what ANOTHER crate does was the shape the second perimeter pass missed.** The falsifier
   the law's own header states took **three** passes to apply to eight boundaries, and each pass missed a
   different shape. The first read *entailed by the allowlist* generously; the second caught phrases about

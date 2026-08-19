@@ -230,12 +230,21 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   for a single-steward repository the rule cannot fire at all. That is a prose prescription with no backstop
   standing on the law itself, which is the shape this project's reason rule refuses everywhere else.
 
-  The law's boundary set — each heading with its rule, so a **widened** allowlist moves it and not only an
-  added or removed boundary — is declared in `crates/kanhe/tests/self_law_amendment.rs` and held against the
-  projection in both directions. Editing that declaration is what accepting an amendment now consists of, and
-  it is a file CODEOWNERS already routes to the steward. Measured before building it: with 璇璣's allowlist
-  quietly widened to permit 圭表 and the projection re-blessed, all nine existing self-governance assertions
-  pass and only this one fails. *(Decided 2026-08-19.)*
+  Every boundary the law declares — its heading, reason, rule and severity — is declared in
+  `crates/kanhe/tests/self_law_amendment.rs` and held against the projection in both directions. A boundary
+  added or removed, an allowlist widened, a severity lowered from `enforce` to `warn`, or a reason rewritten
+  all move it. Measured before building it: with 璇璣's allowlist quietly widened to permit 圭表 and the
+  projection re-blessed, all nine existing self-governance assertions pass and only this one fails.
+
+  **What it establishes is naming, not acceptance, and the difference is recorded rather than blurred.** It
+  forces a structural change to the law to produce a *second explicit artifact*, in a file CODEOWNERS routes
+  to the steward, so a delta cannot arrive inside a regenerated projection unremarked. One actor can still
+  change the law, re-bless the projection and edit the declaration in a single commit, and everything passes:
+  that shows the amendment was named, not that anyone accepted it. Acceptance rests on a steward decision,
+  and a single-steward repository has no mechanical second party to carry it — a pull request's author cannot
+  approve their own. That is a **judgement boundary**, recorded here as one; renaming a same-author constant
+  edit as acceptance would be the overclaim this project's own reason rule refuses.
+  *(Decided 2026-08-19; the naming/acceptance distinction stated 2026-08-19 after review.)*
 
 - **Reborn from modou as a crate family.** modou was taken as frozen/complete at its own
   `0.1.1` when Tianheng was reborn; Tianheng started fresh (clean git history, clean SemVer

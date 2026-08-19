@@ -1345,8 +1345,15 @@ and the parse failure passed over: 389 tracked files, **zero** inspected, and th
 
 The set of boundaries `shengmo::law::constitution()` declares SHALL be declared in this repository as text,
 and held against the projection `AGENTS.self-law.md` renders **in both directions**. The declared identity
-SHALL carry each boundary's rule as well as its heading, so that widening an allowlist moves the set exactly
-as adding or removing a boundary does.
+SHALL carry each boundary's **heading, reason, rule and severity**, so that widening an allowlist, lowering a
+severity from `enforce` to `warn`, or rewriting a reason each move the set exactly as adding or removing a
+boundary does. A repeated boundary on either side SHALL be refused before the comparison, because a set built
+over one would fold it away and hold over a law neither side fully saw.
+
+What this requirement establishes is that an amendment is **named**, not that it was accepted. One actor can
+change the law, regenerate the projection and edit the declaration in a single change and satisfy it. Human
+acceptance rests on a steward decision, which a single-steward repository has no mechanical second party to
+carry; that limit SHALL be recorded as a judgement boundary rather than described as satisfied by this check.
 
 The subject SHALL be the projection's tracked text rather than `constitution()` itself: a check calling the
 law it is judging compares the law against itself and cannot fail.
@@ -1363,6 +1370,26 @@ law itself did not change, and nothing refused them.
 - **WHEN** `constitution()` gains a boundary and the projection is regenerated
 - **THEN** the check fails naming the projected boundary the declaration does not carry, because an amendment
   nobody named is the one this requirement exists to refuse
+- **PINNED-BY** `the_law_declares_no_boundary_this_repository_has_not_named`
+
+#### Scenario: A severity is lowered from enforce to warn
+
+- **WHEN** a boundary keeps its heading, reason and rule while its severity changes
+- **THEN** the check fails naming that boundary, because turning a run-failing violation into an advisory is
+  the relaxation that moves the fewest characters
+- **PINNED-BY** `the_law_declares_no_boundary_this_repository_has_not_named`
+
+#### Scenario: A boundary's reason is rewritten
+
+- **WHEN** a boundary keeps its target, rule and severity while the sentence a reader takes its meaning from
+  changes
+- **THEN** the check fails naming that boundary
+- **PINNED-BY** `the_law_declares_no_boundary_this_repository_has_not_named`
+
+#### Scenario: The same boundary appears twice
+
+- **WHEN** either the declaration or the projection carries one boundary twice
+- **THEN** the check fails on the repeat before comparing, rather than folding it away
 - **PINNED-BY** `the_law_declares_no_boundary_this_repository_has_not_named`
 
 #### Scenario: An allowlist is widened and the projection re-blessed
