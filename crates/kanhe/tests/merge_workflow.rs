@@ -154,6 +154,15 @@ elif [[ $1 == pr && $2 == view && $* == *"--json number"* ]]; then
     else
         printf '%s\n' '42'
     fi
+elif [[ $1 == pr && $2 == view && $* == *"--json changedFiles"* ]]; then
+    # How many files the pull request changes. `empty-diff` is its own mode because an empty diff and a
+    # clean one are the same to every other guard here — which is how a squash carrying no content was
+    # merged with its message intact.
+    case $FAKE_GH_MODE in
+    empty-diff) printf '%s\n' '0' ;;
+    unreadable-count) printf '%s\n' 'not-a-number' ;;
+    *) printf '%s\n' '5' ;;
+    esac
 elif [[ $1 == pr && $2 == view && $* == *"--json statusCheckRollup"* ]]; then
     # What CI said, as the wrapper now reads it: one answer, `<conclusion>\t<name>` per check. A mode that
     # answers NOTHING is distinct from the clean one, because a pull request with no checks and a pull
@@ -180,7 +189,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-pending | ci-unclaimed)
+    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -1073,6 +1082,58 @@ fn a_pull_request_whose_checks_disagree_stops_before_the_merge() {
         run.stderr.contains("MSRV (rust-version)"),
         "the operator is told WHICH check disagreed, not merely that one did: {}",
         run.stderr
+    );
+}
+
+/// A pull request that changes no file stops before the merge.
+///
+/// **This wrapper merged one.** The content was committed onto the release branch itself while the branch
+/// the pull request named still pointed at an already-merged commit, so its diff was empty and every guard
+/// was satisfied: the live commit set was non-empty, CI was green because nothing had changed, and the
+/// squash recorded a message asserting seven repairs across five files while carrying none of them.
+#[test]
+fn a_pull_request_that_changes_no_file_stops_before_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "empty-diff", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a record about work that is not in the pull request is a cannot-judge: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.contains("pr merge"),
+        "and it must stop before the merge, which is the act that cannot be repaired: {}",
+        run.gh_log
+    );
+    assert!(
+        run.stderr.contains("changes no file"),
+        "the operator is told what is missing and where to look: {}",
+        run.stderr
+    );
+}
+
+/// A changed-file count this wrapper cannot read is not a count of zero, and not a count of some either.
+#[test]
+fn an_unreadable_changed_file_count_stops_before_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "unreadable-count", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "an unreadable count is a cannot-judge: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.contains("pr merge"),
+        "and it must stop before the merge: {}",
+        run.gh_log
     );
 }
 

@@ -49,7 +49,7 @@ fn every_verdict() -> Vec<Verdict> {
 /// the verdict *reached the channel first*, which is the ordering, and named a fact no assertion in this
 /// body reaches.
 #[test]
-fn every_refusing_verdict_reaches_the_channel() {
+fn every_refusing_verdict_carries_a_class_to_report() {
     for verdict in every_verdict() {
         assert!(
             !refuses(&verdict) || reached(&verdict).is_some(),

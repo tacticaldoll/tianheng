@@ -4737,11 +4737,14 @@ no adopter runs. They are here rather than under the adopter headings above beca
   quoted path fails the prefix strip and that whole capability's declared bounds are never registered — the
   same direction, one layer worse. Closed with the others.
 
-  **Declined, with the measurement.** The review also asked for two rows to leave the Definition of Done's
-  list, on the grounds that the workspace test run already covers them. It does — and CI names both as
-  separate steps, and that list's job is to mirror what CI runs, which `dod_coherence` holds. Removing them
-  would break that check. The list's own prose about a suite needing *no line of its own* is about suites CI
-  does not name separately.
+  **Declined — and the reason first recorded for declining it was itself false.** The review asked for two
+  rows to leave the Definition of Done's list because the workspace test run already covers them. It does,
+  and the rows still belong: CI names both as their own steps while the two suites the list's prose says need
+  *no line of its own* are named nowhere in CI, so the list is doing exactly what it says. What was recorded
+  instead was that `dod_coherence` would refuse the removal. It would not — that check holds one direction,
+  every listed command appears in CI, and a shorter list cannot fail it. The mirror runs one way and nothing
+  says so, which is why `cargo test -p louke` — the one named CI step the workspace run does not cover — is
+  in the list because someone remembered.
 
   **Corrected with them:** a direction titled for an ordering asserted only that two pure functions agree.
   The ordering — that the channel is written before the panic — is held by construction, and the title said
@@ -4749,6 +4752,62 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
+
+- **A record reached the release branch and the work did not.** `4cd8bee` asserts seven repairs across five
+  files and its tree is byte-identical to its parent's. The content had been committed onto the release
+  branch itself while the branch the pull request named still pointed at an already-merged commit, so the
+  pull request's diff was empty — and every guard the merge wrapper has was satisfied: the live commit set
+  was non-empty, the message gate judged it against that set, CI was green because nothing had changed, and
+  the head pin named a real commit. The only copy of the work was then discarded by a reset to the remote,
+  and it survived as a dangling object.
+
+  It is recovered whole and lands here, so the seven claims are true of the tree. `4cd8bee` is left standing:
+  it is on the remote and a merged squash is a record, which is the same reasoning this window has applied
+  four times — the correction lives beside it rather than in it.
+
+  **And the wrapper now reads what it had been inferring.** A pull request's changed-file count is the one
+  question it did not ask, and nothing anywhere holds a merged squash's tree against its parent. 勘合's own
+  name is a document made in two halves proven genuine by fitting them together; this is the case where one
+  half is empty. A count of zero refuses, and a count it cannot read refuses separately — never as a count of
+  some. `repository-checks` gains the requirement with both scenarios.
+
+  The message being curated apart from the tree is deliberate and stays: it is what lets a squash message be
+  the record. The pull request's diff is the only thing tying the two together, and now something reads it.
+
+- **The region defect closed; the figure was wrong three times, so it is gone.** `calls` takes a corpus by
+  type now and the compiler holds it — that repair was right. What it did not reach is one layer inside the
+  guarantee: the reader's own doc claimed it removed *comments, string literals and imports* and its body
+  removed two of the three, which `region`'s header already declares as a residue of the Rust rule. Inert
+  while the corpus was `crates/kanhe/src`, where the executed count is zero; load-bearing the moment the
+  corpus moved to the test targets, in the same commit that moved it.
+
+  Implementing the third removal moves the figure and does not settle it: three readers have now produced
+  three answers and no two agree. Calibration says the implementation is right where it can be checked —
+  over a module whose real constructions are countable by hand it answers exactly that number, and a new
+  direction holds six shapes (a call, a literal, a raw literal, adjacent literals in one expression, an
+  import, a comment). It still disagrees with an independent reading over the whole corpus, and the
+  disagreement is concentrated in the register's own module, whose source sits in the corpus it reads.
+
+  So no count is given. That is the disposition this window has reached four times and it applies to its own
+  instrument: a figure produced by a reader two independent measurements disagree about is a census this
+  register cannot produce, and the floor says so rather than rendering a third guess. What the floor asserts
+  is unchanged and is what matters — those constructions carry no site identity, they are outside this
+  corpus, and none is registered, held or declared here.
+
+- **A direction's name outlived the correction to its own summary.** The summary line was fixed to say the
+  body asserts two pure functions agree rather than an ordering; the function name still said
+  *reaches the channel*, and the name is what appears in test output where the doc comment does not.
+
+- **The reason recorded for declining a finding was false, and it asserted a protection that does not
+  exist.** `dod_coherence` holds one direction — every listed command appears in CI — so removing a row from
+  the Definition of Done cannot fail it. The decline stands on the reason that does hold: CI names both
+  suites as their own steps, while the two the list's prose says need no line are named nowhere in CI. The
+  one-way mirror is filed with its observation source: three named CI steps sit outside the list, covered by
+  a listed command, and `cargo test -p louke` — the one the workspace run does not cover — is listed because
+  someone remembered.
+
+  No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate that
+  ships in no package.
 
 ## [0.4.0] - 2026-08-04
 
