@@ -106,6 +106,142 @@ fn executed_rust(text: &str) -> Executed {
     Executed(imports_and_rest(text).1)
 }
 
+/// [`Executed`] with the contents of every string literal removed as well — the corpus a **count** reads.
+///
+/// **A literal is noise to a count and identity to a parse, so they cannot share a corpus.** A registered
+/// site *is* a string literal, which is what [`first_literal_args`] reads; a bare construction is an
+/// identifier, and a `"violation"` written as a search term is not one. Stripping literals for both broke
+/// the register's own raw-literal fixture, which is what says the two needs are different rather than one
+/// reader used two ways.
+fn countable(text: &str) -> Countable {
+    // **Literals first, then comments — the other order desynchronises the scanner.** `Source::rust` cuts a
+    // `//` wherever it sees one, and `region`'s own header records that this includes a `//` *inside* a
+    // string literal. That truncation leaves an unmatched quote, after which a literal scanner reads code as
+    // string and string as code for the rest of the file: measured, the register's own module reported
+    // twelve constructions it does not make. Removing literals from the raw text first leaves the comment
+    // rule nothing to truncate.
+    Countable(imports_and_rest(&without_string_literals(text)).1)
+}
+
+/// A name inside a string literal is not a construction, and a name in code is.
+///
+/// **The direction the corpus move needed and did not have.** While this register read
+/// `crates/kanhe/src` its executed count was zero, so a literal contributed nothing and the unimplemented
+/// half of the cleaning never showed. Moving the corpus to the test targets made it load-bearing — the
+/// figure came out well above the truth, and the largest contributor was this file, which passes the
+/// constructor names to [`calls`] as search terms.
+#[test]
+fn a_name_written_as_a_literal_is_not_a_construction() {
+    let counted = |text: &str| {
+        let countable = countable(text);
+        calls(&countable, "violation") + calls(&countable, "cannot_judge")
+    };
+    assert_eq!(counted("fn f() { violation(x); }"), 1, "a call is counted");
+    assert_eq!(
+        counted("fn f() { let s = \"violation\"; }"),
+        0,
+        "a literal is not"
+    );
+    assert_eq!(
+        counted("fn f() { g(r#\"cannot_judge and violation\"#); }"),
+        0,
+        "a raw literal is not, whatever it holds"
+    );
+    assert_eq!(
+        counted("fn f() { g([\"violation_at(\", \"cannot_judge_at(\"]); }"),
+        0,
+        "adjacent literals in one expression are each closed"
+    );
+    assert_eq!(
+        counted("use kanhe::refusal::{cannot_judge, violation};\nfn f() { violation(x); }"),
+        1,
+        "an import names them and constructs nothing"
+    );
+    assert_eq!(
+        counted("// violation\n/// cannot_judge\nfn f() { cannot_judge(x); }"),
+        1,
+        "a comment names them and constructs nothing"
+    );
+}
+
+/// A corpus with comments, imports and string literals removed.
+///
+/// The second newtype, for the same reason as the first: three call sites cleaned their corpus and a fourth
+/// did not, and a type is what made that impossible to forget. This one carries the *rule*, not only the
+/// fact of having been called — the guarantee the first one could not give, since the defect it was added
+/// for then moved one layer inside it.
+struct Countable(String);
+
+/// `text` with the contents of every string literal replaced by nothing.
+///
+/// **The half [`executed_rust`]'s doc claimed and its body did not do.** `Source::rust` cuts comments by a
+/// token-start rule and `region`'s own header records that a string literal therefore survives it — a
+/// residue it declares rather than closes. That was inert while this register read `crates/kanhe/src`,
+/// where the executed count is zero; moving the corpus to the test targets made it load-bearing, and the
+/// figure came out **40** against a true **18**. The largest single contributor was this file, which passes
+/// `"violation"` and `"cannot_judge"` to [`calls`] as search terms and so counted its own arguments as
+/// refusal constructions — the same self-reference it already guards against for `::expect(`.
+///
+/// A raw string is handled by its own arm: `r"…"`, `r#"…"#` and any hash count, since a `\` inside one
+/// escapes nothing and a naive escape-aware scan would run past the closing quote.
+fn without_string_literals(text: &str) -> String {
+    let bytes: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        // A raw string opens with `r` then any number of `#` then `"`, and closes on `"` followed by the
+        // same number of `#`.
+        if c == 'r' && !(i > 0 && (bytes[i - 1].is_alphanumeric() || bytes[i - 1] == '_')) {
+            let mut hashes = 0;
+            let mut at = i + 1;
+            while at < bytes.len() && bytes[at] == '#' {
+                hashes += 1;
+                at += 1;
+            }
+            if at < bytes.len() && bytes[at] == '"' {
+                out.push_str("\"\"");
+                at += 1;
+                while at < bytes.len() {
+                    if bytes[at] == '"'
+                        && bytes[at + 1..]
+                            .iter()
+                            .take(hashes)
+                            .filter(|h| **h == '#')
+                            .count()
+                            == hashes
+                    {
+                        at += 1 + hashes;
+                        break;
+                    }
+                    at += 1;
+                }
+                i = at;
+                continue;
+            }
+        }
+        if c == '"' {
+            out.push_str("\"\"");
+            i += 1;
+            while i < bytes.len() {
+                if bytes[i] == '\\' {
+                    i += 2;
+                    continue;
+                }
+                if bytes[i] == '"' {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
+}
+
 /// A corpus with its comments and imports already removed.
 ///
 /// **A newtype, because the one call site that forgot was the one that was wrong.** `calls` took a `&str`,
@@ -198,7 +334,8 @@ fn imports_and_rest(text: &str) -> (Vec<String>, String) {
 /// turns *did not see it* into *cannot answer for this module*.
 fn unparsed_constructions(text: &str) -> usize {
     let executed = executed_rust(text);
-    let called = calls(&executed, "violation_at") + calls(&executed, "cannot_judge_at");
+    let called =
+        calls(&countable(text), "violation_at") + calls(&countable(text), "cannot_judge_at");
     let parsed = first_literal_args(&executed.0, "violation_at(").len()
         + first_literal_args(&executed.0, "cannot_judge_at(").len();
     called.saturating_sub(parsed)
@@ -248,8 +385,8 @@ fn is_a_site(text: &str) -> bool {
 /// direction that matters.
 ///
 /// Both boundaries, so `cannot_judge_at` is not counted as `cannot_judge`.
-fn calls(executed: &Executed, name: &str) -> usize {
-    let text = &executed.0;
+fn calls(countable: &Countable, name: &str) -> usize {
+    let text = &countable.0;
     let boundary = |byte: u8| !(byte.is_ascii_alphanumeric() || byte == b'_');
     let mut count = 0;
     let mut at = 0;
@@ -329,8 +466,7 @@ fn read(root: &Path) -> Register {
         // doc comment naming a constructor — this repository's prose names them constantly, and the figure
         // jumped by four modules that construct no refusal at all. `region` is the module written so that
         // forgetting to ask was not possible, and the same reader the gates themselves use.
-        let executed = executed_rust(&text);
-        let open = calls(&executed, "violation") + calls(&executed, "cannot_judge");
+        let open = calls(&countable(&text), "violation") + calls(&countable(&text), "cannot_judge");
         if open > 0 {
             unregistered.insert(name, open);
         }
@@ -627,15 +763,6 @@ fn the_register_projection_is_fresh() {
     // corpus and rendered 18, every one of which was the English word in a doc comment; on executed Rust
     // that corpus holds none, which the count of unregistered sites beside it already said. The
     // constructions are in the test targets, which this register's corpus excludes.
-    let outside: usize = tracked(&root, "crates/kanhe/tests")
-        .iter()
-        .map(|path| {
-            let text = std::fs::read_to_string(path)
-                .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
-            let executed = executed_rust(&text);
-            calls(&executed, "violation") + calls(&executed, "cannot_judge")
-        })
-        .sum();
     let mut out = format!(
         "# Refusal register\n\nEvery refusal site in this repository, and what holds it. A site is \
          registered by being constructed through `refusal::violation_at` or `refusal::cannot_judge_at`, and \
@@ -643,10 +770,12 @@ fn the_register_projection_is_fresh() {
          rather than by reading a message.\n\n\
          **What this document does not claim.** `refusal::violation` and `refusal::cannot_judge` construct a \
          refusal carrying no site identity — `Site::OutsideRegister` — so this register does not see them. \
-         Its corpus, `crates/kanhe/src`, holds none of them, which is the figure beside *carry no identity \
-         at all* above. **{outside}** stand in `crates/kanhe/tests`, which this corpus excludes: none is \
-         registered, held, or declared here, and whether any of them should have taken an identity is a \
-         judgement this document does not make.\n\n\
+         Its corpus, `crates/kanhe/src`, holds **none** of them, which is the figure beside *carry no \
+         identity at all* above. The test targets do hold them, and this corpus excludes those: none is \
+         registered, held, or declared here, and whether any should have taken an identity is a judgement \
+         this document does not make. **No count of them is given**, and that is a decision rather than an \
+         omission — the figure was rendered three times from three readers and no two agreed, so it is a \
+         census this register cannot produce and therefore does not claim.\n\n\
          A site that no direction holds is **declared unheld**, with why, an owner and a tracker, in the \
          table this register reads. There is no third state among *registered* sites: one is held or \
          declared, and the register refuses anything else.\n\nGenerated from `crates/kanhe/src/**.rs` by \
@@ -732,8 +861,9 @@ fn the_reader_answers_the_corpus_written_for_it() {
     };
     let mut wrong = Vec::new();
     for (case, want) in expected {
-        let executed = executed_rust(&read(case));
-        let got = calls(&executed, "violation") + calls(&executed, "cannot_judge");
+        let source = read(case);
+        let got =
+            calls(&countable(&source), "violation") + calls(&countable(&source), "cannot_judge");
         if got != *want {
             wrong.push(format!("  {case}: expected {want}, read {got}"));
         }

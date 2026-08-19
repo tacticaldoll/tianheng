@@ -667,6 +667,21 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **WATCH: The Definition of Done and CI mirror each other in one direction only.** *Class:* WATCH.
+  *Observed pressure:* `dod_coherence` asserts that every command in `AGENTS.md`'s list appears in CI, and
+  nothing asserts the converse. *Observation source:* a review measured it, and a record in this window had
+  already asserted the converse existed — three named CI steps run suites the local list does not name
+  (`release_coherence`/`publish_source`, `dod_coherence`, `bound_register`), all covered today by the listed
+  `cargo test --workspace --all-features`, and `cargo test -p louke` is the one named step that run does not
+  cover. It is in the list because a person remembered. *Current reaction or bound:* the one direction.
+  *Risk:* the DoD's own prose records this exact class — *the gate a contributor actually runs went blind to
+  the exact class this job had just learned to catch* — and the residue is a named CI step whose local
+  coverage nothing holds. *Promotion trigger:* a second CI step that the workspace run does not cover, or a
+  contributor's green local run followed by a red CI job on a step the list does not name. *Version class:*
+  patch; governance and CI configuration only. *Authority:* `repository-checks`. *Shape:* assert the converse
+  — every named CI step running a suite is either in the list or covered by a listed command — which needs a
+  reader that can say which suites a listed command covers, and that is the half not built.
+
 - **WATCH: The two irreversible-act wrappers are one lifecycle written twice.** *Class:* WATCH. *Observed
   pressure:* `scripts/merge-pr.sh` and `scripts/publish.sh` share a whole shape — resolve the repository root,
   parse an argument allowlist, open a verdict channel, run the gate, read the class, clean up, `exec` the
