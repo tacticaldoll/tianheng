@@ -690,7 +690,7 @@ pub(super) fn dyn_in_const_static_trait_method_assoc_default_and_where_react() {
 #[test]
 pub(super) fn dyn_in_an_inherent_impl_public_assoc_const_reacts() {
     // The dyn collector's inherent-impl arm now observes public associated `const`/`type`
-    // positions (parity with the signature-coupling collector, which gained them this release), so a
+    // positions (parity with the signature-coupling collector, which gained them in 0.4.0), so a
     // `dyn` written in an inherent-impl `pub const` type reacts — it did not before.
     assert_eq!(
         dyn_mod(

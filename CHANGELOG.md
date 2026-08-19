@@ -910,6 +910,22 @@ them.
   text. Its pin asserts that false positive alongside the bound, so the reason for declaring rather than fixing is
   executable: if a future parameter expansion loses its pipe, that leg fails and the bound is worth re-examining.
 
+- **The repair that removed relative window references named the wrong window at every site it did not
+  write.** `this window` is a positional reference: it means whichever window the reader is in, and a doc
+  comment carrying it becomes false the moment the window closes. The 0.5.0 window replaced sixteen of them
+  with an absolute `the 0.5.0 window` — correct for the twelve inside `kanhe` and `shengmo`, which are new
+  crates whose every sentence was written in this window, and **false for all four in crates that already
+  shipped**. `louke`'s injectivity paragraph (twice), `tianheng`'s misdiagnosis-class note and `xingbiao`'s
+  checkout-dependence note all appeared between v0.3.0 and v0.4.0, so their `this window` meant the 0.4.0
+  window. They now say so. `hunyi`'s `which gained them this release` is the same shape read against the same
+  test and is dated with them.
+
+  The four are in **published crates**, so the false attribution shipped to an adopter's `cargo doc` rather
+  than staying inside the repository machinery. The test that separates the two groups is mechanical and is
+  what should have run with the substitution: a sentence carrying `this window` means the window it was
+  written in, so ask whether the sentence exists in the previous release's tree, and take the window from the
+  answer rather than from the window doing the editing.
+
 ### Self-governance
 
 - **A struct-literal field sat four columns left of its sibling, and `cargo fmt --all --check` was green
@@ -3829,7 +3845,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   **The version arms themselves stay twinned, and by a constraint rather than an oversight.**
   `refusal_register` registers a site by the string literal that *opens* the constructor's argument list, so a
   site id arriving as a variable is a construction it cannot parse — and it holds that count at zero.
-  Collapsing the two arms would instead fold six per-capability identities into two, which is what the
+  Collapsing the two arms would instead fold each gate's own identity into a shared one, which is what the
   register exists to prevent. So what moved is what was genuinely duplicable: the sentences have one owner and
   each gate keeps its own literal identity.
 
@@ -3897,10 +3913,10 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   Both are converged within the reach of their constant, held by a check whose corpus is exactly that reach.
   What lies outside it is named where a reader meets it rather than declared as a bound: `shengmo`'s own law
-  projection cannot reach `kanhe`, and six `MARKER` spellings live in `tianheng`, `louke` and `xuanji`, which
-  are published crates that cannot depend on `shengmo` without closing a cycle. A rename still has to be made
-  in seven places and six of them no check can see — a fact about the dependency graph rather than a site
-  anyone declined to fix.
+  projection cannot reach `kanhe`, and `MARKER` spellings live in `tianheng`, `louke` and `xuanji`, which are
+  published crates that cannot depend on `shengmo` without closing a cycle. A rename still has to reach every
+  one of them, and the ones outside the constant's reach are the ones no check can see — a fact about the
+  dependency graph rather than a site anyone declined to fix.
 
   The projections are byte-identical after the change, which is what makes it a convergence rather than an
   edit: the interpolated constants render exactly what the literals did.
@@ -4300,6 +4316,20 @@ no adopter runs. They are here rather than under the adopter headings above beca
   The reasons project into `AGENTS.self-law.md`, so the projection moves with them. No target, rule, or
   allowlist changes; no recorded baseline is affected. No published API, outcome, report, exit class, or
   manifest moves.
+
+- **Four typed censuses were removed, one of them a figure this window had already ruled false.** A census is
+  produced, never typed, and the correction recorded above for `seven owners and nine` removed the two phrases
+  it quoted rather than the claim: `kanhe::region::DO_NOT_EDIT`'s doc comment still said `seven owners for one
+  token` — the seventh was the constant's own declaration — and the entry for that change still carried the
+  `MARKER` spelling counts in two sentences the correction had not read. `six per-capability identities into
+  two` mixed two denominators a third time, in `manifest.rs`, in `AGENTS.md` and in that entry: the two
+  version arms are four identities folding into two, while the whole workspace-version block is six folding
+  into three.
+
+  Each is removed rather than repaired, which is the disposition the earlier correction already recorded and
+  the reason it gives applies unchanged — nothing enumerates those sets, so any figure there is a census with
+  no producer. What each passage argues is unchanged; only the number is gone, and in every case the sentence
+  beside it already names the check whose run counts the sites.
 
 ## [0.4.0] - 2026-08-04
 

@@ -508,7 +508,7 @@ neither of the token-level instances, it reports a call's arguments as statement
 one, and every tightening measured against that false positive also removed a true one. Worse, the
 convergence it asks for is refused elsewhere: `refusal_register` registers a site by the string literal
 opening the constructor's argument list, so two gates sharing a refusal arm **cannot** converge it without
-either losing six per-capability identities or producing constructions the register cannot parse. An
+either losing each gate's own per-capability identity or producing constructions the register cannot parse. An
 instrument covering one instance of four, needing three declared bounds, and asking for a repair another
 gate forbids is not the available option. The sweep is.
 
