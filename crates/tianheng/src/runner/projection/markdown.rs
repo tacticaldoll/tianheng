@@ -69,9 +69,22 @@ pub(super) fn boundary_markdown(boundary: &Value) -> String {
     };
     let mut out = format!("\n### `{qualified}` ({})\n", field("kind"));
 
+    // **Every line of the reason is quoted, not just the first.** `because` places no restriction on
+    // newlines, and marking only the first line drops every continuation out of the blockquote — markdown
+    // that renders the rest as body text, and a projection no reader can attribute line by line. An empty
+    // line inside a reason is written as a bare `>` rather than `"> "`, so the quote stays unbroken without
+    // leaving trailing whitespace. A reason with no newline renders exactly as it did.
     let reason = field("reason");
     if !reason.is_empty() {
-        out.push_str(&format!("\n> {reason}\n\n"));
+        out.push('\n');
+        for line in reason.lines() {
+            if line.is_empty() {
+                out.push_str(">\n");
+            } else {
+                out.push_str(&format!("> {line}\n"));
+            }
+        }
+        out.push('\n');
     }
 
     out.push_str(&format!("- **rule**: {}", field("rule")));

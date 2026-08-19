@@ -278,28 +278,36 @@ fn projected(text: &str) -> Projected {
             }
             continue;
         };
-        if let Some(rest) = line.strip_prefix("> ") {
-            if !section.reason.is_empty() {
+        let quoted = if line == ">" {
+            Some("")
+        } else {
+            line.strip_prefix("> ")
+        };
+        if let Some(rest) = quoted {
+            // The reason is one unbroken run of quoted lines. A second run after it is a second reason,
+            // which is a section this reader cannot attribute rather than one it should join up.
+            if !section.reason.is_empty() && !section.in_reason {
                 return Projected::Unreadable(format!(
-                    "the section `{}` opens a second reason, `{rest}`, so this reader cannot say which one \
-                     the boundary declares",
+                    "the section `{}` opens a second quoted run, `{rest}`, so this reader cannot say which \
+                     one is the boundary's reason",
                     section.heading
                 ));
             }
             section.reason.push(rest.trim_end().to_string());
             section.in_reason = true;
-        } else if line.starts_with("- **") {
-            section.in_reason = false;
+            continue;
+        }
+        section.in_reason = false;
+        if line.starts_with("- **") {
             section.fields.push(line.trim_end().to_string());
-        } else if line.trim().is_empty() {
-            section.in_reason = false;
-        } else if section.in_reason {
-            // A reason line the renderer left unmarked, because it wrote only the first one with `> `.
-            section.reason.push(line.trim_end().to_string());
-        } else if !section.fields.is_empty() {
+        } else if !line.trim().is_empty() {
+            // **Nothing unquoted belongs to a boundary.** Every reason line is quoted by the renderer, so
+            // unquoted prose inside a section is text this reader can attribute neither to the boundary nor
+            // to the document — and guessing, which an earlier form did by blank line and by `- **` prefix,
+            // is what silently dropped a reason's second paragraph.
             return Projected::Unreadable(format!(
-                "the section `{}` carries prose after its fields, `{line}`, which this reader cannot \
-                 attribute to the boundary or to the document",
+                "the section `{}` carries unquoted prose, `{line}`, which this reader cannot attribute to \
+                 the boundary or to the document",
                 section.heading
             ));
         }
@@ -403,8 +411,12 @@ fn a_projection_this_reader_cannot_parse_is_not_a_law_with_no_boundaries() {
             "### `a` (crate)\n\n> why\n\n> and again\n- **rule**: r\n",
         ),
         (
-            "prose this reader cannot attribute, after the fields",
+            "unquoted prose after the fields",
             "### `a` (crate)\n\n> why\n- **rule**: r\n\nloose prose\n",
+        ),
+        (
+            "an unquoted continuation, which the renderer no longer writes",
+            "### `a` (crate)\n\n> first line\nsecond line\n\n- **rule**: r\n",
         ),
     ] {
         assert!(
@@ -429,14 +441,17 @@ fn a_projection_this_reader_cannot_parse_is_not_a_law_with_no_boundaries() {
         }])
     );
 
-    // **A reason that spans a line is read to its end.** The renderer marks only the first line, so the rest
-    // arrives unmarked, and a reader taking the marked line alone would hold half a sentence and call the
-    // rest unnamed.
+    // **A reason spanning paragraphs is read whole, including a line shaped like a field.** The renderer
+    // quotes every line — a blank one as a bare `>` — so the run is unbroken and nothing has to be guessed
+    // from a blank line or from a `- **` prefix, which is how an earlier form dropped a second paragraph
+    // and misread a `- **note**:` line as a boundary field.
     assert_eq!(
-        projected("### `a` (crate)\n\n> first line\nsecond line\n\n- **rule**: r\n"),
+        projected(
+            "### `a` (crate)\n\n> first paragraph\n>\n> - **note**: still the reason\n\n- **rule**: r\n"
+        ),
         Projected::Read(vec![Rendered {
             heading: "`a` (crate)".to_string(),
-            reason: "first line\nsecond line".to_string(),
+            reason: "first paragraph\n\n- **note**: still the reason".to_string(),
             fields: vec!["- **rule**: r".to_string()],
         }])
     );

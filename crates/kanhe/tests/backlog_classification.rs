@@ -24,6 +24,9 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use kanhe::refusal::{Refusal, cannot_judge_at};
+use kanhe::selection::the_only;
+
 /// The classes `BACKLOG.md`'s own governance section defines.
 ///
 /// Named rather than derived from the headings, because a heading is exactly what this check does not
@@ -47,9 +50,16 @@ const CLASSES: [&str; 6] = [
 ///
 /// Anchored on the sentence rather than on the individual words, and it ends at that sentence's period so
 /// the backticked `BACKLOG.md` in the next one stays outside.
-fn classified_classes(agents: &str) -> Option<Vec<String>> {
-    let clause = agents.split("Classify live work by its").nth(1)?;
-    let run = clause.split(". ").next()?;
+fn classified_classes(agents: &str) -> Result<Vec<String>, Refusal> {
+    // **The anchor is asked how many times it occurs, not for its first occurrence.** `AGENTS.md` is
+    // hand-edited prose that can hold the sentence twice, and this function derives the very class list the
+    // whole check compares `BACKLOG.md` against — `nth(1)` would drop a second candidate clause without a
+    // word, which is the habit two live defects in this repository already came from.
+    let clause = the_only(
+        "backlog classification clause in AGENTS.md",
+        agents.split("Classify live work by its").skip(1),
+    )?;
+    let run = clause.split(". ").next().unwrap_or(clause);
     let classes: Vec<String> = run
         .split('`')
         .skip(1)
@@ -57,9 +67,14 @@ fn classified_classes(agents: &str) -> Option<Vec<String>> {
         .map(str::to_string)
         .collect();
     if classes.is_empty() {
-        None
+        Err(cannot_judge_at(
+            "repository-checks#backlog-classification-clause-names-no-class",
+            "the classification clause in AGENTS.md names no backticked class, and a contract this reader \
+             cannot parse is not a contract admitting nothing"
+                .to_string(),
+        ))
     } else {
-        Some(classes)
+        Ok(classes)
     }
 }
 
@@ -234,11 +249,10 @@ fn the_classes_are_the_ones_agents_md_names() {
     let agents = std::fs::read_to_string(root.join("AGENTS.md"))
         .expect("AGENTS.md states the classification this file judges by and must be readable");
     let contract: BTreeSet<String> = classified_classes(&agents)
-        .unwrap_or_else(|| {
+        .unwrap_or_else(|refusal| {
             panic!(
-                "cannot read the classification from AGENTS.md — the sentence beginning `Classify live \
-                 work by its` is the anchor, and a contract this reader cannot parse is not a contract \
-                 admitting nothing"
+                "cannot read the classification from AGENTS.md ({:?}): {}",
+                refusal.kind, refusal.message
             )
         })
         .into_iter()

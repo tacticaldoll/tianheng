@@ -1088,6 +1088,48 @@ them.
 
   No published API, outcome, report, exit class, or manifest moves; `kanhe` ships in no package.
 
+- **A reason spanning more than one line fell out of its own blockquote.** The Markdown projection wrote a
+  boundary's reason as `> {reason}` on a single line, while `because` places no restriction on newlines — so
+  every continuation landed outside the quote, rendering as body text, and the projection carried less than
+  the constitution declares. That is a defect in a **published crate**, independent of anything reading the
+  projection: an adopter running `list --format markdown` over a constitution with a two-paragraph reason got
+  broken Markdown. Every line is quoted now, an empty one as a bare `>` so the quote stays unbroken without
+  trailing whitespace. A reason with no newline renders exactly as it did, so `AGENTS.self-law.md` is
+  byte-identical.
+
+  `constitution-projection` gains the fidelity requirement with a scenario — stated as fidelity, not layout,
+  because that capability deliberately leaves the blockquote choice free to evolve and pinning it as a machine
+  contract is a standing prohibition.
+
+  **And the reader that consumes it stops guessing.** The amendment check had been recovering a reason's
+  extent from a blank line and a `- **` prefix, which cannot be lossless over free text: a reason with a blank
+  line inside it lost its second paragraph silently, and a reason line beginning `- **note**:` was filed as a
+  boundary field. With every line quoted the reason is one unbroken run, and anything unquoted inside a
+  section is refused rather than guessed at. Negative run, from the terminal: 星表's reason split into two
+  paragraphs renders `> 星表 is the shared metadata substrate.` / `>` / `> It depends on no workspace member
+  at all; serde_json only`, and the check fails; the whitespace gate passes on the bare `>`.
+
+- **Two readers took the first candidate where the input can hold two.** `backlog_classification` anchored on
+  the sentence *Classify live work by its* with `nth(1)`, deriving from it the class list the entire check
+  compares `BACKLOG.md` against — `AGENTS.md` is hand-edited prose that can hold that sentence twice, and a
+  second clause would have been dropped without a word. And `bound_register` took the first backticked name in
+  a tracker, so a tracker naming two documents had only the first held against the tracked set: a second,
+  untracked name passed, in the check whose whole subject is that debt filed where nobody looks is debt nobody
+  owns.
+
+  Both are the `nth(1)` habit this repository already records two live defects from, and both now ask the
+  input how many candidates it holds: `the_only` refuses a duplicated anchor as a cannot-judge, and `all_of`
+  holds every tracker name against the tracked set. Negative runs: a second *Classify live work by its*
+  sentence in `AGENTS.md` fails with `expected exactly one … and found 2`, and a tracker gaining a second name
+  fails with `UNPINNED against \`NOTHING-TRACKS-THIS.md\``.
+
+  Found by a review widening its corpus rather than reading harder — its reader sweeps had run over
+  `crates/*/src/` and bucketed the test targets as triage-only, and in this repository every repository check
+  *is* a test target. The corpus was narrower than the claim, in the review rather than in the code.
+
+  No published API, outcome, report, exit class, or manifest moves. The projection renderer's output changes
+  only for a reason containing a newline, which no declared boundary has.
+
 - **A reason about what ANOTHER crate does was the shape the second perimeter pass missed.** The falsifier
   the law's own header states took **three** passes to apply to eight boundaries, and each pass missed a
   different shape. The first read *entailed by the allowlist* generously; the second caught phrases about
