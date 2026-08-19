@@ -46,9 +46,18 @@ use tianheng::{Boundary, Rule};
 /// keep the edge, and the boundary is green while the sentence is false. *What the allowlist entails* passes
 /// it, because the entailment moves when the set does.
 ///
-/// It lived in one boundary's own annotation below, where it had caught that boundary's clause and nothing
-/// else. Two more reasons carried use clauses through the whole 0.5.0 window while the test sat beside a
-/// third — including one repaired for exactly this and repaired only halfway.
+/// It lived in one boundary's own annotation, where it had caught that boundary's clause and nothing else.
+/// Applied to all eight, it moved five reasons across two passes, and the second pass is why the test is
+/// stated in one sentence here rather than shown by example: the first pass read *entailed by the allowlist*
+/// generously and left three clauses standing. **A phrase about edges pointing AT this crate fails the test
+/// too** — 璇璣 *below every dimension* and 星表 *beneath every dimension* are positions the dimensions'
+/// own allowlists determine, not this boundary's; delete every edge into them and each stays green while its
+/// sentence turns false.
+///
+/// 渾儀's *quarantined syn* is the one left standing, with its reason: the quarantine is real and reacted to,
+/// but by the **sibling** allowlists, none of which names `syn` — inside the law's perimeter without being
+/// inside this rule's. That distinction is the one case where the two come apart, and stating it is more
+/// honest than an edit that would blur which of the two holds it.
 ///
 /// A wrong boundary here is fixed by a human-reviewed amendment, never by quietly
 /// weakening this function to make CI pass.
@@ -58,16 +67,16 @@ pub fn constitution() -> Constitution {
             CrateBoundary::crate_("xuanji")
                 .restrict_dependencies_to(["serde_json"])
                 .because(
-                    "璇璣 is the dimension-agnostic reaction model: serde_json only, below every \
-                     dimension, and must not depend on any workspace member",
+                    "璇璣 is the dimension-agnostic reaction model: it must not depend on any workspace \
+                     member; serde_json only",
                 ),
         )
         .boundary(
             CrateBoundary::crate_("xingbiao")
                 .restrict_dependencies_to(["serde_json"])
                 .because(
-                    "星表 is the shared metadata substrate: serde_json only, so it sits beneath every \
-                     dimension by depending on no workspace member at all",
+                    "星表 is the shared metadata substrate: it depends on no workspace member at all; \
+                     serde_json only",
                 ),
         )
         .boundary(
@@ -128,19 +137,16 @@ pub fn constitution() -> Constitution {
             CrateBoundary::crate_("shengmo")
                 .restrict_dependencies_to(["tianheng", "serde_json"])
                 .because(
-                    "繩墨 declares this law through the shell alone: the allowlist is 天衡 and \
-                     serde_json, so no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist and every \
-                     boundary here is stated through the surface the shell publishes",
+                    "繩墨 depends on 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 or \
+                     璇璣 can exist",
                 ),
         )
         .boundary(
             CrateBoundary::crate_("kanhe")
                 .restrict_dependencies_to(["shengmo", "tianheng", "serde_json"])
                 .because(
-                    "勘合 names the shell, the law's own locator and serde_json, never a \
-                     dimension: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist, so a repository \
-                     check reads the record through the same published surface an adopter has \
-                     rather than through an observation engine",
+                    "勘合 depends on 繩墨, 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 \
+                     or 璇璣 can exist",
                 ),
         )
         // The first *semantic* self-boundary: the family dogfoods its own `sans_io_pure` profile on
