@@ -35,21 +35,22 @@
 
 use std::path::PathBuf;
 
-/// One boundary as the projection renders it: everything a steward reads when accepting an amendment.
+/// One boundary as the projection renders it: everything a steward reads when weighing an amendment.
 ///
-/// **Four fields, because a relaxation moves whichever one this identity omits.** An earlier form carried the
-/// heading and the rule alone, and the most dangerous amendment there is moved neither: turning a boundary
-/// from `enforce` to `warn` leaves both untouched and turns a run-failing violation into an advisory. Run
-/// against that form with 璇璣 lowered to `warn` and the projection re-blessed, all nine self-governance
-/// assertions and this check passed. `reason` is here for the same reason from the other side: the law's
-/// reasons moved three times in one window, and a check that cannot see them says an amendment landed unnamed
-/// when the sentence a reader takes the law's meaning from is exactly what changed.
+/// **Every rendered field, verbatim, rather than a chosen few.** Two earlier forms each omitted the field the
+/// next relaxation moved. The first carried the heading and the rule: lowering a boundary from `enforce` to
+/// `warn` moved neither, turning a run-failing violation into an advisory — run against that form with 璇璣
+/// lowered, all nine self-governance assertions and this check passed. The second named heading, reason, rule
+/// and kind: the renderer also emits `- **anchor**:`, which it did not read, so an anchor could be added or
+/// changed with nothing moving.
+///
+/// So `fields` carries the `- **…**:` lines as they are written, in order. A field the renderer gains later
+/// enters this identity by itself, which is what stops a third form from omitting a third thing.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Boundary {
     heading: &'static str,
     reason: &'static str,
-    rule: &'static str,
-    kind: &'static str,
+    fields: &'static [&'static str],
 }
 
 /// Every boundary the law declares, as the projection renders it.
@@ -62,80 +63,106 @@ const DECLARED: [Boundary; 13] = [
     Boundary {
         heading: "`xuanji` (crate)",
         reason: "璇璣 is the dimension-agnostic reaction model: it must not depend on any workspace member; serde_json only",
-        rule: "restrict dependencies to (only: serde_json)",
-        kind: "crate · **severity**: enforce",
+        fields: &[
+            "- **rule**: restrict dependencies to (only: serde_json)",
+            "- **kind**: crate · **severity**: enforce",
+        ],
     },
     Boundary {
         heading: "`xingbiao` (crate)",
         reason: "星表 is the shared metadata substrate: it depends on no workspace member at all; serde_json only",
-        rule: "restrict dependencies to (only: serde_json)",
-        kind: "crate · **severity**: enforce",
+        fields: &[
+            "- **rule**: restrict dependencies to (only: serde_json)",
+            "- **kind**: crate · **severity**: enforce",
+        ],
     },
     Boundary {
         heading: "`guibiao` (crate)",
         reason: "the 圭表 static core stays dependency-light: serde_json, xuanji (reaction model), and xingbiao (metadata substrate) only. functional core ⊥ imperative shell: 圭表 must not depend on the 天衡 shell. 三儀 ⊥ 三儀: it names no sibling dimension",
-        rule: "restrict dependencies to (only: serde_json, xuanji, xingbiao)",
-        kind: "crate · **severity**: enforce",
+        fields: &[
+            "- **rule**: restrict dependencies to (only: serde_json, xuanji, xingbiao)",
+            "- **kind**: crate · **severity**: enforce",
+        ],
     },
     Boundary {
         heading: "`hunyi` (crate)",
         reason: "渾儀 is the semantic AST dimension: it depends on 璇璣, 星表, serde_json and syn only. 三儀 ⊥ 三儀: it names no sibling dimension and never the 天衡 shell (functional dimension ⊥ imperative shell)",
-        rule: "restrict dependencies to (only: xuanji, xingbiao, serde_json, syn)",
-        kind: "crate · **severity**: enforce",
+        fields: &[
+            "- **rule**: restrict dependencies to (only: xuanji, xingbiao, serde_json, syn)",
+            "- **kind**: crate · **severity**: enforce",
+        ],
     },
     Boundary {
         heading: "`louke` (crate)",
         reason: "漏刻 is the runtime dimension: it depends on 璇璣 and 星表 only. 三儀 ⊥ 三儀: naming no sibling dimension and never the 天衡 shell",
-        rule: "restrict dependencies to (only: xuanji, xingbiao)",
-        kind: "crate · **severity**: enforce",
+        fields: &[
+            "- **rule**: restrict dependencies to (only: xuanji, xingbiao)",
+            "- **kind**: crate · **severity**: enforce",
+        ],
     },
     Boundary {
         heading: "`tianheng` (crate)",
         reason: "the 天衡 shell's direct normal edges end at the observation dimensions and at projection serialization, never at the lower reaction model or metadata substrate",
-        rule: "restrict dependencies to (only: guibiao, hunyi, louke, serde_json)",
-        kind: "crate · **severity**: enforce",
+        fields: &[
+            "- **rule**: restrict dependencies to (only: guibiao, hunyi, louke, serde_json)",
+            "- **kind**: crate · **severity**: enforce",
+        ],
     },
     Boundary {
         heading: "`shengmo` (crate)",
         reason: "繩墨 depends on 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist",
-        rule: "restrict dependencies to (only: tianheng, serde_json)",
-        kind: "crate · **severity**: enforce",
+        fields: &[
+            "- **rule**: restrict dependencies to (only: tianheng, serde_json)",
+            "- **kind**: crate · **severity**: enforce",
+        ],
     },
     Boundary {
         heading: "`kanhe` (crate)",
         reason: "勘合 depends on 繩墨, 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist",
-        rule: "restrict dependencies to (only: shengmo, tianheng, serde_json)",
-        kind: "crate · **severity**: enforce",
+        fields: &[
+            "- **rule**: restrict dependencies to (only: shengmo, tianheng, serde_json)",
+            "- **kind**: crate · **severity**: enforce",
+        ],
     },
     Boundary {
         heading: "`xuanji::crate` (module)",
         reason: "璇璣 is the measure-only reaction model: it reads no ambient clock inline and exposes no async surface — time and effects enter only through the dimensions above it, never the model itself",
-        rule: "inline symbol path confined to module (confined_prefix: std::time; ending_with: now)",
-        kind: "module · **severity**: enforce · **crate**: xuanji",
+        fields: &[
+            "- **rule**: inline symbol path confined to module (confined_prefix: std::time; ending_with: now)",
+            "- **kind**: module · **severity**: enforce · **crate**: xuanji",
+        ],
     },
     Boundary {
         heading: "`guibiao::crate` (module)",
         reason: "path canonicalization and cycle/dedup guards in guibiao must resolve through `xingbiao::canonicalize_or_fail` or `try_visit` for unified failure handling",
-        rule: "inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)",
-        kind: "module · **severity**: enforce · **crate**: guibiao",
+        fields: &[
+            "- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)",
+            "- **kind**: module · **severity**: enforce · **crate**: guibiao",
+        ],
     },
     Boundary {
         heading: "`hunyi::crate` (module)",
         reason: "path canonicalization and cycle/dedup guards in hunyi must resolve through `xingbiao::canonicalize_or_fail` or `try_visit` for unified failure handling",
-        rule: "inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)",
-        kind: "module · **severity**: enforce · **crate**: hunyi",
+        fields: &[
+            "- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)",
+            "- **kind**: module · **severity**: enforce · **crate**: hunyi",
+        ],
     },
     Boundary {
         heading: "`louke::crate` (module)",
         reason: "path canonicalization and cycle/dedup guards in louke must resolve through `xingbiao::try_visit` for unified failure handling",
-        rule: "inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)",
-        kind: "module · **severity**: enforce · **crate**: louke",
+        fields: &[
+            "- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)",
+            "- **kind**: module · **severity**: enforce · **crate**: louke",
+        ],
     },
     Boundary {
         heading: "`xuanji::crate` (semantic)",
         reason: "璇璣 is the measure-only reaction model: it reads no ambient clock inline and exposes no async surface — time and effects enter only through the dimensions above it, never the model itself",
-        rule: "must not expose async fn (including_submodules: true; scan_depth: subtree)",
-        kind: "semantic · **severity**: enforce · **crate**: xuanji",
+        fields: &[
+            "- **rule**: must not expose async fn (including_submodules: true; scan_depth: subtree)",
+            "- **kind**: semantic · **severity**: enforce · **crate**: xuanji",
+        ],
     },
 ];
 
@@ -153,97 +180,73 @@ fn workspace_root() -> Option<PathBuf> {
 /// boundaries, and an empty answer compared two-way against an empty declaration would pass over nothing.
 #[derive(Debug, PartialEq, Eq)]
 enum Projected {
-    Read(Vec<Boundary4>),
+    Read(Vec<Rendered>),
     Unreadable(String),
 }
 
 /// The owned form of [`Boundary`], for what a run reads rather than what this file declares.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-struct Boundary4 {
+struct Rendered {
     heading: String,
     reason: String,
-    rule: String,
-    kind: String,
+    fields: Vec<String>,
 }
 
-impl Boundary4 {
+impl Rendered {
     fn of(declared: &Boundary) -> Self {
         Self {
             heading: declared.heading.to_string(),
             reason: declared.reason.to_string(),
-            rule: declared.rule.to_string(),
-            kind: declared.kind.to_string(),
+            fields: declared.fields.iter().map(|f| (*f).to_string()).collect(),
         }
     }
 }
 
-/// Each `### ` section's heading with the three fields beneath it.
+/// Each `### ` section: its heading, its whole reason, and every `- **…**:` line beneath it.
 ///
-/// A `Vec` rather than a set, so the caller can see a repeated boundary before any comparison folds it away —
-/// a set built here would make two identical entries one, and the comparison would then hold over a law this
-/// reader never fully saw.
+/// **The reason is read to its end, not to its first line.** The renderer writes it as `\n> {reason}\n\n`,
+/// so only the first line of a reason carrying a newline is marked — `because` places no restriction on
+/// newlines. A reader that took the marked line alone would hold half a sentence and call the rest unnamed,
+/// which is the same defect as omitting a field: the amendment surface is smaller than the identity claims.
+/// Continuation lines run to the blank line the renderer writes before the fields.
+///
+/// A `Vec` rather than a set, so the caller can see a repeated boundary before any comparison folds it away.
 fn projected(text: &str) -> Projected {
-    /// A section whose heading has been read and whose three fields are still arriving.
+    /// A section whose heading has been read and whose body is still arriving.
     struct Open {
         heading: String,
-        reason: Option<String>,
-        rule: Option<String>,
-        kind: Option<String>,
+        reason: Vec<String>,
+        in_reason: bool,
+        fields: Vec<String>,
     }
 
-    /// Which field a projection line carries, or none.
-    enum Field {
-        Reason,
-        Rule,
-        Kind,
-    }
-
-    fn field_of(line: &str) -> Option<(Field, &str)> {
-        if let Some(rest) = line.strip_prefix("> ") {
-            Some((Field::Reason, rest))
-        } else if let Some(rest) = line.strip_prefix("- **rule**: ") {
-            Some((Field::Rule, rest))
-        } else {
-            line.strip_prefix("- **kind**: ")
-                .map(|rest| (Field::Kind, rest))
-        }
-    }
-
-    fn close(open: Option<Open>, read: &mut Vec<Boundary4>) -> Result<(), String> {
+    fn close(open: Option<Open>, read: &mut Vec<Rendered>) -> Result<(), String> {
         let Some(open) = open else {
             return Ok(());
         };
-        match (open.reason, open.rule, open.kind) {
-            (Some(reason), Some(rule), Some(kind)) => {
-                read.push(Boundary4 {
-                    heading: open.heading,
-                    reason,
-                    rule,
-                    kind,
-                });
-                Ok(())
-            }
-            (reason, rule, kind) => {
-                let mut missing = Vec::new();
-                if reason.is_none() {
-                    missing.push("a `> ` reason");
-                }
-                if rule.is_none() {
-                    missing.push("a `- **rule**:` line");
-                }
-                if kind.is_none() {
-                    missing.push("a `- **kind**:` line");
-                }
-                Err(format!(
-                    "the section `{}` carries no {}, so this reader cannot say what that boundary declares",
-                    open.heading,
-                    missing.join(" and no ")
-                ))
-            }
+        let mut missing = Vec::new();
+        if open.reason.is_empty() {
+            missing.push("a `> ` reason");
         }
+        if open.fields.is_empty() {
+            missing.push("a `- **…**:` field");
+        }
+        if !missing.is_empty() {
+            return Err(format!(
+                "the section `{}` carries no {}, so this reader cannot say what that boundary declares",
+                open.heading,
+                missing.join(" and no ")
+            ));
+        }
+        read.push(Rendered {
+            heading: open.heading,
+            reason: open.reason.join("\n"),
+            fields: open.fields,
+        });
+        Ok(())
     }
 
-    let mut read: Vec<Boundary4> = Vec::new();
+    let mut read: Vec<Rendered> = Vec::new();
     let mut open: Option<Open> = None;
 
     for line in text.lines() {
@@ -253,29 +256,52 @@ fn projected(text: &str) -> Projected {
             }
             open = Some(Open {
                 heading: rest.trim().to_string(),
-                reason: None,
-                rule: None,
-                kind: None,
+                reason: Vec::new(),
+                in_reason: false,
+                fields: Vec::new(),
             });
-        } else if let Some((field, rest)) = field_of(line) {
-            let Some(section) = open.as_mut() else {
+            continue;
+        }
+        if line.starts_with('#') {
+            // Any other heading closes the open section: the projection groups boundaries under `## `
+            // headings, so a heading is a boundary's end and not prose inside it.
+            if let Err(why) = close(open.take(), &mut read) {
+                return Projected::Unreadable(why);
+            }
+            continue;
+        }
+        let Some(section) = open.as_mut() else {
+            if line.starts_with("> ") || line.starts_with("- **") {
                 return Projected::Unreadable(format!(
-                    "a boundary field appears under no `### ` heading: {rest}"
+                    "a boundary field appears under no `### ` heading: {line}"
                 ));
-            };
-            let slot = match field {
-                Field::Reason => &mut section.reason,
-                Field::Rule => &mut section.rule,
-                Field::Kind => &mut section.kind,
-            };
-            if let Some(first) = slot.as_ref() {
+            }
+            continue;
+        };
+        if let Some(rest) = line.strip_prefix("> ") {
+            if !section.reason.is_empty() {
                 return Projected::Unreadable(format!(
-                    "the section `{}` carries that field twice, `{first}` and `{rest}`, so this reader \
-                     cannot say which one the boundary declares",
+                    "the section `{}` opens a second reason, `{rest}`, so this reader cannot say which one \
+                     the boundary declares",
                     section.heading
                 ));
             }
-            *slot = Some(rest.trim().to_string());
+            section.reason.push(rest.trim_end().to_string());
+            section.in_reason = true;
+        } else if line.starts_with("- **") {
+            section.in_reason = false;
+            section.fields.push(line.trim_end().to_string());
+        } else if line.trim().is_empty() {
+            section.in_reason = false;
+        } else if section.in_reason {
+            // A reason line the renderer left unmarked, because it wrote only the first one with `> `.
+            section.reason.push(line.trim_end().to_string());
+        } else if !section.fields.is_empty() {
+            return Projected::Unreadable(format!(
+                "the section `{}` carries prose after its fields, `{line}`, which this reader cannot \
+                 attribute to the boundary or to the document",
+                section.heading
+            ));
         }
     }
     if let Err(why) = close(open, &mut read) {
@@ -319,7 +345,7 @@ fn the_law_declares_no_boundary_this_repository_has_not_named() {
              boundaries: {why}"
         ),
     };
-    let declared: Vec<Boundary4> = DECLARED.iter().map(Boundary4::of).collect();
+    let declared: Vec<Rendered> = DECLARED.iter().map(Rendered::of).collect();
 
     // Both sides are checked for repeats before either is compared. A duplicate on either side would be
     // folded away by a set comparison, and the equality would then hold over a law neither side fully saw.
@@ -355,8 +381,6 @@ fn the_law_declares_no_boundary_this_repository_has_not_named() {
 /// empty declaration is an assertion over nothing.
 #[test]
 fn a_projection_this_reader_cannot_parse_is_not_a_law_with_no_boundaries() {
-    let whole =
-        "### `a` (crate)\n\n> why\n\n- **rule**: r\n- **kind**: crate · **severity**: enforce\n";
     for (label, text) in [
         (
             "no boundary section at all",
@@ -367,20 +391,20 @@ fn a_projection_this_reader_cannot_parse_is_not_a_law_with_no_boundaries() {
             "### `a` (crate)\n\n- **rule**: r\n- **kind**: k\n",
         ),
         (
-            "a section with no rule",
-            "### `a` (crate)\n\n> why\n- **kind**: k\n",
-        ),
-        (
-            "a section with no kind",
-            "### `a` (crate)\n\n> why\n- **rule**: r\n",
+            "a section with no field at all",
+            "### `a` (crate)\n\n> why\n",
         ),
         (
             "a field under no heading",
             "- **rule**: a rule under no heading\n",
         ),
         (
-            "a section carrying one field twice",
-            "### `a` (crate)\n\n> why\n> and again\n- **rule**: r\n- **kind**: k\n",
+            "a section opening a second reason",
+            "### `a` (crate)\n\n> why\n\n> and again\n- **rule**: r\n",
+        ),
+        (
+            "prose this reader cannot attribute, after the fields",
+            "### `a` (crate)\n\n> why\n- **rule**: r\n\nloose prose\n",
         ),
     ] {
         assert!(
@@ -388,15 +412,50 @@ fn a_projection_this_reader_cannot_parse_is_not_a_law_with_no_boundaries() {
             "{label}: must be refused rather than read as a law with fewer boundaries"
         );
     }
-    // And a whole section is read, so each refusal above is about its own shape rather than about a reader
-    // that refuses everything.
+
+    // A whole section is read, so each refusal above is about its own shape rather than about a reader that
+    // refuses everything.
     assert_eq!(
-        projected(whole),
-        Projected::Read(vec![Boundary4 {
+        projected(
+            "### `a` (crate)\n\n> why\n\n- **rule**: r\n- **kind**: crate · **severity**: enforce\n"
+        ),
+        Projected::Read(vec![Rendered {
             heading: "`a` (crate)".to_string(),
             reason: "why".to_string(),
-            rule: "r".to_string(),
-            kind: "crate · **severity**: enforce".to_string(),
+            fields: vec![
+                "- **rule**: r".to_string(),
+                "- **kind**: crate · **severity**: enforce".to_string(),
+            ],
+        }])
+    );
+
+    // **A reason that spans a line is read to its end.** The renderer marks only the first line, so the rest
+    // arrives unmarked, and a reader taking the marked line alone would hold half a sentence and call the
+    // rest unnamed.
+    assert_eq!(
+        projected("### `a` (crate)\n\n> first line\nsecond line\n\n- **rule**: r\n"),
+        Projected::Read(vec![Rendered {
+            heading: "`a` (crate)".to_string(),
+            reason: "first line\nsecond line".to_string(),
+            fields: vec!["- **rule**: r".to_string()],
+        }])
+    );
+
+    // **Every rendered field is carried, including one this reader was never told about.** `- **anchor**:` is
+    // emitted by the renderer and was absent from two earlier identities; nothing here names it, and it is in
+    // the identity because the fields are taken as written rather than chosen.
+    assert_eq!(
+        projected(
+            "### `a` (crate)\n\n> why\n\n- **rule**: r\n- **anchor**: src/lib.rs\n- **kind**: k\n"
+        ),
+        Projected::Read(vec![Rendered {
+            heading: "`a` (crate)".to_string(),
+            reason: "why".to_string(),
+            fields: vec![
+                "- **rule**: r".to_string(),
+                "- **anchor**: src/lib.rs".to_string(),
+                "- **kind**: k".to_string(),
+            ],
         }])
     );
 }

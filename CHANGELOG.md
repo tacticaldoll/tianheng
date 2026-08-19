@@ -997,7 +997,8 @@ them.
 
 - **Two governance rules were measured as un-reacted in one window and only one was answered.**
   `.github/CODEOWNERS`'s *a merge cannot relax the law without a human accepting it* was measured against
-  `main`'s protection and given the reaction it lacked. The reason-perimeter falsifier is in the same state
+  `main`'s protection, and its **naming** half was given the reaction it lacked — the acceptance half is a
+  judgement boundary, recorded as one two entries above. The reason-perimeter falsifier is in the same state
   and was not: applied by hand across four rounds it produced **eight** corrections and moved no allowlist,
   which is `a repair loop is a diagnosis, not a schedule`'s third class dominating, whose stated remedy is to
   change the shape rather than add a round. The two were noticed as one only when a review put them side by
@@ -1035,6 +1036,57 @@ them.
   remembers rather than the sites a grep finds.
 
   No published API, outcome, report, exit class, or manifest moves; a record only.
+
+- **A reason that spans a line was read to its first line, and a rendered field was not read at all.** The
+  amendment check's identity has now omitted the field the next relaxation moved **twice**. The first form
+  carried heading and rule, and lowering a boundary from `enforce` to `warn` moved neither. The second added
+  reason and kind — and the projection writes a reason as `> {reason}` on one line only, while `because`
+  places no restriction on newlines, so the second line of a two-line reason arrived unmarked and was
+  dropped: half a sentence held, the other half unnamed. The same reader ignored `- **anchor**:`, a field the
+  renderer emits, so an anchor could be added or changed with nothing moving.
+
+  The identity now carries the `- **…**:` lines **as written, in order**, and reads a reason to the blank
+  line before them. A field the renderer gains later enters the identity by itself, which is what stops a
+  third form from omitting a third thing — the two omissions were not two oversights but one shape, choosing
+  fields by name.
+
+  Negative run, from the terminal: a newline inside 星表's reason renders as `> 星表 is the shared metadata
+  substrate: it depends on no workspace member at all.` followed by an unmarked `serde_json only`, and the
+  check fails. The parser's own direction reads a two-line reason whole and carries an `- **anchor**:` line
+  no boundary currently has.
+
+- **Two citations in live governance text named things that do not exist.** `BACKLOG.md`'s Shape clause — the
+  actionable half of a READY-PATCH entry — told an implementer to mirror a test retired with
+  `gate-shape-contract` in this same window, so the instruction was unactionable as written; the clause
+  already describes the shape in words, so the pointer is dropped rather than repointed. And a live WATCH
+  entry named the self-law generator `tianheng_constitution()`, which has never existed, two files from the
+  projection header that spells it correctly.
+
+  Both survived a full pre-release review and four review rounds, and the cause is that nothing resolves a
+  bare identifier: `reference_integrity` resolves paths, `bound_register` resolves pinning-test names, and a
+  backticked name in prose is resolved by nothing. Measured over the live documents: 369 such tokens, six
+  unresolved, and all six legitimate — four explicitly past-tense, one in `docs/history/`, one framed by the
+  line above it as a kept reproduction record. Filed rather than built, because that exemption is *a name
+  cited as history*, which is the prose judgement this repository has rejected three times; what would make
+  it buildable is exemption by declaration, a change to how entries are written.
+
+- **The reaction the amendment control got was its naming half, and two documents said otherwise.**
+  `PROJECT.md` and the check's own doc comment record the distinction correctly; `AGENTS.md`'s new rule and
+  the entry above it both said `.github/CODEOWNERS`'s *a merge cannot relax the law without a human accepting
+  it* got the reaction it was missing. It did not: the naming half did, and acceptance is a judgement
+  boundary. Both now say so.
+
+  A third site of the same retraction, after the previous entry repaired the fourth — which is the class
+  itself, one more time: a repair sweeps the sites it remembers.
+
+- **The rejected detector's figures are anchored to the run that produced them.** The entry filing the
+  reason-perimeter class carried `8 of 13`, `8 false positives`, `0 true positives` as live text and used them
+  as a promotion baseline, in an entry whose own subject is that a census with no producer drifts. The
+  prototype was not retained, so they are anchored to `1fa86d1` on 2026-08-19 with the criterion that produced
+  them written out, and the trigger no longer depends on the numbers staying true: it is now a decidable
+  subset whose first run over the projection produces a true positive.
+
+  No published API, outcome, report, exit class, or manifest moves; `kanhe` ships in no package.
 
 - **A reason about what ANOTHER crate does was the shape the second perimeter pass missed.** The falsifier
   the law's own header states took **three** passes to apply to eight boundaries, and each pass missed a
