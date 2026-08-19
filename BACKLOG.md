@@ -1117,7 +1117,7 @@ consumer for an undemonstrated deduplication.
   one refused approach with its measurement ("scanning paragraphs instead of lines … would not have caught it").
   One instance in a projection is the pattern existing without being enumerated, not the gap being closed.
   *Risk:* a rejection is re-proposed, re-measured and re-rejected; the reverse risk is equally real and is why
-  this is WATCH rather than READY — see the trigger. *Promotion trigger:* **not fired.** The candidate evidence
+  this is WATCH rather than READY — see the trigger. *Promotion trigger:* **Not fired** (evaluated 2026-08-19). The candidate evidence
   points both ways. The harness enumeration was rejected twice on an unmeasured premise, then measured at 107ms
   cold and adopted — a rejection a later reader *did* consult and correctly overturn, which argues that a
   durable, projected register would have entrenched a wrong answer twice. **Where that record now lives is the
@@ -1243,8 +1243,10 @@ consumer for an undemonstrated deduplication.
   **That trigger is decidable only because the annotations now carry a moment.** They were written as
   present-tense assertions — a bare *not fired* — so a reader could not tell one evaluated today from one
   written when the entry was filed and unread since, and *unnoticed* had no observable meaning. Every
-  annotation now reads `**Not fired** (evaluated <date>)`, and a sweep compares dates rather than re-reading
-  every entry. *Authority:* engine. *Compatibility:* patch; this document ships in no crate.
+  annotation matching `**Not fired.**` now reads `**Not fired** (evaluated <date>)`, and a sweep compares
+  dates rather than re-reading every entry. **The corpus is named because the first sweep was stated
+  universally and was not**: a mechanical replacement matched only the capitalised form, so one annotation
+  spelled `**not fired.**` survived a claim that every annotation carried a date. *Authority:* engine. *Compatibility:* patch; this document ships in no crate.
 
 - **WATCH: a tracked declaration nothing reads.** *Observed pressure:*
   `crates/kanhe/tests/fixtures/refusal_scan/` was tracked on 2026-08-10 and referenced by nothing until

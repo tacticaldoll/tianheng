@@ -4020,6 +4020,15 @@ no adopter runs. They are here rather than under the adopter headings above beca
   the **existing** edge — `finding: "serde_json"` for 繩墨, `finding: "shengmo"` for 勘合 — which is what
   shows the rule reads each target's real edges rather than passing over them.
 
+  **Correction to how those four were classified.** The pull request called the last two "the precision half".
+  They are not: a precision witness shows the rule declining to fire on something legal and adjacent, and both
+  of those fire — under a *perturbed law*, which makes them a second pair of violating witnesses observed from
+  the other side. They establish that the rule reads each target's real edges, which is worth having and is
+  not what the word means. The precision witness is the clean run with the law unchanged, where 繩墨's real
+  `tianheng` and `serde_json` edges and 勘合's real `shengmo`, `tianheng` and `serde_json` edges all pass at
+  exit `0`. It exists; it was mislabelled, not missing. A witness is classified by what it establishes, never
+  by the intent it was run with.
+
   **What remains for a human**: these two boundaries were added under a commit stating "the law itself did not
   change". They are formations, not a relocation, and formation carries its own acceptance. The evidence
   above is what that acceptance would rest on; the acceptance itself is not something a repair can supply.
@@ -4091,6 +4100,34 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   The reasons project into `AGENTS.self-law.md`, so the projection moves with them. No target, rule or
   allowlist changes, so no recorded baseline is affected.
+
+- **A dependency edge was recognised by one string layout.** The check holding one token to one owner derives
+  its corpus from the manifests, and read an edge as `text.contains("path = \"../{dep}\"")` — one spelling of
+  one form. `path="../x"` declares the same edge with no spaces; `alias = { package = "x", … }` is cargo's
+  rename, which this repository's release gate already reads for exactly that reason. Both were invisible, and
+  an edge missed on **both** sides of the two-way comparison is a corpus that shrinks while agreeing with
+  itself. The graph is read as TOML now, through the same region reader every other manifest question here
+  uses, across both dependency tables and their target-scoped forms.
+
+  **The negative run is over the reader, and that is forced rather than chosen.** The two constants are owned
+  by the two crates at the top of this workspace's dependency DAG, so no member can be made to reach either
+  without closing a cycle — measured: adding `shengmo` to `xuanji` produces `cyclic package dependency:
+  package guibiao depends on itself` and cargo refuses to build before any direction runs. The declared side
+  of the comparison is perturbable and is held that way; the graph side is not, so five spellings are given to
+  the reader directly and the substring form fails three of them.
+
+- **Two figures with no producer, and one annotation a mechanical replacement did not reach.**
+  `shengmo::workspace::MARKER`'s own documentation still counted the sites outside its reach after the same
+  figures had been removed from the check that reads it — the carrier was cleaned and the token's owner was
+  not. `AGENTS.md`'s doc-comment rule recorded four counts to justify having no reaction, and one of them was
+  reduced to zero by a sweep in the same window, from the same run that typed it. Both are removed: the
+  arguments do not rest on the numbers, and a census belongs where something enumerates it.
+
+  And a claim that *every* annotation now carries an evaluation date was false when it was written: the
+  replacement matched `**Not fired.**` and one entry spelled it `**not fired.**`. It carries a date now, and
+  the claim names the corpus it swept.
+
+  No published API, outcome, report, exit class, or manifest moves.
 
 ## [0.4.0] - 2026-08-04
 
