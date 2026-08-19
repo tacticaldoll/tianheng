@@ -934,6 +934,46 @@ them.
   four are named individually in the paragraph above, so that set is enumerated by the text that uses it,
   which is the only figure here anything produces.
 
+- **A reason about what ANOTHER crate does was the shape the second perimeter pass missed.** The falsifier
+  the law's own header states took **three** passes to apply to eight boundaries, and each pass missed a
+  different shape. The first read *entailed by the allowlist* generously; the second caught phrases about
+  edges pointing **at** a crate and left three phrases about edges pointing **away from** other crates. 圭表's
+  *the observation dimensions are composed only by the 天衡 shell* and 天衡's *remains the outward composition
+  layer* both describe the shell's behaviour: stop composing, keep every declared edge, and both boundaries
+  stay green while both sentences turn false. 渾儀's *quarantined* says `syn` appears in no sibling allowlist
+  — add it to 圭表's and 渾儀's boundary is green while the word is false.
+
+  The third was left standing on the second pass with a note saying it sat inside the law's perimeter without
+  sitting inside this rule's. That is true, and it is not the test: the test is about this rule, and a reason
+  is attached to this rule. The note was a way of keeping a sentence the falsifier had already refused, and
+  recording it is worth more than the edit — an accurate observation used to overrule a decidable test is the
+  harder failure to see. The header now names both missed shapes rather than showing one by example, since an
+  example teaches its own shape and nothing else.
+
+  No target, rule, or allowlist changes; the projection moves with the reasons.
+
+- **`check_and_cover`'s published contract said `None` had one cause after it was given a second.** The
+  membership repair earlier in this window added `Members::Unreadable → None` to the coverage arm, and the
+  doc comment above it still said coverage is `None` *only when the metadata itself could not be read*. That
+  is a public API's stated semantics for its own `Option`, in a crate an adopter compiles against, made false
+  by a change three functions below it. It now names both facts and says that each is also reported as a
+  constitution error, so `None` never travels alone.
+
+  **And the guard for that repair did not reach the consumers it was written for.** It held
+  `workspace_member_names`, whose `enum` already forces every caller to match — but matching is not choosing
+  the right arm, and a later edit mapping `Unreadable` to an empty membership or to a fabricated coverage
+  would have left it green. The coverage arm was inline in a function whose only entry point spawns
+  `cargo metadata`, so no direction could hand it a membership to fail on; it is now `coverage_of`, named and
+  reachable, and a new direction calls both consumers over metadata that cannot be read.
+
+  Negative runs, from the terminal: mapping the coverage arm to a fabricated coverage fails with `no
+  \`packages\` array: coverage over a membership that was never read is coverage over nothing`, and mapping
+  the outcome arm to an empty membership fails with `the error must name what could not be read, got: a
+  boundary must govern a real crate or it silently never reacts: target crate 'core' is not a member of the
+  target workspace` — which is the pre-repair defect exactly: the right refusal, about the wrong thing.
+
+  No signature, outcome kind, exit class, identity shape, or manifest moves; `coverage_of` is private.
+
 ### Self-governance
 
 - **A struct-literal field sat four columns left of its sibling, and `cargo fmt --all --check` was green

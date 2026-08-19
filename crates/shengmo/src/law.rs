@@ -47,17 +47,23 @@ use tianheng::{Boundary, Rule};
 /// it, because the entailment moves when the set does.
 ///
 /// It lived in one boundary's own annotation, where it had caught that boundary's clause and nothing else.
-/// Applied to all eight, it moved five reasons across two passes, and the second pass is why the test is
-/// stated in one sentence here rather than shown by example: the first pass read *entailed by the allowlist*
-/// generously and left three clauses standing. **A phrase about edges pointing AT this crate fails the test
-/// too** — 璇璣 *below every dimension* and 星表 *beneath every dimension* are positions the dimensions'
-/// own allowlists determine, not this boundary's; delete every edge into them and each stays green while its
-/// sentence turns false.
+/// Applied to all eight it took **three passes**, and each pass missed a different shape, which is why the
+/// test is stated in one sentence here rather than shown by example — an example teaches its own shape and
+/// nothing else.
 ///
-/// 渾儀's *quarantined syn* is the one left standing, with its reason: the quarantine is real and reacted to,
-/// but by the **sibling** allowlists, none of which names `syn` — inside the law's perimeter without being
-/// inside this rule's. That distinction is the one case where the two come apart, and stating it is more
-/// honest than an edit that would blur which of the two holds it.
+/// **A phrase about edges pointing AT this crate fails the test.** 璇璣 *below every dimension* and 星表
+/// *beneath every dimension* are positions the dimensions' own allowlists determine, not this boundary's;
+/// delete every edge into them and each stays green while its sentence turns false. The first pass read
+/// *entailed by the allowlist* generously and left all of these standing.
+///
+/// **A phrase about what ANOTHER crate does fails it too**, and the second pass left three. 圭表's *the
+/// observation dimensions are composed only by the 天衡 shell* and 天衡's *remains the outward composition
+/// layer* are claims about the shell's own behaviour: stop composing, keep every edge, and both boundaries
+/// stay green while both sentences turn false. 渾儀's *quarantined* syn says `syn` appears in no sibling
+/// allowlist — add it to 圭表's and 渾儀's boundary is green while the word is false. That one was left
+/// standing on the second pass with a note saying it sat inside the law's perimeter without sitting inside
+/// this rule's, which is true and is not the test: the test is about this rule, and a reason is attached to
+/// this rule. The note was a way of keeping a sentence the falsifier had already refused.
 ///
 /// A wrong boundary here is fixed by a human-reviewed amendment, never by quietly
 /// weakening this function to make CI pass.
@@ -85,18 +91,17 @@ pub fn constitution() -> Constitution {
                 .because(
                     "the 圭表 static core stays dependency-light: serde_json, xuanji (reaction \
                      model), and xingbiao (metadata substrate) only. functional core ⊥ imperative \
-                     shell: 圭表 must not depend on the 天衡 shell. 三儀 ⊥ 三儀: naming no \
-                     sibling dimension, the observation dimensions are composed only by the 天衡 \
-                     shell, never by each other",
+                     shell: 圭表 must not depend on the 天衡 shell. 三儀 ⊥ 三儀: it names no \
+                     sibling dimension",
                 ),
         )
         .boundary(
             CrateBoundary::crate_("hunyi")
                 .restrict_dependencies_to(["xuanji", "xingbiao", "serde_json", "syn"])
                 .because(
-                    "渾儀 is the semantic AST dimension: quarantined syn dependency only. 三儀 ⊥ \
-                     三儀: it depends on no sibling dimension and never on the 天衡 shell \
-                     (functional dimension ⊥ imperative shell)",
+                    "渾儀 is the semantic AST dimension: it depends on 璇璣, 星表, serde_json \
+                     and syn only. 三儀 ⊥ 三儀: it names no sibling dimension and never the 天衡 \
+                     shell (functional dimension ⊥ imperative shell)",
                 ),
         )
         .boundary(
@@ -128,9 +133,9 @@ pub fn constitution() -> Constitution {
             CrateBoundary::crate_("tianheng")
                 .restrict_dependencies_to(["guibiao", "hunyi", "louke", "serde_json"])
                 .because(
-                    "the 天衡 shell remains the outward composition layer: direct normal edges \
-                     end at observation dimensions and projection serialization, never at the \
-                     lower reaction model or metadata substrate",
+                    "the 天衡 shell's direct normal edges end at the observation dimensions and \
+                     at projection serialization, never at the lower reaction model or metadata \
+                     substrate",
                 ),
         )
         .boundary(

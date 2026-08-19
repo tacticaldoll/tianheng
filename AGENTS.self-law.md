@@ -35,14 +35,14 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `guibiao` (crate)
 
-> the 圭表 static core stays dependency-light: serde_json, xuanji (reaction model), and xingbiao (metadata substrate) only. functional core ⊥ imperative shell: 圭表 must not depend on the 天衡 shell. 三儀 ⊥ 三儀: naming no sibling dimension, the observation dimensions are composed only by the 天衡 shell, never by each other
+> the 圭表 static core stays dependency-light: serde_json, xuanji (reaction model), and xingbiao (metadata substrate) only. functional core ⊥ imperative shell: 圭表 must not depend on the 天衡 shell. 三儀 ⊥ 三儀: it names no sibling dimension
 
 - **rule**: restrict dependencies to (only: serde_json, xuanji, xingbiao)
 - **kind**: crate · **severity**: enforce
 
 ### `hunyi` (crate)
 
-> 渾儀 is the semantic AST dimension: quarantined syn dependency only. 三儀 ⊥ 三儀: it depends on no sibling dimension and never on the 天衡 shell (functional dimension ⊥ imperative shell)
+> 渾儀 is the semantic AST dimension: it depends on 璇璣, 星表, serde_json and syn only. 三儀 ⊥ 三儀: it names no sibling dimension and never the 天衡 shell (functional dimension ⊥ imperative shell)
 
 - **rule**: restrict dependencies to (only: xuanji, xingbiao, serde_json, syn)
 - **kind**: crate · **severity**: enforce
@@ -56,7 +56,7 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `tianheng` (crate)
 
-> the 天衡 shell remains the outward composition layer: direct normal edges end at observation dimensions and projection serialization, never at the lower reaction model or metadata substrate
+> the 天衡 shell's direct normal edges end at the observation dimensions and at projection serialization, never at the lower reaction model or metadata substrate
 
 - **rule**: restrict dependencies to (only: guibiao, hunyi, louke, serde_json)
 - **kind**: crate · **severity**: enforce

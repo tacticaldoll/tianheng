@@ -153,11 +153,13 @@ fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
 }
 
 /// Read the target workspace once and return both the reaction outcome and workspace
-/// coverage. Coverage is `Some` whenever the metadata was observed — including when the
+/// coverage. Coverage is `Some` whenever the membership was read — including when the
 /// outcome is a constitution error from a later boundary; the caller decides whether to
-/// surface it. It is `None` only when the metadata itself could not be read. One
-/// `cargo metadata` spawn feeds both, where `check` plus a separate coverage pass would
-/// have spawned twice.
+/// surface it. It is `None` for either of the two facts that make a membership unavailable:
+/// the `cargo metadata` read itself failed, or the metadata was read and its workspace
+/// membership could not be decoded from it. Both are reported as a constitution error in the
+/// outcome, so `None` never travels alone. One `cargo metadata` spawn feeds both, where
+/// `check` plus a separate coverage pass would have spawned twice.
 pub fn check_and_cover(
     constitution: &Constitution,
     manifest_path: &Path,
@@ -171,14 +173,25 @@ pub fn check_and_cover(
             );
         }
     };
-    // Coverage over a membership that could not be read is coverage over nothing: `total = 0` with an
-    // empty uncovered list renders as complete. The evaluation below reports the same fact as a
-    // constitution error, so the advisory is withheld rather than fabricated.
-    let coverage = match workspace_member_names(&metadata) {
+    (
+        evaluate(constitution, &metadata),
+        coverage_of(&metadata, constitution),
+    )
+}
+
+/// The workspace coverage the metadata supports, or `None` where it supports none.
+///
+/// **Named so that the two consumers of [`Members`] cannot reinterpret it apart.** Coverage over a
+/// membership that could not be read is coverage over nothing: `total = 0` with an empty uncovered list
+/// renders as complete. [`evaluate`] reports the same fact as a constitution error, so the advisory is
+/// withheld rather than fabricated — and the two arms saying so live in one function each, reachable by a
+/// direction, rather than inline in a function whose only entry point spawns `cargo metadata` and so cannot
+/// be handed a membership to fail on.
+fn coverage_of(metadata: &Value, constitution: &Constitution) -> Option<Coverage> {
+    match workspace_member_names(metadata) {
         Members::Read(names) => Some(coverage_from(names, constitution)),
         Members::Unreadable(_) => None,
-    };
-    (evaluate(constitution, &metadata), coverage)
+    }
 }
 
 /// Resolve every workspace member's source-root directory from the target workspace at
