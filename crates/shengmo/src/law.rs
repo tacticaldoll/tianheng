@@ -38,6 +38,18 @@ use tianheng::{Boundary, Rule};
 /// — and an allowlist is always stricter than a denylist, so it would add zero protection.
 /// Minimalism forbids the redundant reaction; the law is made *visible*, not re-enforced.
 ///
+/// **The test every `because(...)` below is written against.** `AGENTS.md` says a reason must never assert
+/// structure the law does not react to; what makes that operable is a falsifier, and it is one sentence:
+/// **delete the thing the clause asserts, and if the boundary stays green while the clause turns false, the
+/// clause is outside the perimeter.** Applied to `restrict_dependencies_to`, which sees the declared
+/// dependency set and nothing else: *what a dependency is used for* always fails the test — stop calling it,
+/// keep the edge, and the boundary is green while the sentence is false. *What the allowlist entails* passes
+/// it, because the entailment moves when the set does.
+///
+/// It lived in one boundary's own annotation below, where it had caught that boundary's clause and nothing
+/// else. Two more reasons carried use clauses through the whole 0.5.0 window while the test sat beside a
+/// third — including one repaired for exactly this and repaired only halfway.
+///
 /// A wrong boundary here is fixed by a human-reviewed amendment, never by quietly
 /// weakening this function to make CI pass.
 pub fn constitution() -> Constitution {
@@ -54,8 +66,8 @@ pub fn constitution() -> Constitution {
             CrateBoundary::crate_("xingbiao")
                 .restrict_dependencies_to(["serde_json"])
                 .because(
-                    "星表 is the shared metadata substrate: serde_json only, reading cargo \
-                     metadata beneath the dimensions without depending on workspace members",
+                    "星表 is the shared metadata substrate: serde_json only, so it sits beneath every \
+                     dimension by depending on no workspace member at all",
                 ),
         )
         .boundary(
@@ -92,9 +104,15 @@ pub fn constitution() -> Constitution {
                 // comment; no supported observation surface expresses a feature-gated edge, so it is not
                 // declarable here either. The sibling below already does this correctly by saying "direct
                 // normal edges" — naming exactly what its own rule sees.
+                //
+                // **And this reason failed its own test until the rule moved up to `constitution`'s header.**
+                // It said the dimension "reacts in prod independently of the 天衡 shell": the second half is
+                // entailed by the shell's absence from the allowlist, the first is a use — stop reacting in
+                // prod, keep the edges, and the boundary is green while the sentence is false. A test written
+                // beside one clause caught that clause and not this boundary's own `because`.
                 .because(
                     "漏刻 is the runtime dimension: it depends on 璇璣 and 星表 only. 三儀 ⊥ 三儀: \
-                     naming no sibling dimension, it reacts in prod independently of the 天衡 shell",
+                     naming no sibling dimension and never the 天衡 shell",
                 ),
         )
         .boundary(
@@ -112,9 +130,7 @@ pub fn constitution() -> Constitution {
                 .because(
                     "繩墨 declares this law through the shell alone: the allowlist is 天衡 and \
                      serde_json, so no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist and every \
-                     boundary here is stated through the surface the shell publishes. serde_json \
-                     reads cargo's own message stream, where a reaction's corpus comes from the \
-                     build rather than from a list",
+                     boundary here is stated through the surface the shell publishes",
                 ),
         )
         .boundary(

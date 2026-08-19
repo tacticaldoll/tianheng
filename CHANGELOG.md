@@ -4070,6 +4070,28 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves.
 
+- **The test that decides whether a reason is inside its perimeter lived in one boundary's own annotation, and
+  had never been applied to the other seven — including the boundary hosting it.** `AGENTS.md` states the rule;
+  what makes it operable is a falsifier, and 漏刻's annotation had written it: *delete the thing the clause
+  asserts, and if the boundary stays green while the clause turns false, the clause is outside*. Applied to
+  `restrict_dependencies_to`, which sees the declared dependency set and nothing else, *what a dependency is
+  used for* always fails and *what the allowlist entails* always passes.
+
+  The falsifier moves to `constitution()`'s header, where every `because(...)` is written, and all eight
+  boundaries were run against it. Three carried use clauses: 繩墨's *serde_json reads cargo's own message
+  stream*, 星表's *reading cargo metadata*, and — the sharpest — 漏刻's own *it reacts in prod independently
+  of the 天衡 shell*, in the same boundary whose annotation states the test. Stop reacting in prod, keep the
+  edges, and each boundary is green while its sentence is false.
+
+  The other five pass, and 天衡's is the model the annotation already named: *direct normal edges end at
+  observation dimensions and projection serialization* names exactly what its own rule sees. 渾儀's
+  *quarantined syn* is left as written and noted here: the quarantine is entailed by the **sibling**
+  allowlists rather than by this boundary's own, so it is inside the law's perimeter without being inside
+  this rule's — a distinction worth stating rather than resolving by edit.
+
+  The reasons project into `AGENTS.self-law.md`, so the projection moves with them. No target, rule or
+  allowlist changes, so no recorded baseline is affected.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

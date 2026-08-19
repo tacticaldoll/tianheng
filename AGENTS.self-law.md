@@ -28,7 +28,7 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `xingbiao` (crate)
 
-> 星表 is the shared metadata substrate: serde_json only, reading cargo metadata beneath the dimensions without depending on workspace members
+> 星表 is the shared metadata substrate: serde_json only, so it sits beneath every dimension by depending on no workspace member at all
 
 - **rule**: restrict dependencies to (only: serde_json)
 - **kind**: crate · **severity**: enforce
@@ -49,7 +49,7 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `louke` (crate)
 
-> 漏刻 is the runtime dimension: it depends on 璇璣 and 星表 only. 三儀 ⊥ 三儀: naming no sibling dimension, it reacts in prod independently of the 天衡 shell
+> 漏刻 is the runtime dimension: it depends on 璇璣 and 星表 only. 三儀 ⊥ 三儀: naming no sibling dimension and never the 天衡 shell
 
 - **rule**: restrict dependencies to (only: xuanji, xingbiao)
 - **kind**: crate · **severity**: enforce
@@ -63,7 +63,7 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `shengmo` (crate)
 
-> 繩墨 declares this law through the shell alone: the allowlist is 天衡 and serde_json, so no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist and every boundary here is stated through the surface the shell publishes. serde_json reads cargo's own message stream, where a reaction's corpus comes from the build rather than from a list
+> 繩墨 declares this law through the shell alone: the allowlist is 天衡 and serde_json, so no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist and every boundary here is stated through the surface the shell publishes
 
 - **rule**: restrict dependencies to (only: tianheng, serde_json)
 - **kind**: crate · **severity**: enforce
