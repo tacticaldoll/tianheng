@@ -4276,6 +4276,31 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves.
 
+- **The perimeter test applied strictly moved five of eight reasons, not three.** The first pass read
+  *entailed by the allowlist* generously and cleared three clauses that do not survive the test the
+  constitution's own header states. Applied literally — *delete the thing the clause asserts, and if the
+  boundary stays green while the clause turns false, the clause is outside*:
+
+  **A phrase about edges pointing at this crate fails too.** 璇璣 *below every dimension* and 星表 *beneath
+  every dimension* name positions the **dimensions'** own allowlists determine, not these boundaries'. Delete
+  every edge into them and each stays green while its sentence turns false. Both now say only what their own
+  rule sees: they depend on no workspace member.
+
+  And two use clauses survived the pass that was written to remove use clauses. 繩墨 *declares this law through
+  the shell* and *every boundary here is stated through the surface the shell publishes*; 勘合 *a repository
+  check reads the record through the same published surface an adopter has*. Stop declaring, stop reading, keep
+  the edges — green, and both sentences false. Both reasons now state their allowlist and the dimension edges
+  it forbids, and nothing else.
+
+  渾儀's *quarantined syn* is the one left standing, with its reason recorded rather than edited: the quarantine
+  is real and reacted to, but by the **sibling** allowlists, none of which names `syn`. It is inside the law's
+  perimeter without being inside this rule's — the one case where the two come apart, and an edit would blur
+  which of them holds it.
+
+  The reasons project into `AGENTS.self-law.md`, so the projection moves with them. No target, rule, or
+  allowlist changes; no recorded baseline is affected. No published API, outcome, report, exit class, or
+  manifest moves.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

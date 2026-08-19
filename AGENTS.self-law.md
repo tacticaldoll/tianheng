@@ -21,14 +21,14 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `xuanji` (crate)
 
-> 璇璣 is the dimension-agnostic reaction model: serde_json only, below every dimension, and must not depend on any workspace member
+> 璇璣 is the dimension-agnostic reaction model: it must not depend on any workspace member; serde_json only
 
 - **rule**: restrict dependencies to (only: serde_json)
 - **kind**: crate · **severity**: enforce
 
 ### `xingbiao` (crate)
 
-> 星表 is the shared metadata substrate: serde_json only, so it sits beneath every dimension by depending on no workspace member at all
+> 星表 is the shared metadata substrate: it depends on no workspace member at all; serde_json only
 
 - **rule**: restrict dependencies to (only: serde_json)
 - **kind**: crate · **severity**: enforce
@@ -63,14 +63,14 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `shengmo` (crate)
 
-> 繩墨 declares this law through the shell alone: the allowlist is 天衡 and serde_json, so no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist and every boundary here is stated through the surface the shell publishes
+> 繩墨 depends on 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist
 
 - **rule**: restrict dependencies to (only: tianheng, serde_json)
 - **kind**: crate · **severity**: enforce
 
 ### `kanhe` (crate)
 
-> 勘合 names the shell, the law's own locator and serde_json, never a dimension: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist, so a repository check reads the record through the same published surface an adopter has rather than through an observation engine
+> 勘合 depends on 繩墨, 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist
 
 - **rule**: restrict dependencies to (only: shengmo, tianheng, serde_json)
 - **kind**: crate · **severity**: enforce
