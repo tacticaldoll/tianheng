@@ -1340,3 +1340,49 @@ and the parse failure passed over: 389 tracked files, **zero** inspected, and th
 - **WHEN** a tracked text file has trailing whitespace, a blank line at its end, or no final newline
 - **THEN** the check reports it as a violation naming the path, and the line for trailing whitespace
 - **PINNED-BY** `each_offence_shape_is_named_when_it_is_shown`
+
+### Requirement: An amendment to the self-law is named before it lands
+
+The set of boundaries `shengmo::law::constitution()` declares SHALL be declared in this repository as text,
+and held against the projection `AGENTS.self-law.md` renders **in both directions**. The declared identity
+SHALL carry each boundary's rule as well as its heading, so that widening an allowlist moves the set exactly
+as adding or removing a boundary does.
+
+The subject SHALL be the projection's tracked text rather than `constitution()` itself: a check calling the
+law it is judging compares the law against itself and cannot fail.
+
+`.github/CODEOWNERS` states that the review requirement is the reaction and that a merge cannot relax the law
+without a human accepting it, then states that designation alone only auto-requests review. Measured, `main`
+carries `require_code_owner_reviews: false` and `required_approving_review_count: 0`; and enabling it would
+not close the gap, because a pull request's author cannot approve their own, so for a single-steward
+repository that rule cannot fire. Two crate boundaries reached the projection under a commit body stating the
+law itself did not change, and nothing refused them.
+
+#### Scenario: A boundary reaches the law without being named
+
+- **WHEN** `constitution()` gains a boundary and the projection is regenerated
+- **THEN** the check fails naming the projected boundary the declaration does not carry, because an amendment
+  nobody named is the one this requirement exists to refuse
+- **PINNED-BY** `the_law_declares_no_boundary_this_repository_has_not_named`
+
+#### Scenario: An allowlist is widened and the projection re-blessed
+
+- **WHEN** a boundary keeps its target and its rule permits more than the declaration records
+- **THEN** the check fails naming that boundary, because relaxing the law widens a boundary far more often
+  than it deletes one
+- **PINNED-BY** `the_law_declares_no_boundary_this_repository_has_not_named`
+
+#### Scenario: A declaration outlives its boundary
+
+- **WHEN** a boundary is removed from the law and the declaration still carries it
+- **THEN** the check fails naming the declared boundary the projection does not render, which is the entry a
+  one-directional comparison would keep certifying
+- **PINNED-BY** `the_law_declares_no_boundary_this_repository_has_not_named`
+
+#### Scenario: The projection cannot be parsed
+
+- **WHEN** the projection renders no boundary section, or a section carries no rule line, or a rule line sits
+  under no section
+- **THEN** the check refuses as unreadable rather than comparing an empty set, because a projection this
+  reader cannot parse is not a law with no boundaries
+- **PINNED-BY** `a_projection_this_reader_cannot_parse_is_not_a_law_with_no_boundaries`

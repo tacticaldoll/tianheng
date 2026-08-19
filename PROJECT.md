@@ -207,6 +207,36 @@ govern-by-reaction, never a thing the tool wields.
 
 Record significant decisions here (the *why*; specs and code carry the *what*).
 
+- **Accepted: 繩墨 and 勘合 are formations of the law, not a relocation of it.** `09c29d0` added two crate
+  boundaries to `shengmo::law::constitution()` under a commit body reading *the law itself did not change:
+  the regenerated projection differs by exactly three lines, all of them the preamble's own self-reference*.
+  The projection gained nineteen lines, fourteen of them these two entries, with their own targets, rules and
+  severities. What was recorded as a relocation was a formation, and a formation carries its own acceptance.
+
+  Accepted as declared: **繩墨 may depend on 天衡 and serde_json only; 勘合 on 繩墨, 天衡 and serde_json
+  only.** Both at `enforce`. Both crates ship in no package, so no adopter is reached either way. The cost
+  accepted with them is the ordinary one: a later edge from either to a dimension is an amendment, not a
+  commit.
+
+  The acceptance rests on evidence rather than on the record's word: four perturbations, one command, each
+  perturbed run exiting `101` with the boundary's own `reason` carried into the violation, and the clean run
+  at `0` — reproduced and written out in the `[0.5.0]` CHANGELOG entry. *(Accepted 2026-08-19.)*
+
+- **The amendment requirement is a reaction now, because as prose it never fired.**
+  `.github/CODEOWNERS` says the review requirement *is* the reaction and that a merge cannot relax the law
+  without a human accepting it — then says designation alone only auto-requests review. Measured, `main`'s
+  protection answers `require_code_owner_reviews: false` and `required_approving_review_count: 0`; and
+  enabling it would not close this, since GitHub does not let a pull request's author approve their own, so
+  for a single-steward repository the rule cannot fire at all. That is a prose prescription with no backstop
+  standing on the law itself, which is the shape this project's reason rule refuses everywhere else.
+
+  The law's boundary set — each heading with its rule, so a **widened** allowlist moves it and not only an
+  added or removed boundary — is declared in `crates/kanhe/tests/self_law_amendment.rs` and held against the
+  projection in both directions. Editing that declaration is what accepting an amendment now consists of, and
+  it is a file CODEOWNERS already routes to the steward. Measured before building it: with 璇璣's allowlist
+  quietly widened to permit 圭表 and the projection re-blessed, all nine existing self-governance assertions
+  pass and only this one fails. *(Decided 2026-08-19.)*
+
 - **Reborn from modou as a crate family.** modou was taken as frozen/complete at its own
   `0.1.1` when Tianheng was reborn; Tianheng started fresh (clean git history, clean SemVer
   from `0.1.0`) rather than expanding modou's single crate into a god crate. The runtime
