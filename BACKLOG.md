@@ -667,6 +667,45 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **WATCH: A `cfg_attr` whose applied attributes this reader cannot parse drops its `#[path]` candidate
+  silently.** *Class:* WATCH. *Observed pressure:* a review of the 0.5.0 window read
+  `hunyi::syn_util::cfg_attr_path_values` and `meta_path_value`, both of which take `.ok()` on
+  `parse_args_with(cfg_attr_metas)`. The direction is unsafe: the values are module `#[path]` remaps and the
+  reader's own doc says every one is a candidate a cfg-blind walker must union, so a dropped candidate means
+  some platform's source file is never scanned and any violation in it is a silent false negative. The sibling
+  reader twelve lines away, `sole_bare_cfg_predicate`, declares the same collapse in its own doc — its `None`
+  has three named causes including a parse failure — and its `None` is the conservative direction. *Observation
+  source:* two independent attempts to construct a reaching input, one by the reviewer and one here, both
+  failed. Measured against real rustc: bracket-delimited meta lists are rejected by rustc (`wrong meta list
+  delimiters`), an unknown attribute is rejected before delimiters are reached, and every applied form rustc
+  *does* accept — `unsafe(no_mangle)` in both editions, `doc = include_str!(…)`, a leading-`::` path, a
+  trailing comma, a nested `cfg_attr` — parses as a `syn::Meta` and yields its candidate. Measured with the
+  same probe: two `path` values in one `cfg_attr` take the **first**, and rustc warns `unused attribute` on the
+  second, so this reader's `find_map` agrees with rustc rather than diverging from it. *Current reaction or
+  bound:* none; `observation-bounds.md` has zero `cfg_attr` entries, and `hunyi/src/bounds.rs`'s header
+  describes the family without declaring this member. *Risk:* a silent false negative in a published crate,
+  the one direction this family forbids — bounded only by nobody having found an input. *Promotion trigger:*
+  an input rustc accepts and `cfg_attr_metas` rejects. That input is also what the bound needs: a declared
+  observation bound is pinned by a direction over its own WHEN, and an unconstructible WHEN cannot pin one,
+  which is why this is filed rather than declared. *Version class:* patch; `hunyi` ships. *Authority:*
+  `semantic-*` capabilities, which own the resolver's reach.
+
+- **WATCH: The one-spelling corpus reader matches a dependency by name, not by resolved identity.** *Class:*
+  WATCH. *Observed pressure:* `one_spelling.rs`'s `members_reaching` builds its edge set by comparing a
+  declared dependency's name against each workspace member's **directory basename**, with no path, workspace,
+  or source check. A member declaring a registry dependency that happens to be named after another member
+  would gain an edge to the local crate it does not depend on. *Observation source:* measured against this
+  workspace — all eight members' directory basenames equal their package names, so no edge is silently *lost*,
+  which is the direction that would matter; and the eight declare no registry dependency at all, so the
+  spurious-edge input does not exist here and the self-law's own allowlists (`serde_json only`, plus syn
+  quarantined in one crate) refuse it before this reader would see it. *Current reaction or bound:* the check's
+  two-way `assert_eq!(declared, reaching)`, which a spurious edge breaks **loudly** — the corpus can only grow
+  under this defect, never shrink, so the failure direction is a false positive. *Risk:* a gate refusing a
+  crate that cannot in fact reach the constant. Low, and loud. *Promotion trigger:* a workspace member
+  declaring a non-path dependency whose name matches another member's directory basename, or a member whose
+  directory basename stops matching its package name. *Version class:* patch; the reader is repository
+  machinery, shipping in no crate. *Authority:* `repository-checks`.
+
 - **WATCH: A command a document hands a reader is only checked in one shape.** *Class:* WATCH. *Observed pressure:*
   `5be5678` closed the class *a command a document hands a reader names a target that exists* by
   resolving `-p <package> --test <target>` pairs against `cargo metadata`, and a fifth instance survived it in

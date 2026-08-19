@@ -968,6 +968,62 @@ pub(super) fn an_unreadable_membership_is_not_an_empty_one() {
     );
 }
 
+/// The two consumers of an unreadable membership, exercised through the consumers.
+///
+/// **The reader refusing is not the same fact as the consumers honouring the refusal.** The direction
+/// above holds `workspace_member_names`, which an `enum` already forces every caller to match on — but
+/// matching is not choosing the right arm, and a later edit mapping `Unreadable` to an empty membership
+/// or to a fabricated coverage would leave it green. So this one calls what the callers call: `evaluate`
+/// for the outcome and `coverage_of` for the advisory, over metadata neither can be handed through
+/// `check_and_cover`, whose only entry point spawns `cargo metadata` and therefore cannot be given a
+/// membership to fail on.
+#[test]
+pub(super) fn both_consumers_of_an_unreadable_membership_refuse() {
+    let constitution = Constitution::new("w").boundary(
+        CrateBoundary::crate_("core")
+            .restrict_dependencies_to(["serde_json"])
+            .because("a boundary is needed for coverage to have a denominator"),
+    );
+
+    for (label, metadata) in [
+        (
+            "no `packages` array",
+            serde_json::json!({ "workspace_root": "/w" }),
+        ),
+        (
+            "a package this reader cannot name",
+            serde_json::json!({ "packages": [ { "name": "core" }, { "version": "0.1.0" } ] }),
+        ),
+    ] {
+        match crate::evaluate(&constitution, &metadata) {
+            Outcome::ConstitutionError(why) => assert!(
+                why.contains("membership") || why.contains("workspace members"),
+                "{label}: the error must name what could not be read, got: {why}"
+            ),
+            other => panic!("{label}: an unreadable membership must refuse, got {other:?}"),
+        }
+        assert!(
+            crate::coverage_of(&metadata, &constitution).is_none(),
+            "{label}: coverage over a membership that was never read is coverage over nothing"
+        );
+    }
+
+    // The control: a membership that IS readable reaches both consumers, so the assertions above are
+    // about the unreadable state rather than about a constitution that refuses everything.
+    let read = serde_json::json!({ "packages": [ { "name": "core" } ] });
+    assert!(
+        !matches!(
+            crate::evaluate(&constitution, &read),
+            Outcome::ConstitutionError(_)
+        ),
+        "a readable membership must not refuse"
+    );
+    assert!(
+        crate::coverage_of(&read, &constitution).is_some(),
+        "a readable membership must produce coverage"
+    );
+}
+
 #[test]
 pub(super) fn workspace_rule_flags_only_unlisted_workspace_members() {
     // Deps: two workspace members (core, adapters), one external (serde), and one
