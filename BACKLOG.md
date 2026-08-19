@@ -667,6 +667,32 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **WATCH: The reason-perimeter rule is prose applied by hand, and four rounds of applying it produced eight
+  corrections.** *Class:* WATCH. *Observed pressure:* the falsifier in `constitution()`'s header — *delete
+  what the clause asserts; if the boundary stays green while the clause turns false, the clause is outside* —
+  was applied across four review rounds, moving two reasons (use clauses), then three (phrases about edges
+  pointing **at** this crate), then three more (phrases about what **another** crate does). Eight corrections;
+  no allowlist ever moved. By `AGENTS.md`'s own *a repair loop is a diagnosis, not a schedule*, that is a loop
+  dominated by the third class — the code is right and a statement about it is wrong — whose stated remedy is
+  to change the shape rather than add a round. The header itself now records *each pass missed a different
+  shape*, and the third pass explicitly withdrew an exemption the second had written. *Observation source:*
+  the one decidable subset a review proposed — *a reason naming a family crate that is neither its own target
+  nor in its own allowlist* — was implemented against the current projection before being adopted, and
+  measured: **8 of 13 boundaries fire, all 8 false positives, 0 true positives.** Every hit is a legitimate
+  prohibition entailed by the allowlist (繩墨's and 勘合's *no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist*,
+  圭表's *must not depend on the 天衡 shell*) or a module boundary naming the crate it must resolve through.
+  And it reaches only one of the three shapes the third pass moved: 天衡's *remains the outward composition
+  layer* names no crate at all, and 渾儀's *quarantined* names `syn`, which **is** in its allowlist. *Current
+  reaction or bound:* none. `self_law_amendment` makes a reason **change** visible — it carries the reason in
+  the identity — but says nothing about whether a reason is inside its rule's perimeter. *Risk:* the
+  projection teaches every agent that loads `AGENTS.self-law.md`, so a reason asserting structure the law does
+  not react to is a false statement of the law, at its most widely read surface. Bounded by four passes having
+  been run. *Promotion trigger:* a fifth pass finding a ninth clause, or a decidable subset that measures
+  better than 8 false positives to 0 true ones. *Version class:* patch; both crates ship in no package.
+  *Authority:* `governance-dogfood`. *Shape:* what would end the class is constructing the entailed half of a
+  reason rather than writing it, leaving only a genuinely additional clause by hand — a design change, not a
+  detector, which is why this is filed rather than half-built.
+
 - **WATCH: A `cfg_attr` whose applied attributes this reader cannot parse drops its `#[path]` candidate
   silently.** *Class:* WATCH. *Observed pressure:* a review of the 0.5.0 window read
   `hunyi::syn_util::cfg_attr_path_values` and `meta_path_value`, both of which take `.ok()` on

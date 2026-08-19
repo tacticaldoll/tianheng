@@ -361,6 +361,16 @@ or *a claim about the code was wrong while the code was right*. The third domina
 signal is not "review harder" — it is that the property is stated where nothing can falsify it. Add a round and
 the next round finds the next sentence; change the shape and the class ends.
 
+**A governance rule measured as un-reacted is given a reaction or filed, in the same change.** Finding that a
+prose rule has no backstop and then leaving it as prose is how the same rule keeps costing: the measurement is
+the expensive part and it is already done. Two rules in this repository were measured un-reacted in one window
+and only one of them was answered — `.github/CODEOWNERS`'s *a merge cannot relax the law without a human
+accepting it*, measured against `main`'s protection as `require_code_owner_reviews: false`, got the reaction it
+was missing; the reason-perimeter falsifier, measured over four rounds and eight corrections, did not, and was
+noticed only because a review put the two side by side. Filing counts as answering — a class with a measured
+cost and a recorded trigger is not the same as one nobody has priced — but silence does not. Say which of the
+two the change is doing.
+
 Measured, in the window that produced this rule: three consecutive repair rounds on one text reader, and across
 all three **not one finding was a new code defect**. Every one was a sentence describing what the reader does —
 "the line start refuses a mention", "the two cannot diverge", "three inputs decline", a declared bound's WHEN
