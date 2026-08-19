@@ -35,12 +35,19 @@ fn every_verdict() -> Vec<Verdict> {
     ]
 }
 
-/// **A verdict that fails the run always reached the channel first.**
+/// **Every verdict that fails the run carries a class to report.**
 ///
 /// This is the property the direction it replaces could not hold. That one located the harness's
 /// `Err(refusal) => {` arm by substring and asserted the report preceded the panic *inside it*, so every
 /// other exit owed nothing — and a subject supplied as unreadable bytes left through one of them, clean.
 /// Asked of the type instead, the enumeration is the whole set by construction.
+///
+/// **What this does not observe, and what holds it instead.** It asks two pure functions to agree —
+/// `refuses` implies `reached` is `Some` — which is what makes it total over the enumeration. The
+/// *ordering*, that `deliver` writes the channel before it panics, is held by construction: the write sits
+/// above the `match` in a function with one exit per arm, and nothing here runs it. Its earlier title said
+/// the verdict *reached the channel first*, which is the ordering, and named a fact no assertion in this
+/// body reaches.
 #[test]
 fn every_refusing_verdict_reaches_the_channel() {
     for verdict in every_verdict() {

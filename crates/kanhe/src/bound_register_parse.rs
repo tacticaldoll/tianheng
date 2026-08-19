@@ -270,10 +270,14 @@ pub fn tracked_specs(root: &Path) -> Vec<(String, String)> {
     let listing = must(
         root,
         "`git ls-files openspec/specs`",
-        &["git", "ls-files", "openspec/specs"],
+        &["git", "ls-files", "-z", "openspec/specs"],
     );
+    // **`-z`, because the capability name is derived from the path.** A quoted path fails `strip_prefix`,
+    // so the spec is filtered out and that whole capability's declared bounds are never registered — the
+    // same false-negative direction the release gate's listings carried, one layer worse because a dropped
+    // path takes a set of bounds with it. Latent: no tracked path needs quoting today.
     let specs: Vec<(String, String)> = listing
-        .lines()
+        .split('\0')
         .filter(|p| p.ends_with("/spec.md"))
         .filter_map(|p| {
             p.strip_prefix("openspec/specs/")

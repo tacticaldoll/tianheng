@@ -4688,16 +4688,64 @@ no adopter runs. They are here rather than under the adopter headings above beca
   nothing else exists*. `refusal::violation` and `refusal::cannot_judge` do exist — `Site::OutsideRegister`
   exists for them. Every figure in that document is computed from the register value and this one sentence
   was a literal, which is why it was the one that was false. It is computed too now, and reads as the floor
-  its sibling projections carry: **18** such constructions stand in the corpus, and the register does not see
-  them.
+  its sibling projections carry — and that first computation was itself wrong, corrected in the entry below.
 
-- **Three git listings were read without `-z`.** `machinery_names` builds the set `adopter_cited_machinery`
+- **Git listings were read without `-z`.** `machinery_names` builds the set `adopter_cited_machinery`
   refuses CHANGELOG citations against, and `core.quotePath` defaults on while `hermetic()` neutralises the
   config that could turn it off — so a tracked path carrying non-ASCII bytes would enter that set in its
   escaped spelling, its real name absent, and a record citing it would go unrecognised. Latent: no tracked
   path needs quoting today. Closed rather than declared because the sibling capability already raises the
   class to a SHALL, measured on a fixture named `ignored-普通`. The one `status` call without `-z` is closed
   with them, where the consequence was confined to how a diagnostic renders.
+
+  No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
+  script that ships in no package.
+
+- **A repair that removed four false sentences wrote three more, and one of them was worse than what it
+  replaced.** The round's own subject was *four sentences that outlived their subject*; an adversarial
+  review of the repair found it had reproduced the class three times, each time by removing a false claim
+  and asserting a new one in the same breath without sweeping from its own base.
+
+  **The figure was produced from the wrong region.** The refusal register's new floor counted constructions
+  over the **raw text** of its corpus and rendered a number — every one of which was the English word
+  *violation* or *cannot-judge* in a doc comment, and not one a call. The correct reader sits in the same
+  file, under a comment naming this exact defect: *counting the bare identifier over the whole text counted
+  every doc comment naming a constructor*. On executed Rust that corpus holds **none**, which the count
+  beside it already said; the constructions are in the test targets the corpus excludes, and the floor names
+  those now. A false figure in a document whose header says every number is produced is worse than the false
+  prose it replaced, because it carries the authority of a measurement.
+
+  So `calls` takes a corpus that has already had its comments and imports removed, as a type. Three sites
+  passed one and the fourth passed the file, and the difference was a caller remembering — which is the
+  failure `region`'s own header was written to make impossible: *a corpus is never handed to a recognizer as
+  a string*. The compiler found the fourth site immediately.
+
+  **The boundary clause was false in the same way its predecessor was.** `kanhe` *runs no product reaction
+  against this workspace* — except `observer_protocol` calls `tianheng::check_constitution` over this
+  workspace's own manifest. The true line is what each call **asks**: `kanhe` runs one with the workspace as
+  its *subject*, comparing two composition paths for equality over a non-trivial input, never to enforce the
+  law over it. The paragraph now records that it has been wrong twice, in the paragraph declaring the split.
+
+  **A flag changed a stream's shape and its reader did not change with it.** Adding `-z` to `status` made the
+  records NUL-separated, and the diagnostic interpolated them raw — so a dirty worktree printed its entries
+  run together on one line, where the plain form printed one each, and `trim_end` left the trailing
+  separator because NUL is not white space. The `-z` change was made *for* how that diagnostic renders a
+  quoted path, and then left the diagnostic alone.
+
+  **And the scope claim described what the commit touched rather than the class.** A fourth listing in the
+  same crate reads `git ls-files openspec/specs` and derives each capability's name from the path, so a
+  quoted path fails the prefix strip and that whole capability's declared bounds are never registered — the
+  same direction, one layer worse. Closed with the others.
+
+  **Declined, with the measurement.** The review also asked for two rows to leave the Definition of Done's
+  list, on the grounds that the workspace test run already covers them. It does — and CI names both as
+  separate steps, and that list's job is to mirror what CI runs, which `dod_coherence` holds. Removing them
+  would break that check. The list's own prose about a suite needing *no line of its own* is about suites CI
+  does not name separately.
+
+  **Corrected with them:** a direction titled for an ordering asserted only that two pure functions agree.
+  The ordering — that the channel is written before the panic — is held by construction, and the title said
+  it was observed. It now says which.
 
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.

@@ -102,9 +102,19 @@ fn first_literal_args(text: &str, call: &str) -> Vec<(String, usize)> {
 /// The import line was the second way a count could be wrong: a module holding both forms names all four
 /// constructors in one `use`, and the bare identifiers there were counted as two more unregistered sites —
 /// a figure two above the truth in the module where the truth is what the migration is steering by.
-fn executed_rust(text: &str) -> String {
-    imports_and_rest(text).1
+fn executed_rust(text: &str) -> Executed {
+    Executed(imports_and_rest(text).1)
 }
+
+/// A corpus with its comments and imports already removed.
+///
+/// **A newtype, because the one call site that forgot was the one that was wrong.** `calls` took a `&str`,
+/// and three sites handed it `executed_rust(&text)` while a fourth handed it the file — which counted every
+/// doc comment naming a constructor and rendered **18** into a projection whose header says every number in
+/// it is produced. The true count for that corpus is zero. `region`'s own header makes this argument for
+/// every other recognizer in this crate — *a corpus is never handed to a recognizer as `&str`* — and this
+/// recognizer had not taken it.
+struct Executed(String);
 
 /// Whether `trimmed` opens a `use` item — including one carrying a visibility.
 ///
@@ -189,8 +199,8 @@ fn imports_and_rest(text: &str) -> (Vec<String>, String) {
 fn unparsed_constructions(text: &str) -> usize {
     let executed = executed_rust(text);
     let called = calls(&executed, "violation_at") + calls(&executed, "cannot_judge_at");
-    let parsed = first_literal_args(&executed, "violation_at(").len()
-        + first_literal_args(&executed, "cannot_judge_at(").len();
+    let parsed = first_literal_args(&executed.0, "violation_at(").len()
+        + first_literal_args(&executed.0, "cannot_judge_at(").len();
     called.saturating_sub(parsed)
 }
 
@@ -238,7 +248,8 @@ fn is_a_site(text: &str) -> bool {
 /// direction that matters.
 ///
 /// Both boundaries, so `cannot_judge_at` is not counted as `cannot_judge`.
-fn calls(text: &str, name: &str) -> usize {
+fn calls(executed: &Executed, name: &str) -> usize {
+    let text = &executed.0;
     let boundary = |byte: u8| !(byte.is_ascii_alphanumeric() || byte == b'_');
     let mut count = 0;
     let mut at = 0;
@@ -609,17 +620,20 @@ fn the_register_projection_is_fresh() {
     let register = read(&root);
     let remaining: usize = register.unregistered.values().sum();
     let declared = kanhe::refusal_bounds::unheld();
-    // **The floor is computed, like every figure beside it.** The header used to say every construction goes
-    // through the `_at` forms "since nothing else exists". `refusal::violation` and `refusal::cannot_judge`
-    // do exist — they carry `Site::OutsideRegister` precisely because they take no identity — so the one
-    // hand-typed sentence in a document whose every number is produced was the one that was false.
-    let outside: usize = tracked(&root, "crates/kanhe/src")
+    // **The floor is computed, over the corpus where the constructions actually are.** The header used to
+    // say every construction goes through the `_at` forms "since nothing else exists". `refusal::violation`
+    // and `refusal::cannot_judge` do exist — they carry `Site::OutsideRegister` precisely because they take
+    // no identity. The first repair of that sentence counted them over the RAW text of this register's own
+    // corpus and rendered 18, every one of which was the English word in a doc comment; on executed Rust
+    // that corpus holds none, which the count of unregistered sites beside it already said. The
+    // constructions are in the test targets, which this register's corpus excludes.
+    let outside: usize = tracked(&root, "crates/kanhe/tests")
         .iter()
-        .filter(|path| !path.ends_with("refusal.rs"))
         .map(|path| {
             let text = std::fs::read_to_string(path)
                 .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
-            calls(&text, "violation") + calls(&text, "cannot_judge")
+            let executed = executed_rust(&text);
+            calls(&executed, "violation") + calls(&executed, "cannot_judge")
         })
         .sum();
     let mut out = format!(
@@ -628,10 +642,11 @@ fn the_register_projection_is_fresh() {
          **held** by a direction calling `refusal::expect` with the same identity, compared by running \
          rather than by reading a message.\n\n\
          **What this document does not claim.** `refusal::violation` and `refusal::cannot_judge` construct a \
-         refusal carrying no site identity — `Site::OutsideRegister` — so this register does not see them: \
-         **{outside}** such constructions stand in `crates/kanhe/src`, and none is registered, held, or \
-         declared here. Whether one of them should have taken an identity is a judgement this document does \
-         not make.\n\n\
+         refusal carrying no site identity — `Site::OutsideRegister` — so this register does not see them. \
+         Its corpus, `crates/kanhe/src`, holds none of them, which is the figure beside *carry no identity \
+         at all* above. **{outside}** stand in `crates/kanhe/tests`, which this corpus excludes: none is \
+         registered, held, or declared here, and whether any of them should have taken an identity is a \
+         judgement this document does not make.\n\n\
          A site that no direction holds is **declared unheld**, with why, an owner and a tracker, in the \
          table this register reads. There is no third state among *registered* sites: one is held or \
          declared, and the register refuses anything else.\n\nGenerated from `crates/kanhe/src/**.rs` by \
