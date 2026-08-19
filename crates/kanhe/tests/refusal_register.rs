@@ -126,7 +126,7 @@ fn countable(text: &str) -> Countable {
     // string and string as code for the rest of the file: measured, the register's own module reported
     // twelve constructions it does not make. Removing literals from the raw text first leaves the comment
     // rule nothing to truncate.
-    Countable(imports_and_rest(&without_string_literals(text)).1)
+    Countable(drop_imports(&code_only(text)))
 }
 
 /// A name inside a string literal is not a construction, and a name in code is.
@@ -198,6 +198,100 @@ fn a_name_written_as_a_literal_is_not_a_construction() {
         0,
         "a byte string is a literal, raw or not — the `b` does not stop the arm from seeing it"
     );
+
+    // **Which region a token sits in, and what the token is, are two questions.** Every shape this direction
+    // declares up to here asks only the first. A name is a construction when it is *called*, and `(` is a boundary character
+    // like `|`, `.` and `,` — so a closure parameter, a binding and a field access all read as one.
+    assert_eq!(
+        counted("fn f() { xs.iter().any(|violation| violation.kind) }"),
+        0,
+        "a closure parameter and a field access are not constructions"
+    );
+    assert_eq!(
+        counted("fn f() { let violation = x; }"),
+        0,
+        "a `let` binding introduces the name and constructs nothing"
+    );
+    // **What this reader cannot tell apart, stated rather than asserted.** A bare reference to a name is a
+    // constructor taken by name — which the corpus declares as a construction — or a use of a local that
+    // shares it, and nothing in the text says which. So `g(violation)` after `let violation = x;` counts,
+    // and that is a limit of a text reader rather than a defect in this one.
+    assert_eq!(
+        counted("fn f() { let violation = x; g(violation); }"),
+        1,
+        "a bare reference is read as a constructor taken by name, whichever it is"
+    );
+    assert_eq!(
+        counted("fn f() { let build = violation; build(x) }"),
+        1,
+        "a constructor taken by name is a construction, which is why a following `(` is not the test"
+    );
+}
+
+/// The reader swallows no declaration from any file it actually reads.
+///
+/// **A direction over synthetic fragments cannot reach a property of the real corpus.** Eleven shapes were
+/// declared and every one is a well-formed Rust fragment; none is a comment carrying an unbalanced quote,
+/// which is what four files of this repository hold — `region.rs`'s comments carry an odd number of double
+/// quotes, and under a reader that stripped literals before comments a lone `"` in a comment opened a string
+/// that ran into real code, swallowing three `pub fn` declarations. Both figures this register produces
+/// stayed correct through that, by which tokens the swallowed spans happened to contain.
+///
+/// So the corpus is the subject: a declaration is code, `code_only` removes no code, and any file where the
+/// count drops names a span the reader lost. It is `pub fn` rather than every token because a declaration
+/// cannot appear inside a literal or a comment by accident — the assertion is about the reader, not about
+/// how this repository writes prose.
+#[test]
+fn the_reader_swallows_no_declaration_from_the_corpus_it_reads() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let mut lost = Vec::new();
+    let mut examined = 0;
+    for dir in ["crates/kanhe/src", "crates/kanhe/tests"] {
+        for path in tracked(&root, dir) {
+            let text = std::fs::read_to_string(&path)
+                .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
+            // **At the start of its line, which is where a declaration is and an embedded fragment is
+            // not.** These files put Rust in string literals on purpose — a projection template, a fixture,
+            // this file's own `counted("fn f() { … }")` — and every one of those sits behind a call, never
+            // at column zero of its own line. Comparing the same line index in both texts is what tells a
+            // declaration the reader lost from a fragment it correctly emptied.
+            let declares = |line: &str| {
+                let t = line.trim_start();
+                t.starts_with("fn ")
+                    || t.starts_with("pub fn ")
+                    || t.starts_with("pub(") && t.contains(" fn ")
+            };
+            let code = code_only(&text);
+            let after: Vec<&str> = code.lines().collect();
+            for (index, line) in text.lines().enumerate() {
+                if !declares(line) {
+                    continue;
+                }
+                examined += 1;
+                match after.get(index) {
+                    Some(kept) if declares(kept) => {}
+                    _ => lost.push(format!(
+                        "  {}:{}: {}",
+                        path.display(),
+                        index + 1,
+                        line.trim()
+                    )),
+                }
+            }
+        }
+    }
+    assert!(
+        examined > 0,
+        "no declaration entered the corpus, so this direction would report clean over nothing"
+    );
+    assert!(
+        lost.is_empty(),
+        "the reader swallowed code from files it reads, so every figure it produces holds only by what the \
+         swallowed spans happened to contain:\n{}",
+        lost.join("\n")
+    );
 }
 
 /// A corpus with comments, imports and string literals removed.
@@ -220,97 +314,147 @@ struct Countable(String);
 ///
 /// A raw string is handled by its own arm: `r"…"`, `r#"…"#` and any hash count, since a `\` inside one
 /// escapes nothing and a naive escape-aware scan would run past the closing quote.
-fn without_string_literals(text: &str) -> String {
+fn code_only(text: &str) -> String {
+    #[derive(PartialEq)]
+    enum In {
+        Code,
+        Line,
+        Block(usize),
+        Str,
+        Raw(usize),
+    }
+
     let chars: Vec<char> = text.chars().collect();
     let ident = |c: char| c.is_alphanumeric() || c == '_';
     let mut out = String::with_capacity(text.len());
+    let mut state = In::Code;
     let mut i = 0;
+
     while i < chars.len() {
         let c = chars[i];
-
-        // **A char literal can hold a quote**, and the first form had no arm for one: `'"'` opened a string
-        // at that quote and ran to the next `"` anywhere after it, so a construction between two of them
-        // was swallowed and a literal's contents after one were exposed as code. Five modules of this
-        // reader's own corpus carry the shape.
-        //
-        // A lifetime is not a char literal and has no closing `'`, so the close is looked for before
-        // anything is consumed. `\u{…}` runs to its brace; every other escape is one char.
-        if c == '\'' && !(i > 0 && ident(chars[i - 1])) {
-            let mut at = i + 1;
-            if chars.get(at) == Some(&'\\') {
-                at += 1;
-                if chars.get(at) == Some(&'u') {
-                    while at < chars.len() && chars[at] != '}' {
-                        at += 1;
-                    }
-                }
-            }
-            at += 1;
-            if chars.get(at) == Some(&'\'') {
-                out.push_str("''");
-                i = at + 1;
-                continue;
-            }
-            // No close: a lifetime. Fall through and emit it unchanged.
-        }
-
-        // **A raw string, with or without a byte prefix.** `br#"…"#` was read as an ordinary string by the
-        // first form, because the `r` sat behind a `b` and the arm required `r` to open the token.
-        let mut at = i;
-        let opens_here = !(i > 0 && ident(chars[i - 1]));
-        if chars[at] == 'b' && opens_here {
-            at += 1;
-        }
-        if opens_here && chars.get(at) == Some(&'r') {
-            let mut hashes = 0;
-            let mut scan = at + 1;
-            while chars.get(scan) == Some(&'#') {
-                hashes += 1;
-                scan += 1;
-            }
-            if chars.get(scan) == Some(&'"') {
-                scan += 1;
-                while scan < chars.len() {
-                    if chars[scan] == '"'
-                        && chars[scan + 1..]
-                            .iter()
-                            .take(hashes)
-                            .filter(|h| **h == '#')
-                            .count()
-                            == hashes
-                    {
-                        scan += 1 + hashes;
-                        break;
-                    }
-                    scan += 1;
-                }
-                out.push_str("\"\"");
-                i = scan;
-                continue;
-            }
-        }
-
-        // **A string, with or without a byte prefix.** `\` escapes one char, which is what keeps `\"` from
-        // closing it.
-        if opens_here && chars.get(at) == Some(&'"') {
-            out.push_str("\"\"");
-            i = at + 1;
-            while i < chars.len() {
-                if chars[i] == '\\' {
-                    i += 2;
-                    continue;
-                }
-                if chars[i] == '"' {
-                    i += 1;
-                    break;
+        match state {
+            In::Line => {
+                if c == '\n' {
+                    out.push('\n');
+                    state = In::Code;
                 }
                 i += 1;
             }
-            continue;
+            In::Block(depth) => {
+                if c == '/' && chars.get(i + 1) == Some(&'*') {
+                    state = In::Block(depth + 1);
+                    i += 2;
+                } else if c == '*' && chars.get(i + 1) == Some(&'/') {
+                    state = if depth == 1 {
+                        In::Code
+                    } else {
+                        In::Block(depth - 1)
+                    };
+                    i += 2;
+                } else {
+                    if c == '\n' {
+                        out.push('\n');
+                    }
+                    i += 1;
+                }
+            }
+            In::Str => {
+                if c == '\\' {
+                    // **An escaped newline is still a newline.** A `\` at end of line continues a string
+                    // across it, and consuming both without emitting the break shifted every line index
+                    // after it — which is how a direction comparing the same line in both texts reported a
+                    // declaration lost that the reader had not touched.
+                    if chars.get(i + 1) == Some(&'\n') {
+                        out.push('\n');
+                    }
+                    i += 2;
+                } else if c == '"' {
+                    state = In::Code;
+                    i += 1;
+                } else {
+                    if c == '\n' {
+                        out.push('\n');
+                    }
+                    i += 1;
+                }
+            }
+            In::Raw(hashes) => {
+                if c == '"'
+                    && chars[i + 1..]
+                        .iter()
+                        .take(hashes)
+                        .filter(|h| **h == '#')
+                        .count()
+                        == hashes
+                {
+                    state = In::Code;
+                    i += 1 + hashes;
+                } else {
+                    if c == '\n' {
+                        out.push('\n');
+                    }
+                    i += 1;
+                }
+            }
+            In::Code => {
+                if c == '/' && chars.get(i + 1) == Some(&'/') {
+                    state = In::Line;
+                    i += 2;
+                    continue;
+                }
+                if c == '/' && chars.get(i + 1) == Some(&'*') {
+                    state = In::Block(1);
+                    i += 2;
+                    continue;
+                }
+                // A char literal, told from a lifetime by looking for the close before consuming.
+                if c == '\'' && !(i > 0 && ident(chars[i - 1])) {
+                    let mut at = i + 1;
+                    if chars.get(at) == Some(&'\\') {
+                        at += 1;
+                        if chars.get(at) == Some(&'u') {
+                            while at < chars.len() && chars[at] != '}' {
+                                at += 1;
+                            }
+                        }
+                    }
+                    at += 1;
+                    if chars.get(at) == Some(&'\'') {
+                        out.push_str("''");
+                        i = at + 1;
+                        continue;
+                    }
+                }
+                // A string or raw string, with or without a byte prefix.
+                let opens_here = !(i > 0 && ident(chars[i - 1]));
+                let mut at = i;
+                if opens_here && chars[at] == 'b' {
+                    at += 1;
+                }
+                if opens_here && chars.get(at) == Some(&'r') {
+                    let mut hashes = 0;
+                    let mut scan = at + 1;
+                    while chars.get(scan) == Some(&'#') {
+                        hashes += 1;
+                        scan += 1;
+                    }
+                    if chars.get(scan) == Some(&'"') {
+                        out.push_str("\"\"");
+                        state = In::Raw(hashes);
+                        i = scan + 1;
+                        continue;
+                    }
+                }
+                if opens_here && chars.get(at) == Some(&'"') {
+                    out.push_str("\"\"");
+                    state = In::Str;
+                    i = at + 1;
+                    continue;
+                }
+                out.push(c);
+                i += 1;
+            }
         }
-
-        out.push(c);
-        i += 1;
     }
     out
 }
@@ -364,7 +508,23 @@ fn opens_a_use(trimmed: &str) -> bool {
 /// repository's Definition of Done in direct contradiction. Asked once now, by both.
 fn imports_and_rest(text: &str) -> (Vec<String>, String) {
     let source = Source::of(text);
-    let executed = source.rust();
+    let executed: String = source.rust().lines().collect::<Vec<_>>().join(
+        "
+",
+    );
+    imports_and_rest_of(&executed)
+}
+
+/// The import walk alone, over text whose comments are already gone.
+///
+/// Separated so [`countable`] can run it over [`code_only`]'s output without a second comment pass —
+/// `Source::rust` is not in that path at all, which is what makes the ordering question disappear rather
+/// than be answered.
+fn drop_imports(executed: &str) -> String {
+    imports_and_rest_of(executed).1
+}
+
+fn imports_and_rest_of(executed: &str) -> (Vec<String>, String) {
     let mut imports = Vec::new();
     let mut rest = Vec::new();
     let mut open: Option<String> = None;
@@ -477,7 +637,22 @@ fn calls(countable: &Countable, name: &str) -> usize {
         // reported a module that constructs nothing as constructing one. Both are named in the corpus
         // written for this reader, and both were read wrong until it was run.
         let defines = text[..start].trim_end().ends_with("fn");
-        if boundary(before) && boundary(after) && !defines {
+        // **Introduced or referenced, not called or not.** `(` is a boundary and so are `|`, `.`, `,` and a
+        // space, so a binding, a field access and a closure parameter all counted — live,
+        // `.any(|violation| (dimension.reacted)(violation.kind))` contributed two constructions to a module
+        // that makes none there.
+        //
+        // Requiring a following `(` is the obvious repair and the corpus written for this reader refuses
+        // it: `a_constructor_taken_by_name` is `let build = violation;`, a constructor taken by name and
+        // called through the alias, declared as one construction. So the question is whether this
+        // occurrence *introduces* the name — a closure parameter or a `let` binding — or *projects* a value
+        // that merely shares it.
+        let binds = {
+            let head = text[..start].trim_end();
+            head.ends_with('|') || head.ends_with("let")
+        };
+        let projects = text[at..].starts_with('.');
+        if boundary(before) && boundary(after) && !defines && !binds && !projects {
             count += 1;
         }
     }
@@ -847,9 +1022,11 @@ fn the_register_projection_is_fresh() {
          Its corpus, `crates/kanhe/src`, holds **none** of them, which is the figure beside *carry no \
          identity at all* above. The test targets do hold them, and this corpus excludes those: none is \
          registered, held, or declared here, and whether any should have taken an identity is a judgement \
-         this document does not make. **No count of them is given**, and that is a decision rather than an \
-         omission — the figure was rendered three times from three readers and no two agreed, so it is a \
-         census this register cannot produce and therefore does not claim.\n\n\
+         this document does not make. **No count of them is given**, and the reason is a property of \
+         this reader rather than a history: it tells one region from another — code from comment, string and \
+         char literal — and it does not tell one token role from another, so a name taken by reference reads \
+         the same whether it is a constructor or a local that shares its spelling. Until it distinguishes \
+         those, the census has no producer here.\n\n\
          A site that no direction holds is **declared unheld**, with why, an owner and a tracker, in the \
          table this register reads. There is no third state among *registered* sites: one is held or \
          declared, and the register refuses anything else.\n\nGenerated from `crates/kanhe/src/**.rs` by \
