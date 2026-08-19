@@ -912,9 +912,9 @@ them.
 
 - **The repair that removed relative window references named the wrong window at every site it did not
   write.** `this window` is a positional reference: it means whichever window the reader is in, and a doc
-  comment carrying it becomes false the moment the window closes. The 0.5.0 window replaced sixteen of them
-  with an absolute `the 0.5.0 window` — correct for the twelve inside `kanhe` and `shengmo`, which are new
-  crates whose every sentence was written in this window, and **false for all four in crates that already
+  comment carrying it becomes false the moment the window closes. The 0.5.0 window replaced every one of them
+  with an absolute `the 0.5.0 window` — correct inside `kanhe` and `shengmo`, which are new crates whose
+  every sentence was written in this window, and **false at all four sites in crates that already
   shipped**. `louke`'s injectivity paragraph (twice), `tianheng`'s misdiagnosis-class note and `xingbiao`'s
   checkout-dependence note all appeared between v0.3.0 and v0.4.0, so their `this window` meant the 0.4.0
   window. They now say so. `hunyi`'s `which gained them this release` is the same shape read against the same
@@ -925,6 +925,14 @@ them.
   what should have run with the substitution: a sentence carrying `this window` means the window it was
   written in, so ask whether the sentence exists in the previous release's tree, and take the window from the
   answer rather than from the window doing the editing.
+
+  **Correction, of this entry's own first draft.** It said the window replaced `sixteen` of them and that
+  `twelve` were correct. Counting the substitution's own diff answers **seventeen**: the seventeenth line
+  sits in a generated document, produced from a literal the same commit changed, so it is a projection of
+  another site rather than a site. Sixteen was right only under a convention the sentence never stated, and
+  the squash `0bded84` and its pull request still carry it. The counts are gone rather than reconciled — the
+  four are named individually in the paragraph above, so that set is enumerated by the text that uses it,
+  which is the only figure here anything produces.
 
 ### Self-governance
 
