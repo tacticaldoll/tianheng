@@ -264,7 +264,7 @@ consumer for an undemonstrated deduplication.
   **Not a defect unique to this reader.** `crates/kanhe/src/region.rs`'s own `Executed` abstraction declares
   the identical residue for the same reason (a `/\* … \*/` span and a string-literal marker both need
   nested-span lexing this tree has "defeated repeatedly," in that module's own words) and cites this exact
-  bound as its precedent — the citation was one-directional until this window closed it: see the
+  bound as its precedent — the citation was one-directional until the 0.5.0 window closed it: see the
   `observer-protocol` spec, now amended to cite `region.rs` back. Filing them separately let each be
   rediscovered as a fresh problem; they are one class. If this is ever closed, the closure is a **shared**
   nested-span lexer serving both sites, not a point patch to either — `guibiao::module_scan` already scans
@@ -327,18 +327,18 @@ consumer for an undemonstrated deduplication.
   the semantic arm always had one implementation with two callers. Closing this one needs the shell's semantic
   outcome to be *unreachable* except through the observer — a shape where the guard stops compiling — which is
   a design step, not a call-site swap. *Class:* READY-PATCH. *Observed pressure:* the
-  source-shape reaction that claimed to observe it is retired in this window after four review rounds each
+  source-shape reaction that claimed to observe it is retired in the 0.5.0 window after four review rounds each
   defeated the narrowing before it — by name resolution, by the parameter's binding site, by which definition is
   the subject, by the caller frame, and by execution, which no reading of text reaches. `observer-protocol`
   declares the resulting gap as an unpinned bound owned by the engine, and it is the tracker for this entry.
   *Observation source:* that bound and the retired reaction's history on `change/refuse-ambiguous-delegation-extent`.
   *Current reaction or bound:* the declared bound; no reaction. *Risk:* the shell grows a second semantic
   behaviour owner and nothing says so — the drift a seam exists to end. The dimension's *equality* is
-  construction-held since this window; its *delegation* is the seam that is not, and the two are one word
+  construction-held since the 0.5.0 window; its *delegation* is the seam that is not, and the two are one word
   apart. *Promotion trigger:* fired; the bound is declared unpinned, which the register leads with.
   *Version class:* patch if the composition is restructured without moving a public signature; minor if the
   shell's entry point changes shape. *Authority:* `observer-protocol`, whose spec states both the obligation and
-  the retirement. *Shape:* **not** the runtime route, which this window
+  the retirement. *Shape:* **not** the runtime route, which the 0.5.0 window
   tried and measured wrong: invoking the observer makes the *equality* construction-held and leaves an
   independent shell decision as writable as before, because the runtime arm had a second implementation to
   collapse and this one never did. What would close it is the shell's semantic outcome being unreachable except
@@ -362,7 +362,7 @@ consumer for an undemonstrated deduplication.
   proved them.
 
   **Promoted from WATCH because its own trigger fired, six times.** That trigger was *a normative SHALL found
-  un-reacted **after** this window's sweep* — the sweep being the control, so the four found before it could not
+  un-reacted **after** the 0.5.0 window's sweep* — the sweep being the control, so the four found before it could not
   stand as evidence for themselves. Rounds 6 and 7 then found three more, and **all three were requirements this
   window had just written**: a SHALL added in one change and left unreacted, in the window whose whole subject was
   closing that class. That is stronger evidence than the original four, because it shows the class reproducing under
@@ -554,7 +554,7 @@ consumer for an undemonstrated deduplication.
   All 34 specifications were searched: **none** stated that a publish must come from a signed annotated tag at
   the tip of `main`. The gate standing before the one irreversible act carried its contract in its own header
   comment, while `gate-shape-contract` exempted it from Definition-of-Done membership *by name* — the one place a
-  reader was told it is special. A reaction with no requirement is the mirror of the class this window kept
+  reader was told it is special. A reaction with no requirement is the mirror of the class the 0.5.0 window kept
   closing, and it has a consequence: there was nowhere to declare a bound.
 
   **The bound's stated cause was wrong, and that is why the defect survived.** The header said the signature could
@@ -634,7 +634,7 @@ consumer for an undemonstrated deduplication.
   judgment itself. It is not a bound and does not belong in the register: it limits a test's completeness,
   not an observation.
 
-  Lesson kept, because it recurred four times in this window: a gap suspected from a partial view dissolves
+  Lesson kept, because it recurred four times in the 0.5.0 window: a gap suspected from a partial view dissolves
   on the full one. The injectivity assertion here was read as absent from a fifteen-line excerpt and sits on
   the sixteenth. Read the whole construct before reporting it, and diff what a change actually moves rather
   than reasoning about what it should.
@@ -796,7 +796,7 @@ consumer for an undemonstrated deduplication.
 - **WATCH: A third hand-written scanner of the `#### Scenario:`/`- **PINNED-BY**` grammar still disagrees with the
   other two on two edge cases.** *Class:* WATCH. *Observed pressure:* `bound_register_parse::bounds_in` and
   `bound_register_parse::citations_in` (the latter extracted from `pinning_citations` during an adversarial
-  review this window, so `pin_bites::cited_bounds` and `pinning_citations` share one recognizer instead of
+  review the 0.5.0 window, so `pin_bites::cited_bounds` and `pinning_citations` share one recognizer instead of
   two) now agree with each other exactly. `crates/kanhe/tests/observation_bound_model.rs`'s own
   `spec_bounds`/`spec_defence` were not touched by that extraction and remain a **third**, independent
   implementation of the identical grammar, found by the same review to have already drifted from the other
@@ -818,13 +818,13 @@ consumer for an undemonstrated deduplication.
   closing this fully needs one shared low-level walker (`"#### Scenario:"`-untrimmed to open,
   `"#### "`/`"### "`/`"## "`-trimmed to close, matching `bounds_in`'s own rules) that all three call sites use,
   not a third point patch; filed rather than done here because it touches `observation_bound_model.rs`'s core
-  logic, a file this window's fixes did not otherwise touch, and reworking it deserves its own scoped review
+  logic, a file the 0.5.0 window's fixes did not otherwise touch, and reworking it deserves its own scoped review
   rather than folding into an adversarial-review pass over a different fix.
 
 - **WATCH: `negates_bound_in_prose`'s one-interposed-word budget is measured from `a`/`an`, independently of
   `states_a_bound_in_prose`'s own budget measured from `stated`/`documented`, so a sentence stacking both
   qualifiers is read as a declaration rather than the denial it is.** *Class:* WATCH. *Observed pressure:* an
-  adversarial review of this window's own fix (which corrected a live case-sensitivity gap in both functions,
+  adversarial review of the 0.5.0 window's own fix (which corrected a live case-sensitivity gap in both functions,
   see the `CHANGELOG.md` entry) also asked whether the two functions' independent one-word tolerances could
   ever disagree, and found they can: `"this is not a documented residual bound"` has `states_a_bound_in_prose`
   return `true` (one interposed word, `residual`, between `documented` and `bound`) and
@@ -866,7 +866,7 @@ consumer for an undemonstrated deduplication.
   already has, most simply by having this function call `contains_words(heading, "bound")` /
   `contains_words(heading, "bounds")` (or a variant tolerant of the `boundary` exemption) instead of its own
   one-sided scan — a smaller change than the sibling entry above, filed alongside it rather than folded into
-  this window's fix because both were found by the same pass and neither has a live instance forcing it.
+  the 0.5.0 window's fix because both were found by the same pass and neither has a live instance forcing it.
 
 - ~~**WATCH: `AGENTS.md`'s OpenSpec lifecycle section describes a process with no instances.**~~
   **CLOSED** in the open window via `fix/declare-the-openspec-adoption-mode`. The diagnosis in the entry
@@ -1951,7 +1951,7 @@ that also holds a closed READY-PATCH record.
   every module's own top-level `fn`/`const`/`static` from declaration-cleaned source, with the
   true-inline-module keying and module-top-level-only disciplines already worked out for the
   strict-external local-precedence ladder. The trigger was a missing *connection*, not a missing
-  capability — the same misjudged cost as the absolute-`#[path]` entry earlier in this window, whose
+  capability — the same misjudged cost as the absolute-`#[path]` entry earlier in the 0.5.0 window, whose
   trigger read as a four-function refactor and turned out to be one line. Worth recording as a pattern:
   a promotion trigger written from inside the code that lacks the observation tends to describe building
   it rather than looking for it.

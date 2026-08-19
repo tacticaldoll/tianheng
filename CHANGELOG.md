@@ -4249,6 +4249,33 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves.
 
+- **Correction: the four figures in the doc-comment rule were never removed, and by the time two reviews
+  measured them three were wrong.** An entry in this window records them as removed. The replacement that was
+  supposed to do it silently matched nothing and the result was not checked, so the paragraph kept saying
+  `crates/` carries 5 `PR #N`, 7 bare `#NNN`, 20 `round N` and 16 `this window`. Measured now: **0, 2, 18 or
+  88 depending on whether the hyphenated form counts, and 0** — and three of the four moved *because sweeps in
+  the same window, from the same run that typed them*, changed what they counted.
+
+  They are gone, and the argument is unchanged without them: the decidable subset collides with the fixture for
+  the squash-serial check, and the rest needs the criterion applied per site. The paragraph's own subject is
+  that hand-written figures drift; it enumerated nothing, so it should never have carried any.
+
+- **Correction: the relative-anchor sweep claimed the whole tree and had swept two directories.** An entry
+  records `this window` as "zero across the whole tree". It was zero across `crates/` and `openspec/`, which is
+  what the sweep covered; thirteen remained in `PROJECT.md` and `BACKLOG.md`. They now name the window. The one
+  in `AGENTS.md` stays: it is the rule quoting the shape it forbids, the same way the promotion-trigger rule
+  quotes the annotation form.
+
+  This is the second time in one window that a completeness claim outran its sweep, and the rule against it was
+  added between the two.
+
+- **The rule about the Definition of Done's name carried its own unanchored census.** It recorded how many
+  times the phrase had been misused, over how many commands, eroding from how many kinds to one — four figures
+  with no producer, in a rule about naming a corpus honestly. The rule says what it needs without them; the
+  measurement stays in the `CHANGELOG` entry that took it.
+
+  No published API, outcome, report, exit class, or manifest moves.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
