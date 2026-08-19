@@ -934,6 +934,44 @@ them.
   four are named individually in the paragraph above, so that set is enumerated by the text that uses it,
   which is the only figure here anything produces.
 
+- **The requirement that the law is amended only with a human's acceptance was prose, and it never fired.**
+  `.github/CODEOWNERS` says the review requirement **is** the reaction and that a merge cannot relax the law
+  without a human accepting it, then says in its own last paragraph that designation alone only auto-requests
+  review. Measured, `main` answers `require_code_owner_reviews: false` and `required_approving_review_count:
+  0` — and enabling it would not close this, because a pull request's author cannot approve their own, so for
+  a repository whose steward and author are one person the rule cannot fire at all. A prose prescription with
+  no backstop, standing on the law itself, which is the shape the reason rule refuses everywhere else.
+
+  What it cost is recorded above: two crate boundaries reached the projection under a commit body saying the
+  law did not change, and nothing refused them. They were found by reading the history months later.
+
+  The law's boundary set is declared as text and held against the projection **in both directions**. The
+  declared identity carries each boundary's **rule** as well as its heading, because relaxing a law widens a
+  boundary far more often than it deletes one — and keying on the target alone would pass a 璇璣 that had
+  quietly gained 圭表. Editing that declaration is what accepting an amendment now consists of, and CODEOWNERS
+  already routes the file to the steward.
+
+  **The gap was measured before the check was written, and it was real.** With 璇璣's allowlist widened to
+  permit 圭表 and the projection re-blessed, all **nine** existing self-governance assertions pass and only
+  this one fails, naming `` `xuanji` (crate) `` with `only: serde_json` declared against `only: serde_json,
+  guibiao` projected. Neither of the two assertions that come closest reaches it:
+  `dimension_boundaries_declare_the_mutual_independence_law` reads only the three dimension crates'
+  allowlists, and `every_workspace_member_is_self_governed` asks whether a member has a boundary, never what
+  that boundary permits.
+
+  The other direction is run too — a declared boundary the projection does not render fails naming it, which
+  is the entry a one-directional comparison would go on certifying. The reader answers *unreadable* rather
+  than *no boundaries* for a projection it cannot parse, in each of four shapes, so the check's own failure
+  mode is not the silence it exists to refuse. The subject is the projection's tracked text rather than
+  `constitution()`, which `kanhe` can reach: a check calling the law it judges compares the law against
+  itself and cannot fail.
+
+  `repository-checks` gains the requirement with it — the two-way property, the rule-carrying identity, the
+  text-not-`constitution()` subject, and a scenario each for an unnamed boundary, a widened allowlist, a
+  declaration that outlived its boundary, and an unparseable projection.
+
+  No published API, outcome, report, exit class, or manifest moves; `kanhe` ships in no package.
+
 - **A reason about what ANOTHER crate does was the shape the second perimeter pass missed.** The falsifier
   the law's own header states took **three** passes to apply to eight boundaries, and each pass missed a
   different shape. The first read *entailed by the allowlist* generously; the second caught phrases about
@@ -4124,8 +4162,18 @@ no adopter runs. They are here rather than under the adopter headings above beca
   繩墨's real `tianheng` and `serde_json` edges and 勘合's real `shengmo`, `tianheng` and `serde_json` edges
   all pass with the law unchanged.
 
-  The tree is byte-identical after the replay, `Cargo.lock` included. What still remains for a human is
-  unchanged: the acceptance itself.
+  The tree is byte-identical after the replay, `Cargo.lock` included.
+
+  **Accepted, and recorded in `PROJECT.md`'s Decisions.** 繩墨 may depend on 天衡 and serde_json only; 勘合 on
+  繩墨, 天衡 and serde_json only; both at `enforce`; both crates ship in no package, so no adopter is reached
+  either way. The cost accepted with them is the ordinary one — a later edge from either to a dimension is an
+  amendment rather than a commit.
+
+  **Correction to `09c29d0`'s own body.** It reads *the law itself did not change: the regenerated projection
+  differs by exactly three lines, all of them the preamble's own self-reference*. Three of the projection's
+  changed lines are the preamble's; the projection changed by nineteen, and fourteen of them are these two
+  boundary entries with their own targets, rules and severities. The correction lives here because a merged
+  squash is a record: amending it changes the hash its pull request's merge record cites.
 
   No published API, outcome, report, exit class, or manifest moves.
 
