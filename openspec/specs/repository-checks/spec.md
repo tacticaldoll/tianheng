@@ -1413,3 +1413,36 @@ law itself did not change, and nothing refused them.
 - **THEN** the check refuses as unreadable rather than comparing an empty set, because a projection this
   reader cannot parse is not a law with no boundaries
 - **PINNED-BY** `a_projection_this_reader_cannot_parse_is_not_a_law_with_no_boundaries`
+
+### Requirement: The merge wrapper reads what CI said, not only what ran locally
+
+The wrapper standing in front of `gh pr merge` SHALL read the pull request's check conclusions and refuse to
+reach the tool unless every finished check agrees. It SHALL separate three states: a check that disagreed, a
+check that has not finished, and a head no workflow has claimed — an unfinished run is not a failed one, and
+merging on *not success* would refuse a pull request nobody has answered yet.
+
+The refusal SHALL name **which** check disagreed. Both refusals are cannot-judge, exit `2`: a suite this
+wrapper could not get agreement from is not a gate that ran and refused.
+
+The Definition of Done is the **local** pre-flight list and CI runs a superset of it, so a green local run is
+not a green suite. Measured: a single let-chain the default toolchain accepts and the declared MSRV refuses
+was red in CI and green locally through **nineteen consecutive merges**, on a job the local list does not
+carry because it installs a toolchain and rebuilds the workspace.
+
+#### Scenario: A check disagreed
+
+- **WHEN** a pull request carries a check whose conclusion is neither success, neutral, nor skipped
+- **THEN** the wrapper refuses as a cannot-judge naming that check, and `gh pr merge` is never reached
+- **PINNED-BY** `a_pull_request_whose_checks_disagree_stops_before_the_merge`
+
+#### Scenario: A check has not finished
+
+- **WHEN** a pull request carries a check with no conclusion yet
+- **THEN** the wrapper refuses as a cannot-judge saying the run is unfinished rather than that it disagreed
+- **PINNED-BY** `a_pull_request_whose_checks_have_not_finished_stops_before_the_merge`
+
+#### Scenario: The check rollup cannot be read
+
+- **WHEN** reading the pull request's check conclusions fails
+- **THEN** the wrapper refuses as a cannot-judge, because a rollup it could not read is not a suite that
+  agreed

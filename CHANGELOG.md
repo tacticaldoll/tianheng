@@ -4615,6 +4615,36 @@ no adopter runs. They are here rather than under the adopter headings above beca
   no producer. What each passage argues is unchanged; only the number is gone, and in every case the sentence
   beside it already names the check whose run counts the sites.
 
+- **The suite nobody ran was red for nineteen consecutive merges.** `01fbf93` wrote
+  `if let Some(source) = source && !answered.contains_key(source)` — a let-chain the default toolchain
+  accepts and the workspace's declared MSRV, 1.85, refuses. Every merge after it failed CI on exactly one job,
+  `MSRV (rust-version)`, and every one was merged. Nineteen runs, one cause, all red on the same line.
+
+  **Every local gate was green each time, and that is not a contradiction.** `AGENTS.md` says the Definition
+  of Done is the local pre-flight list and that CI runs a **superset** of it; the MSRV job is in the superset
+  because it installs a toolchain and rebuilds the workspace, which a pre-flight list should not carry. The
+  process was working as documented. What was missing is that nothing read CI's answer before the merge — an
+  earlier audit in this window asked whether any red pull request had been merged, checked the local
+  Definition of Done, and answered no. It was reading the wrong suite.
+
+  The line is filtered rather than chained, so 1.85 builds and tests the whole workspace again — measured, 68
+  suites green on `cargo +1.85`. **Only `kanhe` was affected**, it is the workspace's one let-chain, and it
+  ships in no package: no published crate's MSRV moves, and `v0.4.0` builds clean on 1.85 as it always did.
+
+  **`scripts/merge-pr.sh` now reads CI's verdict the way it already reads its own.** The wrapper stands in
+  front of `gh pr merge` and refused to reach it without a gate verdict; it now equally refuses a pull request
+  whose checks disagree, and refuses one whose checks have not finished — three states, because a run still in
+  flight is not a run that failed, and merging on *not success* would refuse a pull request that simply has
+  not been answered yet. A head no workflow has claimed is its own cannot-judge rather than a pass.
+
+  **Recorded because of how it was found.** Seven rounds of static review could not see it — the reviewer said
+  so in the round that found nothing, naming the unrun suite as the evidence static reading structurally
+  cannot supply. Two of the four things it named were CI-only jobs. The packaged-tarball self-test was run at
+  the same time and passes for all six publishable crates; this one did not.
+
+  No published API, outcome, report, exit class, or manifest moves; the repaired line is in a crate that ships
+  in no package.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
@@ -4780,7 +4810,6 @@ rather than by recalling what was added — two of these had reached the branch 
 it is `#[doc(hidden)]`, exists only as `register_origin!`'s expansion target, and is public solely
 because a macro's expansion runs in the caller's crate. It replaces `OriginEntry::new`, which is removed
 — both recorded under *Fixed*, where the forgery gap it closes is described.
-
 
 ### Changed
 - **BREAKING**: renamed 渾儀's `SemanticBoundary` (the signature-coupling DSL's boundary type,

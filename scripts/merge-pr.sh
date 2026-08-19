@@ -360,6 +360,45 @@ require_a_verdict() {
     fi
 }
 
+# The other suite: what CI said about this pull request's head.
+#
+# **Measured, this wrapper merged nineteen consecutive red runs.** Every local gate reported green each time —
+# the Definition of Done is the LOCAL pre-flight list and says so, and CI runs a superset of it. One job in
+# that superset, the MSRV build, is not in the local list because it installs a toolchain and rebuilds the
+# workspace; a single `if let … && …` that the default toolchain accepts and 1.85 refuses was therefore red in
+# CI and green here, through nineteen merges, until someone ran the job by hand.
+#
+# So the wrapper reads the same answer it already reads for its own gate: a verdict, not an inference. Three
+# states, and the middle one is why a boolean would not do — a run still in flight is not a run that failed,
+# and merging on "not success" would refuse a pull request whose checks simply have not finished.
+#
+# `--json` rather than the human table, because the table is a display this wrapper does not own. An empty
+# conclusion is a check still running; a missing rollup is a head no workflow has claimed, which is its own
+# cannot-judge rather than a pass — a pull request nothing has checked is not a pull request that checked out.
+require_ci_green() {
+    local rollup
+    rollup=$(gh pr view "$pr_number" --repo "$repository" \
+        --json statusCheckRollup \
+        -q '[.statusCheckRollup[]? | select(.conclusion != null and .conclusion != "" and .conclusion != "SUCCESS" and .conclusion != "NEUTRAL" and .conclusion != "SKIPPED") | .name] | join(", ")' \
+        2>&1) || cannot_judge \
+        "cannot read what CI said about this pull request ($rollup), which is not the same fact as CI having \
+agreed"
+    if [[ -n $rollup ]]; then
+        cannot_judge \
+            "CI has not agreed about this pull request: $rollup. A local Definition of Done is the pre-flight \
+list and CI runs a superset of it, so a green local run is not a green suite — measured, this wrapper merged \
+nineteen consecutive red runs on exactly that difference"
+    fi
+    local pending
+    pending=$(gh pr view "$pr_number" --repo "$repository" \
+        --json statusCheckRollup -q '[.statusCheckRollup[]? | select(.conclusion == null or .conclusion == "")] | length' 2>/dev/null) || pending=0
+    if [[ ${pending:-0} -gt 0 ]]; then
+        cannot_judge \
+            "$pending check(s) on this pull request have not finished, and a run still in flight is not a run \
+that agreed. Wait for them rather than merging on their silence"
+    fi
+}
+
 verdict_file=$(mktemp) || cannot_judge \
     "cannot open a file for the gate to report its refusal class on, so a failing gate could not be told from \
 an input it could not read"
@@ -419,6 +458,7 @@ gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
 }
 require_one_pass "$gate_output"
 require_a_verdict
+require_ci_green
 
 # The title is re-read, because it is the OTHER END OF A RELATION rather than a value being recorded.
 #

@@ -206,9 +206,12 @@ pub fn hidden_by_the_checkout_with(
         let source = sources.get(path).copied();
         // The three answers stay apart: an unreadable one refuses rather than counting as untracked, which
         // would report a disagreement about a file whose status was never read.
-        if let Some(source) = source
-            && !answered.contains_key(source)
-        {
+        //
+        // **Filtered rather than chained, because a let-chain is not stable at this workspace's declared
+        // MSRV.** `if let … && …` compiles on the default toolchain and fails on 1.85, which the local
+        // Definition of Done never runs — so this one line was red in CI for nineteen consecutive merges
+        // while every local gate reported green.
+        if let Some(source) = source.filter(|source| !answered.contains_key(*source)) {
             match tracks(repo, source) {
                 Tracked::Yes => {
                     answered.insert(source, true);
