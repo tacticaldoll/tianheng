@@ -4753,6 +4753,47 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
 
+- **Two ordered passes cannot close a mutual dependency, and the ordering was the defect rather than its
+  direction.** Comments and string literals each delimit the other. Stripping comments first truncates a `//`
+  inside a literal and leaves an unmatched quote; stripping literals first lets a lone `"` inside a comment
+  open a string that runs into real code. The previous round chose the second, documented why, and closed
+  every token that can hold a quote **in code** — and four files of this repository's own corpus carry
+  comments with an odd number of double quotes. Measured on `region.rs`, whose comments hold 43: three `pub
+  fn` declarations were being swallowed, today, in the corpus feeding the figure the register refuses a
+  non-zero answer for.
+
+  One pass now, tracking both states: inside a comment no quote opens a string, inside a string no `//` opens
+  a comment, with nested block comments and byte-prefixed raw strings. The ordering question disappears
+  rather than being answered, and the shared reader is no longer in this path at all. An escaped newline
+  inside a string is emitted rather than consumed, without which every line index after a `\`-continued
+  string shifted — which is how the corpus direction below first reported a declaration lost that the reader
+  had not touched.
+
+  **The direction that would have caught it is over the corpus, not over fragments.** Eleven declared shapes
+  were each a well-formed Rust fragment; none was a comment carrying an unbalanced quote, which is what the
+  corpus actually holds. A declaration is code, the reader removes no code, so any file where a line that
+  declared one no longer does names a span the reader lost. It is asserted at the same line index in both
+  texts, because these files embed Rust in literals on purpose and an embedded fragment never starts its own
+  line.
+
+- **A reader named for calls counted occurrences.** `calls` tested a word boundary on each side and nothing
+  else — and `(` is a boundary, but so are `|`, `.` and `,`, so a closure parameter, a field access and a
+  binding all read as constructions. Live: `.any(|violation| (dimension.reacted)(violation.kind))` contributed
+  two to a module that constructs none there.
+
+  **Requiring a following `(` is the obvious repair and the corpus written for this reader refuses it.** Its
+  fixture `a_constructor_taken_by_name` is `let build = violation;` — a constructor taken by name and called
+  through the alias — declared as one construction. So the question is not whether the name is called but
+  whether this occurrence *introduces* it: a closure parameter or a `let` binding introduces, a field access
+  projects a value that merely shares it, and everything else references. Three shapes join the direction,
+  and one of them records what the reader cannot tell apart rather than asserting it away — a bare reference
+  is a constructor taken by name or a local sharing its spelling, and nothing in the text says which.
+
+  **The floor's reason is restated on the property rather than the history.** It said no count is given
+  because three readers had disagreed; two readers now agree and are both wrong for the same reason. What
+  prevents the census is that this reader tells one region from another and does not tell one token role from
+  another — which a reader can act on, where a fact about the past cannot.
+
 - **The literal scanner had no arm for the tokens that can also hold a quote.** It read `"…"` and `r#"…"#`
   and nothing else, so a char literal spelling a quote — `if c == '"'` — opened a string at that quote and
   ran to the next one anywhere after it. Both directions fail from there: a construction between two of them
@@ -4765,10 +4806,10 @@ no adopter runs. They are here rather than under the adopter headings above beca
   close before consuming anything. Five shapes join the direction: a construction between two quote char
   literals, a literal after one, an escaped quote char literal, a lifetime, and a byte string raw or plain.
 
-  **The two figures this reader does produce were true and are now true by construction.** `0 carry no
-  identity at all`, which the register refuses a non-zero figure for, and the per-module
-  `unparsed_constructions == 0` were both correct before this — by which tokens the desync happened to
-  expose, not because the scanner was right. That gap is this crate's whole subject.
+  **The two figures this reader does produce were true, and the claim that they had become true by
+  construction was not.** That sentence is corrected in the entry below: the repair closed the arms for
+  tokens that can hold a quote **in code** and left the mirror open — a comment can hold an unbalanced quote
+  too, and this reader ran on raw text.
 
   **And publishing no count was what contained it.** Had a figure been rendered from the previous reader the
   projection would carry a fourth wrong number. The recorded reason — three readers, three answers, no two
