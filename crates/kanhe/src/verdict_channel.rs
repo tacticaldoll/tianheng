@@ -84,11 +84,27 @@ pub fn refuses(verdict: &Verdict) -> bool {
 ///
 /// # Panics
 ///
-/// Where `verdict` refuses, **after** the channel has been written. [`reached`] and [`refuses`] are what a
-/// direction holds that pairing with, rather than reading this body.
+/// Where `verdict` refuses, **after** the channel has been written — and where the channel was opened and
+/// could not be written, because that is a verdict this run reached and lost. [`reached`] and [`refuses`] are
+/// what a direction holds the first pairing with, rather than reading this body.
 pub fn deliver(gate: &str, verdict: Verdict) {
     if let Some(class) = reached(&verdict) {
-        report_reached(&class);
+        // **A write that fails is not an absence.** The predecessor of this function returned the write's
+        // outcome and said why: *"Returning the outcome lets a direction assert that, rather than inferring
+        // it from a file that is missing for either reason."* Routing every gate through one exit dropped
+        // that return, and absence acquired a second cause — a verdict reached and lost. `absent means
+        // unjudged` is what this module and `repository-checks` both claim **by construction**, and it was
+        // true again only while nothing could fail silently between the two.
+        //
+        // The cost was a lost distinction rather than an unsafe pass: a `Refused` whose write failed reached
+        // the wrapper as exit 2 instead of exit 1 — the class collapse this module exists to end, through a
+        // different door.
+        if let Delivery::Failed(why) = report_reached(&class) {
+            panic!(
+                "{gate}: reached a verdict and could not write it to the channel ({why}), so the class this \
+                 run found cannot travel. That is not the same fact as a run that judged nothing"
+            );
+        }
     }
     match verdict {
         Verdict::NotAsked(why) => eprintln!("{gate}: not judged — {why}"),
@@ -99,10 +115,28 @@ pub fn deliver(gate: &str, verdict: Verdict) {
     }
 }
 
+/// What became of a write to the channel.
+///
+/// Three states rather than a `bool`, for the reason every other split in this crate has: *no channel was
+/// opened* and *a channel was opened and could not be written* are different facts, and a boolean makes the
+/// second unobservable. A gate run in the ordinary suite opens none, which is not a failure; a gate run by a
+/// wrapper opens one, and a failure there is a verdict lost.
+enum Delivery {
+    /// No caller opened a channel — a gate run outside a wrapper, which is the ordinary case.
+    NoChannel,
+    /// The class is on the channel.
+    OnChannel,
+    /// A channel was opened and the class could not be put on it.
+    Failed(String),
+}
+
 /// Write `class` to the channel, if the caller opened one.
-fn report_reached(class: &str) -> bool {
+fn report_reached(class: &str) -> Delivery {
     let Some(path) = std::env::var_os(ENV) else {
-        return false;
+        return Delivery::NoChannel;
     };
-    std::fs::write(Path::new(&path), class).is_ok()
+    match std::fs::write(Path::new(&path), class) {
+        Ok(()) => Delivery::OnChannel,
+        Err(err) => Delivery::Failed(format!("{}: {err}", Path::new(&path).display())),
+    }
 }
