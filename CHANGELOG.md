@@ -946,10 +946,10 @@ them.
   law did not change, and nothing refused them. They were found by reading the history months later.
 
   The law's boundary set is declared as text and held against the projection **in both directions**. The
-  declared identity carries each boundary's **rule** as well as its heading, because relaxing a law widens a
-  boundary far more often than it deletes one — and keying on the target alone would pass a 璇璣 that had
-  quietly gained 圭表. Editing that declaration is what accepting an amendment now consists of, and CODEOWNERS
-  already routes the file to the steward.
+  declared identity carries more than the heading, because relaxing a law widens a boundary far more often
+  than it deletes one — keying on the target alone would pass a 璇璣 that had quietly gained 圭表. The entry
+  below widens that identity again and states what it establishes: editing the declaration is what **naming**
+  an amendment consists of, in a file CODEOWNERS routes to the steward, and naming is not accepting.
 
   **The gap was measured before the check was written, and it was real.** With 璇璣's allowlist widened to
   permit 圭表 and the projection re-blessed, all **nine** existing self-governance assertions pass and only
@@ -961,14 +961,14 @@ them.
 
   The other direction is run too — a declared boundary the projection does not render fails naming it, which
   is the entry a one-directional comparison would go on certifying. The reader answers *unreadable* rather
-  than *no boundaries* for a projection it cannot parse, in each of four shapes, so the check's own failure
-  mode is not the silence it exists to refuse. The subject is the projection's tracked text rather than
+  than *no boundaries* for every shape of projection it cannot parse, so the check's own failure mode is not
+  the silence it exists to refuse. The subject is the projection's tracked text rather than
   `constitution()`, which `kanhe` can reach: a check calling the law it judges compares the law against
   itself and cannot fail.
 
-  `repository-checks` gains the requirement with it — the two-way property, the rule-carrying identity, the
-  text-not-`constitution()` subject, and a scenario each for an unnamed boundary, a widened allowlist, a
-  declaration that outlived its boundary, and an unparseable projection.
+  `repository-checks` gains the requirement with it — the two-way property, an identity carrying more than
+  the target, the text-not-`constitution()` subject, and a scenario for each way the set can move. The entry
+  below adds to all three.
 
   No published API, outcome, report, exit class, or manifest moves; `kanhe` ships in no package.
 
@@ -1018,6 +1018,23 @@ them.
   three scenarios.
 
   No published API, outcome, report, exit class, or manifest moves; `kanhe` ships in no package.
+
+- **The retraction reached three of its four sites, and the fourth is the one a reader reads.** The claim
+  that editing the boundary declaration *is* accepting an amendment was withdrawn from `PROJECT.md`, from the
+  check's own doc comment and from `repository-checks` — and left standing in the entry above it, which is
+  the document an adopter opens. Two typed figures in the same entry had gone stale the same way: the
+  identity it describes as carrying the rule now carries four fields, and *four shapes* of unreadable
+  projection are six. All three are repaired where they stand, and the figures are replaced by the structure
+  rather than re-typed, because a later change in the same window will move them again.
+
+  **How it was found is the part worth keeping.** Every reaction built in this window had a defect found in
+  the next round — the membership repair's guard did not reach its consumers, the census removal typed two
+  figures of its own, the amendment check's identity omitted severity. Three of three. The entry that fixed
+  the third was the only one nothing had read, so it was swept from its own base rather than waited on, and
+  the class it carried is the one this window has closed most often: a repair that sweeps the sites it
+  remembers rather than the sites a grep finds.
+
+  No published API, outcome, report, exit class, or manifest moves; a record only.
 
 - **A reason about what ANOTHER crate does was the shape the second perimeter pass missed.** The falsifier
   the law's own header states took **three** passes to apply to eight boundaries, and each pass missed a
