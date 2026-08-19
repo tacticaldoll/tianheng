@@ -57,15 +57,15 @@ fn members_reaching(root: &Path, crate_name: &str) -> BTreeSet<String> {
     for member in &members {
         let text = std::fs::read_to_string(root.join(member).join("Cargo.toml"))
             .unwrap_or_else(|err| panic!("cannot read {member}/Cargo.toml ({err})"));
-        let name = text
-            .lines()
-            .find_map(|line| line.trim().strip_prefix("name = "))
-            .map(|value| value.trim().trim_matches('"').to_string())
+        let name = package_name(&text)
             .unwrap_or_else(|| panic!("{member}/Cargo.toml declares no package name"));
-        for other in &members {
-            let dep = other.rsplit('/').next().unwrap_or(other);
-            if dep != name && text.contains(&format!("path = \"../{dep}\"")) {
-                edges.push((name.clone(), dep.to_string()));
+        for dep in declared_dependencies(&text) {
+            if dep != name
+                && members
+                    .iter()
+                    .any(|m| m.rsplit('/').next() == Some(&dep[..]))
+            {
+                edges.push((name.clone(), dep));
             }
         }
     }
@@ -83,6 +83,83 @@ fn members_reaching(root: &Path, crate_name: &str) -> BTreeSet<String> {
         }
     }
     reaching
+}
+
+/// The `[package]` name a manifest declares, read from executed TOML.
+fn package_name(text: &str) -> Option<String> {
+    let source = Source::of(text);
+    let mut inside = false;
+    for line in source.toml().lines() {
+        let trimmed = line.trim();
+        if trimmed == "[package]" {
+            inside = true;
+            continue;
+        }
+        if trimmed.starts_with('[') {
+            inside = false;
+            continue;
+        }
+        if !inside {
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("name") {
+            if let Some(value) = rest.trim_start().strip_prefix('=') {
+                return Some(value.trim().trim_matches('"').to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Every crate a manifest declares a dependency on, however the dependency is spelled.
+///
+/// **Not a substring over one layout.** The first draft recognised an edge by
+/// `text.contains("path = \"../{dep}\"")`, which is one spelling of one form: `path="../x"` without the
+/// spaces declares the same edge and was invisible, and `alias = { package = "x", path = "../x" }` — cargo's
+/// rename, which this repository's own release gate already reads for exactly this reason — was invisible
+/// twice over. An edge missed on both sides of a two-way comparison is a corpus that shrinks while agreeing
+/// with itself, which is the shape the comparison exists to refuse.
+///
+/// The corpus is `crate::region`'s TOML region, so a commented-out dependency is not a dependency and a `#`
+/// inside a string is not a comment — the same reader every other manifest question in this repository uses.
+/// A dependency is its **key** unless a `package` field renames it, and both dependency tables are read.
+fn declared_dependencies(text: &str) -> Vec<String> {
+    let source = Source::of(text);
+    let mut found = Vec::new();
+    let mut inside = false;
+    for line in source.toml().lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            // `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]` and their
+            // `[target.'cfg(...)'.dependencies]` forms — the tables an edge can be declared in.
+            inside = trimmed.trim_end_matches(']').ends_with("dependencies");
+            continue;
+        }
+        if !inside || trimmed.is_empty() {
+            continue;
+        }
+        let Some((key, value)) = trimmed.split_once('=') else {
+            continue;
+        };
+        // A rename names the real crate in `package`; otherwise the key is the crate.
+        match value.split_once("package") {
+            Some((_, rest)) => {
+                if let Some(renamed) = rest.trim_start().strip_prefix('=') {
+                    found.push(
+                        renamed
+                            .trim_start()
+                            .trim_start_matches('"')
+                            .split('"')
+                            .next()
+                            .unwrap_or_default()
+                            .to_string(),
+                    );
+                }
+            }
+            None => found.push(key.trim().trim_matches('"').to_string()),
+        }
+    }
+    found
 }
 
 /// Every tracked `.rs` file under `dirs`, as `(path, text)`.
@@ -183,4 +260,66 @@ fn a_token_with_a_constant_owner_has_no_second_spelling_in_reach() {
             sites[0]
         );
     }
+}
+
+/// A dependency edge is read as TOML, not as one string layout.
+///
+/// **The reader this replaces recognised `path = "../x"` and nothing else.** `path="../x"` declares the same
+/// edge with no spaces; `alias = { package = "x", … }` is cargo's rename, which this repository's own release
+/// gate already reads for exactly this reason. Both were invisible, and an edge missed on **both** sides of
+/// `assert_eq!(declared, reaching)` is a corpus that shrinks while agreeing with itself.
+///
+/// **Asked of the reader rather than of the graph, and that is forced.** The two constants are owned by the
+/// two crates at the top of this workspace's dependency DAG, so no member can be made to reach either without
+/// closing a cycle — measured: adding `shengmo` to `xuanji` produces
+/// `cyclic package dependency: package guibiao depends on itself`, and cargo refuses to build before any
+/// direction runs. The declared side is perturbable and is held that way; the graph side is not, so the
+/// reader is exercised over text it is given.
+#[test]
+fn every_spelling_of_a_dependency_edge_is_read() {
+    for (why, manifest, expected) in [
+        (
+            "the spelling the reader this replaces recognised",
+            "[dependencies]\nshengmo = { path = \"../shengmo\" }\n",
+            "shengmo",
+        ),
+        (
+            "the same edge with no spaces around the equals",
+            "[dependencies]\nshengmo = { path=\"../shengmo\" }\n",
+            "shengmo",
+        ),
+        (
+            "cargo's rename, where the key is not the crate",
+            "[dependencies]\nalias = { package = \"shengmo\", path = \"../shengmo\" }\n",
+            "shengmo",
+        ),
+        (
+            "a dev-dependency is an edge too",
+            "[dev-dependencies]\nshengmo = { path = \"../shengmo\" }\n",
+            "shengmo",
+        ),
+        (
+            "a target-scoped table is still a dependency table",
+            "[target.'cfg(unix)'.dependencies]\nshengmo = { path = \"../shengmo\" }\n",
+            "shengmo",
+        ),
+    ] {
+        assert!(
+            declared_dependencies(manifest).contains(&expected.to_string()),
+            "{why}: {expected} is declared and this reader did not see it — {:?}",
+            declared_dependencies(manifest)
+        );
+    }
+
+    // And the corpus is the TOML region, so a commented-out dependency is not one.
+    assert!(
+        !declared_dependencies("[dependencies]\n# shengmo = { path = \"../shengmo\" }\n")
+            .contains(&"shengmo".to_string()),
+        "a commented-out dependency is not a declared edge"
+    );
+    // A table that is not a dependency table declares no edge.
+    assert!(
+        declared_dependencies("[package]\nshengmo = \"1\"\n").is_empty(),
+        "only dependency tables declare edges"
+    );
 }
