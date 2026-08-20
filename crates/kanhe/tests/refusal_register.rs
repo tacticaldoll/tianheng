@@ -514,19 +514,25 @@ fn aliases_a_constructor(text: &str) -> bool {
     finder.0
 }
 
-/// `text` with every comment removed and every string/char literal's interior blanked,
-/// keeping the line count exactly as it was.
+/// `text` with every comment and every string/char literal (delimiters and interior alike)
+/// blanked, keeping the line count exactly as it was.
 ///
 /// **The gaps between real tokens, not a scan for `//` and `"`.** `proc_macro2`'s tokenizer
 /// already knows exactly where a raw string, a byte char literal, or a doc comment begins and
 /// ends — comments are never emitted as tokens at all, and a literal is emitted as one token
-/// spanning its whole quoted form however it is written. Copying every token's byte range
-/// verbatim and blanking everything between them (while keeping whitespace, so a `pub`/`fn`
-/// boundary a line-based check depends on does not fuse into `pubfn`) can therefore never
-/// mistake a `//` inside a raw string for a comment, or a quote inside a byte char literal for
-/// the start of a string — the exact class of desynchronisation the character-by-character
-/// version above needed a dedicated arm for, the first time each shape was found.
+/// spanning its whole quoted form however it is written. Copying an identifier's, a punctuation
+/// mark's, or a group delimiter's byte range verbatim, and blanking every literal along with
+/// everything between tokens (while keeping whitespace, so a `pub`/`fn` boundary a line-based
+/// check depends on does not fuse into `pubfn`), can therefore never mistake a `//` inside a raw
+/// string for a comment, or a quote inside a byte char literal for the start of a string — the
+/// exact class of desynchronisation the character-by-character version above needed a dedicated
+/// arm for, the first time each shape was found.
 fn code_only(text: &str) -> String {
+    // A `Literal`'s span is deliberately absent from `out` below: its whole quoted form —
+    // delimiters and interior alike — is what this function's own doc comment calls blanked, so
+    // a `pub fn` shaped line embedded in a string (this file's own fixtures write several) is
+    // never read back as a declaration by `the_reader_swallows_no_declaration_from_the_corpus_it_reads`,
+    // which depends on exactly that to tell a real declaration from one merely quoted.
     fn collect_spans(stream: proc_macro2::TokenStream, out: &mut Vec<Range<usize>>) {
         for tt in stream {
             match tt {
@@ -537,7 +543,7 @@ fn code_only(text: &str) -> String {
                 }
                 proc_macro2::TokenTree::Ident(i) => out.push(i.span().byte_range()),
                 proc_macro2::TokenTree::Punct(p) => out.push(p.span().byte_range()),
-                proc_macro2::TokenTree::Literal(l) => out.push(l.span().byte_range()),
+                proc_macro2::TokenTree::Literal(_) => {}
             }
         }
     }
