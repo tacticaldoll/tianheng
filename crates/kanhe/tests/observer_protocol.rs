@@ -27,6 +27,10 @@ use tianheng::check_constitution;
 use tianheng::prelude::*;
 
 use kanhe::region::Source;
+// The extent step reads Rust with a real parser rather than counting braces by eye — see
+// [`syn_body_span`] for why, and `crates/kanhe/Cargo.toml` for why a dev-only edge to `syn` needs no
+// amendment to this crate's own boundary.
+use syn::visit::Visit;
 
 fn workspace_manifest() -> Option<PathBuf> {
     shengmo::workspace::locate(
@@ -379,43 +383,60 @@ fn a_brace_in_a_comment_tail_no_longer_closes_the_body() {
     );
 }
 
-/// A brace inside a block comment or a string literal still moves the body extent — a declared bound.
+/// A brace inside a block comment or a string literal no longer moves the read body extent — the bound is
+/// closed.
 ///
-/// Recognizing it would need the string-literal lexing this file deliberately does not carry, and which
-/// `crates/kanhe/tests/bound_register.rs` measured and rejected for the same reason: this tree's own lexer suites
-/// put comment delimiters inside string literals, several of them nested, so a delimiter-counting stripper opens
-/// a phantom comment at the first of them.
+/// [`syn_body_span`] replaced the brace count with a real parse, which tokenizes a comment or a string literal
+/// as what it is before any brace inside either is counted at all — so nothing moves the extent this way any
+/// more, closing the bound `observer-protocol/spec.md` used to declare over this shape.
 ///
-/// It is declared rather than closed because **for this comparison** the error direction is the safe one, which
-/// this pin is what shows: a moved extent makes a **conforming** body read as non-conforming, because no
-/// brace-carrying construct survives the exact one-statement comparison. An author meets a refusal to argue
-/// with, never a silent pass. The control is the same body with the comment removed, so the refusal is the
-/// brace's doing and not the recognizer refusing everything.
-///
-/// The direction belongs to the comparison and not to the extent, and reading it as a property of the extent is
-/// how the same moved extent went four windows accepting a divergent body elsewhere. That second reader compared
-/// by count and containment, which a truncated remainder satisfies in full, so what fell past the cut was not
-/// there to refuse; it was retired rather than narrowed again, and the distinction is kept here so this bound's
-/// safety is not read as transferring to the next reader written over the same recognizer.
+/// The extent is asserted directly (via [`function_body`]) rather than through [`bounds_body`]'s
+/// exact-one-statement comparison: a block comment written on its own line is not itself stripped by
+/// [`Executed`]'s Rust rule (a residue `kanhe::region` already declares, unrelated to this reader), so a body
+/// carrying one still fails that stricter comparison — for a real reason now, the comment being read as extra
+/// content, rather than for the old one, the extent stopping short of the real closing brace. Both fixtures'
+/// controls show the same body without the brace-carrying construct still resolves and still delegates
+/// exactly, so what changed is the extent and nothing about the recognizer's other rules.
 #[test]
-fn a_brace_in_a_block_comment_moves_the_body_extent() {
+fn a_brace_in_a_block_comment_or_a_string_literal_no_longer_moves_the_body_extent() {
     let braced_block_comment = Source::of(
         "fn bounds(&self) -> Vec<BoundDecl> {\n    /* } */\n    observation_bounds()\n}\n",
     );
+    assert_eq!(
+        function_body(&braced_block_comment, "fn bounds(")
+            .as_ref()
+            .map(Source::whole),
+        Some("\n    /* } */\n    observation_bounds()\n"),
+        "the extent now reaches the real closing brace, not the one written inside the block comment"
+    );
+    // The comment line is not stripped by `Executed`'s Rust rule, so the exact one-statement comparison still
+    // refuses this body — never a false pass — but the refusal is now about the comment being extra content,
+    // not about a truncated extent.
     assert_ne!(
         bounds_body(&braced_block_comment).as_deref(),
-        Some(["observation_bounds()".to_string()].as_slice()),
-        "the extent stops at the commented brace, so this body — which delegates exactly — is refused; that \
-         false refusal is the declared bound"
+        Some([DELEGATION.to_string()].as_slice()),
+        "a block comment on its own line is still read as a second line, so the exact delegation check still \
+         refuses it — safely, and for its own, separate, already-declared reason"
+    );
+
+    let braced_string_literal = Source::of(
+        "fn bounds(&self) -> Vec<BoundDecl> {\n    let _tag = \"}\";\n    observation_bounds()\n}\n",
+    );
+    assert_eq!(
+        function_body(&braced_string_literal, "fn bounds(")
+            .as_ref()
+            .map(Source::whole),
+        Some("\n    let _tag = \"}\";\n    observation_bounds()\n"),
+        "and the same holds for a brace written inside a string literal"
     );
 
     let same_body_uncommented =
         Source::of("fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n");
     assert_eq!(
         bounds_body(&same_body_uncommented).as_deref(),
-        Some(["observation_bounds()".to_string()].as_slice()),
-        "the identical body without the comment resolves, so the bound is about the brace and not about the \
-         recognizer refusing whatever it is given"
+        Some([DELEGATION.to_string()].as_slice()),
+        "the identical body without either construct still resolves, so the fix is about the brace and not \
+         about the recognizer accepting more than it should"
     );
 }
 
@@ -640,60 +661,94 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
     )
 }
 
-/// The same text with `{` and `}` inside a line-comment tail replaced by a space.
+/// Every named, body-carrying function-like item `syn` parsed out of one source, keyed by where its `fn`
+/// keyword begins.
 ///
-/// Byte offsets are preserved exactly — only a one-byte ASCII brace is ever swapped for a one-byte ASCII space
-/// — so the mask can be brace-matched while the ORIGINAL text is sliced with the offsets that produces. That
-/// matters concretely: this tree's comments carry 漢字, and a mask that re-encoded anything would shift every
-/// offset after the first multi-byte character.
-///
-/// Why it exists: [`function_body`] counted braces through comments, so `observation_bounds(); // }` closed the
-/// body at the comment and everything after it — a second list — was never read. `bounds_body`'s own `//`-tail
-/// stripping then made the truncated remainder look like the exact delegation, and the check passed. The
-/// stripping had to move *before* the brace count, not after it.
-///
-/// [`Executed`] cannot do this job: it filters lines whose trimmed start is `//`, so a comment TAIL — which is
-/// the shape above — survives it whole, brace and all.
-///
-/// What it does **not** do is understand literals: a `//` inside a string blanks a real opening brace whose
-/// match is on a later line, and a brace inside a string, a character literal, or a block comment is counted as
-/// code. The extent then moves, and what that costs depends entirely on the comparison reading it — refusal for
-/// the exact one-statement equality below, a silent pass for a count-and-containment. A reader of that second
-/// kind existed and was retired; this function does not guard against the move on a caller's behalf, because
-/// the safe answer is not the same for every reader.
-fn mask_line_comment_braces(text: &str) -> String {
-    let mut bytes = text.as_bytes().to_vec();
-    let mut line_start = 0usize;
-    while line_start <= bytes.len() {
-        let line_end = bytes[line_start..]
-            .iter()
-            .position(|byte| *byte == b'\n')
-            .map_or(bytes.len(), |at| line_start + at);
-        if let Some(at) = bytes[line_start..line_end]
-            .windows(2)
-            .position(|pair| pair == b"//")
-        {
-            for byte in &mut bytes[line_start + at..line_end] {
-                if *byte == b'{' || *byte == b'}' {
-                    *byte = b' ';
-                }
-            }
-        }
-        if line_end >= bytes.len() {
-            break;
-        }
-        line_start = line_end + 1;
+/// Keyed by byte offset rather than walked-to by name: [`anchor`] already decided which occurrence of the
+/// signature is the definition, so [`syn_body_span`] only needs to ask "is there a real function starting
+/// exactly there", never "is there a function of this name somewhere". That keeps this step from silently
+/// widening the anchor rule it sits downstream of — a same-named method on some unrelated `impl` elsewhere in
+/// the file is a real, parseable function, and matching by name alone would read its body as this one's. That
+/// shape is still a way the anchor step itself can be fooled (see `ANCHOR_CASES`), not one this step
+/// introduces.
+#[derive(Default)]
+struct FnBodies {
+    /// `(the fn keyword's byte offset, the block's own `{ … }` byte range, braces included)`.
+    found: Vec<(usize, std::ops::Range<usize>)>,
+}
+
+impl FnBodies {
+    fn record(&mut self, fn_token_span: proc_macro2::Span, block: &syn::Block) {
+        self.found.push((
+            fn_token_span.byte_range().start,
+            block.brace_token.span.join().byte_range(),
+        ));
     }
-    String::from_utf8(bytes).expect("only ASCII braces were replaced, each by one ASCII space")
+}
+
+impl<'ast> Visit<'ast> for FnBodies {
+    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
+        self.record(node.sig.fn_token.span, &node.block);
+        syn::visit::visit_item_fn(self, node);
+    }
+
+    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        self.record(node.sig.fn_token.span, &node.block);
+        syn::visit::visit_impl_item_fn(self, node);
+    }
+
+    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
+        if let Some(block) = &node.default {
+            self.record(node.sig.fn_token.span, block);
+        }
+        syn::visit::visit_trait_item_fn(self, node);
+    }
+}
+
+/// The `{ … }` byte range — braces included — of the function-like item whose `fn` keyword begins at byte
+/// offset `at` in `text`, or `None` if `text` does not parse as a Rust file, or parses without any such item
+/// beginning exactly there.
+///
+/// This is the extent step alone, once [`anchor`] has already decided which occurrence is the definition — it
+/// does not revisit that decision. What replaces brace-counting here is a real parser: `syn` tokenizes
+/// comments and string literals as what they are, so a `{` or `}` written inside either is never mistaken for
+/// one that opens or closes a body — closing the gap the brace-counter this function replaced left declared in
+/// `observer-protocol/spec.md`. `proc-macro2`'s span-locations are exact outside a proc-macro context — which
+/// a `cargo test` binary always is — so the byte range this reads back is the same offsets `at` was computed
+/// against.
+///
+/// Declining on a parse failure or on finding no match at `at` is the safe direction that closed gap's own pin
+/// required staying in: this function never reports a span it cannot attribute to a real `fn` sitting exactly
+/// where the anchor said the definition begins.
+fn syn_body_span(text: &str, at: usize) -> Option<std::ops::Range<usize>> {
+    let file = syn::parse_str::<syn::File>(text).ok()?;
+    let mut bodies = FnBodies::default();
+    bodies.visit_file(&file);
+    bodies
+        .found
+        .into_iter()
+        .find(|(start, _)| *start == at)
+        .map(|(_, block)| block)
 }
 
 /// What this reader does with every shape it can meet — **including the shapes it gets wrong**.
 ///
 /// The table is the description. A comment saying which shapes the anchor rule refuses drifted from the code
 /// twice in one window, and each repair corrected the sentence review had named and then wrote the next one; a
-/// row cannot drift, because it runs. `observer-protocol`'s declared bound over this reader is read off the
+/// row cannot drift, because it runs. `observer-protocol`'s still-open bound over the *anchor* step — a
+/// whole-line occurrence that is not the definition anchors the read — is read off the
 /// [`Verdict::ReadsTheWrongBody`] rows rather than typed beside them, and a reviewer's perturbation lands here
 /// as a row instead of as a finding.
+///
+/// **A block comment or a string literal is no longer among those rows.** [`syn_body_span`] closed the
+/// *extent* bound those two shapes used to demonstrate: the anchor still lands inside the comment or the
+/// literal exactly as before, but there is no real `fn` there for a parser to find, so the read now declines
+/// rather than reading the decoy's body — see the block-comment and string-literal `AnchorCase` rows, each
+/// commented at its own definition with what changed from [`Verdict::ReadsTheWrongBody`] to
+/// [`Verdict::Declines`]. The anchor bug survives them, only its consequence narrowed: what remains reachable
+/// is a whole-line copy that *is* real, parseable Rust — a same-named method on some unrelated `impl`
+/// elsewhere in the file, which the "any other position the reader does not distinguish from executed text"
+/// clause of that bound's own scenario already covers.
 struct AnchorCase {
     /// The shape, in the words a spec scenario would use for it.
     shape: &'static str,
@@ -739,14 +794,30 @@ const ANCHOR_CASES: &[AnchorCase] = &[
         verdict: Verdict::Declines,
     },
     AnchorCase {
+        // The anchor still lands here — `anchor()` is untouched and knows nothing of comments — but
+        // `syn_body_span` finds no real `fn` starting at that byte offset, because it is text inside a block
+        // comment rather than a token. Was `Verdict::ReadsTheWrongBody`; closed by the extent fix.
         shape: "a whole-line copy in a block comment, the definition moved out of the file",
         source: "/*\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n*/\nfn other() -> u8 { 0 }\n",
-        verdict: Verdict::ReadsTheWrongBody("\n    observation_bounds()\n"),
+        verdict: Verdict::Declines,
     },
     AnchorCase {
+        // Same shape, a string literal in place of the comment. Was `Verdict::ReadsTheWrongBody`; closed by
+        // the extent fix for the identical reason — no real `fn` starts inside a string literal's token.
         shape: "a whole-line copy in a string literal, the definition moved out of the file",
         source: "const MOVED: &str = \"\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n\";\nfn other() -> u8 { 0 }\n",
-        verdict: Verdict::ReadsTheWrongBody("\n    observation_bounds()\n"),
+        verdict: Verdict::Declines,
+    },
+    AnchorCase {
+        // Unlike the block-comment and string-literal rows, this whole-line copy IS real, parseable Rust: a
+        // `bounds` method on an unrelated `impl`, with no `Observer`'s `bounds` anywhere in the source.
+        // `anchor()` cannot tell it apart from the intended definition — it is still just "the unique,
+        // line-start occurrence" — and `syn_body_span` correctly finds a real function there and reads its
+        // real body, which is exactly the wrong one. This is what keeps the anchor bound demonstrable now
+        // that a decoy hidden in prose no longer is.
+        shape: "a same-named method on an unrelated impl anchors the read, the intended definition absent",
+        source: "impl OtherTrait for Whatever {\n    fn bounds(&self) -> Vec<BoundDecl> {\n        unrelated()\n    }\n}\n",
+        verdict: Verdict::ReadsTheWrongBody("\n        unrelated()\n    "),
     },
 ];
 
@@ -823,34 +894,16 @@ fn decline_reason(source: &Source, signature: &str) -> String {
 ///
 /// Declining rather than taking the first is the point: an occurrence in a comment anchors exactly as well as a
 /// definition, so uniqueness is what makes the subject knowable, and the anchor scan therefore reads the whole
-/// source rather than [`Executed`].
+/// source rather than [`Executed`]. What follows the anchor is [`syn_body_span`] rather than a brace count —
+/// see it for why, and what this step decides WRONGLY (nothing, now — the residual is [`anchor`]'s alone) is
+/// still shown in [`ANCHOR_CASES`] rather than described here.
 fn function_body(source: &Source, signature: &str) -> Option<Source> {
     let text = source.whole();
-    // Braces are counted over the MASK and the body is sliced out of the original, which the mask's
-    // offset-for-offset construction makes the same positions. See [`mask_line_comment_braces`].
-    let masked = mask_line_comment_braces(text);
-    // What this rule decides, and what it decides WRONGLY, is shown in [`ANCHOR_CASES`] rather than described
-    // here — a comment saying which shapes it refuses drifted from it twice in one window.
-    let Anchor::At(signature) = anchor(text, signature) else {
+    let Anchor::At(at) = anchor(text, signature) else {
         return None;
     };
-    let open = signature + masked[signature..].find('{')?;
-    let mut depth = 0usize;
-    let mut close = None;
-    for (offset, character) in masked[open..].char_indices() {
-        match character {
-            '{' => depth += 1,
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    close = Some(open + offset);
-                    break;
-                }
-            }
-            _ => {}
-        }
-    }
-    Some(Source::of(&text[open + 1..close?]))
+    let span = syn_body_span(text, at)?;
+    Some(Source::of(&text[span.start + 1..span.end - 1]))
 }
 
 // --- the fold's ordering directions, on hand-written observers ---
