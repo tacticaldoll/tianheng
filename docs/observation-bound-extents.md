@@ -657,11 +657,11 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 ### `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound`
 
-> a registered refusal constructed in a shape the register's reader models as neither a parsed construction nor an unparseable one
+> a bare reference to a registered or unregistered constructor's name, where whether it names the constructor taken by value or a local variable sharing its spelling is not decidable from syntax
 
-- **because**: the reader is text over Rust and is not exhaustive over the language. Its two sides fail in opposite directions -- a missed citation reports a site as unobserved and fails loud, a missed construction reports clean over a site nothing holds -- and only the second is unsafe. Closing it means the compiler enumerating the sites, which is a change to what a site is rather than one more shape taught to a scanner
+- **because**: the register's reader used to be text over Rust and not exhaustive over the language, where a byte char literal, a raw string, or a two-line closure parameter list could desynchronise a character scan entirely -- invisible to both of its readings at once, the unsafe direction this bound named. Reading this repository's own Rust with a real parser instead of scanning it closed that floor; what remains is not lexical. Whether a bare reference names the constructor taken by value or a local sharing its spelling is not written down anywhere a parse tree carries, and answering it needs name resolution, which a reader of syntax alone does not have
 - **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *the register's reader is text over a language it does not model exhaustively*
+- **unpinned**, tracked by: `BACKLOG.md` — *a bare reference to a registered constructor's name cannot be told from a local variable sharing its spelling without name resolution*
 
 ### `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
 

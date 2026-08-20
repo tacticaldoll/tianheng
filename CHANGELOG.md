@@ -5287,6 +5287,37 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every site is in a crate that ships in no
   package.
 
+- **The refusal register reads Rust, not text, and its stated bound narrows to the residue a parser cannot
+  close.** `refusal_register.rs`'s character-by-character scanner — `code_only`, `calls`, `first_literal_args`,
+  `imports_and_rest` — is replaced by a reader built on `syn::parse_str` and `syn::visit::Visit`. Exclusions
+  that used to be text heuristics (pipe-counting for a closure parameter, a `.` check for field access, an
+  `fn`-suffix check for a definition) are now free consequences of AST node type: a bound `Pat`, a `UseTree`,
+  or a `Signature::ident` is simply never visited as an `Expr::Path`. A byte char literal, a raw string, and a
+  closure parameter list wrapped across two lines — three shapes that desynchronised the old scanner the first
+  time each was found — are closed by construction rather than by an arm added per shape.
+
+  `openspec/specs/repository-checks/spec.md`'s "A construction shape the register's reader does not model"
+  bound narrows to what a parse tree genuinely cannot decide: whether a bare reference to a registered
+  constructor's name is the constructor taken by value or a local variable sharing its spelling, which needs
+  name resolution rather than syntax. `crates/kanhe/src/bounds.rs`'s matching declaration and `BACKLOG.md`'s
+  watch entry are narrowed in lockstep; `docs/observation-bounds.md` and `docs/observation-bound-extents.md`
+  are regenerated.
+
+  A raw string literal used as a registered site's identity, previously unparseable and filed under
+  `UNREADABLE_SITE_CASES`, is now read like any other string — `syn::LitStr::value()` decodes a raw string
+  exactly as it decodes a plain one, so there is no special case left to write for it. `docs/refusal-register.md`
+  is byte-identical to what it was before this change: this repository's own tracked source carries no
+  registered site the old and new readers disagree about.
+
+  `code_only`'s own doc comment, and the one test that reads its output, both assumed a string or char
+  literal's interior is blanked so an embedded `pub fn`-shaped fragment is never read back as a real
+  declaration — adversarial review found the first implementation instead kept every literal's span as
+  in-code, benign only because no tracked file happens to open such a fragment at column zero of its own line.
+  Corrected before landing rather than left as a doc comment the code did not yet match.
+
+  No published API, outcome, report, exit class, or manifest moves; every site is in a crate that ships in no
+  package.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

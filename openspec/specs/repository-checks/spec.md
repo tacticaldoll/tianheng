@@ -128,14 +128,21 @@ was a shell script and its refusal was an exit code, and it is why retiring the 
 
 #### Scenario: A construction shape the register's reader does not model — a stated bound
 
-- **WHEN** a registered refusal is constructed in a shape this register's reader recognises as neither a
-  parsed construction nor an unparseable one — a shape its model of Rust does not reach at all
-- **THEN** the site is produced and unreported. The reader is text over Rust and is not exhaustive over the
-  language, and the two sides of it fail in opposite directions: a missed **citation** reports a site as
-  unobserved and fails loud, while a missed **construction** reports clean over a site nothing holds. Only
-  the second is unsafe, and closing it means the compiler enumerating the sites rather than a reader —
-  which is a change to what a site *is*, not another shape added to a scanner
-- **UNPINNED** `BACKLOG.md` — *the register's reader is text over a language it does not model exhaustively*
+- **WHEN** a registered or unregistered constructor is referenced by a bare name rather than called directly
+  — a binding taken by value and called through the alias, or a reference to the name that a local binding
+  of the same spelling has shadowed
+- **THEN** the reference is read as a construction, whichever it actually names. **This bound used to be
+  wider.** The register's reader was text over Rust and not exhaustive over the language: a byte char
+  literal, a raw string, or a closure whose parameter list spanned two lines could desynchronise a
+  character-by-character scan entirely, producing a site the reader neither parsed nor counted as
+  unparseable — invisible to both of its readings at once, which was the unsafe direction this bound named,
+  since a missed citation fails loud while a missed construction reports clean over a site nothing holds.
+  Reading this repository's own Rust with a real parser instead of scanning it closes that floor: every
+  syntactically valid construction is seen by construction, not by an arm added the day a shape was found
+  wrong. **What remains is not lexical.** Whether a bare reference names the constructor taken by value or a
+  local variable that happens to share its spelling is not written down anywhere a parse tree carries —
+  answering it needs name resolution, which a reader of syntax alone does not have
+- **UNPINNED** `BACKLOG.md` — *a bare reference to a registered constructor's name cannot be told from a local variable sharing its spelling without name resolution*
 
 #### Scenario: A refusal constructed outside the register's corpus is not triaged — a stated bound
 
@@ -175,12 +182,14 @@ was a shell script and its refusal was an exit code, and it is why retiring the 
 #### Scenario: A registered construction this reader cannot parse is not counted as absent
 
 - **WHEN** a registered refusal is constructed in a shape this register's reader does not parse — the
-  constructor taken by name and called through the binding, a site arriving as a parameter, or a site
-  written as a raw string literal
+  constructor taken by name and called through the binding, or a site arriving as a parameter
 - **THEN** the register refuses for that module. Each shape was invisible to **both** of its readings: no
   parsed site, and not counted as untriaged either, because the untriaged count reads the site-less
   constructors. A real refusal site was then neither held, nor declared, nor reported missing. The parse is
-  counted against the calls, which turns *did not see it* into *cannot answer for this module*
+  counted against the calls, which turns *did not see it* into *cannot answer for this module*. A site
+  written as a raw string literal no longer belongs to this list: the register's reader parses this
+  repository's own Rust with a real parser, and a raw string decodes exactly like a plain one — there is no
+  special case left to write for it
 
 #### Scenario: A violation may not be declared unheld
 
