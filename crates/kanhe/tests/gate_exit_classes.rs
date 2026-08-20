@@ -12,6 +12,7 @@
 //! gate calls unjudgeable. No direction could have caught it: the ones covering those sites asserted only that
 //! the wrapper failed, which cannot see `1` from `2`.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use kanhe::refusal::Kind;
@@ -31,6 +32,82 @@ fn workspace_root() -> Option<PathBuf> {
 /// Both scripts are named rather than globbed: a script this array forgets is a wrapper whose exit classes
 /// nothing compares, and the sibling direction below holds the array against what the tree actually carries.
 const WRAPPERS: [&str; 2] = ["scripts/merge-pr.sh", "scripts/publish.sh"];
+
+/// Every test target that runs `git` without the shared fixture builder, and why each may.
+///
+/// **One helper lived twice and the convergence took one copy.** `release_coherence.rs` and
+/// `publish_source.rs` each held the same `hermetic("git")`-plus-assert runner — byte-identical past a doc
+/// comment — and when the fixture dates were extracted, only the file the work was already in was
+/// converged. Every fixture commit in the other kept taking its dates from the clock. That is the third
+/// instance of the class `kanhe::hermetic_git`'s own header records twice about the two gate modules these
+/// two targets belong to, one layer out.
+///
+/// Reading the file finds the copy you are editing; reading the pair finds the copy you are not. So the set
+/// is declared and held against the tree in **both directions**: a target that gains a direct `git` run is
+/// named here or the direction fails, and a name that outlives its reason fails too.
+///
+/// `publish_source.rs` is the only member, and its two uses are **reads** — `rev-parse` and a `Tracked`
+/// probe. A read asks the repository a question and writes no commit, so no fixture date is its to carry;
+/// everything in that file that builds a fixture goes through the builder.
+const TARGETS_RUNNING_GIT_DIRECTLY: [&str; 1] = ["crates/kanhe/tests/publish_source.rs"];
+
+/// The declared set of targets running `git` directly equals the set the tree carries.
+#[test]
+fn no_test_target_runs_git_outside_the_shared_builder_unnamed() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let declared: BTreeSet<String> = TARGETS_RUNNING_GIT_DIRECTLY
+        .iter()
+        .map(|path| (*path).to_string())
+        .collect();
+    let mut reaching: BTreeSet<String> = BTreeSet::new();
+    let listing = std::process::Command::new("git")
+        .args(["ls-files", "-z", "crates/kanhe/tests"])
+        .current_dir(&root)
+        .output()
+        .expect("git ls-files is runnable");
+    assert!(
+        listing.status.success(),
+        "could not enumerate the test targets, so this direction would report clean over nothing"
+    );
+    let paths: Vec<String> = String::from_utf8_lossy(&listing.stdout)
+        .split('\0')
+        .filter(|path| path.ends_with(".rs"))
+        .map(str::to_string)
+        .collect();
+    assert!(
+        !paths.is_empty(),
+        "no test target entered the corpus, so this direction would report clean over nothing"
+    );
+    for path in &paths {
+        let text = std::fs::read_to_string(root.join(path))
+            .unwrap_or_else(|err| panic!("cannot read {path}: {err}"));
+        // The executed text, so a doc comment naming the call is not read as one — `region` is the reader
+        // every other recognizer in this crate uses.
+        //
+        // **And by position, not by the bare marker.** This direction's own source is in the corpus it
+        // reads, and it holds the search term as a literal: `"hermetic("` written here would match itself.
+        // A call has an identifier boundary before it — a space, a `.`, a `(` — where the literal has a
+        // quote, which is the same argument `refusal_register` makes for `::expect(` against its own panic
+        // messages.
+        let source = Source::of(&text);
+        let executed = source.rust();
+        let runs_git_directly = executed.lines().any(|line| {
+            line.match_indices("hermetic(")
+                .any(|(at, _)| at == 0 || line.as_bytes()[at - 1] != b'"')
+        });
+        if runs_git_directly {
+            reaching.insert(path.clone());
+        }
+    }
+    assert_eq!(
+        declared, reaching,
+        "the test targets running `git` directly differ from the set named here. A target that gains one \
+         must be named with why it may, and a name that outlives its reason must go — the helper this \
+         guards lived twice and the convergence took one copy"
+    );
+}
 
 fn read(root: &Path, path: &str) -> String {
     std::fs::read_to_string(root.join(path)).unwrap_or_else(|err| {

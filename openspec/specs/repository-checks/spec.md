@@ -1489,3 +1489,29 @@ only thing tying the two together, and nothing read it.
 - **THEN** the wrapper refuses as a cannot-judge, because a count it cannot read is not a count of zero and
   not a count of some
 - **PINNED-BY** `an_unreadable_changed_file_count_stops_before_the_merge`
+
+### Requirement: A test target running git outside the shared fixture builder is named
+
+The set of test targets that run `git` without the shared fixture builder SHALL be declared and held against
+the tree **in both directions**: a target that gains a direct run is named with why it may, and a name that
+outlives its reason fails too.
+
+One helper lived twice — byte-identical past a doc comment, in the two test targets belonging to the two
+gate modules the shared builder was extracted from — and when the builder gained fixed fixture dates only
+the file the work was already in was converged. Every fixture commit in the other kept taking its dates from
+the clock. Reading a file finds the copy being edited; reading the pair finds the copy that is not.
+
+The recognizer SHALL read executed text and SHALL recognize the call by position rather than by the bare
+marker, because this check's own source is in the corpus it reads and holds the marker as a literal.
+
+#### Scenario: A test target gains a direct git run
+
+- **WHEN** a tracked test target runs `git` outside the shared builder and is not named
+- **THEN** the check fails naming it
+- **PINNED-BY** `no_test_target_runs_git_outside_the_shared_builder_unnamed`
+
+#### Scenario: A declared target no longer runs git directly
+
+- **WHEN** a named target stops running `git` directly
+- **THEN** the check fails, because a name that outlives its reason certifies nothing
+- **PINNED-BY** `no_test_target_runs_git_outside_the_shared_builder_unnamed`
