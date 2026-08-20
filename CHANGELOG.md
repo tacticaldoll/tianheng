@@ -4753,6 +4753,28 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
 
+- **A release section's date is held against the commit that makes the release.** `is_iso_date` was
+  hardened twice — parsed rather than counted, then ranged rather than digit-tested — and each step asked a
+  sharper question about the **shape**. The value was never asked, and the value is what a reader takes the
+  release to have happened on. Three releases carried a section date equal to their `release: X.Y.Z` commit's
+  date because a person remembered; the fourth was prepared four days behind the day it would be cut on, and
+  nothing would have said so.
+
+  The comparison runs **only at the snapshot**, which is the first moment the answer exists: before the
+  release commit there is nothing to date against, and a date written during preparation is an intent rather
+  than a claim. So the check stays silent through development and release-ready and speaks at the one commit
+  whose date is the answer, naming both dates so an operator can see which to change. The spine already read
+  the commit; it reads its date from the same log line.
+
+  **The fixtures commit at a fixed instant now**, which the new direction needs and which every fixture
+  benefits from: with the date taken from the clock, a literal release date and its commit agree only until
+  midnight, and the fixture would be asserting the machine rather than the subject. Both the author and the
+  committer date are pinned, because git takes them from different variables and a fixture setting only the
+  first would still record a wall-clock committer date.
+
+  `release-coherence` gains the requirement with its scenario, and the control is the existing coherent
+  snapshot — the same fixture with the date left agreeing.
+
 - **A debt entry counted the tree before its own repair, and named the invalidation two sentences later.**
   The WATCH entry filing the two wrappers as one lifecycle written twice recorded the overlap as a figure and
   a list of five shared named constructs — and the same paragraph records `merge-pr.sh` gaining `refuse`,

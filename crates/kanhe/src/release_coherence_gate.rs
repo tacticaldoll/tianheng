@@ -463,6 +463,8 @@ struct Spine {
     state: State,
     /// The latest `release: X.Y.Z` subject's version.
     release_version: String,
+    /// That commit's own date, `YYYY-MM-DD`, which the dated section is held against at the snapshot.
+    release_date: String,
     /// The one before it, absent when the latest is the first release.
     previous_release: Option<String>,
 }
@@ -476,19 +478,26 @@ fn release_spine(
     version: &str,
     version_parts: (u64, u64, u64),
 ) -> Result<Spine, Refusal> {
-    let subjects = git(repo, &["log", "--format=%H%x09%s"]).map_err(|err| {
-        cannot_judge_at(
-            "release-coherence#release-history-unreadable",
-            format!("could not read the release history: {err}"),
-        )
-    })?;
-    let mut history: Vec<(String, String)> = Vec::new();
+    // `%ad` with `--date=short`, because the dated release section's value is held against the release
+    // commit's own date and reading it here costs nothing — the log that answers "which commit" answers
+    // "when" in the same line.
+    let subjects =
+        git(repo, &["log", "--date=short", "--format=%H%x09%ad%x09%s"]).map_err(|err| {
+            cannot_judge_at(
+                "release-coherence#release-history-unreadable",
+                format!("could not read the release history: {err}"),
+            )
+        })?;
+    let mut history: Vec<(String, String, String)> = Vec::new();
     // HEAD's own commit is the first line this log produced, so asking git for it again would be a second
     // read of something already in hand — and a refusal guarding that second read is a branch no input can
     // take. Taken here instead.
     let mut head: Option<String> = None;
     for line in subjects.lines() {
-        let Some((commit, subject)) = line.split_once('\t') else {
+        let Some((commit, rest_of_line)) = line.split_once('\t') else {
+            continue;
+        };
+        let Some((date, subject)) = rest_of_line.split_once('\t') else {
             continue;
         };
         if head.is_none() {
@@ -501,7 +510,7 @@ fn release_spine(
                     format!("malformed release history subject: {subject}"),
                 ));
             }
-            history.push((commit.to_string(), rest.to_string()));
+            history.push((commit.to_string(), date.to_string(), rest.to_string()));
         } else if subject.starts_with("release:") {
             return Err(violation_at(
                 "release-coherence#release-history-subject-malformed",
@@ -509,14 +518,14 @@ fn release_spine(
             ));
         }
     }
-    let Some((release_commit, release_version)) = history.first().cloned() else {
+    let Some((release_commit, release_date, release_version)) = history.first().cloned() else {
         return Err(cannot_judge_at(
             "release-coherence#release-history-shallow",
             "exact release history is unavailable; fetch full history containing release: X.Y.Z — a shallow \
              clone cannot see the release spine, which is not the same as surfaces that disagree",
         ));
     };
-    let previous_release = history.get(1).map(|(_, v)| v.clone());
+    let previous_release = history.get(1).map(|(_, _, v)| v.clone());
     // A release commit exists, so at least one line of the log parsed, so this is Some. Provable from the
     // loop above rather than assumed about git.
     let head =
@@ -551,6 +560,7 @@ fn release_spine(
     Ok(Spine {
         state,
         release_version,
+        release_date,
         previous_release,
     })
 }
@@ -646,15 +656,35 @@ fn require_changelog_state(
                 ));
             }
             let prefix = format!("## [{version}] - ");
-            let dated = changelog.lines().any(|line| {
-                line.trim_end()
-                    .strip_prefix(&prefix)
-                    .is_some_and(is_iso_date)
-            });
-            if !dated {
+            let dated: Option<&str> = changelog
+                .lines()
+                .map(str::trim_end)
+                .filter_map(|line| line.strip_prefix(&prefix))
+                .find(|rest| is_iso_date(rest));
+            let Some(dated) = dated else {
                 return Err(violation_at(
                     "release-coherence#dated-release-notes-missing",
                     format!("CHANGELOG is missing dated release notes for {version}"),
+                ));
+            };
+            // **Which date, not merely a date.** `is_iso_date` was hardened twice — parsed rather than
+            // counted, then ranged rather than digit-tested — and each step asked a sharper question about
+            // the SHAPE. The value was never asked, and the value is what a reader takes the release to have
+            // happened on. Three releases got it right by someone remembering; the fourth was prepared with
+            // a date four days behind the day it would be cut on, and nothing said so.
+            //
+            // Only at the snapshot, because that is the first moment the answer exists: before the
+            // `release: X.Y.Z` commit there is no release commit to be dated against, and a date written
+            // during preparation is an intent rather than a claim. Held here rather than by the wrapper,
+            // since the wrapper stands in front of the publish and this is a property of the commit.
+            if spine.state == State::Snapshot && dated != spine.release_date {
+                return Err(violation_at(
+                    "release-coherence#release-date-disagrees-with-its-commit",
+                    format!(
+                        "CHANGELOG dates {version} at {dated} and its `release: {version}` commit was made \
+                         on {} — a reader takes the section's date for the day the release happened",
+                        spine.release_date
+                    ),
                 ));
             }
             let from = if spine.state == State::ReleaseReady {
