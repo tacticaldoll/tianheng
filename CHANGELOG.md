@@ -5266,6 +5266,27 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate that
   ships in no package.
 
+- **A brace-counting extent reader is closed by a real parser, and the anchor bug it shared a table with
+  survived narrower.** `observer_protocol.rs`'s bounds-method extent step counted braces by eye and mistook
+  one inside a block comment or a string literal for the body's own — a declared bound, safe in its one
+  comparison because a moved extent could only refuse a conforming body, never accept a divergent one.
+  `syn_body_span` replaces the count: kanhe's dev-dependency on syn tokenizes a comment or a literal as what
+  it is, so no brace inside either is ever available to be miscounted, and the reader declines rather than
+  guesses where a real parse, or a real match at the anchor's own offset, is unavailable.
+
+  Two of `ANCHOR_CASES`'s rows demonstrated this bound by hiding a decoy definition inside a comment or a
+  literal, and closing the extent bug forces both from `ReadsTheWrongBody` to `Declines` — a mathematically
+  forced consequence, since no parser finds a function inside a comment's or a string's own token. The anchor
+  step itself (which occurrence is the definition) is untouched, and its own bound — a whole-line occurrence
+  anchors the read whether or not it is the definition — stays open in `observer-protocol/spec.md`, exactly as
+  written before this change. What no longer demonstrates it is replaced with what still does: a same-named
+  `bounds` method on an unrelated `impl`, real and parseable, which `anchor()` cannot tell from the intended
+  definition for the identical reason the closed cases could not — a case the scenario's own wording already
+  covered before this change gave it a row.
+
+  No published API, outcome, report, exit class, or manifest moves; every site is in a crate that ships in no
+  package.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
