@@ -319,9 +319,9 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound`
 
-> the site is produced and unreported. The reader is text over Rust and is not exhaustive over the language, and the two sides of it fail in opposite directions: a missed **citation** reports a site as unobserved and fails loud, while a missed **construction** reports clean over a site nothing holds. Only the second is unsafe, and closing it means the compiler enumerating the sites rather than a reader — which is a change to what a site *is*, not another shape added to a scanner
+> the reference is read as a construction, whichever it actually names. **This bound used to be wider.** The register's reader was text over Rust and not exhaustive over the language: a byte char literal, a raw string, or a closure whose parameter list spanned two lines could desynchronise a character-by-character scan entirely, producing a site the reader neither parsed nor counted as unparseable — invisible to both of its readings at once, which was the unsafe direction this bound named, since a missed citation fails loud while a missed construction reports clean over a site nothing holds. Reading this repository's own Rust with a real parser instead of scanning it closes that floor: every syntactically valid construction is seen by construction, not by an arm added the day a shape was found wrong. **What remains is not lexical.** Whether a bare reference names the constructor taken by value or a local variable that happens to share its spelling is not written down anywhere a parse tree carries — answering it needs name resolution, which a reader of syntax alone does not have
 
-- **unpinned**, tracked by: `BACKLOG.md` — *the register's reader is text over a language it does not model exhaustively*
+- **unpinned**, tracked by: `BACKLOG.md` — *a bare reference to a registered constructor's name cannot be told from a local variable sharing its spelling without name resolution*
 
 ### `repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound`
 
