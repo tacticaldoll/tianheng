@@ -226,6 +226,24 @@ fn a_name_written_as_a_literal_is_not_a_construction() {
         1,
         "a constructor taken by name is a construction, which is why a following `(` is not the test"
     );
+    // **The boundary of the exclusion, which the shapes chosen from the defect did not reach.** A closure's
+    // closing pipe looks exactly like its opening one to a character test, so a construction called in the
+    // body was excluded with the parameter that introduces the name.
+    assert_eq!(
+        counted("fn f() { xs.iter().map(|e| violation(e)) }"),
+        1,
+        "a construction inside a closure body is kept — the pipe before it closes the parameter list"
+    );
+    assert_eq!(
+        counted("fn f() { g(|| cannot_judge(x)) }"),
+        1,
+        "a zero-argument closure introduces no name, so what follows its pipes is a construction"
+    );
+    assert_eq!(
+        counted("fn f() { xs.map(|violation| g(violation)) }"),
+        1,
+        "the parameter is excluded and the reference in the body is not, on one line"
+    );
 }
 
 /// The reader swallows no declaration from any file it actually reads.
@@ -508,10 +526,7 @@ fn opens_a_use(trimmed: &str) -> bool {
 /// repository's Definition of Done in direct contradiction. Asked once now, by both.
 fn imports_and_rest(text: &str) -> (Vec<String>, String) {
     let source = Source::of(text);
-    let executed: String = source.rust().lines().collect::<Vec<_>>().join(
-        "
-",
-    );
+    let executed: String = source.rust().lines().collect::<Vec<_>>().join("\n");
     imports_and_rest_of(&executed)
 }
 
@@ -647,9 +662,21 @@ fn calls(countable: &Countable, name: &str) -> usize {
         // called through the alias, declared as one construction. So the question is whether this
         // occurrence *introduces* the name — a closure parameter or a `let` binding — or *projects* a value
         // that merely shares it.
+        // **A position, not the character beside it.** `head.ends_with('|')` is true for a parameter list's
+        // CLOSING pipe as well as for a parameter, so `.map_err(|err| cannot_judge(…))` was excluded — a
+        // construction that references and calls, in the false-negative direction this count exists to
+        // catch. A name is inside a binder when an odd number of pipes stands before it on its line; the
+        // closing pipe makes that count even again, which is exactly the boundary the character test could
+        // not see.
+        //
+        // `||` is even whether it opens a zero-argument closure or means boolean or, so both fall outside a
+        // binder correctly. A single bitwise `|` before a construction on one line would read as a binder;
+        // it is not a shape this corpus holds and a constructor is not an operand.
         let binds = {
             let head = text[..start].trim_end();
-            head.ends_with('|') || head.ends_with("let")
+            let line_start = text[..start].rfind('\n').map_or(0, |at| at + 1);
+            let pipes = text[line_start..start].matches('|').count();
+            pipes % 2 == 1 || head.ends_with("let")
         };
         let projects = text[at..].starts_with('.');
         if boundary(before) && boundary(after) && !defines && !binds && !projects {
@@ -1022,11 +1049,13 @@ fn the_register_projection_is_fresh() {
          Its corpus, `crates/kanhe/src`, holds **none** of them, which is the figure beside *carry no \
          identity at all* above. The test targets do hold them, and this corpus excludes those: none is \
          registered, held, or declared here, and whether any should have taken an identity is a judgement \
-         this document does not make. **No count of them is given**, and the reason is a property of \
-         this reader rather than a history: it tells one region from another — code from comment, string and \
-         char literal — and it does not tell one token role from another, so a name taken by reference reads \
-         the same whether it is a constructor or a local that shares its spelling. Until it distinguishes \
-         those, the census has no producer here.\n\n\
+         this document does not make. **No count of them is given**, and two different things stand in \
+         the way. One is a floor: a name taken by reference reads the same whether it is the constructor or a \
+         local that shares its spelling, and no reader of text can decide which. The other is a debt: whether \
+         an occurrence is inside a closure's parameter list is a **position**, and this reader answers it by \
+         counting the pipes standing before the name on its line — which is right for every shape the corpus \
+         holds and is an approximation of the position rather than the position itself. The first cannot be \
+         closed; the second can.\n\n\
          A site that no direction holds is **declared unheld**, with why, an owner and a tracker, in the \
          table this register reads. There is no third state among *registered* sites: one is held or \
          declared, and the register refuses anything else.\n\nGenerated from `crates/kanhe/src/**.rs` by \
