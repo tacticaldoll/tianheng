@@ -29,3 +29,8 @@ serde_json = { workspace = true }
 # The shared fixture-scratch-root claim (`claim_scratch`), so a test's temp directory refuses to adopt a
 # pre-existing symlink rather than writing through it.
 xingbiao = { workspace = true }
+# A real Rust parser for kanhe's own test-only source scanners (refusal_register, observer_protocol),
+# replacing hand-rolled lexing. Dev-only: kanhe's crate boundary (crates/shengmo/src/law.rs) restricts
+# only its Normal dependencies, so this does not touch the self-law and needs no amendment.
+syn = { workspace = true, features = ["extra-traits"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
