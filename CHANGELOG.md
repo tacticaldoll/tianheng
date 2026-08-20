@@ -4753,6 +4753,30 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
 
+- **Two reasons written beside a change described the tree the change started in.** The converged commit
+  site said the delegation *keeps this file out of the set of targets that write with git directly* — and
+  the file is in that set, named in the declaration, because membership is per file and it still holds a
+  direct read beside the write verb it now delegates. The rule has an owner and the site restated a
+  consequence of it backwards; the site says why it delegates now and leaves the set to the declaration.
+
+  And the guard's exclusion note credited the wrong mechanism. It said recognition is by position *because
+  this file holds every marker as a literal* — measured over the executed text the check actually reads,
+  `hermetic(` is the only marker whose own spelling produces the sequence it searches for, and its single
+  executed occurrence is exactly the quote-preceded one, so the lookbehind is load-bearing there and nowhere
+  else. The five write markers produce no executed sequence at all: the quotes inside them are escaped in
+  the array that declares them. What keeps this file out of its own set is holding no executed write plus
+  that escaping — and the escaping is the fragile half, which is worth naming because a rewrite of the
+  array that stopped escaping would make the lookbehind load-bearing where it is not.
+
+  **The distinction bit while the correction was being written.** Naming a write marker in the new paragraph
+  put a real one in the file; the comment strip removes it and a raw reading would not have. Measured after
+  the edit rather than before it, which is the only order that catches this.
+
+  `-qm` and `-am` are recorded as belt-and-braces — a `commit -qm` already carries `"commit"` and a
+  `tag -am` already carries `"tag"`, so neither can fire alone — with the sweep that says the verb list is
+  complete for this corpus: no `rebase`, `cherry-pick`, `revert`, `commit-tree`, `stash` or `filter-branch`
+  anywhere in `crates/`.
+
 - **The guard's requirement was wider than its detector, which puts the gap in the floor.** It said *test
   targets that run `git` without the shared builder* and detected one spelling of the invocation —
   `hermetic(` — while **fourteen** targets ran git through a bare `Command::new("git")`, this guard's own

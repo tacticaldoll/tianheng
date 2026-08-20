@@ -330,8 +330,7 @@ fn a_branch_with_no_resolvable_base_cannot_be_judged() {
         ],
     ] {
         // Through the shared fixture builder, which is what gives this commit the fixture's date rather
-        // than the clock's — and what keeps this file out of the set of targets that write with git
-        // directly.
+        // than the clock's. It took both from the clock until a widened guard found it.
         kanhe::hermetic_git::fixture(&scratch, "git", &args);
     }
 
