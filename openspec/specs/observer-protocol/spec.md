@@ -299,21 +299,18 @@ comparison resting on the dimensions that did not.
   at the comment and the further statement was never presented to the comparison at all, so the one thing this
   requirement refuses passed as the delegation
 
-#### Scenario: A brace inside a block comment or a string literal moves the read body extent — a stated bound
+#### Scenario: A brace inside a block comment or a string literal no longer moves the read body extent
 
 - **WHEN** an inspected bounds-method body carries `{` or `}` inside a block comment or a string literal
-- **THEN** the reaction reads an extent that is not the method's body — a stated bound.
-  It counts braces outside line comments only, and closing the gap needs the string-literal lexing this
-  repository measured and rejected: this tree's own lexer suites put comment delimiters inside string literals,
-  several of them nested, so a delimiter-counting scan opens a phantom comment at the first of them and swallows
-  every definition to the next close. For **this** comparison the error direction is the safe one, and
-  it is what the pin shows — no brace-carrying construct survives the exact one-statement comparison, so a moved
-  extent refuses a **conforming** body rather than accepting a divergent one. The direction is a property of the
-  comparison rather than of the extent, and it does not transfer to another reader of that extent: the
-  same moved extent meeting a count-and-containment comparison would accept a divergent body instead. A reader of
-  that second kind existed over the shell's composition body and is retired; the direction is recorded here so
-  the next one is not written on the assumption that this bound's safety transfers to it
-- **PINNED-BY** `a_brace_in_a_block_comment_moves_the_body_extent`
+- **THEN** the reaction reads the method's real body, to its real closing brace, whichever construct the brace
+  sits inside. The extent step parses the source with `syn` rather than counting braces by eye, so a comment or
+  a string literal is tokenized as what it is before any brace inside either is ever available to be counted —
+  closing the bound this scenario used to declare, in both directions it named: neither a block comment nor a
+  string literal moves the extent any longer. What replaces that closed bound is this implementation's own
+  failure mode: if the source does not parse as a Rust file, or parses without a function-like item beginning
+  exactly where the anchor step said the definition starts, the reaction refuses to verify rather than passing —
+  never a silent acceptance of a body it could not attribute to that exact site
+- **PINNED-BY** `a_brace_in_a_block_comment_or_a_string_literal_no_longer_moves_the_body_extent`
 
 #### Scenario: A Rust attribute appears in an inspected body
 
