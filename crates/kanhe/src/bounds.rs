@@ -370,27 +370,10 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "a_trait_object_on_a_continuation_line_is_not_recognized",
         ),
-        // Which side of the false-negative line a moved extent falls on is decided by the comparison reading
-        // it, not by the extent. An exact one-statement equality cannot survive one and therefore over-reacts,
-        // which is this bound. A second reader over the shell's composition body compared by count and
-        // containment, which a truncated remainder satisfies, and was retired rather than narrowed a fifth
-        // time; the distinction is kept here so the direction is not read as a property of the extent itself.
-        BoundDecl::pinned(
-            BoundId::new(
-                "observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound",
-            ),
-            "an inspected bounds-method body carrying `{` or `}` inside a block comment or a string literal",
-            // Over-reacting rather than under-reacting, and that is read off this comparison rather than
-            // preferred: the body is required to be one exact statement, which no brace-carrying construct
-            // survives, so a moved extent refuses a conforming body instead of admitting a divergent one.
-            Extent::Reached(Reached::OverReacts {
-                because: "the extent is found by counting braces outside line comments only, and separating a \
-                          brace in code from one inside a string literal needs the lexing this tree's own \
-                          lexer suites defeat, their fixtures putting comment delimiters inside string \
-                          literals".into(),
-            }),
-            "a_brace_in_a_block_comment_moves_the_body_extent",
-        ),
+        // The bounds-method reader's extent step used to count braces by eye and moved the read extent on a
+        // brace inside a block comment or a string literal — closed by replacing that step with a real parse
+        // (`syn_body_span` in `crates/kanhe/tests/observer_protocol.rs`), so no declaration for it remains here.
+        //
         // The check that read the composition body is retired, so what is declared is the obligation being
         // unobserved rather than one family of escapes from a reader that no longer exists. Under-reacting with
         // the engine as owner, not out of reach: the deciding text was inside the file the reader loaded, so the

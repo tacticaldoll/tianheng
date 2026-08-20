@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**20 of 92 declared bounds have no pinning test.** That figure is the register's
+**20 of 91 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -198,12 +198,6 @@ fallback used where no manifest exists, which the register spec describes.
 > the reaction reads that copy's body and reports it as the method's. Both anchor conditions are satisfied — one occurrence, at a line start — and the reader knows nothing of comments or literals, so the class is "the unique whole-line occurrence is not the definition" rather than any one syntactic position. What passes is a **second, hand-maintained path that agrees today**: a *divergent* list does not, because `observation-bound-model` reads every dimension's declarations through `Observer::bounds` and holds them in a bijection with the specs, which fails on any difference of membership or content. Measured both ways. So the residual is narrower than a divergent list slipping through, and wider than a comment. **Not a defect unique to this reader.** `kanhe::region`'s own `Executed` abstraction declares the identical residue for the same reason — a block comment and a string literal both need nested-span lexing to tell from executed text, which this tree has defeated repeatedly and left declared rather than approximated. Closing either needs the same instrument; closing one without the other would leave the class recorded twice under two names for a reader to reconcile. This bound SHALL be **shown rather than described**: the reaction enumerates every shape it decides together with the decision, the reader is run against that table, and the rows where it reads a body that is not the method's are this bound. A sentence here that the table contradicts fails, which is what the three repair rounds preceding this scenario could not do
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*
-
-### `observer-protocol/a-brace-inside-a-block-comment-or-a-string-literal-moves-the-read-body-extent-a-stated-bound`
-
-> the reaction reads an extent that is not the method's body — a stated bound. It counts braces outside line comments only, and closing the gap needs the string-literal lexing this repository measured and rejected: this tree's own lexer suites put comment delimiters inside string literals, several of them nested, so a delimiter-counting scan opens a phantom comment at the first of them and swallows every definition to the next close. For **this** comparison the error direction is the safe one, and it is what the pin shows — no brace-carrying construct survives the exact one-statement comparison, so a moved extent refuses a **conforming** body rather than accepting a divergent one. The direction is a property of the comparison rather than of the extent, and it does not transfer to another reader of that extent: the same moved extent meeting a count-and-containment comparison would accept a divergent body instead. A reader of that second kind existed over the shell's composition body and is retired; the direction is recorded here so the next one is not written on the assumption that this bound's safety transfers to it
-
-- **pinned by**: `a_brace_in_a_block_comment_moves_the_body_extent`
 
 ### `observer-protocol/a-trait-object-on-a-wrapped-signature-s-continuation-line-is-not-seen-a-stated-bound`
 
