@@ -21,11 +21,17 @@
 //! so coverage cannot lag behind the migration.
 
 use kanhe::region::DO_NOT_EDIT;
-use kanhe::region::Source;
 use shengmo::workspace::MARKER;
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use syn::spanned::Spanned;
+use syn::visit::Visit;
+use syn::{
+    Block, Expr, ExprCall, ExprField, ExprLit, ExprMethodCall, ExprPath, ItemUse, Lit, Stmt,
+    UseTree,
+};
 
 const PROJECTION: &str = "docs/refusal-register.md";
 
@@ -57,76 +63,6 @@ fn tracked(root: &Path, dir: &str) -> Vec<PathBuf> {
         .filter(|p| p.ends_with(".rs"))
         .map(|p| root.join(p))
         .collect()
-}
-
-/// The first string literal argument of each `call` in `text`, with the line it sits on.
-///
-/// Deliberately not a Rust parser: the argument is a literal by construction — the constructors take
-/// `&'static str` — so the first quote after the opening parenthesis begins it.
-fn first_literal_args(text: &str, call: &str) -> Vec<(String, usize)> {
-    let mut found = Vec::new();
-    let mut at = 0;
-    while let Some(offset) = text[at..].find(call) {
-        let start = at + offset;
-        at = start + call.len();
-        // A call, not the tail of a longer identifier: `violation_at(` must not be read as `violation(`.
-        // A `call` opening with `::` carries its own left boundary, so no check on the byte before it —
-        // which is the last byte of the path, and always an identifier byte.
-        if call.starts_with(|c: char| c.is_ascii_alphanumeric()) && start > 0 {
-            let before = text.as_bytes()[start - 1];
-            if before.is_ascii_alphanumeric() || before == b'_' {
-                continue;
-            }
-        }
-        let rest = &text[at..];
-        let Some(open) = rest.find('"') else { continue };
-        // Only a literal that opens the argument list, so a call whose first argument is an expression is
-        // not read as though the next literal on the line were its site.
-        if rest[..open].chars().any(|c| !c.is_whitespace()) {
-            continue;
-        }
-        let Some(close) = rest[open + 1..].find('"') else {
-            continue;
-        };
-        found.push((
-            rest[open + 1..open + 1 + close].to_string(),
-            text[..start].matches('\n').count() + 1,
-        ));
-    }
-    found
-}
-
-/// `text` with its comments and imports removed, so neither a name in prose nor a name in a `use` list is
-/// read as a construction. **Not its string literals** — see [`countable`] for the corpus that removes
-/// those, which a count reads and a parse must not.
-///
-/// That sentence said *comments, string literals and imports* while this body removed two of the three, and
-/// it is the claim that misled a repair into rendering a figure counting every doc comment naming a
-/// constructor. It survived two repairs aimed at exactly that half, because both read the body to find the
-/// defect and neither re-read the sentence.
-///
-/// The import line was the second way a count could be wrong: a module holding both forms names all four
-/// constructors in one `use`, and the bare identifiers there were counted as two more unregistered sites —
-/// a figure two above the truth in the module where the truth is what the migration is steering by.
-fn executed_rust(text: &str) -> Executed {
-    Executed(imports_and_rest(text).1)
-}
-
-/// [`Executed`] with the contents of every string literal removed as well — the corpus a **count** reads.
-///
-/// **A literal is noise to a count and identity to a parse, so they cannot share a corpus.** A registered
-/// site *is* a string literal, which is what [`first_literal_args`] reads; a bare construction is an
-/// identifier, and a `"violation"` written as a search term is not one. Stripping literals for both broke
-/// the register's own raw-literal fixture, which is what says the two needs are different rather than one
-/// reader used two ways.
-fn countable(text: &str) -> Countable {
-    // **Literals first, then comments — the other order desynchronises the scanner.** `Source::rust` cuts a
-    // `//` wherever it sees one, and `region`'s own header records that this includes a `//` *inside* a
-    // string literal. That truncation leaves an unmatched quote, after which a literal scanner reads code as
-    // string and string as code for the rest of the file: measured, the register's own module reported
-    // twelve constructions it does not make. Removing literals from the raw text first leaves the comment
-    // rule nothing to truncate.
-    Countable(drop_imports(&code_only(text)))
 }
 
 /// A name inside a string literal is not a construction, and a name in code is.
@@ -312,305 +248,6 @@ fn the_reader_swallows_no_declaration_from_the_corpus_it_reads() {
     );
 }
 
-/// A corpus with comments, imports and string literals removed.
-///
-/// The second newtype, for the same reason as the first: three call sites cleaned their corpus and a fourth
-/// did not, and a type is what made that impossible to forget. This one carries the *rule*, not only the
-/// fact of having been called — the guarantee the first one could not give, since the defect it was added
-/// for then moved one layer inside it.
-struct Countable(String);
-
-/// `text` with the contents of every string literal replaced by nothing.
-///
-/// **The half [`executed_rust`]'s doc claimed and its body did not do.** `Source::rust` cuts comments by a
-/// token-start rule and `region`'s own header records that a string literal therefore survives it — a
-/// residue it declares rather than closes. That was inert while this register read `crates/kanhe/src`,
-/// where the executed count is zero; moving the corpus to the test targets made it load-bearing, and the
-/// figure came out **40** against a true **18**. The largest single contributor was this file, which passes
-/// `"violation"` and `"cannot_judge"` to [`calls`] as search terms and so counted its own arguments as
-/// refusal constructions — the same self-reference it already guards against for `::expect(`.
-///
-/// A raw string is handled by its own arm: `r"…"`, `r#"…"#` and any hash count, since a `\` inside one
-/// escapes nothing and a naive escape-aware scan would run past the closing quote.
-fn code_only(text: &str) -> String {
-    #[derive(PartialEq)]
-    enum In {
-        Code,
-        Line,
-        Block(usize),
-        Str,
-        Raw(usize),
-    }
-
-    let chars: Vec<char> = text.chars().collect();
-    let ident = |c: char| c.is_alphanumeric() || c == '_';
-    let mut out = String::with_capacity(text.len());
-    let mut state = In::Code;
-    let mut i = 0;
-
-    while i < chars.len() {
-        let c = chars[i];
-        match state {
-            In::Line => {
-                if c == '\n' {
-                    out.push('\n');
-                    state = In::Code;
-                }
-                i += 1;
-            }
-            In::Block(depth) => {
-                if c == '/' && chars.get(i + 1) == Some(&'*') {
-                    state = In::Block(depth + 1);
-                    i += 2;
-                } else if c == '*' && chars.get(i + 1) == Some(&'/') {
-                    state = if depth == 1 {
-                        In::Code
-                    } else {
-                        In::Block(depth - 1)
-                    };
-                    i += 2;
-                } else {
-                    if c == '\n' {
-                        out.push('\n');
-                    }
-                    i += 1;
-                }
-            }
-            In::Str => {
-                if c == '\\' {
-                    // **An escaped newline is still a newline.** A `\` at end of line continues a string
-                    // across it, and consuming both without emitting the break shifted every line index
-                    // after it — which is how a direction comparing the same line in both texts reported a
-                    // declaration lost that the reader had not touched.
-                    if chars.get(i + 1) == Some(&'\n') {
-                        out.push('\n');
-                    }
-                    i += 2;
-                } else if c == '"' {
-                    state = In::Code;
-                    i += 1;
-                } else {
-                    if c == '\n' {
-                        out.push('\n');
-                    }
-                    i += 1;
-                }
-            }
-            In::Raw(hashes) => {
-                if c == '"'
-                    && chars[i + 1..]
-                        .iter()
-                        .take(hashes)
-                        .filter(|h| **h == '#')
-                        .count()
-                        == hashes
-                {
-                    state = In::Code;
-                    i += 1 + hashes;
-                } else {
-                    if c == '\n' {
-                        out.push('\n');
-                    }
-                    i += 1;
-                }
-            }
-            In::Code => {
-                if c == '/' && chars.get(i + 1) == Some(&'/') {
-                    state = In::Line;
-                    i += 2;
-                    continue;
-                }
-                if c == '/' && chars.get(i + 1) == Some(&'*') {
-                    state = In::Block(1);
-                    i += 2;
-                    continue;
-                }
-                // A char literal, told from a lifetime by looking for the close before consuming.
-                //
-                // **A `b` prefix belongs to the literal, and reading it as an identifier cost a swallowed
-                // declaration.** `b'\"'` put an ident character immediately before the quote, so this arm
-                // declined it, and the `\"` inside then opened a string that ran to the next quote several
-                // lines down — taking a `fn` with it. The string arm below already knew about the prefix;
-                // this one did not, which is the asymmetry that made it latent: it only shows when the
-                // swallowed span happens to cross a declaration.
-                let byte_char =
-                    c == 'b' && chars.get(i + 1) == Some(&'\'') && !(i > 0 && ident(chars[i - 1]));
-                if byte_char || (c == '\'' && !(i > 0 && ident(chars[i - 1]))) {
-                    let mut at = if byte_char { i + 2 } else { i + 1 };
-                    if chars.get(at) == Some(&'\\') {
-                        at += 1;
-                        if chars.get(at) == Some(&'u') {
-                            while at < chars.len() && chars[at] != '}' {
-                                at += 1;
-                            }
-                        }
-                    }
-                    at += 1;
-                    if chars.get(at) == Some(&'\'') {
-                        out.push_str("''");
-                        i = at + 1;
-                        continue;
-                    }
-                }
-                // A string or raw string, with or without a byte prefix.
-                let opens_here = !(i > 0 && ident(chars[i - 1]));
-                let mut at = i;
-                if opens_here && chars[at] == 'b' {
-                    at += 1;
-                }
-                if opens_here && chars.get(at) == Some(&'r') {
-                    let mut hashes = 0;
-                    let mut scan = at + 1;
-                    while chars.get(scan) == Some(&'#') {
-                        hashes += 1;
-                        scan += 1;
-                    }
-                    if chars.get(scan) == Some(&'"') {
-                        out.push_str("\"\"");
-                        state = In::Raw(hashes);
-                        i = scan + 1;
-                        continue;
-                    }
-                }
-                if opens_here && chars.get(at) == Some(&'"') {
-                    out.push_str("\"\"");
-                    state = In::Str;
-                    i = at + 1;
-                    continue;
-                }
-                out.push(c);
-                i += 1;
-            }
-        }
-    }
-    out
-}
-
-/// A corpus with its comments and imports already removed.
-///
-/// **A newtype, because the one call site that forgot was the one that was wrong.** `calls` took a `&str`,
-/// and three sites handed it `executed_rust(&text)` while a fourth handed it the file — which counted every
-/// doc comment naming a constructor and rendered **18** into a projection whose header says every number in
-/// it is produced. The true count for that corpus is zero. `region`'s own header makes this argument for
-/// every other recognizer in this crate — *a corpus is never handed to a recognizer as `&str`* — and this
-/// recognizer had not taken it.
-struct Executed(String);
-
-/// Whether `trimmed` opens a `use` item — including one carrying a visibility.
-///
-/// **The item, not one textual prefix.** `pub use` and `pub(crate) use` are imports and construct nothing,
-/// and a reader matching `use ` alone left them in the executed text, counted the constructor names they
-/// carry as calls, and refused a module over an import. That is an **over**-reaction, on the side of this
-/// reader whose failures were supposed to be the loud harmless ones, and it is outside the bound declared
-/// for the other side — which is about constructions the reader misses. A gate that refuses correct source
-/// is a defect, not a limit.
-///
-/// The space after `use` is load-bearing: `impl Iterator<…> + use<'a>` is precise capturing rather than an
-/// import, and this repository writes it.
-fn opens_a_use(trimmed: &str) -> bool {
-    let rest = match trimmed.strip_prefix("pub") {
-        Some(after) => {
-            let after = after.trim_start();
-            match after.strip_prefix('(') {
-                Some(scope) => match scope.find(')') {
-                    Some(close) => scope[close + 1..].trim_start(),
-                    None => return false,
-                },
-                None => after,
-            }
-        }
-        None => trimmed,
-    };
-    rest.starts_with("use ")
-}
-
-/// A file's `use` **statements**, and everything else, split once.
-///
-/// **One implementation, because two readers ask this and one of them was wrong.** Where a `use` statement
-/// ends is a fact about Rust, and it lived twice here: the alias detector accumulated to the `;` while its
-/// neighbour, fifteen lines up and reading the same input, dropped the line that *opens* a statement and
-/// kept every continuation. A wrapped import naming `cannot_judge_at` on a line of its own then counted as
-/// a call with nothing to parse, and the register refused a module that constructs nothing — a shape
-/// `cargo fmt` produces the moment an import list grows too wide, which would have put two gates in this
-/// repository's Definition of Done in direct contradiction. Asked once now, by both.
-fn imports_and_rest(text: &str) -> (Vec<String>, String) {
-    let source = Source::of(text);
-    let executed: String = source.rust().lines().collect::<Vec<_>>().join("\n");
-    imports_and_rest_of(&executed)
-}
-
-/// The import walk alone, over text whose comments are already gone.
-///
-/// Separated so [`countable`] can run it over [`code_only`]'s output without a second comment pass —
-/// `Source::rust` is not in that path at all, which is what makes the ordering question disappear rather
-/// than be answered.
-fn drop_imports(executed: &str) -> String {
-    imports_and_rest_of(executed).1
-}
-
-fn imports_and_rest_of(executed: &str) -> (Vec<String>, String) {
-    let mut imports = Vec::new();
-    let mut rest = Vec::new();
-    let mut open: Option<String> = None;
-    for line in executed.lines() {
-        let trimmed = line.trim_start();
-        let statement = match open.as_mut() {
-            Some(statement) => {
-                statement.push(' ');
-                statement.push_str(trimmed);
-                statement
-            }
-            None if opens_a_use(trimmed) => {
-                open = Some(trimmed.to_string());
-                open.as_mut().expect("just assigned")
-            }
-            None => {
-                rest.push(line);
-                continue;
-            }
-        };
-        if statement.contains(';') {
-            imports.push(std::mem::take(statement));
-            open = None;
-        }
-    }
-    if let Some(unterminated) = open {
-        imports.push(unterminated);
-    }
-    (imports, rest.join("\n"))
-}
-
-/// How many registered constructions in `text` this reader could not parse.
-///
-/// **Counted against the calls, because parsing alone cannot report what it did not see.** The parser reads
-/// a direct call whose first argument is an ordinary quoted literal, and three shapes are not that: a
-/// constructor taken by name and called through the binding, a wrapper whose site arrives as a parameter,
-/// and a raw string literal. Each was invisible to *both* halves of this register — no parsed site, and not
-/// counted as unregistered either, since the unregistered counter reads the site-less constructors — so a
-/// real refusal site was neither held, declared, nor reported missing. Comparing the two readings is what
-/// turns *did not see it* into *cannot answer for this module*.
-fn unparsed_constructions(text: &str) -> usize {
-    let executed = executed_rust(text);
-    let called =
-        calls(&countable(text), "violation_at") + calls(&countable(text), "cannot_judge_at");
-    let parsed = first_literal_args(&executed.0, "violation_at(").len()
-        + first_literal_args(&executed.0, "cannot_judge_at(").len();
-    called.saturating_sub(parsed)
-}
-
-/// Whether `text` imports a refusal constructor under another name.
-///
-/// A reader that matches names cannot follow an alias: `use crate::refusal::cannot_judge as cj;` makes every
-/// later `cj(…)` invisible, and invisible reads as *this module constructs no refusal*. The corpus written
-/// for this reader names that case, and the answer is not a count — it is that this file cannot be counted,
-/// which is the same distinction between *disagrees* and *could not be read* that every gate here draws.
-fn aliases_a_constructor(text: &str) -> bool {
-    imports_and_rest(text).0.iter().any(|statement| {
-        statement.contains(" as ")
-            && (statement.contains("violation") || statement.contains("cannot_judge"))
-    })
-}
-
 /// Whether `text` has a site identity's shape: `<capability>#<slug>`, lowercase and hyphenated.
 ///
 /// **`#` and not `/`, because `<capability>/<slug>` is already an identity here.** The bound register
@@ -632,414 +269,381 @@ fn is_a_site(text: &str) -> bool {
     word(capability) && word(slug)
 }
 
-/// Occurrences of the constructor named `name` in `text`, however it is reached.
-///
-/// **The identifier, not `name(`.** Counting the call syntax missed a constructor used as a value:
-/// `workspace_version(repo).map_err(cannot_judge)` has no opening parenthesis after the name, so a live
-/// refusal site was invisible to the register built to count them — found by migrating the module the site
-/// was in, and only because the compiler then objected to the import. A register whose corpus reader can be
-/// stepped around by a point-free call is one that reports a smaller number than the truth, which is the
-/// direction that matters.
-///
-/// Both boundaries, so `cannot_judge_at` is not counted as `cannot_judge`.
-fn calls(countable: &Countable, name: &str) -> usize {
-    let text = &countable.0;
-    let boundary = |byte: u8| !(byte.is_ascii_alphanumeric() || byte == b'_');
-    let mut count = 0;
-    let mut at = 0;
-    while let Some(offset) = text[at..].find(name) {
-        let start = at + offset;
-        at = start + name.len();
-        let before = if start == 0 {
-            b' '
-        } else {
-            text.as_bytes()[start - 1]
-        };
-        let after = text.as_bytes().get(at).copied().unwrap_or(b' ');
-        // **A definition is not a construction.** `fn violation(…) -> Refusal` declares the constructor and
-        // `fn violation(target, rule, …) -> Violation` merely shares its name; counting either as a use
-        // reported a module that constructs nothing as constructing one. Both are named in the corpus
-        // written for this reader, and both were read wrong until it was run.
-        let defines = text[..start].trim_end().ends_with("fn");
-        // **Introduced or referenced, not called or not.** `(` is a boundary and so are `|`, `.`, `,` and a
-        // space, so a binding, a field access and a closure parameter all counted — live,
-        // `.any(|violation| (dimension.reacted)(violation.kind))` contributed two constructions to a module
-        // that makes none there.
-        //
-        // Requiring a following `(` is the obvious repair and the corpus written for this reader refuses
-        // it: `a_constructor_taken_by_name` is `let build = violation;`, a constructor taken by name and
-        // called through the alias, declared as one construction. So the question is whether this
-        // occurrence *introduces* the name — a closure parameter or a `let` binding — or *projects* a value
-        // that merely shares it.
-        // **A position, not the character beside it.** `head.ends_with('|')` is true for a parameter list's
-        // CLOSING pipe as well as for a parameter, so `.map_err(|err| cannot_judge(…))` was excluded — a
-        // construction that references and calls, in the false-negative direction this count exists to
-        // catch. A name is inside a binder when an odd number of pipes stands before it on its line; the
-        // closing pipe makes that count even again, which is exactly the boundary the character test could
-        // not see.
-        //
-        // `||` is even whether it opens a zero-argument closure or means boolean or, so both fall outside a
-        // binder correctly. A single bitwise `|` before a construction on one line would read as a binder;
-        // it is not a shape this corpus holds and a constructor is not an operand.
-        let binds = {
-            let head = text[..start].trim_end();
-            let line_start = text[..start].rfind('\n').map_or(0, |at| at + 1);
-            let pipes = text[line_start..start].matches('|').count();
-            pipes % 2 == 1 || head.ends_with("let")
-        };
-        let projects = text[at..].starts_with('.');
-        if boundary(before) && boundary(after) && !defines && !binds && !projects {
-            count += 1;
-        }
-    }
-    count
-}
-
 // =============================================================================================
-// A syn-based reader, added beside the hand-rolled one above so both can be run over the same
-// corpus and compared before anything above this line is touched. See
-// `the_syn_reader_agrees_with_the_hand_rolled_one_over_its_fixtures`,
-// `the_syn_reader_agrees_with_the_hand_rolled_one_over_the_real_corpus`, and the two "seen to
-// fail" tests further down for the differential proof this migration itself demands.
+// The reader: a real Rust parser (`syn`) rather than a character-by-character scanner.
 //
-// **Why a real parser closes this bug class rather than adding another shape to the scanner.**
-// Every fix above this line closed one hole by teaching the character-by-character state machine
-// one more shape: a byte prefix before a char literal, a raw string's hash count, an escaped
-// newline inside a string, a wrapped `use` list. Each fix was correct and each was local — none
-// of them made the *next* shape less likely, because the reader was never parsing Rust; it was
+// **Why a real parser closes this bug class rather than adding another shape to a scanner.** A
+// hand-rolled predecessor of everything below needed a dedicated arm for every new shape it was
+// found wrong on — a byte prefix before a char literal, a raw string's hash count, an escaped
+// newline inside a string, a wrapped `use` list. Each fix was correct and each was local — none of
+// them made the *next* shape less likely, because that reader was never parsing Rust; it was
 // pattern-matching against Rust well enough for the corpus measured so far. `syn::parse_str` and
 // `syn::Block::parse_within` parse the actual grammar, so a raw string, a byte char literal, or a
 // closure whose parameter list spans two lines are read correctly by construction, not by an arm
-// added for that specific shape after it was found wrong.
+// added for that specific shape after it was found wrong. See
+// `a_naive_scanner_without_the_byte_prefix_fix_regresses_where_the_syn_reader_does_not` further
+// down for "seen to fail" evidence of exactly that class, held against a reproduction of the
+// bug this reader was written to make structurally impossible rather than merely patched.
 // =============================================================================================
-mod syn_reader {
-    use super::{Path, Register, is_a_site, tracked};
-    use std::collections::{BTreeMap, BTreeSet};
-    use std::ops::Range;
-    use syn::spanned::Spanned;
-    use syn::visit::Visit;
-    use syn::{
-        Block, Expr, ExprCall, ExprField, ExprLit, ExprMethodCall, ExprPath, ItemUse, Lit, Stmt,
-        UseTree,
-    };
 
-    /// `text` parsed as a sequence of statements, however it is shaped.
-    ///
-    /// A complete, compiling source file is always a valid [`syn::File`] — every real corpus file
-    /// this register reads is one, since it compiles. A **fixture** written to exercise one shape
-    /// in isolation often is not: `let x = a_violation(1);` alone is not a file (there is no item
-    /// there for a file to hold), and mixing a `use` with bare statements is not a sequence of
-    /// items either. Both are exactly what [`Block::parse_within`] parses: the grammar for the
-    /// inside of a block, where an item, a `let`, and a bare expression all stand as one [`Stmt`]
-    /// — which is also true of a real file's top-level items, since an item is a valid statement
-    /// inside a block since Rust 2018. Trying the file grammar first and falling back to the block
-    /// grammar reads every shape this register or its fixtures hand it, including a leading inner
-    /// attribute (`#![...]`), which only the file grammar accepts.
-    fn parse_fragment(text: &str) -> Vec<Stmt> {
-        if let Ok(file) = syn::parse_str::<syn::File>(text) {
-            return file.items.into_iter().map(Stmt::Item).collect();
-        }
-        syn::parse::Parser::parse_str(Block::parse_within, text).unwrap_or_else(|err| {
-            panic!(
-                "this text is not Rust this reader can parse — neither a complete file nor a \
-                 sequence of statements: {err}\n---\n{text}"
-            )
-        })
+/// `text` parsed as a sequence of statements, however it is shaped.
+///
+/// A complete, compiling source file is always a valid [`syn::File`] — every real corpus file
+/// this register reads is one, since it compiles. A **fixture** written to exercise one shape
+/// in isolation often is not: `let x = a_violation(1);` alone is not a file (there is no item
+/// there for a file to hold), and mixing a `use` with bare statements is not a sequence of
+/// items either. Both are exactly what [`Block::parse_within`] parses: the grammar for the
+/// inside of a block, where an item, a `let`, and a bare expression all stand as one [`Stmt`]
+/// — which is also true of a real file's top-level items, since an item is a valid statement
+/// inside a block since Rust 2018. Trying the file grammar first and falling back to the block
+/// grammar reads every shape this register or its fixtures hand it, including a leading inner
+/// attribute (`#![...]`), which only the file grammar accepts.
+fn parse_fragment(text: &str) -> Vec<Stmt> {
+    if let Ok(file) = syn::parse_str::<syn::File>(text) {
+        return file.items.into_iter().map(Stmt::Item).collect();
     }
+    syn::parse::Parser::parse_str(Block::parse_within, text).unwrap_or_else(|err| {
+        panic!(
+            "this text is not Rust this reader can parse — neither a complete file nor a \
+             sequence of statements: {err}\n---\n{text}"
+        )
+    })
+}
 
-    /// The four names this register reads, and nothing else — an identifier spelled any other way
-    /// is prose or an unrelated symbol, not a refusal construction.
-    const NAMES: [&str; 4] = [
-        "violation_at",
-        "cannot_judge_at",
-        "violation",
-        "cannot_judge",
-    ];
+/// The four names this register reads, and nothing else — an identifier spelled any other way
+/// is prose or an unrelated symbol, not a refusal construction.
+const NAMES: [&str; 4] = [
+    "violation_at",
+    "cannot_judge_at",
+    "violation",
+    "cannot_judge",
+];
 
-    fn last_segment_name(path: &syn::Path) -> Option<&'static str> {
-        let last = path.segments.last()?.ident.to_string();
-        NAMES.iter().copied().find(|name| *name == last)
+fn last_segment_name(path: &syn::Path) -> Option<&'static str> {
+    let last = path.segments.last()?.ident.to_string();
+    NAMES.iter().copied().find(|name| *name == last)
+}
+
+fn as_str_lit(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Lit(ExprLit {
+            lit: Lit::Str(s), ..
+        }) => Some(s.value()),
+        _ => None,
     }
+}
 
-    fn as_str_lit(expr: &Expr) -> Option<String> {
-        match expr {
-            Expr::Lit(ExprLit {
-                lit: Lit::Str(s), ..
-            }) => Some(s.value()),
-            _ => None,
-        }
-    }
+/// One occurrence of a registered name, classified by where it sits rather than by a
+/// character beside it.
+///
+/// **A position, not a heuristic.** The hand-rolled reader answered *is this a binder* by
+/// counting `|` characters before the name on its line, and *is this a projection* by asking
+/// whether a `.` immediately follows — both are approximations of a question the grammar
+/// already answers exactly. A name that is a [`syn::Pat`] (a closure parameter, a `let`
+/// binding, a function argument, a match arm) is never visited as an [`Expr::Path`] at all in
+/// this walk, so it is excluded by construction rather than by counting pipes; a name that is
+/// the base of a field access or a method receiver is excluded the same way, by checking the
+/// one syntactic parent that matters instead of the one character that usually correlates
+/// with it.
+///
+/// **What this still cannot tell, on purpose.** A bare [`ExprPath`] referring to `violation`
+/// might be the constructor taken by value, or a local that happens to share its spelling —
+/// the grammar alone does not say which, and this reader does not attempt to resolve it. Both
+/// read as one occurrence, matching what this file's own tests already assert.
+#[derive(Debug, Clone)]
+struct Finding {
+    name: &'static str,
+    /// `Some(value)` when this occurrence is the callee of a call whose first argument is a
+    /// plain or raw string literal — the shape a registered site takes, whichever quoting it
+    /// was written with.
+    call_first_arg_lit: Option<String>,
+    line: usize,
+}
 
-    /// One occurrence of a registered name, classified by where it sits rather than by a
-    /// character beside it.
-    ///
-    /// **A position, not a heuristic.** The hand-rolled reader answered *is this a binder* by
-    /// counting `|` characters before the name on its line, and *is this a projection* by asking
-    /// whether a `.` immediately follows — both are approximations of a question the grammar
-    /// already answers exactly. A name that is a [`syn::Pat`] (a closure parameter, a `let`
-    /// binding, a function argument, a match arm) is never visited as an [`Expr::Path`] at all in
-    /// this walk, so it is excluded by construction rather than by counting pipes; a name that is
-    /// the base of a field access or a method receiver is excluded the same way, by checking the
-    /// one syntactic parent that matters instead of the one character that usually correlates
-    /// with it.
-    ///
-    /// **What this still cannot tell, on purpose.** A bare [`ExprPath`] referring to `violation`
-    /// might be the constructor taken by value, or a local that happens to share its spelling —
-    /// the grammar alone does not say which, and this reader does not attempt to resolve it. Both
-    /// read as one occurrence, matching what this file's own tests already assert.
-    #[derive(Debug, Clone)]
-    struct Finding {
+struct NameFinder {
+    findings: Vec<Finding>,
+}
+
+impl NameFinder {
+    fn record(
+        &mut self,
         name: &'static str,
-        /// `Some(value)` when this occurrence is the callee of a call whose first argument is a
-        /// plain or raw string literal — the shape a registered site takes, whichever quoting it
-        /// was written with.
         call_first_arg_lit: Option<String>,
-        line: usize,
+        span: proc_macro2::Span,
+    ) {
+        self.findings.push(Finding {
+            name,
+            call_first_arg_lit,
+            line: span.start().line,
+        });
+    }
+}
+
+impl<'ast> Visit<'ast> for NameFinder {
+    fn visit_expr_call(&mut self, node: &'ast ExprCall) {
+        if let Expr::Path(expr_path) = node.func.as_ref() {
+            if let Some(name) = last_segment_name(&expr_path.path) {
+                let lit = node.args.first().and_then(as_str_lit);
+                self.record(name, lit, node.span());
+                // The callee is handled; still walk the arguments for a nested construction,
+                // e.g. `outer(violation(x))`.
+                for arg in &node.args {
+                    self.visit_expr(arg);
+                }
+                return;
+            }
+        }
+        syn::visit::visit_expr_call(self, node);
     }
 
-    struct NameFinder {
-        findings: Vec<Finding>,
+    fn visit_expr_field(&mut self, node: &'ast ExprField) {
+        // `violation.kind` — a construction is called or referenced as a value, never used as
+        // the receiver of a field it does not have. Suppressing the base here is what makes a
+        // closure body doing `|violation| violation.kind` read as the two exclusions it
+        // actually is: the parameter (never visited as a path at all) and this receiver.
+        if let Expr::Path(p) = node.base.as_ref() {
+            if last_segment_name(&p.path).is_some() {
+                return;
+            }
+        }
+        syn::visit::visit_expr_field(self, node);
     }
 
-    impl NameFinder {
-        fn record(
-            &mut self,
-            name: &'static str,
-            call_first_arg_lit: Option<String>,
-            span: proc_macro2::Span,
-        ) {
-            self.findings.push(Finding {
-                name,
-                call_first_arg_lit,
-                line: span.start().line,
-            });
+    fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
+        if let Expr::Path(p) = node.receiver.as_ref() {
+            if last_segment_name(&p.path).is_some() {
+                for arg in &node.args {
+                    self.visit_expr(arg);
+                }
+                return;
+            }
+        }
+        syn::visit::visit_expr_method_call(self, node);
+    }
+
+    fn visit_expr_path(&mut self, node: &'ast ExprPath) {
+        if let Some(name) = last_segment_name(&node.path) {
+            self.record(name, None, node.span());
+            return;
+        }
+        syn::visit::visit_expr_path(self, node);
+    }
+}
+
+/// Every occurrence of a registered name in `text`, by real syntax rather than by text.
+///
+/// A function's own name (`fn violation(...)`) is a [`syn::Signature`] field, never an
+/// [`Expr::Path`]; a `use` import is a [`UseTree`], which holds no [`Expr`] at all. Neither is
+/// visited by the walk above, so a definition and an import are excluded by the shape of the
+/// grammar rather than by a rule this reader has to state and keep correct.
+fn findings(text: &str) -> Vec<Finding> {
+    let stmts = parse_fragment(text);
+    let mut finder = NameFinder {
+        findings: Vec::new(),
+    };
+    for stmt in &stmts {
+        finder.visit_stmt(stmt);
+    }
+    finder.findings
+}
+
+/// A corpus with comments, string literal contents and imports already excluded from being
+/// read as a construction — because none of them are [`Expr::Path`] nodes to begin with.
+struct Countable(Vec<Finding>);
+
+/// Occurrences of `text`'s registered names, over the corpus [`calls`] reads.
+fn countable(text: &str) -> Countable {
+    Countable(findings(text))
+}
+
+/// Occurrences of the constructor named `name` in `countable`'s corpus, however it is
+/// reached — called, referenced bare, or taken by value and called through an alias.
+fn calls(countable: &Countable, name: &str) -> usize {
+    countable.0.iter().filter(|f| f.name == name).count()
+}
+
+/// How many registered constructions in `text` this reader could not parse to a site.
+///
+/// A call whose callee is `violation_at`/`cannot_judge_at` and whose first argument is a
+/// string literal (raw or not) is a parsed site. Everything else this walk still counted as
+/// that name — a bare reference taken by value, or a call whose first argument is not a
+/// literal — is unparsed: seen, but not read as a site.
+fn unparsed_constructions(text: &str) -> usize {
+    findings(text)
+        .into_iter()
+        .filter(|f| f.name == "violation_at" || f.name == "cannot_judge_at")
+        .filter(|f| f.call_first_arg_lit.is_none())
+        .count()
+}
+
+fn use_tree_aliases_a_constructor(tree: &UseTree) -> bool {
+    match tree {
+        UseTree::Path(p) => use_tree_aliases_a_constructor(&p.tree),
+        UseTree::Group(g) => g.items.iter().any(use_tree_aliases_a_constructor),
+        UseTree::Rename(r) => {
+            let original = r.ident.to_string();
+            original.contains("violation") || original.contains("cannot_judge")
+        }
+        UseTree::Name(_) | UseTree::Glob(_) => false,
+    }
+}
+
+struct AliasFinder(bool);
+
+impl<'ast> Visit<'ast> for AliasFinder {
+    fn visit_item_use(&mut self, node: &'ast ItemUse) {
+        if use_tree_aliases_a_constructor(&node.tree) {
+            self.0 = true;
+        }
+        // No need to recurse further: a `use` item holds no nested `use` of its own.
+    }
+}
+
+/// Whether `text` imports a refusal constructor under another name.
+///
+/// [`AliasFinder`] visits every [`ItemUse`] the walk reaches, at any depth — a module-level
+/// import and one written inside a function body are the same node type to `syn`, so both are
+/// found the same way, unlike a line-based reader that has to notice indentation meant
+/// nothing.
+fn aliases_a_constructor(text: &str) -> bool {
+    let stmts = parse_fragment(text);
+    let mut finder = AliasFinder(false);
+    for stmt in &stmts {
+        finder.visit_stmt(stmt);
+    }
+    finder.0
+}
+
+/// `text` with every comment removed and every string/char literal's interior blanked,
+/// keeping the line count exactly as it was.
+///
+/// **The gaps between real tokens, not a scan for `//` and `"`.** `proc_macro2`'s tokenizer
+/// already knows exactly where a raw string, a byte char literal, or a doc comment begins and
+/// ends — comments are never emitted as tokens at all, and a literal is emitted as one token
+/// spanning its whole quoted form however it is written. Copying every token's byte range
+/// verbatim and blanking everything between them (while keeping whitespace, so a `pub`/`fn`
+/// boundary a line-based check depends on does not fuse into `pubfn`) can therefore never
+/// mistake a `//` inside a raw string for a comment, or a quote inside a byte char literal for
+/// the start of a string — the exact class of desynchronisation the character-by-character
+/// version above needed a dedicated arm for, the first time each shape was found.
+fn code_only(text: &str) -> String {
+    fn collect_spans(stream: proc_macro2::TokenStream, out: &mut Vec<Range<usize>>) {
+        for tt in stream {
+            match tt {
+                proc_macro2::TokenTree::Group(g) => {
+                    out.push(g.span_open().byte_range());
+                    collect_spans(g.stream(), out);
+                    out.push(g.span_close().byte_range());
+                }
+                proc_macro2::TokenTree::Ident(i) => out.push(i.span().byte_range()),
+                proc_macro2::TokenTree::Punct(p) => out.push(p.span().byte_range()),
+                proc_macro2::TokenTree::Literal(l) => out.push(l.span().byte_range()),
+            }
         }
     }
 
-    impl<'ast> Visit<'ast> for NameFinder {
+    let Ok(tokens) = text.parse::<proc_macro2::TokenStream>() else {
+        // Unlexable text is not a corpus this reader can hold an opinion about; an empty
+        // reading is the honest one, and this repository's own corpus (which always compiles)
+        // is what would notice this ever firing there.
+        return String::new();
+    };
+    let mut spans = Vec::new();
+    collect_spans(tokens, &mut spans);
+    spans.sort_unstable_by_key(|range| range.start);
+
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0usize;
+    for (byte, ch) in text.char_indices() {
+        while cursor < spans.len() && byte >= spans[cursor].end {
+            cursor += 1;
+        }
+        let in_code =
+            cursor < spans.len() && byte >= spans[cursor].start && byte < spans[cursor].end;
+        if in_code || ch.is_whitespace() {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+fn expect_citations(text: &str) -> Vec<String> {
+    struct ExpectFinder(Vec<String>);
+    impl<'ast> Visit<'ast> for ExpectFinder {
         fn visit_expr_call(&mut self, node: &'ast ExprCall) {
             if let Expr::Path(expr_path) = node.func.as_ref() {
-                if let Some(name) = last_segment_name(&expr_path.path) {
-                    let lit = node.args.first().and_then(as_str_lit);
-                    self.record(name, lit, node.span());
-                    // The callee is handled; still walk the arguments for a nested construction,
-                    // e.g. `outer(violation(x))`.
-                    for arg in &node.args {
-                        self.visit_expr(arg);
+                let segments = &expr_path.path.segments;
+                // **Path-qualified, never `.expect(...)`.** A method call is a distinct node
+                // type in this grammar (`ExprMethodCall`), so `Result::expect` can never reach
+                // this arm no matter how this walk recurses — the distinction the hand-rolled
+                // reader drew by requiring the substring `::expect(` is drawn here by the
+                // grammar itself.
+                if segments.len() >= 2 && segments.last().is_some_and(|s| s.ident == "expect") {
+                    if let Some(site) = node.args.first().and_then(as_str_lit) {
+                        self.0.push(site);
                     }
-                    return;
                 }
             }
             syn::visit::visit_expr_call(self, node);
         }
+    }
+    let stmts = parse_fragment(text);
+    let mut finder = ExpectFinder(Vec::new());
+    for stmt in &stmts {
+        finder.visit_stmt(stmt);
+    }
+    finder.0
+}
 
-        fn visit_expr_field(&mut self, node: &'ast ExprField) {
-            // `violation.kind` — a construction is called or referenced as a value, never used as
-            // the receiver of a field it does not have. Suppressing the base here is what makes a
-            // closure body doing `|violation| violation.kind` read as the two exclusions it
-            // actually is: the parameter (never visited as a path at all) and this receiver.
-            if let Expr::Path(p) = node.base.as_ref() {
-                if last_segment_name(&p.path).is_some() {
-                    return;
-                }
+/// Read every registered refusal site under `root`, and how much of the repository still
+/// constructs one without a site identity — the same contract this function has always had, now
+/// answered by walking a real parse tree instead of scanning characters.
+fn read(root: &Path) -> Register {
+    let mut registered: BTreeMap<String, Vec<(String, usize)>> = BTreeMap::new();
+    let mut disagrees: BTreeMap<String, bool> = BTreeMap::new();
+    let mut unregistered: BTreeMap<String, usize> = BTreeMap::new();
+    for path in tracked(root, "crates/kanhe/src") {
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
+        let name = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .into_owned();
+        if name.ends_with("src/refusal.rs") {
+            continue;
+        }
+        assert_eq!(
+            unparsed_constructions(&text),
+            0,
+            "{name} constructs a registered refusal in a shape this register cannot read"
+        );
+        assert!(
+            !aliases_a_constructor(&text),
+            "{name} imports a refusal constructor under another name"
+        );
+        for finding in findings(&text) {
+            if finding.name != "violation_at" && finding.name != "cannot_judge_at" {
+                continue;
             }
-            syn::visit::visit_expr_field(self, node);
+            let Some(site) = finding.call_first_arg_lit else {
+                continue;
+            };
+            disagrees.insert(site.clone(), finding.name == "violation_at");
+            registered
+                .entry(site)
+                .or_default()
+                .push((name.clone(), finding.line));
         }
-
-        fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
-            if let Expr::Path(p) = node.receiver.as_ref() {
-                if last_segment_name(&p.path).is_some() {
-                    for arg in &node.args {
-                        self.visit_expr(arg);
-                    }
-                    return;
-                }
-            }
-            syn::visit::visit_expr_method_call(self, node);
-        }
-
-        fn visit_expr_path(&mut self, node: &'ast ExprPath) {
-            if let Some(name) = last_segment_name(&node.path) {
-                self.record(name, None, node.span());
-                return;
-            }
-            syn::visit::visit_expr_path(self, node);
+        let countable = countable(&text);
+        let open = calls(&countable, "violation") + calls(&countable, "cannot_judge");
+        if open > 0 {
+            unregistered.insert(name, open);
         }
     }
-
-    /// Every occurrence of a registered name in `text`, by real syntax rather than by text.
-    ///
-    /// A function's own name (`fn violation(...)`) is a [`syn::Signature`] field, never an
-    /// [`Expr::Path`]; a `use` import is a [`UseTree`], which holds no [`Expr`] at all. Neither is
-    /// visited by the walk above, so a definition and an import are excluded by the shape of the
-    /// grammar rather than by a rule this reader has to state and keep correct.
-    fn findings(text: &str) -> Vec<Finding> {
-        let stmts = parse_fragment(text);
-        let mut finder = NameFinder {
-            findings: Vec::new(),
-        };
-        for stmt in &stmts {
-            finder.visit_stmt(stmt);
-        }
-        finder.findings
-    }
-
-    /// A corpus with comments, string literal contents and imports already excluded from being
-    /// read as a construction — because none of them are [`Expr::Path`] nodes to begin with.
-    pub(super) struct Countable(Vec<Finding>);
-
-    /// Occurrences of `text`'s registered names, over the corpus [`calls`] reads.
-    pub(super) fn countable(text: &str) -> Countable {
-        Countable(findings(text))
-    }
-
-    /// Occurrences of the constructor named `name` in `countable`'s corpus, however it is
-    /// reached — called, referenced bare, or taken by value and called through an alias.
-    pub(super) fn calls(countable: &Countable, name: &str) -> usize {
-        countable.0.iter().filter(|f| f.name == name).count()
-    }
-
-    /// How many registered constructions in `text` this reader could not parse to a site.
-    ///
-    /// A call whose callee is `violation_at`/`cannot_judge_at` and whose first argument is a
-    /// string literal (raw or not) is a parsed site. Everything else this walk still counted as
-    /// that name — a bare reference taken by value, or a call whose first argument is not a
-    /// literal — is unparsed: seen, but not read as a site.
-    pub(super) fn unparsed_constructions(text: &str) -> usize {
-        findings(text)
-            .into_iter()
-            .filter(|f| f.name == "violation_at" || f.name == "cannot_judge_at")
-            .filter(|f| f.call_first_arg_lit.is_none())
-            .count()
-    }
-
-    fn use_tree_aliases_a_constructor(tree: &UseTree) -> bool {
-        match tree {
-            UseTree::Path(p) => use_tree_aliases_a_constructor(&p.tree),
-            UseTree::Group(g) => g.items.iter().any(use_tree_aliases_a_constructor),
-            UseTree::Rename(r) => {
-                let original = r.ident.to_string();
-                original.contains("violation") || original.contains("cannot_judge")
-            }
-            UseTree::Name(_) | UseTree::Glob(_) => false,
-        }
-    }
-
-    struct AliasFinder(bool);
-
-    impl<'ast> Visit<'ast> for AliasFinder {
-        fn visit_item_use(&mut self, node: &'ast ItemUse) {
-            if use_tree_aliases_a_constructor(&node.tree) {
-                self.0 = true;
-            }
-            // No need to recurse further: a `use` item holds no nested `use` of its own.
-        }
-    }
-
-    /// Whether `text` imports a refusal constructor under another name.
-    ///
-    /// [`AliasFinder`] visits every [`ItemUse`] the walk reaches, at any depth — a module-level
-    /// import and one written inside a function body are the same node type to `syn`, so both are
-    /// found the same way, unlike a line-based reader that has to notice indentation meant
-    /// nothing.
-    pub(super) fn aliases_a_constructor(text: &str) -> bool {
-        let stmts = parse_fragment(text);
-        let mut finder = AliasFinder(false);
-        for stmt in &stmts {
-            finder.visit_stmt(stmt);
-        }
-        finder.0
-    }
-
-    /// `text` with every comment removed and every string/char literal's interior blanked,
-    /// keeping the line count exactly as it was.
-    ///
-    /// **The gaps between real tokens, not a scan for `//` and `"`.** `proc_macro2`'s tokenizer
-    /// already knows exactly where a raw string, a byte char literal, or a doc comment begins and
-    /// ends — comments are never emitted as tokens at all, and a literal is emitted as one token
-    /// spanning its whole quoted form however it is written. Copying every token's byte range
-    /// verbatim and blanking everything between them (while keeping whitespace, so a `pub`/`fn`
-    /// boundary a line-based check depends on does not fuse into `pubfn`) can therefore never
-    /// mistake a `//` inside a raw string for a comment, or a quote inside a byte char literal for
-    /// the start of a string — the exact class of desynchronisation the character-by-character
-    /// version above needed a dedicated arm for, the first time each shape was found.
-    pub(super) fn code_only(text: &str) -> String {
-        fn collect_spans(stream: proc_macro2::TokenStream, out: &mut Vec<Range<usize>>) {
-            for tt in stream {
-                match tt {
-                    proc_macro2::TokenTree::Group(g) => {
-                        out.push(g.span_open().byte_range());
-                        collect_spans(g.stream(), out);
-                        out.push(g.span_close().byte_range());
-                    }
-                    proc_macro2::TokenTree::Ident(i) => out.push(i.span().byte_range()),
-                    proc_macro2::TokenTree::Punct(p) => out.push(p.span().byte_range()),
-                    proc_macro2::TokenTree::Literal(l) => out.push(l.span().byte_range()),
-                }
-            }
-        }
-
-        let Ok(tokens) = text.parse::<proc_macro2::TokenStream>() else {
-            // Unlexable text is not a corpus this reader can hold an opinion about; an empty
-            // reading is the honest one, and this repository's own corpus (which always compiles)
-            // is what would notice this ever firing there.
-            return String::new();
-        };
-        let mut spans = Vec::new();
-        collect_spans(tokens, &mut spans);
-        spans.sort_unstable_by_key(|range| range.start);
-
-        let mut out = String::with_capacity(text.len());
-        let mut cursor = 0usize;
-        for (byte, ch) in text.char_indices() {
-            while cursor < spans.len() && byte >= spans[cursor].end {
-                cursor += 1;
-            }
-            let in_code =
-                cursor < spans.len() && byte >= spans[cursor].start && byte < spans[cursor].end;
-            if in_code || ch.is_whitespace() {
-                out.push(ch);
-            }
-        }
-        out
-    }
-
-    fn expect_citations(text: &str) -> Vec<String> {
-        struct ExpectFinder(Vec<String>);
-        impl<'ast> Visit<'ast> for ExpectFinder {
-            fn visit_expr_call(&mut self, node: &'ast ExprCall) {
-                if let Expr::Path(expr_path) = node.func.as_ref() {
-                    let segments = &expr_path.path.segments;
-                    // **Path-qualified, never `.expect(...)`.** A method call is a distinct node
-                    // type in this grammar (`ExprMethodCall`), so `Result::expect` can never reach
-                    // this arm no matter how this walk recurses — the distinction the hand-rolled
-                    // reader drew by requiring the substring `::expect(` is drawn here by the
-                    // grammar itself.
-                    if segments.len() >= 2 && segments.last().is_some_and(|s| s.ident == "expect") {
-                        if let Some(site) = node.args.first().and_then(as_str_lit) {
-                            self.0.push(site);
-                        }
-                    }
-                }
-                syn::visit::visit_expr_call(self, node);
-            }
-        }
-        let stmts = parse_fragment(text);
-        let mut finder = ExpectFinder(Vec::new());
-        for stmt in &stmts {
-            finder.visit_stmt(stmt);
-        }
-        finder.0
-    }
-
-    /// [`super::read`], reimplemented over the syn-based walk above rather than the hand-rolled
-    /// text scanner — see the differential tests below for the proof the two agree everywhere
-    /// this repository's own corpus and fixtures reach.
-    pub(super) fn read(root: &Path) -> Register {
-        let mut registered: BTreeMap<String, Vec<(String, usize)>> = BTreeMap::new();
-        let mut disagrees: BTreeMap<String, bool> = BTreeMap::new();
-        let mut unregistered: BTreeMap<String, usize> = BTreeMap::new();
-        for path in tracked(root, "crates/kanhe/src") {
+    let mut cited: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for dir in ["crates/kanhe/tests", "crates/kanhe/src/tests"] {
+        for path in tracked(root, dir) {
             let text = std::fs::read_to_string(&path)
                 .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
             let name = path
@@ -1047,223 +651,24 @@ mod syn_reader {
                 .unwrap_or(&path)
                 .to_string_lossy()
                 .into_owned();
-            if name.ends_with("src/refusal.rs") {
-                continue;
-            }
-            assert_eq!(
-                unparsed_constructions(&text),
-                0,
-                "{name} constructs a registered refusal in a shape this register cannot read"
-            );
-            assert!(
-                !aliases_a_constructor(&text),
-                "{name} imports a refusal constructor under another name"
-            );
-            for finding in findings(&text) {
-                if finding.name != "violation_at" && finding.name != "cannot_judge_at" {
-                    continue;
-                }
-                let Some(site) = finding.call_first_arg_lit else {
-                    continue;
-                };
-                disagrees.insert(site.clone(), finding.name == "violation_at");
-                registered
-                    .entry(site)
-                    .or_default()
-                    .push((name.clone(), finding.line));
-            }
-            let countable = countable(&text);
-            let open = calls(&countable, "violation") + calls(&countable, "cannot_judge");
-            if open > 0 {
-                unregistered.insert(name, open);
-            }
-        }
-        let mut cited: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-        for dir in ["crates/kanhe/tests", "crates/kanhe/src/tests"] {
-            for path in tracked(root, dir) {
-                let text = std::fs::read_to_string(&path)
-                    .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
-                let name = path
-                    .strip_prefix(root)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .into_owned();
-                for site in expect_citations(&text) {
-                    if is_a_site(&site) {
-                        cited.entry(site).or_default().insert(name.clone());
-                    }
+            for site in expect_citations(&text) {
+                if is_a_site(&site) {
+                    cited.entry(site).or_default().insert(name.clone());
                 }
             }
         }
-        Register {
-            registered,
-            disagrees,
-            unregistered,
-            cited,
-        }
+    }
+    Register {
+        registered,
+        disagrees,
+        unregistered,
+        cited,
     }
 }
 
-/// The syn reader and the hand-rolled one, run over every fixture written for the hand-rolled
-/// one, and required to agree — except the one case named below, which is exactly the fixture
-/// [`the_reader_answers_the_corpus_written_for_it`] already reclassifies for the same reason.
-///
-/// **Why one case is excluded rather than made to agree.** `a_raw_literal_site` is a
-/// `violation_at(r#"release-coherence#raw"#, "x")` call — a raw string is not "an ordinary quoted
-/// literal" the hand-rolled reader's own doc comment names as what it can read, so it reports this
-/// site unparsed. `syn::Lit::Str` decodes a raw string's value exactly like a plain one; there is
-/// no special case to write for it, which is the whole argument for a real parser rather than one
-/// more arm. Requiring agreement here would mean requiring the fix to not have happened.
-#[test]
-fn the_syn_reader_agrees_with_the_hand_rolled_one_over_its_fixtures() {
-    let Some(root) = workspace_root() else {
-        return;
-    };
-    let dir = root.join("crates/kanhe/tests/fixtures/refusal_scan");
-    let mut disagreements = Vec::new();
-    for entry in entries_of(&dir) {
-        let file_name = entry.file_name().to_string_lossy().into_owned();
-        let Some(case) = file_name.strip_suffix(".rs.txt") else {
-            continue;
-        };
-        let text = std::fs::read_to_string(entry.path())
-            .unwrap_or_else(|err| panic!("cannot read {case}: {err}"));
-
-        let old_counted = {
-            let c = countable(&text);
-            calls(&c, "violation") + calls(&c, "cannot_judge")
-        };
-        let new_counted = {
-            let c = syn_reader::countable(&text);
-            syn_reader::calls(&c, "violation") + syn_reader::calls(&c, "cannot_judge")
-        };
-        if old_counted != new_counted {
-            disagreements.push(format!(
-                "{case}: counted — old {old_counted}, new {new_counted}"
-            ));
-        }
-
-        let old_unparsed = unparsed_constructions(&text);
-        let new_unparsed = syn_reader::unparsed_constructions(&text);
-        if case == "a_raw_literal_site" {
-            assert_eq!(
-                old_unparsed, 1,
-                "{case}: the hand-rolled reader's own documented limit"
-            );
-            assert_eq!(
-                new_unparsed, 0,
-                "{case}: the syn reader closes exactly this limit"
-            );
-        } else if old_unparsed != new_unparsed {
-            disagreements.push(format!(
-                "{case}: unparsed_constructions — old {old_unparsed}, new {new_unparsed}"
-            ));
-        }
-
-        let old_aliases = aliases_a_constructor(&text);
-        let new_aliases = syn_reader::aliases_a_constructor(&text);
-        if old_aliases != new_aliases {
-            disagreements.push(format!(
-                "{case}: aliases_a_constructor — old {old_aliases}, new {new_aliases}"
-            ));
-        }
-    }
-    assert!(
-        disagreements.is_empty(),
-        "the syn reader disagrees with the hand-rolled one over a fixture written for the \
-         latter, outside the one case where disagreement is the point:\n  {}",
-        disagreements.join("\n  ")
-    );
-}
-
-/// The two readers, run over this repository's own corpus — the same files
-/// [`the_reader_swallows_no_declaration_from_the_corpus_it_reads`] and [`read`] already trust —
-/// and required to agree everywhere, including the full [`Register`] each one produces.
-///
-/// No fixture in this repository's own source triggers the raw-string case the fixture-level test
-/// above excludes, so no exclusion is needed here: if this test ever needs one, that is itself a
-/// finding — a real site in this repository that the two readers disagree about — not a reason to
-/// add one quietly.
-#[test]
-fn the_syn_reader_agrees_with_the_hand_rolled_one_over_the_real_corpus() {
-    let Some(root) = workspace_root() else {
-        return;
-    };
-    let mut disagreements = Vec::new();
-    for dir in [
-        "crates/kanhe/src",
-        "crates/kanhe/tests",
-        "crates/kanhe/src/tests",
-    ] {
-        for path in tracked(&root, dir) {
-            let text = std::fs::read_to_string(&path)
-                .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
-            let name = path
-                .strip_prefix(&root)
-                .unwrap_or(&path)
-                .display()
-                .to_string();
-
-            let old_counted = {
-                let c = countable(&text);
-                calls(&c, "violation") + calls(&c, "cannot_judge")
-            };
-            let new_counted = {
-                let c = syn_reader::countable(&text);
-                syn_reader::calls(&c, "violation") + syn_reader::calls(&c, "cannot_judge")
-            };
-            if old_counted != new_counted {
-                disagreements.push(format!(
-                    "{name}: counted — old {old_counted}, new {new_counted}"
-                ));
-            }
-
-            let old_unparsed = unparsed_constructions(&text);
-            let new_unparsed = syn_reader::unparsed_constructions(&text);
-            if old_unparsed != new_unparsed {
-                disagreements.push(format!(
-                    "{name}: unparsed_constructions — old {old_unparsed}, new {new_unparsed}"
-                ));
-            }
-
-            let old_aliases = aliases_a_constructor(&text);
-            let new_aliases = syn_reader::aliases_a_constructor(&text);
-            if old_aliases != new_aliases {
-                disagreements.push(format!(
-                    "{name}: aliases_a_constructor — old {old_aliases}, new {new_aliases}"
-                ));
-            }
-        }
-    }
-    assert!(
-        disagreements.is_empty(),
-        "the syn reader disagrees with the hand-rolled one somewhere in this repository's own \
-         corpus:\n  {}",
-        disagreements.join("\n  ")
-    );
-
-    let old_register = read(&root);
-    let new_register = syn_reader::read(&root);
-    assert_eq!(
-        old_register.registered, new_register.registered,
-        "the two readers disagree on which sites this repository registers"
-    );
-    assert_eq!(
-        old_register.disagrees, new_register.disagrees,
-        "the two readers disagree on which registered sites are violations"
-    );
-    assert_eq!(
-        old_register.unregistered, new_register.unregistered,
-        "the two readers disagree on which modules still construct an unregistered refusal"
-    );
-    assert_eq!(
-        old_register.cited, new_register.cited,
-        "the two readers disagree on which sites a direction observes"
-    );
-}
-
-/// A minimal reproduction of the bug `code_only`'s `byte_char` branch exists to close, run here
-/// only as evidence that the syn reader does not need it — not as a reader anything else calls.
+/// A minimal reproduction of the bug the character-by-character reader this file used to hold
+/// needed a dedicated arm to close — run here only as "seen to fail" evidence that the syn-based
+/// [`code_only`] below was never vulnerable to it, not as a reader anything else calls.
 ///
 /// **What this scanner gets wrong, and why.** Before that branch existed, a quote was read as
 /// opening a char literal by looking at the character immediately before it: an identifier
@@ -1315,14 +720,15 @@ fn naive_scan_without_the_byte_prefix_fix(text: &str) -> String {
     out
 }
 
-/// The "seen to fail" evidence this migration itself demands: a construction the pre-fix scanner
-/// swallows, read correctly by the syn-based reader on the exact same input.
+/// The "seen to fail" evidence this migration itself demands: a construction a hand-rolled
+/// character scanner swallows, read correctly by [`code_only`]/[`countable`]/[`calls`] — the real
+/// reader this file ships — on the exact same input.
 ///
-/// This is not a claim about the reader that ships — [`code_only`] already carries the fix, and
-/// [`the_reader_swallows_no_declaration_from_the_corpus_it_reads`] already holds it to account
-/// over this repository's real corpus. It is a claim about *why* a real parser is the fix rather
-/// than one more arm: reverting the fix by hand, as this test does, reproduces the swallow;
-/// nothing needs reverting on the syn side, because it never scanned characters to begin with.
+/// [`the_reader_swallows_no_declaration_from_the_corpus_it_reads`] already holds the shipped
+/// reader to account over this repository's real corpus, so this is not a claim about *that*
+/// reader; it is a claim about *why* a real parser is the fix rather than one more arm. The naive
+/// scanner above reproduces the historical swallow by hand; nothing needs reproducing on the syn
+/// side, because it never scanned characters to begin with.
 #[test]
 fn a_naive_scanner_without_the_byte_prefix_fix_regresses_where_the_syn_reader_does_not() {
     let Some(root) = workspace_root() else {
@@ -1342,64 +748,14 @@ fn a_naive_scanner_without_the_byte_prefix_fix_regresses_where_the_syn_reader_do
          no longer reproduces the historical bug it exists to document:\n{naive}"
     );
 
-    let syn_count = {
-        let c = syn_reader::countable(&text);
-        syn_reader::calls(&c, "violation") + syn_reader::calls(&c, "cannot_judge")
+    let count = {
+        let c = countable(&text);
+        calls(&c, "violation") + calls(&c, "cannot_judge")
     };
     assert_eq!(
-        syn_count, 1,
+        count, 1,
         "the syn reader must read the true construction regardless of how a hand-rolled scanner \
          run over the same bytes would have fared"
-    );
-}
-
-/// [`the_reader_swallows_no_declaration_from_the_corpus_it_reads`], run again over
-/// [`syn_reader::code_only`] instead — the same declaration-preservation invariant, held against
-/// the token-gap reader rather than the character-by-character one.
-#[test]
-fn the_syn_reader_s_code_only_also_swallows_no_declaration() {
-    let Some(root) = workspace_root() else {
-        return;
-    };
-    let mut lost = Vec::new();
-    let mut examined = 0;
-    for dir in ["crates/kanhe/src", "crates/kanhe/tests"] {
-        for path in tracked(&root, dir) {
-            let text = std::fs::read_to_string(&path)
-                .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
-            let declares = |line: &str| {
-                let t = line.trim_start();
-                t.starts_with("fn ")
-                    || t.starts_with("pub fn ")
-                    || t.starts_with("pub(") && t.contains(" fn ")
-            };
-            let code = syn_reader::code_only(&text);
-            let after: Vec<&str> = code.lines().collect();
-            for (index, line) in text.lines().enumerate() {
-                if !declares(line) {
-                    continue;
-                }
-                examined += 1;
-                match after.get(index) {
-                    Some(kept) if declares(kept) => {}
-                    _ => lost.push(format!(
-                        "  {}:{}: {}",
-                        path.display(),
-                        index + 1,
-                        line.trim()
-                    )),
-                }
-            }
-        }
-    }
-    assert!(
-        examined > 0,
-        "no declaration entered the corpus, so this direction would report clean over nothing"
-    );
-    assert!(
-        lost.is_empty(),
-        "the syn reader's code_only swallowed code from files it reads:\n{}",
-        lost.join("\n")
     );
 }
 
@@ -1412,85 +768,6 @@ struct Register {
     unregistered: BTreeMap<String, usize>,
     /// Sites named by a direction, to the test files naming them.
     cited: BTreeMap<String, BTreeSet<String>>,
-}
-
-fn read(root: &Path) -> Register {
-    let mut registered: BTreeMap<String, Vec<(String, usize)>> = BTreeMap::new();
-    let mut disagrees: BTreeMap<String, bool> = BTreeMap::new();
-    let mut unregistered: BTreeMap<String, usize> = BTreeMap::new();
-    for path in tracked(root, "crates/kanhe/src") {
-        let text = std::fs::read_to_string(&path)
-            .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
-        let name = path
-            .strip_prefix(root)
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .into_owned();
-        // The constructors themselves are declarations, not sites.
-        if name.ends_with("src/refusal.rs") {
-            continue;
-        }
-        // **An alias makes this reader unable to answer, which is not the same as answering zero.** Every
-        // call through `use … as cj` is invisible to a reader that matches names, so a module that aliases a
-        // constructor would be counted as constructing none. Refused rather than counted, in the class this
-        // repository reserves for a source it could not read.
-        assert_eq!(
-            unparsed_constructions(&text),
-            0,
-            "{name} constructs a registered refusal in a shape this register cannot read — a site taken by \
-             name, arriving as a parameter, or written as a raw literal is invisible to both halves of it"
-        );
-        assert!(
-            !aliases_a_constructor(&text),
-            "{name} imports a refusal constructor under another name, so every construction through that \
-             alias is invisible to this register — which would read as a module that constructs none"
-        );
-        for call in ["violation_at(", "cannot_judge_at("] {
-            for (site, line) in first_literal_args(&text, call) {
-                disagrees.insert(site.clone(), call.starts_with("violation"));
-                registered
-                    .entry(site)
-                    .or_default()
-                    .push((name.clone(), line));
-            }
-        }
-        // **Executed Rust, not the file.** Counting the bare identifier over the whole text counted every
-        // doc comment naming a constructor — this repository's prose names them constantly, and the figure
-        // jumped by four modules that construct no refusal at all. `region` is the module written so that
-        // forgetting to ask was not possible, and the same reader the gates themselves use.
-        let countable = countable(&text);
-        let open = calls(&countable, "violation") + calls(&countable, "cannot_judge");
-        if open > 0 {
-            unregistered.insert(name, open);
-        }
-    }
-    let mut cited: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for dir in ["crates/kanhe/tests", "crates/kanhe/src/tests"] {
-        for path in tracked(root, dir) {
-            let text = std::fs::read_to_string(&path)
-                .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
-            let name = path
-                .strip_prefix(root)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .into_owned();
-            // **By position and by shape, never by the bare name.** `Result::expect` is a method taking a
-            // panic message, and this reader's own source is in the corpus it reads — so a citation is
-            // recognised as a path-qualified call, `refusal::expect`, whose first argument has a site's
-            // shape. Reading every `expect(` counted panic messages as citations, this file's own included.
-            for (site, _) in first_literal_args(&text, "::expect(") {
-                if is_a_site(&site) {
-                    cited.entry(site).or_default().insert(name.clone());
-                }
-            }
-        }
-    }
-    Register {
-        registered,
-        disagrees,
-        unregistered,
-        cited,
-    }
 }
 
 /// A registered site names one branch, and no two branches share a name.
@@ -1826,10 +1103,18 @@ fn the_register_projection_is_fresh() {
 /// the completeness join at the end spelled all eight again — so a case could be answered by an arm and left
 /// out of the join, or joined and answered by nothing, and neither would be reported. The join is derived
 /// from these now, which is the same repair the counted table already had.
-const UNREADABLE_SITE_CASES: [&str; 3] = [
+///
+/// **`a_raw_literal_site` left this list when the reader stopped needing to.** A raw string
+/// first argument used to be unparsed — not because the site cannot be known, but because the
+/// hand-rolled reader's own quote-matching required a plain `"` immediately after the opening
+/// parenthesis, and `r#"…"#` opens with `r#` first. `syn::Lit::Str` decodes a raw string exactly
+/// like a plain one, with no extra code for it, so this case now belongs beside the other controls
+/// this reader successfully parses. The two names remaining here are a different kind of limit —
+/// the site is a local variable's *value*, not present in the text at all, which no reader of
+/// syntax alone can recover.
+const UNREADABLE_SITE_CASES: [&str; 2] = [
     "a_siteful_constructor_taken_by_name",
     "a_siteful_call_that_wraps",
-    "a_raw_literal_site",
 ];
 
 /// The cases where a constructor arrives under another name, so the file cannot be counted at all.
@@ -1866,6 +1151,7 @@ fn the_reader_answers_the_corpus_written_for_it() {
         ("a_comment", 0),
         ("a_constructor_taken_by_name", 1),
         ("a_longer_identifier", 0),
+        ("a_raw_literal_site", 0),
         ("an_unrelated_violation_builder", 0),
         ("a_second_cannot_judge_variant", 0),
         ("a_second_constructor", 0),
@@ -1907,12 +1193,15 @@ fn the_reader_answers_the_corpus_written_for_it() {
             "{case}: a registered construction this reader cannot parse went unreported"
         );
     }
-    for case in std::iter::once("two_on_one_line").chain(IMPORT_ONLY_CASES) {
+    for case in std::iter::once("two_on_one_line")
+        .chain(std::iter::once("a_raw_literal_site"))
+        .chain(IMPORT_ONLY_CASES)
+    {
         assert_eq!(
             unparsed_constructions(&read(case)),
             0,
-            "{case}: the controls — a construction this reader parses, and an import that constructs \
-             nothing — must not be reported as unread"
+            "{case}: the controls — a construction this reader parses (plain or raw), and an \
+             import that constructs nothing — must not be reported as unread"
         );
     }
 
