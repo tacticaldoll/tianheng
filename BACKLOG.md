@@ -664,6 +664,36 @@ consumer for an undemonstrated deduplication.
   everywhere it applies while leaving one declaration to maintain, so the property the old rule protected is
   no longer bought at the price of restatement.
 
+- **kanhe's TOML readers hand-parse a grammar `region::toml()` already tokenizes but does not structure.**
+  *Class:* READY-PATCH. *Observed pressure:* `release_coherence_gate.rs`'s `declared_dependencies`,
+  `package_name` and `require_lock_versions`, and `prelude_promise.rs`'s `block_body`, each route through
+  `kanhe::region::Source::of(text).toml()` for comment/string-stripping but still hand-split the resulting
+  lines for table and block structure. `crates/kanhe/tests/release_coherence.rs`'s own doc comments record
+  the resulting bug class as a still-open well, not a closed one: a `[lib]` name-line preceding `[package]`
+  misread as the package name, single- versus double-quoted TOML string values silently unreadable, a
+  `[[patch.unused]]` table's fields bleeding into the `[[package]]` block above it because the block boundary
+  was the literal string `[[package]]` and nothing else, a commented-out dependency line counted as a real
+  pin, and a comment glued to a value with zero whitespace tripping an older lexer. *Observation source:* a
+  `v0.4.0..release/0.5.0` review that also sampled the most recent 60 commits on `release/0.5.0` and found 46
+  (78%) carrying `kanhe` in their Conventional Commit scope and 38 (64%) typed `fix` — this entry's TOML
+  readers are the still-unclosed half of that pattern; the Rust-side half (`refusal_register.rs`,
+  `observer_protocol.rs`'s body-extent reader) closed via syn as a `[dev-dependencies]`-only addition,
+  requiring no self-law amendment because `restrict_dependencies_to` observes only `DependencyKind::Normal`
+  by default. *Current reaction or bound:* none declared in any capability spec; the bugs above are recorded
+  only in doc comments and `CHANGELOG.md` history, not in `openspec/specs/repository-checks/spec.md` as a
+  stated bound. *Risk, bounded rather than assumed:* kanhe ships in no package (`publish = false`), so a
+  misread here misfires only this repository's own release-coherence gate — never an adopter's build or a
+  published artifact. *Promotion trigger:* unlike the Rust-side closure above, these four functions run from
+  non-test `crates/kanhe/src/` code that the `release-coherence` production gate calls directly, so a real
+  TOML parser (`toml` or `toml_edit`) would land in kanhe's `[dependencies]`, not `[dev-dependencies]` —
+  crossing `crates/shengmo/src/law.rs`'s `kanhe` boundary (`restrict_dependencies_to(["shengmo", "tianheng",
+  "serde_json"])`) and requiring the self-law amendment ritual `crates/kanhe/tests/self_law_amendment.rs`
+  records, with steward review per `.github/CODEOWNERS`. The trigger is that amendment being proposed and
+  accepted — this entry does not promise a minor release until it fires. *Compatibility class:* patch; the
+  correction itself ships in no crate, but the prerequisite amendment is an architectural change decided by
+  the steward, not a code patch. *Authority:* this entry, `crates/shengmo/src/law.rs`'s `kanhe` boundary,
+  `crates/kanhe/tests/release_coherence.rs`'s documented bug history.
+
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
