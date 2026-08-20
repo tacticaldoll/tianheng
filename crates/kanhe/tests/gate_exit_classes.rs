@@ -33,7 +33,7 @@ fn workspace_root() -> Option<PathBuf> {
 /// nothing compares, and the sibling direction below holds the array against what the tree actually carries.
 const WRAPPERS: [&str; 2] = ["scripts/merge-pr.sh", "scripts/publish.sh"];
 
-/// Every test target that runs `git` without the shared fixture builder, and what each uses it for.
+/// Every test target that spawns a process itself, and what each spawns it for.
 ///
 /// **One helper lived twice and the convergence took one copy.** `release_coherence.rs` and
 /// `publish_source.rs` each held the same `hermetic("git")`-plus-assert runner — byte-identical past a doc
@@ -41,82 +41,97 @@ const WRAPPERS: [&str; 2] = ["scripts/merge-pr.sh", "scripts/publish.sh"];
 /// converged. Every fixture commit in the other kept taking its dates from the clock. Reading a file finds
 /// the copy being edited; reading the pair finds the copy that is not.
 ///
-/// **An allowlist, after two narrower forms.** The first said *runs `git` without the shared builder* and
-/// detected one spelling of the invocation while fourteen targets used another, so the set equality passed
-/// over a set the detector could not produce. The second narrowed the requirement to a run that **writes**
-/// and carried a typed list of write verbs — which made the guard complete only while a prose sentence
-/// about the tree stayed true, with nothing holding it: a fixture gaining `git rebase` would have made the
-/// sentence false and dropped that write out of reach, together and silently.
+/// **The detector enumerated spellings, and was one short three rounds running.** `hermetic(`, then
+/// `Command::new("git")`, then `Command::new(args[0])` — the program-as-value form, which
+/// `kanhe::hermetic_git`'s own header had already recorded as one of the two variants it converged, before
+/// this guard was written. A detector keyed on *how* something is written will keep being one form short of
+/// a requirement about *what is done*; each round the requirement was right and the reach was not.
 ///
-/// So the membership question is the one with no list to keep: **does this target run `git` itself**. A
-/// target that gains one is named here with what it uses git for, and the reason is read by whoever adds
-/// the next one — which is the same argument both wrappers make in their own headers, that an allowlist is
-/// always stricter than a denylist, applied to the guard that was holding a denylist of writes.
+/// So the question is the one with a single syntactic form and no knowledge of the program: **does this
+/// target spawn a process itself**. It no longer has to know how `git` is spelled, or that it is `git` —
+/// and the earlier form's own argument, that an allowlist is stricter than a denylist, now applies to the
+/// detector as well as to the set it feeds. The cost is three more members out of eighteen files.
 ///
-/// Most members only enumerate: `ls-files` asks the repository what it tracks and writes nothing. The two
-/// that create commits or tags are named as such, and both route those through the shared builder — the
-/// direct calls they keep are reads.
-const TARGETS_RUNNING_GIT_DIRECTLY: [(&str, &str); 15] = [
+/// The purpose beside each path is prose with no producer: a reader's aid for whoever adds the next one,
+/// not a fact this direction holds. What it holds is membership.
+const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 18] = [
     (
         "crates/kanhe/tests/bound_register.rs",
-        "enumerates, and builds a scratch repository's tree",
+        "git: enumerates, and builds a scratch repository's tree",
     ),
     (
         "crates/kanhe/tests/capability_subjects.rs",
-        "enumerates and reads a scratch repository's state; its one commit goes through the builder",
+        "git: enumerates and reads a scratch repository's state; its one commit goes through the builder",
     ),
-    ("crates/kanhe/tests/census.rs", "enumerates"),
+    ("crates/kanhe/tests/census.rs", "git: enumerates"),
     (
         "crates/kanhe/tests/gate_exit_classes.rs",
-        "enumerates the test targets this direction reads",
+        "git: two enumerations — the test targets this direction reads, and the tracked scripts the \
+         wrapper direction beside it reads",
     ),
-    ("crates/kanhe/tests/law_restatement.rs", "enumerates"),
+    (
+        "crates/kanhe/tests/gate_identity.rs",
+        "git, through a program-as-value runner: enumerates the scripts and the tracked Markdown",
+    ),
+    ("crates/kanhe/tests/law_restatement.rs", "git: enumerates"),
+    (
+        "crates/kanhe/tests/merge_message.rs",
+        "this test binary itself, to re-run one direction in a child process",
+    ),
     (
         "crates/kanhe/tests/merge_workflow.rs",
-        "initialises a scratch repository",
+        "bash, to run the wrapper; git, to initialise a fixture",
     ),
     (
         "crates/kanhe/tests/observation_bound_model.rs",
-        "enumerates",
+        "git: enumerates",
     ),
-    ("crates/kanhe/tests/one_spelling.rs", "enumerates"),
+    ("crates/kanhe/tests/one_spelling.rs", "git: enumerates"),
     (
         "crates/kanhe/tests/pin_bites.rs",
-        "enumerates, and reads a blob back",
+        "git: enumerates and reads a blob back through a program-as-value runner, and removes the worktree \
+         it added",
     ),
     (
         "crates/kanhe/tests/projection_register.rs",
-        "enumerates, and builds a scratch repository's tree",
+        "git: enumerates, and builds a scratch repository's tree",
     ),
     (
         "crates/kanhe/tests/publish_source.rs",
-        "reads `rev-parse` and a tracked-path probe; its commits and tags go through the builder",
+        "git: reads `rev-parse` and a tracked-path probe; its commits and tags go through the builder",
+    ),
+    (
+        "crates/kanhe/tests/publish_workflow.rs",
+        "bash, to run the publish wrapper",
     ),
     (
         "crates/kanhe/tests/reference_integrity.rs",
-        "enumerates, reads the log, and asks about exclusion",
+        "git: enumerates, initialises fixtures, reads the log, and asks about exclusion",
     ),
-    ("crates/kanhe/tests/refusal_register.rs", "enumerates"),
-    ("crates/kanhe/tests/whitespace_hygiene.rs", "enumerates"),
+    ("crates/kanhe/tests/refusal_register.rs", "git: enumerates"),
+    (
+        "crates/kanhe/tests/whitespace_hygiene.rs",
+        "git: enumerates",
+    ),
     (
         "crates/kanhe/tests/workspace_isolation.rs",
-        "enumerates, and builds a scratch repository's tree",
+        "git: enumerates, and builds a scratch repository's tree",
     ),
 ];
 
-/// The declared set of targets running `git` directly equals the set the tree carries.
+/// The declared set of targets spawning a process equals the set the tree carries.
 #[test]
-fn no_test_target_runs_git_outside_the_shared_builder_unnamed() {
+fn no_test_target_spawns_a_process_unnamed() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let declared: BTreeSet<String> = TARGETS_RUNNING_GIT_DIRECTLY
+    let declared: BTreeSet<String> = TARGETS_SPAWNING_A_PROCESS
         .iter()
         .map(|(path, _)| (*path).to_string())
         .collect();
     assert_eq!(
         declared.len(),
-        TARGETS_RUNNING_GIT_DIRECTLY.len(),
+        TARGETS_SPAWNING_A_PROCESS.len(),
         "a path is declared twice, so the comparison below is over fewer targets than the list holds"
     );
     let listing = std::process::Command::new("git")
@@ -143,30 +158,36 @@ fn no_test_target_runs_git_outside_the_shared_builder_unnamed() {
         let text = std::fs::read_to_string(root.join(path))
             .unwrap_or_else(|err| panic!("cannot read {path}: {err}"));
         // Executed text, so a doc comment naming a call is not read as one — and by position rather than by
-        // the bare marker, because this direction's own source is in the corpus it reads. Measured over that
-        // executed text: `hermetic(` is the marker whose own literal spelling here produces the sequence it
-        // searches for, and its executed occurrence is exactly the quote-preceded one, so without the
-        // lookbehind this file would match itself on it. `Command::new("git")`'s literal produces no
-        // sequence, and its executed occurrences are this direction's own two enumerations — which is why
-        // this file is a declared member rather than an exception.
+        // the bare marker, because this direction's own source is in the corpus it reads and holds both
+        // markers as literals. A call has a boundary before it where the literal has a quote, which is the
+        // argument `refusal_register` makes for `::expect(` against its own panic messages.
         let source = Source::of(&text);
         let executed = source.rust();
-        let unquoted = |line: &str, marker: &str| {
-            line.match_indices(marker)
-                .any(|(at, _)| at == 0 || line.as_bytes()[at - 1] != b'"')
+        // Not preceded by a quote, so this file does not match its own marker literals — and not preceded
+        // by an identifier character either, so `PhantomCommand::new(` is a different type's constructor
+        // rather than a spawn. A path qualifier ends in `:` and a bare call in whitespace, so both real
+        // spellings survive the boundary. Found by a perturbation that renamed the type and did not move
+        // the verdict, which is a probe that was measuring nothing.
+        let opens = |line: &str, marker: &str| {
+            line.match_indices(marker).any(|(at, _)| {
+                at == 0 || {
+                    let before = line.as_bytes()[at - 1];
+                    before != b'"' && !before.is_ascii_alphanumeric() && before != b'_'
+                }
+            })
         };
         if executed
             .lines()
-            .any(|line| unquoted(line, "hermetic(") || unquoted(line, "Command::new(\"git\")"))
+            .any(|line| opens(line, "Command::new(") || opens(line, "hermetic("))
         {
             reaching.insert(path.clone());
         }
     }
     assert_eq!(
         declared, reaching,
-        "the test targets running `git` directly differ from the set named here. A target that gains one \
-         must be named with what it uses git for, and a name that outlives its reason must go — the helper \
-         this guards lived twice and the convergence took one copy"
+        "the test targets spawning a process differ from the set named here. A target that gains one must \
+         be named with what it spawns, and a name that outlives its reason must go — the helper this guards \
+         lived twice and the convergence took one copy"
     );
 }
 

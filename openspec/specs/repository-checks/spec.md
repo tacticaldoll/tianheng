@@ -1490,36 +1490,35 @@ only thing tying the two together, and nothing read it.
   not a count of some
 - **PINNED-BY** `an_unreadable_changed_file_count_stops_before_the_merge`
 
-### Requirement: A test target running git outside the shared fixture builder is named
+### Requirement: A test target that spawns a process itself is named
 
-Every test target that runs `git` itself, rather than through the shared fixture builder, SHALL be named in
-a declared set together with what it uses git for, and that set SHALL be held against the tree in both
-directions.
+Every test target that spawns a process itself, rather than through a shared builder, SHALL be named in a
+declared set together with what it spawns, and that set SHALL be held against the tree in both directions. A
+path SHALL NOT be declared twice, since a repeat would shrink the compared set and weaken the comparison
+without saying so.
 
-Membership SHALL be *does this target run git itself*, not *does it write*. Two narrower forms preceded it.
-The first was wider than its detector — it said *runs git without the shared builder* and recognized one
-spelling of the invocation while fourteen targets used another, so the set equality passed over a set the
-detector could not produce. The second narrowed membership to a run that writes and carried a typed list of
-write subcommands, which made the guard complete only while a prose claim about the tree stayed true: a
-fixture gaining a date-carrying subcommand outside that list would have made the claim false and dropped
-that write out of reach, together and silently.
+The detector SHALL recognize the **capability** rather than a spelling of it. Three narrower forms preceded
+this one and each was one spelling short of a requirement that was already correct: a shared-builder marker,
+then a literal program name, then a program passed as a value — the last already recorded in the builder's
+own header as one of the two variants it converged, before this check was written. A detector keyed on how
+something is written will keep trailing a requirement about what is done; spawning a process has one
+syntactic form and needs no knowledge of the program.
 
-An allowlist is stricter than a denylist, which both irreversible-act wrappers already argue in their own
-headers. The membership question SHALL therefore be the one with no list to keep, so an unfamiliar use of
-git is a member by default — a file to look at rather than a gap.
+The detector SHALL read executed text, and SHALL recognize the call by position: not preceded by a quote, so
+the check does not match its own marker literals, and not preceded by an identifier character, so a
+different type's constructor is not read as a spawn.
 
-The detector SHALL recognize every spelling of a git invocation in executed text, and SHALL recognize it by
-position rather than by the bare marker, because this check's own source is in the corpus it reads and holds
-a marker as a literal.
+The purpose recorded beside each path is prose with no producer — a reader's aid for whoever adds the next
+one. What this requirement holds is membership.
 
-#### Scenario: A test target gains a direct git run
+#### Scenario: A test target gains a spawn
 
-- **WHEN** a tracked test target runs `git` itself and is not named
+- **WHEN** a tracked test target spawns a process itself and is not named
 - **THEN** the check fails naming it
-- **PINNED-BY** `no_test_target_runs_git_outside_the_shared_builder_unnamed`
+- **PINNED-BY** `no_test_target_spawns_a_process_unnamed`
 
-#### Scenario: A declared target stops running git
+#### Scenario: A declared target stops spawning
 
-- **WHEN** a named target no longer runs `git` itself
+- **WHEN** a named target no longer spawns a process
 - **THEN** the check fails, because a name that outlives its reason certifies nothing
-- **PINNED-BY** `no_test_target_runs_git_outside_the_shared_builder_unnamed`
+- **PINNED-BY** `no_test_target_spawns_a_process_unnamed`
