@@ -4753,6 +4753,29 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
 
+- **A closing pipe is not a parameter position, and the difference was one real construction.** The
+  introduction test — *a closure parameter or a `let` binding introduces the name; everything else
+  references it* — is a statement about **position**, and it was implemented as the character standing before
+  the name. A parameter list's closing `|` looks exactly like its opening one to that test, so
+  `.map_err(|err| cannot_judge(…))` was excluded: a construction that references and calls, missed in the
+  false-negative direction this count exists to catch. One instance in the corpus today, in a test target;
+  none in the crate the published figure reads, where one idiomatic `.map_err(|e| cannot_judge(…))` would
+  leave a real site-less construction unreported while the projection states none exists.
+
+  The count is positional now — an odd number of pipes before the name on its line means inside a binder,
+  and the closing pipe makes it even again, which is exactly the boundary the character test could not see.
+  `||` is even whether it opens a zero-argument closure or means boolean or.
+
+  **The direction's shapes were chosen from the defect and not from the predicate's edges**, which is the
+  same shape as the round before it: three cases each asserted that a binder is excluded and none asserted
+  that a construction *adjacent* to one is kept. Three more join them, including the two-on-one-line case
+  where the parameter is excluded and the reference in the body is not.
+
+  **And the floor named one obstacle where there are two.** It said the census has no producer because a
+  bare reference is undecidable from text — true, and a floor. It did not say that the introduction test is
+  an approximation of a position, which is a debt with a fix. A reader acting on the floor as written would
+  have concluded nothing could be done. It now names both and says which is which.
+
 - **Two ordered passes cannot close a mutual dependency, and the ordering was the defect rather than its
   direction.** Comments and string literals each delimit the other. Stripping comments first truncates a `//`
   inside a literal and leaves an unmatched quote; stripping literals first lets a lone `"` inside a comment
