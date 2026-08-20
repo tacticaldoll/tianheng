@@ -4665,8 +4665,8 @@ no adopter runs. They are here rather than under the adopter headings above beca
 - **The wrapper chose its exit class at every argument arm, against its own clause.** `repository-checks` says
   the classification SHALL be chosen in one place per wrapper; `publish.sh` routes every refusal through a
   helper and `merge-pr.sh` spelled `printf … >&2; exit 2` inline at each arm. It has that helper now, and its
-  arms go through it. The pair is filed with the measurement a review made of it — 65 of `publish.sh`'s 110
-  code lines byte-identical to its sibling, five whole named constructs among them — and with why the
+  arms go through it. The pair is filed with what a review measured of it — most of `publish.sh`'s code
+  byte-identical to its sibling, every named construct they share among it — and with why the
   extraction waits: the two wrappers stand in front of the two acts that cannot be undone, and a refactor's
   own risk outweighs the drift it removes until the release is out.
 
@@ -4752,6 +4752,33 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
+
+- **A debt entry counted the tree before its own repair, and named the invalidation two sentences later.**
+  The WATCH entry filing the two wrappers as one lifecycle written twice recorded the overlap as a figure and
+  a list of five shared named constructs — and the same paragraph records `merge-pr.sh` gaining `refuse`,
+  which is the sixth. The repair that closed the idiom divergence added a shared construct in the commit that
+  filed the debt at the pre-repair count. Nothing catches it: the census reaction reaches the phrases a census
+  declares, and an entry's arithmetic declares none.
+
+  Both figures are gone rather than corrected. The entry's promotion trigger reads *a second divergence
+  between the two wrappers' shared constructs*, which is a shape; the arithmetic is what goes stale, and this
+  entry is written to be re-read later by someone who will re-measure anyway.
+
+  The discipline is the one already applied to a repair's own doc comments, moved to a governance record: an
+  entry describing a repair is written from the repaired tree, not from the tree the repair started in.
+
+- **The dirty-worktree diagnostic is observed, after six rounds of being the finding nothing holds.** Its
+  direction asserted the refusal's opening sentence and nothing else, so the render broke when `-z` arrived —
+  the NUL-separated records ran together on one line — and was repaired again with neither change failing
+  anything. It now asserts that each path is named as the repository holds it, unescaped, one per line, and
+  that no separator reaches the operator.
+
+  Two dirty paths, one of them non-ASCII, because with a single record a run-together render and a
+  one-per-line render are the same string. Both negative runs, from the terminal: without `-z` the non-ASCII
+  path arrives in git's quoted spelling and the first assertion fails; without the split the message reads
+  `?? plain.txt ?? 普通.txt` on one line and the separator assertion fails.
+
+  `publish-source-integrity` gains the requirement with its scenario.
 
 - **A closing pipe is not a parameter position, and the difference was one real construction.** The
   introduction test — *a closure parameter or a `let` binding introduces the name; everything else

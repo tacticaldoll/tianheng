@@ -190,3 +190,21 @@ outside the split that repair made.
   is no repository, or its index cannot be parsed
 - **THEN** the gate refuses as a cannot-judge saying which status it met, rather than reading it as the
   answer that the path is untracked
+
+### Requirement: The dirty-worktree diagnostic names each path as itself
+
+Where the worktree is not clean, the refusal SHALL name each offending path **as the repository holds it**,
+one record per line. `git status` is read with `-z`, so a path carrying non-ASCII bytes arrives unquoted and
+the records arrive NUL-separated; the diagnostic SHALL split on that separator rather than interpolating the
+stream, and no separator or octal escape SHALL reach the operator.
+
+This render changed twice with nothing observing it — it broke when `-z` was added, since only emptiness was
+tested, and was repaired again without either change failing a direction. A direction SHALL use at least two
+dirty paths, because with one record a run-together render and a one-per-line render are the same string.
+
+#### Scenario: Two dirty paths, one of them non-ASCII
+
+- **WHEN** the worktree holds two untracked files, one named with non-ASCII bytes
+- **THEN** the refusal names both, each on its own line, the non-ASCII one spelled as itself rather than in
+  git's quoted form, and carries no record separator
+- **PINNED-BY** `the_dirty_worktree_diagnostic_names_each_path_unescaped_and_one_per_line`
