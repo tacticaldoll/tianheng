@@ -33,7 +33,7 @@ fn workspace_root() -> Option<PathBuf> {
 /// nothing compares, and the sibling direction below holds the array against what the tree actually carries.
 const WRAPPERS: [&str; 2] = ["scripts/merge-pr.sh", "scripts/publish.sh"];
 
-/// Every test target that could write with `git` outside the shared fixture builder, and why each may.
+/// Every test target that runs `git` without the shared fixture builder, and what each uses it for.
 ///
 /// **One helper lived twice and the convergence took one copy.** `release_coherence.rs` and
 /// `publish_source.rs` each held the same `hermetic("git")`-plus-assert runner — byte-identical past a doc
@@ -41,34 +41,84 @@ const WRAPPERS: [&str; 2] = ["scripts/merge-pr.sh", "scripts/publish.sh"];
 /// converged. Every fixture commit in the other kept taking its dates from the clock. Reading a file finds
 /// the copy being edited; reading the pair finds the copy that is not.
 ///
-/// **The first form of this guard was narrower than the requirement it carried.** It said *runs `git`
-/// without the shared builder* and detected only `hermetic(` — while fourteen targets ran git through a bare
-/// `Command::new("git")`, this file among them, and the set equality passed because the detector could not
-/// produce them. A requirement wider than its detector puts the gap in the floor.
+/// **An allowlist, after two narrower forms.** The first said *runs `git` without the shared builder* and
+/// detected one spelling of the invocation while fourteen targets used another, so the set equality passed
+/// over a set the detector could not produce. The second narrowed the requirement to a run that **writes**
+/// and carried a typed list of write verbs — which made the guard complete only while a prose sentence
+/// about the tree stayed true, with nothing holding it: a fixture gaining `git rebase` would have made the
+/// sentence false and dropped that write out of reach, together and silently.
 ///
-/// So the requirement is the class the fixture-date discipline is about — a run that **writes** — and the
-/// detector is every git invocation in executed text, in either spelling. A file is named when it holds
-/// both: a direct invocation, and a write verb anywhere in it. That is file-level and therefore
-/// over-inclusive, which is the safe direction: a member here is a file to look at, not an accusation.
-/// Both members hold a direct invocation that is a **read** — one asks the repository a question and writes
-/// no commit, so no fixture date is its to carry — beside write verbs whose calls go through the builder.
-/// `publish_source.rs` reads `rev-parse` and a `Tracked` probe; `capability_subjects.rs` reads a scratch
-/// repository's state, and its one commit was converged into the builder when this guard was widened.
-const TARGETS_THAT_COULD_WRITE_WITH_GIT_DIRECTLY: [&str; 2] = [
-    "crates/kanhe/tests/capability_subjects.rs",
-    "crates/kanhe/tests/publish_source.rs",
+/// So the membership question is the one with no list to keep: **does this target run `git` itself**. A
+/// target that gains one is named here with what it uses git for, and the reason is read by whoever adds
+/// the next one — which is the same argument both wrappers make in their own headers, that an allowlist is
+/// always stricter than a denylist, applied to the guard that was holding a denylist of writes.
+///
+/// Most members only enumerate: `ls-files` asks the repository what it tracks and writes nothing. The two
+/// that create commits or tags are named as such, and both route those through the shared builder — the
+/// direct calls they keep are reads.
+const TARGETS_RUNNING_GIT_DIRECTLY: [(&str, &str); 15] = [
+    (
+        "crates/kanhe/tests/bound_register.rs",
+        "enumerates, and builds a scratch repository's tree",
+    ),
+    (
+        "crates/kanhe/tests/capability_subjects.rs",
+        "enumerates and reads a scratch repository's state; its one commit goes through the builder",
+    ),
+    ("crates/kanhe/tests/census.rs", "enumerates"),
+    (
+        "crates/kanhe/tests/gate_exit_classes.rs",
+        "enumerates the test targets this direction reads",
+    ),
+    ("crates/kanhe/tests/law_restatement.rs", "enumerates"),
+    (
+        "crates/kanhe/tests/merge_workflow.rs",
+        "initialises a scratch repository",
+    ),
+    (
+        "crates/kanhe/tests/observation_bound_model.rs",
+        "enumerates",
+    ),
+    ("crates/kanhe/tests/one_spelling.rs", "enumerates"),
+    (
+        "crates/kanhe/tests/pin_bites.rs",
+        "enumerates, and reads a blob back",
+    ),
+    (
+        "crates/kanhe/tests/projection_register.rs",
+        "enumerates, and builds a scratch repository's tree",
+    ),
+    (
+        "crates/kanhe/tests/publish_source.rs",
+        "reads `rev-parse` and a tracked-path probe; its commits and tags go through the builder",
+    ),
+    (
+        "crates/kanhe/tests/reference_integrity.rs",
+        "enumerates, reads the log, and asks about exclusion",
+    ),
+    ("crates/kanhe/tests/refusal_register.rs", "enumerates"),
+    ("crates/kanhe/tests/whitespace_hygiene.rs", "enumerates"),
+    (
+        "crates/kanhe/tests/workspace_isolation.rs",
+        "enumerates, and builds a scratch repository's tree",
+    ),
 ];
 
-/// The declared set of targets that could write with `git` directly equals the set the tree carries.
+/// The declared set of targets running `git` directly equals the set the tree carries.
 #[test]
-fn no_test_target_writes_with_git_outside_the_shared_builder_unnamed() {
+fn no_test_target_runs_git_outside_the_shared_builder_unnamed() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let declared: BTreeSet<String> = TARGETS_THAT_COULD_WRITE_WITH_GIT_DIRECTLY
+    let declared: BTreeSet<String> = TARGETS_RUNNING_GIT_DIRECTLY
         .iter()
-        .map(|path| (*path).to_string())
+        .map(|(path, _)| (*path).to_string())
         .collect();
+    assert_eq!(
+        declared.len(),
+        TARGETS_RUNNING_GIT_DIRECTLY.len(),
+        "a path is declared twice, so the comparison below is over fewer targets than the list holds"
+    );
     let listing = std::process::Command::new("git")
         .args(["ls-files", "-z", "crates/kanhe/tests"])
         .current_dir(&root)
@@ -88,57 +138,35 @@ fn no_test_target_writes_with_git_outside_the_shared_builder_unnamed() {
         "no test target entered the corpus, so this direction would report clean over nothing"
     );
 
-    // A write is what carries a date, so these are the verbs the fixture-date discipline is about. `init`
-    // and `add` write to the repository and carry no date of their own.
-    //
-    // `-qm` and `-am` are belt-and-braces: a `commit -qm` already carries `"commit"` and a `tag -am` already
-    // carries `"tag"`, so neither can fire alone. They are here so a reader does not have to prove that,
-    // and swept against the corpus with them: no date-carrying subcommand outside this list is used
-    // anywhere in `crates/` — not `rebase`, `cherry-pick`, `am`, `revert`, `commit-tree`, `stash` or
-    // `filter-branch` — so the residue is latent with no instance.
-    const WRITES: [&str; 5] = ["\"commit\"", "\"tag\"", "\"merge\"", "\"-qm\"", "\"-am\""];
-
     let mut reaching: BTreeSet<String> = BTreeSet::new();
     for path in &paths {
         let text = std::fs::read_to_string(root.join(path))
             .unwrap_or_else(|err| panic!("cannot read {path}: {err}"));
         // Executed text, so a doc comment naming a call is not read as one — and by position rather than by
-        // the bare marker, because this direction's own source is in the corpus it reads.
-        //
-        // **Measured over the executed text this reads, the position test carries exactly one marker.**
-        // `hermetic(` is the one whose own literal spelling here produces the sequence it searches for, and
-        // one of its occurrences is quote-preceded — so without the lookbehind this file would match itself
-        // on it. The five write markers produce no executed sequence at all, because the quotes inside them
-        // are escaped in the array that declares them, and `Command::new("git")`'s literal produces none
-        // either. What keeps this file out of its own set is that it holds no executed write, plus that
-        // escaping — and the escaping is the fragile half: a rewrite of `WRITES` that stopped escaping would
-        // make the lookbehind load-bearing where it is not today.
-        //
-        // Executed, not raw, and the distinction bit while this sentence was being written: naming a write
-        // marker in prose puts a real one in the file, which the comment strip removes and a raw reading
-        // would not. Applied to every marker regardless, which is the same argument
-        // `refusal_register` makes for `::expect(` against its own panic messages.
+        // the bare marker, because this direction's own source is in the corpus it reads. Measured over that
+        // executed text: `hermetic(` is the marker whose own literal spelling here produces the sequence it
+        // searches for, and its executed occurrence is exactly the quote-preceded one, so without the
+        // lookbehind this file would match itself on it. `Command::new("git")`'s literal produces no
+        // sequence, and its executed occurrences are this direction's own two enumerations — which is why
+        // this file is a declared member rather than an exception.
         let source = Source::of(&text);
         let executed = source.rust();
         let unquoted = |line: &str, marker: &str| {
             line.match_indices(marker)
                 .any(|(at, _)| at == 0 || line.as_bytes()[at - 1] != b'"')
         };
-        let invokes = executed
+        if executed
             .lines()
-            .any(|line| unquoted(line, "hermetic(") || unquoted(line, "Command::new(\"git\")"));
-        let writes = executed
-            .lines()
-            .any(|line| WRITES.iter().any(|verb| unquoted(line, verb)));
-        if invokes && writes {
+            .any(|line| unquoted(line, "hermetic(") || unquoted(line, "Command::new(\"git\")"))
+        {
             reaching.insert(path.clone());
         }
     }
     assert_eq!(
         declared, reaching,
-        "the test targets that could write with `git` outside the shared builder differ from the set named \
-         here. A target that gains one must be named with why it may, and a name that outlives its reason \
-         must go — the helper this guards lived twice and the convergence took one copy"
+        "the test targets running `git` directly differ from the set named here. A target that gains one \
+         must be named with what it uses git for, and a name that outlives its reason must go — the helper \
+         this guards lived twice and the convergence took one copy"
     );
 }
 

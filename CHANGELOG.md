@@ -4753,6 +4753,27 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
 
+- **The guard held a denylist, and both wrappers already argue why that is the weaker direction.** Its
+  membership was *does this target write with git* and it carried a typed list of write subcommands — so it
+  was complete only while a prose sentence about the tree stayed true, with nothing holding it. A fixture
+  gaining `git rebase` would have made the sentence false and dropped that write out of reach, **together
+  and silently**: the claim and the coverage fail as one.
+
+  Membership is now the question with no list to keep — *does this target run `git` itself* — so an
+  unfamiliar use is a member by default, which is a file to look at rather than a gap. That is the argument
+  both irreversible-act wrappers make in their own headers, applied to the guard that was holding the other
+  kind. The declared set is fifteen entries, each saying what that target uses git for; most only enumerate
+  what the repository tracks, and the two that create commits or tags route those through the shared builder
+  and keep only reads.
+
+  **Three forms, and each was corrected on the axis the last one moved.** The first was wider than its
+  detector; the second met its detector and bought completeness with a claim; the third removes the claim.
+  What ends this shape is not a better list but no list — the same move that ended the lexer thread five
+  entries above, where a sequence of filters became one pass over the grammar.
+
+  Both directions run red without the guard: an unnamed target that gains a direct run fails naming it, and
+  a named target that stops running git fails too.
+
 - **Two reasons written beside a change described the tree the change started in.** The converged commit
   site said the delegation *keeps this file out of the set of targets that write with git directly* — and
   the file is in that set, named in the declaration, because membership is per file and it still holds a
