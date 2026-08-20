@@ -54,7 +54,7 @@ const WRAPPERS: [&str; 2] = ["scripts/merge-pr.sh", "scripts/publish.sh"];
 ///
 /// The purpose beside each path is prose with no producer: a reader's aid for whoever adds the next one,
 /// not a fact this direction holds. What it holds is membership.
-const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 18] = [
+const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 22] = [
     (
         "crates/kanhe/tests/bound_register.rs",
         "git: enumerates, and builds a scratch repository's tree",
@@ -117,6 +117,22 @@ const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 18] = [
         "crates/kanhe/tests/workspace_isolation.rs",
         "git: enumerates, and builds a scratch repository's tree",
     ),
+    (
+        "crates/shengmo/tests/examples_suite.rs",
+        "cargo, to build and run each example; git, to enumerate the examples directory",
+    ),
+    (
+        "crates/shengmo/tests/family_coverage.rs",
+        "git: enumerates the published family's sources",
+    ),
+    (
+        "crates/shengmo/tests/self_governance.rs",
+        "cargo, as a program-as-value, to read this workspace's metadata",
+    ),
+    (
+        "crates/tianheng/tests/baseline_cli.rs",
+        "the shell's own binary, as a program-as-value, to run the delivered CLI against a fixture",
+    ),
 ];
 
 /// The declared set of targets spawning a process equals the set the tree carries.
@@ -135,7 +151,13 @@ fn no_test_target_spawns_a_process_unnamed() {
         "a path is declared twice, so the comparison below is over fewer targets than the list holds"
     );
     let listing = std::process::Command::new("git")
-        .args(["ls-files", "-z", "crates/kanhe/tests"])
+        // **Every test target in the workspace, which is the noun the requirement uses.** The corpus was
+        // `crates/kanhe/tests` from the first form, when the finding was two files in that directory, and
+        // every widening since asked *what to look for* rather than *where to look* — so the spelling axis
+        // and the verb axis were each closed while the set equality went on passing over a corpus the
+        // requirement does not describe. Four targets outside that directory spawn a process and two run
+        // `git` directly, in the crates whose own gates this guard protects.
+        .args(["ls-files", "-z", "crates"])
         .current_dir(&root)
         .output()
         .expect("git ls-files is runnable");
@@ -145,7 +167,13 @@ fn no_test_target_spawns_a_process_unnamed() {
     );
     let paths: Vec<String> = String::from_utf8_lossy(&listing.stdout)
         .split('\0')
-        .filter(|path| path.ends_with(".rs"))
+        // An integration test target is `crates/<member>/tests/<name>.rs` — the shape cargo compiles as its
+        // own binary. Matched by shape rather than by a git pathspec glob, whose `*` crosses `/` and would
+        // also take a nested fixture.
+        .filter(|path| {
+            let parts: Vec<&str> = path.split('/').collect();
+            parts.len() == 4 && parts[0] == "crates" && parts[2] == "tests" && path.ends_with(".rs")
+        })
         .map(str::to_string)
         .collect();
     assert!(

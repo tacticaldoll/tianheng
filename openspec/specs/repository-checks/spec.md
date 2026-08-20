@@ -1492,10 +1492,17 @@ only thing tying the two together, and nothing read it.
 
 ### Requirement: A test target that spawns a process itself is named
 
-Every test target that spawns a process itself, rather than through a shared builder, SHALL be named in a
-declared set together with what it spawns, and that set SHALL be held against the tree in both directions. A
-path SHALL NOT be declared twice, since a repeat would shrink the compared set and weaken the comparison
-without saying so.
+Every test target that spawns a process itself SHALL be named in a declared set together with what it
+spawns, and that set SHALL be held against the tree in both directions. *Every* means every test target this
+workspace compiles, not one crate's. A path SHALL NOT be declared twice, since a repeat would shrink the compared set and weaken
+the comparison without saying so.
+
+The corpus SHALL be every integration test target the workspace compiles, matched by the shape cargo builds
+as its own binary. A reaction's reach has three axes — what it looks for, what it counts as a hit, and where
+it looks — and this requirement said *every test target* while the corpus was one crate's directory from the
+form when the finding happened to sit there. Two axes were closed by construction while the set equality went
+on passing over a corpus the requirement does not describe, and four targets outside that directory spawned
+processes, two of them running `git` directly.
 
 The detector SHALL recognize the **capability** rather than a spelling of it. Three narrower forms preceded
 this one and each was one spelling short of a requirement that was already correct: a shared-builder marker,

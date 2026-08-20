@@ -4753,6 +4753,22 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
 
+- **A reaction's reach has three axes, and the rounds closed them one at a time.** What it looks for, what
+  it counts as a hit, and **where it looks**. The first two were closed by construction — the capability
+  instead of its spellings, and no verb list at all — while the third had never been examined: the corpus was
+  one crate's test directory, from the form where the finding happened to sit there, and every widening since
+  asked *what to look for* rather than *where to look*.
+
+  The requirement said *every test target* throughout. Four outside that directory spawn a process and two
+  run `git` directly, in the crates whose own gates this guard protects — `shengmo`'s examples suite spawns
+  cargo and enumerates with git, its family-coverage direction enumerates with git, and two more run a
+  program passed as a value. The corpus is now every integration test target the workspace compiles, matched
+  by the shape cargo builds as its own binary rather than by a pathspec glob, whose `*` crosses `/` and would
+  also take a nested fixture. Twenty-two members.
+
+  Negative run: a spawn added to a `guibiao` test target — outside the old corpus entirely — now fails naming
+  it.
+
 - **A detector keyed on spellings was one form short for the third round running.** `hermetic(`, then
   `Command::new("git")`, then `Command::new(args[0])` — the program-as-value form, which the shared
   builder's own header had already recorded as one of the two variants it converged, **before this guard was
