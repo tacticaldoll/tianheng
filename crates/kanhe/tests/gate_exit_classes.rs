@@ -90,6 +90,12 @@ fn no_test_target_writes_with_git_outside_the_shared_builder_unnamed() {
 
     // A write is what carries a date, so these are the verbs the fixture-date discipline is about. `init`
     // and `add` write to the repository and carry no date of their own.
+    //
+    // `-qm` and `-am` are belt-and-braces: a `commit -qm` already carries `"commit"` and a `tag -am` already
+    // carries `"tag"`, so neither can fire alone. They are here so a reader does not have to prove that,
+    // and swept against the corpus with them: no date-carrying subcommand outside this list is used
+    // anywhere in `crates/` — not `rebase`, `cherry-pick`, `am`, `revert`, `commit-tree`, `stash` or
+    // `filter-branch` — so the residue is latent with no instance.
     const WRITES: [&str; 5] = ["\"commit\"", "\"tag\"", "\"merge\"", "\"-qm\"", "\"-am\""];
 
     let mut reaching: BTreeSet<String> = BTreeSet::new();
@@ -97,9 +103,21 @@ fn no_test_target_writes_with_git_outside_the_shared_builder_unnamed() {
         let text = std::fs::read_to_string(root.join(path))
             .unwrap_or_else(|err| panic!("cannot read {path}: {err}"));
         // Executed text, so a doc comment naming a call is not read as one — and by position rather than by
-        // the bare marker, because this direction's own source is in the corpus it reads and holds every
-        // marker below as a literal. A call has a boundary before it where the literal has a quote, which is
-        // the argument `refusal_register` makes for `::expect(` against its own panic messages.
+        // the bare marker, because this direction's own source is in the corpus it reads.
+        //
+        // **Measured over the executed text this reads, the position test carries exactly one marker.**
+        // `hermetic(` is the one whose own literal spelling here produces the sequence it searches for, and
+        // one of its occurrences is quote-preceded — so without the lookbehind this file would match itself
+        // on it. The five write markers produce no executed sequence at all, because the quotes inside them
+        // are escaped in the array that declares them, and `Command::new("git")`'s literal produces none
+        // either. What keeps this file out of its own set is that it holds no executed write, plus that
+        // escaping — and the escaping is the fragile half: a rewrite of `WRITES` that stopped escaping would
+        // make the lookbehind load-bearing where it is not today.
+        //
+        // Executed, not raw, and the distinction bit while this sentence was being written: naming a write
+        // marker in prose puts a real one in the file, which the comment strip removes and a raw reading
+        // would not. Applied to every marker regardless, which is the same argument
+        // `refusal_register` makes for `::expect(` against its own panic messages.
         let source = Source::of(&text);
         let executed = source.rust();
         let unquoted = |line: &str, marker: &str| {
