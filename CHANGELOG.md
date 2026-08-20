@@ -4753,6 +4753,30 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
 
+- **A detector keyed on spellings was one form short for the third round running.** `hermetic(`, then
+  `Command::new("git")`, then `Command::new(args[0])` — the program-as-value form, which the shared
+  builder's own header had already recorded as one of the two variants it converged, **before this guard was
+  written**. Each round the requirement was right and the reach was not, and `gate_identity.rs` ran
+  `git ls-files` twice through the third spelling while the set equality passed over a set that could not
+  contain it.
+
+  Three instances are one defect. The question is now the one with a single syntactic form and no knowledge
+  of the program — **does this target spawn a process itself** — so the guard no longer has to know how
+  `git` is spelled, or that it is `git`. The earlier form's own argument, that an allowlist is stricter than
+  a denylist, applied to the set and left the detector a denylist of known spellings; it applies to both
+  now. The cost is three more members out of eighteen files.
+
+  **A probe that measured nothing found the boundary defect.** Renaming a member's `Command::new(` to
+  `PhantomCommand::new(` did not move the verdict — because the marker is a substring of the rename. The
+  recognizer excluded a preceding quote and not a preceding identifier character, so a different type's
+  constructor read as a spawn. Both boundaries now, and the perturbation moves the verdict.
+
+  Three of the fifteen purposes were also wrong or short against what their file invokes: one named uses
+  that go through the invisible spelling while omitting the `worktree remove` it does directly, one omitted
+  its fixture initialisation, and one attributed a sibling direction's enumeration to itself. All eighteen
+  are rewritten from a per-file reading, and the entry says what it is: prose with no producer, a reader's
+  aid. What the direction holds is membership.
+
 - **The guard held a denylist, and both wrappers already argue why that is the weaker direction.** Its
   membership was *does this target write with git* and it carried a typed list of write subcommands — so it
   was complete only while a prose sentence about the tree stayed true, with nothing holding it. A fixture
