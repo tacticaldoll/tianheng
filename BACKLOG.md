@@ -686,13 +686,13 @@ consumer for an undemonstrated deduplication.
   published artifact. *Promotion trigger:* unlike the Rust-side closure above, these four functions run from
   non-test `crates/kanhe/src/` code that the `release-coherence` production gate calls directly, so a real
   TOML parser (`toml` or `toml_edit`) would land in kanhe's `[dependencies]`, not `[dev-dependencies]` —
-  crossing `crates/shengmo/src/law.rs`'s `kanhe` boundary (`restrict_dependencies_to(["shengmo", "tianheng",
-  "serde_json"])`) and requiring the self-law amendment ritual `crates/kanhe/tests/self_law_amendment.rs`
-  records, with steward review per `.github/CODEOWNERS`. The trigger is that amendment being proposed and
-  accepted — this entry does not promise a minor release until it fires. *Compatibility class:* patch; the
-  correction itself ships in no crate, but the prerequisite amendment is an architectural change decided by
-  the steward, not a code patch. *Authority:* this entry, `crates/shengmo/src/law.rs`'s `kanhe` boundary,
-  `crates/kanhe/tests/release_coherence.rs`'s documented bug history.
+  crossing kanhe's declared dependency allowlist (`AGENTS.self-law.md`, rendered from `crates/shengmo/src/law.rs`)
+  and requiring the self-law amendment ritual `crates/kanhe/tests/self_law_amendment.rs` records, with steward
+  review per `.github/CODEOWNERS`. The trigger is that amendment being proposed and accepted — this entry does
+  not promise a minor release until it fires. *Compatibility class:* patch; the correction itself ships in no
+  crate, but the prerequisite amendment is an architectural change decided by the steward, not a code patch.
+  *Authority:* this entry, `AGENTS.self-law.md`, `crates/kanhe/tests/release_coherence.rs`'s documented bug
+  history.
 
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
