@@ -5,7 +5,6 @@
 //! covers the interval before it — a rename lands in a pull request long before anyone runs a wrapper.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use kanhe::gate_identity::{citations, offences, uncited_scripts};
 
@@ -17,9 +16,18 @@ fn workspace_root() -> Option<PathBuf> {
     )
 }
 
+/// Run a composed argument list in `root`, returning its stdout or the reason it produced none.
+///
+/// **Not `hermetic_git::read`, and the difference is the contract.** That reader asserts success; this hands
+/// the failure back, because one caller passes it to `offences` as a closure and a refusal is what that
+/// direction reports. It also suppresses cargo's colour, without which the `--list` output it parses arrives
+/// with escape codes. The program is composed into the list because it is chosen at run time — `git` to
+/// enumerate, `cargo` to list a target's tests — which is the second shape
+/// `kanhe::hermetic_git::program_and_args` admits and states.
 fn run(root: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new(args[0])
-        .args(&args[1..])
+    let (program, rest) = kanhe::hermetic_git::program_and_args("the identity runner", args);
+    let out = kanhe::hermetic_git::hermetic(program)
+        .args(rest)
         .current_dir(root)
         .env("CARGO_TERM_COLOR", "never")
         .output()

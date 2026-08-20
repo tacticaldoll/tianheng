@@ -23,7 +23,6 @@
 
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The top-level directories a bare reference may name, and the extensions a bare basename may carry.
@@ -286,7 +285,10 @@ fn no_tracked_file_is_claimed_by_two_declared_formats() {
 }
 
 fn tracked(root: &Path) -> Vec<String> {
-    let out = Command::new("git")
+    // Through the builder for the reason the whole capability's Purpose states: every read behind a verdict
+    // here is isolated from config outside the repository being judged, not only the one an ignore file can
+    // flip.
+    let out = kanhe::hermetic_git::hermetic("git")
         .args(["ls-files"])
         .current_dir(root)
         .output()
@@ -400,7 +402,28 @@ fn extract(line: &str) -> Vec<Reference> {
 /// directory-only pattern is never misclassified as ignored.
 fn ignored(root: &Path, target: &str) -> bool {
     let query = |candidate: &str| {
-        Command::new("git")
+        // **This is the one read here whose answer an ambient file changes**, and it ran through a bare
+        // `Command::new("git")` for a window. Measured: with a global `core.excludesFile` naming a path,
+        // `check-ignore` answers *ignored* for it; with the setting named it does not.
+        //
+        // `hermetic` closes it now — it names `core.excludesFile` through `GIT_CONFIG_COUNT`, which the
+        // config-file variables alone did not do, because `$XDG_CONFIG_HOME/git/ignore` is the default
+        // excludes path git uses when no config file names one. That row moved into the builder once this
+        // finding showed it was not confined to one read. The flag stays as the narrower statement at the
+        // call site whose verdict it decides; it is no longer the only thing standing here.
+        //
+        // The direction is what makes it consequential: `true` here means the offence is **not** reported,
+        // so an entry in whoever's personal ignore file quietly excuses a stale reference — an
+        // under-refusal whose verdict depends on who runs the gate, in the capability whose Purpose is
+        // that a checkout's verdict does not depend on ambient process state.
+        //
+        // `.git/info/exclude` is inside the repository, so no config setting reaches it; that row of
+        // `hermetic`'s table stays open here as it does for the publish gate.
+        //
+        // A spawn or fatal failure reads as *not ignored*, which reports the offence. That is the safe
+        // direction for this predicate: the alternative excuses a reference over a read that never happened.
+        kanhe::hermetic_git::hermetic("git")
+            .args(["-c", "core.excludesFile=/dev/null"])
             .args(["check-ignore", "-q", "--", candidate])
             .current_dir(root)
             .status()
@@ -426,12 +449,10 @@ fn ignored(root: &Path, target: &str) -> bool {
 #[test]
 fn a_directory_only_ignore_pattern_reacts_whether_or_not_the_directory_exists() {
     let repo = scratch("directory-ignore");
-    let init = Command::new("git")
-        .args(["init", "-q"])
-        .current_dir(&repo)
-        .status()
-        .expect("run git init");
-    assert!(init.success(), "could not init the fixture repository");
+    // Through the shared fixture builder, so `init.templateDir` in a global config cannot seed this
+    // repository from the machine being judged — which is verbatim what that builder exists to prevent, and
+    // is the same channel the ignore query above closes.
+    kanhe::hermetic_git::fixture(&repo, "git", &["init", "-q"]);
     std::fs::write(repo.join(".gitignore"), "/build/\n").expect("write the fixture .gitignore");
 
     let seen = ignored(&repo, "build");
@@ -454,12 +475,10 @@ fn a_directory_only_ignore_pattern_reacts_whether_or_not_the_directory_exists() 
 #[test]
 fn a_real_file_sharing_a_directory_only_pattern_s_name_is_not_ignored() {
     let repo = scratch("directory-ignore-real-file");
-    let init = Command::new("git")
-        .args(["init", "-q"])
-        .current_dir(&repo)
-        .status()
-        .expect("run git init");
-    assert!(init.success(), "could not init the fixture repository");
+    // Through the shared fixture builder, so `init.templateDir` in a global config cannot seed this
+    // repository from the machine being judged — which is verbatim what that builder exists to prevent, and
+    // is the same channel the ignore query above closes.
+    kanhe::hermetic_git::fixture(&repo, "git", &["init", "-q"]);
     std::fs::write(repo.join(".gitignore"), "/build/\n").expect("write the fixture .gitignore");
     std::fs::write(repo.join("build"), "not a directory").expect("write the fixture file");
 
@@ -695,14 +714,21 @@ fn offences_in(
     // Every basename this repository once tracked outside a change directory. A change directory's
     // scaffolding is pruned at every sync, so its names are the lifecycle's vocabulary rather than paths.
     let deleted_outside_changes: BTreeSet<String> = {
-        let out = Command::new("git")
+        let out = kanhe::hermetic_git::hermetic("git")
             .args(["log", "--diff-filter=D", "--name-only", "--format="])
             .current_dir(root)
             .output()
             .expect("run git log");
+        // The sentence has one owner: `kanhe::hermetic_git::failed`. It stood verbatim at four sites in three
+        // files, already diverged in what each printed beside it.
         assert!(
             out.status.success(),
-            "could not read the deletion history; a failed read is not an empty result"
+            "{}",
+            kanhe::hermetic_git::failed(
+                "reading the deletion history",
+                &out.status.to_string(),
+                &String::from_utf8_lossy(&out.stderr)
+            )
         );
         String::from_utf8_lossy(&out.stdout)
             .lines()

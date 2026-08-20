@@ -23,17 +23,21 @@ use crate::refusal::{Refusal, cannot_judge_at, violation_at};
 /// `Command::new("git")`. The fixtures were isolated and the verdict was not, which is the wrong way round —
 /// a `core.excludesFile` outside the repository made the cleanliness read return empty for an untracked file.
 ///
-/// Neutralising `core.excludesFile` **explicitly** is the load-bearing half, measured rather than assumed:
+/// Neutralising `core.excludesFile` **explicitly** was the load-bearing half, measured rather than assumed —
+/// as this table read while it was:
 ///
-/// | ambient source | hermetic alone | `-c core.excludesFile=/dev/null` |
+/// | ambient source | hermetic alone, then | `-c core.excludesFile=/dev/null` |
 /// |---|---|---|
 /// | global / system `core.excludesFile` | closed | closed |
-/// | `$XDG_CONFIG_HOME/git/ignore`, the default no config names | **survives** | closed |
+/// | `$XDG_CONFIG_HOME/git/ignore`, the default no config names | **survived** | closed |
 /// | `.git/info/exclude` | **survives** | **survives** |
 ///
-/// Routing through the builder and stopping there would have read as a repair while the XDG default still hid
-/// files. What the third row costs is handled by [`hidden_by_the_checkout`], which classifies rather than
-/// refuses.
+/// **The middle row moved into the builder**, which now names the setting through `GIT_CONFIG_COUNT` for every
+/// caller, because the row was costing more than this file: a fixture's `git add -A` anywhere in the crate
+/// could silently omit a file the fixture named, and an ignore query on the real workspace could excuse an
+/// offence. So this flag is no longer what closes it, and is kept as the narrower per-command statement rather
+/// than dropped. What the third row costs is handled by [`hidden_by_the_checkout`], which classifies rather
+/// than refuses.
 fn git(repo: &Path, args: &[&str]) -> Result<String, crate::hermetic_git::Failure> {
     crate::hermetic_git::run(repo, &["-c", "core.excludesFile=/dev/null"], args)
 }

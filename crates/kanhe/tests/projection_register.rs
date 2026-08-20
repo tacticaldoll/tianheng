@@ -14,7 +14,6 @@
 use shengmo::workspace::MARKER;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use tianheng::testing::assert_projection_matches;
 
@@ -47,7 +46,12 @@ fn workspace_root() -> Option<PathBuf> {
 
 /// Tracked paths under `pathspec`, read with `-z` because `git ls-files` quotes a non-ASCII path by default.
 fn tracked(root: &Path, pathspec: &str) -> Vec<String> {
-    let output = Command::new("git")
+    // **Not the shared reader, and the reason is a clause it does not carry.** `hermetic_git::read` converts
+    // with `from_utf8_lossy`, which turns a path this enumeration cannot represent into replacement
+    // characters and reports a name no file has. This one refuses instead, because the paths it returns are
+    // compared against a register: a mangled name would read as a document that is not there. Converging it
+    // was tried and reverted for exactly that clause.
+    let output = kanhe::hermetic_git::hermetic("git")
         .arg("-C")
         .arg(root)
         .args(["ls-files", "-z", pathspec])
@@ -55,8 +59,12 @@ fn tracked(root: &Path, pathspec: &str) -> Vec<String> {
         .unwrap_or_else(|err| panic!("cannot run `git ls-files` in {root:?}: {err}"));
     assert!(
         output.status.success(),
-        "`git ls-files` failed in {root:?}: {}",
-        String::from_utf8_lossy(&output.stderr)
+        "{}",
+        kanhe::hermetic_git::failed(
+            "`git ls-files`",
+            &output.status.to_string(),
+            &String::from_utf8_lossy(&output.stderr)
+        )
     );
     output
         .stdout
@@ -388,14 +396,11 @@ fn an_empty_surface_fails_rather_than_reporting_clean() {
         "# Notes\n\nHand written.\n",
     )
     .expect("writable");
+    // Through the shared fixture builder rather than a bare spawn: `init.templateDir` and a global
+    // `core.excludesFile` both reach `init` and `add`, so a fixture built bare inherits the machine being
+    // judged — and `add -A` is exactly the verb an ambient excludes file changes the result of.
     for arguments in [["init", "-q"], ["add", "-A"]] {
-        let status = Command::new("git")
-            .arg("-C")
-            .arg(&fixture)
-            .args(arguments)
-            .status()
-            .expect("git is available");
-        assert!(status.success(), "the fixture repository is prepared");
+        kanhe::hermetic_git::fixture(&fixture, "git", &arguments);
     }
 
     let refused = std::panic::catch_unwind(|| registered(&fixture));

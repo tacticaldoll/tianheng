@@ -17,11 +17,22 @@ pub enum Kind {
 ///
 /// **Two states rather than a sentinel, because a sentinel let a false sentence be written.** This was a
 /// `&'static str` with the empty string standing for *outside the corpus*, and the doc on it then claimed
-/// that nothing could construct a refusal unable to say which branch produced it — which `violation("…")`
-/// does, seventeen times, while [`violation`]'s own doc correctly calls that pair a deliberate corpus
-/// boundary. One file, two mutually exclusive statements, and the false one on the field a reader meets
-/// first. The type refuses to hold that sentence now, which is the same repair a sibling struct's `package`
-/// field was given one cycle earlier.
+/// that nothing could construct a refusal unable to say which branch produced it — which
+/// [`violation`]`("…")` and [`cannot_judge`]`("…")` do, at every site outside `src`, while [`violation`]'s
+/// own doc correctly calls that pair a deliberate corpus boundary. One file, two mutually exclusive
+/// statements, and the false one on the field a reader meets first. The type refuses to hold that sentence
+/// now, which is the same repair a sibling struct's `package` field was given one cycle earlier.
+///
+/// **The shape rather than a count, because the count was typed and drifted.** It read *seventeen times*,
+/// which was about right when it was written and wrong under every reading by the time anyone re-read it.
+/// Nothing could catch it: `census::sweep` reads tracked Markdown and this is a Rust doc comment, so the
+/// figure sat in no reaction's reach.
+///
+/// **The first repair replaced it with three fresh figures**, one sentence before concluding where such a
+/// figure belongs — accurate the day they were written, which is exactly what *seventeen* was, and standing
+/// on the same nothing. A measurement of a repair belongs in the dated record that repair writes, where the
+/// changelog entry for this one carries it; a live count belongs in a declared census with a producer, or
+/// nowhere.
 ///
 /// What is actually true is narrower and is held by a run rather than by this comment: **no construction
 /// under `crates/kanhe/src` lacks an identity**, which `no_refusal_site_is_untriaged` asserts.

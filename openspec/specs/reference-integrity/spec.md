@@ -17,6 +17,14 @@ The reference-integrity gate SHALL carry Tianheng's required governance-document
 environment variables SHALL NOT replace or narrow that set, so the same checkout receives the same required-surface
 judgment regardless of its parent process.
 
+**Ambient git configuration is a second channel, and this requirement never covered it.** The Purpose above
+says a checkout's verdict does not depend on ambient process state; this requirement is scoped to environment
+variables and to the document set, and git config is neither — which is how the gate's own ignore query went
+a window reading whoever's personal `core.excludesFile`, quietly excusing a stale reference. That channel is
+held by `repository-checks`' requirement that a judgement closes the ambient channel of any read whose answer
+an ignore file changes, whose corpus includes this gate's own source. A Purpose wider than every requirement
+under it is not a claim anything defends.
+
 #### Scenario: Ambient state names a smaller set
 
 - **WHEN** a required governance document is absent and the process environment names a smaller document set

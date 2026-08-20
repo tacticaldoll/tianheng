@@ -54,7 +54,7 @@ const WRAPPERS: [&str; 2] = ["scripts/merge-pr.sh", "scripts/publish.sh"];
 ///
 /// The purpose beside each path is prose with no producer: a reader's aid for whoever adds the next one,
 /// not a fact this direction holds. What it holds is membership.
-const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 22] = [
+const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 23] = [
     (
         "crates/kanhe/tests/bound_register.rs",
         "git: enumerates, and builds a scratch repository's tree",
@@ -71,7 +71,8 @@ const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 22] = [
     ),
     (
         "crates/kanhe/tests/gate_identity.rs",
-        "git, through a program-as-value runner: enumerates the scripts and the tracked Markdown",
+        "git, to enumerate the scripts and the tracked Markdown; cargo, to list a target's tests and to \
+         read this workspace's metadata — both through one program-as-value runner",
     ),
     ("crates/kanhe/tests/law_restatement.rs", "git: enumerates"),
     (
@@ -89,12 +90,17 @@ const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 22] = [
     ("crates/kanhe/tests/one_spelling.rs", "git: enumerates"),
     (
         "crates/kanhe/tests/pin_bites.rs",
-        "git: enumerates and reads a blob back through a program-as-value runner, and removes the worktree \
-         it added",
+        "git, to enumerate and to read a record blob back; cargo, to build each mutated checkout — both \
+         through one program-as-value runner — and git again to remove the worktree it added",
     ),
     (
         "crates/kanhe/tests/projection_register.rs",
         "git: enumerates, and builds a scratch repository's tree",
+    ),
+    (
+        "crates/kanhe/tests/release_coherence.rs",
+        "git: initialises each fixture repository and writes its commits — every one through the shared \
+         fixture builder, which is why no spelling this array's detector knew reached it",
     ),
     (
         "crates/kanhe/tests/publish_source.rs",
@@ -150,36 +156,7 @@ fn no_test_target_spawns_a_process_unnamed() {
         TARGETS_SPAWNING_A_PROCESS.len(),
         "a path is declared twice, so the comparison below is over fewer targets than the list holds"
     );
-    let listing = std::process::Command::new("git")
-        // **Every test target in the workspace, which is the noun the requirement uses.** The corpus was
-        // `crates/kanhe/tests` from the first form, when the finding was two files in that directory, and
-        // every widening since asked *what to look for* rather than *where to look* — so the spelling axis
-        // and the verb axis were each closed while the set equality went on passing over a corpus the
-        // requirement does not describe. Four targets outside that directory spawn a process and two run
-        // `git` directly, in the crates whose own gates this guard protects.
-        .args(["ls-files", "-z", "crates"])
-        .current_dir(&root)
-        .output()
-        .expect("git ls-files is runnable");
-    assert!(
-        listing.status.success(),
-        "could not enumerate the test targets, so this direction would report clean over nothing"
-    );
-    let paths: Vec<String> = String::from_utf8_lossy(&listing.stdout)
-        .split('\0')
-        // An integration test target is `crates/<member>/tests/<name>.rs` — the shape cargo compiles as its
-        // own binary. Matched by shape rather than by a git pathspec glob, whose `*` crosses `/` and would
-        // also take a nested fixture.
-        .filter(|path| {
-            let parts: Vec<&str> = path.split('/').collect();
-            parts.len() == 4 && parts[0] == "crates" && parts[2] == "tests" && path.ends_with(".rs")
-        })
-        .map(str::to_string)
-        .collect();
-    assert!(
-        !paths.is_empty(),
-        "no test target entered the corpus, so this direction would report clean over nothing"
-    );
+    let paths = test_targets(&root);
 
     let mut reaching: BTreeSet<String> = BTreeSet::new();
     for path in &paths {
@@ -191,23 +168,21 @@ fn no_test_target_spawns_a_process_unnamed() {
         // argument `refusal_register` makes for `::expect(` against its own panic messages.
         let source = Source::of(&text);
         let executed = source.rust();
-        // Not preceded by a quote, so this file does not match its own marker literals — and not preceded
-        // by an identifier character either, so `PhantomCommand::new(` is a different type's constructor
-        // rather than a spawn. A path qualifier ends in `:` and a bare call in whitespace, so both real
-        // spellings survive the boundary. Found by a perturbation that renamed the type and did not move
-        // the verdict, which is a probe that was measuring nothing.
-        let opens = |line: &str, marker: &str| {
-            line.match_indices(marker).any(|(at, _)| {
-                at == 0 || {
-                    let before = line.as_bytes()[at - 1];
-                    before != b'"' && !before.is_ascii_alphanumeric() && before != b'_'
-                }
-            })
-        };
-        if executed
-            .lines()
-            .any(|line| opens(line, "Command::new(") || opens(line, "hermetic("))
-        {
+        // **The whole module, not each spawning function it exports** — the fourth round of the defect the
+        // doc above predicts. `hermetic_git::fixture` became a call site's spelling in this window, and a
+        // target whose only spawn were that would have gone undetected while `Command::new(` and
+        // `hermetic(` both passed over it. Naming the module closes every entry point it has and every one
+        // it gains. Two of its items — `failed` and `program_and_args` — spawn nothing, so a target reaching
+        // only those would be over-declared; over-declaring is the safe direction here, and no target does
+        // (measured: every file reaching this module also runs something through it).
+        //
+        // `hermetic(` stays beside it because an imported `hermetic` is spelled bare, with no module
+        // qualifier to match.
+        if executed.lines().any(|line| {
+            opens(line, "Command::new(")
+                || opens(line, "hermetic_git::")
+                || opens(line, "hermetic(")
+        }) {
             reaching.insert(path.clone());
         }
     }
@@ -216,6 +191,220 @@ fn no_test_target_spawns_a_process_unnamed() {
         "the test targets spawning a process differ from the set named here. A target that gains one must \
          be named with what it spawns, and a name that outlives its reason must go — the helper this guards \
          lived twice and the convergence took one copy"
+    );
+}
+
+/// Every tracked Rust file under `crates`, enumerated **once** for the two directions that read it.
+///
+/// One enumeration because two would be two corpora that must agree, and a file the second forgot would be
+/// judged by one direction and not the other — the granularity defect this file's own directions exist to
+/// close, reintroduced one level up.
+/// Whether `line` opens a call to `marker`, rather than merely containing its text.
+///
+/// Not preceded by a quote, so a direction using this does not match its own marker literals — and not
+/// preceded by an identifier character either, so `PhantomCommand::new(` is a different type's constructor
+/// rather than a spawn. A path qualifier ends in `:` and a bare call in whitespace, so both real spellings
+/// survive the boundary. Found by a perturbation that renamed the type and did not move the verdict, which is
+/// a probe that was measuring nothing.
+///
+/// One owner because two directions ask it now. It was a closure inside the first, which is where a second
+/// caller copies from.
+fn opens(line: &str, marker: &str) -> bool {
+    line.match_indices(marker).any(|(at, _)| {
+        at == 0 || {
+            let before = line.as_bytes()[at - 1];
+            before != b'"' && !before.is_ascii_alphanumeric() && before != b'_'
+        }
+    })
+}
+
+fn tracked_rust(root: &Path) -> Vec<String> {
+    let listing = std::process::Command::new("git")
+        .args(["ls-files", "-z", "crates"])
+        .current_dir(root)
+        .output()
+        .expect("git ls-files is runnable");
+    assert!(
+        listing.status.success(),
+        "could not enumerate the tracked Rust, so the directions over it would report clean over nothing"
+    );
+    let paths: Vec<String> = String::from_utf8_lossy(&listing.stdout)
+        .split('\0')
+        .filter(|path| path.ends_with(".rs"))
+        .map(str::to_string)
+        .collect();
+    assert!(
+        !paths.is_empty(),
+        "no tracked Rust entered the corpus, so the directions over it would report clean over nothing"
+    );
+    paths
+}
+
+/// The test targets among [`tracked_rust`].
+///
+/// **Every test target in the workspace, which is the noun the requirement uses.** The corpus was
+/// `crates/kanhe/tests` from the first form, when the finding was two files in that directory, and every
+/// widening since asked *what to look for* rather than *where to look* — so the spelling axis and the verb
+/// axis were each closed while the set equality went on passing over a corpus the requirement does not
+/// describe. Four targets outside that directory spawn a process and two run `git` directly, in the crates
+/// whose own gates this guard protects.
+fn test_targets(root: &Path) -> Vec<String> {
+    // An integration test target is `crates/<member>/tests/<name>.rs` — the shape cargo compiles as its own
+    // binary. Matched by shape rather than by a git pathspec glob, whose `*` crosses `/` and would also take
+    // a nested fixture.
+    let targets: Vec<String> = tracked_rust(root)
+        .into_iter()
+        .filter(|path| {
+            let parts: Vec<&str> = path.split('/').collect();
+            parts.len() == 4 && parts[0] == "crates" && parts[2] == "tests" && path.ends_with(".rs")
+        })
+        .collect();
+    assert!(
+        !targets.is_empty(),
+        "no test target entered the corpus, so the direction over it would report clean over nothing"
+    );
+    targets
+}
+
+/// Every git subcommand whose answer an ignore file outside the repository changes, spelled as the whole
+/// argument a caller passes.
+///
+/// **The whole literal, because a fragment matched prose and a diagnostic.** `publish_source.rs` builds the
+/// string `"check-ignore exploded"` for a stub's failure and names the subcommand in two doc comments; none
+/// of the three runs anything. A real caller passes the subcommand as one argument, so the closing quote is
+/// what separates the two — and writing the quotes escaped here is also why this file does not match its own
+/// array: the text on disk carries a backslash where a real call site carries the quote.
+///
+/// `status` earns its place through `--untracked-files`: it reports an untracked file only if nothing outside
+/// the repository excludes it, which is the same channel `check-ignore` answers on directly.
+const AMBIENT_IGNORE_READS: [&str; 4] = [
+    "\"check-ignore\"",
+    "\"--others\"",
+    "\"--untracked-files\"",
+    "\"--untracked-files=all\"",
+];
+
+/// The setting whose absence leaves the channel open, however it comes to be named.
+const NEUTRALISER: &str = "core.excludesFile";
+
+/// The one file that must leave the channel open, and why.
+///
+/// It pins the channel's existence by *difference*: one command with the setting closed, one without, and the
+/// assertion is that the two answers differ. The control cannot name the setting — a control that closed the
+/// channel would be comparing a value against itself, which is the inert-probe shape this repository refuses
+/// wherever it finds one. So this file legitimately runs the read bare, and the direction below says so by
+/// name rather than by a pattern that would also excuse a judgement.
+///
+/// Held live below rather than trusted: an exception whose instance has gone is an exception that silently
+/// widens what passes.
+const CHANNEL_CONTROL: &str = "crates/kanhe/src/tests/hermetic_git.rs";
+
+/// The direction whose existence earns [`CHANNEL_CONTROL`] its exception.
+///
+/// **Named, because holding the file was satisfied for the wrong reason.** The first guard asked only whether
+/// that file still ran an ignore-sensitive read through a `Command` of its own — and a *different* test in
+/// the same file spawns bare for a different property, so the guard went on passing with the ignore control
+/// converted away. A protection can outlive its instance while looking green; what the exception is *for* is
+/// this one direction, so this one direction is what is held.
+const CHANNEL_CONTROL_PINS: &str =
+    "fn an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command(";
+
+/// No judgement runs a subcommand an ambient ignore file answers differently with that channel left open.
+///
+/// **The measurement, on this machine's git, both directions.** With `$XDG_CONFIG_HOME/git/ignore` naming a
+/// path, `git check-ignore -q -- <that path>` exits `0` — *ignored* — and `git add -A` leaves the file
+/// **untracked**, so a fixture is built without a file it named. With `core.excludesFile` named as
+/// `/dev/null`, the query exits `1` and the file is added. Neutralising the config *files* alone does not do
+/// it, because that path is the default git uses when no config file names one.
+///
+/// **What it cost.** `reference_integrity::ignored` asked `check-ignore` through a bare `Command::new("git")`,
+/// on the real repository, on the verdict path — and *ignored* there means the offence is **not** reported. So
+/// an entry in whoever's personal ignore file excused a stale path reference: an under-refusal whose verdict
+/// depended on who ran the gate, in the capability whose stated Purpose is that it does not. `hermetic` was
+/// reachable throughout and nothing required it.
+///
+/// **Two ways to close it, and this accepts either**, because after the repair above the builder closes it
+/// for every caller and requiring the flag as well would refuse correct code and call the redundancy a fix:
+///
+/// - the file names the setting itself, which the two judgements whose verdict turns on the answer do; or
+/// - the file starts no process itself, so every command it runs is the builder's and carries the setting.
+///
+/// A file that does neither is running an ignore-sensitive read through a `Command` it built itself, with the
+/// channel open — which is the defect, exactly.
+///
+/// **This does not reach**, each limit measured rather than supposed:
+///
+/// - **File granularity.** A file that names the setting once and spawns a bare `Command` for something else
+///   passes. Per-call would refuse `publish_source_gate`, where one wrapper closes the channel for every
+///   judgement in the file, so the tighter rule would be wrong on the site that was already right.
+/// - **A literal argument.** A subcommand composed at run time — `format!`, a variable, a `const` — is not
+///   seen. Every call site in this workspace spells it as a literal (measured).
+/// - **`.git/info/exclude`.** Inside the repository, so no config setting reaches it.
+///   `publish_source_gate::hidden_by_the_checkout` classifies rather than refuses because of it.
+/// - **One marker's reach, individually.** The vacuity guard holds that *some* marker still matches, not that
+///   each does — measured by removing one and watching this stay green. Holding each would be the stronger
+///   shape and is not adoptable while the array admits `"--untracked-files"` as its own argument, a spelling
+///   git accepts with no call site here: the repair would be to stop admitting it.
+#[test]
+fn no_judgement_reads_an_ambient_ignore_file() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let mut reading = 0usize;
+    let mut control_seen = false;
+    let mut open = Vec::new();
+    for path in tracked_rust(&root) {
+        let text = read(&root, &path);
+        // Executed text, so the two doc comments naming the subcommand are not read as calls.
+        let source = Source::of(&text);
+        let executed = source.rust();
+        let lines: Vec<&str> = executed.lines().collect();
+        if !AMBIENT_IGNORE_READS
+            .iter()
+            .any(|marker| lines.iter().any(|line| line.contains(marker)))
+        {
+            continue;
+        }
+        reading += 1;
+        if lines.iter().any(|line| line.contains(NEUTRALISER)) {
+            continue;
+        }
+        if !lines.iter().any(|line| opens(line, "Command::new(")) {
+            continue;
+        }
+        if path == CHANNEL_CONTROL {
+            control_seen = true;
+            continue;
+        }
+        open.push(path);
+    }
+    // Without this the direction reports clean the moment a rename or a rewrite takes the last call site out
+    // of its reach — which is the vacuity every enumeration in this file guards against.
+    assert!(
+        reading > 0,
+        "no file in the corpus runs a subcommand an ambient ignore file answers, so this direction would \
+         report clean over nothing — the reach was lost, not the risk"
+    );
+    // The exception is held against its own instance, both halves: that it is still being used, and that the
+    // direction it exists for is still there. Either alone passes for the wrong reason.
+    assert!(
+        control_seen,
+        "`{CHANNEL_CONTROL}` is named as the one file that must leave this channel open, and it no longer \
+         runs an ignore-sensitive read through a `Command` of its own — so the exception excuses nothing and \
+         should say so by being removed"
+    );
+    assert!(
+        opens(&read(&root, CHANNEL_CONTROL), CHANNEL_CONTROL_PINS),
+        "`{CHANNEL_CONTROL}` is excused because `{CHANNEL_CONTROL_PINS}` pins the channel by difference, and \
+         that direction is no longer there under that name. Either it moved, in which case name where, or \
+         the exception is now excusing a file with nothing to pin"
+    );
+    assert!(
+        open.is_empty(),
+        "a judgement runs a subcommand an ambient ignore file answers differently through a `Command` it \
+         built itself, without naming `{NEUTRALISER}` — so its verdict depends on who runs it, and for an \
+         ignore query the ambient answer is the one that excuses an offence:\n{}",
+        open.join("\n")
     );
 }
 

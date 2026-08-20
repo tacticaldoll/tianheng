@@ -12,8 +12,32 @@
 //!   * and two of my own probes measured a `usage:` banner and a dragged-along flag rather than the cell.
 //!
 //! A helper existed — `uncommented()` — and was used by nine of eleven properties. That is the point: the failure
-//! was not a missing helper but that **forgetting it was possible**. So a corpus is never handed to a recognizer as
-//! `&str`: it arrives as a region, and a recognizer that wants executed text cannot be given the whole file.
+//! was not a missing helper but that **forgetting it was possible**. So a recognizer's **corpus** over executed
+//! text is never a bare `&str`: it arrives as a region, and cannot be given the whole file.
+//!
+//! The rule is about the corpus and not about every string that flows out of one. A *line* taken from a region
+//! is a bare `&str` by design — that is what [`Executed::lines`] hands out, and what a per-line predicate
+//! takes. Said here because the sentence was written as *a recognizer is never handed a bare `&str`*, and a
+//! per-line predicate extracted in this window falsifies that reading while being exactly the shape the type
+//! exists to produce.
+//!
+//! **What this does not yet cover, stated because this module's own governing claim used to cover it.** These
+//! Markdown readers in this crate still take `&str` and call `.lines()` on it: `release_coherence_gate`'s
+//! `require_changelog_state`, `require_section_shape` and `unreleased_has_item`, and
+//! `restatement::document_offences`. A fenced `## [Unreleased]` or `### Added` would be read as the section it
+//! resembles, and a fenced block naming a whole dependency allowlist would be read as a restatement.
+//!
+//! It is **latent, and that is produced rather than asserted here**:
+//! `the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span` holds that `CHANGELOG.md` and
+//! every `openspec/specs/*/spec.md` carry no fenced block and no HTML comment span, so the day one appears the
+//! misread is reported as live instead of waiting for someone to re-read this paragraph. This comment carried
+//! the figures as three typed zeroes before that, which is the shape [`crate::refusal::Site`]'s own doc is
+//! about. `document_offences`'s wider corpus is not covered: its residue is conditional rather than a count,
+//! and holding it means running the restatement rule inside a fence.
+//!
+//! Not closed by taking [`Prose`] in those four signatures for a stated reason: `Prose` drops the lines it
+//! excludes, so it has no positions, and `document_offences` reports the line a block starts at. Closing it
+//! means giving [`Prose`] a numbered form first.
 //!
 //! [`Source::whole`] is the deliberate escape, spelled out so it is greppable. The family already handles `dyn`
 //! this way: not forbidden globally, but every appearance visible where it matters.
@@ -124,7 +148,17 @@ impl Source {
     ///
     /// Where a generated document warns, and where a shell gate declares its contract. A warning below the first
     /// section heading sits where the damage has already been done.
+    ///
+    /// **A heading at position 0 has no newline before it**, so searching `"\n## "` alone found none and
+    /// returned the *whole document* as its header — and both consumers error toward a false pass from
+    /// there: [`declares_itself_generated`] would find the do-not-edit warning anywhere in the file, and a
+    /// reader over `paths_named_in_header` would take every path in it. Latent when this was measured — no
+    /// tracked `.md` opens with `## ` — and closed rather than declared, because the position test costs one
+    /// branch and the residue would have to be re-measured every time a document is added.
     pub fn header(&self) -> Header<'_> {
+        if self.0.starts_with("## ") {
+            return Header("");
+        }
         Header(match self.0.find("\n## ") {
             Some(index) => &self.0[..index],
             None => &self.0,

@@ -65,6 +65,29 @@ enum Shape {
     Glyph,
 }
 
+impl Shape {
+    /// The rule this shape refuses by, so a refusal states the recognition it was actually made under.
+    ///
+    /// **One sentence served both shapes and stated only one.** The refusal read *naming the mark inside a
+    /// sentence is not carrying it; a line that begins with it is* — the trailer rule — while
+    /// [`Shape::Glyph`] matches wherever the glyph sits, mid-line included, which [`Shape::Glyph`]'s own doc
+    /// states. So an operator refused for `fix(x): 🤖 wrote this` was handed the rule that would
+    /// have permitted it, in front of a record no rerun amends. The mark and its recognizer already travel
+    /// in one array; the sentence that recognizer refuses by belongs beside them rather than in a single
+    /// `format!` that cannot know which fired.
+    const fn rule(self) -> &'static str {
+        match self {
+            Shape::Trailer => {
+                "a line that begins with it is carrying it; naming it inside a sentence is not"
+            }
+            Shape::Glyph => {
+                "this glyph has no legitimate use in a commit message here, wherever it appears — name the \
+                 rule in words instead, as this repository's own prose does"
+            }
+        }
+    }
+}
+
 /// Whether `text` carries `mark` in the way its shape defines.
 fn carries(text: &str, mark: &str, shape: Shape) -> bool {
     match shape {
@@ -199,9 +222,9 @@ pub fn judge(
             return Err(violation_at(
                 "repository-checks#squash-message-carries-an-attribution",
                 format!(
-                    "a line of the squash message is the agent attribution {mark:?}, which this repository's commit \
-                 messages and pull request descriptions do not carry. Naming the mark inside a sentence is not \
-                 carrying it; a line that begins with it is"
+                    "the squash message carries the agent attribution {mark:?}, which this repository's commit \
+                 messages and pull request descriptions do not carry. {}",
+                    shape.rule()
                 ),
             ));
         }

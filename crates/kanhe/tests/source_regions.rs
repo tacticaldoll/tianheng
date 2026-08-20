@@ -408,3 +408,37 @@ fn a_multi_line_toml_string_carries_across_lines_and_a_broken_one_does_not() {
         "an unterminated single-line string ends at its line, so the next line is read as the code it is"
     );
 }
+
+/// A document whose very first line is a section heading has an empty header, not a whole-document one.
+///
+/// **The newline the search assumed.** `header()` located the first `## ` by `find("\n## ")`, so a heading at
+/// position 0 matched nothing and the whole document came back as its header. Both consumers error toward a
+/// false pass from there: `declares_itself_generated` would find a do-not-edit warning anywhere in the file,
+/// and a reader over the header's paths would take every path in it. The offset form is asserted beside it, so
+/// this direction cannot pass by the search having been removed.
+#[test]
+fn a_heading_at_position_zero_leaves_no_header() {
+    let first = Source::of("## Section\n\nbody\n");
+    assert_eq!(
+        first.header().text(),
+        "",
+        "a heading on line one is the first section, so nothing stands above it"
+    );
+    assert!(
+        !first.header().contains("body"),
+        "and the document below it is not its header"
+    );
+
+    let offset = Source::of("# Title\n\nwarning\n\n## Section\n\nbody\n");
+    assert!(
+        offset.header().contains("warning"),
+        "a heading below the top still yields everything above it"
+    );
+    assert!(!offset.header().contains("body"), "and nothing below it");
+
+    let none = Source::of("# Title\n\nonly a header\n");
+    assert!(
+        none.header().contains("only a header"),
+        "a document with no section heading is all header"
+    );
+}
