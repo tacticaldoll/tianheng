@@ -23,7 +23,6 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use kanhe::bound_register_parse::citations_in;
 
@@ -37,9 +36,18 @@ fn workspace_root() -> Option<PathBuf> {
     )
 }
 
+/// Run a composed argument list in `dir`, returning its status code and its output, streams merged.
+///
+/// **Not `hermetic_git::read`, and the difference is the contract rather than the spelling.** That reader
+/// asserts success and returns stdout; this one hands back the code, because a mutation's build is *expected*
+/// to fail and the code is the answer, and merges the streams, because a build diagnostic is on stderr. It
+/// also owns two environment decisions no git read needs. The program is composed into the list because it
+/// is chosen at run time — `cargo` for a build, `git` for a record read — which is the second shape
+/// `kanhe::hermetic_git::program_and_args` admits and states.
 fn run(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
-    let out = Command::new(args[0])
-        .args(&args[1..])
+    let (program, rest) = kanhe::hermetic_git::program_and_args("the mutation runner", args);
+    let out = kanhe::hermetic_git::hermetic(program)
+        .args(rest)
         .current_dir(dir)
         .env("CARGO_TERM_COLOR", "never")
         // The checkout builds in **its own** target directory, which the register spec requires because
@@ -62,12 +70,18 @@ fn run(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
     )
 }
 
+/// As [`run`], requiring exit 0.
+///
+/// **The diagnostic has one owner.** *A failed read is not an empty result* stood verbatim at four sites in
+/// three files; `kanhe::hermetic_git::failed` is where it lives now, so a wording this rule turns on cannot
+/// be corrected in one copy and left in three.
 fn must(dir: &Path, what: &str, args: &[&str]) -> String {
     let (code, output) = run(dir, args);
     assert_eq!(
         code,
         Some(0),
-        "{what} failed; a failed read is not an empty result: {output}"
+        "{}",
+        kanhe::hermetic_git::failed(what, &format!("exit {code:?}"), &output)
     );
     output
 }
@@ -263,7 +277,7 @@ impl Scratch {
 
 impl Drop for Scratch {
     fn drop(&mut self) {
-        let _ = Command::new("git")
+        let _ = kanhe::hermetic_git::hermetic("git")
             .args(["worktree", "remove", "--force"])
             .arg(&self.tree)
             .current_dir(&self.root)

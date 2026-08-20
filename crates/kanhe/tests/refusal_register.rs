@@ -426,8 +426,17 @@ fn code_only(text: &str) -> String {
                     continue;
                 }
                 // A char literal, told from a lifetime by looking for the close before consuming.
-                if c == '\'' && !(i > 0 && ident(chars[i - 1])) {
-                    let mut at = i + 1;
+                //
+                // **A `b` prefix belongs to the literal, and reading it as an identifier cost a swallowed
+                // declaration.** `b'\"'` put an ident character immediately before the quote, so this arm
+                // declined it, and the `\"` inside then opened a string that ran to the next quote several
+                // lines down — taking a `fn` with it. The string arm below already knew about the prefix;
+                // this one did not, which is the asymmetry that made it latent: it only shows when the
+                // swallowed span happens to cross a declaration.
+                let byte_char =
+                    c == 'b' && chars.get(i + 1) == Some(&'\'') && !(i > 0 && ident(chars[i - 1]));
+                if byte_char || (c == '\'' && !(i > 0 && ident(chars[i - 1]))) {
+                    let mut at = if byte_char { i + 2 } else { i + 1 };
                     if chars.get(at) == Some(&'\\') {
                         at += 1;
                         if chars.get(at) == Some(&'u') {
@@ -1103,6 +1112,28 @@ fn the_register_projection_is_fresh() {
     tianheng::testing::assert_projection_matches(&root, PROJECTION, &out);
 }
 
+/// The cases whose answer is not a count, named once each.
+///
+/// **Three lists had to agree and were written three times.** Each arm below spelled its own cases inline and
+/// the completeness join at the end spelled all eight again — so a case could be answered by an arm and left
+/// out of the join, or joined and answered by nothing, and neither would be reported. The join is derived
+/// from these now, which is the same repair the counted table already had.
+const UNREADABLE_SITE_CASES: [&str; 3] = [
+    "a_siteful_constructor_taken_by_name",
+    "a_siteful_call_that_wraps",
+    "a_raw_literal_site",
+];
+
+/// The cases where a constructor arrives under another name, so the file cannot be counted at all.
+const ALIASED_CASES: [&str; 2] = ["an_aliased_import", "a_wrapped_aliased_import"];
+
+/// The cases that are an import and nothing else, in each spelling `use` takes.
+const IMPORT_ONLY_CASES: [&str; 3] = [
+    "a_wrapped_import_that_constructs_nothing",
+    "a_public_import_that_constructs_nothing",
+    "a_scoped_public_import_wrapped",
+];
+
 /// The reader, run over the corpus written for it.
 ///
 /// **This corpus was tracked and unread.** `crates/kanhe/tests/fixtures/refusal_scan/` entered this
@@ -1121,6 +1152,7 @@ fn the_reader_answers_the_corpus_written_for_it() {
     // Each case, and how many refusal constructions it holds. A **definition** of a constructor is not a
     // construction, and neither is a function that merely shares a name with one.
     let expected: &[(&str, usize)] = &[
+        ("a_byte_char_literal_holding_a_quote", 1),
         ("a_call_and_a_definition", 1),
         ("a_call_that_wraps", 1),
         ("a_comment", 0),
@@ -1160,23 +1192,14 @@ fn the_reader_answers_the_corpus_written_for_it() {
     // that matches names, so the honest answer is that this file cannot be counted at all — which is a
     // different fact from counting zero, and the same distinction every gate in this repository draws.
     // The shapes a parser cannot read, answered as *cannot answer* rather than as zero.
-    for case in [
-        "a_siteful_constructor_taken_by_name",
-        "a_siteful_call_that_wraps",
-        "a_raw_literal_site",
-    ] {
+    for case in UNREADABLE_SITE_CASES {
         assert_eq!(
             unparsed_constructions(&read(case)),
             1,
             "{case}: a registered construction this reader cannot parse went unreported"
         );
     }
-    for case in [
-        "two_on_one_line",
-        "a_wrapped_import_that_constructs_nothing",
-        "a_public_import_that_constructs_nothing",
-        "a_scoped_public_import_wrapped",
-    ] {
+    for case in std::iter::once("two_on_one_line").chain(IMPORT_ONLY_CASES) {
         assert_eq!(
             unparsed_constructions(&read(case)),
             0,
@@ -1185,7 +1208,7 @@ fn the_reader_answers_the_corpus_written_for_it() {
         );
     }
 
-    for case in ["an_aliased_import", "a_wrapped_aliased_import"] {
+    for case in ALIASED_CASES {
         assert!(
             aliases_a_constructor(&read(case)),
             "{case}: an aliased import went unnoticed, so every call through the alias would read as absent"
@@ -1212,18 +1235,11 @@ fn the_reader_answers_the_corpus_written_for_it() {
         .iter()
         .map(|(case, _)| (*case).to_string())
         .chain(
-            [
-                "an_aliased_import",
-                "a_wrapped_aliased_import",
-                "a_siteful_constructor_taken_by_name",
-                "a_siteful_call_that_wraps",
-                "a_raw_literal_site",
-                "a_wrapped_import_that_constructs_nothing",
-                "a_public_import_that_constructs_nothing",
-                "a_scoped_public_import_wrapped",
-            ]
-            .into_iter()
-            .map(str::to_string),
+            UNREADABLE_SITE_CASES
+                .into_iter()
+                .chain(ALIASED_CASES)
+                .chain(IMPORT_ONLY_CASES)
+                .map(str::to_string),
         )
         .collect();
     assert_eq!(

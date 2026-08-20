@@ -278,7 +278,7 @@ fn a_line_that_is_an_agent_attribution_is_a_violation() {
             &format!("{OK_BODY}\n{line}\n"),
             OK_SUBJECT,
             Kind::Violation,
-            "is the agent attribution",
+            "carries the agent attribution",
         );
         refusal::expect(
             "repository-checks#squash-message-carries-an-attribution",
@@ -292,11 +292,47 @@ fn a_line_that_is_an_agent_attribution_is_a_violation() {
         OK_BODY,
         "fix(kanhe): 🤖 wrote this",
         Kind::Violation,
-        "is the agent attribution",
+        "carries the agent attribution",
     );
     refusal::expect(
         "repository-checks#squash-message-carries-an-attribution",
         &refusal,
+    );
+}
+
+/// The refusal states the rule of the shape that actually fired, not the other one.
+///
+/// **The half nothing held.** One `format!` served both recognition shapes and carried the trailer sentence:
+/// *naming the mark inside a sentence is not carrying it; a line that begins with it is*. A glyph matches
+/// wherever it sits, so an operator refused for `fix(x): 🤖 wrote this` was handed the rule that would have
+/// permitted it — in front of a record no rerun amends. Both directions above assert only the shared half,
+/// which cannot tell the two sentences apart; this asserts each shape's own.
+#[test]
+fn the_refusal_states_the_rule_of_the_shape_that_fired() {
+    let trailer = refuse(
+        OK_SUBJECT,
+        &format!("{OK_BODY}\nCo-authored-by: Someone <a@b.invalid>\n"),
+        OK_SUBJECT,
+        Kind::Violation,
+        "a line that begins with it is carrying it",
+    );
+    assert!(
+        !trailer.message.contains("wherever it appears"),
+        "a trailer refusal must not carry the glyph rule: {}",
+        trailer.message
+    );
+
+    let glyph = refuse(
+        "fix(kanhe): 🤖 wrote this",
+        OK_BODY,
+        "fix(kanhe): 🤖 wrote this",
+        Kind::Violation,
+        "wherever it appears",
+    );
+    assert!(
+        !glyph.message.contains("a line that begins with it"),
+        "a glyph refused mid-line must not be handed the rule that would have permitted it: {}",
+        glyph.message
     );
 }
 

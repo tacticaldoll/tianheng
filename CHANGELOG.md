@@ -1172,6 +1172,93 @@ them.
 
 ### Self-governance
 
+- **An ignore file on the machine running the gate could excuse a stale path reference, and silently omit a
+  file from a fixture.** `reference_integrity::ignored` asked `git check-ignore` through a bare
+  `Command::new("git")`, on the real repository, on the verdict path — and *ignored* there means the offence is
+  **not** reported. So an entry in whoever's global `core.excludesFile` or `$XDG_CONFIG_HOME/git/ignore`
+  matching a referenced path made the gate report clean over a reference it should have refused: an
+  under-refusal whose answer depended on who ran it, in the capability whose stated Purpose is that a
+  checkout's verdict does not depend on ambient process state.
+
+  **Repairing that one read is what showed it was never one read.** The shared command builder neutralises the
+  global and system config *files*, and `$XDG_CONFIG_HOME/git/ignore` is the default excludes path git uses
+  when **no** config file names one — so emptying the files leaves the default in force, and the builder was
+  not closing this channel for anyone. Measured, both directions, on a fixture whose only exclusion came from
+  an XDG ignore file: the query answers *ignored*, and `git add -A` leaves the matching file **untracked**, so
+  every fixture repository in the crate could be built without a file it named, by a file on the machine
+  judging it. The builder names the setting now, through the one ambient channel that cannot be closed and
+  therefore can carry a setting no config file names; the two judgements whose verdict turns on the answer
+  keep the explicit flag as the narrower statement. Pinned by a case comparing an isolated command against an
+  unisolated control — the control must leave the channel open, or it compares a value against itself.
+
+  Held crate-wide by `no_judgement_reads_an_ambient_ignore_file`, over every tracked `.rs` under `crates`: a
+  file running such a subcommand must either name the setting or start no process of its own, so that every
+  command it runs is the builder's. Requiring the flag *on top of* the builder was the first form and it
+  refused the pinning control itself — a rule that manufactures a redundancy and calls it a repair. Negative
+  runs: the original defect restored verbatim is refused by name; with every named subcommand out of reach the
+  vacuity guard fails rather than reporting clean; with the builder's setting removed the pinning case fails;
+  and with the excused control's direction renamed away the exception fails rather than going on excusing the
+  file. That last one was itself a repair — the exception was first held against the file's continuing to
+  spawn, which a *different* test in the same file satisfied, so the guard stayed green with the control
+  converted away.
+
+  The subcommand is recognized as a **complete argument literal**, which is both why a diagnostic string
+  reading `"check-ignore exploded"` and two doc comments are not mistaken for calls, and why the direction does
+  not judge itself by its own marker array — escaped quotes on disk are not the quotes a call site carries.
+  Not marked `**BREAKING**`: the mark is for a change that makes an adopter *do* something, and repository
+  checks ship in no package, so no recorded baseline anywhere moves.
+
+  What it does not reach, each measured: file granularity rather than per-call, because a per-call rule would
+  refuse the one site that was already right, where one wrapper closes the channel for every judgement in that
+  file; a subcommand composed at run time; `.git/info/exclude`, which is inside the repository so no setting
+  reaches it; and one named spelling losing its reach individually, since the guard holds that *some* marker
+  still matches, not each — a per-marker rule is not adoptable while the array admits a form git accepts and
+  nothing uses.
+
+- **The refusal reader read `b'\"'` as an opening quote and swallowed the next declaration.** Its
+  string-literal scanner knew a `b` prefix on a *string* and not on a *char*, so the `b` before the quote read
+  as an identifier, the char-literal arm declined the literal, and the `"` inside it opened a span that ran to
+  the next quote several lines down — taking a `fn` with it. Every figure the reader produces holds only by
+  what a swallowed span happened to contain, which is why the corpus-wide guard exists; it caught this the
+  moment a shared helper was extracted and the swallow started crossing a declaration, having been latent
+  before that purely by placement. Pinned by a case in the reader's own corpus, where a swallow shows up as a
+  construction counted zero. Negative run: with the arm removed, the case and the corpus guard both fail.
+
+  **Three lists that had to agree, in the direction that reads that corpus.** Each arm spelled its cases
+  inline and the completeness join at the end spelled all eight again, so a case could be answered by an arm
+  and left out of the join, or joined and answered by nothing. The join derives from three named sets now,
+  each used once by the arm that answers it.
+
+  Found by adding a fourth list — a set-equality guard the direction already had, one screenful further down.
+  The duplicate reported five cases as unanswered and every one of them was answered, by an arm that gives a
+  verdict rather than a count; what disagreed was the new list's membership rule, not the tree. So the finding
+  was not the one it looked like: writing a guard for a property already held is how the three-way duplication
+  became visible, and the guard itself was the wrong repair and was removed.
+
+- **A test target spawning only through the shared fixture builder was invisible to the guard that names
+  spawners.** The detector knew `Command::new(` and `hermetic(`; `hermetic_git::fixture` became a call site's
+  spelling and matched neither, so `release_coherence.rs` — every one of whose fixture repositories it builds —
+  was never in the declared set. That is the **fourth** narrower form in a row for a requirement that was
+  already correct, and the first one to be live rather than caught while widening: the file's own doc comment
+  had predicted it in those words. The detector names the process **module** now instead of the functions it
+  exports, so every entry point it has and every one it gains is covered, and the missing target is declared
+  with what it spawns.
+
+- **The command-runner rule now holds where it is stated.** `bound_register_parse::{search, must}` took the
+  program inside the argument list — the shape `hermetic_git`'s own doc calls admissible only where a caller
+  chooses the program at run time — and every one of their twelve call sites named a literal, `"git"` or
+  `"cargo"`. They take the program as a parameter now, so the list form survives at exactly the two runners
+  that genuinely compose it, `pin_bites::run` and `gate_identity::run`, and a rule with an exception nothing
+  needed is no longer there for the next caller to read as permission.
+
+- **Three typed counts left where a typed count had just been deleted.** The repair that removed
+  *seventeen times* from `refusal::Site`'s doc replaced it with *four call sites, twelve textual occurrences,
+  twenty-six counting both constructors* — accurate the day they were written, which is exactly what
+  *seventeen* was, standing on the same nothing: `census::sweep` reads tracked Markdown and a Rust doc comment
+  is in no reaction's reach. The figures are gone; what stands is the shape, plus the record that the first
+  repair reproduced the defect one sentence before concluding where such a figure belongs. A measurement of a
+  repair belongs in the dated entry that repair writes — this one.
+
 - **A struct-literal field sat four columns left of its sibling, and `cargo fmt --all --check` was green
   over it.** The `a-workspace-dependency-allowlist-is-not-examined` declaration in
   `crates/shengmo/src/bounds.rs` indented `owner:` at 12 where its own `because:` and the sibling
@@ -3379,6 +3466,62 @@ them.
 Changes to this repository's own governance machinery, which ships in no package and which
 no adopter runs. They are here rather than under the adopter headings above because
 `CHANGELOG.md` is the adopter's document; the rigour they carry is unchanged.
+
+- **An independent review of this window found five, and the blocking one told an operator the wrong rule.**
+  `merge_message_gate`'s attribution refusal served two recognition shapes with one sentence and stated only
+  the trailer's: *naming the mark inside a sentence is not carrying it; a line that begins with it is*. A
+  glyph is matched wherever it sits, mid-line included — which the shape's own doc says — so an operator
+  refused for `fix(x): 🤖 wrote this` was handed the rule that would have permitted it, in front of a record
+  no rerun amends. The rule now travels with the recognizer that refuses by it, in the same array as the mark,
+  and a direction asserts each shape's own sentence and the absence of the other's. Negative run: with both
+  shapes returning the trailer rule, it fails.
+
+  **A figure typed into a doc comment had drifted past every reading.** `refusal.rs` said `violation("…")`
+  constructs an identity-less refusal *seventeen times*. It was about right when written and nothing could
+  re-measure it: `census::sweep` reads tracked Markdown, and this is Rust. The figure is gone and the shape is
+  stated — *at every site outside `src`* — with why no reaction reached it.
+
+  The first repair replaced the figure with three fresh ones and stated them in the present tense, without the
+  counting rule that would let anyone reproduce them — so they read as facts about the tree and were checkable
+  against nothing. They are gone too. A count that no reaction can produce does not become safe by moving to a
+  dated entry; what a dated entry can carry is what was measured and how, and *seventeen* is here as the thing
+  that drifted rather than as a figure anyone should trust.
+
+  **`region`'s governing sentence was absolute and false inside its own crate.** *A corpus is never handed to
+  a recognizer as `&str`* — while Markdown readers here still take one: three in `release_coherence_gate`
+  and `restatement::document_offences`. Narrowed to what is true, executed text, with the residue stated where
+  it was claimed away and measured: 0 fenced blocks and 0 HTML comment spans in `CHANGELOG.md`, 0 of each in
+  every spec, and no fenced block in tracked Markdown names a crate together with its whole allowlist. Filed WATCH rather than declared a bound, because it is a debt about which reader a call site
+  chose rather than a claim a reaction makes about its own limits — and closing it needs `Prose` to carry
+  positions first, since `document_offences` reports the line a block starts at.
+
+  **`Source::header` searched for a newline the first line does not have.** A document opening with `## `
+  matched nothing and came back whole as its own header, and both consumers err toward a false pass from
+  there. Closed with a position test rather than declared, and pinned by a direction that asserts the offset
+  form beside it so it cannot pass by the search having been removed. Negative run: with the branch removed,
+  it fails.
+
+  **Four command runners for one job, two of them the shape this crate documents as not kept.**
+  `bound_register_parse::search`, `bound_register_parse::must`, `gate_identity::run` and `pin_bites::run` each
+  took the program inside `args[0]`, none routed through `hermetic`, and *a failed read is not an empty result*
+  stood verbatim at four sites in three files, already diverged in what each printed beside it. The two that
+  share a contract are one implementation in `hermetic_git` now; the sentence has one owner; and the list form
+  is admitted where a caller composes the program at run time — `pin_bites` chooses `cargo` for a mutation
+  build and `git` for a record read, `gate_identity` chooses `git` to enumerate and `cargo` to list a target's
+  tests — unpacked in one place that turns an unstated index panic into a stated one. The doc that declared one
+  shape universally kept now names both and says which is for which.
+
+  This paragraph first said *three* runners and named two of the four, and the doc comment beside it said
+  *three* and *one that cannot do otherwise*. Both counts were taken from inside the repair, over the set that
+  had just been edited, instead of from the base commit — which is the same authoring failure as the typed
+  census below, at two sites in one change. Corrected here and replaced with the enumeration there.
+
+  Recorded because it is the machinery working on this entry's own work: `reference_integrity` refused two
+  positional references — *paragraphs up*, *sentence above* — written while explaining the four repairs above
+  it. Both name the item now.
+
+  No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate that
+  ships in no package.
 
 - **The prelude's promise now has a reaction, and the requirement it holds did not exist.** The compile
   contract's claim to name the whole promised surface was a header comment: the one requirement about prelude

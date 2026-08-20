@@ -1504,12 +1504,14 @@ form when the finding happened to sit there. Two axes were closed by constructio
 on passing over a corpus the requirement does not describe, and four targets outside that directory spawned
 processes, two of them running `git` directly.
 
-The detector SHALL recognize the **capability** rather than a spelling of it. Three narrower forms preceded
-this one and each was one spelling short of a requirement that was already correct: a shared-builder marker,
-then a literal program name, then a program passed as a value — the last already recorded in the builder's
-own header as one of the two variants it converged, before this check was written. A detector keyed on how
-something is written will keep trailing a requirement about what is done; spawning a process has one
-syntactic form and needs no knowledge of the program.
+The detector SHALL recognize the **capability** rather than a spelling of it, and where the spawn goes
+through this repository's shared process module the detector SHALL name that **module**, not the functions it
+exports. Each narrower form was one spelling short of a requirement that was already correct: a
+shared-builder marker, then a literal program name, then a program passed as a value, then a second entry
+point added to the same module. The last of those was **live rather than hypothetical** — a test target whose
+only spawn went through that entry point was undeclared while both older markers passed over it, and naming
+the module found it. A detector keyed on how something is written will keep trailing a requirement about what
+is done; spawning a process has one syntactic form and needs no knowledge of the program.
 
 The detector SHALL read executed text, and SHALL recognize the call by position: not preceded by a quote, so
 the check does not match its own marker literals, and not preceded by an identifier character, so a
@@ -1529,3 +1531,74 @@ one. What this requirement holds is membership.
 - **WHEN** a named target no longer spawns a process
 - **THEN** the check fails, because a name that outlives its reason certifies nothing
 - **PINNED-BY** `no_test_target_spawns_a_process_unnamed`
+
+### Requirement: A judgement SHALL close the ambient channel of any read whose answer an ignore file changes
+
+A repository check SHALL name `core.excludesFile` as neutralised whenever it runs a git subcommand whose
+answer an ignore file **outside** the repository changes. Neutralising the config *files* SHALL NOT be treated
+as sufficient: `$XDG_CONFIG_HOME/git/ignore` is the default excludes path git uses when no config file names
+one, so emptying the files leaves the default in force. The setting has to be named. Measured both directions
+rather than reasoned about — an ignore query answers *ignored*, and a fixture's `add -A` leaves the matching
+file untracked, until it is named.
+
+The shared command builder SHALL name it, so the property holds for every caller rather than for whichever
+call site was last edited. That the builder did not was found by a read that had been fixed on its own: the
+same channel was silently omitting files from fixtures across the crate. The builder's guarantee SHALL be held
+by a case comparing a command that closes the channel against one that does not, and the control SHALL leave
+the channel open — a control that closed it would compare a value against itself.
+
+**Why this and not process isolation in general.** Bare spawns survive across this crate's test targets and
+most of them read a fact no configuration moves. The subcommands this requirement names are the ones whose
+answer is ambient — an ignore query directly, and a `status` or `ls-files` asked which files are untracked.
+A requirement covering every spawn would name a rule nothing in the tree meets; this one names the half that
+can move a verdict, and the tree meets it.
+
+**The direction is what makes it consequential.** For an ignore query, the ambient answer is *ignored*, and
+`ignored` means the offence is **not** reported. So the failure mode is an under-refusal whose verdict depends
+on who runs the gate — which is what happened: the reference-integrity gate asked `check-ignore` through a
+bare spawn on the real repository, so an entry in whoever's personal ignore file quietly excused a stale path
+reference. The builder was reachable throughout and nothing required it.
+
+The check SHALL accept **either** closure — the file naming the setting, or the file starting no process of
+its own, so that every command it runs is the builder's. Requiring the explicit flag on top of the builder
+would refuse correct code and call the redundancy a repair. It SHALL recognize the subcommand as a **complete
+argument literal**, because a fragment matched a diagnostic string and two doc comments that run nothing. It
+SHALL refuse to report clean when no file in the corpus matches, since a rename that takes the last call site
+out of reach otherwise reads as compliance.
+
+Where a file must leave the channel open to pin it, the check SHALL name that file and SHALL hold the
+exception against **the direction that earns it**, not against the file's continuing to spawn — measured: a
+different test in the same file spawns bare for a different property, and the first form of the guard went on
+passing with the control converted away.
+
+What this holds is **file granularity**: the neutraliser in the same file's executed text, not in the same
+call. A per-call rule would refuse the one site that was already right, where a single wrapper closes the
+channel for every judgement in that file. A subcommand composed at run time is not seen, and
+`.git/info/exclude` is inside the repository, so no setting reaches it — the row the publish gate classifies
+rather than refuses.
+
+#### Scenario: A judgement asks an ignore question through an unisolated read
+
+- **WHEN** a tracked Rust file's executed text runs a subcommand whose answer an ambient ignore file changes
+  through a `Command` it builds itself, and never names `core.excludesFile`
+- **THEN** the check fails naming the file, because that verdict depends on who runs it
+- **PINNED-BY** `no_judgement_reads_an_ambient_ignore_file`
+
+#### Scenario: The builder stops closing the channel
+
+- **WHEN** the shared command builder no longer names `core.excludesFile`
+- **THEN** the case comparing an isolated command against an unisolated control fails, because the two
+  answers stop differing
+- **PINNED-BY** `an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command`
+
+#### Scenario: The excused control stops pinning anything
+
+- **WHEN** the direction that earns the named exception is renamed or removed
+- **THEN** the check fails rather than going on excusing that file
+- **PINNED-BY** `no_judgement_reads_an_ambient_ignore_file`
+
+#### Scenario: The check loses its reach
+
+- **WHEN** no file in the corpus matches any named subcommand
+- **THEN** the check fails rather than reporting clean, because the reach was lost and not the risk
+- **PINNED-BY** `no_judgement_reads_an_ambient_ignore_file`

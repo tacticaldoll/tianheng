@@ -29,19 +29,37 @@ pub const FIXTURE_DAY: &str = "2026-07-20";
 /// | ambient source | closed here |
 /// |---|---|
 /// | global / system config file | yes |
-/// | `GIT_CONFIG_COUNT` + `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` | **no** — any key reaches `git`, `commit.gpgsign=true` included |
+/// | `$XDG_CONFIG_HOME/git/ignore` | yes — see below; this row read **no** until a gate was found relying on it |
+/// | `GIT_CONFIG_COUNT` + `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` | **no** — any key reaches `git`, `commit.gpgsign=true` included, and index `0` here is taken |
 /// | `GIT_AUTHOR_NAME` / `GIT_COMMITTER_NAME` and their emails | **no** — they override the fixture's own `.git/config` identity |
-/// | `$XDG_CONFIG_HOME/git/ignore` | **no** — see [`crate::publish_source_gate`]'s table |
 /// | `.git/info/exclude` | **no** — inside the repository, so no config setting reaches it |
 ///
-/// The last two rows are why the publish gate passes `-c core.excludesFile=/dev/null` on top of this rather
-/// than routing through the builder and stopping there.
+/// **The ignore row is closed through the row above it, which is the one that cannot be closed.** Neutralising
+/// the config *files* does not neutralise `core.excludesFile`, because
+/// `$XDG_CONFIG_HOME/git/ignore` is the default excludes path git uses when **no** config file names one — so
+/// emptying the files leaves the default in force. The setting has to be *named*, and the only channel that
+/// carries a setting without a config file is `GIT_CONFIG_COUNT`, the row this table records as open. What
+/// makes it open to a caller is what makes it usable here.
+///
+/// **Measured, on a fixture whose only exclusion came from an XDG ignore file:** `git add -A` with the three
+/// file variables set and nothing else left the matching file *untracked* — a fixture silently built without
+/// a file it named — and adds it once `core.excludesFile` is named. `git check-ignore` answers *ignored* and
+/// stops. Both directions, and the first is why this moved into the builder rather than staying a flag each
+/// judgement remembers: the reads were being fixed one at a time and every fixture construction was exposed.
+///
+/// A caller needing its own key starts at `_1` and sets `GIT_CONFIG_COUNT` to `2`; overwriting the count
+/// without carrying index `0` forward reopens the ignore row. No caller in this workspace sets these
+/// variables — this function is the only writer of them (measured) — so the collision is stated rather than
+/// guarded.
 pub fn hermetic(program: &str) -> Command {
     let mut command = Command::new(program);
     command
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_SYSTEM", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1");
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_COUNT", "1")
+        .env("GIT_CONFIG_KEY_0", "core.excludesFile")
+        .env("GIT_CONFIG_VALUE_0", "/dev/null");
     command
 }
 
@@ -50,8 +68,9 @@ pub fn hermetic(program: &str) -> Command {
 ///
 /// It lived twice here too, byte-identical past the leading flags, in the same two files this module's own
 /// doc comment already names for [`hermetic`]. `flags` are spliced in before `args` — `&[]` for
-/// `release_coherence_gate`, `&["-c", "core.excludesFile=/dev/null"]` for `publish_source_gate`, which must
-/// also close the last ambient row this module's doc table leaves open.
+/// `release_coherence_gate`, `&["-c", "core.excludesFile=/dev/null"]` for `publish_source_gate`, which stated
+/// per command what [`hermetic`] now states for every caller. The flag is kept there rather than dropped: it
+/// is the narrower statement, it costs nothing, and the measurement that earned it is recorded beside it.
 pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure> {
     let out = hermetic("git")
         .args(flags)
@@ -77,8 +96,23 @@ pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure
 /// second spelling also panicked on an empty slice where the first could not, so the twin had begun to
 /// diverge in the way `manifest`'s header describes for its own pair.
 ///
-/// The explicit signature is the one kept. `args[0]` makes the program a value the caller has to get right
-/// inside a list, and there is no shape of that list a type refuses.
+/// The explicit signature is the one kept **here**. `args[0]` makes the program a value the caller has to get
+/// right inside a list, and there is no shape of that list a type refuses.
+///
+/// **It is not the only shape admitted, which this sentence used to claim.** Four runner bodies in this crate
+/// composed the program into the list — `bound_register_parse::search`, `bound_register_parse::must`,
+/// `gate_identity::run` and `pin_bites::run` — and **two** of them cannot do otherwise: `pin_bites` chooses
+/// `cargo` for a mutation build and `git` for a record read through one runner, and `gate_identity` chooses
+/// `git` to enumerate and `cargo` to list a target's tests. The other two never chose at run time — every one
+/// of their call sites named a literal — so they were given this signature, and the list form now survives
+/// only where the rule admits it, unpacked in exactly one place, [`program_and_args`], which also turns the
+/// empty-slice panic this paragraph names into a stated one. Every fixture that knows its program still
+/// passes it here.
+///
+/// **The enumeration rather than the counts, which were written from inside the repair.** This paragraph
+/// first said *three* runners and *one* that cannot; both were measured over the set the author had just
+/// edited rather than over the base commit, and both were wrong. Nothing reacts to a count in a Rust doc
+/// comment — the shape [`crate::refusal::Site`] describes for its own drifted figure.
 ///
 /// # Panics
 ///
@@ -174,5 +208,97 @@ impl std::fmt::Display for Failure {
             Failure::Spawn(why) => write!(f, "{why}"),
             Failure::Exit { stderr, .. } => write!(f, "{stderr}"),
         }
+    }
+}
+
+/// What a caller is told when a read it required did not happen.
+///
+/// **One owner, because this sentence stood at four sites.** *A failed read is not an empty result* was
+/// written verbatim in `bound_register_parse::{search, must}`, in `pin_bites`'s own `must`, and in
+/// `reference_integrity` — four copies of the one rule the Core Contract turns on, in three files, already
+/// diverged in what they printed beside it. The rule is that reporting a failed read as an empty one reports
+/// a verdict over content that was never read, which is the vacuity direction the contract forbids; a
+/// sentence that says so belongs where the readers that say it live.
+pub fn failed(what: &str, status: &str, output: &str) -> String {
+    format!("{what} failed ({status}); a failed read is not an empty result: {output}")
+}
+
+/// The program a caller composed into its argument list, split from the rest.
+///
+/// **The second admitted shape, stated rather than left to a reader to notice.** [`fixture`] keeps the
+/// program as its own parameter and its doc says why: a list gives the caller a position to get wrong and no
+/// type refuses the wrong one. That is the shape to reach for — and **two** callers genuinely cannot, because
+/// each composes its program at run time: `pin_bites::run` builds `["cargo", "test", …]` for a mutation build
+/// and `["git", "show", …]` for a record read through one runner, and `gate_identity::run` builds
+/// `["git", "ls-files", …]` to enumerate and `["cargo", "test", …, "--list"]` to list a target's tests. Those
+/// two are the whole of it: no other caller in this crate reaches this function. So both shapes are admitted,
+/// this is where the list form is unpacked, and the empty case is a stated panic instead of the unstated
+/// index it was.
+pub fn program_and_args<'a>(what: &str, args: &'a [&'a str]) -> (&'a str, &'a [&'a str]) {
+    let (program, rest) = args
+        .split_first()
+        .unwrap_or_else(|| panic!("{what}: an empty argument list names no program to run"));
+    (program, rest)
+}
+
+/// One read of `program` in `dir` through [`hermetic`], requiring success, returning its stdout.
+///
+/// A failed read is not an empty result — see [`failed`] — so this asserts rather than returning a status a
+/// caller might drop. Through [`hermetic`], which the copies this replaces were not: they read the global and
+/// system git config every read *this module* owns closes off.
+///
+/// **Not *the rest of this crate's git*, which this sentence used to claim.** Bare `Command::new("git")`
+/// survives across this crate's test targets, and `gate_exit_classes` enumerates every one of them. What is
+/// held rather than asserted is narrower and is the half that can move a verdict: no judgement runs a
+/// subcommand an ambient ignore file answers differently without neutralising it — see
+/// `no_judgement_reads_an_ambient_ignore_file`.
+pub fn read(dir: &Path, what: &str, program: &str, args: &[&str]) -> String {
+    let out = hermetic(program)
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap_or_else(|err| panic!("cannot run {what}: {err}"));
+    assert!(
+        out.status.success(),
+        "{}",
+        failed(
+            what,
+            &out.status.to_string(),
+            &format!(
+                "{}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            )
+        )
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// A search whose *ordinary* no-match answer is a non-zero status, returning the matching lines.
+///
+/// `grep` exits 1 on a clean miss. Treating that as a failure was found the hard way in this repository's
+/// shell era: a producer's contract has to be named per call site rather than inferred, because the
+/// alternative — reading every non-zero as empty — turns a failed read into a clean verdict, which is the
+/// one direction the Core Contract forbids. So exit 1 is *no match* and anything else is a failure.
+pub fn search(dir: &Path, what: &str, program: &str, args: &[&str]) -> Vec<String> {
+    let out = hermetic(program)
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap_or_else(|err| panic!("cannot run {what}: {err}"));
+    match out.status.code() {
+        Some(0) => String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(str::to_string)
+            .collect(),
+        Some(1) => Vec::new(),
+        other => panic!(
+            "{}",
+            failed(
+                what,
+                &format!("exit {other:?}"),
+                &String::from_utf8_lossy(&out.stderr)
+            )
+        ),
     }
 }

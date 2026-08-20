@@ -1,0 +1,7 @@
+fn at_a_boundary(before: u8) -> bool {
+    before != b'"' && before != b'_'
+}
+
+fn refuse() -> Refusal {
+    violation("a construction standing after a byte char literal that holds a quote")
+}

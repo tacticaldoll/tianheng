@@ -6,7 +6,6 @@
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// This workspace's root, or `None` when the checks are running somewhere that is not it.
 ///
@@ -25,43 +24,24 @@ pub fn workspace_root() -> Option<PathBuf> {
 /// shell era and is recorded in the library that replaced it: a producer's contract has to be named per call
 /// site rather than inferred, because the alternative — treating every non-zero as empty — turns a failed
 /// read into a clean verdict, which is the one direction the Core Contract forbids.
-pub fn search(root: &Path, what: &str, args: &[&str]) -> Vec<String> {
-    let output = Command::new(args[0])
-        .args(&args[1..])
-        .current_dir(root)
-        .output()
-        .unwrap_or_else(|err| panic!("cannot run {what}: {err}"));
-    match output.status.code() {
-        Some(0) => String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::to_string)
-            .collect(),
-        Some(1) => Vec::new(),
-        other => panic!(
-            "{what} failed (exit {other:?}); a failed read is not an empty result: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ),
-    }
+///
+/// **`program` is its own parameter, because no caller here ever chose one at run time.** This pair took the
+/// program inside `args`, which [`crate::hermetic_git::fixture`]'s doc calls the shape to reach for only
+/// where the program *is* chosen at run time — and every one of this pair's call sites named a literal,
+/// `"git"` or `"cargo"`. A rule with an exception nothing needed is a rule the next caller reads as
+/// permission.
+pub fn search(root: &Path, what: &str, program: &str, args: &[&str]) -> Vec<String> {
+    crate::hermetic_git::search(root, what, program, args)
 }
 
 /// Run a command in `root`, requiring success, and return its stdout.
 ///
 /// A failed read is not an empty result: reporting one as the other would report a verdict over content that
 /// was never read, which is the vacuity direction the Core Contract forbids.
-pub fn must(root: &Path, what: &str, args: &[&str]) -> String {
-    let output = Command::new(args[0])
-        .args(&args[1..])
-        .current_dir(root)
-        .output()
-        .unwrap_or_else(|err| panic!("cannot run {what}: {err}"));
-    assert!(
-        output.status.success(),
-        "{what} failed ({}); a failed read is not an empty result: {}{}",
-        output.status,
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).into_owned()
+///
+/// `program` is its own parameter for the reason [`search`] states.
+pub fn must(root: &Path, what: &str, program: &str, args: &[&str]) -> String {
+    crate::hermetic_git::read(root, what, program, args)
 }
 
 /// The slug rule, applied to a scenario heading to derive a bound's id.
@@ -270,7 +250,8 @@ pub fn tracked_specs(root: &Path) -> Vec<(String, String)> {
     let listing = must(
         root,
         "`git ls-files openspec/specs`",
-        &["git", "ls-files", "-z", "openspec/specs"],
+        "git",
+        &["ls-files", "-z", "openspec/specs"],
     );
     // **`-z`, because the capability name is derived from the path.** A quoted path fails `strip_prefix`,
     // so the spec is filtered out and that whole capability's declared bounds are never registered — the

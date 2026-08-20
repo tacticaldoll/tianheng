@@ -85,7 +85,8 @@ fn registered_tests(root: &Path) -> BTreeMap<String, BTreeSet<String>> {
     let manifests = must(
         root,
         "`git ls-files -- crates/*/Cargo.toml`",
-        &["git", "ls-files", "--", "crates/*/Cargo.toml"],
+        "git",
+        &["ls-files", "--", "crates/*/Cargo.toml"],
     );
     // git's pathspec `*` crosses directory separators, unlike the shell's — measured, the glob above also
     // matched fixture manifests nested under a member's tests. A workspace member is one segment deep.
@@ -107,8 +108,8 @@ fn registered_tests(root: &Path) -> BTreeMap<String, BTreeSet<String>> {
         let listing = must(
             root,
             &format!("`cargo test -p {member} --all-features -- --list`"),
+            "cargo",
             &[
-                "cargo",
                 "test",
                 "-q",
                 "-p",
@@ -205,15 +206,8 @@ fn a_raw_identifier_citation_resolves_to_its_definition() {
     let sites = search(
         &fixture,
         "raw-identifier probe",
-        &[
-            "git",
-            "grep",
-            "-n",
-            "-E",
-            &definition_pattern("r#type"),
-            "--",
-            ".",
-        ],
+        "git",
+        &["grep", "-n", "-E", &definition_pattern("r#type"), "--", "."],
     );
     let _ = std::fs::remove_dir_all(&fixture);
     assert_eq!(
@@ -251,7 +245,8 @@ fn search_and_must_panic_on_a_genuine_failure_not_only_on_a_clean_miss() {
         search(
             &root,
             "clean-miss probe",
-            &["git", "ls-files", "--", "zzz-absent-probe-path-xyz"],
+            "git",
+            &["ls-files", "--", "zzz-absent-probe-path-xyz"],
         ),
         Vec::<String>::new(),
         "a clean miss is empty, not a panic"
@@ -263,7 +258,8 @@ fn search_and_must_panic_on_a_genuine_failure_not_only_on_a_clean_miss() {
         search(
             &root,
             "bad-flag probe",
-            &["git", "ls-files", "--this-flag-does-not-exist"],
+            "git",
+            &["ls-files", "--this-flag-does-not-exist"],
         )
     });
     assert!(
@@ -277,7 +273,8 @@ fn search_and_must_panic_on_a_genuine_failure_not_only_on_a_clean_miss() {
         must(
             &root,
             "bad-pattern probe",
-            &["git", "grep", "-E", "[", "--", "crates/"],
+            "git",
+            &["grep", "-E", "[", "--", "crates/"],
         )
     });
     assert!(
@@ -296,7 +293,8 @@ fn search_and_must_panic_on_a_genuine_failure_not_only_on_a_clean_miss() {
         search(
             &missing_root,
             "missing-root probe (search)",
-            &["git", "ls-files"],
+            "git",
+            &["ls-files"],
         )
     });
     assert!(
@@ -307,7 +305,8 @@ fn search_and_must_panic_on_a_genuine_failure_not_only_on_a_clean_miss() {
         must(
             &missing_root,
             "missing-root probe (must)",
-            &["git", "ls-files"],
+            "git",
+            &["ls-files"],
         )
     });
     assert!(
@@ -454,8 +453,8 @@ fn every_pinning_citation_resolves_to_one_registered_test() {
         let sites = search(
             &root,
             "`git grep` locating the cited definition",
+            "git",
             &[
-                "git",
                 "grep",
                 "-n",
                 "-E",
@@ -483,7 +482,7 @@ fn every_unpinned_bound_names_a_tracked_tracker() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let tracked: BTreeSet<String> = must(&root, "`git ls-files`", &["git", "ls-files"])
+    let tracked: BTreeSet<String> = must(&root, "`git ls-files`", "git", &["ls-files"])
         .lines()
         .map(str::to_string)
         .collect();
@@ -867,7 +866,7 @@ fn every_bare_bound_reference_resolves_to_a_declared_bound() {
          reference — a corpus that never arrived is not one in which nothing resolves"
     );
 
-    let listing = must(&root, "`git ls-files`", &["git", "ls-files"]);
+    let listing = must(&root, "`git ls-files`", "git", &["ls-files"]);
     let corpus: Vec<&str> = listing
         .lines()
         .filter(|path| path.ends_with(".rs") || path.ends_with(".md"))
