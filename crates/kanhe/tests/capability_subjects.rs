@@ -329,16 +329,10 @@ fn a_branch_with_no_resolvable_base_cannot_be_judged() {
             "one",
         ],
     ] {
-        let out = Command::new("git")
-            .args(&args)
-            .current_dir(&scratch)
-            .output()
-            .expect("run git in the scratch repository");
-        assert!(
-            out.status.success(),
-            "git {args:?}: {}",
-            String::from_utf8_lossy(&out.stderr)
-        );
+        // Through the shared fixture builder, which is what gives this commit the fixture's date rather
+        // than the clock's — and what keeps this file out of the set of targets that write with git
+        // directly.
+        kanhe::hermetic_git::fixture(&scratch, "git", &args);
     }
 
     let refusal =

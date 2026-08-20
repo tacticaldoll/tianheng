@@ -1490,11 +1490,23 @@ only thing tying the two together, and nothing read it.
   not a count of some
 - **PINNED-BY** `an_unreadable_changed_file_count_stops_before_the_merge`
 
-### Requirement: A test target running git outside the shared fixture builder is named
+### Requirement: A test target that could write with git outside the shared builder is named
 
-The set of test targets that run `git` without the shared fixture builder SHALL be declared and held against
-the tree **in both directions**: a target that gains a direct run is named with why it may, and a name that
-outlives its reason fails too.
+Every test target that could write with `git` outside the shared fixture builder SHALL be named in a
+declared set, and that set SHALL be held against the tree in both directions.
+
+A write is a commit, a tag or a merge — the runs that carry a date. The declaration is held both ways: a target that gains one is named
+with why it may, and a name that outlives its reason fails too.
+
+The requirement SHALL be no wider than the detector. Its first form said *runs `git` without the shared
+builder* and detected one spelling of the invocation, while fourteen targets ran git through another — so the
+set equality passed over a set the detector could not produce, and the gap sat in the floor. The detector
+SHALL recognize every spelling of a git invocation in executed text, and the requirement SHALL be the class
+the fixture-date discipline is about: a run that writes is a run that carries a date.
+
+Membership SHALL be judged per file — a direct invocation anywhere in it, and a write verb anywhere in it —
+which over-includes a file whose direct runs are reads. That is the safe direction: a member is a file to
+look at rather than an accusation, and its entry says which.
 
 One helper lived twice — byte-identical past a doc comment, in the two test targets belonging to the two
 gate modules the shared builder was extracted from — and when the builder gained fixed fixture dates only
@@ -1504,14 +1516,14 @@ the clock. Reading a file finds the copy being edited; reading the pair finds th
 The recognizer SHALL read executed text and SHALL recognize the call by position rather than by the bare
 marker, because this check's own source is in the corpus it reads and holds the marker as a literal.
 
-#### Scenario: A test target gains a direct git run
+#### Scenario: A test target gains a direct git write
 
-- **WHEN** a tracked test target runs `git` outside the shared builder and is not named
+- **WHEN** a tracked test target holds both a direct `git` invocation and a write verb, and is not named
 - **THEN** the check fails naming it
-- **PINNED-BY** `no_test_target_runs_git_outside_the_shared_builder_unnamed`
+- **PINNED-BY** `no_test_target_writes_with_git_outside_the_shared_builder_unnamed`
 
-#### Scenario: A declared target no longer runs git directly
+#### Scenario: A declared target no longer qualifies
 
-- **WHEN** a named target stops running `git` directly
+- **WHEN** a named target stops holding both
 - **THEN** the check fails, because a name that outlives its reason certifies nothing
-- **PINNED-BY** `no_test_target_runs_git_outside_the_shared_builder_unnamed`
+- **PINNED-BY** `no_test_target_writes_with_git_outside_the_shared_builder_unnamed`
