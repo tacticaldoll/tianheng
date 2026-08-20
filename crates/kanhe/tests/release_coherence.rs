@@ -6,13 +6,19 @@
 //! reading only "non-zero" was blind to exactly the regression the shell era's shared backstop introduced,
 //! where every genuine incoherence was reported as cannot-judge with CI green throughout.
 
+use kanhe::hermetic_git::FIXTURE_DAY;
 use kanhe::refusal;
+
+/// A day that is not [`FIXTURE_DAY`], for the direction that needs the two to disagree.
+///
+/// Spelled rather than computed, because date arithmetic would be a second implementation of the calendar
+/// in a file whose subject is a date — and the pair is legible as it stands: the day after.
+const A_DIFFERENT_DAY: &str = "2026-07-21";
 
 use kanhe::release_coherence_gate as gate;
 
 use gate::{
-    build_fixture, commit, development_changelog, hermetic, judge, release_changelog,
-    workspace_files,
+    build_fixture, commit, development_changelog, judge, release_changelog, workspace_files,
 };
 use refusal::Kind;
 use std::path::{Path, PathBuf};
@@ -35,17 +41,16 @@ fn scratch(name: &str) -> PathBuf {
     root
 }
 
+/// Every `git` this file runs goes through the fixture builder, dates and all.
+///
+/// **A second command helper stood beside the shared one and predated it.** This was
+/// `hermetic("git")` plus an assert — which is `hermetic_git::fixture` minus the fixed dates — and four
+/// commit-creating paths went through it, including the one the date direction adds. So every amended
+/// fixture HEAD carried a wall-clock committer date while the constant beside it existed to stop exactly
+/// that. It is the fourth instance of the class `hermetic_git`'s own header is about, and the one the date
+/// extraction walked past.
 fn git(repo: &Path, args: &[&str]) {
-    let out = hermetic("git")
-        .args(args)
-        .current_dir(repo)
-        .output()
-        .unwrap_or_else(|err| panic!("cannot run git {args:?}: {err}"));
-    assert!(
-        out.status.success(),
-        "git {args:?} failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    kanhe::hermetic_git::fixture(repo, "git", args);
 }
 
 /// Rewrite `[Unreleased]`'s single item, so a direction can place content under a heading of its choosing.
@@ -140,7 +145,10 @@ fn a_release_section_dated_away_from_its_commit_is_a_violation() {
     let text = std::fs::read_to_string(&path).expect("the fixture changelog is readable");
     std::fs::write(
         &path,
-        text.replace("## [0.2.0] - 2026-07-20", "## [0.2.0] - 2026-07-21"),
+        text.replace(
+            &format!("## [0.2.0] - {FIXTURE_DAY}"),
+            &format!("## [0.2.0] - {A_DIFFERENT_DAY}"),
+        ),
     )
     .expect("the fixture changelog is writable");
     // Amended rather than committed on top, so the release commit stays HEAD and the state stays Snapshot.
@@ -154,7 +162,7 @@ fn a_release_section_dated_away_from_its_commit_is_a_violation() {
         &refusal,
     );
     assert!(
-        refusal.message.contains("2026-07-21") && refusal.message.contains("2026-07-20"),
+        refusal.message.contains(A_DIFFERENT_DAY) && refusal.message.contains(FIXTURE_DAY),
         "the refusal names both dates so an operator can see which to change: {}",
         refusal.message
     );
@@ -259,7 +267,10 @@ fn a_dated_heading_whose_suffix_is_not_a_date_is_a_violation() {
     let text = std::fs::read_to_string(&path).expect("read");
     std::fs::write(
         &path,
-        text.replace("## [0.2.1] - 2026-07-20", "## [0.2.1] - notadate!!"),
+        text.replace(
+            &format!("## [0.2.1] - {FIXTURE_DAY}"),
+            "## [0.2.1] - notadate!!",
+        ),
     )
     .expect("write");
     commit(&fixture.repo, "chore: prepare release");
@@ -397,7 +408,7 @@ fn a_dated_heading_whose_fields_are_out_of_range_is_a_violation() {
         std::fs::write(
             &path,
             text.replace(
-                "## [0.2.1] - 2026-07-20",
+                &format!("## [0.2.1] - {FIXTURE_DAY}"),
                 &format!("## [0.2.1] - {impossible}"),
             ),
         )

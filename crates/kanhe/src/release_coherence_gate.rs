@@ -1772,10 +1772,13 @@ pub fn development_changelog(repo: &Path, version: &str, with_item: bool) {
 /// Write a changelog in the release shape: a dated section for `version`, with the link block naming
 /// `previous`.
 pub fn release_changelog(repo: &Path, version: &str, previous: &str) {
+    // The same day the fixture's commits carry, from the one owner — this section and those commits are the
+    // two halves `release-coherence` compares.
+    let day = crate::hermetic_git::FIXTURE_DAY;
     write(
         repo.join("CHANGELOG.md"),
         &format!(
-            "# Changelog\n\n## [Unreleased]\n\n## [{version}] - 2026-07-20\n\n- Release notes.\n\n\
+            "# Changelog\n\n## [Unreleased]\n\n## [{version}] - {day}\n\n- Release notes.\n\n\
              [Unreleased]: {COMPARE}/v{version}...HEAD\n[{version}]: {COMPARE}/v{previous}...v{version}\n"
         ),
     );

@@ -4753,6 +4753,29 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
 
+- **The fixture date got a constant from the half that needed it, not from the fact.** The commit half was
+  given `FIXTURE_DATE`; the other half — the changelog section that same check compares it against — stayed a
+  literal in the generator and in four directions. One fact, two consumers, an owner available and unused.
+
+  The day is the owner now and the instant is built from it. A first attempt reached for `concat!`, which
+  takes literals and not a constant's name, so the day would have been written twice under a macro that
+  reads as though it were derived — worse than two plain literals, and caught by running the pair rather
+  than by reading it: changing the day alone left the commits on the old one and the changelog on the new,
+  and the gate refused naming both. Changing it now moves both halves and the suite stays green.
+
+- **A second command helper stood beside the shared one, and the date extraction walked past it.**
+  `release_coherence`'s directions had their own `git()` — `hermetic("git")` plus an assert, which is
+  `hermetic_git::fixture` minus the fixed dates — and four commit-creating paths went through it, including
+  the one the date direction adds. So every amended fixture HEAD carried a wall-clock committer date while
+  the constant beside it existed to stop exactly that. The fourth instance of the class that module's own
+  header is about; every `git` in that file goes through the builder now.
+
+  **And the reason recorded for setting the committer date was false of the tree it was written into.** It
+  said a fixture setting only the author date would record a wall-clock committer date *which a later
+  direction would read* — nothing reads `%cd`, the spine reads `%ad`. It is set for symmetry rather than for
+  a consumer, and the note says which, so the next reader does not go looking for the one that does not
+  exist.
+
 - **A release section's date is held against the commit that makes the release.** `is_iso_date` was
   hardened twice — parsed rather than counted, then ranged rather than digit-tested — and each step asked a
   sharper question about the **shape**. The value was never asked, and the value is what a reader takes the

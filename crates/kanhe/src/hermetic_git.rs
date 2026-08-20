@@ -7,9 +7,22 @@
 use std::path::Path;
 use std::process::Command;
 
+/// The day every fixture's dates are on.
+///
+/// **One owner, because two things have to agree.** A fixture's commits carry this date and the changelog a
+/// fixture writes dates its release section with it — and `release-coherence` now compares those two. The
+/// first extraction took the constant from the half that needed it (the commit) and left the other half
+/// (the section) a literal in the generator and in four directions, which is one fact with an enumerator
+/// available and unused.
+pub const FIXTURE_DAY: &str = "2026-07-20";
+
 /// The instant every fixture commit is made at, so a fixture's dates are the fixture's rather than the
 /// clock's.
-pub const FIXTURE_DATE: &str = "2026-07-20T00:00:00+00:00";
+///
+/// UTC midnight, and that is the load-bearing half: `--date=short` renders in the commit's own timezone, so
+/// this reads as [`FIXTURE_DAY`] on every machine — where a local-midnight stamp would read as the day
+/// before anywhere west of UTC.
+pub const FIXTURE_DATE: &str = concat!("2026-07-20", "T00:00:00+00:00");
 
 /// A command that reads neither the **global** nor the **system** git config file.
 ///
@@ -85,9 +98,11 @@ pub fn fixture(dir: &Path, program: &str, args: &[&str]) {
     // against the `release: X.Y.Z` commit's own date; with the date taken from the clock those two agree
     // only until midnight, and the fixture would be asserting the machine rather than the subject.
     //
-    // Both variables, because git takes the author date from one and the committer date from the other and
-    // `%ad` reads the first — a fixture that set only the author date would still record a wall-clock
-    // committer date, which is the half a later direction would read.
+    // Both variables, because git takes the author date from one and the committer date from the other.
+    // Nothing reads `%cd` today — the release spine reads `%ad` — so the committer date is set for symmetry
+    // rather than for a consumer, and saying which it is keeps the next reader from looking for the one
+    // that does not exist. It matters under `--amend`, which preserves the author date and rewrites the
+    // committer date to the clock: a fixture routed around this builder would carry one of each.
     let out = hermetic(program)
         .env("GIT_AUTHOR_DATE", FIXTURE_DATE)
         .env("GIT_COMMITTER_DATE", FIXTURE_DATE)
