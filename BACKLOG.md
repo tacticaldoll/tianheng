@@ -685,10 +685,12 @@ consumer for an undemonstrated deduplication.
 - **WATCH: The two irreversible-act wrappers are one lifecycle written twice.** *Class:* WATCH. *Observed
   pressure:* `scripts/merge-pr.sh` and `scripts/publish.sh` share a whole shape — resolve the repository root,
   parse an argument allowlist, open a verdict channel, run the gate, read the class, clean up, `exec` the
-  tool — and a review measured the overlap at 65 of `publish.sh`'s 110 code lines byte-identical to its
-  sibling, including five whole named constructs (`cannot_judge`, `require_a_verdict`, `require_one_pass`, the
+  tool — and a review measured most of `publish.sh`'s code as byte-identical to its sibling, including
+  every named construct they share (`cannot_judge`, `refuse`, `require_a_verdict`, `require_one_pass`, the
   ERR trap with its bash-5 measurement paragraph, and the mktemp/EXIT-trap/pre-exec `rm` sequence) plus both
-  class constants and their diagnostics. *Observation source:* that review, plus the drift it already
+  class constants and their diagnostics. **No count is given**: this entry first carried one, and the very
+  repair recorded two sentences below it — `merge-pr.sh` gaining `refuse` — moved the figure in the commit
+  that wrote it. The trigger reads the shape, not the arithmetic. *Observation source:* that review, plus the drift it already
   produced and which is repaired with it — `publish.sh` routed every argument refusal through a `refuse()`
   helper while `merge-pr.sh` spelled `printf … >&2; exit 2` inline at every arm, against
   `repository-checks`'s own clause that *the classification SHALL be chosen in one place per wrapper*.

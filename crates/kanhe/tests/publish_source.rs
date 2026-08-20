@@ -113,6 +113,47 @@ fn a_dirty_worktree_is_a_violation() {
     );
 }
 
+/// The diagnostic names each dirty path, unescaped and one per line.
+///
+/// **The render is what the `-z` change was for, and nothing observed it.** This gate reads `git status`
+/// with `-z` so a path carrying non-ASCII bytes reaches the judgement as itself rather than in git's
+/// quoted spelling — and the sibling direction asserts only the sentence's prefix, so the render broke
+/// when `-z` arrived (the NUL-separated records ran together on one line) and was repaired again with
+/// nothing failing either time. Six review rounds carried it as the finding nothing observes.
+///
+/// Two paths, because one cannot show a separator: with a single record a run-together render and a
+/// one-per-line render are the same string.
+#[test]
+fn the_dirty_worktree_diagnostic_names_each_path_unescaped_and_one_per_line() {
+    let root = scratch("dirty-render");
+    let fixture = build_fixture(&root, "dirty-render", "9.9.9");
+    std::fs::write(fixture.repo.join("普通.txt"), "untracked")
+        .expect("write a non-ASCII stray file");
+    std::fs::write(fixture.repo.join("plain.txt"), "untracked").expect("write a stray file");
+    let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a dirty worktree must be refused");
+    let message = &refusal.message;
+
+    assert!(
+        message.contains("普通.txt"),
+        "the path is named as itself, not in git's quoted spelling — which is what `-z` is read for: {message}"
+    );
+    assert!(
+        !message.contains("\\346"),
+        "no octal escape reaches the operator: {message}"
+    );
+    assert!(
+        !message.contains('\0'),
+        "no record separator reaches the operator: {message}"
+    );
+    let listed = message.lines().filter(|line| line.contains(".txt")).count();
+    assert_eq!(
+        listed, 2,
+        "each dirty path is on its own line, so two are two lines: {message}"
+    );
+}
+
 #[test]
 fn a_head_that_is_not_the_release_snapshot_is_a_violation() {
     let root = scratch("subject");
