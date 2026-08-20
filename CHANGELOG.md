@@ -4753,6 +4753,36 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
 
+- **The convergence took one of two copies, and the day split between two constants.** Both are the same
+  finding at two scales: one helper with two implementations, one fact with two owners — and each repair
+  closed the instance in the file it was already editing.
+
+  `publish_source.rs` held the same `hermetic("git")`-plus-assert runner its twin in `release_coherence.rs`
+  did, byte-identical past a doc comment, and fifteen commit- and tag-creating calls went through it —
+  three of them fresh `release: 9.9.9` commits taking **both** dates from the clock. It delegates now. The
+  two direct runs that remain there are reads, which ask the repository a question and write no commit.
+
+  And `FIXTURE_DATE` spelled the day a second time six lines under `FIXTURE_DAY`. The `concat!` around it
+  reads as a derivation and is not one — measured with rustc, that macro takes literals and not a constant's
+  name — so a second literal wore the appearance of the first. The constant is gone: `Command::env` takes
+  anything `AsRef<OsStr>`, so the value that was needed was a `String` and the `const` was never required.
+  The day is written once.
+
+  **The reading that finds this is not the reading that finds a file's own defects.** Reading a file finds
+  the copy being edited; the copy that is not is found by reading the *pair*. So the set of test targets
+  running `git` outside the shared builder is declared and held against the tree in both directions — a
+  target that gains one is named with why it may, and a name that outlives its reason fails too. It
+  recognizes the call by position rather than by the bare marker, because the check's own source is in the
+  corpus it reads and holds the marker as a literal.
+
+  `repository-checks` gains the requirement with a scenario for each direction.
+
+  Recorded with them: the previous round's own repair of this constant was reverted before it landed. A
+  `git checkout -- <file>` restoring a temporary perturbation took the refactor with it, and the run
+  afterwards was green because the reverted tree is internally consistent — a restore verified by a passing
+  suite rather than by its content. That is the second time in this window; the rule that failed was staging
+  before the *real* edit rather than before the *temporary* one.
+
 - **The fixture date got a constant from the half that needed it, not from the fact.** The commit half was
   given `FIXTURE_DATE`; the other half — the changelog section that same check compares it against — stayed a
   literal in the generator and in four directions. One fact, two consumers, an owner available and unused.

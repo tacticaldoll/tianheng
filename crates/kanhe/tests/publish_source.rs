@@ -41,17 +41,18 @@ fn scratch(name: &str) -> PathBuf {
     root
 }
 
+/// Every `git` this file runs to BUILD a fixture goes through the shared builder, dates and all.
+///
+/// **The second of two byte-identical copies.** Its twin in `release_coherence.rs` was converged one commit
+/// ago and this one was not, because the unit of reading was the file and the unit of duplication is the
+/// pair — the same shape `hermetic_git`'s own header records twice about the two gate modules these two test
+/// targets belong to. Fifteen commit- and tag-creating calls went through it, three of them fresh
+/// `release: 9.9.9` commits taking both dates from the clock.
+///
+/// The two `hermetic("git")` reads that remain in this file are reads: they ask the repository a question
+/// and never write a commit, so a fixture date is not theirs to carry.
 fn git(repo: &Path, args: &[&str]) {
-    let out = hermetic("git")
-        .args(args)
-        .current_dir(repo)
-        .output()
-        .unwrap_or_else(|err| panic!("cannot run git {args:?}: {err}"));
-    assert!(
-        out.status.success(),
-        "git {args:?} failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    kanhe::hermetic_git::fixture(repo, "git", args);
 }
 
 /// The gate, over this repository, at publish time only.

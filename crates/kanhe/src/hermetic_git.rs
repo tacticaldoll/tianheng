@@ -16,14 +16,6 @@ use std::process::Command;
 /// available and unused.
 pub const FIXTURE_DAY: &str = "2026-07-20";
 
-/// The instant every fixture commit is made at, so a fixture's dates are the fixture's rather than the
-/// clock's.
-///
-/// UTC midnight, and that is the load-bearing half: `--date=short` renders in the commit's own timezone, so
-/// this reads as [`FIXTURE_DAY`] on every machine — where a local-midnight stamp would read as the day
-/// before anywhere west of UTC.
-pub const FIXTURE_DATE: &str = concat!("2026-07-20", "T00:00:00+00:00");
-
 /// A command that reads neither the **global** nor the **system** git config file.
 ///
 /// Measured rather than assumed: without this the fixture inherited this repository's own signing
@@ -103,9 +95,19 @@ pub fn fixture(dir: &Path, program: &str, args: &[&str]) {
     // rather than for a consumer, and saying which it is keeps the next reader from looking for the one
     // that does not exist. It matters under `--amend`, which preserves the author date and rewrites the
     // committer date to the clock: a fixture routed around this builder would carry one of each.
+    // UTC midnight, and that is the load-bearing half: `--date=short` renders in the commit's own timezone,
+    // so this reads as [`FIXTURE_DAY`] on every machine — where a local-midnight stamp would read as the day
+    // before anywhere west of UTC.
+    //
+    // Built here rather than kept as a second constant. A `const` would have to be a `&'static str`, so it
+    // could only be spelled as a literal — `concat!` takes literals and not a constant's name, measured with
+    // rustc — and a second literal under a `concat!` reads as a derivation from the first while being a
+    // second place the day is written. `Command::env` takes anything that is `AsRef<OsStr>`, so the value
+    // this needs is a `String` and the const was never required.
+    let stamp = format!("{FIXTURE_DAY}T00:00:00+00:00");
     let out = hermetic(program)
-        .env("GIT_AUTHOR_DATE", FIXTURE_DATE)
-        .env("GIT_COMMITTER_DATE", FIXTURE_DATE)
+        .env("GIT_AUTHOR_DATE", &stamp)
+        .env("GIT_COMMITTER_DATE", &stamp)
         .args(args)
         .current_dir(dir)
         .output()
