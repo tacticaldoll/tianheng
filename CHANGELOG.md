@@ -4753,6 +4753,27 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every repaired site is in a crate or a
   script that ships in no package.
 
+- **The guard's requirement was wider than its detector, which puts the gap in the floor.** It said *test
+  targets that run `git` without the shared builder* and detected one spelling of the invocation —
+  `hermetic(` — while **fourteen** targets ran git through a bare `Command::new("git")`, this guard's own
+  file among them. The declared set named one file and the equality passed, because the detector could not
+  produce the others. A set comparison is only as wide as what reaches it.
+
+  The requirement is narrowed to the class the fixture-date discipline is about — a run that **writes**,
+  since a write is what carries a date — and the detector is widened to every spelling of an invocation in
+  executed text. Membership is per file: a direct invocation anywhere in it and a write verb anywhere in it,
+  which over-includes a file whose direct runs are reads. That is the safe direction, and each member's entry
+  says which it is.
+
+  It found a real one immediately: `capability_subjects.rs` created a commit through a bare
+  `Command::new("git")`, taking both dates from the clock. That commit goes through the builder now. The two
+  members that remain hold reads beside writes that already delegate.
+
+  Both directions run red without the guard. Recorded with them: the first attempt at the second negative run
+  reported green from a **stale binary** — a blanket replacement had also changed a sibling constant's length
+  and the target did not compile, and the passing line came from the previous build. Read what the run
+  actually was, not that a run was green.
+
 - **The convergence took one of two copies, and the day split between two constants.** Both are the same
   finding at two scales: one helper with two implementations, one fact with two owners — and each repair
   closed the instance in the file it was already editing.
