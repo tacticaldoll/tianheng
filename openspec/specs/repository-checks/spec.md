@@ -1490,40 +1490,36 @@ only thing tying the two together, and nothing read it.
   not a count of some
 - **PINNED-BY** `an_unreadable_changed_file_count_stops_before_the_merge`
 
-### Requirement: A test target that could write with git outside the shared builder is named
+### Requirement: A test target running git outside the shared fixture builder is named
 
-Every test target that could write with `git` outside the shared fixture builder SHALL be named in a
-declared set, and that set SHALL be held against the tree in both directions.
+Every test target that runs `git` itself, rather than through the shared fixture builder, SHALL be named in
+a declared set together with what it uses git for, and that set SHALL be held against the tree in both
+directions.
 
-A write is a commit, a tag or a merge — the runs that carry a date. The declaration is held both ways: a target that gains one is named
-with why it may, and a name that outlives its reason fails too.
+Membership SHALL be *does this target run git itself*, not *does it write*. Two narrower forms preceded it.
+The first was wider than its detector — it said *runs git without the shared builder* and recognized one
+spelling of the invocation while fourteen targets used another, so the set equality passed over a set the
+detector could not produce. The second narrowed membership to a run that writes and carried a typed list of
+write subcommands, which made the guard complete only while a prose claim about the tree stayed true: a
+fixture gaining a date-carrying subcommand outside that list would have made the claim false and dropped
+that write out of reach, together and silently.
 
-The requirement SHALL be no wider than the detector. Its first form said *runs `git` without the shared
-builder* and detected one spelling of the invocation, while fourteen targets ran git through another — so the
-set equality passed over a set the detector could not produce, and the gap sat in the floor. The detector
-SHALL recognize every spelling of a git invocation in executed text, and the requirement SHALL be the class
-the fixture-date discipline is about: a run that writes is a run that carries a date.
+An allowlist is stricter than a denylist, which both irreversible-act wrappers already argue in their own
+headers. The membership question SHALL therefore be the one with no list to keep, so an unfamiliar use of
+git is a member by default — a file to look at rather than a gap.
 
-Membership SHALL be judged per file — a direct invocation anywhere in it, and a write verb anywhere in it —
-which over-includes a file whose direct runs are reads. That is the safe direction: a member is a file to
-look at rather than an accusation, and its entry says which.
+The detector SHALL recognize every spelling of a git invocation in executed text, and SHALL recognize it by
+position rather than by the bare marker, because this check's own source is in the corpus it reads and holds
+a marker as a literal.
 
-One helper lived twice — byte-identical past a doc comment, in the two test targets belonging to the two
-gate modules the shared builder was extracted from — and when the builder gained fixed fixture dates only
-the file the work was already in was converged. Every fixture commit in the other kept taking its dates from
-the clock. Reading a file finds the copy being edited; reading the pair finds the copy that is not.
+#### Scenario: A test target gains a direct git run
 
-The recognizer SHALL read executed text and SHALL recognize the call by position rather than by the bare
-marker, because this check's own source is in the corpus it reads and holds the marker as a literal.
-
-#### Scenario: A test target gains a direct git write
-
-- **WHEN** a tracked test target holds both a direct `git` invocation and a write verb, and is not named
+- **WHEN** a tracked test target runs `git` itself and is not named
 - **THEN** the check fails naming it
-- **PINNED-BY** `no_test_target_writes_with_git_outside_the_shared_builder_unnamed`
+- **PINNED-BY** `no_test_target_runs_git_outside_the_shared_builder_unnamed`
 
-#### Scenario: A declared target no longer qualifies
+#### Scenario: A declared target stops running git
 
-- **WHEN** a named target stops holding both
+- **WHEN** a named target no longer runs `git` itself
 - **THEN** the check fails, because a name that outlives its reason certifies nothing
-- **PINNED-BY** `no_test_target_writes_with_git_outside_the_shared_builder_unnamed`
+- **PINNED-BY** `no_test_target_runs_git_outside_the_shared_builder_unnamed`
