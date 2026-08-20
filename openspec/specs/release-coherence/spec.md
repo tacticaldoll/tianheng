@@ -530,3 +530,24 @@ its own. A slug shared between two sites excuses whichever one was looked at.
 
 - **WHEN** iterating an enumerated directory fails part-way
 - **THEN** the judgement refuses rather than continuing over the entries it did receive
+
+### Requirement: A release section is dated on the day its release commit was made
+
+At the release snapshot the dated section for the workspace version SHALL carry the date of the
+`release: X.Y.Z` commit itself. The check SHALL compare the value, not only the shape: a reader takes that
+date for the day the release happened, and `is_iso_date` answers whether the field is a calendar date and
+never which one.
+
+It SHALL hold **only at the snapshot**. Before the release commit exists there is nothing to date against,
+and a date written during preparation is an intent rather than a claim — so the check stays silent through
+development and release-ready and speaks at the one commit whose date is the answer.
+
+Three releases carried a section date equal to their release commit's date because a person remembered; a
+fourth was prepared with a date four days behind the day it would be cut on, and nothing said so.
+
+#### Scenario: The dated section disagrees with its release commit
+
+- **WHEN** the workspace is at the release snapshot and the dated section for its version carries a date
+  other than the release commit's
+- **THEN** release coherence fails naming both dates, so an operator can see which to change
+- **PINNED-BY** `a_release_section_dated_away_from_its_commit_is_a_violation`

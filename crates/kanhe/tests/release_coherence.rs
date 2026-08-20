@@ -121,6 +121,45 @@ fn a_snapshot_is_coherent() {
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
+/// A release section dated on a day other than its own release commit is a violation.
+///
+/// **The value, not only the shape.** `is_iso_date` was hardened twice — parsed rather than counted, then
+/// ranged rather than digit-tested — and each step asked a sharper question about the shape while the value
+/// went unasked. Three releases carried a section date equal to their `release: X.Y.Z` commit's date because
+/// someone remembered; the fourth was prepared with a date four days behind the day it would be cut on, and
+/// nothing said so.
+///
+/// Only at the snapshot: before the release commit exists there is nothing to be dated against, and a date
+/// written during preparation is an intent. The control is `a_snapshot_is_coherent`, which is the same
+/// fixture with the date left agreeing.
+#[test]
+fn a_release_section_dated_away_from_its_commit_is_a_violation() {
+    let root = scratch("date-disagrees");
+    let fixture = build_fixture(&root, "date-disagrees", "0.2.0");
+    let path = fixture.repo.join("CHANGELOG.md");
+    let text = std::fs::read_to_string(&path).expect("the fixture changelog is readable");
+    std::fs::write(
+        &path,
+        text.replace("## [0.2.0] - 2026-07-20", "## [0.2.0] - 2026-07-21"),
+    )
+    .expect("the fixture changelog is writable");
+    // Amended rather than committed on top, so the release commit stays HEAD and the state stays Snapshot.
+    git(&fixture.repo, &["add", "."]);
+    git(&fixture.repo, &["commit", "-q", "--amend", "--no-edit"]);
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a section dated away from its commit must be refused");
+    refusal::expect(
+        "release-coherence#release-date-disagrees-with-its-commit",
+        &refusal,
+    );
+    assert!(
+        refusal.message.contains("2026-07-21") && refusal.message.contains("2026-07-20"),
+        "the refusal names both dates so an operator can see which to change: {}",
+        refusal.message
+    );
+}
+
 #[test]
 fn development_with_release_notes_is_coherent() {
     let root = scratch("development");

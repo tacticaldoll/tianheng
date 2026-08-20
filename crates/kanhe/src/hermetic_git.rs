@@ -7,6 +7,10 @@
 use std::path::Path;
 use std::process::Command;
 
+/// The instant every fixture commit is made at, so a fixture's dates are the fixture's rather than the
+/// clock's.
+pub const FIXTURE_DATE: &str = "2026-07-20T00:00:00+00:00";
+
 /// A command that reads neither the **global** nor the **system** git config file.
 ///
 /// Measured rather than assumed: without this the fixture inherited this repository's own signing
@@ -76,7 +80,17 @@ pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure
 /// When the process cannot be started, or exits non-zero. This builds a fixture rather than judging one, so
 /// a failure here is the harness being unable to construct its own subject.
 pub fn fixture(dir: &Path, program: &str, args: &[&str]) {
+    // **A fixture's commits carry a fixed date**, so a direction can assert what a date is rather than only
+    // what shape it has. `release_coherence` writes its dated release section as a literal and now holds it
+    // against the `release: X.Y.Z` commit's own date; with the date taken from the clock those two agree
+    // only until midnight, and the fixture would be asserting the machine rather than the subject.
+    //
+    // Both variables, because git takes the author date from one and the committer date from the other and
+    // `%ad` reads the first — a fixture that set only the author date would still record a wall-clock
+    // committer date, which is the half a later direction would read.
     let out = hermetic(program)
+        .env("GIT_AUTHOR_DATE", FIXTURE_DATE)
+        .env("GIT_COMMITTER_DATE", FIXTURE_DATE)
         .args(args)
         .current_dir(dir)
         .output()
