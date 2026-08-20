@@ -96,8 +96,10 @@ pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure
 /// second spelling also panicked on an empty slice where the first could not, so the twin had begun to
 /// diverge in the way `manifest`'s header describes for its own pair.
 ///
-/// The explicit signature is the one kept **here**. `args[0]` makes the program a value the caller has to get
-/// right inside a list, and there is no shape of that list a type refuses.
+/// The explicit signature is the shape to reach for, and it is what this function takes. `args[0]` makes the
+/// program a value the caller has to get right inside a list, and there is no shape of that list a type
+/// refuses. It read *the one kept **here***, which was the correct narrowing while three other runners still
+/// composed the program into a list; two of those have since been converged, so the qualifier understated it.
 ///
 /// **It is not the only shape admitted, which this sentence used to claim.** Four runner bodies in this crate
 /// composed the program into the list — `bound_register_parse::search`, `bound_register_parse::must`,
