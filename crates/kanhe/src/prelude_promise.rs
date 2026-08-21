@@ -52,6 +52,14 @@ pub enum Unreadable {
     /// Refused rather than read to end of file. Reading on is what made a re-export *after* the module a
     /// promised member — a promise that widened by exactly the amount the reader failed to bound.
     UnclosedPrelude,
+    /// A `pub use super::{` statement whose `};` this reader never reached, quoted from its opener.
+    ///
+    /// The block-level twin of [`Self::UnclosedPrelude`], one level in. It returned `Ok` of an empty set
+    /// before, which `judge` then reported as *the promise parsed to no member* — an input this reader could
+    /// not read, wearing the diagnostic of a promise that genuinely holds nothing, and discarding whatever
+    /// earlier statements in the same block had already contributed. `pub use super::{A, B} ;` is legal Rust
+    /// and carries no `};`, so the shape is reachable rather than hypothetical.
+    UnterminatedStatement(String),
 }
 
 /// The names `pub mod prelude` re-exports, recognized by **position** rather than by a bare marker.
@@ -123,8 +131,15 @@ pub fn promised_members(lib_rs: &str) -> Result<BTreeSet<String>, Unreadable> {
 
     let mut members = BTreeSet::new();
     for statement in statements {
+        // **A statement this reader cannot terminate is refused, never returned as an empty promise.** The
+        // arm returned `Ok(BTreeSet::new())`, which discarded every member already read from earlier
+        // statements and reached `judge` as *the promise parsed to no member* — the one diagnostic that names
+        // a different fact. Refusing here keeps this reader's own rule, stated in this module's header: an
+        // input it cannot read is not an empty disagreement.
         let Some((list, _)) = statement.split_once("};") else {
-            return Ok(BTreeSet::new());
+            return Err(Unreadable::UnterminatedStatement(
+                statement.chars().take(60).collect(),
+            ));
         };
         for entry in list.split(',') {
             let entry = entry.trim();
@@ -225,6 +240,14 @@ pub fn judge(lib_rs: &str, contract_rs: &str) -> Promise {
                 "{count} `pub mod prelude {{` markers are present, so which block carries the promise is \
                  decided by whichever comes first in the file. Two blocks are two promises and merging them \
                  would invent a third, so this is reported rather than resolved"
+            ));
+        }
+        Err(Unreadable::UnterminatedStatement(opener)) => {
+            return Promise::CannotJudge(format!(
+                "a `pub use super::{{` statement in the prelude block reaches no `}};` — read from `{opener}`. \
+                 The members of every statement before it were read, so this is an input this check cannot \
+                 read rather than a promise of nothing, and the two demand different repairs: one is a \
+                 malformed statement to fix, the other a prelude with no members"
             ));
         }
     };

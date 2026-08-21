@@ -340,3 +340,46 @@ fn a_brace_in_a_comment_neither_closes_nor_opens_the_block() {
         "a block whose close this reader never finds is refused, never read to end of file"
     );
 }
+
+/// A statement this reader cannot terminate is refused, and the falsifier is the member it would have dropped.
+///
+/// **Two statements, the second unterminated**, because that is the input the previous arm answered wrongly in
+/// a way one statement cannot show: it returned `Ok` of an empty set, so `Alpha` — already read from the
+/// statement before — vanished, and the empty set then reached `judge` wearing the vacuity diagnostic. One
+/// unterminated statement on its own returns an empty set under both readings, so it cannot tell them apart.
+///
+/// `pub use super::{Beta} ;` is the shape: legal Rust, rustfmt would rewrite it, and it carries no `};`
+/// substring for the reader to split on.
+#[test]
+fn an_unterminated_reexport_statement_is_refused_rather_than_read_as_an_empty_promise() {
+    let dropped =
+        "pub mod prelude {\n    pub use super::{Alpha};\n    pub use super::{Beta} ;\n}\n";
+
+    match promised_members(dropped) {
+        Err(Unreadable::UnterminatedStatement(opener)) => assert!(
+            opener.contains("Beta"),
+            "the refusal must quote the statement it could not terminate so an author can find it: {opener:?}"
+        ),
+        other => panic!(
+            "a `pub use super::{{` reaching no `}};` is an input this reader cannot read, not a promise of \
+             nothing — and reading it as nothing also drops `Alpha`, which the statement before it declared. \
+             Got {other:?}"
+        ),
+    }
+
+    // And the refusal reaches the operator as itself, not as the vacuity guard's sentence.
+    match judge(dropped, "fn t() { let _ = (Alpha, Beta); }") {
+        Promise::CannotJudge(why) => {
+            assert!(
+                why.contains("no `};`"),
+                "the diagnostic must name the unterminated statement: {why}"
+            );
+            assert!(
+                !why.contains("parsed to no member"),
+                "an input this check cannot read must not wear the diagnostic of a promise that holds \
+                 nothing — the two demand different repairs: {why}"
+            );
+        }
+        other => panic!("an unreadable promise must refuse, got {other:?}"),
+    }
+}

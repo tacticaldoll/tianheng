@@ -5318,6 +5318,24 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every site is in a crate that ships in no
   package.
 
+- **An unreadable re-export statement is refused, not read as a promise of nothing.** `prelude_promise`'s
+  reader returned `Ok` of an empty member set when a `pub use super::{` statement reached no `};`, which the
+  vacuity guard one level up then reported as *the promise parsed to no member* — an input the check cannot
+  read wearing the diagnostic of a prelude that genuinely holds nothing, and discarding whatever earlier
+  statements in the same block had already contributed. The two demand different repairs: one is a malformed
+  statement to fix, the other a prelude with no members. `Unreadable` gains a fourth variant carrying the
+  statement it could not terminate, and `judge` reports it as itself.
+
+  The direction was always safe — it refused either way — so what moved is the diagnostic and not the exit
+  class. The shape is reachable rather than hypothetical: `pub use super::{A, B} ;` is legal Rust and carries
+  no `};` substring. `openspec/specs/repository-checks/spec.md` gains the requirement clause and its scenario.
+  The pin gives the reader **two** statements with the second unterminated, because one on its own returns an
+  empty set under both readings and cannot tell them apart; without the repair it reports `Ok({})`, naming the
+  `Alpha` that the statement before it had already declared.
+
+  No published API, outcome, report, exit class, or manifest moves; every site is in a crate that ships in no
+  package.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

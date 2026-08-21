@@ -1292,6 +1292,14 @@ read the promise from the prelude's own block, read the external-view integratio
 and refuse when a promised member is mentioned nowhere. It SHALL refuse as a cannot-judge when the promise
 parses to nothing or the contract yields no identifier, since both make every direction hold vacuously.
 
+**An input the reader cannot read SHALL be refused naming what it could not read, never returned as an empty
+promise.** The two reach the same exit class and are not the same fact: one is a malformed source to repair,
+the other a prelude that genuinely promises nothing, and a reader that reports the first as the second sends
+its operator to the wrong repair. One arm collapsed them — a `pub use super::{` statement reaching no `};`
+returned an empty member set, which the vacuity guard above then reported as *the promise parsed to no
+member*, discarding whatever earlier statements in the same block had already contributed. The direction is
+safe (it refuses either way) and the diagnostic was not.
+
 #### Scenario: Whether a mention compiles anything is not observed — a stated bound
 
 - **WHEN** the contract names a promised member only in a comment
@@ -1300,6 +1308,14 @@ parses to nothing or the contract yields no identifier, since both make every di
   mention bite is the compiler rather than this check. A comment-only mention still fails the reviewer reading
   the diff, which is the layer that owns it
 - **PINNED-BY** `a_member_named_only_in_a_comment_is_counted_as_named`
+
+#### Scenario: A re-export statement the reader cannot terminate
+
+- **WHEN** the prelude block carries a `pub use super::{` statement that reaches no `};` — `pub use
+  super::{A, B} ;`, which is legal Rust — after a statement whose members were read
+- **THEN** the check refuses as a cannot-judge naming the statement it could not terminate, rather than
+  returning the empty member set that the vacuity guard reports as a promise of nothing
+- **PINNED-BY** `an_unterminated_reexport_statement_is_refused_rather_than_read_as_an_empty_promise`
 
 ### Requirement: Whitespace hygiene SHALL be held over every tracked text file, and hold itself to this family's contract
 
