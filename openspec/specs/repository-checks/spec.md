@@ -1487,6 +1487,40 @@ carry because it installs a toolchain and rebuilds the workspace.
 - **THEN** the wrapper refuses as a cannot-judge, because a rollup it could not read is not a suite that
   agreed
 
+The rollup is a **union of two node shapes** and the read SHALL cover both. A check run carries a conclusion
+and a name; an external commit status carries a state and a context, and neither of the first two. A read of
+one shape answers the empty conclusion for every node of the other, so a **failed** commit status classifies
+as unfinished and is reported under a name no check has — the same wrong sentence the stderr rule above
+already forbids, arriving through the shape the read never covered. A state with no counterpart among the
+conclusions SHALL be classified by what the operator must do about it: a status still **expected** is
+unfinished, since it is required and not yet posted, and reading it as agreement would merge past a required
+status that never arrived.
+
+#### Scenario: A failed external commit status disagrees
+
+- **WHEN** a pull request carries a commit status whose state is a failure, alongside check runs that passed
+- **THEN** the wrapper refuses as a cannot-judge naming that status by its context, rather than classifying it
+  as unfinished under a name no check carries
+- **PINNED-BY** `a_failed_commit_status_disagrees_rather_than_reading_as_unfinished`
+
+#### Scenario: A commit status still expected has not finished
+
+- **WHEN** a pull request carries a commit status whose state is *expected* — required, and never posted
+- **THEN** the wrapper refuses as a cannot-judge saying the run is unfinished, so the operator waits rather
+  than hunting a disagreement
+- **PINNED-BY** `a_commit_status_still_expected_is_unfinished_rather_than_agreement`
+
+#### Scenario: An admitted flag does not carry a red suite past the wrapper
+
+- **WHEN** the wrapper is invoked with `--admin` on a pull request whose checks disagree
+- **THEN** it refuses as a cannot-judge and `gh pr merge` is never reached. `--admin` bypasses required
+  **reviews**, which a single-steward repository needs because a pull request's author cannot approve their
+  own; it SHALL NOT be read as bypassing this requirement, which runs before the tool. The flag was admitted
+  on the ground that whether CI agreed stayed outside this wrapper, and that ground was withdrawn when this
+  requirement was written — the arm's own reasoning outlived its premise because no direction observed the
+  two together
+- **PINNED-BY** `the_admin_flag_does_not_carry_a_red_suite_past_this_wrapper`
+
 ### Requirement: A merge records a message about work the pull request carries
 
 The wrapper standing in front of `gh pr merge` SHALL read how many files the pull request changes and refuse

@@ -164,16 +164,37 @@ elif [[ $1 == pr && $2 == view && $* == *"--json changedFiles"* ]]; then
     *) printf '%s\n' '5' ;;
     esac
 elif [[ $1 == pr && $2 == view && $* == *"--json statusCheckRollup"* ]]; then
-    # What CI said, as the wrapper now reads it: one answer, `<conclusion>\t<name>` per check. A mode that
-    # answers NOTHING is distinct from the clean one, because a pull request with no checks and a pull
-    # request whose checks all passed were byte-identical to the first form and no direction could tell
-    # them apart — which is exactly how its third state came to be unreachable.
+    # **Raw JSON, and the wrapper's OWN `-q` filter applied to it.** This arm used to print the
+    # already-transformed `<conclusion>\t<name>` lines, which meant the filter in `scripts/merge-pr.sh` was
+    # executed by no direction at all: the stub stood exactly where it ran. A filter reading one of the
+    # rollup's two node shapes was therefore invisible, and so would its repair have been.
+    #
+    # The filter is read out of this call's own argv rather than copied here, so it keeps one owner. Copying
+    # it would be the two-places-that-must-agree shape a stub is especially bad at holding, since nothing
+    # compares them.
+    #
+    # `StatusContext` is the second shape — an external commit status, carrying `.state`/`.context` and
+    # neither `.conclusion` nor `.name`. `ci-unclaimed` answers an empty array, which is distinct from the
+    # clean mode: a pull request with no checks and one whose checks all passed were byte-identical under the
+    # printed form, which is how the third state came to be unreachable.
+    filter=""
+    for ((i = 1; i <= $#; i++)); do
+        if [[ ${!i} == -q ]]; then
+            j=$((i + 1))
+            filter=${!j}
+        fi
+    done
     case $FAKE_GH_MODE in
-    ci-red) printf '%b\n' 'FAILURE\tMSRV (rust-version)' 'SUCCESS\tDefinition of Done' ;;
-    ci-pending) printf '%b\n' '\tMSRV (rust-version)' 'SUCCESS\tDefinition of Done' ;;
-    ci-unclaimed) : ;;
-    *) printf '%b\n' 'SUCCESS\tDefinition of Done' 'SKIPPED\tExamples dogfood' ;;
+    ci-red) body='{"statusCheckRollup":[{"conclusion":"FAILURE","name":"MSRV (rust-version)"},{"conclusion":"SUCCESS","name":"Definition of Done"}]}' ;;
+    ci-pending) body='{"statusCheckRollup":[{"conclusion":null,"name":"MSRV (rust-version)"},{"conclusion":"SUCCESS","name":"Definition of Done"}]}' ;;
+    ci-unclaimed) body='{"statusCheckRollup":[]}' ;;
+    # A FAILED external commit status: the second node shape, with none of a CheckRun's fields.
+    ci-red-status) body='{"statusCheckRollup":[{"state":"FAILURE","context":"continuous-integration/legacy"},{"conclusion":"SUCCESS","name":"Definition of Done"}]}' ;;
+    # And one still expected: required, never posted. Agreement would merge past it.
+    ci-expected-status) body='{"statusCheckRollup":[{"state":"EXPECTED","context":"continuous-integration/legacy"},{"conclusion":"SUCCESS","name":"Definition of Done"}]}' ;;
+    *) body='{"statusCheckRollup":[{"conclusion":"SUCCESS","name":"Definition of Done"},{"conclusion":"SKIPPED","name":"Examples dogfood"}]}' ;;
     esac
+    printf '%s' "$body" | jq -r "$filter"
 elif [[ $1 == pr && $2 == view && $* == *"--json headRefOid"* ]]; then
     if [[ $FAKE_GH_MODE == unreadable-head ]]; then
         printf '%s\n' ''
@@ -189,7 +210,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
+    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -1082,6 +1103,120 @@ fn a_pull_request_whose_checks_disagree_stops_before_the_merge() {
         run.stderr.contains("MSRV (rust-version)"),
         "the operator is told WHICH check disagreed, not merely that one did: {}",
         run.stderr
+    );
+}
+
+/// A FAILED external commit status disagrees; it is not an unfinished check.
+///
+/// **The rollup is a union and the filter read one half of it.** `StatusCheckRollupContext` is
+/// `CheckRun | StatusContext`, and a `StatusContext` carries `.state`/`.context` with neither `.conclusion`
+/// nor `.name` — so `(.conclusion // "")` answered `""` for every commit status and a FAILED one was
+/// classified as *unfinished*, reported as `these checks have not finished: ?`. A refusal naming a check that
+/// does not exist is verbatim the defect the filter's own paragraph records fixing once, returned through the
+/// node shape it never read.
+///
+/// Fail-closed either way, which is why it was latent: both classes refuse. What moved is what the operator
+/// is told, and `?` sends them looking for nothing.
+///
+/// This direction is only possible because the stub now applies the wrapper's own `-q` filter to raw JSON
+/// instead of printing what the filter would have produced. Under the printed form the filter was executed
+/// nowhere and this shape was unreachable.
+#[test]
+fn a_failed_commit_status_disagrees_rather_than_reading_as_unfinished() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "ci-red-status", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a suite this wrapper could not get agreement from is a cannot-judge: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.contains("pr merge"),
+        "and it must stop before the merge: {}",
+        run.gh_log
+    );
+    assert!(
+        run.stderr.contains("continuous-integration/legacy"),
+        "the operator is told which context disagreed, by the name the status actually carries: {}",
+        run.stderr
+    );
+    assert!(
+        !run.stderr.contains("have not finished"),
+        "a status that FAILED is a disagreement, not a check still running — and `?` for its name is what \
+         sends an operator looking for a check that does not exist: {}",
+        run.stderr
+    );
+}
+
+/// A required commit status that was never posted is unfinished, not agreement.
+///
+/// `EXPECTED` is GitHub's *a status is expected*: required, and not yet reported. Reading it as agreement
+/// would merge past a required status that never arrived, which is the false-negative direction this guard
+/// exists to close — so it is classified with `PENDING`, whose operator action is identical. Recorded because
+/// the review that found the union proposed the opposite mapping.
+#[test]
+fn a_commit_status_still_expected_is_unfinished_rather_than_agreement() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "ci-expected-status", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a required status that never arrived is not agreement: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.contains("pr merge"),
+        "and it must stop before the merge: {}",
+        run.gh_log
+    );
+    assert!(
+        run.stderr.contains("have not finished"),
+        "an expected-but-unposted status is reported as unfinished, so the operator waits rather than \
+         hunting a disagreement: {}",
+        run.stderr
+    );
+}
+
+/// `--admin` does not carry a red suite past this wrapper.
+///
+/// **The admitted flag and the CI guard had never been observed together.** `--admin` was reasoned in as
+/// consistent with *whether CI is green stays a human's call*, and `require_ci_green` landed 204 commits
+/// later and refuses unconditionally — so the arm's premise was false and nothing said so, because the one
+/// direction covering `--admin` proves it reaches the merge against a GREEN stub. What `--admin` still does
+/// is bypass required REVIEWS, which a single-steward repository genuinely needs; what it does not do is
+/// reach `gh` with a red rollup behind it.
+///
+/// **This pins the contract, not a change, and says so rather than claiming a negative run.** The behaviour
+/// it asserts held before this change too — `require_ci_green` already refused unconditionally. What was
+/// missing was any direction that looked, so the arm's prose could go on describing a premise its own
+/// repository had falsified. Closing an observation gap and moving behaviour are different acts; only the
+/// second has a run that fails beforehand, and reporting the first as the second is how a restatement gets
+/// mistaken for a guard.
+#[test]
+fn the_admin_flag_does_not_carry_a_red_suite_past_this_wrapper() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "ci-red", &["--admin"]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "an admitted flag does not change what the CI guard found: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.contains("pr merge"),
+        "`--admin` bypasses required reviews on GitHub's side; it must not carry a red suite past a guard \
+         that runs before `gh` is reached: {}",
+        run.gh_log
     );
 }
 

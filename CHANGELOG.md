@@ -5458,6 +5458,47 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every site is in a crate that ships in no
   package.
 
+- **The merge wrapper now says what it holds, reads both rollup shapes, and its filter is finally under
+  test.** Three findings in one file, and the third is why the first two were invisible.
+
+  `scripts/merge-pr.sh`'s header said *whether CI is green remains a human's call* while `require_ci_green`
+  refused a red or unfinished rollup unconditionally — a premise the wrapper's own newer code had falsified,
+  left standing where an operator reads it first. `require_ci_green` landed 204 commits after the `--admin`
+  arm was reasoned **from that premise**, which is how a stale premise spreads rather than merely sits.
+  `--admin` stays admitted for what it still does — bypass required **reviews**, which a single-steward
+  repository needs because a pull request's author cannot approve their own — and its arm no longer claims it
+  reaches past CI.
+
+  **The rollup is a union of two node shapes and the filter read one.** `StatusCheckRollupContext` is
+  `CheckRun | StatusContext`; a commit status carries `.state`/`.context` and neither `.conclusion` nor
+  `.name`, so `(.conclusion // "")` answered `""` for every one of them and a **failed** status classified as
+  *unfinished*, reported as `these checks have not finished: ?`. That is verbatim the wrong sentence the
+  stderr-capture rule already forbids, returned through the shape the filter never covered. Fail-closed
+  either way, so latent — this repository produces no commit statuses — and latent is not fixed: a check
+  reported under a name nobody can find is what sends an operator after the wrong thing. `EXPECTED` is
+  classified **unfinished rather than agreeing**, a deliberate departure from the review that found the
+  union: GitHub's meaning is *required and not yet posted*, so agreement would merge past a status that never
+  arrived.
+
+  **The filter was executed by no direction at all**, and that is the finding behind the other two. The `gh`
+  stub printed the already-transformed `<conclusion>\t<name>` lines, so it stood exactly where the filter
+  ran: a filter reading half the union was unobservable, and so would its repair have been. The stub now
+  emits raw JSON and applies the `-q` filter **it was handed**, so the filter keeps one owner — copying it
+  into the stub would be two places that must agree with nothing comparing them — and every one of the
+  target's existing directions passes unchanged through real `jq`.
+
+  Three directions added. Two carry negative runs; the third pins the contract and says so, because it does
+  not move behaviour — `require_ci_green` already refused a red suite with `--admin` passed, and what was
+  missing was any direction that looked, which is exactly how the arm's prose went on describing a withdrawn
+  premise. The `EXPECTED` negative run had to move **only** the classification: reverted together with the
+  filter it passed, because the old filter answered `""` for a commit status and so already read as
+  unfinished — accidentally right for the wrong reason.
+
+  `reference_integrity` refused the change once on the way in: a new comment said *the paragraph below*, and
+  a positional reference names nothing checkable. It names the rule it means instead.
+
+  No published API, outcome, report, exit class, or manifest moves; the wrapper ships in no package.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
