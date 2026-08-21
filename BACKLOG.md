@@ -694,8 +694,87 @@ consumer for an undemonstrated deduplication.
   *Authority:* this entry, `AGENTS.self-law.md`, `crates/kanhe/tests/release_coherence.rs`'s documented bug
   history.
 
+- **A claim about this tree, written as prose, is held only where its author declared it.** *Class:*
+  READY-PATCH. *Observed pressure:* two claims were found false in the 0.5.0 window by the same shape — a
+  statement about an enumerable property of this repository, written with no producer and an outer edge wider
+  than anything that reacts. `Cargo.toml`'s *syn quarantined to 渾儀 alone*, false from the moment the
+  dev-table edge landed in the same window; and `PROJECT.md`'s *zero change directories have ever existed*,
+  contradicted by `git log --all`, by two commit bodies on the tip that wrote it, and by a requirement with a
+  scenario in `openspec/specs/reference-integrity/spec.md`. Both were true of a corpus neither named. *Observation
+  source:* an adversarial contract review of `v0.4.0..HEAD`, plus this file's and `CHANGELOG.md`'s own record of
+  the figure form of the same class — eight hand-written figures found wrong in a single change, which is what
+  `crates/kanhe/src/census.rs` was built for. *Current reaction or bound:* `census` holds a **figure** written in
+  a sentence its enumerating check declared, over tracked Markdown, and `repository-checks` declares two bounds
+  for what that leaves — a count in a phrasing no census declares, and a census outside Markdown. Nothing at all
+  holds a **set-membership or absolute** claim (`only X`, `never Y`, `alone`), in any carrier. *Risk:* the
+  projected prose is what conditions every agent that loads it, so a claim wider than its reaction is a false
+  statement of the law at the surface 潛移 makes most load-bearing. Bounded by the claims being prose: nothing an
+  adopter resolves, and no exit class moves. *Promotion trigger:* a third instance, or the design below being
+  written. *Version class:* patch; the carriers ship in no crate. *Authority:* this entry, `AGENTS.md`'s *Bind a
+  claim to its measurement* and *A census is produced, never typed*, and `crates/kanhe/src/census.rs`.
+
+  *Shape, because the obvious instrument is already refused:* a detector over prose was designed, measured three
+  times and rejected, and that refusal has an observation source this entry does not get to ignore. The admitted
+  shape is the one already built for figures — **declaration**: `Census` carries a phrase and produced figures,
+  and the missing sibling is a declared phrase whose held value is a produced **set**, so *only 渾儀 names syn*
+  is compared against the enumerator that answers it. What that cannot cover is stated here rather than
+  discovered later: it reaches only claims some check enumerates the set for, so a role description like *the
+  syn dependency lives here* stays a reviewer's, and coverage stays opt-in — declaring is an author's act. That
+  residual is the honest floor of this repair, not an argument against it.
+
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
+
+- **WATCH: no reaction asks what each repository check observed, and the check surface is now an order of
+  magnitude larger than the product it guards.** *Class:* WATCH. *Observed pressure:* the drift law — *no
+  target or name without a reaction*, *no drift type without an observation source* — is stated over the
+  product's boundaries and has never been turned on the repository checks themselves. Every check has a
+  reason written in its header; nothing enumerates which ones have an **observation source**, in the sense
+  this file demands of a backlog entry: a thing that happened, not a shape that could. *Observation source,
+  reconstructible:* measured at `HEAD` on 2026-08-21, from **one** enumeration so the two sides cannot be
+  counted under different rules:
+
+  ```bash
+  git diff --numstat --no-renames v0.4.0..HEAD -- crates > /tmp/n
+  grep '/src/' /tmp/n | grep -vE 'crates/(kanhe|shengmo)/' | grep -vE '/tests?(\.rs|/)' \
+    | awk '{a+=$1} END{print a}'                                          # product logic: +2230
+  grep -E 'crates/(kanhe|shengmo)/' /tmp/n | awk '{a+=$1} END{print a}'   # machinery:     +28687
+  ```
+
+  `--no-renames` is load-bearing rather than decorative: nine fixture moves render as
+  `crates/{tianheng => shengmo}/…`, which a path-shaped filter reads and a name-shaped one does not, and the
+  two forms disagreed on both figures until the enumeration was pinned. No file count is given — the ratio is
+  the claim, and the counts were the half that broke.
+  and against this file's own anchored figure for the same window — 46 of the last 60 commits (78%) scoped
+  `kanhe`, 38 (64%) typed `fix`. *Current reaction or bound:* none. `observation-bound-register` enumerates
+  where each check *stops*, which is the opposite question; nothing enumerates why each check *exists*.
+  *Risk, and both readings stated because the evidence does not choose between them:* the ratio is what
+  dogfooding a governance thesis looks like, and the checks with a recorded observation source — a release
+  dated four days behind the day it would be cut, a publish from the wrong branch, nine squash subjects
+  carrying `(#N)`, a prelude promise narrowing unobserved — are the argument for it. The risk is the
+  remainder: a check built from a shape someone imagined would be exactly the name-without-an-observation
+  the drift law refuses in product code, and it would be indistinguishable from the others by reading, since
+  every header reasons well. *Promotion trigger:* an audit that asks each `crates/{kanhe,shengmo}/tests/*`
+  target *what did this catch, and when* — enumerated from tracked content the way
+  `observation-bound-register` is, never hand-listed — and finds a target with no answer. Deliberately not
+  attempted here: it is the audit-cycle shape `PROJECT.md` records, whose own decision says larger surfaces
+  are named and not committed to, and running it is a window's work rather than a review round's. *Version
+  class:* patch; both crates ship in no package, so any retirement it produced would reach no adopter.
+  *Authority:* this entry, `PROJECT.md`'s drift law and its audit-cycle decision, `governance-dogfood`.
+
+- **WATCH: the prose-claim class is filed but not closed, and no rule says how much of a class must react.**
+  *Class:* WATCH. *Observed pressure:* `AGENTS.md` says a governance rule measured un-reacted is *given a
+  reaction or filed, in the same change* — and filing counts as answering. The `READY-PATCH` entry above
+  discharges that duty for the prose-claim class by proposing the declaration; this one records that the
+  declaration does not close it, because its coverage is an author's act. What no rule in this repository
+  answers is when a class whose only instrument is opt-in has been answered *enough*. *Observation source:*
+  this file's own history of the figure form of the same class — declared 2026-08, reacted for one sentence,
+  and the eight-figure change that followed it. *Current reaction or bound:* none, and by construction: this
+  is a question about the coverage of a discipline, not about a shape anything observes. *Risk:* the class is
+  rediscovered once a window and each rediscovery pays the measurement again; bounded by every carrier being
+  prose. *Promotion trigger:* a third window in which this class costs a review round after the `READY-PATCH`
+  above lands. *Version class:* patch. *Authority:* `AGENTS.md`'s *A repair loop is a diagnosis, not a
+  schedule*.
 
 - **WATCH: Four Markdown readers still take a bare `&str` where `region` exists.** *Class:* WATCH.
   *Observed pressure:* `region`'s own header made this an absolute — *a corpus is never handed to a

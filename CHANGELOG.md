@@ -5367,6 +5367,39 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves. No reaction changes behaviour: the one
   code edit is a comment.
 
+- **`syn`'s perimeter is stated at the table the law observes, and the class behind it is filed.** The
+  `[workspace.dependencies]` comment read *quarantined to 渾儀 (hunyi) alone — never the 圭表 core or 璇璣 model
+  (enforced by `crates/shengmo/src/law.rs`)*, unchanged since `2f903fb`, and `alone` had been false since this
+  same window added `syn` to `crates/kanhe/Cargo.toml`'s `[dev-dependencies]` for 勘合's test-only Rust
+  scanners. The parenthetical over-reached in exactly the direction the new edge sits:
+  `restrict_dependencies_to` observes one table and `Normal` is the default every self-law boundary takes — a
+  specified default with its own scenario in `openspec/specs/crate-dependency-boundary/spec.md`, which is why
+  the edge needed no amendment and why the sentence could not cover it. The comment now separates what is
+  reacted (among `[dependencies]`, 渾儀 alone) from what is not (`[dev-dependencies]` is outside every
+  allowlist, and 勘合 occupies it), and the crate-family header above it says *the only packaged crate* rather
+  than naming the whole tree.
+
+  **Two claims of one shape in one window, so the class is filed rather than only repaired.** `BACKLOG.md`
+  gains a `READY-PATCH` for it — a claim about an enumerable property of this tree, written with no producer
+  and an edge wider than anything that reacts — with the design that shape admits: `census` already declares
+  the sentence a **figure** is written in, and the missing sibling declares one whose held value is a produced
+  **set**, so *only 渾儀 names syn* is compared against the enumerator that answers it. A detector over prose
+  stays refused, on the measurement that refused it three times. What the declaration cannot cover is written
+  into the entry rather than left to be found: coverage is an author's act, and a role description no check
+  enumerates a set for stays a reviewer's. A sibling `WATCH` records that filing the class does not close it.
+
+  **And one filing that is an observation rather than a defect.** The drift law — *no target or name without a
+  reaction* — has never been turned on the repository checks themselves: every one reasons well in its header,
+  and nothing enumerates which have an observation source in the sense this repository demands of a backlog
+  entry. Measured at `HEAD` with the one pinned enumeration the entry carries: the packaged product's logic
+  gained +2230 lines in this window while the machinery gained +28687. Both readings of that ratio
+  are stated in the entry, because the evidence does not choose between them, and the audit that would is
+  named and deliberately not attempted — it is the enumerated-surface cycle `PROJECT.md` records, and a window's
+  work rather than a review round's.
+
+  No published API, outcome, report, exit class, or manifest moves; no reaction changes behaviour, and no code
+  was edited.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
