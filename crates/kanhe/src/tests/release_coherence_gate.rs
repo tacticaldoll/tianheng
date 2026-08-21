@@ -152,3 +152,63 @@ fn a_path_or_a_version_this_reader_cannot_read_is_a_cannot_judge() {
         refusal.message
     );
 }
+
+/// A dependency key this reader cannot decode is refused, not skipped.
+///
+/// **The falsifier is the stale pin that got away.** TOML admits a quoted key and cargo decodes it —
+/// measured, `"serde_json" = "1"` resolves to a dependency named `serde_json` — so `"xuanji" = "0.0.1"` is a
+/// real family requirement whose raw spelling matches no family member. Before this it was dropped by the
+/// `!family.contains(…)` filter, and the aggregate requirement counter stayed non-zero on the strength of the
+/// second example here, so the judgement reported **clean** over a stale pin. That is the false-negative
+/// direction the Core Contract forbids, reached through the same door the `Named` arm's own comment already
+/// describes for a rename.
+///
+/// The second example is load-bearing rather than decoration: with only the quoted one present the counter
+/// would reach zero and the existing vacuity guard would refuse for its own reason, which is not this one.
+#[test]
+fn a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped() {
+    let root = std::env::temp_dir().join(format!("kanhe-quoted-key-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("the scratch root is writable");
+
+    let write = |dir: &str, body: &str| {
+        let at = root.join("examples").join(dir);
+        std::fs::create_dir_all(&at).expect("the example directory is writable");
+        std::fs::write(at.join("Cargo.toml"), body).expect("the example manifest is writable");
+    };
+    // The quoted key carries a stale pin; the bare one is correct and keeps the counter non-zero.
+    write(
+        "quoted",
+        "[package]\nname = \"ex-quoted\"\n\n[dependencies]\n\"xuanji\" = \"0.0.1\"\n",
+    );
+    write(
+        "bare",
+        "[package]\nname = \"ex-bare\"\n\n[dependencies]\nxuanji = \"0.5.0\"\n",
+    );
+
+    let manifests = [(
+        "crates/xuanji/Cargo.toml".to_string(),
+        "[package]\nname = \"xuanji\"\n".to_string(),
+    )];
+
+    let refusal = super::super::release_coherence_gate::require_example_pins(
+        &root, &manifests, "0.5.0",
+    )
+    .expect_err(
+        "a key this reader cannot decode names some crate, and which one is what it cannot say — so the \
+         entry can neither be matched against the family nor passed over. Passed over, the stale \
+         \"0.0.1\" reaches a release as clean",
+    );
+    crate::refusal::expect(
+        "release-coherence#example-dependency-key-unreadable",
+        &refusal,
+    );
+    assert_eq!(refusal.kind, Kind::CannotJudge);
+    assert!(
+        refusal.message.contains("not a bare TOML key"),
+        "the refusal must name what it could not decode, got: {}",
+        refusal.message
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}

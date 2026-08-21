@@ -5400,6 +5400,34 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; no reaction changes behaviour, and no code
   was edited.
 
+- **A dependency key this reader cannot decode is refused, not skipped — the release gate's own false
+  negative.** Where an example declares no `package`, its key *is* the identity, and the key was taken as the
+  raw text before the `=`. TOML admits a quoted key and cargo decodes it — measured, `"serde_json" = "1"`
+  resolves to a dependency named `serde_json` — so `"xuanji" = "0.0.1"` is a real family requirement whose raw
+  spelling matches no family member. The `!family.contains(…)` filter dropped it by `continue`, and the
+  requirement counter is an **aggregate** over every example, so one example's quoted pins contribute zero
+  while the others keep the total non-zero and the guard stays silent.
+
+  That is the one class the Core Contract forbids, and it is the **second door** into a class this file's own
+  comment already describes verbatim for the first: *cargo renames with `alias = { package = "xuanji", version
+  = "stale" }`, `alias` is in no family, and the entry was skipped entirely — while the aggregate
+  `requirements` counter stayed non-zero on the strength of the other examples.* `Package` gains
+  `KeyUnreadable`, `Package::of` judges the key where it already resolves the identity, and the one consumer
+  the compiler names answers it with a cannot-judge.
+
+  Refused rather than decoded, deliberately: decoding is TOML string parsing, which `BACKLOG.md` already files
+  as its own entry with its own trigger, and a reader that refuses what it cannot decode cannot narrow the set
+  it judges. Measured before writing — no tracked manifest carries a non-bare dependency key, so this refuses
+  nothing the tree has.
+
+  The negative run is at the **verdict** level rather than at the reader's: with the key check reverted,
+  `require_example_pins` returns `Ok([("crates/xuanji/Cargo.toml", "xuanji")])` over a stale `"0.0.1"` — the
+  gate reporting a clean release. The pin carries a second, correct example for that reason; with only the
+  quoted one present the counter reaches zero and the existing vacuity guard refuses for a different reason.
+
+  No published API, outcome, report, exit class, or manifest moves; every site is in a crate that ships in no
+  package.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

@@ -171,6 +171,19 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   equals nor is the minor series of
 - **THEN** the coherence check fails and names the example, the crate, and the version found
 
+#### Scenario: A dependency key this reader cannot decode
+
+- **WHEN** an example declares a family crate under a key that is not a bare TOML key — `"xuanji" = "0.0.1"`,
+  which cargo decodes to a dependency named `xuanji` — and no `package` value names the crate explicitly
+- **THEN** the check refuses as a cannot-judge naming the key it could not decode, rather than passing the
+  entry over. A key whose decoded value is not its text names some crate and this reader cannot say which, so
+  it can neither be matched against the family nor skipped: skipping it is what let a stale pin reach a
+  release as clean, while the aggregate requirement counter stayed non-zero on the strength of the other
+  examples. It is the same false negative as a renamed dependency, through a second door, and the identity
+  rule that closed the first — a dependency names the crate its `package` field names, and its key only
+  otherwise — is where the key's own spelling has to be judged
+- **PINNED-BY** `a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped`
+
 #### Scenario: A dependency is read in either form cargo writes it
 
 - **WHEN** an example declares a family crate as a detailed table — `[dependencies.alias]` with its own
