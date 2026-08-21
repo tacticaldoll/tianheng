@@ -1229,7 +1229,11 @@ same kind of thing:
 - a **trailer** — a `Key: Value` mark such as the co-authored trailer or the generated-with footer — SHALL be
   recognised at the start of a line, so a body that *names* one inside a sentence is not carrying it. This gate
   would otherwise refuse the commit message of any change about this rule, which is the false refusal this
-  requirement forbids;
+  requirement forbids. **A line-start match SHALL also require the mark to END there**, and the two line marks
+  end differently because only one of them is a key: a trailer key ends at its `:`, and a footer phrase ends at
+  a word boundary — `Generated with Claude Code` carries no colon, so demanding one would stop refusing the
+  real mark. Without a boundary the prefix runs on and a line beginning `Co-authored-bystander …` is refused
+  while carrying no attribution at all, which is this same false refusal reached from the other end;
 - a **glyph** with no legitimate use in this repository's messages SHALL be recognised wherever it appears.
   Reading it by position would let a subject carrying it mid-line pass, which is a miss rather than a false
   refusal. Prose about the rule names such a glyph in words.
@@ -1316,6 +1320,15 @@ safe (it refuses either way) and the diagnostic was not.
 - **THEN** the check refuses as a cannot-judge naming the statement it could not terminate, rather than
   returning the empty member set that the vacuity guard reports as a promise of nothing
 - **PINNED-BY** `an_unterminated_reexport_statement_is_refused_rather_than_read_as_an_empty_promise`
+
+#### Scenario: A longer word that starts like an attribution mark is not one
+
+- **WHEN** a body line begins with a longer word that merely starts like a mark — `Co-authored-bystander …`,
+  `Generated withheld …`
+- **THEN** the gate does not refuse it, because the mark must end where it ends: a trailer key at its `:`, a
+  footer phrase at a word boundary. Refusing it is the same false refusal the line-start rule exists to
+  prevent, reached from the other end
+- **PINNED-BY** `a_longer_word_that_starts_like_a_mark_is_not_carrying_it`
 
 ### Requirement: Whitespace hygiene SHALL be held over every tracked text file, and hold itself to this family's contract
 
