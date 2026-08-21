@@ -1098,7 +1098,6 @@ pub(crate) fn require_example_pins(
         .map(|(head, _)| head)
         .unwrap_or(version);
     let mut example_manifests = 0usize;
-    let mut requirements = 0usize;
 
     let dirs = entries_of(&repo.join("examples"))?;
     for dir in dirs {
@@ -1118,6 +1117,12 @@ pub(crate) fn require_example_pins(
             )
         })?;
         example_manifests += 1;
+        // **Counted per example, because the aggregate could not see a partial read.** This counter used to
+        // live outside the loop, so seven examples parsing kept it non-zero while an eighth went unexamined
+        // — the partial case this function's own header names, and the half that let a renamed and then a
+        // quoted family key each reach a release as clean. One example is one subject: whatever the reader
+        // failed to see there is invisible to every other example's success.
+        let mut requirements_here = 0usize;
         let name = dir
             .file_name()
             .unwrap_or_default()
@@ -1212,7 +1217,7 @@ pub(crate) fn require_example_pins(
                     ));
                 }
             };
-            requirements += 1;
+            requirements_here += 1;
             if pin != minor && pin != version {
                 // The package, and the key where they differ: a renamed dependency reported by its key alone
                 // sends a reader looking for a crate the manifest does not name.
@@ -1235,6 +1240,16 @@ pub(crate) fn require_example_pins(
                 ));
             }
         }
+        if requirements_here == 0 {
+            return Err(cannot_judge_at(
+                "release-coherence#example-requires-no-family-crate",
+                format!(
+                    "example {name} declares no family dependency requirement this check could read, so its \
+                 pins would be reported over nothing. Either it requires no family crate — which is not an \
+                 example of this family — or it declares one in a form this reader did not see"
+                ),
+            ));
+        }
     }
     if example_manifests == 0 {
         return Err(cannot_judge_at(
@@ -1242,15 +1257,13 @@ pub(crate) fn require_example_pins(
             "found no example manifests under examples/ — the layout changed or is absent",
         ));
     }
-    if requirements == 0 {
-        return Err(cannot_judge_at(
-            "release-coherence#no-family-requirement-in-examples",
-            format!(
-                "read {example_manifests} example manifest(s) and found no family dependency requirement in any \
-             of them — the declaration form changed, so example pins would be reported over nothing"
-            ),
-        ));
-    }
+    // **The aggregate guard is gone rather than kept beside this one, because no input can reach it.** With
+    // every example refusing on its own zero, a run that gets past the loop has `example_manifests` examples
+    // each contributing at least one requirement; a run with none is the guard above. Keeping it would be the
+    // dead branch this file already refuses one read earlier — *a branch no input can take, which is dead code
+    // rather than a guard*. Its WHEN moved rather than vanished: the fixture that reached it, one example
+    // requiring no family crate, now reaches the per-example refusal, and the direction that pinned it is
+    // rewritten onto the new site rather than deleted.
     Ok(members)
 }
 

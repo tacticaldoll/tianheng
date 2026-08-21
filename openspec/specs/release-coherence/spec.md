@@ -256,6 +256,19 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 - **PINNED-BY** `an_example_whose_package_value_is_unreadable_is_not_judged`
 - **PINNED-BY** `an_example_declaring_several_package_keys_is_not_judged`
 
+#### Scenario: An example declaring no family requirement is refused on its own, not counted against its siblings
+
+- **WHEN** one manifest under `examples/` declares no family dependency this reader could see, while other
+  examples declare theirs correctly
+- **THEN** the check refuses as a cannot-judge **naming that example**, rather than passing it over because
+  the other examples supplied requirements. The requirement count SHALL be per example: an aggregate over
+  every example cannot distinguish *no example declares one* from *this example went unexamined while its
+  siblings parsed*, and the second is the shape a reader that misses a declaration produces. Both closed
+  identity doors — a renamed key, and a key this reader cannot decode — reached a clean release through this
+  counter, so the two are one requirement and the count is where it is enforced
+- **PINNED-BY** `an_example_requiring_no_family_crate_reports_over_nothing`
+- **PINNED-BY** `an_example_declaring_nothing_is_refused_though_its_sibling_is_fine`
+
 #### Scenario: A value that is not a string does not borrow the next one
 
 - **WHEN** a dependency's `package` or `version` value is not a double-quoted string while a later key on
