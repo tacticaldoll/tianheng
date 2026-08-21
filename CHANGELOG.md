@@ -5575,6 +5575,29 @@ no adopter runs. They are here rather than under the adopter headings above beca
   is read by this very guard as having closed the channel itself, and the guard's control-file assertion
   caught that on the way in.
 
+- **One enumerator for the capability specs, which is the third of three and the one the extraction left
+  behind.** `observation_bound_model` had already converged the marker predicate and the slug rule into
+  `bound_register_parse` and imported both — and kept enumerating the corpus itself, with
+  `std::fs::read_dir(openspec/specs)` over the **worktree**, while the register enumerated the same set from
+  `git ls-files -z` over **tracked content**, where `-z` is load-bearing because a quoted path would silently
+  drop a whole capability's bounds.
+
+  Two enumerators of one set, in one crate, with nothing comparing them. The consequence is not abstract: an
+  untracked or gitignored `spec.md` entered the bijection gate and could never enter the register's, so the
+  two gates judged different corpora and neither could say so. Measured, with an untracked
+  probe capability's `spec.md` planted in the worktree and the walk restored — the bijection reported it as
+  *declared in a spec and classified nowhere* while `bound_register` stayed green, both corpora visible in one
+  run.
+
+  `spec_bounds` calls `tracked_specs` now, and the duplicate vacuity assert goes with the walk: `tracked_specs`
+  refuses its own empty enumeration, so the second one was a guard a call away from itself. The *other* assert
+  stays and is a different fact — no declared bound found is not no capability spec found.
+
+  `openspec/specs/observation-bound-model/spec.md` already forbade a second implementation of the predicate and
+  the slug rule, and stopped exactly where this defect was; the corpus is named there now as the third, with
+  the scenario. The pin asserts the corpus **by identity** rather than by re-deriving a set to compare against
+  — a comparison would need the second walk this removes.
+
   No published API, outcome, report, exit class, or manifest moves; every site is in a crate that ships in no
   package.
 
