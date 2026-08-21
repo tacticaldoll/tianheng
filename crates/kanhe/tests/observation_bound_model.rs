@@ -96,31 +96,23 @@ fn unpinned_fixture() -> BoundDecl {
 
 /// Every declared bound the specs state, keyed by derived id.
 ///
-/// Fails loudly on an empty enumeration in either direction. A check reporting a perfect bijection between
-/// two empty sets is the vacuity this repository has re-opened six times in one window.
+/// **The corpus comes from the one enumerator, not from a second walk of the same directory.** This read
+/// `std::fs::read_dir(openspec/specs)` — the WORKTREE — while `bound_register_parse::tracked_specs`
+/// enumerates the same set from `git ls-files -z`, tracked content, with `-z` load-bearing because a quoted
+/// path would silently drop a whole capability's bounds. Two enumerators of one set, in one crate, with
+/// nothing comparing them: an untracked or gitignored `spec.md` entered this bijection and not the register's,
+/// so the two gates judged different corpora and neither said so. This file already imported `slug_of`,
+/// `marks_a_bound` and `projection_offences` from that module — the extraction took the parse rules and left
+/// the corpus behind, which is the half a reader of the diff would not miss and a reader of the pair would.
+///
+/// The vacuity refusal comes with it. `tracked_specs` asserts its own enumeration is non-empty, so the second
+/// assert here was a duplicate of a guard one call away, and a check reporting a perfect bijection between two
+/// empty sets is the vacuity this repository has re-opened six times in one window.
 fn spec_bounds(root: &Path) -> BTreeMap<String, SpecBound> {
-    let specs_dir = root.join("openspec/specs");
-    let mut capabilities: Vec<PathBuf> = std::fs::read_dir(&specs_dir)
-        .unwrap_or_else(|err| panic!("cannot read {specs_dir:?}: {err}"))
-        .map(|entry| entry.expect("a readable directory entry").path())
-        .filter(|path| path.join("spec.md").is_file())
-        .collect();
-    capabilities.sort();
-    assert!(
-        !capabilities.is_empty(),
-        "no capability spec found under {specs_dir:?}; a bijection over an empty set holds while proving nothing"
-    );
-
     let mut bounds = BTreeMap::new();
-    for capability_dir in capabilities {
-        let capability = capability_dir
-            .file_name()
-            .expect("a capability directory has a name")
-            .to_string_lossy()
-            .into_owned();
-        let spec = capability_dir.join("spec.md");
-        let text = std::fs::read_to_string(&spec)
-            .unwrap_or_else(|err| panic!("cannot read {spec:?}: {err}"));
+    for (capability, spec) in kanhe::bound_register_parse::tracked_specs(root) {
+        let text = std::fs::read_to_string(root.join(&spec))
+            .unwrap_or_else(|err| panic!("cannot read {spec}: {err}"));
 
         let mut open: Option<String> = None;
         for line in text.lines() {
@@ -165,8 +157,8 @@ fn spec_bounds(root: &Path) -> BTreeMap<String, SpecBound> {
 
     assert!(
         !bounds.is_empty(),
-        "no declared bound found under {specs_dir:?}; the heading marker may have changed, and a bijection \
-         over an empty set holds while proving nothing"
+        "no declared bound found in any tracked capability spec; the heading marker may have changed, and a \
+         bijection over an empty set holds while proving nothing"
     );
     bounds
 }
@@ -645,5 +637,49 @@ fn granularity_is_carried_only_by_the_as_intended_extent() {
                 "{id}: an out-of-reach bound has no granularity and no owner to carry"
             );
         }
+    }
+}
+
+/// This gate's corpus IS the register's enumeration, asserted rather than described.
+///
+/// **The third of three, and the one the extraction left behind.** The marker predicate and the slug rule were
+/// converged into `bound_register_parse` and imported here; the corpus stayed a `read_dir` walk of the
+/// worktree while the register enumerated tracked content. Two enumerators of one set, in one crate, with
+/// nothing comparing them — so an untracked `spec.md` entered this bijection and not the register's.
+///
+/// Asserted by identity rather than by re-deriving a set to compare: the corpus this gate reads is the value
+/// that function returns, so there is nothing left to disagree. A comparison would need a second walk, which
+/// is the thing being removed.
+///
+/// Measured before this landed: with the walk restored and a probe capability's `spec.md` present in the
+/// worktree and absent from tracked content, the bijection reported it as *declared in a spec and classified
+/// nowhere* while `bound_register` stayed green — the two corpora, visible in one run. The probe's path is
+/// described rather than written, because a citation to a deliberately untracked path is exactly what
+/// `reference_integrity` refuses, and it refused this comment's first draft.
+#[test]
+fn the_spec_corpus_is_the_registers_own_enumeration() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let enumerated = kanhe::bound_register_parse::tracked_specs(&root);
+    assert!(
+        !enumerated.is_empty(),
+        "the shared enumerator answered nothing, so every direction over this corpus would hold vacuously"
+    );
+
+    // Every capability this gate derived a bound for must be one the shared enumerator named. The reverse
+    // does not hold and must not be asserted: a tracked spec declaring no bound is ordinary.
+    let named: std::collections::BTreeSet<&str> = enumerated
+        .iter()
+        .map(|(capability, _)| capability.as_str())
+        .collect();
+    for id in spec_bounds(&root).keys() {
+        let capability = id.split('/').next().expect("an id carries its capability");
+        assert!(
+            named.contains(capability),
+            "`{id}` was derived from a capability the shared enumerator does not name — this gate is reading \
+             a corpus of its own again, which is how an untracked spec entered the bijection and not the \
+             register's"
+        );
     }
 }

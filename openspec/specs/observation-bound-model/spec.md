@@ -204,10 +204,17 @@ convention because it reads well, and inherits no reaction that would name a mal
 rule as an API would make this family's bookkeeping an adopter's obligation, which is the opposite of where
 this protocol places enforcement: on the declarer, who is asked to declare and not audited on how.
 
-The spec-side set SHALL be enumerated with the observation-bound register's canonical marker predicate, and the
-id SHALL be derived with the register's canonical slug rule; this gate SHALL NOT carry a second implementation
-of either. The comparison SHALL be the derived set against the **tracked projection**, and SHALL name every id
+The spec-side set SHALL be enumerated with the observation-bound register's canonical marker predicate, the id
+SHALL be derived with the register's canonical slug rule, and **the corpus SHALL be the register's own
+enumeration of tracked capability specs**; this gate SHALL NOT carry a second implementation of any of the
+three. The comparison SHALL be the derived set against the **tracked projection**, and SHALL name every id
 only one side carries — a property that holds however many implementations the slug rule has.
+
+**The corpus is named here because it was the one of the three left behind.** This gate walked
+`openspec/specs` in the **worktree** while the register enumerated the same set from tracked content, so an
+untracked or gitignored `spec.md` entered this bijection and not the register's: two gates over one set,
+judging different corpora, with nothing comparing them. The parse rules had already been converged and the
+corpus had not — the half a reader of the diff would not miss and a reader of the pair would.
 
 Independent slug derivation was previously required here, reasoning that sharing the id function would collapse
 the comparison to the same implementation on both sides. That was measured and did not hold: the two
@@ -242,6 +249,14 @@ below says why, and a guard fails if one ever appears there.
   heading's id by calling the canonical slug rule
 
 #### Scenario: A projection disagreeing with the derived set is named
+
+#### Scenario: An untracked capability spec is not in the corpus
+
+- **WHEN** a `spec.md` declaring a bound is present in the worktree and absent from tracked content
+- **THEN** this gate does not read it, because its corpus is the register's own enumeration of tracked specs.
+  Walking the worktree instead put a bound into this bijection that the register's gate could never see, so
+  the two gates judged different sets and neither could say so
+- **PINNED-BY** `the_spec_corpus_is_the_registers_own_enumeration`
 
 - **WHEN** the tracked projection lacks an id the specs derive, or carries one they do not
 - **THEN** the comparison names that id and says which side carries it, and it does so with the projection
