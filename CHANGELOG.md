@@ -5336,6 +5336,37 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every site is in a crate that ships in no
   package.
 
+- **The OpenSpec adoption mode now says which mode this is.** `PROJECT.md`'s decision recorded `specs` half
+  only, on the measurement *zero change directories have ever existed*. That was false in the plainest sense:
+  `git log --all` reaches dozens of them, `c52cd1d` and `9fa3ee5` each committed one on 2026-08-21, and the two
+  commits on that day's tip say in their own bodies that the work was proposed and synced through one. The
+  claim was true of the **release spine**, which is the corpus it never named — the completeness failure
+  `AGENTS.md` names one section earlier, in the document that names it.
+
+  What the tree actually does is now what both documents say: **both halves, one requirement truth.** A
+  requirement is read from `openspec/specs/*` and nowhere else; `openspec/changes/<slug>/` plans one open
+  change, is committed on the development branch, and is stripped before the squash, so `main` and every
+  `release/*` track nothing there but `archive/.gitkeep`. What is transient is the plan, not the requirement.
+
+  **Four repository checks already encoded this, which is how the claim was caught.** `reference_integrity`
+  excludes a change directory from its corpus and treats a basename tracked only there as lifecycle
+  vocabulary; `law_restatement` excludes it beside `docs/history/` and `CHANGELOG.md`; `capability_subjects`
+  takes it as a corpus. One of those exclusions is a **requirement with a scenario** in
+  `openspec/specs/reference-integrity/spec.md` — so a capability spec and a `PROJECT.md` decision had been
+  contradicting each other for the whole window, which is the conflict `AGENTS.md`'s document-authority rule
+  says to fix before building on it.
+
+  Two sentences that over-reached the same way are corrected with it. `AGENTS.md`'s *the
+  `change/<openspec-name>` branch role went with the half* retired the role correctly and said the half went
+  too; the role stays retired and a change directory rides a `<type>/<scope>-<slug>` branch.
+  `capability_subjects`'s own comment said its corpus *can never be non-empty* — true where CI runs it, false
+  where the direction actually runs. `BACKLOG.md`'s closed entry and its live `capability-subjects` WATCH each
+  carry a trailing note rather than a rewrite, per this repository's idiom for an entry a later change
+  orphans; the WATCH's trigger loses the half that had already fired.
+
+  No published API, outcome, report, exit class, or manifest moves. No reaction changes behaviour: the one
+  code edit is a comment.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

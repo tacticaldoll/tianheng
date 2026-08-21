@@ -126,21 +126,31 @@ implementation requires the entry to name its observation source, risk, compatib
 authority in `BACKLOG.md`; a breaking candidate does not promise a minor release until its recorded
 trigger fires.
 
-## Working a capability change — OpenSpec in `specs` mode
+## Working a capability change — OpenSpec, both halves, one requirement truth
 
-**This project uses OpenSpec's `specs` half and not its `changes` half**, and that is a chosen mode
-rather than a stage on the way to something. `openspec/specs/*` is the per-capability requirement
-truth; there is no proposal workflow, no change directory, and no separate lifecycle vocabulary.
-`PROJECT.md`'s Decisions records why, and what would change it.
+**Both halves are used, and they answer different questions.** `openspec/specs/*` is the
+per-capability requirement truth — the one place a requirement is read from.
+`openspec/changes/<slug>/` is the **working lifecycle of one open change**: `proposal.md`,
+`design.md`, `tasks.md`, and the delta spec, written and committed on the development branch while
+the change is being worked. Where a requirement lives and how one change is planned are separate
+questions, and the two halves answer one each.
 
-So a capability change is one ordinary piece of work:
+So a capability change is:
 
 1. **Read** the capability's spec, and the law projection the SOP above names.
-2. **Write the requirement onto its spec** — a new or amended `### Requirement:` and its
-   `#### Scenario:`s, edited in place.
-3. **Write the reaction that answers it**, in the same branch.
-4. **Land both as one squash pull request**, whose subject names the product effect
+2. **Propose** — write `openspec/changes/<slug>/` if the change wants a plan. It is optional; a
+   small change may skip straight to step 3.
+3. **Write the requirement onto its spec** — a new or amended `### Requirement:` and its
+   `#### Scenario:`s, edited in place on `openspec/specs/*`.
+4. **Write the reaction that answers it**, in the same branch.
+5. **Strip the change directory** before the squash, so the requirement has exactly one home.
+6. **Land the rest as one squash pull request**, whose subject names the product effect
    (`feat(xuanji)!: …`, `fix(hunyi): …`, `refactor(guibiao)!: …`) per *Commits & PRs* below.
+
+**Step 5 is the invariant, and it is what the two halves being used does not cost.** `main` and
+every `release/*` track nothing under `openspec/changes/` but `archive/.gitkeep`, so a closed
+change's requirement is read from its spec and from nowhere else — a proposal is never a second
+place to read a requirement from. What is transient is the plan, not the requirement.
 
 The spec and the reaction move together **because they are one change**, not because a sync step
 merges them later. A pull request that edits a requirement and ships no reaction for it is the thing
@@ -152,17 +162,25 @@ add a new guard and record the required negative run. If a property cannot fail 
 model constructs it, state that construction in requirement prose rather than inventing a scenario.
 A scenario with neither form of evidence does not belong in a spec.
 
-`openspec/changes/` stays present, empty but for `archive/.gitkeep`. **Its job is optionality**: the
-directory exists so adopting the `changes` half later needs no setup and no exception, and the one
-placeholder is what keeps `openspec/changes/` itself tracked. It is not evidence that the workflow is
-in use — nothing has ever been written there. Nothing enforces the mode either, deliberately: a check
-that failed when a change directory appeared would prevent the adoption the placeholder is held open
-for.
+**Four repository checks already encode the lifecycle, which is how the paragraph this replaces was
+found to be false.** `reference_integrity` excludes a change directory from its corpus — a plan
+names the files it intends to create, so its references are forward by construction — and
+`openspec/specs/reference-integrity/spec.md` states that exclusion as a requirement with its own
+scenario, so a *capability spec* is one of the authorities saying active plans exist. A basename
+tracked only under `openspec/changes/` is that same lifecycle's vocabulary rather than a stale
+reference. `law_restatement` excludes it alongside `docs/history/` and `CHANGELOG.md`.
+`capability_subjects` takes it as a corpus: it holds a proposal's declared capability set against
+the subjects its diff touches, which is a direction that runs on a development branch and is empty
+on the release spine.
 
-**The `change/<openspec-name>` branch role went with the half.** *Branching and release* below named it as
-one of two fixed roles, matching a directory nothing has ever written to. A capability change takes
-`<type>/<scope>-<slug>` like every other piece of work. The role is held open exactly as this directory is:
-adopting the half again needs no setup, and until then it is not a role this repository has.
+**The `change/<openspec-name>` branch role is retired, and the half is not.** *Branching and release*
+below once named it as one of two fixed roles; a capability change now takes `<type>/<scope>-<slug>`
+like every other piece of work, and a change directory rides that ordinarily-named branch. Retiring
+the role was right and the sentence that retired it over-reached: it said the role went *with the
+half*, and the half stayed.
+
+Nothing enforces any of this, deliberately: a check that refused a change directory would forbid the
+lifecycle, and a check that required one would forbid the small change that skips step 2.
 
 ## Bind a claim to its measurement — construction where you can, a reaction where you must
 

@@ -377,20 +377,30 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   already been made to lie. It is not a general preference for abstraction — `BoundaryKind`'s four names are
   right for the dimensions they name, and the gap is that nothing else can be said.
 - **The composed adopter surface is compile-reacted.** `tianheng::prelude::*` is the entrypoint. `check_constitution(&Constitution, &Path) -> Outcome` unifies CLI and library testing evaluation.
-- **OpenSpec is adopted in its `specs` mode, not its `changes` mode.** OpenSpec offers two halves: `specs/` as
-  the per-capability requirement truth, and `changes/` as a proposal workflow — a change directory carrying
-  `proposal.md` / `design.md` / `tasks.md`, synced into the specs and then archived. This project uses the
-  first and not the second. A requirement change is written directly onto its spec, in the same branch and
-  pull request as the reaction that answers it. *(Recorded 2026-08: the mode had been chosen in practice from
-  the beginning and stated nowhere — measured, zero change directories have ever existed, while seven whole
-  capabilities were specified in the 0.5.0 window alone, four of them under `feat:`. `AGENTS.md` meanwhile
-  described the `changes` workflow in the present indicative, and the cost was observed rather than
-  hypothesised: an agent reading it first, as that file instructs, planned work through a mode this project
-  does not use, three times in one session, before anyone measured.)* **What would change it:** a change too
-  large to land as one reviewable pull request, where the value of a written proposal exceeds the cost of a
-  second place for requirements to live. That has not happened; the discriminator is reviewability, not size
-  of intent. Nothing enforces the mode, deliberately — a reaction that failed when a change directory
-  appeared would prevent adopting the other half, which is the freezing this decision exists to avoid.
+- **OpenSpec is adopted in both halves, and the requirement has one home.** OpenSpec offers `specs/` as the
+  per-capability requirement truth and `changes/` as a working lifecycle — a change directory carrying
+  `proposal.md` / `design.md` / `tasks.md` and a delta spec. This project uses both, for different questions:
+  a requirement is read from its spec and from nowhere else, and a change directory plans one open change
+  while it is open. It is written and committed on the development branch and **stripped before the squash**,
+  so `main` and every `release/*` track nothing under `openspec/changes/` but `archive/.gitkeep`. What is
+  transient is the plan, not the requirement.
+
+  *(Recorded 2026-08 as `specs` mode only, and corrected 2026-08-21 after the record was measured against the
+  tree rather than against itself. The retired claim was that **zero change directories have ever existed** —
+  false in the plainest sense: `git log --all` reaches dozens of them, `c52cd1d` and `9fa3ee5` committed one
+  each on 2026-08-21, and the two commits on that day's tip say in their own bodies that the work was proposed
+  and synced through one. Four repository checks handle the directory's live content, and one of those
+  exclusions is stated as a requirement with a scenario in `openspec/specs/reference-integrity/spec.md` — so a
+  capability spec and this decision had been contradicting each other for the whole window. The claim was true
+  of the release spine, which is the corpus it never named. Its predecessor's diagnosis stands and is why this
+  correction is worth its length: a routing document describing a mode the project does not run in cost an
+  agent three misplanned attempts in one session, and the same document was then rewritten in the opposite
+  direction, which would cost the next one the same way.)*
+
+  **What would change it:** a change large enough that the plan itself becomes a second place people read
+  requirements from — at which point step 5's strip is what has failed, not the two-half adoption. Nothing
+  enforces any of this, deliberately: a reaction refusing a change directory would forbid the lifecycle, and
+  one requiring it would forbid the small change that needs no plan.
 - **繩墨 and 勘合 are two crates because they answer to different subjects, and the dependency law states only
   what it can observe.** 繩墨 holds the law 天衡 declares over itself and the dogfood gates running the
   delivered product's reactions against this workspace; 勘合 holds this repository's record against itself and
