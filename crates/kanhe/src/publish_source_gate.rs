@@ -122,6 +122,64 @@ pub(crate) fn tracks(repo: &Path, source: &str) -> Tracked {
     }
 }
 
+/// Whether the release tag's ref resolves, or why this reader could not tell.
+///
+/// The sibling of [`Tracked`], one question over: the same *one status is the answer, the rest are git
+/// declining to give it* split, applied to the read that decides whether a release is tagged at all.
+#[derive(Debug)]
+pub(crate) enum TagPresence {
+    /// The ref resolves.
+    Present,
+    /// `rev-parse` ran and the ref does not resolve — the answer this question expects.
+    Absent,
+    /// git declined to answer, so whether the tag exists was never read.
+    Unreadable(String),
+}
+
+/// Whether `repo` carries `tag`, asked so that a refusal to answer is not an answer.
+///
+/// **`--quiet` is what makes `1` mean anything**, and it is not cosmetic. Measured on this machine's git:
+/// bare `rev-parse --verify` exits `128` for an absent ref *and* for a directory that is no repository, so
+/// the two are one status and no split exists to make. With `--quiet` an unresolvable ref exits `1` and git's
+/// own refusals keep `128`, which is the contract `ls-files --error-unmatch` already has and the reason its
+/// reader could be split at all.
+///
+/// This site read `.is_err()` and reported every failure as *there is no tag*, **as a violation**, in front
+/// of `cargo publish`. `publish-source-integrity` states the rule over the class — every git read whose
+/// answer is an exit status reads the status that is the answer and treats the rest as a refusal — and
+/// records that it was generalized because it arrived through a second door. This was the third.
+///
+/// **What stays unsplit, measured rather than assumed:** a ref file holding garbage exits `1` exactly as an
+/// absent ref does, so *the tag is missing* and *the tag's ref is corrupt* are one status here and this
+/// reader cannot separate them. `BACKLOG.md` carries that residue; it is not declared as a bound because a
+/// bound is pinned by a direction over its own WHEN, and this WHEN produces the same answer as the case
+/// beside it. A ref holding a well-formed sha with no object behind it exits `0` — read as Present — and the
+/// tag-object read downstream refuses it as unreadable, which is where that case is already answered.
+pub(crate) fn tag_presence(repo: &Path, tag: &str) -> TagPresence {
+    match git(
+        repo,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("refs/tags/{tag}"),
+        ],
+    ) {
+        Ok(_) => TagPresence::Present,
+        Err(crate::hermetic_git::Failure::Exit { code: Some(1), .. }) => TagPresence::Absent,
+        Err(crate::hermetic_git::Failure::Exit { code, stderr }) => {
+            let status = match code {
+                Some(code) => format!("exited {code}"),
+                None => "was ended by a signal".to_string(),
+            };
+            TagPresence::Unreadable(format!(
+                "git rev-parse {status} rather than answering whether {tag} exists: {stderr}"
+            ))
+        }
+        Err(crate::hermetic_git::Failure::Spawn(why)) => TagPresence::Unreadable(why),
+    }
+}
+
 /// Whether this repository tracks a file, or why that could not be decided.
 #[derive(Debug)]
 pub enum Tracked {
@@ -483,16 +541,25 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
         ));
     }
 
-    if git(
-        repo,
-        &["rev-parse", "--verify", &format!("refs/tags/{tag}")],
-    )
-    .is_err()
-    {
-        return Err(violation_at(
-            "publish-source-integrity#release-tag-absent",
-            format!("there is no tag {tag}; the release snapshot is tagged before it is published"),
-        ));
+    match tag_presence(repo, &tag) {
+        TagPresence::Present => {}
+        TagPresence::Absent => {
+            return Err(violation_at(
+                "publish-source-integrity#release-tag-absent",
+                format!(
+                    "there is no tag {tag}; the release snapshot is tagged before it is published"
+                ),
+            ));
+        }
+        TagPresence::Unreadable(why) => {
+            return Err(cannot_judge_at(
+                "publish-source-integrity#release-tag-unreadable",
+                format!(
+                    "{why} — which is not the same fact as a snapshot that was never tagged, and this gate \
+                     stands in front of an upload that cannot be replaced"
+                ),
+            ));
+        }
     }
     // The tag object, read **once**. Asking git for its type and then for its content is two reads of one
     // object, and the second cannot fail once the first has answered — a branch no input can take, which is

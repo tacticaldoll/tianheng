@@ -172,6 +172,18 @@ directory that is no repository or an index it cannot parse, and a reader that a
 reported the second as the first — one repair after the sibling rule above was written, and one exit status
 outside the split that repair made.
 
+#### Scenario: A tag read that declines is not a snapshot that was never tagged
+
+- **WHEN** the read that decides whether the release tag exists cannot be answered by git — the path is no
+  repository, or the ref store cannot be read
+- **THEN** the gate refuses as a cannot-judge, rather than reporting the tag absent as a **violation**. This
+  read took every failure as *there is no tag*, which is the third door onto the rule stated over the class
+  above. `--quiet` is what makes the split exist: measured, a bare `rev-parse --verify` exits `128` both for
+  an absent ref and for a directory that is no repository, so the answer and the refusal are one status until
+  it is passed
+- **PINNED-BY** `a_directory_git_will_not_read_is_not_a_repository_with_no_tag`
+- **PINNED-BY** `a_repository_git_can_read_answers_both_ways_about_a_tag`
+
 #### Scenario: A file with special bytes is ignored by tracked repository content
 
 - **WHEN** a tracked `.gitignore` ignores a file whose name git prints quoted

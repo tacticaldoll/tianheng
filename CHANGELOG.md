@@ -5499,6 +5499,41 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves; the wrapper ships in no package.
 
+- **A tag read that declines is not a snapshot that was never tagged.** The publish gate's tag check was
+  `git rev-parse --verify` plus `.is_err()`, so a directory that is no repository, a ref store it could not
+  read, and an absent tag were one fact — reported as *there is no tag*, **as a violation**, in front of an
+  upload that can be yanked and never replaced.
+
+  `publish-source-integrity` states the rule over the class: every git read whose answer is an exit status
+  reads the status that IS the answer and treats every other non-zero as a refusal to answer. The spec
+  records that it was generalized from `check-ignore` to the class because it arrived through a second door,
+  `ls-files --error-unmatch`. This was the third, and the machinery for it already existed —
+  `hermetic_git::Failure::Exit` carries the status, and its own doc records the measurement that put it
+  there. `TagPresence` is `Tracked`'s sibling, built from the same split.
+
+  **`--quiet` is what makes the split exist**, and it is not cosmetic: measured, a bare `rev-parse --verify`
+  exits `128` for an absent ref *and* for a directory that is no repository, so the answer and the refusal
+  are one status until it is passed. With it, an unresolvable ref exits `1` and git keeps `128` for declining
+  — the contract `ls-files --error-unmatch` already had, and the reason its reader could be split at all.
+
+  The control is built without a commit: `hermetic` closes the config that would carry an identity, so the
+  fixture tags a written blob instead. A tag ref may name any object and what this reads is whether the ref
+  RESOLVES, so the object's kind is not the subject.
+
+  **What stays unsplit is filed rather than declared.** A ref file holding garbage exits `1` exactly as an
+  absent ref does, so *missing* and *corrupt* are one status at this layer; `BACKLOG.md` carries it as a
+  `WATCH` with the commands that measured it. It is deliberately **not** an observation bound: a bound is
+  pinned by a direction over its own WHEN, and this WHEN produces the same answer as the case beside it, so
+  the pin would compare a value with itself. A neighbouring case is separated and recorded so the two are not
+  confused — a ref holding a well-formed sha with no object exits `0`, reads as present, and the tag-object
+  read downstream refuses it as unreadable.
+
+  Negative run: with the classifier reverted to *every failure is absent*, the refusal direction reports
+  `Absent` for a directory git declined to read, while the control and the sibling `tracks` direction both
+  pass unchanged in the same run.
+
+  No published API, outcome, report, exit class, or manifest moves; the gate ships in no package.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

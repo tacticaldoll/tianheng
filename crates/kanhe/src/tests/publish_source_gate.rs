@@ -5,7 +5,7 @@
 //! run real git against real directories because the distinction being tested **is** git's exit contract —
 //! a fake would assert the reader against this file's belief about git rather than against git.
 
-use crate::publish_source_gate::{Tracked, tracks};
+use crate::publish_source_gate::{TagPresence, Tracked, tag_presence, tracks};
 
 /// A scratch directory of this process's own, removed and recreated so a previous run cannot answer for this
 /// one.
@@ -66,6 +66,60 @@ fn a_directory_git_will_not_read_is_not_a_directory_that_tracks_nothing() {
         matches!(read, Tracked::Unreadable(_)),
         "git declined to read a directory that is no repository, and the reader turned that into an answer \
          about the path: {read:?}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// The control for the tag read: in a repository git can read, a present tag and an absent one differ.
+///
+/// Without it the refusal direction below would hold for a reader answering `Unreadable` to everything.
+#[test]
+fn a_repository_git_can_read_answers_both_ways_about_a_tag() {
+    let dir = scratch("tag-answers");
+    git(&dir, &["init", "-q", "."]);
+    // The ref points at a blob rather than a commit, because a commit needs an identity and `hermetic`
+    // closes the config that would carry one. A tag ref may name any object, and what this reads is whether
+    // the ref RESOLVES — so the object's kind is not the subject and a blob keeps the fixture to one step.
+    std::fs::write(dir.join("o.txt"), "x").expect("write");
+    let sha = crate::hermetic_git::read(
+        &dir,
+        "a blob to tag",
+        "git",
+        &["hash-object", "-w", "o.txt"],
+    );
+    git(&dir, &["update-ref", "refs/tags/v9.9.9", sha.trim()]);
+
+    assert!(
+        matches!(tag_presence(&dir, "v9.9.9"), TagPresence::Present),
+        "a tag this fixture just created was not read as present"
+    );
+    assert!(
+        matches!(tag_presence(&dir, "v0.0.0"), TagPresence::Absent),
+        "a tag the repository does not carry was not read as absent — this is the exit status the question \
+         expects, and folding it in with the rest would make every answer unreadable"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A directory that is not a repository: git exits **128**, which is not the answer to the question.
+///
+/// This site read `.is_err()` and reported every failure as *there is no tag*, as a **violation**, in front
+/// of `cargo publish` — where this repository's contract reserves that class for a source that disagrees.
+/// `publish-source-integrity` states the rule over the class of every status-answering git read, and records
+/// that it was generalized because it arrived through a second door; this was the third.
+///
+/// **Negative run:** against the reader that took `.is_err()` as *absent*, this failed reporting the tag
+/// missing, and the control above passed unchanged in the same run. `--quiet` is what makes the split exist
+/// at all: without it an absent ref and an unreadable directory both exit `128`.
+#[test]
+fn a_directory_git_will_not_read_is_not_a_repository_with_no_tag() {
+    let dir = scratch("tag-norepo");
+
+    let read = tag_presence(&dir, "v9.9.9");
+    assert!(
+        matches!(read, TagPresence::Unreadable(_)),
+        "git declined to read a directory that is no repository, and the reader turned that into an answer \
+         about the tag: {read:?}"
     );
     std::fs::remove_dir_all(&dir).ok();
 }

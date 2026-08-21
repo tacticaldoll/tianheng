@@ -725,6 +725,35 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **WATCH: a corrupt tag ref and an absent one are one exit status, so the publish gate cannot tell them
+  apart.** *Class:* WATCH. *Observed pressure:* the tag read was split so that git declining to answer is no
+  longer reported as *there is no tag*, and one residue survives the split: a ref FILE holding unparseable
+  content exits the same status as a ref that does not exist. *Observation source, reconstructible:* measured
+  on 2026-08-21 in a scratch repository —
+
+  ```bash
+  git init -q . && git commit -q --allow-empty -m x
+  printf 'garbage\n' > .git/refs/tags/broken
+  git rev-parse --verify --quiet refs/tags/broken; echo $?   # 1
+  git rev-parse --verify --quiet refs/tags/absent;  echo $?   # 1
+  ```
+
+  and the bare form collapses them differently rather than better: both answer `128`, which is also what a
+  directory that is no repository answers. *Current reaction or bound:* the gate reports **absent** for both,
+  which is the safe direction — it refuses the publish either way, and the operator's next act is to look at
+  the tag. Not declared as an observation bound, deliberately: a declared bound is pinned by a direction over
+  its own WHEN, and this WHEN produces the same answer as the case beside it, so a pin would compare a value
+  with itself. *Risk:* an operator told *there is no tag* when the tag's ref is corrupt goes to create one and
+  meets a ref that already exists. Bounded to a diagnostic: no publish proceeds on either reading. *Promotion
+  trigger:* a git version or a read that separates the two — `for-each-ref` and `cat-file` were both measured
+  and neither does at this layer — or one occurrence of a corrupt ref in front of a real release. *Version
+  class:* patch; the gate ships in no package. *Authority:* `publish-source-integrity`, whose class rule this
+  residue sits inside rather than outside.
+
+  A neighbouring case IS separated and is recorded so the two are not confused: a ref holding a well-formed
+  sha with no object behind it exits `0`, is read as present, and the tag-object read downstream refuses it as
+  unreadable.
+
 - **WATCH: no reaction asks what each repository check observed, and the check surface is now an order of
   magnitude larger than the product it guards.** *Class:* WATCH. *Observed pressure:* the drift law — *no
   target or name without a reaction*, *no drift type without an observation source* — is stated over the
