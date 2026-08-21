@@ -184,6 +184,36 @@ enum Package {
     Unreadable,
     /// More than one `package` key in one dependency. Malformed, and not this reader's to choose from.
     Several(usize),
+    /// The dependency's own key is not a bare TOML key, so its spelling is not the package name — quoted as
+    /// written.
+    ///
+    /// **The same false negative as a rename, through a second door.** Where a dependency declares no
+    /// `package`, its key *is* the identity — and the key was taken as the raw text between the line's start
+    /// and its `=`. TOML admits a quoted key, and cargo decodes it: measured, `"serde_json" = "1"` resolves
+    /// to a dependency named `serde_json`. So `"xuanji" = "0.0.1"` is a real family requirement whose raw
+    /// spelling matches no family member, and the entry was skipped by the same `continue` the sibling
+    /// `Named` arm's own comment already describes for `alias = { package = "xuanji", … }`.
+    ///
+    /// Refused rather than decoded. Decoding is TOML string parsing — escapes, the literal form, a dotted
+    /// key — which is the hand-parsing `BACKLOG.md` already files as its own entry; and a reader that
+    /// refuses what it cannot decode cannot narrow the set it judges, which is the direction that matters
+    /// here. Measured before writing: no tracked manifest carries a non-bare dependency key, so this refuses
+    /// nothing the tree has.
+    KeyUnreadable(String),
+}
+
+/// Whether `key` is a bare TOML key — the only spelling this reader takes as a package name.
+///
+/// TOML's bare keys are ASCII letters, digits, `_` and `-`. Anything else — a quoted key, a dotted key, a
+/// key carrying whitespace — is a spelling whose decoded value is not its text, and this reader does not
+/// decode. It is asked of the dependency's own key rather than of a value, which is why it is not
+/// [`inline_assignments`]'s key recogniser: that one asks whether `version` *opens an assignment* inside an
+/// inline table, a different question about a different key.
+fn is_bare_key(key: &str) -> bool {
+    !key.is_empty()
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 impl Package {
@@ -191,10 +221,12 @@ impl Package {
     ///
     /// One function rather than the two arms that stood in `declared_dependencies` — the inline form and the
     /// detailed table each resolved this themselves, byte-identical, which is the shape that lets two
-    /// readers of one rule disagree.
+    /// readers of one rule disagree. That sharing is what gives the key rule below one home too.
     fn of(mut values: Vec<Quoted>, key: &str) -> Self {
         match values.len() {
-            0 => Package::Named(key.to_string()),
+            // No `package`, so the KEY is the identity — and only a bare key's text is its name.
+            0 if is_bare_key(key) => Package::Named(key.to_string()),
+            0 => Package::KeyUnreadable(key.to_string()),
             1 => match values.pop() {
                 Some(Quoted::Value(name)) => Package::Named(name),
                 _ => Package::Unreadable,
@@ -1027,7 +1059,7 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
 /// Returns the `(path, package)` each workspace manifest names, because resolving them is the first thing
 /// this does and the lock reader needed exactly that list. It re-read the manifests instead, which gave it
 /// two refusals for a name this reader had already refused on — branches nothing could reach.
-fn require_example_pins(
+pub(crate) fn require_example_pins(
     repo: &Path,
     manifests: &[(String, String)],
     version: &str,
@@ -1124,6 +1156,22 @@ fn require_example_pins(
                         format!(
                             "example {name} declares {several} `package` keys for `{key}`, so which crate it \
                          requires is not this reader's to choose"
+                        ),
+                    ));
+                }
+                // **Refused here rather than filtered below, because below is where the false negative was.**
+                // A key this reader cannot decode names some crate, and which one is exactly what it cannot
+                // say — so it can neither be matched against the family nor passed over. Passing over is what
+                // it did: the raw spelling matched no member and `continue` dropped the entry, while the
+                // aggregate counter stayed non-zero on the strength of the other examples.
+                Package::KeyUnreadable(written) => {
+                    return Err(cannot_judge_at(
+                        "release-coherence#example-dependency-key-unreadable",
+                        format!(
+                            "example {name} declares a dependency under the key {written}, which is not a bare \
+                         TOML key — cargo decodes such a key and this check does not, so whether it requires a \
+                         family crate cannot be decided. Write it bare, or give it an explicit `package = \
+                         \"…\"`"
                         ),
                     ));
                 }
