@@ -13,9 +13,17 @@
 # like every other one judging this repository; this script gathers the inputs and refuses to reach `gh`
 # without it.
 #
-# What stays outside. WHETHER to merge, and whether CI is green, remain a human's call — this wrapper holds
-# only what the merge is about to record. A merge made in the GitHub web UI reaches no wrapper at all; that is
-# a declared bound, not an oversight.
+# What stays outside, and what no longer does. WHETHER to merge remains a human's call. Whether CI AGREED
+# does not: `require_ci_green` below reads the rollup and refuses, unconditionally, because the alternative
+# was measured — this wrapper merged nineteen consecutive red runs on the difference between a local
+# Definition of Done and the superset CI runs. So this holds what the merge is about to record AND that the
+# suite agreed about it.
+#
+# This sentence said both were a human's call until 2026-08-21, and `require_ci_green` had landed 204 commits
+# earlier. A premise its own new code had falsified, left standing where an operator reads it first — and the
+# `--admin` arm below was reasoned from it, which is how a stale premise spreads rather than merely sits.
+#
+# A merge made in the GitHub web UI reaches no wrapper at all; that is a declared bound, not an oversight.
 set -Eeuo pipefail
 
 usage() {
@@ -173,9 +181,16 @@ while (($#)); do
     #
     # ONE spelling each, values as separate arguments. Parsing gh's glued and equals forms is what let the
     # short forms through; refusing those costs an argument's worth of typing and removes the parsing question.
-    # `--admin` bypasses the branch's required checks. That is consistent with what this wrapper already
-    # declares: WHETHER to merge, and whether CI is green, stay a human's call — this holds only what the
-    # merge is about to record.
+    # `--admin` is admitted for what it still does: bypass required **reviews**. In a single-steward
+    # repository a pull request's author cannot approve their own, so `require_code_owner_reviews` cannot be
+    # satisfied by the person merging — which `PROJECT.md` records as a judgement boundary rather than a
+    # mechanism. That is a real and remaining use.
+    #
+    # **What it no longer does is bypass CI, and the arm used to be reasoned from that.** It said this was
+    # consistent with *whether CI is green stays a human's call*; `require_ci_green` refuses a red or
+    # unfinished rollup before `gh` is reached, so passing `--admin` to force a red merge through this path
+    # does not work and is not meant to. Use the web UI for that, and meet no gate at all — which is the
+    # declared bound the header names, not a loophole this arm opens.
     #
     # It is the only flag admitted here, and the criterion above is why. `--delete-branch` shared this arm
     # with no sentence of its own: it changes neither whether the merge proceeds, nor what it records, nor
@@ -391,8 +406,24 @@ require_ci_green() {
     # not exist. The pending read handled the same stream the opposite way, discarding it entirely, and that
     # disagreement between the two is what made the pair worth reading as one.
     local rollup
+    # **The rollup is a UNION of two node shapes, and reading one of them is not reading it.** GitHub's
+    # `StatusCheckRollupContext` is `CheckRun | StatusContext`: a `CheckRun` carries `.conclusion`/`.name`,
+    # and a `StatusContext` — an external commit status — carries `.state`/`.context` and neither of the
+    # first two. So the earlier filter answered `""` and `"?"` for every commit status, and a FAILED one was
+    # classified as *unfinished* and reported as `these checks have not finished: ?` — a refusal naming a
+    # check that does not exist. That is verbatim the defect `require_ci_green`'s stderr-capture note already
+    # records fixing once, where folding a successful call's notice into the value produced `CI has not
+    # agreed about this pull request: <notice>`; the same wrong sentence, reached through the node shape the
+    # filter never read.
+    #
+    # Fail-closed either way, so this was latent rather than live: this repository runs GitHub Actions and
+    # produces no commit statuses. Latent is not fixed — a check reported under a name nobody can find is
+    # what sends an operator looking for the wrong thing, and one added integration changes the class.
+    #
+    # `.state` and `.context` are the fallbacks, so one filter reads both shapes and every classification
+    # below is over one vocabulary.
     rollup=$(gh pr view "$pr_number" --repo "$repository" --json statusCheckRollup \
-        -q '[.statusCheckRollup[]? | ((.conclusion // "") + "\t" + (.name // "?"))] | join("\n")') \
+        -q '[.statusCheckRollup[]? | ((.conclusion // .state // "") + "\t" + (.name // .context // "?"))] | join("\n")') \
         || cannot_judge \
             "cannot read what CI said about this pull request, which is not the same fact as CI having agreed"
 
@@ -410,9 +441,19 @@ same fact as a suite that agreed"
         [[ -z ${line//[[:space:]]/} ]] && continue
         conclusion=${line%%$'\t'*}
         name=${line#*$'\t'}
+        # One vocabulary over both node shapes. `SUCCESS` is shared; `NEUTRAL`/`SKIPPED` are a `CheckRun`'s
+        # conclusions; `PENDING`/`EXPECTED` are a `StatusContext`'s states, and an empty field is a
+        # `CheckRun` still running. `FAILURE`, `ERROR`, `CANCELLED`, `TIMED_OUT` and anything unlisted fall
+        # to the catch-all, which is the direction a class this script has not met must fall.
+        #
+        # **`EXPECTED` is unfinished, not agreeing**, and that is a deliberate departure from the review that
+        # found this. GitHub's own meaning is *a status is expected* — required and not yet posted — so
+        # reading it as agreement would merge past a required status that never arrived, which is the
+        # false-negative direction this whole guard exists to close. Classified with `PENDING`, whose
+        # operator action is identical: wait for it.
         case $conclusion in
         SUCCESS | NEUTRAL | SKIPPED) ;;
-        "") unfinished+="${unfinished:+, }${name}" ;;
+        "" | PENDING | EXPECTED) unfinished+="${unfinished:+, }${name}" ;;
         *) disagreeing+="${disagreeing:+, }${name} (${conclusion})" ;;
         esac
     done <<<"$rollup"
