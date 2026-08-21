@@ -11,7 +11,6 @@
 //! starts compiling code written to be wrong. For a fixture under a member, nothing else notices.
 
 use std::path::PathBuf;
-use std::process::Command;
 
 use kanhe::refusal::{Kind, Refusal, cannot_judge, violation};
 
@@ -28,23 +27,29 @@ fn workspace_root() -> Option<PathBuf> {
 /// Tracked rather than walked, so a manifest present only in a working tree cannot make this pass, and one
 /// deleted from the tree but still on disk cannot make it fail.
 fn subject_manifests(root: &std::path::Path) -> Result<Vec<String>, Refusal> {
-    let out = Command::new("git")
-        .args([
+    // Through the shared builder like the fixture writes below. `ls-files` without `--others` consults no
+    // ignore file, so this read is not in that channel — but one file spawning git two ways is the twin this
+    // crate keeps converging, and the builder's failure type already separates *git could not run* from
+    // *git ran and refused*, which the hand-rolled form folded into one sentence.
+    let out = kanhe::hermetic_git::run(
+        root,
+        &[],
+        &[
             "ls-files",
             "--",
             "crates/*/tests/fixtures/*/Cargo.toml",
             "examples/*/Cargo.toml",
-        ])
-        .current_dir(root)
-        .output()
-        .map_err(|err| cannot_judge(format!("cannot enumerate the tracked manifests: {err}")))?;
-    if !out.status.success() {
-        return Err(cannot_judge(format!(
-            "git ls-files failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        )));
-    }
-    Ok(String::from_utf8_lossy(&out.stdout)
+        ],
+    );
+    let listing = match out {
+        Ok(listing) => listing,
+        Err(err) => {
+            return Err(cannot_judge(format!(
+                "cannot enumerate the tracked manifests: {err}"
+            )));
+        }
+    };
+    Ok(listing
         .lines()
         .filter(|line| !line.is_empty())
         .map(str::to_string)
@@ -157,14 +162,10 @@ fn a_repository_carrying_none_of_the_judged_manifests_holds_over_nothing() {
     let root = std::env::temp_dir().join(format!("kanhe-isolation-empty-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("create");
-    let git = |args: &[&str]| {
-        let out = Command::new("git")
-            .args(args)
-            .current_dir(&root)
-            .output()
-            .expect("run git");
-        assert!(out.status.success(), "git {args:?} failed in the fixture");
-    };
+    // Through the shared builder, which closes the ambient ignore channel. A bare `Command` here left
+    // `git add` reading whatever `core.excludesFile` this machine has, so a fixture could be built without
+    // the file it names — and the file it names IS the subject.
+    let git = |args: &[&str]| kanhe::hermetic_git::fixture(&root, "git", args);
     git(&["init", "-q", "."]);
     std::fs::write(
         root.join("README.md"),
@@ -193,14 +194,10 @@ fn a_tracked_manifest_that_cannot_be_read_is_not_one_that_disagrees() {
     let root = std::env::temp_dir().join(format!("kanhe-isolation-unread-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("create");
-    let git = |args: &[&str]| {
-        let out = Command::new("git")
-            .args(args)
-            .current_dir(&root)
-            .output()
-            .expect("run git");
-        assert!(out.status.success(), "git {args:?} failed in the fixture");
-    };
+    // Through the shared builder, which closes the ambient ignore channel. A bare `Command` here left
+    // `git add` reading whatever `core.excludesFile` this machine has, so a fixture could be built without
+    // the file it names — and the file it names IS the subject.
+    let git = |args: &[&str]| kanhe::hermetic_git::fixture(&root, "git", args);
     git(&["init", "-q", "."]);
     std::fs::create_dir_all(root.join("examples/adopter")).expect("create");
     std::fs::write(root.join("examples/adopter/Cargo.toml"), [0xff, 0xfe, 0xfd]).expect("write");

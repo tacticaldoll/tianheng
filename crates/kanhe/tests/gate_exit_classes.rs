@@ -277,11 +277,17 @@ fn test_targets(root: &Path) -> Vec<String> {
 ///
 /// `status` earns its place through `--untracked-files`: it reports an untracked file only if nothing outside
 /// the repository excludes it, which is the same channel `check-ignore` answers on directly.
-const AMBIENT_IGNORE_READS: [&str; 4] = [
+const AMBIENT_IGNORE_READS: [&str; 5] = [
     "\"check-ignore\"",
     "\"--others\"",
     "\"--untracked-files\"",
     "\"--untracked-files=all\"",
+    // **Staging, not only querying — and the source of truth named this one FIRST.** `hermetic_git`'s
+    // ambient table records the measurement in both directions, and its leading sentence is `git add -A`
+    // with the three file variables set leaving the matching file *untracked* — a fixture silently built
+    // without a file it named. Every other entry here asks git what it would ignore; this one is git ACTING
+    // on the answer, which is the half that corrupts a fixture rather than merely misreporting one.
+    "\"add\"",
 ];
 
 /// The setting whose absence leaves the channel open, however it comes to be named.

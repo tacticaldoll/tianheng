@@ -108,3 +108,59 @@ fn an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command() {
          excuses an offence, and for a fixture's `add` it silently omits a file the fixture named"
     );
 }
+
+/// The count this builder writes is what closes the `GIT_CONFIG_*` channel, asserted on the construction.
+///
+/// **This turns a corrected row into a check, and it checks the construction rather than simulating the
+/// ambient environment.** The table recorded that channel as **open** — *any key reaches `git`* — and that
+/// was wrong in the direction that costs: a row saying a channel is open reads as governed policy and would
+/// send the next fixture author to build isolation they already have.
+///
+/// Why the construction and not a run: `Command::env` *overrides* the inherited environment for a key, so a
+/// direction that sets `GIT_CONFIG_COUNT=2` on the command is overriding this builder rather than standing in
+/// for an ambient value. The first draft of this did exactly that and failed, which is the trap rather than a
+/// finding. Constructing the real ambient case needs the test process's own environment mutated — `set_var`,
+/// unsafe in this edition and racy against a parallel run — or a child process to carry it.
+///
+/// So the property is split the way this repository's own law asks: the **construction** is asserted here —
+/// the count is written, and index `0` is taken — and the *consequence* is measured once and recorded in
+/// [`hermetic`]'s own table, where `git config --get user.name` under this builder exits `1` while the same
+/// ambient pair without it answers the ambient value. `git` reading only indices below the count is git's
+/// documented contract, not this file's guess.
+#[test]
+fn the_builder_writes_the_config_count_and_takes_index_zero() {
+    let command = hermetic("git");
+    let envs: Vec<(String, Option<String>)> = command
+        .get_envs()
+        .map(|(k, v)| {
+            (
+                k.to_string_lossy().into_owned(),
+                v.map(|v| v.to_string_lossy().into_owned()),
+            )
+        })
+        .collect();
+    let value = |name: &str| {
+        envs.iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_else(|| panic!("`{name}` is not set on the command: {envs:?}"))
+    };
+
+    assert_eq!(
+        value("GIT_CONFIG_COUNT").as_deref(),
+        Some("1"),
+        "the count is what makes an ambient key at any higher index unreachable; without it written here the \
+         channel is as open as the table used to claim"
+    );
+    assert_eq!(
+        value("GIT_CONFIG_KEY_0").as_deref(),
+        Some(crate::hermetic_git::EXCLUDES_SETTING),
+        "index 0 is the one index git will read under that count, so this builder has to own it — and what \
+         it names is the setting that closes the ignore row"
+    );
+    assert_eq!(
+        value("GIT_CONFIG_VALUE_0").as_deref(),
+        Some("/dev/null"),
+        "naming the setting without neutralising it would leave the XDG default in force"
+    );
+}

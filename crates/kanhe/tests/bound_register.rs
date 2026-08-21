@@ -28,7 +28,6 @@ use parse::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-use std::process::Command;
 
 // --- citations ------------------------------------------------------------------------------------------
 
@@ -193,15 +192,12 @@ fn a_raw_identifier_citation_resolves_to_its_definition() {
         "#[test]\nfn r#type() {\n    assert!(true);\n}\n",
     )
     .expect("writable");
-    for arguments in [["init", "-q"], ["add", "-A"]] {
-        let status = Command::new("git")
-            .arg("-C")
-            .arg(&fixture)
-            .args(arguments)
-            .status()
-            .expect("git is available");
-        assert!(status.success(), "the fixture repository is prepared");
-    }
+    // Through the shared builder, which closes the ambient ignore channel — and written once, because this
+    // block stood byte-identical twice in this file. With a bare `Command`, `add -A` read whatever
+    // `core.excludesFile` this machine carries, so a fixture could be built without the probe file it names;
+    // the `grep` below would then find nothing and the assertion pass for the wrong reason. That is the
+    // direction the ambient table records first.
+    prepare(&fixture);
 
     let sites = search(
         &fixture,
@@ -329,15 +325,12 @@ fn tracked_specs_refuses_a_repository_with_no_spec_md_rather_than_reporting_it_e
     xingbiao::claim_scratch(&fixture).expect("the fixture directory is writable");
     std::fs::create_dir_all(fixture.join("openspec")).expect("the fixture directory is writable");
     std::fs::write(fixture.join("openspec").join("README.md"), "# Not a spec\n").expect("writable");
-    for arguments in [["init", "-q"], ["add", "-A"]] {
-        let status = Command::new("git")
-            .arg("-C")
-            .arg(&fixture)
-            .args(arguments)
-            .status()
-            .expect("git is available");
-        assert!(status.success(), "the fixture repository is prepared");
-    }
+    // Through the shared builder, which closes the ambient ignore channel — and written once, because this
+    // block stood byte-identical twice in this file. With a bare `Command`, `add -A` read whatever
+    // `core.excludesFile` this machine carries, so a fixture could be built without the probe file it names;
+    // the `grep` below would then find nothing and the assertion pass for the wrong reason. That is the
+    // direction the ambient table records first.
+    prepare(&fixture);
 
     let refused = std::panic::catch_unwind(|| parse::tracked_specs(&fixture));
     let _ = std::fs::remove_dir_all(&fixture);
@@ -934,4 +927,15 @@ fn every_bound_stated_in_prose_is_declared_as_a_scenario() {
          none:\n{}",
         offences.join("\n")
     );
+}
+
+/// Initialise a fixture repository and stage everything in it, through the hermetic builder.
+///
+/// One function because the two call sites held this byte-identical, which is the twin this crate keeps
+/// converging. `hermetic_git::fixture` asserts success itself and closes the ambient ignore channel, so the
+/// `-C` dance and the status assertion both go away with it.
+fn prepare(fixture: &std::path::Path) {
+    for arguments in [["init", "-q"], ["add", "-A"]] {
+        kanhe::hermetic_git::fixture(fixture, "git", &arguments);
+    }
 }

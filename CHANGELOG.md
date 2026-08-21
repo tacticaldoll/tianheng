@@ -5534,6 +5534,50 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves; the gate ships in no package.
 
+- **The ambient-ignore guard reaches staging, two fixtures stop bypassing it, and the table it enforces was
+  wrong in two rows.** `AMBIENT_IGNORE_READS` held four markers and every one was a *query* — `check-ignore`,
+  `--others`, `--untracked-files`. The source of truth names the other direction **first**: `hermetic_git`'s
+  ambient table records `git add -A` with the three file variables set leaving the matching file untracked,
+  *a fixture silently built without a file it named*. Querying misreports; staging **corrupts the subject**,
+  and the guard could not see it.
+
+  Adding `"add"` reported exactly the two files a review had named: `bound_register.rs` and
+  `workspace_isolation.rs`, both spawning a bare `Command::new("git")` with neither `hermetic` nor the
+  neutraliser. Both are routed through `hermetic_git::{fixture, run}` now — and `bound_register`'s block stood
+  **byte-identical twice**, so it converged into one helper on the way through. `workspace_isolation`'s third
+  git site, an `ls-files` enumeration, is not in that channel and went through the shared reader anyway: one
+  file spawning git two ways is the twin this crate keeps converging, and the builder's failure type already
+  separates *git could not run* from *git ran and refused*, which the hand-rolled form folded into one
+  sentence.
+
+  **Two table rows were wrong, both measured rather than reasoned.** `GIT_CONFIG_*` was recorded as **open** —
+  *any key reaches git* — and is closed: `Command::env` overrides `GIT_CONFIG_COUNT` to `1`, git reads index
+  `0` only, and this builder owns index `0`. Measured with `GIT_CONFIG_COUNT=2` and
+  `GIT_CONFIG_KEY_1=user.name` ambient: under the builder `git config --get user.name` exits `1` with no
+  output, and the same pair without it answers the ambient value. A row claiming a channel is open is not a
+  conservative error — it reads as governed policy and would send the next fixture author to build isolation
+  they already have. And `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` were **missing**: they are not an
+  ignore channel, they move which repository git acts on, reaching past `current_dir` entirely. Measured, with
+  `GIT_DIR` naming another repository, `rev-parse --git-dir` under the builder answers that other repository.
+  Nothing in this tree sets them, so it is a stated limit rather than a live defect — stated because the
+  table's own column is *ambient source* and a fixture author reads it as the set.
+
+  The correction invalidated the sentence under it, which said that channel *cannot be closed*. Occupying
+  index `0` is what closes both rows at once: the setting reaches git from here, and the count this builder
+  writes is what makes an ambient key unreachable. The channel is **used**, not open.
+
+  The new direction asserts the **construction** — the count is written and index `0` is taken — rather than
+  simulating an ambient environment, and says why: `Command::env` *overrides* the inherited value, so a
+  direction setting `GIT_CONFIG_COUNT=2` on the command overrides the builder rather than standing in for
+  ambient. The first draft did exactly that and failed, which is the trap and not a finding; constructing the
+  real case needs the test process's own environment mutated or a child to carry it. `EXCLUDES_SETTING` gives
+  the setting name one owner, which that direction needs for a second reason: a file that *spells* the setting
+  is read by this very guard as having closed the channel itself, and the guard's control-file assertion
+  caught that on the way in.
+
+  No published API, outcome, report, exit class, or manifest moves; every site is in a crate that ships in no
+  package.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
