@@ -16,6 +16,15 @@ use std::process::Command;
 /// available and unused.
 pub const FIXTURE_DAY: &str = "2026-07-20";
 
+/// The one setting that closes the ambient ignore channel, named once.
+///
+/// A constant rather than a literal at each site, and the reason is a direction rather than tidiness: a file
+/// that *spells* this setting is read by `gate_exit_classes` as having closed the channel itself. The
+/// direction that pins this builder's construction has to name the setting without claiming to neutralise
+/// anything, and referring to it is how — which also gives the name one owner, as its own table's rule for a
+/// declared set asks.
+pub const EXCLUDES_SETTING: &str = "core.excludesFile";
+
 /// A command that reads neither the **global** nor the **system** git config file.
 ///
 /// Measured rather than assumed: without this the fixture inherited this repository's own signing
@@ -30,22 +39,41 @@ pub const FIXTURE_DAY: &str = "2026-07-20";
 /// |---|---|
 /// | global / system config file | yes |
 /// | `$XDG_CONFIG_HOME/git/ignore` | yes — see below; this row read **no** until a gate was found relying on it |
-/// | `GIT_CONFIG_COUNT` + `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` | **no** — any key reaches `git`, `commit.gpgsign=true` included, and index `0` here is taken |
+/// | `GIT_CONFIG_COUNT` + `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` | **yes** — see below; this row read **no** until it was measured |
+/// | `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` | **no** — they move which repository `git` acts on, past `current_dir` entirely |
 /// | `GIT_AUTHOR_NAME` / `GIT_COMMITTER_NAME` and their emails | **no** — they override the fixture's own `.git/config` identity |
 /// | `.git/info/exclude` | **no** — inside the repository, so no config setting reaches it |
 ///
-/// **The ignore row is closed through the row above it, which is the one that cannot be closed.** Neutralising
-/// the config *files* does not neutralise `core.excludesFile`, because
+/// **The ignore row is closed through the row above it, by taking that channel rather than by blocking it.**
+/// Neutralising the config *files* does not neutralise `core.excludesFile`, because
 /// `$XDG_CONFIG_HOME/git/ignore` is the default excludes path git uses when **no** config file names one — so
 /// emptying the files leaves the default in force. The setting has to be *named*, and the only channel that
-/// carries a setting without a config file is `GIT_CONFIG_COUNT`, the row this table records as open. What
-/// makes it open to a caller is what makes it usable here.
+/// carries a setting without a config file is `GIT_CONFIG_COUNT`. **Occupying index `0` is what closes both
+/// rows at once**: the setting reaches `git` from here, and the count this builder writes is what makes an
+/// ambient key at any index unreachable. This paragraph said that channel *cannot be closed* until the row
+/// above was measured; the channel is used, not open.
 ///
 /// **Measured, on a fixture whose only exclusion came from an XDG ignore file:** `git add -A` with the three
 /// file variables set and nothing else left the matching file *untracked* — a fixture silently built without
 /// a file it named — and adds it once `core.excludesFile` is named. `git check-ignore` answers *ignored* and
 /// stops. Both directions, and the first is why this moved into the builder rather than staying a flag each
 /// judgement remembers: the reads were being fixed one at a time and every fixture construction was exposed.
+///
+/// **The `GIT_CONFIG_*` row is closed, and it read open until someone measured it.** The claim was that any
+/// ambient key reaches `git`, `commit.gpgsign=true` included. It does not: [`Command::env`] overrides
+/// `GIT_CONFIG_COUNT` to `1`, `git` then reads index `0` only, and this builder owns index `0` — so an
+/// ambient key at any index is unreachable and an ambient key at index `0` is overwritten. Measured, with
+/// `GIT_CONFIG_COUNT=2` and `GIT_CONFIG_KEY_1=user.name` in the environment: under this builder
+/// `git config --get user.name` exits `1` with no output, and the same pair without it answers the ambient
+/// value. A row saying **no** where the answer is **yes** is not a conservative error — it reads as governed
+/// policy and would send the next fixture author to build isolation they already have.
+///
+/// **`GIT_DIR` and its siblings are the row this table did not have.** They are not an ignore channel; they
+/// move which repository `git` acts on, so they reach past `current_dir(dir)` and out of the fixture
+/// entirely. Measured: with `GIT_DIR` naming another repository, `git rev-parse --git-dir` under this builder
+/// answers that other repository rather than `.git`. Nothing in this tree sets them — zero occurrences,
+/// repository-wide — so this is a stated limit rather than a live defect, and it is stated because the
+/// table's own column is *ambient source* and a fixture author reads it as the set.
 ///
 /// A caller needing its own key starts at `_1` and sets `GIT_CONFIG_COUNT` to `2`; overwriting the count
 /// without carrying index `0` forward reopens the ignore row. No caller in this workspace sets these
@@ -58,7 +86,7 @@ pub fn hermetic(program: &str) -> Command {
         .env("GIT_CONFIG_SYSTEM", "/dev/null")
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_COUNT", "1")
-        .env("GIT_CONFIG_KEY_0", "core.excludesFile")
+        .env("GIT_CONFIG_KEY_0", EXCLUDES_SETTING)
         .env("GIT_CONFIG_VALUE_0", "/dev/null");
     command
 }
