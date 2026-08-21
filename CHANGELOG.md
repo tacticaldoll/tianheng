@@ -5601,6 +5601,32 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every site is in a crate that ships in no
   package.
 
+- **An attribution mark ends where it ends, and the two line marks end differently.** `carries` matched a
+  trailer with `starts_with`, so a line beginning `Co-authored-bystander …` was refused while carrying no
+  attribution at all. That is a **false refusal**, and it is the very thing the line-start rule was written to
+  prevent — *this gate would otherwise refuse the commit message of any change about this rule* — reached from
+  the other end.
+
+  The two line marks are not the same shape and lumping them is what let the prefix run on. `co-authored-by`
+  is a trailer **key** and ends at its `:`; `generated with` is a footer **phrase** with no colon at all, so
+  demanding one would stop refusing the real mark, and it ends at a word boundary instead. `Shape::Trailer`
+  splits into `TrailerKey` and `Footer`, each carrying its own boundary and its own refusal sentence — the
+  array already carried the recognizer beside the mark, and now it carries the right two.
+
+  **A review reported this as the gate failing to establish a `Key: Value` shape, and that part is refuted
+  rather than adopted.** `repository-checks` asks for case-insensitive recognition *at the start of a line* and
+  states no shape requirement; and one of the marks is not a `Key: Value` — the requirement's own word for it
+  is *footer*. What was wrong is the boundary, not the shape, and citing a requirement that does not exist
+  would have justified the repair on a premise the spec contradicts.
+
+  Direction and controls run together: the three admitted lines carry no attribution, and the three refused
+  ones are the marks in the forms that actually appear — including `co-authored-by : …`, since git's own
+  trailer reader accepts a space before the colon. Without the controls the direction would hold for a gate
+  that refuses nothing. Negative run, with the boundary reverted and the two shapes kept so it still compiles:
+  the `Co-authored-bystander` line is refused.
+
+  No published API, outcome, report, exit class, or manifest moves; the gate ships in no package.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

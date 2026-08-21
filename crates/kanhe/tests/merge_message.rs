@@ -303,7 +303,7 @@ fn a_line_that_is_an_agent_attribution_is_a_violation() {
 /// The refusal states the rule of the shape that actually fired, not the other one.
 ///
 /// **The half nothing held.** One `format!` served both recognition shapes and carried the trailer sentence:
-/// *naming the mark inside a sentence is not carrying it; a line that begins with it is*. A glyph matches
+/// *naming the mark inside a sentence is not carrying it; a line that begins with it and its `:` is*. A glyph matches
 /// wherever it sits, so an operator refused for `fix(x): 🤖 wrote this` was handed the rule that would have
 /// permitted it — in front of a record no rerun amends. Both directions above assert only the shared half,
 /// which cannot tell the two sentences apart; this asserts each shape's own.
@@ -314,7 +314,7 @@ fn the_refusal_states_the_rule_of_the_shape_that_fired() {
         &format!("{OK_BODY}\nCo-authored-by: Someone <a@b.invalid>\n"),
         OK_SUBJECT,
         Kind::Violation,
-        "a line that begins with it is carrying it",
+        "a line that begins with it and its `:` is carrying it",
     );
     assert!(
         !trailer.message.contains("wherever it appears"),
@@ -748,4 +748,48 @@ fn the_channel_this_helper_names_is_the_one_it_reads() {
         kanhe::verdict_channel::CLEAN,
         "the class must come back from the channel the caller named, not from the default one"
     );
+}
+
+/// A longer word that merely starts like a mark is not the mark.
+///
+/// **This is a false-REFUSAL direction, and the requirement's own reason is what it holds.** The line-start
+/// rule exists so *a body that names one inside a sentence is not carrying it* — stated because the gate
+/// *"would otherwise refuse the commit message of any change about this rule, which is the false refusal this
+/// requirement forbids"*. `starts_with` alone reopened that from the other end: the prefix ran on into a
+/// longer word.
+///
+/// Both line shapes are covered, because they are bounded differently and only one is a `Key: Value`. A
+/// trailer key ends at its `:`; a footer phrase ends at a word boundary, since `Generated with Claude Code`
+/// carries no colon and demanding one would stop refusing the real mark.
+///
+/// The controls are in the same run: the real marks must still be refused, or this direction would hold for a
+/// gate that refuses nothing at all.
+#[test]
+fn a_longer_word_that_starts_like_a_mark_is_not_carrying_it() {
+    for admitted in [
+        "Co-authored-bystander notes on the review are not a trailer.",
+        "Generated withheld results are not this footer.",
+        "Co-authored-byte counts are not a trailer either.",
+    ] {
+        let body = format!("{OK_BODY}\n{admitted}\n");
+        assert!(
+            judge(OK_SUBJECT, &body, OK_SUBJECT, &commits()).is_ok(),
+            "a line beginning with a longer word that merely starts like a mark carries no attribution, and \
+             refusing it is the false refusal this requirement forbids: {admitted:?}"
+        );
+    }
+
+    // The controls: the marks themselves, in the forms that actually appear.
+    for refused in [
+        "Co-authored-by: Someone <a@b.invalid>",
+        "co-authored-by : Someone <a@b.invalid>",
+        "Generated with a tool",
+    ] {
+        let body = format!("{OK_BODY}\n{refused}\n");
+        assert!(
+            judge(OK_SUBJECT, &body, OK_SUBJECT, &commits()).is_err(),
+            "the mark itself must still be refused, or the boundary rule has narrowed the gate rather than \
+             bounding it: {refused:?}"
+        );
+    }
 }

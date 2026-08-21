@@ -45,8 +45,8 @@ const TYPES: [&str; 9] = [
 /// The subject arm matters only for the glyph. A subject that begins with a trailer key is already refused for not
 /// being a Conventional Commit, one check earlier — measured, which is why no direction here asserts otherwise.
 const ATTRIBUTION: [(&str, Shape); 3] = [
-    ("co-authored-by", Shape::Trailer),
-    ("generated with", Shape::Trailer),
+    ("co-authored-by", Shape::TrailerKey),
+    ("generated with", Shape::Footer),
     ("🤖", Shape::Glyph),
 ];
 
@@ -58,8 +58,26 @@ const ATTRIBUTION: [(&str, Shape); 3] = [
 /// rule beside it.
 #[derive(Clone, Copy)]
 enum Shape {
-    /// A key on a line of its own. Prose naming it is not it, and GitHub honours only the line form.
-    Trailer,
+    /// A trailer KEY on a line of its own, so the mark must be followed by its `:`. Prose naming it is not
+    /// it, and GitHub honours only the line form.
+    ///
+    /// **The colon is what bounds it, and without one the prefix ran on.** `starts_with("co-authored-by")`
+    /// refuses a line beginning `Co-authored-bystander …` — a false refusal of a message carrying no
+    /// attribution at all, in a gate whose own requirement exists to prevent exactly that: the line-start
+    /// rule is there so *a body that names one inside a sentence is not carrying it*.
+    TrailerKey,
+    /// A footer PHRASE on a line of its own, bounded by a word boundary rather than by a colon.
+    ///
+    /// **Not every mark this array holds is a `Key: Value`, and treating them alike is what let the prefix
+    /// run on.** `Generated with Claude Code` carries no colon, so demanding one would stop refusing the
+    /// real mark; requiring the phrase to END — the next character is not one a word continues with —
+    /// refuses that and admits `Generated withheld …`, which is not this mark.
+    ///
+    /// A review reported this as the gate failing to establish a `Key: Value` shape. It is not: the
+    /// requirement asks for case-insensitive recognition at the start of a line, and this half of the array
+    /// is a footer rather than a key — the spec's own word for it. What was wrong is the boundary, not the
+    /// shape.
+    Footer,
     /// A glyph with no legitimate use in this repository's commit messages, wherever it appears. Prose about the
     /// rule names it in words instead — which is what this repository's own prose does.
     Glyph,
@@ -77,8 +95,13 @@ impl Shape {
     /// `format!` that cannot know which fired.
     const fn rule(self) -> &'static str {
         match self {
-            Shape::Trailer => {
-                "a line that begins with it is carrying it; naming it inside a sentence is not"
+            Shape::TrailerKey => {
+                "a line that begins with it and its `:` is carrying it; naming it inside a sentence is not, \
+                 and a longer word that merely starts the same way is not it at all"
+            }
+            Shape::Footer => {
+                "a line that begins with it, as a phrase that ends there, is carrying it; naming it inside a \
+                 sentence is not, and a longer word that merely starts the same way is not it at all"
             }
             Shape::Glyph => {
                 "this glyph has no legitimate use in a commit message here, wherever it appears — name the \
@@ -89,11 +112,32 @@ impl Shape {
 }
 
 /// Whether `text` carries `mark` in the way its shape defines.
+///
+/// **A prefix is not the mark, and this took `starts_with` alone until a review read it.** Both line shapes
+/// now require the mark to END where it ends: a trailer key at its `:`, a footer phrase at a word boundary.
+/// Without that, `Co-authored-bystander …` at a line start was refused — a false refusal, which is the
+/// direction this requirement's own reason forbids rather than the false negative the gate exists for.
 fn carries(text: &str, mark: &str, shape: Shape) -> bool {
     match shape {
-        Shape::Trailer => text
-            .lines()
-            .any(|line| line.trim().to_ascii_lowercase().starts_with(mark)),
+        Shape::TrailerKey => text.lines().any(|line| {
+            line.trim()
+                .to_ascii_lowercase()
+                .strip_prefix(mark)
+                // Optional space before the colon, because git's own trailer reader accepts one.
+                .is_some_and(|rest| rest.trim_start().starts_with(':'))
+        }),
+        Shape::Footer => text.lines().any(|line| {
+            line.trim()
+                .to_ascii_lowercase()
+                .strip_prefix(mark)
+                // The phrase ends here: end of line, or a character no word continues with. `-` and `_`
+                // count as continuing, so a hyphenated compound is not this phrase either.
+                .is_some_and(|rest| {
+                    rest.chars()
+                        .next()
+                        .is_none_or(|c| !(c.is_alphanumeric() || c == '-' || c == '_'))
+                })
+        }),
         Shape::Glyph => text.contains(mark),
     }
 }
