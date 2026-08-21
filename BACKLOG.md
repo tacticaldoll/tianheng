@@ -1074,6 +1074,13 @@ consumer for an undemonstrated deduplication.
   archive hygiene, so adopting the other half needs no exception — and nothing enforces the mode,
   deliberately, since a check that fired on a change directory would prevent that adoption.
 
+  *Note, 2026-08-21: the mode this closure recorded was itself wrong, and the correction is in `PROJECT.md`'s
+  Decisions. `has never used the second` was measured over the release spine and stated over the repository:
+  `git log --all` reaches dozens of change directories, and this entry's own observation source — `openspec/changes/**`
+  untouched since `2f903fb` — reads only what a release-spine checkout tracks. The closure's diagnosis
+  survives it: the adoption decision was written down nowhere, and writing it down was right. Which mode got
+  written is what the correction moves.*
+
 - **WATCH: `AGENTS.md`'s OpenSpec lifecycle section describes a process with no instances.** *Class:* WATCH.
   *Observed pressure:* found while deciding the entry above — its four phases, commit-type conventions and
   archive-pruning guardrail are written in the present indicative ("A capability change **moves through**
@@ -1126,12 +1133,18 @@ consumer for an undemonstrated deduplication.
   rather than hypothetical: `scripts/publish.sh` has two claimants, which is the shape the join was built
   from. *Risk:* a requirement filed under the wrong capability goes unnoticed until someone reads both
   specs. Bounded — the mistake is visible in the diff of any PR that makes it. *Why not re-point it:* the
-  join compares a proposal's **declared** capability set against the subjects a diff touches, and under
-  `specs` mode there is no independent declaration to compare against — reading the set from the touched
-  spec paths is near-tautological, since touching a spec is naming its capability. *Promotion trigger:* a
-  requirement found filed under the wrong capability, or the `changes` half being adopted, which makes the
-  join start working with no edit. **Not fired** (evaluated 2026-08-18). *Version class:* patch; repository-internal, shipping in
-  no crate. *Authority:* `capability-subjects`, and `PROJECT.md`'s adoption-mode decision.
+  join compares a proposal's **declared** capability set against the subjects a diff touches, and where no
+  proposal is present there is no independent declaration to compare against — reading the set from the
+  touched spec paths is near-tautological, since touching a spec is naming its capability. *Promotion
+  trigger:* a requirement found filed under the wrong capability. **Not fired** (evaluated 2026-08-18).
+  *Version class:* patch; repository-internal, shipping in no crate. *Authority:* `capability-subjects`, and
+  `PROJECT.md`'s adoption-mode decision.
+
+  *Note, 2026-08-21: the trigger's second half — `the changes half being adopted, which makes the join start
+  working with no edit` — is retired, because it had already happened. A change directory is committed on the
+  development branch, so the join runs there and returns early only on the release spine. What stays live is
+  the first half: the filing class is defended by review wherever the join returns early, which is every CI
+  run.*
 
 - **WATCH: nine structural findings the merged-review campaign deliberately did not take.** *Observed
   pressure:* a contributed review's Gate 4 found twelve functions long or deeply nested enough to hide more
