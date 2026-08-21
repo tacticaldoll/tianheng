@@ -8,9 +8,15 @@ A site that no direction holds is **declared unheld**, with why, an owner and a 
 
 Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.rs`. **Do not edit by hand** — regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_register`. A stale projection fails that gate.
 
-**13 of 117 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
+**14 of 118 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
 
 ## Declared unheld
+
+### `publish-source-integrity#release-tag-unreadable`
+
+- because measured, not assumed: every ref-store perturbation a fixture can build answers `1`, which is              this read's ANSWER — an unreadable `refs/tags` and a `refs/tags` replaced by a file both exit              `1`, and in that state `rev-parse HEAD` fails first at `128`, so the judgement never reaches              this arm. The classifier itself IS observed, against a directory that is no repository; what no              fixture can build is a repository whose earlier reads succeed and whose tag read declines
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
 
 ### `release-coherence#directory-entry-unreadable`
 
