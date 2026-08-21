@@ -1567,10 +1567,12 @@ fn every_enumeration_refuses_rather_than_reporting_clean_over_nothing() {
             "examples-empty",
             "found no example manifests",
         ),
+        // Per example since the counter moved inside the loop: the aggregate could not see one example
+        // going unexamined beside siblings that parsed, which is the read this enumeration now covers.
         (
-            "no family requirement in any example",
+            "an example requiring no family crate",
             "example-reqs",
-            "found no family dependency requirement",
+            "declares no family dependency requirement",
         ),
     ] {
         let root = scratch(wreck);
@@ -2437,12 +2439,17 @@ fn an_examples_directory_holding_no_manifest_at_all_reports_over_nothing() {
 
 /// Examples that require no family crate are examples this check has nothing to say about.
 ///
-/// The second vacuity guard, and the one the first cannot cover: manifests were read and none of them
-/// declared a family dependency, so every example pin would be reported over an empty set.
+/// The second vacuity guard, and the one the first cannot cover: an example was read and declared no family
+/// dependency, so its pins would be reported over an empty set.
+///
+/// **Counted per example since this was written.** The guard was an aggregate over every example, which is
+/// the shape that cannot see a partial read: seven examples parsing kept it non-zero while an eighth went
+/// unexamined. This fixture carries one example and reaches the same refusal either way — which is why it
+/// could not have caught the aggregate's own hole, and why the sibling below exists.
 ///
 /// Negative run: with the guard replaced by `Ok(())`, this fixture passed.
 #[test]
-fn examples_requiring_no_family_crate_report_over_nothing() {
+fn an_example_requiring_no_family_crate_reports_over_nothing() {
     let root = scratch("no-family-requirement");
     let fixture = build_fixture(&root, "no-family-requirement", "0.2.0");
     std::fs::write(
@@ -2457,12 +2464,52 @@ fn examples_requiring_no_family_crate_report_over_nothing() {
         "chore: require no family crate from any example",
     );
     refusal::expect(
-        "release-coherence#no-family-requirement-in-examples",
+        "release-coherence#example-requires-no-family-crate",
         &refuse(
             &fixture.repo,
             Kind::CannotJudge,
-            "found no family dependency requirement",
+            "declares no family dependency requirement",
         ),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The case the aggregate guard could not see: one example fine, one declaring nothing.
+///
+/// **This is the falsifier the sibling above cannot be.** With the counter outside the loop, `adopter`'s own
+/// correct pin kept it non-zero and `bare` was never examined — the partial read that let a renamed key and
+/// then a quoted key each reach a release as clean, through the one door that stays open when the reader
+/// misses a declaration rather than misreading it. Two examples, and the second is the one the aggregate
+/// would have carried past.
+///
+/// Negative run: with the counter hoisted back out of the loop, this fixture passed and named nothing.
+#[test]
+fn an_example_declaring_nothing_is_refused_though_its_sibling_is_fine() {
+    let root = scratch("bare-beside-a-good-one");
+    let fixture = build_fixture(&root, "bare-beside-a-good-one", "0.2.0");
+    // `adopter` keeps the pin the fixture builds it with, so the aggregate counter would stay non-zero.
+    std::fs::create_dir_all(fixture.repo.join("examples/bare")).expect("create");
+    std::fs::write(
+        fixture.repo.join("examples/bare/Cargo.toml"),
+        "[package]\nname = \"bare\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
+         [dependencies]\nserde_json = \"1\"\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "chore: add an example requiring no family crate",
+    );
+    let refusal = refuse(&fixture.repo, Kind::CannotJudge, "example bare declares no");
+    refusal::expect(
+        "release-coherence#example-requires-no-family-crate",
+        &refusal,
+    );
+    assert!(
+        refusal.message.contains("bare"),
+        "the refusal must name WHICH example declared nothing, or an operator cannot find it among the \
+         siblings that are fine: {}",
+        refusal.message
     );
     let _ = std::fs::remove_dir_all(&root);
 }

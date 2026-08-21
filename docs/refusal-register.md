@@ -317,6 +317,11 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
+### `release-coherence#example-requires-no-family-crate`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
+
 ### `release-coherence#git-unrunnable`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
@@ -378,11 +383,6 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
 ### `release-coherence#no-example-manifests-found`
-
-- produced in `crates/kanhe/src/release_coherence_gate.rs`
-- observed by `crates/kanhe/tests/release_coherence.rs`
-
-### `release-coherence#no-family-requirement-in-examples`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`

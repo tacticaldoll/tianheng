@@ -5428,6 +5428,36 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; every site is in a crate that ships in no
   package.
 
+- **The example requirement count is per example, and the aggregate guard is gone rather than kept beside
+  it.** The counter lived outside the loop over `examples/`, so it answered *did any example declare a family
+  requirement* when the question it was guarding is *was every example examined*. Seven parsing kept it
+  non-zero while an eighth went unexamined — and both identity doors closed in this window reached a clean
+  release through exactly that: a renamed key, whose repair records it verbatim, and a key this reader cannot
+  decode, closed one change earlier.
+
+  One example is one subject: whatever the reader failed to see there is invisible to every other example's
+  success. An example declaring no family requirement is now its own cannot-judge, **naming that example**,
+  and the site id moves from the aggregate `#no-family-requirement-in-examples` to the per-example
+  `#example-requires-no-family-crate` — the singular form its `#example-pin-absent` and
+  `#example-pin-unreadable` siblings already use.
+
+  The aggregate guard is **deleted, not kept**: with every example refusing on its own zero, a run past the
+  loop has each example contributing at least one requirement and a run with none is the guard above it, so
+  no input reaches it. Keeping it would be the dead branch this same function refuses one read earlier — *a
+  branch no input can take, which is dead code rather than a guard*. Its WHEN moved rather than vanished: the
+  fixture that reached it now reaches the per-example refusal, and the direction that pinned it is rewritten
+  onto the new site rather than deleted. A third direction, the one enumerating every vacuity guard, was
+  updated by being run.
+
+  The negative run is the aggregate shape itself: hoist the counter back out of the loop and the gate answers
+  `ok release coherence (development: 0.2.0)` over an example it never examined, beside a sibling whose pin is
+  correct. That two-example fixture is what the pre-existing one-example direction could not be — with a
+  single example the aggregate and the per-example guard agree, which is why the hole survived a direction
+  that already covered the site.
+
+  No published API, outcome, report, exit class, or manifest moves; every site is in a crate that ships in no
+  package.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
