@@ -259,9 +259,11 @@ that was never there. A phrase that can be anchored by what precedes it SHALL st
 means reading what the sentence points back to.
 
 **Runs of comment lines SHALL be joined, with the marker stripped first, before matching.** A wrapped comment
-splits a phrase across lines, and both halves of that are load-bearing: matching per line missed one of the
-eight live instances outright, and joining without stripping the marker leaves the marker inside the phrase and
-matches nothing either. The offence SHALL name the line the phrase ends on rather than the line its passage
+splits a phrase across lines, and both halves of that are load-bearing: matching per line misses a wrapped
+instance outright, and joining without stripping the marker leaves the marker inside the phrase and matches
+nothing either. **The marker's own extensions SHALL go with it** — a doc comment opens with the declared
+marker and adds a glyph, so stripping only what the format declaration owns leaves that glyph inside the
+joined phrase, which is the same failure by a different character. The offence SHALL name the line the phrase ends on rather than the line its passage
 began on — a wrapped file header otherwise reports line 1, and a shell script's `#!` opens the run, so every
 offence in one would have named the shebang.
 
