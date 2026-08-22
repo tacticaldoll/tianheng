@@ -445,7 +445,7 @@ same fact as a suite that agreed"
     # Split by parameter expansion rather than by `read`'s field splitting: a tab is IFS whitespace, so
     # `IFS=$'\t' read -r conclusion name` strips the LEADING tab of an unfinished check's line and reads its
     # name as the conclusion — measured, the unfinished direction reported a disagreement.
-    local disagreeing="" unfinished="" line conclusion name
+    local disagreeing="" unfinished="" silent="" line conclusion name
     while IFS= read -r line; do
         [[ -z ${line//[[:space:]]/} ]] && continue
         conclusion=${line%%$'\t'*}
@@ -455,14 +455,28 @@ same fact as a suite that agreed"
         # `CheckRun` still running. `FAILURE`, `ERROR`, `CANCELLED`, `TIMED_OUT` and anything unlisted fall
         # to the catch-all, which is the direction a class this script has not met must fall.
         #
-        # **`EXPECTED` is unfinished, not agreeing**, and that is a deliberate departure from the review that
-        # found this. GitHub's own meaning is *a status is expected* — required and not yet posted — so
-        # reading it as agreement would merge past a required status that never arrived, which is the
-        # false-negative direction this whole guard exists to close. Classified with `PENDING`, whose
-        # operator action is identical: wait for it.
+        # **`EXPECTED` is unfinished, not agreeing.** GitHub's own meaning is *a status is expected* —
+        # required and not yet posted — so reading it as agreement would merge past a required status that
+        # never arrived, which is the false-negative direction this whole guard exists to close. Classified
+        # with `PENDING`, whose operator action is identical: wait for it.
+        #
+        # **`NEUTRAL` and `SKIPPED` are their own class, and they agreed with nothing.** They sat beside
+        # `SUCCESS` with no measurement while the arm above was reasoned about at length — and the same
+        # argument covers them: a check that did not run produced no evidence, so reading it as agreement
+        # merges past whatever it would have said. Measured on this repository's own workflow: none of the
+        # jobs in `.github/workflows/ci.yml` carries `if:`, `needs:`, `paths:`, `paths-ignore:` or
+        # `continue-on-error:`, so a skip here cannot mean *legitimately not applicable* — it can only mean
+        # the workflow changed or the run was interfered with, and both are things to look at rather than
+        # merge past.
+        #
+        # Their own arm rather than the unfinished one, because the operator action differs: an unfinished
+        # check is waited for, and a skipped one is investigated. When a job legitimately may skip — a
+        # path filter, say — move it back beside `SUCCESS` and state which job and why that skip is
+        # evidence, the way the `EXPECTED` paragraph above states its own.
         case $conclusion in
-        SUCCESS | NEUTRAL | SKIPPED) ;;
+        SUCCESS) ;;
         "" | PENDING | EXPECTED) unfinished+="${unfinished:+, }${name}" ;;
+        NEUTRAL | SKIPPED) silent+="${silent:+, }${name} (${conclusion})" ;;
         *) disagreeing+="${disagreeing:+, }${name} (${conclusion})" ;;
         esac
     done <<<"$rollup"
@@ -472,6 +486,13 @@ same fact as a suite that agreed"
             "CI has not agreed about this pull request: $disagreeing. A local Definition of Done is the \
 pre-flight list and CI runs a superset of it, so a green local run is not a green suite — measured, this \
 wrapper merged nineteen consecutive red runs on exactly that difference"
+    fi
+    if [[ -n $silent ]]; then
+        cannot_judge \
+            "these checks produced no evidence: $silent. A check that did not run agreed with nothing, and \
+no job in this repository's workflow carries \`if:\`, \`needs:\`, \`paths:\` or \`continue-on-error:\` — so a skip \
+here is the workflow having changed or the run having been interfered with, not a job that legitimately did \
+not apply. Look at why it did not run"
     fi
     if [[ -n $unfinished ]]; then
         cannot_judge \
