@@ -1393,6 +1393,86 @@ fn a_pull_request_no_workflow_has_claimed_stops_before_the_merge() {
 /// **Three states, and the middle one is why a boolean would not do.** A run still in flight is not a run
 /// that failed; merging on *not success* would refuse a pull request nobody has answered yet, and merging on
 /// *not failure* would merge one nobody has answered yet. The wrapper says which of the two it met.
+/// The premise the no-evidence refusal rests on, held against the workflow that has to keep it true.
+///
+/// **The classification and the diagnostic both filter on this claim, and nothing held it.** The wrapper
+/// tells an operator that a skip here *cannot* be legitimate — *no job in this repository's workflow carries
+/// `if:`, `needs:`, `paths:` or `continue-on-error:`* — and refuses on that basis. Add one of those keys and
+/// the sentence becomes false at the moment it is printed, while the refusal it justifies goes on happening:
+/// a legitimate skip refused with a message asserting legitimate skips are impossible. `AGENTS.md` names the
+/// rule this falls under — *something downstream filters on the claim → declare it, and hold it to the
+/// producer both ways* — and the producer is a tracked file a sibling direction already reads.
+///
+/// **Job level, not the whole file, and the difference is not tidiness.** A `steps:` entry may carry `if:` or
+/// `continue-on-error:` without the job's own conclusion moving: the step is skipped and the job still reports
+/// success, so the rollup this wrapper reads is unaffected and refusing it would refuse correct code. What
+/// moves a job to `SKIPPED` is a key on the job itself, or a workflow-level path filter — so those are what
+/// this reads.
+///
+/// The count guards vacuity in the shape the indentation rule can actually lose: a renamed `jobs:` block or a
+/// re-indented file yields zero jobs, and zero jobs satisfy "none of them carries a forbidden key" while
+/// having read nothing.
+#[test]
+fn no_workflow_job_can_legitimately_skip() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let workflow = root.join(".github/workflows/ci.yml");
+    let text = std::fs::read_to_string(&workflow)
+        .expect("read .github/workflows/ci.yml, whose shape the no-evidence refusal asserts");
+
+    // On the job itself. A workflow-level path filter lives under `on:` and is read over the whole file,
+    // since those two keys have no other meaning anywhere in it.
+    const ON_THE_JOB: [&str; 3] = ["if:", "needs:", "continue-on-error:"];
+    const ANYWHERE: [&str; 2] = ["paths:", "paths-ignore:"];
+
+    let mut jobs = 0usize;
+    let mut carried: Vec<String> = Vec::new();
+    let mut in_jobs = false;
+    for (index, line) in text.lines().enumerate() {
+        if !line.starts_with([' ', '\t']) && !line.trim().is_empty() {
+            in_jobs = line.starts_with("jobs:");
+            continue;
+        }
+        if let Some(key) = ANYWHERE
+            .iter()
+            .find(|key| line.trim_start().starts_with(**key))
+        {
+            carried.push(format!("  ci.yml:{}: {key}", index + 1));
+        }
+        if !in_jobs {
+            continue;
+        }
+        // Two spaces names a job; four is one of its own keys. Deeper is a step's.
+        if line.starts_with("  ") && !line.starts_with("   ") && line.trim_end().ends_with(':') {
+            jobs += 1;
+        }
+        if line.starts_with("    ") && !line.starts_with("     ") {
+            if let Some(key) = ON_THE_JOB
+                .iter()
+                .find(|key| line.trim_start().starts_with(**key))
+            {
+                carried.push(format!("  ci.yml:{}: {key}", index + 1));
+            }
+        }
+    }
+
+    assert!(
+        jobs > 0,
+        "no job was read out of {}, so this direction would report the premise held over a file it never \
+         parsed — the `jobs:` block or its indentation has moved, not the property",
+        workflow.display()
+    );
+    assert!(
+        carried.is_empty(),
+        "a job can now legitimately skip, and `require_ci_green` says otherwise to an operator's face: its \
+         refusal reads \"no job in this repository's workflow carries `if:`, `needs:`, `paths:` or \
+         `continue-on-error:`\", which is now false. Either move that conclusion back beside `SUCCESS` with \
+         the measurement that earns it — which job, and why its skip is evidence — or drop the key:\n{}",
+        carried.join("\n")
+    );
+}
+
 /// A check that finished and produced no evidence is not a check that agreed.
 ///
 /// **`NEUTRAL` and `SKIPPED` sat beside `SUCCESS` with no measurement**, while the `EXPECTED` classification
