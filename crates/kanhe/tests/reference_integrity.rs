@@ -210,8 +210,8 @@ fn every_tracked_format_is_classified() {
 /// a member nothing reaches. Measured before this direction existed: `("LICENSE", …)` was unreachable, because
 /// an early return in `prose_of` classified every `LICENSE`-prefixed name before the array was consulted and
 /// no tracked name ends with `LICENSE` without starting with it. The array called itself the one declaration
-/// while one classification lived in two places, and the entry that proved it stood for a window without
-/// anything noticing.
+/// while one classification lived in two places, and the entry that proved it stood without anything
+/// noticing.
 ///
 /// A dead entry is not cosmetic here: it reads as coverage of a format, so the next reader adding that format
 /// finds it already declared and moves on.
@@ -403,7 +403,7 @@ fn extract(line: &str) -> Vec<Reference> {
 fn ignored(root: &Path, target: &str) -> bool {
     let query = |candidate: &str| {
         // **This is the one read here whose answer an ambient file changes**, and it ran through a bare
-        // `Command::new("git")` for a window. Measured: with a global `core.excludesFile` naming a path,
+        // `Command::new("git")`. Measured: with a global `core.excludesFile` naming a path,
         // `check-ignore` answers *ignored* for it; with the setting named it does not.
         //
         // `hermetic` closes it now — it names `core.excludesFile` through `GIT_CONFIG_COUNT`, which the
@@ -1412,6 +1412,128 @@ fn positional_reference(line: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// The phrases that name a **moving** reference, so the passage is stale the moment what they point at moves.
+///
+/// `AGENTS.md`'s table of what earns a place in a doc comment gives this row its verdict — *neither* an
+/// observation source nor provenance, because it names a moving reference — and says of the same table that
+/// this is the one row a sweep can enumerate. The others need the criterion applied per site, which is prose
+/// judgement this repository has designed, measured three times and rejected.
+///
+/// **Admitted by instance or by the rule's own text, and by nothing else.** Most were live in tracked line
+/// comments when the sweep was written; the remainder is admitted because `AGENTS.md`'s row spells it out.
+/// Nothing is added on the strength of sounding similar: an entry that closes nothing reads as a defence that
+/// was never there, which is what `AMBIENT_IGNORE_READS` records about admitting a spelling with no call site.
+///
+/// **The members are not restated in this passage, and that is the check's own lesson applied to itself.**
+/// Naming one here put a live instance in the corpus — the sweep reported its own documentation, which is
+/// verbatim what `projection-register` records about a check whose subject is text. The list below is the one
+/// owner; a reader wanting the members reads them.
+///
+/// **`the same window` is deliberately absent.** It can be anchored by what precedes it — *the same window as
+/// `64ed18c`* names a moment — so deciding it means reading what the sentence points back to, and that is the
+/// prose instrument this repository refuses. Seven passages carry it; each is a reviewer's call.
+const RELATIVE_ANCHORS: [&str; 4] = [
+    "this window",
+    "for a window",
+    "one commit ago",
+    "the previous round",
+];
+
+/// Every relative anchor the comment lines of `corpus` carry, in `corpus_root`.
+///
+/// **Runs of comment lines are joined before matching, which is the whole difficulty.** A wrapped comment
+/// splits a phrase across lines — `scripts/publish.sh` carries `for a` at one line's end and `window` at the
+/// next line's start — so a per-line sweep sees six of the seven live instances and reports the seventh
+/// clean. The marker is stripped **before** the join for the same reason: joining raw lines leaves `for a #
+/// window`, which matches nothing either.
+///
+/// Split from the check so a negative fixture can call it, exactly as the sibling positional sweep is.
+fn relative_anchor_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSet<String> {
+    let mut offences = BTreeSet::new();
+    let mut read = 0usize;
+    for path in corpus.iter() {
+        let Some(Prose::LineComment(marker)) = prose_of(path) else {
+            continue;
+        };
+        let text = std::fs::read_to_string(corpus_root.join(path)).unwrap_or_else(|error| {
+            panic!(
+                "cannot read tracked file '{path}' — a file this check claims to have inspected must have \
+                 been read: {error}"
+            )
+        });
+        read += 1;
+        // One run of consecutive comment lines is one passage. A blank comment line joins as a space and
+        // separates nothing, which is right: a phrase does not cross a paragraph, and treating the blank as
+        // a break would re-open the wrap the join exists to close.
+        //
+        // Each line's offset into the joined text is kept so a hit reports the line the phrase **ends** on
+        // rather than the line the passage began on. Without it a wrapped file header reports line 1 — and a
+        // shell script's `#!` opens the run, so every offence in one would have named the shebang.
+        //
+        // Whitespace is normalised per line before the join rather than over the result, so the offsets stay
+        // valid: a phrase wrapped across two lines is matched only if the join is single-spaced, and
+        // normalising afterwards would move every offset it had just been compared against.
+        let mut passage = String::new();
+        let mut origins: Vec<(usize, usize)> = Vec::new();
+        let flush = |passage: &mut String,
+                     origins: &mut Vec<(usize, usize)>,
+                     offences: &mut BTreeSet<String>| {
+            for anchor in RELATIVE_ANCHORS {
+                let mut from = 0usize;
+                while let Some(at) = passage[from..].find(anchor) {
+                    let end = from + at + anchor.len();
+                    let line = origins
+                        .iter()
+                        .take_while(|(offset, _)| *offset < end)
+                        .last()
+                        .map_or(0, |(_, line)| *line);
+                    offences.insert(format!(
+                        "  {path}:{line} writes `{anchor}`, which names a moving reference — it is stale the \
+                         moment that reference moves, and nothing can check it. Anchor it to the moment (a \
+                         version, a date, a commit) or drop it: the sentence almost always means the same \
+                         without it"
+                    ));
+                    from = end;
+                }
+            }
+            passage.clear();
+            origins.clear();
+        };
+        for (index, line) in text.lines().enumerate() {
+            match line.trim_start().strip_prefix(marker) {
+                Some(rest) => {
+                    let normalised = rest.split_whitespace().collect::<Vec<_>>().join(" ");
+                    passage.push(' ');
+                    origins.push((passage.len(), index + 1));
+                    passage.push_str(&normalised);
+                }
+                None => flush(&mut passage, &mut origins, &mut offences),
+            }
+        }
+        flush(&mut passage, &mut origins, &mut offences);
+    }
+    assert!(
+        read > 0,
+        "no line-comment source was read, so this sweep would report clean over a corpus it never opened"
+    );
+    offences
+}
+
+/// `AGENTS.md`'s relative-anchor row, held over every tracked line comment.
+#[test]
+fn no_tracked_source_names_a_relative_anchor() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let offences = relative_anchor_offences_in(&root, &tracked(&root));
+    assert!(
+        offences.is_empty(),
+        "{} relative anchor(s) in tracked source:\n{}",
+        offences.len(),
+        offences.iter().cloned().collect::<Vec<_>>().join("\n")
+    );
 }
 
 /// Every positional reference the comment lines of `corpus` carry, in `corpus_root`.

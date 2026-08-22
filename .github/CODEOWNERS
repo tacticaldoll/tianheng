@@ -15,7 +15,7 @@
 #     coherence, DoD coherence, the bound register, the merge-message gate and the
 #     publish-source gate. 繩墨 above holds the law Tianheng declares over its own
 #     architecture; 勘合 holds this repository's record against itself. Both are things an
-#     agent would weaken to make CI pass, and for a window only the first was named:
+#     agent would weaken to make CI pass, and only the first was named:
 #     the whole repository-check surface moved into this crate from `scripts/` and
 #     CODEOWNERS was updated for the move it noticed and not for the class.
 #   - scripts/ is the two wrappers standing in front of the irreversible acts —

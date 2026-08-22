@@ -238,6 +238,48 @@ same rule that keeps a recognizer asserting its own emptiness elsewhere here.
 - **WHEN** the check's own directions carry the shapes they refuse, as string literals on executed lines
 - **THEN** they are outside the corpus by position, not by an exemption the corpus could also claim
 
+### Requirement: An anchor SHALL name a moment, not a moving reference
+
+The comment lines of every format the declaration classifies as carrying line comments SHALL NOT anchor a
+passage to a reference that moves with time. `AGENTS.md`'s table of what earns a place in a doc comment gives
+this row its verdict — *neither* an observation source nor provenance, because it names a moving reference and
+is stale the moment that reference moves — and says of the same table that this is the one row a sweep can
+enumerate. A passage SHALL anchor to the moment instead: a version, a date, a commit; or drop the clause,
+since the sentence almost always means the same without it.
+
+**This is the sibling of naming a position, on the other axis.** That requirement refuses a reference that
+points *where* by counting; this one refuses a passage that points *when* by counting. Both are decidable
+without reading what the sentence means, which is what separates them from the rest of the table — those need
+the criterion applied per site, and that is prose judgement this repository has designed, measured three times
+and declined.
+
+The recognised phrases SHALL be declared in one place in the reaction and admitted **by instance or by the
+rule's own text**, never on the strength of sounding similar: an entry that closes nothing reads as a defence
+that was never there. A phrase that can be anchored by what precedes it SHALL stay outside, because deciding it
+means reading what the sentence points back to.
+
+**Runs of comment lines SHALL be joined, with the marker stripped first, before matching.** A wrapped comment
+splits a phrase across lines, and both halves of that are load-bearing: matching per line missed one of the
+eight live instances outright, and joining without stripping the marker leaves the marker inside the phrase and
+matches nothing either. The offence SHALL name the line the phrase ends on rather than the line its passage
+began on — a wrapped file header otherwise reports line 1, and a shell script's `#!` opens the run, so every
+offence in one would have named the shebang.
+
+Markdown SHALL be outside this requirement by the same construction the sibling names: it is whole-document
+prose rather than a line-comment format, and in a record a relative phrase narrates a past state.
+
+#### Scenario: A comment anchors to a moving reference
+
+- **WHEN** a comment in any line-comment format carries one of the declared phrases
+- **THEN** the reaction fails, naming the file, the line the phrase ends on, and the phrase, and says to anchor
+  it to the moment or drop it
+- **PINNED-BY** `no_tracked_source_names_a_relative_anchor`
+
+#### Scenario: A phrase wrapped across two comment lines
+
+- **WHEN** a phrase's words fall on either side of a line break in a wrapped comment
+- **THEN** the reaction still names it, because the run is joined with its markers stripped before matching
+
 ### Requirement: Deliberate absence does not become a stale-reference finding
 
 The gate SHALL skip a recognized target when Git reports that target ignored, because prose may

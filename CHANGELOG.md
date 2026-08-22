@@ -1172,6 +1172,26 @@ them.
 
 ### Self-governance
 
+- **The one row of the doc-comment table a sweep can enumerate had no sweep.** `AGENTS.md` classes a relative
+  anchor — a passage pointing at *when* by counting rather than by naming a moment — as neither an observation
+  source nor provenance, *stale the moment the window closes*, and says in the same breath that this is the
+  one row of that table a sweep can enumerate; the others need the criterion applied per site, which is the
+  prose instrument this repository has declined three times. The row a sweep could have had did not have one,
+  and eight passages carried anchors across `.rs`, `.sh` and `CODEOWNERS`.
+
+  **The sweep found two the reviews had not.** An adversarial review named six and a follow-up sweep found a
+  seventh; the reaction found eight. `.github/CODEOWNERS` was missed by both — it is not a format a reader
+  thinks to grep — and `scripts/publish.sh`'s instance is invisible to any per-line search, because the phrase
+  wraps: `for a` ends one line and `window` opens the next. Joining raw lines does not fix it either, since
+  the marker lands inside the phrase; the run is joined **with markers stripped**, and the offence names the
+  line the phrase ends on rather than the line the passage began on — otherwise a wrapped file header reports
+  line 1, and a shell script's `#!` opens the run, so every offence in one would have named the shebang.
+
+  **And it found one in its own documentation.** The first form of the declaring constant explained why a
+  member was admitted by writing that member out, which put a live instance in the corpus — verbatim what
+  `projection-register` records about a check whose subject is text. The list is now the single owner and the
+  prose does not restate it.
+
 - **A skipped check was read as agreement, and the fixture standing for a green suite carried one.**
   `require_ci_green` classified `NEUTRAL` and `SKIPPED` beside `SUCCESS` with no measurement, while the
   `EXPECTED` classification was reasoned onto the unfinished side at length — *reading it as agreement would
