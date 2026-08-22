@@ -393,277 +393,6 @@ consumer for an undemonstrated deduplication.
   requirement prose instead. This does not close the entry — review convention cannot derive the missing binding —
   but it prevents sync from knowingly admitting another un-reacted scenario while the derived capability is designed.
 
-- ~~**`crates/kanhe/tests/release_coherence.rs`'s subshell reads have not been audited for a swallowed status.**~~
-  **CLOSED** in the open window. Audited read by read rather than swept: four of the five consumers already
-  carried a vacuity guard (the release spine, the crate-manifest set, and both example-pin counters), which
-  is why the entry's MEDIUM risk did not materialise as a false clean. The fifth — the internal-pin loop —
-  had none, so a reformatted `[workspace.dependencies]` table iterated zero times and the direction passed
-  having asserted nothing about any pin; it now refuses with `2`.
-
-  The audit found two things the entry did not predict, both worth keeping. The gate collapsed **violation**
-  into **cannot judge**'s absence: every refusal was `1`, including a shallow clone, an absent manifest, and a
-  moved crate layout, which the family contract forbids and this gate's own header (written one change
-  earlier) already claimed it did not do. And the exit-contract backstop had **inverted** it — `fail` was a
-  `return 1` relying on `set -e`, so the `ERR` trap turned every genuine incoherence into `2`. Neither was
-  visible to CI, because this matrix asserted a non-zero status rather than a code. Every gate matrix now
-  assert the code, which is the property that would have caught it.
-
-- ~~**Two gates have no companion failure matrix.**~~ **CLOSED** in the open window. Both now have one, and
-  both were worth building rather than recording. `crates/kanhe/tests/whitespace_hygiene.rs` is the only fixture that pins
-  the exit-contract backstop's subshell misfire — removing that guard fails it and no other matrix.
-  `crates/kanhe/tests/dod_coherence.rs` closes the gate whose subject is a claim `AGENTS.md` makes about **itself**, so a
-  reaction nobody had watched refuse was all that stood behind it; its zero-commands direction is the one that
-  matters most, since without that guard the gate reports `ok: every local Definition of Done command (0
-  parsed) is run by CI` and exits 0. Each gate gained the target-directory argument that makes a fixture
-  possible, the same argument the register and reference-integrity gates already took.
-
-  Every `check_*` gate now has a `test_*` twin, and every one of those matrices asserts the expected exit
-  **code** rather than a non-zero status — the property whose absence let a 1-into-2 collapse ride green
-  through CI in the release-coherence gate. The count is deliberately not written here: it is printed by
-  the retired gate-shape projection, whose reaction enumerates the pairing.
-
-- ~~**An observer cannot be made to declare what it does not observe.**~~ **CLOSED** in the open window, and
-  worth recording for what it did **not** buy as much as for what it did.
-
-  `xuanji::Observer` has two methods and no default body on either, so a participant cannot be composed into a
-  run without declaring its limits. The promise stops being a convention this family keeps about itself and
-  becomes a property of the type — including for a third party this family never reviews. `tianheng::Run` folds
-  eagerly, and 圭表, 渾儀 and 漏刻 each implement it, so it is dogfooded rather than offered.
-
-  **What it does not buy, and this entry should not be read as claiming it:** the obligation is to *declare*,
-  never to declare *completely*. A participant may answer with a partial list, or an empty one, and no reaction
-  can enumerate the limits of a reaction it did not write. The fold likewise composes verdicts and does not
-  adjudicate them. Both are declared bounds of `observer-protocol` rather than gaps left to be discovered.
-
-  Two design decisions were **reversed by measurement**, both recorded because each looked principled. A third
-  method — "identify your boundary kind" — was dropped because nothing reacts to it: a `Violation` already
-  carries its kind, so restating it would be a second copy of one fact. And the heterogeneous set was to be a
-  declared `dyn` exposure in the shell; measured, no module of `tianheng` is governed by a semantic boundary and
-  the `dyn`-trait DSL has no allow-except form, so the declaration would have been a name with no reaction. The
-  eager fold removes the exposure instead, and a grep-based assertion keeps it removed because 渾儀 is not
-  watching that crate. **The lesson: a boundary declaration must be checked against the DSL that would have to
-  carry it, not only against the architecture that motivates it.**
-
-  A side effect worth keeping: the corpus-and-anchor derivation the shell computed for 漏刻 now lives in 星表,
-  the single reader of truth, because a runtime observer would otherwise have derived it a second time — and it
-  is **baseline identity**, which is precisely the twin drift that crate exists to prevent.
-
-- ~~**The list of generated documents is prose, and nothing checks it.**~~ **CLOSED** in the open window as the
-  `projection-register` capability, and filed here in the same change that closed it because the trigger was that
-  change's own last step: closing `gate-shape-contract` added a fourth projection **and** a hand edit to
-  `AGENTS.md` to mention it, with no reaction behind the edit.
-  `crates/kanhe/tests/projection_register.rs` enumerates the generated documents from the marker each carries,
-  holds a two-way correspondence with the reactions blessing them, requires each to be named in `AGENTS.md`'s prose
-  rather than inside a fence, and includes itself. Measured before proposing: 4 of 4 documents already carried the
-  marker and named their generator, and the holders already agreed 4 for 4, so it described the tree.
-
-  **Residual, declared rather than solved.** Two mechanisms are recognized — the shared Rust rule, and a `check_*`
-  gate writing under `BLESS`. A document generated a third way whose author also omitted the marker is absent from
-  both sides of the correspondence, which then holds over a surface missing a member. That is a declared false
-  negative owned by the engine, not a limit of the corpus: the third mechanism's source sits in the tree the
-  reaction already reads. Promotion trigger for closing it: a second generating mechanism actually existing. There
-  is one today. The other residual is that a stated regeneration command is registered and never run, because
-  running it means re-entering the harness already running or letting the reaction write into the tree it judges —
-  `OutOfReach`, and not closable without giving up one of those two properties.
-
-  **The lesson worth keeping is about reactions whose subject is text.** This apply hit self-reference three times:
-  the specification quoting the marker it requires, the reaction's own source naming the signature it excludes, and
-  the register having to be blessed twice to see itself. Every one was found by running it, none by reading it, and
-  the fix was the same each time — recognize by position or shape, never by the bare string.
-
-- ~~**A gate's own shape is convention, so every new gate re-learns it by breaking.**~~ **CLOSED** in the open
-  window as the `gate-shape-contract` capability, whose reaction enumerated the
-  tracked shell units under `scripts/` whose basename began with `check_` — on the basename rather than by a
-  `check_*` pathspec, since git matches pathspec wildcards without `FNM_PATHNAME` and the glob would be
-  describing something other than what it says — pairs each gate with the twin its basename names, asserts every
-  checkable property, declares the three semantic classes and the coverage limit as observation bounds with
-  pinning tests, and projects the retired gate-shape projection. A Rust reaction rather than a seventh shell gate,
-  because `PINNED-BY` resolves only a harness-registered Rust function: a shell-defended capability would have
-  landed those bounds `UNPINNED` and moved the register projection's leading figure off zero. It rides the
-  existing `cargo test` line, so it added no Definition of Done entry and no CI step.
-
-  **This entry's own claim was wrong, and worth recording as such.** It said the per-gate property table "is
-  uniform **today** and enforced **nowhere**"; the second half held and the first did not. Measured while
-  applying: the silent-clean-run assertion held in **2 of 6** twins — four grepped a clean run's stderr for the
-  backstop's own diagnostic, which catches the one line it names — and the unchanged-repository assertion held
-  in 5 of 6 by name and, once observed, in **none** of them, because every form captured `before` from a
-  repository the gate had already run over, so a gate writing the same file on every run left it in `before` too.
-  A stray write injected into a gate passed that direction unnoticed. The entry was wrong because it counted the
-  properties it had just finished creating: the shape it described as settled was three weeks old — probed at
-  `v0.4.0`, the backstop was installed in 0 of 4 gates and fixture-addressability in 1 of 4 — so the entry was
-  reading its own recent work as convention. **The lesson: a promotion trigger written from inside the code that
-  lacks the observation describes building the property, not finding it; measure the exact observation source
-  before writing a figure into a trigger.**
-
-  Both revisions the parked proposal needed were applied before it landed: the two qualifier phrasings left the
-  heading slot, since what kind of stop a bound describes now belongs to `xuanji::Extent`; and the publish-time
-  membership exemption left the bound mechanism entirely, because a bound says a reaction stops at a shape while
-  an exemption says one named instance is excused from a requirement. **Residual, declared rather than solved:**
-  nothing enumerates policy exemptions. The register enumerates bounds; this exemption is checked live by the
-  reaction and named in the projection, and that is all. Trigger for giving exemptions their own register: a
-  second instance. This is the first.
-
-  **Retired two commits later, in the same window.** `gate-shape-contract` itself — the capability this entry
-  closed with — was retired by `5abda1f`, once `scripts/` held nothing but `merge-pr.sh` and `publish.sh` and
-  the capability's own projection read `0 gates, 11 properties each`: nothing left to pair, nothing left to
-  enumerate. The pairing this entry describes, and every property and bound declared under it, no longer
-  exists at `HEAD`. Recorded here rather than deleted, since the shape this entry closed — a gate's own
-  convention, re-learned by breaking — is the part worth keeping; the capability that closed it is not the
-  part that lasted.
-
-- ~~**A swallowed subshell status was repaired nine times and could be written a tenth.**~~ **CLOSED** in the open
-  window, and closed as a *shape* rather than as a tenth repair. `gate-shape-contract` gained an eleventh property:
-  a gate may not consume an observation source through `< <(producer)` whose producer can fail.
-
-  **Both failure directions are measured, which is what made the class worth a property rather than a habit.** A
-  `git ls-files --eol` truncated after one clean row made `crates/kanhe/tests/whitespace_hygiene.rs` report
-  `whitespace hygiene ok (1 tracked text files)` at **exit 0** over a repository it had read one file of — the count
-  fell from two to one in its own output and nothing reacted to it. A `git log` truncated the same way made
-  `crates/kanhe/tests/release_coherence.rs` conclude snapshot state and report `[Unreleased] must be empty` at **exit 1**, a
-  violation invented from a partial read. A vacuity guard reaches neither: it was built for zero rows, and a partial
-  read gives one or more. **The guard and the capture answer different questions, which is why they now sit side by
-  side rather than one replacing the other.**
-
-  Eight sites migrated to the shell era's shared capture library, and **the property found two more on its first run — one of them
-  written by the migration itself** (`< <(sort …)`), the other a per-file scan never migrated at all. A property that
-  catches its own author's fresh mistake within a minute of existing is the argument for having it.
-
-  **The lesson worth keeping is about the helper, not the sites.** Its first version turned `grep`'s exit 1 — a clean
-  miss, the ordinary case — into cannot-judge, and the release gate's own vacuity direction failed immediately. So it
-  takes `--ordinary-empty <status>` per call site: the rule is about the producer's *contract*, not about its name,
-  and the shell era's shared exit-contract backstop draws the same distinction for the same reason. A shared helper that decides a
-  producer's contract for its callers would have been a new class of its own.
-
-  **Residual, and the bound was narrowed rather than left standing.** A status swallowed by a command substitution,
-  or by a pipeline's non-final stage, is still unobserved — detecting either would mean modelling whether the caller
-  reads `$?` afterwards, which is control flow rather than text. The declared bound now says exactly that, with its
-  heading untouched because the slug is its id. Also unreproduced: the `git ls-files | grep -q` SIGPIPE shape, which
-  needs enough data to fill a pipe buffer; migrated with the class and recorded as migrated without a demonstrated
-  negative run. Trigger for revisiting: a swallowed status found in a shape the property does not reach.
-
-  **Retired with the rest of `gate-shape-contract`, by `5abda1f`.** The eleventh property, the shared capture
-  library, and the `--ordinary-empty` per-call-site contract this entry describes were all part of the same
-  capability, deleted whole once it reached the vacuity its own bounds warned about. Nothing at `HEAD` still
-  asserts either failure direction measured above; a future instance of a swallowed subshell status would
-  need a new reaction, not a resurrection of this one.
-
-- ~~**The pre-publish gate had no specification, and its stated bound had the cause backwards.**~~ **CLOSED** in
-  the open window as the `publish-source-integrity` capability. Found in the 0.5.0 pre-release review, and worth
-  keeping for the shape rather than the fix.
-
-  All 34 specifications were searched: **none** stated that a publish must come from a signed annotated tag at
-  the tip of `main`. The gate standing before the one irreversible act carried its contract in its own header
-  comment, while `gate-shape-contract` exempted it from Definition-of-Done membership *by name* — the one place a
-  reader was told it is special. A reaction with no requirement is the mirror of the class the 0.5.0 window kept
-  closing, and it has a consequence: there was nowhere to declare a bound.
-
-  **The bound's stated cause was wrong, and that is why the defect survived.** The header said the signature could
-  not be verified because verification needs an allowed-signers configuration CI lacks. Measured with no such file
-  anywhere, `ssh-keygen -Y check-novalidate` verifies validity; only **attribution** needs the file. So the gate
-  matched a shape — and accepted an unsigned tag whose message quoted a signature block. **The lesson: a bound's
-  cause is what the next author reasons from. This one said "you cannot check this", so nobody tried.** A bound
-  with a wrong cause is worse than one with no cause at all.
-
-  This is the second live instance in one day of `observation-bound-model`'s own declared bound that *a
-  declaration's stated cause is the real cause is not observed*. Two instances is the number worth naming:
-  the extent is typed and checkable while the rationale is prose the model never reads, and both instances were
-  found by a human-style review rather than by any reaction. Trigger for revisiting that bound: a **third**
-  instance, or a proposal for a rationale check that is not a keyword heuristic.
-
-  Also recorded: `PINNED-BY` resolving only a Rust function meant this shell gate's bound could be defended by a
-  twin direction and cited by nothing. Rather than accept `UNPINNED` — which would have reported a defended bound
-  as undefended, buying a true figure with a false fact — the release-repository fixture builder was extracted to
-  `crates/kanhe/src/publish_source_gate.rs` and a Rust test pins the bound through it. **Measured, not estimated**: one
-  shared builder, no second construction. So the WATCH entry on shell-defended capabilities stays WATCH; its
-  trigger asks for a residual measured and found *unaffordable*, and this one was affordable.
-
-- ~~**The 天衡 shell's baseline-writing and CLI surface has never been swept.**~~ **CLOSED** in the open window,
-  swept against an enumeration built first as the entry required, and it found **two defects — both in the
-  requirements rather than in the code.**
-
-  **The enumeration, and what it measured.** The baseline write path's twelve filesystem operations, read out of
-  the code rather than guessed: `canonicalize` on the target, the mode read, the `O_EXCL` temp create, the
-  temp-plant loop, `fchmod` on the *descriptor* rather than the path, `sync_all` after the mode and before the
-  rename, the rename, the parent-directory flush whose error is deliberately discarded, the guard's cleanup on
-  drop, and on the create path `create_new`, the `symlink_metadata` dangling-symlink diagnosis and `read_link`.
-  Every one already has a test in `crates/tianheng/tests/baseline_cli.rs`. Five further adversarial shapes were
-  probed live — absent parent directory, target is a directory, read-only parent, unreadable target, symlink to a
-  directory — and all five exit 2 naming the path and the OS cause, with no silent success and no misdiagnosis.
-  The create-versus-overwrite decision takes the create path on `NotFound` **only**, so an unreadable existing
-  baseline cannot be misreported as a creation race. On the CLI side, twenty-five cells: four value-taking flags ×
-  {missing value, empty, flag-shaped, empty in the equals form, repeated}, plus the boolean flags, the unknown
-  flag and positional, and the `--format` value. **Swept and defended, except for one column.**
-
-  **What it found.** `list`'s refusal named no flag — one sentence for all five check-only flags — while the
-  requirement covering the same conflict inside `check` cites `list`'s rule as the one it extends *and* requires
-  the flag to be named. Each implementation satisfied its own requirement, which is why no test caught it. And
-  `list`'s requirement enumerated four check-only flags while the runner rejected five: `--disallow-stale` was
-  added to the code and not to the prose. Corrected by tightening the requirement and deriving the set, so a sixth
-  flag is covered the moment it exists.
-
-  **Two of the sweep's own measurements were wrong before they were right**, recorded because the correction is the
-  transferable part. The first CLI probe grepped the whole output for the flag name — and the `usage:` banner lists
-  every flag by construction, so every cell measured as naming its flag, including a nonexistent one. The second
-  read the `error:` line only. Separately, `list --format sarif` looked like it shared the generic message until
-  the probe stopped passing `--manifest-path` alongside it, which was tripping the check-only guard first. **A
-  probe that carries an unrelated flag is measuring that flag.**
-
-  **Residual: the enumeration is hand-made and will rot.** It is a snapshot taken against a named revision, in a
-  proposal that dissolves at sync, and nothing enumerates the CLI surface as a reaction — which is how this
-  requirement's own list of four went stale in the first place. Not solved here: a register over six flags would be
-  ceremony this finding does not justify. Promotion trigger: a **second** defect found in this surface, or a flag
-  added to the runner without a test that names it.
-
-- ~~**The 渾儀 seam-identity and owner-qualification surface has not been swept against the bound index.**~~
-  **CLOSED** in the open window, swept and found defended — by a structurally enforced enumeration rather
-  than by diligence, which is why the result is worth recording instead of just noting "no findings".
-
-  `every_public_seam_shape_is_named_and_identity_injective` carries the enumeration and forces it to stay
-  complete: `seam_kind` matches all eleven `PublicSeam` variants with no wildcard, so a new variant cannot
-  compile without a representative; `SeamKind::ALL` is asserted duplicate-free; the observed shape set must
-  **equal** it; the shape-to-label mapping is a bijection checked in **both** directions, so a new variant
-  folded into an existing shape cannot read as covered; each seam's field schema is asserted exactly; and
-  `keys.len() == seams.len()` asserts the injectivity the name claims. Thirty-eight further
-  distinctness tests cover the owner-qualification half across the family.
-
-  **ACCEPTED DEBT, stated by that test itself**: the *content* of each representative stays hand-maintained.
-  A representative whose field values do not actually differ from a sibling's in the distinguishing field
-  would satisfy the set equality and the bijection while proving nothing about that field. The test names
-  this as a judgment no structure can force, and it is accepted rather than closed because the alternative —
-  generating representatives — would need a model of which field distinguishes which shape, which is the
-  judgment itself. It is not a bound and does not belong in the register: it limits a test's completeness,
-  not an observation.
-
-  Lesson kept, because it recurred four times in the 0.5.0 window: a gap suspected from a partial view dissolves
-  on the full one. The injectivity assertion here was read as absent from a fifteen-line excerpt and sits on
-  the sixteenth. Read the whole construct before reporting it, and diff what a change actually moves rather
-  than reasoning about what it should.
-
-
-- ~~**An inherited observation bound is RESTATED by each capability that inherits it, so one behaviour
-  change leaves several specs stale at once.**~~ **CLOSED** in the open window. Closed by a reaction plus
-  the repair it forced, not by choosing one of the three candidates the entry listed: they were framed as
-  alternatives and are not — a reaction detects the restatement and the repair resolves it, and only the
-  reaction stops the next one accumulating silently.
-
-  The register made it measurable on its first projection: two behaviours were declared as bounds in three
-  capabilities each, all six declarations citing one test. `crates/kanhe/tests/bound_register.rs` now fails when a test
-  is cited by declared bounds in more than one capability, keyed on the shared citation rather than on
-  statement text — two declarations of one behaviour do not have identical prose, so text similarity would
-  be a heuristic where a shared citation is a fact. Repetition within one capability is not a restatement
-  and does not fire it.
-
-  The repair sank the declaration to `semantic-signature-coupling`, which its own spec already identifies as
-  the owner by stating the anchor-and-item property on every single-module-anchored capability's behalf, and
-  the other two now reference it. **Raising a shared surface into its own capability was rejected**:
-  ownership already existed, so a new capability would have added a name without adding an observation.
-
-  A settled decision was reversed deliberately and the reversal recorded: the register originally declared a
-  shared bound once per capability, because declaring it once would leave the other specs silent about a
-  bound they have. The reference form, which did not exist when that was settled, keeps the bound visible
-  everywhere it applies while leaving one declaration to maintain, so the property the old rule protected is
-  no longer bought at the price of restatement.
-
 - **kanhe's TOML readers hand-parse a grammar `region::toml()` already tokenizes but does not structure.**
   *Class:* READY-PATCH. *Observed pressure:* `release_coherence_gate.rs`'s `declared_dependencies`,
   `package_name` and `require_lock_versions`, and `prelude_promise.rs`'s `block_body`, each route through
@@ -1232,25 +961,6 @@ consumer for an undemonstrated deduplication.
   one-sided scan — a smaller change than the sibling entry above, filed alongside it rather than folded into
   the 0.5.0 window's fix because both were found by the same pass and neither has a live instance forcing it.
 
-- ~~**WATCH: `AGENTS.md`'s OpenSpec lifecycle section describes a process with no instances.**~~
-  **CLOSED** in the open window via `fix/declare-the-openspec-adoption-mode`. The diagnosis in the entry
-  below was the second of three, and the third is the one that was acted on. Not *unrealized aspiration*
-  and not *prose contradicted by practice*: **an adoption decision made from the beginning and written
-  down nowhere.** OpenSpec offers a `specs` half and a `changes` half; this project uses the first, has
-  never used the second, and `openspec/config.yaml` declared neither. So `AGENTS.md` described the mode not
-  chosen, and a reader had nothing telling them it was a choice. The call is now in `PROJECT.md`'s
-  Decisions with what would change it, and `AGENTS.md` states how a capability change is worked in the mode
-  actually in use. `openspec/changes/archive/.gitkeep` **stays** — its job is now optionality rather than
-  archive hygiene, so adopting the other half needs no exception — and nothing enforces the mode,
-  deliberately, since a check that fired on a change directory would prevent that adoption.
-
-  *Note, 2026-08-21: the mode this closure recorded was itself wrong, and the correction is in `PROJECT.md`'s
-  Decisions. `has never used the second` was measured over the release spine and stated over the repository:
-  `git log --all` reaches dozens of change directories, and this entry's own observation source — `openspec/changes/**`
-  untouched since `2f903fb` — reads only what a release-spine checkout tracks. The closure's diagnosis
-  survives it: the adoption decision was written down nowhere, and writing it down was right. Which mode got
-  written is what the correction moves.*
-
 - **WATCH: `AGENTS.md`'s OpenSpec lifecycle section describes a process with no instances.** *Class:* WATCH.
   *Observed pressure:* found while deciding the entry above — its four phases, commit-type conventions and
   archive-pruning guardrail are written in the present indicative ("A capability change **moves through**
@@ -1441,17 +1151,6 @@ consumer for an undemonstrated deduplication.
   distinction is enumerable rather than a convention; the expensive form is a second directory, which would
   move files every gate resolves by path.
 
-- ~~**WATCH: a refusal site is defended only if some direction dies when its kind is swapped or its message
-  sentinelled — and twenty-four are not.**~~ **Closed at the time** by the now-retired refusal mutation sweep,
-  which turned the review technique into a repository check and, in doing so, corrected the entry: the
-  twenty-four merged two populations a hand-run sweep cannot separate, because a perturbation kills nothing
-  both when no direction distinguishes a site and when no direction reaches it. At closure it measured:
-  `58 enumerated, 52 defended, 6 declared out of reach, 0 undistinguished, 0 unreached and unclaimed, 0 stale`.
-  The residual was closed in order — fourteen sites constructed, two deleted as second reads of something the
-  judgement already held, six declared with a slug joined in both directions to a bound. The mechanism was
-  later retired when constructor locations were reclassified as implementation coverage rather than
-  repository governance identities; focused behavior matrices retain the operator-facing evidence.
-
 - **WATCH: the self-governance residual is a judgement over an entry's subject.** *Observed pressure:*
   `CHANGELOG.md` is the adopter's document and offered no heading that was not an adopter's vocabulary, so
   twenty entries named that machinery, before the section was collapsed — eleven in `[Unreleased]`
@@ -1514,34 +1213,6 @@ consumer for an undemonstrated deduplication.
   **incidental** evidence — `AGENTS.md`'s prose-detector rejection leads with four closable false positives and
   buries the one unclosable false negative — and make strength **derived** from structural facts rather than
   authored, the way `Extent::demonstrates` is, so it cannot be self-assessed.
-
-- ~~**WATCH: the rule shape the self-law relies on most is absent from `examples/`.**~~ **CLOSED** in the open
-  window, by its own trigger firing and being noticed rather than by a decision to go looking. The trigger was
-  *an example is added or revised for another reason, at which point the shape is chosen deliberately rather
-  than by omission* — and `examples/observer-participant` was added mid-window while
-  `grep -rc restrict_dependencies_to examples/` still returned zero. The shape had been chosen by omission one
-  more time, and the entry existed to make that visible.
-
-  `examples/guibiao-standalone` now declares a crate-level allowlist beside its module boundary. The landing
-  site was not a free choice: that example's manifest already claimed its one-dependency footprint **is** the
-  圭表 pitch, "demonstrated here rather than asserted" — a claim in a comment with no reaction, which is the
-  open loop this project exists to close. Declaring it makes the pitch react.
-
-  **The evidence a holding boundary needs is different, and that shaped the change.** A passing allowlist is
-  indistinguishable from one reading the wrong thing, so `tests/reaction.rs` points the same shape at the same
-  real manifest with the dependency excluded and requires it to name that dependency and gate. Measured
-  separately, by adding a second dependency to the manifest and running the demo: the declaration in
-  `governance()` reports it and exits 1.
-
-  **Two figures in this entry had drifted before it closed**, which is the class the window spent itself on: it
-  said the rule carries six of eleven self-law boundaries, and measured it is neither number. They are not
-  replaced with corrected ones — the projection enumerates that set, and the property the sentence needed is
-  that the rule carries *more of the self-law than any other*, which is true without arithmetic. *Version
-  class:* patch; `examples/` ships in no crate. *Authority:* `governance-dogfood`, which owns the examples'
-  reaction. **Still not claimed**, unchanged from the original entry: that enumerated denylists are wrong, or
-  that the self-law avoids them. It does not — its inline-symbol-path confinements each carry an enumerated verb
-  list, and `inline-symbol-path-confinement` declares the unlisted remainder as a bound the adopter owns.
-
 
 - **WATCH:**
 - **WATCH: a pin may defend a direction its bound does not declare.** *Observed pressure:* one live instance,
@@ -1964,7 +1635,7 @@ consumer for an undemonstrated deduplication.
 
 ### Closed — reproduction records (0.4.0 onward)
 
-These are **not** open work. Each was a live item in this index when the window opened and is now closed;
+These are **not** open work. Each was a live item in this index and is now closed;
 the original entry is kept verbatim beneath its closing note because the reproduction record —
 what was observed, by which lens, and why the trigger was believed narrower than it was — is the part
 that stops the same defect being re-found from scratch. The present-tense `Class:` / `Risk:` /
@@ -1972,7 +1643,12 @@ that stops the same defect being re-found from scratch. The present-tense `Class
 
 They live here rather than under their own class heading because an index that carries a question and its
 answer at once is a reader trap — the same reason a stale WATCH line was retired in `68e183b`, applied to
-the larger entries it left in place. Neither the class nor the number is restated collectively: each
+the larger entries it left in place. **Saying it twice held it nowhere**: the governance section states the
+same rule from the other side, and entries closed after this section was written kept accumulating under
+`### READY-PATCH` and `### WATCH / ACCEPTED / DECLINED / BUILT` regardless — struck through, complete with
+their answers, under headings a reader consults to ask what is left to do. They are moved here, verbatim and
+in the order they sat in, and `a_closed_entry_does_not_stay_under_a_live_class` now decides the property
+instead of two paragraphs asserting it. Neither the class nor the number is restated collectively: each
 retained entry carries its own `Class:` line, and a count here would go stale the next time an item
 closes — which is how the previous two sentences came to say "DESIGN-BREAKING" and "six" about a section
 that also holds a closed READY-PATCH record.
@@ -2474,6 +2150,335 @@ that also holds a closed READY-PATCH record.
   `AlreadyExists`, and `remove_dir_all` removes the link rather than following it — so every one of these
   was a race in a window, not a plant-and-wait. *Version class:* patch; repository-internal, shipping in no
   crate. *Authority:* `publish-source-integrity`, which paid for the first instance.
+
+- ~~**`crates/kanhe/tests/release_coherence.rs`'s subshell reads have not been audited for a swallowed status.**~~
+  **CLOSED** in the open window. Audited read by read rather than swept: four of the five consumers already
+  carried a vacuity guard (the release spine, the crate-manifest set, and both example-pin counters), which
+  is why the entry's MEDIUM risk did not materialise as a false clean. The fifth — the internal-pin loop —
+  had none, so a reformatted `[workspace.dependencies]` table iterated zero times and the direction passed
+  having asserted nothing about any pin; it now refuses with `2`.
+
+  The audit found two things the entry did not predict, both worth keeping. The gate collapsed **violation**
+  into **cannot judge**'s absence: every refusal was `1`, including a shallow clone, an absent manifest, and a
+  moved crate layout, which the family contract forbids and this gate's own header (written one change
+  earlier) already claimed it did not do. And the exit-contract backstop had **inverted** it — `fail` was a
+  `return 1` relying on `set -e`, so the `ERR` trap turned every genuine incoherence into `2`. Neither was
+  visible to CI, because this matrix asserted a non-zero status rather than a code. Every gate matrix now
+  assert the code, which is the property that would have caught it.
+
+- ~~**Two gates have no companion failure matrix.**~~ **CLOSED** in the open window. Both now have one, and
+  both were worth building rather than recording. `crates/kanhe/tests/whitespace_hygiene.rs` is the only fixture that pins
+  the exit-contract backstop's subshell misfire — removing that guard fails it and no other matrix.
+  `crates/kanhe/tests/dod_coherence.rs` closes the gate whose subject is a claim `AGENTS.md` makes about **itself**, so a
+  reaction nobody had watched refuse was all that stood behind it; its zero-commands direction is the one that
+  matters most, since without that guard the gate reports `ok: every local Definition of Done command (0
+  parsed) is run by CI` and exits 0. Each gate gained the target-directory argument that makes a fixture
+  possible, the same argument the register and reference-integrity gates already took.
+
+  Every `check_*` gate now has a `test_*` twin, and every one of those matrices asserts the expected exit
+  **code** rather than a non-zero status — the property whose absence let a 1-into-2 collapse ride green
+  through CI in the release-coherence gate. The count is deliberately not written here: it is printed by
+  the retired gate-shape projection, whose reaction enumerates the pairing.
+
+- ~~**An observer cannot be made to declare what it does not observe.**~~ **CLOSED** in the open window, and
+  worth recording for what it did **not** buy as much as for what it did.
+
+  `xuanji::Observer` has two methods and no default body on either, so a participant cannot be composed into a
+  run without declaring its limits. The promise stops being a convention this family keeps about itself and
+  becomes a property of the type — including for a third party this family never reviews. `tianheng::Run` folds
+  eagerly, and 圭表, 渾儀 and 漏刻 each implement it, so it is dogfooded rather than offered.
+
+  **What it does not buy, and this entry should not be read as claiming it:** the obligation is to *declare*,
+  never to declare *completely*. A participant may answer with a partial list, or an empty one, and no reaction
+  can enumerate the limits of a reaction it did not write. The fold likewise composes verdicts and does not
+  adjudicate them. Both are declared bounds of `observer-protocol` rather than gaps left to be discovered.
+
+  Two design decisions were **reversed by measurement**, both recorded because each looked principled. A third
+  method — "identify your boundary kind" — was dropped because nothing reacts to it: a `Violation` already
+  carries its kind, so restating it would be a second copy of one fact. And the heterogeneous set was to be a
+  declared `dyn` exposure in the shell; measured, no module of `tianheng` is governed by a semantic boundary and
+  the `dyn`-trait DSL has no allow-except form, so the declaration would have been a name with no reaction. The
+  eager fold removes the exposure instead, and a grep-based assertion keeps it removed because 渾儀 is not
+  watching that crate. **The lesson: a boundary declaration must be checked against the DSL that would have to
+  carry it, not only against the architecture that motivates it.**
+
+  A side effect worth keeping: the corpus-and-anchor derivation the shell computed for 漏刻 now lives in 星表,
+  the single reader of truth, because a runtime observer would otherwise have derived it a second time — and it
+  is **baseline identity**, which is precisely the twin drift that crate exists to prevent.
+
+- ~~**The list of generated documents is prose, and nothing checks it.**~~ **CLOSED** in the open window as the
+  `projection-register` capability, and filed here in the same change that closed it because the trigger was that
+  change's own last step: closing `gate-shape-contract` added a fourth projection **and** a hand edit to
+  `AGENTS.md` to mention it, with no reaction behind the edit.
+  `crates/kanhe/tests/projection_register.rs` enumerates the generated documents from the marker each carries,
+  holds a two-way correspondence with the reactions blessing them, requires each to be named in `AGENTS.md`'s prose
+  rather than inside a fence, and includes itself. Measured before proposing: 4 of 4 documents already carried the
+  marker and named their generator, and the holders already agreed 4 for 4, so it described the tree.
+
+  **Residual, declared rather than solved.** Two mechanisms are recognized — the shared Rust rule, and a `check_*`
+  gate writing under `BLESS`. A document generated a third way whose author also omitted the marker is absent from
+  both sides of the correspondence, which then holds over a surface missing a member. That is a declared false
+  negative owned by the engine, not a limit of the corpus: the third mechanism's source sits in the tree the
+  reaction already reads. Promotion trigger for closing it: a second generating mechanism actually existing. There
+  is one today. The other residual is that a stated regeneration command is registered and never run, because
+  running it means re-entering the harness already running or letting the reaction write into the tree it judges —
+  `OutOfReach`, and not closable without giving up one of those two properties.
+
+  **The lesson worth keeping is about reactions whose subject is text.** This apply hit self-reference three times:
+  the specification quoting the marker it requires, the reaction's own source naming the signature it excludes, and
+  the register having to be blessed twice to see itself. Every one was found by running it, none by reading it, and
+  the fix was the same each time — recognize by position or shape, never by the bare string.
+
+- ~~**A gate's own shape is convention, so every new gate re-learns it by breaking.**~~ **CLOSED** in the open
+  window as the `gate-shape-contract` capability, whose reaction enumerated the
+  tracked shell units under `scripts/` whose basename began with `check_` — on the basename rather than by a
+  `check_*` pathspec, since git matches pathspec wildcards without `FNM_PATHNAME` and the glob would be
+  describing something other than what it says — pairs each gate with the twin its basename names, asserts every
+  checkable property, declares the three semantic classes and the coverage limit as observation bounds with
+  pinning tests, and projects the retired gate-shape projection. A Rust reaction rather than a seventh shell gate,
+  because `PINNED-BY` resolves only a harness-registered Rust function: a shell-defended capability would have
+  landed those bounds `UNPINNED` and moved the register projection's leading figure off zero. It rides the
+  existing `cargo test` line, so it added no Definition of Done entry and no CI step.
+
+  **This entry's own claim was wrong, and worth recording as such.** It said the per-gate property table "is
+  uniform **today** and enforced **nowhere**"; the second half held and the first did not. Measured while
+  applying: the silent-clean-run assertion held in **2 of 6** twins — four grepped a clean run's stderr for the
+  backstop's own diagnostic, which catches the one line it names — and the unchanged-repository assertion held
+  in 5 of 6 by name and, once observed, in **none** of them, because every form captured `before` from a
+  repository the gate had already run over, so a gate writing the same file on every run left it in `before` too.
+  A stray write injected into a gate passed that direction unnoticed. The entry was wrong because it counted the
+  properties it had just finished creating: the shape it described as settled was three weeks old — probed at
+  `v0.4.0`, the backstop was installed in 0 of 4 gates and fixture-addressability in 1 of 4 — so the entry was
+  reading its own recent work as convention. **The lesson: a promotion trigger written from inside the code that
+  lacks the observation describes building the property, not finding it; measure the exact observation source
+  before writing a figure into a trigger.**
+
+  Both revisions the parked proposal needed were applied before it landed: the two qualifier phrasings left the
+  heading slot, since what kind of stop a bound describes now belongs to `xuanji::Extent`; and the publish-time
+  membership exemption left the bound mechanism entirely, because a bound says a reaction stops at a shape while
+  an exemption says one named instance is excused from a requirement. **Residual, declared rather than solved:**
+  nothing enumerates policy exemptions. The register enumerates bounds; this exemption is checked live by the
+  reaction and named in the projection, and that is all. Trigger for giving exemptions their own register: a
+  second instance. This is the first.
+
+  **Retired two commits later, in the same window.** `gate-shape-contract` itself — the capability this entry
+  closed with — was retired by `5abda1f`, once `scripts/` held nothing but `merge-pr.sh` and `publish.sh` and
+  the capability's own projection read `0 gates, 11 properties each`: nothing left to pair, nothing left to
+  enumerate. The pairing this entry describes, and every property and bound declared under it, no longer
+  exists at `HEAD`. Recorded here rather than deleted, since the shape this entry closed — a gate's own
+  convention, re-learned by breaking — is the part worth keeping; the capability that closed it is not the
+  part that lasted.
+
+- ~~**A swallowed subshell status was repaired nine times and could be written a tenth.**~~ **CLOSED** in the open
+  window, and closed as a *shape* rather than as a tenth repair. `gate-shape-contract` gained an eleventh property:
+  a gate may not consume an observation source through `< <(producer)` whose producer can fail.
+
+  **Both failure directions are measured, which is what made the class worth a property rather than a habit.** A
+  `git ls-files --eol` truncated after one clean row made `crates/kanhe/tests/whitespace_hygiene.rs` report
+  `whitespace hygiene ok (1 tracked text files)` at **exit 0** over a repository it had read one file of — the count
+  fell from two to one in its own output and nothing reacted to it. A `git log` truncated the same way made
+  `crates/kanhe/tests/release_coherence.rs` conclude snapshot state and report `[Unreleased] must be empty` at **exit 1**, a
+  violation invented from a partial read. A vacuity guard reaches neither: it was built for zero rows, and a partial
+  read gives one or more. **The guard and the capture answer different questions, which is why they now sit side by
+  side rather than one replacing the other.**
+
+  Eight sites migrated to the shell era's shared capture library, and **the property found two more on its first run — one of them
+  written by the migration itself** (`< <(sort …)`), the other a per-file scan never migrated at all. A property that
+  catches its own author's fresh mistake within a minute of existing is the argument for having it.
+
+  **The lesson worth keeping is about the helper, not the sites.** Its first version turned `grep`'s exit 1 — a clean
+  miss, the ordinary case — into cannot-judge, and the release gate's own vacuity direction failed immediately. So it
+  takes `--ordinary-empty <status>` per call site: the rule is about the producer's *contract*, not about its name,
+  and the shell era's shared exit-contract backstop draws the same distinction for the same reason. A shared helper that decides a
+  producer's contract for its callers would have been a new class of its own.
+
+  **Residual, and the bound was narrowed rather than left standing.** A status swallowed by a command substitution,
+  or by a pipeline's non-final stage, is still unobserved — detecting either would mean modelling whether the caller
+  reads `$?` afterwards, which is control flow rather than text. The declared bound now says exactly that, with its
+  heading untouched because the slug is its id. Also unreproduced: the `git ls-files | grep -q` SIGPIPE shape, which
+  needs enough data to fill a pipe buffer; migrated with the class and recorded as migrated without a demonstrated
+  negative run. Trigger for revisiting: a swallowed status found in a shape the property does not reach.
+
+  **Retired with the rest of `gate-shape-contract`, by `5abda1f`.** The eleventh property, the shared capture
+  library, and the `--ordinary-empty` per-call-site contract this entry describes were all part of the same
+  capability, deleted whole once it reached the vacuity its own bounds warned about. Nothing at `HEAD` still
+  asserts either failure direction measured above; a future instance of a swallowed subshell status would
+  need a new reaction, not a resurrection of this one.
+
+- ~~**The pre-publish gate had no specification, and its stated bound had the cause backwards.**~~ **CLOSED** in
+  the open window as the `publish-source-integrity` capability. Found in the 0.5.0 pre-release review, and worth
+  keeping for the shape rather than the fix.
+
+  All 34 specifications were searched: **none** stated that a publish must come from a signed annotated tag at
+  the tip of `main`. The gate standing before the one irreversible act carried its contract in its own header
+  comment, while `gate-shape-contract` exempted it from Definition-of-Done membership *by name* — the one place a
+  reader was told it is special. A reaction with no requirement is the mirror of the class the 0.5.0 window kept
+  closing, and it has a consequence: there was nowhere to declare a bound.
+
+  **The bound's stated cause was wrong, and that is why the defect survived.** The header said the signature could
+  not be verified because verification needs an allowed-signers configuration CI lacks. Measured with no such file
+  anywhere, `ssh-keygen -Y check-novalidate` verifies validity; only **attribution** needs the file. So the gate
+  matched a shape — and accepted an unsigned tag whose message quoted a signature block. **The lesson: a bound's
+  cause is what the next author reasons from. This one said "you cannot check this", so nobody tried.** A bound
+  with a wrong cause is worse than one with no cause at all.
+
+  This is the second live instance in one day of `observation-bound-model`'s own declared bound that *a
+  declaration's stated cause is the real cause is not observed*. Two instances is the number worth naming:
+  the extent is typed and checkable while the rationale is prose the model never reads, and both instances were
+  found by a human-style review rather than by any reaction. Trigger for revisiting that bound: a **third**
+  instance, or a proposal for a rationale check that is not a keyword heuristic.
+
+  Also recorded: `PINNED-BY` resolving only a Rust function meant this shell gate's bound could be defended by a
+  twin direction and cited by nothing. Rather than accept `UNPINNED` — which would have reported a defended bound
+  as undefended, buying a true figure with a false fact — the release-repository fixture builder was extracted to
+  `crates/kanhe/src/publish_source_gate.rs` and a Rust test pins the bound through it. **Measured, not estimated**: one
+  shared builder, no second construction. So the WATCH entry on shell-defended capabilities stays WATCH; its
+  trigger asks for a residual measured and found *unaffordable*, and this one was affordable.
+
+- ~~**The 天衡 shell's baseline-writing and CLI surface has never been swept.**~~ **CLOSED** in the open window,
+  swept against an enumeration built first as the entry required, and it found **two defects — both in the
+  requirements rather than in the code.**
+
+  **The enumeration, and what it measured.** The baseline write path's twelve filesystem operations, read out of
+  the code rather than guessed: `canonicalize` on the target, the mode read, the `O_EXCL` temp create, the
+  temp-plant loop, `fchmod` on the *descriptor* rather than the path, `sync_all` after the mode and before the
+  rename, the rename, the parent-directory flush whose error is deliberately discarded, the guard's cleanup on
+  drop, and on the create path `create_new`, the `symlink_metadata` dangling-symlink diagnosis and `read_link`.
+  Every one already has a test in `crates/tianheng/tests/baseline_cli.rs`. Five further adversarial shapes were
+  probed live — absent parent directory, target is a directory, read-only parent, unreadable target, symlink to a
+  directory — and all five exit 2 naming the path and the OS cause, with no silent success and no misdiagnosis.
+  The create-versus-overwrite decision takes the create path on `NotFound` **only**, so an unreadable existing
+  baseline cannot be misreported as a creation race. On the CLI side, twenty-five cells: four value-taking flags ×
+  {missing value, empty, flag-shaped, empty in the equals form, repeated}, plus the boolean flags, the unknown
+  flag and positional, and the `--format` value. **Swept and defended, except for one column.**
+
+  **What it found.** `list`'s refusal named no flag — one sentence for all five check-only flags — while the
+  requirement covering the same conflict inside `check` cites `list`'s rule as the one it extends *and* requires
+  the flag to be named. Each implementation satisfied its own requirement, which is why no test caught it. And
+  `list`'s requirement enumerated four check-only flags while the runner rejected five: `--disallow-stale` was
+  added to the code and not to the prose. Corrected by tightening the requirement and deriving the set, so a sixth
+  flag is covered the moment it exists.
+
+  **Two of the sweep's own measurements were wrong before they were right**, recorded because the correction is the
+  transferable part. The first CLI probe grepped the whole output for the flag name — and the `usage:` banner lists
+  every flag by construction, so every cell measured as naming its flag, including a nonexistent one. The second
+  read the `error:` line only. Separately, `list --format sarif` looked like it shared the generic message until
+  the probe stopped passing `--manifest-path` alongside it, which was tripping the check-only guard first. **A
+  probe that carries an unrelated flag is measuring that flag.**
+
+  **Residual: the enumeration is hand-made and will rot.** It is a snapshot taken against a named revision, in a
+  proposal that dissolves at sync, and nothing enumerates the CLI surface as a reaction — which is how this
+  requirement's own list of four went stale in the first place. Not solved here: a register over six flags would be
+  ceremony this finding does not justify. Promotion trigger: a **second** defect found in this surface, or a flag
+  added to the runner without a test that names it.
+
+- ~~**The 渾儀 seam-identity and owner-qualification surface has not been swept against the bound index.**~~
+  **CLOSED** in the open window, swept and found defended — by a structurally enforced enumeration rather
+  than by diligence, which is why the result is worth recording instead of just noting "no findings".
+
+  `every_public_seam_shape_is_named_and_identity_injective` carries the enumeration and forces it to stay
+  complete: `seam_kind` matches all eleven `PublicSeam` variants with no wildcard, so a new variant cannot
+  compile without a representative; `SeamKind::ALL` is asserted duplicate-free; the observed shape set must
+  **equal** it; the shape-to-label mapping is a bijection checked in **both** directions, so a new variant
+  folded into an existing shape cannot read as covered; each seam's field schema is asserted exactly; and
+  `keys.len() == seams.len()` asserts the injectivity the name claims. Thirty-eight further
+  distinctness tests cover the owner-qualification half across the family.
+
+  **ACCEPTED DEBT, stated by that test itself**: the *content* of each representative stays hand-maintained.
+  A representative whose field values do not actually differ from a sibling's in the distinguishing field
+  would satisfy the set equality and the bijection while proving nothing about that field. The test names
+  this as a judgment no structure can force, and it is accepted rather than closed because the alternative —
+  generating representatives — would need a model of which field distinguishes which shape, which is the
+  judgment itself. It is not a bound and does not belong in the register: it limits a test's completeness,
+  not an observation.
+
+  Lesson kept, because it recurred four times in the 0.5.0 window: a gap suspected from a partial view dissolves
+  on the full one. The injectivity assertion here was read as absent from a fifteen-line excerpt and sits on
+  the sixteenth. Read the whole construct before reporting it, and diff what a change actually moves rather
+  than reasoning about what it should.
+
+
+- ~~**An inherited observation bound is RESTATED by each capability that inherits it, so one behaviour
+  change leaves several specs stale at once.**~~ **CLOSED** in the open window. Closed by a reaction plus
+  the repair it forced, not by choosing one of the three candidates the entry listed: they were framed as
+  alternatives and are not — a reaction detects the restatement and the repair resolves it, and only the
+  reaction stops the next one accumulating silently.
+
+  The register made it measurable on its first projection: two behaviours were declared as bounds in three
+  capabilities each, all six declarations citing one test. `crates/kanhe/tests/bound_register.rs` now fails when a test
+  is cited by declared bounds in more than one capability, keyed on the shared citation rather than on
+  statement text — two declarations of one behaviour do not have identical prose, so text similarity would
+  be a heuristic where a shared citation is a fact. Repetition within one capability is not a restatement
+  and does not fire it.
+
+  The repair sank the declaration to `semantic-signature-coupling`, which its own spec already identifies as
+  the owner by stating the anchor-and-item property on every single-module-anchored capability's behalf, and
+  the other two now reference it. **Raising a shared surface into its own capability was rejected**:
+  ownership already existed, so a new capability would have added a name without adding an observation.
+
+  A settled decision was reversed deliberately and the reversal recorded: the register originally declared a
+  shared bound once per capability, because declaring it once would leave the other specs silent about a
+  bound they have. The reference form, which did not exist when that was settled, keeps the bound visible
+  everywhere it applies while leaving one declaration to maintain, so the property the old rule protected is
+  no longer bought at the price of restatement.
+
+- ~~**WATCH: `AGENTS.md`'s OpenSpec lifecycle section describes a process with no instances.**~~
+  **CLOSED** in the open window via `fix/declare-the-openspec-adoption-mode`. The diagnosis in the entry
+  below was the second of three, and the third is the one that was acted on. Not *unrealized aspiration*
+  and not *prose contradicted by practice*: **an adoption decision made from the beginning and written
+  down nowhere.** OpenSpec offers a `specs` half and a `changes` half; this project uses the first, has
+  never used the second, and `openspec/config.yaml` declared neither. So `AGENTS.md` described the mode not
+  chosen, and a reader had nothing telling them it was a choice. The call is now in `PROJECT.md`'s
+  Decisions with what would change it, and `AGENTS.md` states how a capability change is worked in the mode
+  actually in use. `openspec/changes/archive/.gitkeep` **stays** — its job is now optionality rather than
+  archive hygiene, so adopting the other half needs no exception — and nothing enforces the mode,
+  deliberately, since a check that fired on a change directory would prevent that adoption.
+
+  *Note, 2026-08-21: the mode this closure recorded was itself wrong, and the correction is in `PROJECT.md`'s
+  Decisions. `has never used the second` was measured over the release spine and stated over the repository:
+  `git log --all` reaches dozens of change directories, and this entry's own observation source — `openspec/changes/**`
+  untouched since `2f903fb` — reads only what a release-spine checkout tracks. The closure's diagnosis
+  survives it: the adoption decision was written down nowhere, and writing it down was right. Which mode got
+  written is what the correction moves.*
+
+- ~~**WATCH: a refusal site is defended only if some direction dies when its kind is swapped or its message
+  sentinelled — and twenty-four are not.**~~ **Closed at the time** by the now-retired refusal mutation sweep,
+  which turned the review technique into a repository check and, in doing so, corrected the entry: the
+  twenty-four merged two populations a hand-run sweep cannot separate, because a perturbation kills nothing
+  both when no direction distinguishes a site and when no direction reaches it. At closure it measured:
+  `58 enumerated, 52 defended, 6 declared out of reach, 0 undistinguished, 0 unreached and unclaimed, 0 stale`.
+  The residual was closed in order — fourteen sites constructed, two deleted as second reads of something the
+  judgement already held, six declared with a slug joined in both directions to a bound. The mechanism was
+  later retired when constructor locations were reclassified as implementation coverage rather than
+  repository governance identities; focused behavior matrices retain the operator-facing evidence.
+
+- ~~**WATCH: the rule shape the self-law relies on most is absent from `examples/`.**~~ **CLOSED** in the open
+  window, by its own trigger firing and being noticed rather than by a decision to go looking. The trigger was
+  *an example is added or revised for another reason, at which point the shape is chosen deliberately rather
+  than by omission* — and `examples/observer-participant` was added mid-window while
+  `grep -rc restrict_dependencies_to examples/` still returned zero. The shape had been chosen by omission one
+  more time, and the entry existed to make that visible.
+
+  `examples/guibiao-standalone` now declares a crate-level allowlist beside its module boundary. The landing
+  site was not a free choice: that example's manifest already claimed its one-dependency footprint **is** the
+  圭表 pitch, "demonstrated here rather than asserted" — a claim in a comment with no reaction, which is the
+  open loop this project exists to close. Declaring it makes the pitch react.
+
+  **The evidence a holding boundary needs is different, and that shaped the change.** A passing allowlist is
+  indistinguishable from one reading the wrong thing, so `tests/reaction.rs` points the same shape at the same
+  real manifest with the dependency excluded and requires it to name that dependency and gate. Measured
+  separately, by adding a second dependency to the manifest and running the demo: the declaration in
+  `governance()` reports it and exits 1.
+
+  **Two figures in this entry had drifted before it closed**, which is the class the window spent itself on: it
+  said the rule carries six of eleven self-law boundaries, and measured it is neither number. They are not
+  replaced with corrected ones — the projection enumerates that set, and the property the sentence needed is
+  that the rule carries *more of the self-law than any other*, which is true without arithmetic. *Version
+  class:* patch; `examples/` ships in no crate. *Authority:* `governance-dogfood`, which owns the examples'
+  reaction. **Still not claimed**, unchanged from the original entry: that enumerated denylists are wrong, or
+  that the self-law avoids them. It does not — its inline-symbol-path confinements each carry an enumerated verb
+  list, and `inline-symbol-path-confinement` declares the unlisted remainder as a bound the adopter owns.
+
 
 ## Version horizons
 
