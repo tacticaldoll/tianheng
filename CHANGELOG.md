@@ -1192,7 +1192,7 @@ them.
   source nor provenance, *stale the moment the window closes*, and says in the same breath that this is the
   one row of that table a sweep can enumerate; the others need the criterion applied per site, which is the
   prose instrument this repository has declined three times. The row a sweep could have had did not have one,
-  and eight passages carried anchors across `.rs`, `.sh` and `CODEOWNERS`.
+  and nine passages carried anchors across `.rs`, `.sh` and `CODEOWNERS`.
 
   **Each instrument found what the one before it could not, and the sweep was no exception.** An adversarial
   review named six passages and a `git grep` found a seventh; the first form of the reaction found eight; a
