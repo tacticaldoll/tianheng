@@ -1410,7 +1410,7 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
     };
 
     // (label, document, jobs it must find, keys it must carry)
-    let rows: [(&str, String, usize, usize); 10] = [
+    let rows: [(&str, String, usize, usize); 13] = [
         ("clean", base("    name: A\n    runs-on: x\n"), 2, 0),
         (
             "if: at the file's own key depth",
@@ -1467,6 +1467,31 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
             "paths: as a step input does not react",
             base("    name: A\n    steps:\n      - uses: dorny/paths-filter@v3\n        with:\n          paths: src/**\n"),
             2,
+            0,
+        ),
+        // YAML's flow form puts the whole block on the key's own line. Entering it and reading it are not
+        // exclusive, and this row is the one that fails **open** if they are treated as such.
+        (
+            "a flow-form trigger block carries its filter on the key's line",
+            "name: ci\n\non: {push: {branches: [main], paths: ['src/**']}}\n\njobs:\n  alpha:\n    name: A\n"
+                .to_string(),
+            1,
+            1,
+        ),
+        // The common flow form carries no filter and must stay quiet.
+        (
+            "a flow-form trigger list is not a filter",
+            "name: ci\n\non: [push, pull_request]\n\njobs:\n  alpha:\n    name: A\n".to_string(),
+            1,
+            0,
+        ),
+        // The job side is not read on its own line **on purpose**: a flow-form job header ends in no colon
+        // at the name depth, so no job is found and the direction's set equality says so loudly. Pinned so
+        // the asymmetry is a decision on record rather than an omission someone later "fixes" into silence.
+        (
+            "a flow-form job body is lost rather than misread",
+            "name: ci\n\njobs:\n  alpha: {name: A, if: x}\n".to_string(),
+            0,
             0,
         ),
         // The quoted spelling names the same block: YAML 1.1 reads a bare `on` as a boolean.
@@ -1556,12 +1581,27 @@ fn workflow_shape(text: &str) -> WorkflowShape {
         if depth == 0 {
             // YAML 1.1 reads a bare `on` as a boolean, so a workflow may quote the key; both spellings name
             // the same block. Taken off the key rather than matched as a prefix, so `once:` is not `on:`.
-            let top = line
-                .split_once(':')
-                .map_or("", |(key, _)| key.trim().trim_matches(['"', '\'']));
+            let (top, rest) = line.split_once(':').unwrap_or((line, ""));
+            let top = top.trim().trim_matches(['"', '\'']);
             in_jobs = top == "jobs";
             in_on = top == "on";
             in_job = false;
+            // **Entering a block and reading it are not exclusive.** This branch used to set the flag and
+            // `continue`, so the rest of its own line was seen by no reader — and YAML's flow form puts the
+            // whole block there: `on: {push: {paths: ['src/**']}}` carries a real path filter that the
+            // premise then reported intact. That direction is **open**, which is the one this machinery
+            // exists to close.
+            //
+            // The job side is deliberately not given the same treatment, because it already fails the other
+            // way: a flow-form `jobs: {alpha: {…}}` leaves no line ending in a colon at the name depth, so
+            // the set equality reports the jobs missing. Measured — `missing ["examples"]`. Reading it here
+            // would turn a loud failure into a quiet pass unless the flow body were parsed, which is a YAML
+            // parser rather than a line reader.
+            if in_on {
+                if let Some(key) = ON_THE_WORKFLOW.iter().find(|key| rest.contains(**key)) {
+                    carried.push(format!("  ci.yml:{}: {key}", index + 1));
+                }
+            }
             job_name_depth = None;
             continue;
         }

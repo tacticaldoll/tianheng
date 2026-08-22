@@ -1483,6 +1483,20 @@ job's own conclusion moving, so refusing those would refuse correct code. `paths
 **trigger** conditions and sit under `on:`, quoted or not — YAML 1.1 reads a bare `on` as a boolean, so both
 spellings name the block.
 
+**Under `on:` includes the flow form**, where the whole block sits on the key's own line. Entering a block
+and reading it SHALL NOT be exclusive: a reader that sets its scope from a top-level key and then moves to the
+next line never examines the rest of that line, so `on: {push: {paths: ['src/**']}}` carries a real filter
+past a premise that reports itself intact. That direction is **open**, which is the one this requirement
+exists to close, and it is the only open direction the reader has had — the depth and scope defects above
+each refused too much rather than too little.
+
+**The job side SHALL NOT be given the same treatment**, and the asymmetry is a decision rather than an
+oversight. A flow-form `jobs: {alpha: {…}}` leaves no line ending in a colon at the name depth, so no job is
+found and the set equality reports them missing — measured, `missing ["examples"]`. Reading that line the same
+way would turn a loud failure into a quiet pass unless the flow body were parsed, which is a YAML parser
+rather than a line reader. Failing loudly on a shape this repository's workflow does not use is the better of
+the two.
+
 Reading the trigger pair at any depth instead SHALL NOT be treated as harmless breadth. It was, justified as
 *those two keys have no other meaning anywhere in it* — a claim about one file's current content rather than
 about the keys, and the same kind of assumption the indentation rule had just been rewritten to remove.
@@ -1517,6 +1531,21 @@ sequence item written at a job key's depth.
   happens to use
 - **THEN** the reader still finds them, because it derives both depths from the document — a reader keyed to
   one width loses keys without losing names, which the set equality cannot see
+- **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
+
+#### Scenario: A trigger block is written in flow form
+
+- **WHEN** the trigger block sits on its own key's line — `on: {push: {paths: […]}}` — with or without quotes
+  on the key
+- **THEN** the filter is still found, because entering the block and reading it are the same line's work; and
+  a flow-form list carrying no filter still reacts to nothing
+- **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
+
+#### Scenario: A job body is written in flow form
+
+- **WHEN** a job is written as `alpha: {name: A, if: x}`
+- **THEN** no job is read and the set equality names it missing, rather than the key being read out of a body
+  the reader cannot parse — the loud failure is chosen over a quiet pass
 - **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
 
 #### Scenario: A key of one class appears where the other class lives
