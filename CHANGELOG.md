@@ -1172,6 +1172,25 @@ them.
 
 ### Self-governance
 
+- **Thirteen closed entries sat under headings a reader consults to ask what is left to do.**
+  `BACKLOG.md`'s governance says a closed item *leaves the live class it was filed under; it does not stay
+  there struck through*, and gives the reason — *a class heading is read as a queue and an entry that carries a
+  question and its answer at once is a reader trap*. The closed-records section states the same rule from the
+  other side. Two statements, and nothing held either: ten entries accumulated under `### READY-PATCH` and
+  three under `### WATCH / ACCEPTED / DECLINED / BUILT`, each struck through and each carrying its own answer,
+  in the index a reader consults for promotable work.
+
+  `backlog_classification` was the check that could not see them, and deliberately: `live_entries` skips a
+  struck-through bullet because a closed entry keeps the `*Class:*` line it had when written, and holding a
+  record to today's headings is a falsification this repository refuses generally. Skipping the **comparison**
+  is right; that the entry belongs where it sits does not follow.
+  `a_closed_entry_does_not_stay_under_a_live_class` asks the other question — not *does its class match the
+  heading* but *is it under a class heading at all* — which needs none of the record's own text.
+
+  All thirteen are moved verbatim and in order; the file's line count is unchanged and its lines compare equal
+  as a set, so only position moved. The closed-records preamble no longer says each entry was live *when the
+  window opened*, which was true of the entries it was written for and not of the ones that closed after it.
+
 - **A wrapper chose its exit class at four sites while the rule says one, and nothing counted them.**
   `repository-checks` requires the classification to be chosen once per wrapper rather than at each site.
   `gate_exit_classes` compared the class *constants* and the presence of `require_one_pass` across both

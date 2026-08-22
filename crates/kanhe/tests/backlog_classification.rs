@@ -150,6 +150,70 @@ fn declared_class(entry: &str) -> Option<&'static str> {
         .find(|class| rest.starts_with(class))
 }
 
+/// A closed entry does not stay under the live class it was filed under.
+///
+/// `BACKLOG.md`'s own governance says so, with its reason: *A **closed** item leaves the live class it was
+/// filed under; it does not stay there struck through … because a class heading is read as a queue and an
+/// entry that carries a question and its answer at once is a reader trap.* The closed-records section
+/// repeats it from the other side — *They live here rather than under their own class heading because an
+/// index that carries a question and its answer at once is a reader trap*. Two statements of one rule, and
+/// nothing held either.
+///
+/// **This is the direction [`live_entries`] cannot supply, and the distinction is worth stating.** That
+/// function skips a struck-through bullet deliberately: a closed entry keeps the `*Class:*` line it had when
+/// it was written, and holding a record to today's headings is the falsification this repository refuses
+/// generally. Skipping the **comparison** is right; it does not follow that the entry belongs where it sits.
+/// This asks a different question — not *does its class match the heading* but *is it under a class heading
+/// at all* — which needs none of the record's own text and so falsifies nothing.
+///
+/// Decidable, which is why it is a reaction: a struck-through bullet is a literal, and whether the heading
+/// above it names a class is the same question [`heading_classes`] already answers for the check below. The
+/// closed-records heading names none, so entries there are outside this by construction rather than by an
+/// exception anyone maintains.
+#[test]
+fn a_closed_entry_does_not_stay_under_a_live_class() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let text = std::fs::read_to_string(root.join("BACKLOG.md"))
+        .expect("read BACKLOG.md, whose filing this check is about");
+    let mut heading = String::new();
+    let mut misfiled: Vec<String> = Vec::new();
+    let mut struck = 0usize;
+    for (index, line) in text.lines().enumerate() {
+        if line.starts_with("### ") || line.starts_with("## ") {
+            heading = line.trim_start_matches('#').trim().to_string();
+            continue;
+        }
+        if !line.starts_with("- ~~") {
+            continue;
+        }
+        struck += 1;
+        if heading_classes(&heading).is_some() {
+            let title: String = line.chars().skip(4).take(88).collect();
+            misfiled.push(format!(
+                "  BACKLOG.md:{}: under `{heading}` — {title}",
+                index + 1
+            ));
+        }
+    }
+    // The corpus is the struck-through bullets, and it is scanned rather than literal — a change to how a
+    // closed entry is marked would empty it, and an empty scan reports clean over nothing.
+    assert!(
+        struck > 0,
+        "no entry in BACKLOG.md is struck through, so this direction decided nothing — the mark it reads by \
+         has moved, not the property"
+    );
+    assert!(
+        misfiled.is_empty(),
+        "{} closed entr(y/ies) sit under a live class heading, which reads as a queue holding work that is \
+         already done. Move each to `### Closed — reproduction records`, where the governance section and \
+         that section's own preamble both say it belongs:\n{}",
+        misfiled.len(),
+        misfiled.join("\n")
+    );
+}
+
 /// Every live entry, as `(heading, first line number, whole text)`.
 ///
 /// A **live** entry is one whose bullet does not open with `~~`: a closed item is struck through and keeps
