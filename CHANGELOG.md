@@ -22,7 +22,7 @@ them.
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-08-16
+## [0.5.0] - 2026-08-22
 
 ### Documentation
 
@@ -1171,6 +1171,21 @@ them.
   No signature, outcome kind, exit class, identity shape, or manifest moves; `coverage_of` is private.
 
 ### Self-governance
+
+- **The release date is written at the cut, and the ritual did not say so.** The dated section for the version
+  under preparation carries a date nothing compares until the `release: X.Y.Z` commit exists, and it drifted
+  twice: one release was prepared four days behind its cut, and this section stood six days behind the branch
+  tip. `AGENTS.md` now states the step where the value stops being a guess — the date is the last edit before
+  the cut, not one made during preparation.
+
+  **The earlier check is declined rather than missing**, and `BACKLOG.md` carries why. Comparing the dated
+  section against `HEAD`'s date during preparation would have caught both instances the day they appeared — a
+  cut happens at or after `HEAD`, so an earlier date is already wrong. But preparation spans days, so that
+  reaction turns red on the first commit of every new day and asks for an edit whose value is a guess: right
+  at one moment and wrong the rest of the time, which is the trade this repository already declined for the
+  Definition of Done's untracked-file guard. What holds the property is
+  `release-coherence#release-date-disagrees-with-its-commit` at the snapshot, so a stale date cannot reach a
+  release — it fails the cut, and the cost is one retry rather than a wrong published date.
 
 - **The one row of the doc-comment table a sweep can enumerate had no sweep.** `AGENTS.md` classes a relative
   anchor — a passage pointing at *when* by counting rather than by naming a moment — as neither an observation

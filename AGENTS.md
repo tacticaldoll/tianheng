@@ -643,6 +643,14 @@ release preparation—and at the exact `release: X.Y.Z` snapshot—the dated CHA
 internal pins, and every workspace package entry in `Cargo.lock` must all name that version. The
 check is read-only and needs full git history; it never bumps, commits, tags, or publishes.
 
+**Setting the dated section's date is the last edit before the cut, not a step during preparation.** At the
+snapshot the check holds that date against the `release: X.Y.Z` commit's own, so a date written days earlier
+fails there — and it has: one release was prepared with a date four days behind the day it would be cut on,
+and nothing said so until the check was given that comparison. During preparation the date is an intent
+rather than a claim, so preparation may leave it stale for as long as it lasts; what must not happen is
+cutting without touching it. Write it on the day the `release: X.Y.Z` commit is made, immediately before
+making it.
+
 A branching pattern is not an observable architectural fact, so the drift law keeps it out of the
 constitution: it is a convention for humans and agents rather than a Tianheng boundary.
 
