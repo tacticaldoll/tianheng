@@ -122,10 +122,21 @@ pub fn hermetic(program: &str) -> Command {
 /// git's manual would carry it, and an entry that closes nothing reads as a defence that was never there —
 /// which this workspace's own manifest already argues about inert `exclude` entries.
 ///
-/// **What it does not reach**, stated rather than left to be found: `GIT_OBJECT_DIRECTORY` and
-/// `GIT_ALTERNATE_OBJECT_DIRECTORIES` were measured against `rev-parse HEAD`, which reads refs and was
-/// unaffected; whether they move a read of an **object** — the tag body the signature check reconstructs — was
-/// not measured, and is filed rather than guessed at.
+/// **The object-directory pair is measured too, and neither moves an answer.** They were first measured only
+/// against `rev-parse HEAD`, which reads refs — so the read that matters, the tag body the signature check
+/// reconstructs, was left unmeasured under a note saying it was filed. Nothing was filed, which left a private
+/// doc comment as the only carrier of a stop; the row above records what that costs. Measured since, against
+/// `for-each-ref --format=%(contents) refs/tags/<tag>` over two repositories whose tag bodies differ:
+///
+/// | variable | effect on the tag-object read | admitted |
+/// |---|---|---|
+/// | `GIT_OBJECT_DIRECTORY` | **replaces** the store, so this repository's own tag object goes missing — exit 128, `fatal: missing object … for refs/tags/…` | no: it refuses rather than answering wrongly |
+/// | `GIT_ALTERNATE_OBJECT_DIRECTORIES` | **appends** a store, so the local object still answers — exit 0, this repository's own tag body | no: it moves nothing |
+///
+/// The reasons differ and both are stated, because *not admitted* covers a fail-closed variable and an inert
+/// one alike while only the second is harmless in general. Reading a **different** body through either would
+/// need the ref to resolve to an object id whose content differs, and the refs come from this repository
+/// because `GIT_DIR` is cleared — so it needs a collision, not a variable.
 const REPOSITORY_SELECTORS: [&str; 3] = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"];
 
 /// One read of `git` in `repo` through [`hermetic`], with the output/success/failure mapping every gate's

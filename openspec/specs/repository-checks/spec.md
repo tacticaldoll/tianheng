@@ -1650,6 +1650,22 @@ tree against this index. `GIT_NAMESPACE` was measured in the same run and `for-e
 answered this repository, so it is **not** in the set — an entry that closes nothing reads as a defence that
 was never there.
 
+**Every variable considered SHALL carry its measurement, admitted or not.** `GIT_OBJECT_DIRECTORY` and
+`GIT_ALTERNATE_OBJECT_DIRECTORIES` are outside the set for reasons that differ and are both recorded: measured
+against the tag-object read the signature check reconstructs, the first **replaces** the store so this
+repository's own tag object goes missing and the command refuses — a gate in front of an irreversible act may
+fail closed — while the second **appends** one, so the local object still answers and nothing moves. A
+negative measurement kept is what stops the set from growing by resemblance, and what stops the same variable
+being re-measured every review.
+
+**The direction's own reach SHALL be stated in this requirement rather than only beside the case.** What a
+construction case establishes is that the builder marks the variables for removal, and what it cannot
+establish is the composition — that a variable inherited from a real environment is absent in the child —
+because constructing that needs this process's environment mutated, which is unsafe in this edition and racy
+against a parallel run. That residue belongs here, where the register reads, and not only in the case's
+header: the first form of this repair left an unmeasured stop in a private doc comment saying it was filed
+when nothing was, which is the defect the paragraph below describes arriving through the repair for it.
+
 **A stop that is not declared is a defect rather than policy, which is how this requirement came to exist.**
 The builder left these open and said so in a doc-comment table, with the justification *nothing in this tree
 sets them — zero occurrences, repository-wide*. That corpus cannot decide it: the channel is ambient, so the
