@@ -1194,13 +1194,30 @@ them.
   prose instrument this repository has declined three times. The row a sweep could have had did not have one,
   and eight passages carried anchors across `.rs`, `.sh` and `CODEOWNERS`.
 
-  **The sweep found two the reviews had not.** An adversarial review named six and a follow-up sweep found a
-  seventh; the reaction found eight. `.github/CODEOWNERS` was missed by both — it is not a format a reader
-  thinks to grep — and `scripts/publish.sh`'s instance is invisible to any per-line search, because the phrase
-  wraps: `for a` ends one line and `window` opens the next. Joining raw lines does not fix it either, since
-  the marker lands inside the phrase; the run is joined **with markers stripped**, and the offence names the
-  line the phrase ends on rather than the line the passage began on — otherwise a wrapped file header reports
-  line 1, and a shell script's `#!` opens the run, so every offence in one would have named the shebang.
+  **Each instrument found what the one before it could not, and the sweep was no exception.** An adversarial
+  review named six passages and a `git grep` found a seventh; the first form of the reaction found eight; a
+  second review found the ninth, in the reaction's own blind spot. `.github/CODEOWNERS` was missed by both
+  humans — it is not a format a reader thinks to grep — and `scripts/publish.sh`'s instance is invisible to any
+  per-line search, because the phrase wraps: `for a` ends one line and `window` opens the next.
+
+  **The blind spot was one glyph wide.** `FORMATS` declares `.rs` as a line comment opening with `//`, which is
+  correct for what that declaration owns — and `///` and `//!` both open with `//`, so stripping the declared
+  marker leaves `/` or `!` at the front of the line's contribution. That glyph lands inside the joined phrase,
+  which is verbatim the failure the same function's comment describes for an unstripped `#`. Measured:
+  `crates/kanhe/tests/publish_source.rs` carried a wrapped `one commit` / `ago` and was reported clean, in a
+  tracked file inside the corpus. The marker's extension is trimmed after it, so a Rust doc comment reads like
+  any other — a trim rather than a longest-first table, since the table would be a second declaration of what
+  `FORMATS` already owns.
+
+  **And the sweep shipped claiming a negative fixture it did not have.** Its own doc said it was split from the
+  check *so a negative fixture can call it*; nothing called it, so the only thing holding the wrap was the tree
+  happening to contain a shell instance while the corpus's majority shape went unread.
+  `a_wrapped_anchor_reacts_in_every_marker_shape` now holds all three marker forms and the executed line that
+  must not react — with the extension unstripped it reports one of three, which is the state that shipped.
+
+  The offence names the line the phrase ends on rather than the line the passage began on — otherwise a wrapped
+  file header reports line 1, and a shell script's `#!` opens the run, so every offence in one would have named
+  the shebang.
 
   **And it found one in its own documentation.** The first form of the declaring constant explained why a
   member was admitted by writing that member out, which put a live instance in the corpus — verbatim what
