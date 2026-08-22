@@ -1224,6 +1224,20 @@ them.
   `projection-register` records about a check whose subject is text. The list is now the single owner and the
   prose does not restate it.
 
+- **The no-evidence refusal asserted a property of the workflow, and nothing held it.** The classification
+  and the diagnostic both filter on *no job in this repository's workflow carries `if:`, `needs:`, `paths:` or
+  `continue-on-error:`* — a claim measured once and then load-bearing in two directions at once. Add one of
+  those keys and the sentence is false at the moment it is printed, while the refusal it justifies goes on
+  happening: a legitimate skip refused with a message asserting legitimate skips are impossible. `AGENTS.md`
+  names the rule — *something downstream filters on the claim, so declare it and hold it to the producer both
+  ways* — and the producer was a tracked file a sibling direction already reads.
+
+  `no_workflow_job_can_legitimately_skip` reads the **job** level rather than the whole file, because a
+  `steps:` entry may carry `if:` without the job's conclusion moving and refusing that would refuse correct
+  code. It refuses a corpus in which no job was read: a renamed block or a re-indented file otherwise
+  satisfies *none of them carries a forbidden key* while having parsed nothing. Both directions were run —
+  an `if:` on one job names it by line, and renaming `jobs:` trips the vacuity guard.
+
 - **A skipped check was read as agreement, and the fixture standing for a green suite carried one.**
   `require_ci_green` classified `NEUTRAL` and `SKIPPED` beside `SUCCESS` with no measurement, while the
   `EXPECTED` classification was reasoned onto the unfinished side at length — *reading it as agreement would

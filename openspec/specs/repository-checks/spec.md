@@ -1471,6 +1471,27 @@ unfinished one, because the operator action differs: an unfinished check is wait
 investigated. Where a job legitimately may skip, moving it back to agreement SHALL carry the measurement that
 earns it — which job, and why that skip is evidence.
 
+**The workflow property this rests on SHALL be held against the workflow.** The classification and the
+refusal both filter on the claim that no job can legitimately skip, and the refusal states it to an operator
+as fact — so a job acquiring `if:`, `needs:` or `continue-on-error:`, or the workflow acquiring a path
+filter, makes that sentence false at the moment it is printed while the refusal it justifies goes on
+happening: a legitimate skip refused with a message asserting legitimate skips are impossible. `AGENTS.md`'s
+rule reaches it — *something downstream filters on the claim, so declare it and hold it to the producer both
+ways* — and the producer is a tracked file. The reaction SHALL read the **job** level rather than the whole
+file: a `steps:` entry may carry `if:` or `continue-on-error:` without the job's own conclusion moving, so
+refusing those would refuse correct code. It SHALL refuse a corpus in which no job was read, since a renamed
+block or a re-indented file otherwise satisfies *none of them carries a forbidden key* while having read
+nothing.
+
+#### Scenario: A job acquires a key that lets it skip
+
+- **WHEN** a job in the workflow carries `if:`, `needs:` or `continue-on-error:`, or the workflow carries a
+  path filter
+- **THEN** the check fails naming the key and its line, and says the wrapper's refusal now asserts something
+  false — either that conclusion moves back beside agreement with the measurement that earns it, or the key
+  goes
+- **PINNED-BY** `no_workflow_job_can_legitimately_skip`
+
 **A fixture standing for a green suite SHALL carry only agreeing conclusions.** The default rollup fixture
 carried a `SKIPPED` beside a `SUCCESS`, so every success-path direction over this wrapper asserted the
 classification above as an unwritten premise; withdrawing it failed four directions at once, none of them
