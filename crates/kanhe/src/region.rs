@@ -18,7 +18,7 @@
 //! The rule is about the corpus and not about every string that flows out of one. A *line* taken from a region
 //! is a bare `&str` by design — that is what [`Executed::lines`] hands out, and what a per-line predicate
 //! takes. Said here because the sentence was written as *a recognizer is never handed a bare `&str`*, and a
-//! per-line predicate extracted in this window falsifies that reading while being exactly the shape the type
+//! per-line predicate [`Executed::lines`] hands out falsifies that reading while being exactly the shape the type
 //! exists to produce.
 //!
 //! **What this does not yet cover, stated because this module's own governing claim used to cover it.** These

@@ -169,7 +169,7 @@ fn no_test_target_spawns_a_process_unnamed() {
         let source = Source::of(&text);
         let executed = source.rust();
         // **The whole module, not each spawning function it exports** — the fourth round of the defect the
-        // doc above predicts. `hermetic_git::fixture` became a call site's spelling in this window, and a
+        // doc above predicts. `hermetic_git::fixture` is itself a call site's spelling, and a
         // target whose only spawn were that would have gone undetected while `Command::new(` and
         // `hermetic(` both passed over it. Naming the module closes every entry point it has and every one
         // it gains. Two of its items — `failed` and `program_and_args` — spawn nothing, so a target reaching

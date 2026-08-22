@@ -30,8 +30,8 @@
 # file besides.
 #
 # **Admitting an argument takes TWO questions, not one.** The first is above. The second is whether cargo
-# actually HONOURS it beside what this script supplies itself — and `--package` failed that one silently for a
-# window: written after an unconditional `--workspace`, cargo discarded it and published everything. Classify
+# actually HONOURS it beside what this script supplies itself — and `--package` failed that one silently:
+# written after an unconditional `--workspace`, cargo discarded it and published everything. Classify
 # against the tool's real behaviour at a named version, not against its `--help` alone.
 #
 # Two classifications are worth their sentence. `--package` narrows by NAMING, which a partly

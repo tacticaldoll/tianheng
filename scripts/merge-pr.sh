@@ -180,7 +180,7 @@ while (($#)); do
     #
     # Classified against `gh pr merge --help` on gh 2.95.0 by TWO questions. First: does it move what the gate
     # judged? Second: does gh honour it as this wrapper composes the invocation — beside the `--squash`,
-    # `--subject` and `--body-file` written below? The second question was missing for a window, and the sibling
+    # `--subject` and `--body-file` written below? The second question was missing, and the sibling
     # publish wrapper paid for it: it admitted `--package` beside an unconditional `--workspace`, which cargo
     # silently maps to *all packages*. Here the same question refuses `--auto` and `--disable-auto`: one defers
     # the merge past the evidence the gate read, the other is not a merge at all.
@@ -649,8 +649,8 @@ rm -f "$verdict_file"
 #
 # `--body` over a wrapper-owned temporary file, which would close the same race: such a file must outlive the
 # `exec` for gh to read it, so it could not be removed beforehand and no EXIT trap survives an `exec` — which is
-# the leak this repository closed one commit ago, reintroduced to fix a different defect. A value in `argv` has
-# an `ARG_MAX` ceiling a path does not, and that ceiling fails loud with `E2BIG` before the merge rather than
+# the leak closed by removing the file just before the `exec`, reintroduced to fix a different defect. A
+# value in `argv` has an `ARG_MAX` ceiling a path does not, and that ceiling fails loud with `E2BIG` before the merge rather than
 # recording something wrong.
 #
 # `passthrough` may be empty, and `"${empty[@]}"` under `set -u` is an unbound variable before bash 4.4 —
