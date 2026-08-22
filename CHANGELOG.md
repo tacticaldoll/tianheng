@@ -1224,6 +1224,26 @@ them.
   `projection-register` records about a check whose subject is text. The list is now the single owner and the
   prose does not restate it.
 
+- **The reader holding that premise assumed two indentation widths, and one of them lost keys silently.**
+  The direction's own documentation named three ways it could lose a job; two were closed in the round that
+  wrote them and the third was not. It is the one the set equality cannot see: a job key at a depth other than
+  the assumed four loses a **key**, not a **name**, so the job is still found, the equality still holds, and
+  the forbidden key is simply never examined. Measured on a document `pyyaml` accepts — with `if:` among a
+  job's six-space keys the reader found the job, held the equality, examined no key, and reported the premise
+  intact, while `require_ci_green` went on telling an operator that no job here can legitimately skip.
+
+  Both widths are derived from the document now rather than declared, which removes a literal instead of
+  adding one: the job-name depth is whatever the first structural line under `jobs:` sits at, and each job's
+  key depth is whatever its own first deeper non-sequence line sits at. YAML fixes neither — only consistency
+  within a mapping — so this reads the file instead of assuming a house style.
+
+  The reader is split out so a fixture can hand it shapes the tracked workflow does not have, which is the
+  half that was missing: one real file cannot ask the question. Seven rows, including the two that must
+  **not** react — a `steps:` entry's own `if:`, and a sequence item written at a job key's depth. Both
+  negative runs land on their own row: assuming the key depth reports `carried [], expected 1`, and assuming
+  the name depth reports `read {}, expected 2 job(s)`. The second row was absent when the fixture was first
+  written, which is the same omission one axis over.
+
 - **The no-evidence refusal asserted a property of the workflow, and nothing held it.** The classification
   and the diagnostic both filter on *no job in this repository's workflow carries `if:`, `needs:`, `paths:` or
   `continue-on-error:`* — a claim measured once and then load-bearing in two directions at once. Add one of

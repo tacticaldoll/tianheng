@@ -1479,9 +1479,18 @@ happening: a legitimate skip refused with a message asserting legitimate skips a
 rule reaches it — *something downstream filters on the claim, so declare it and hold it to the producer both
 ways* — and the producer is a tracked file. The reaction SHALL read the **job** level rather than the whole
 file: a `steps:` entry may carry `if:` or `continue-on-error:` without the job's own conclusion moving, so
-refusing those would refuse correct code. It SHALL refuse a corpus in which no job was read, since a renamed
-block or a re-indented file otherwise satisfies *none of them carries a forbidden key* while having read
-nothing.
+refusing those would refuse correct code. It SHALL hold the job names it reads against a declared set **in both
+directions**, since a read that loses jobs otherwise satisfies *none of them carries a forbidden key* over
+whatever it happened to reach. A count of what was read is not sufficient: it catches a reader that found
+nothing and not one that found fewer.
+
+**The block's indentation SHALL be read out of the document rather than assumed.** YAML fixes no width — only
+consistency within a mapping — so a job whose keys sit deeper than another document's is the same document,
+and a reader keyed to one width loses **keys** rather than names: the job is still found, the set equality
+still holds, and the forbidden key is never examined. That is the one loss the equality cannot catch, so it is
+removed rather than guarded. The reader SHALL be exercised by a fixture over the shapes the tracked workflow
+does not currently have, including the two that must **not** react — a `steps:` entry's own `if:`, and a
+sequence item written at a job key's depth.
 
 #### Scenario: A job acquires a key that lets it skip
 
@@ -1491,6 +1500,14 @@ nothing.
   false — either that conclusion moves back beside agreement with the measurement that earns it, or the key
   goes
 - **PINNED-BY** `no_workflow_job_can_legitimately_skip`
+
+#### Scenario: The workflow is written at a different indentation
+
+- **WHEN** a job's keys, or the job names themselves, sit at a depth other than the one the tracked workflow
+  happens to use
+- **THEN** the reader still finds them, because it derives both depths from the document — a reader keyed to
+  one width loses keys without losing names, which the set equality cannot see
+- **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
 
 **A fixture standing for a green suite SHALL carry only agreeing conclusions.** The default rollup fixture
 carried a `SKIPPED` beside a `SUCCESS`, so every success-path direction over this wrapper asserted the

@@ -697,6 +697,21 @@ consumer for an undemonstrated deduplication.
   would close it is an MSRV step in the Definition of Done, which installs a toolchain and rebuilds, so it
   belongs beside `pin_bites` as an env-gated line rather than in the ordinary list.
 
+  **The trigger has fired, and two of this entry's own premises were wrong.** The recorded trigger was *a
+  second failure only the `msrv` job catches*, and it happened: a `let` chain in an `if` condition — stable
+  well past `rust-version` — compiled on the default toolchain, passed the whole local Definition of Done, and
+  failed CI's MSRV job with `E0658`. That is not a shape resembling the nineteen-merge window this entry
+  records; it is the **same construct**, `if … && let …`, written again in the repository that wrote the
+  paragraph about it.
+
+  What the firing corrected. *Installs a toolchain* is not a cost here: `1.85` was already present on the
+  machine that hit this, so the step is a rebuild and nothing more, and it ran clean in minutes when finally
+  asked — `cargo +1.85 build --workspace` and `cargo +1.85 test --workspace --all-features`. And the
+  mitigation this entry credits held exactly as written: `require_ci_green` refuses a red rollup, so the
+  defect cost one CI round rather than reaching a release branch. Filed rather than promoted for the reason
+  the sibling wrapper entry gives — the Definition of Done is not edited at a release cut. First work of the
+  window after, with the cost now measured rather than assumed.
+
 - **WATCH: A constant's literal copies outside its reach are unheld.** *Class:* WATCH. *Observed pressure:*
   `shengmo::workspace::MARKER` owns `TIANHENG_WORKSPACE_TESTS`, and seven sites in `tianheng`, `louke` and
   `xuanji` spell it as a literal because those crates cannot depend on `shengmo` without closing a cycle.
