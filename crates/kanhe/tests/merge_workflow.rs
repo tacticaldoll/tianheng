@@ -1549,9 +1549,14 @@ fn workflow_shape(text: &str) -> WorkflowShape {
             continue;
         }
         let keys_depth = *key_depth.get_or_insert(depth);
-        if depth == keys_depth
-            && let Some(key) = ON_THE_JOB.iter().find(|key| trimmed.starts_with(**key))
-        {
+        if depth != keys_depth {
+            continue;
+        }
+        // Two statements rather than a `let` chain: chained `let` in an `if` condition is stable well past
+        // this workspace's declared `rust-version`, and the local Definition of Done compiles on whatever
+        // toolchain is installed. This is the shape `require_ci_green`'s own header records riding nineteen
+        // merges green here and red in CI.
+        if let Some(key) = ON_THE_JOB.iter().find(|key| trimmed.starts_with(**key)) {
             carried.push(format!("  ci.yml:{}: {key}", index + 1));
         }
     }
