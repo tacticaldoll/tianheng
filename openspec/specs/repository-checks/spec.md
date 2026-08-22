@@ -1477,9 +1477,19 @@ as fact — so a job acquiring `if:`, `needs:` or `continue-on-error:`, or the w
 filter, makes that sentence false at the moment it is printed while the refusal it justifies goes on
 happening: a legitimate skip refused with a message asserting legitimate skips are impossible. `AGENTS.md`'s
 rule reaches it — *something downstream filters on the claim, so declare it and hold it to the producer both
-ways* — and the producer is a tracked file. The reaction SHALL read the **job** level rather than the whole
-file: a `steps:` entry may carry `if:` or `continue-on-error:` without the job's own conclusion moving, so
-refusing those would refuse correct code. It SHALL hold the job names it reads against a declared set **in both
+ways* — and the producer is a tracked file. **Every key SHALL be read at the position it can occupy**, and there are two classes. `if:`, `needs:` and
+`continue-on-error:` sit on a **job**: a `steps:` entry may carry `if:` or `continue-on-error:` without the
+job's own conclusion moving, so refusing those would refuse correct code. `paths:` and `paths-ignore:` are
+**trigger** conditions and sit under `on:`, quoted or not — YAML 1.1 reads a bare `on` as a boolean, so both
+spellings name the block.
+
+Reading the trigger pair at any depth instead SHALL NOT be treated as harmless breadth. It was, justified as
+*those two keys have no other meaning anywhere in it* — a claim about one file's current content rather than
+about the keys, and the same kind of assumption the indentation rule had just been rewritten to remove.
+Measured: a step input named `paths`, the shape several published actions take, made the reaction refuse and
+tell a maintainer that a job can now legitimately skip, about an input that moves no job's conclusion. The
+reaction fails closed, so the cost is a false refusal rather than a merge — which is why it is scoped rather
+than deleted. It SHALL hold the job names it reads against a declared set **in both
 directions**, since a read that loses jobs otherwise satisfies *none of them carries a forbidden key* over
 whatever it happened to reach. A count of what was read is not sufficient: it catches a reader that found
 nothing and not one that found fewer.
@@ -1507,6 +1517,13 @@ sequence item written at a job key's depth.
   happens to use
 - **THEN** the reader still finds them, because it derives both depths from the document — a reader keyed to
   one width loses keys without losing names, which the set equality cannot see
+- **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
+
+#### Scenario: A key of one class appears where the other class lives
+
+- **WHEN** a step carries an input named `paths`, or a job carries a key the trigger block owns
+- **THEN** nothing reacts, because each key is read only where it can change whether a job runs — a reaction
+  that refuses a step input names a skip that cannot happen and sends the maintainer to look for it
 - **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
 
 **A fixture standing for a green suite SHALL carry only agreeing conclusions.** The default rollup fixture

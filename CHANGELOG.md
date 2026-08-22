@@ -1224,6 +1224,23 @@ them.
   `projection-register` records about a check whose subject is text. The list is now the single owner and the
   prose does not restate it.
 
+- **The last of the reader's three assumptions about the file was a content claim, not a width.** Two were
+  indentation and are gone; the third read `paths:` and `paths-ignore:` at any depth on any line, before the
+  position gate the other three keys pass through, justified as *those two keys have no other meaning anywhere
+  in it*. That is a claim about one file's current content rather than about the keys — the same kind of
+  assumption the widths had just been rewritten to remove, one member later in the same list.
+
+  Measured: a step input named `paths`, the shape `dorny/paths-filter` and `tj-actions/changed-files` take,
+  made the direction refuse and tell a maintainer *a job can now legitimately skip* about an input that moves
+  no job's conclusion. The reaction fails closed, so the cost was a false refusal rather than a merge — which
+  is why the pair is scoped rather than dropped. A path filter is a **trigger** condition: it lives under
+  `on:`, quoted or not, since YAML 1.1 reads a bare `on` as a boolean and both spellings name the block.
+
+  Three fixture rows cover it — a filter under `on:` reacting, the same under a quoted `"on":` reacting, and a
+  step input not reacting — and both negative runs land on their own row: matching at any depth reports the
+  step input as an offence, and recognising only the bare spelling misses the quoted block. `repository-checks`
+  now states the two key classes and their positions rather than describing one of them.
+
 - **The reader holding that premise assumed two indentation widths, and one of them lost keys silently.**
   The direction's own documentation named three ways it could lose a job; two were closed in the round that
   wrote them and the third was not. It is the one the set equality cannot see: a job key at a depth other than
