@@ -1410,7 +1410,7 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
     };
 
     // (label, document, jobs it must find, keys it must carry)
-    let rows: [(&str, String, usize, usize); 7] = [
+    let rows: [(&str, String, usize, usize); 10] = [
         ("clean", base("    name: A\n    runs-on: x\n"), 2, 0),
         (
             "if: at the file's own key depth",
@@ -1452,6 +1452,31 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
         // the job **names** sit deeper than two. A reader assuming that width finds no job at all, and the
         // set equality then reports every job missing rather than the key it never examined — loud, but for
         // the wrong reason. Derived, it simply reads.
+        // A path filter is a trigger condition and belongs under `on:`, where it does move whether a job
+        // runs at all.
+        (
+            "paths: under on: reacts",
+            "name: ci\n\non:\n  push:\n    paths:\n      - src/**\n\njobs:\n  alpha:\n    name: A\n"
+                .to_string(),
+            1,
+            1,
+        ),
+        // Must NOT react: `paths` is an ordinary input name for several published actions, and a step input
+        // moves no job's conclusion. Reading the key at any depth refused this.
+        (
+            "paths: as a step input does not react",
+            base("    name: A\n    steps:\n      - uses: dorny/paths-filter@v3\n        with:\n          paths: src/**\n"),
+            2,
+            0,
+        ),
+        // The quoted spelling names the same block: YAML 1.1 reads a bare `on` as a boolean.
+        (
+            "paths: under a quoted on: still reacts",
+            "name: ci\n\n\"on\":\n  push:\n    paths:\n      - src/**\n\njobs:\n  alpha:\n    name: A\n"
+                .to_string(),
+            1,
+            1,
+        ),
         (
             "the whole job block is indented deeper",
             "name: ci\n\njobs:\n    alpha:\n      name: A\n      if: x\n    beta:\n      name: B\n"
@@ -1502,14 +1527,20 @@ struct WorkflowShape {
 }
 
 fn workflow_shape(text: &str) -> WorkflowShape {
-    // On the job itself. A workflow-level path filter lives under `on:` and is read over the whole file,
-    // since those two keys have no other meaning anywhere in it.
+    // Two key classes, each read at the position it can occupy. A path filter is a **trigger** condition
+    // and lives under `on:`; the other three sit on a job. Reading the pair at any depth instead was
+    // justified as *those two keys have no other meaning anywhere in it* — a claim about this file's current
+    // content rather than about the keys, and the same kind of assumption this reader removed for both
+    // indentation widths. Measured: a step input named `paths` — the shape `dorny/paths-filter` and
+    // `tj-actions/changed-files` take — made the direction refuse, telling a maintainer that a job can now
+    // legitimately skip about an input that moves no job's conclusion.
     const ON_THE_JOB: [&str; 3] = ["if:", "needs:", "continue-on-error:"];
-    const ANYWHERE: [&str; 2] = ["paths:", "paths-ignore:"];
+    const ON_THE_WORKFLOW: [&str; 2] = ["paths:", "paths-ignore:"];
 
     let mut jobs = BTreeSet::new();
     let mut carried = Vec::new();
     let mut in_jobs = false;
+    let mut in_on = false;
     let mut job_name_depth: Option<usize> = None;
     let mut key_depth: Option<usize> = None;
     let mut in_job = false;
@@ -1522,14 +1553,25 @@ fn workflow_shape(text: &str) -> WorkflowShape {
         }
         let depth = line.len() - trimmed.len();
 
-        if let Some(key) = ANYWHERE.iter().find(|key| trimmed.starts_with(**key)) {
-            carried.push(format!("  ci.yml:{}: {key}", index + 1));
-        }
-
         if depth == 0 {
-            in_jobs = line.starts_with("jobs:");
+            // YAML 1.1 reads a bare `on` as a boolean, so a workflow may quote the key; both spellings name
+            // the same block. Taken off the key rather than matched as a prefix, so `once:` is not `on:`.
+            let top = line
+                .split_once(':')
+                .map_or("", |(key, _)| key.trim().trim_matches(['"', '\'']));
+            in_jobs = top == "jobs";
+            in_on = top == "on";
             in_job = false;
             job_name_depth = None;
+            continue;
+        }
+        if in_on {
+            if let Some(key) = ON_THE_WORKFLOW
+                .iter()
+                .find(|key| trimmed.starts_with(**key))
+            {
+                carried.push(format!("  ci.yml:{}: {key}", index + 1));
+            }
             continue;
         }
         if !in_jobs {
