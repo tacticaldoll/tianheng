@@ -53,21 +53,26 @@
 # typing and removes the parsing question entirely.
 set -Eeuo pipefail
 
-# Before the gate, not after: a refusal must not depend on the gate's own verdict, and reading the
-# arguments is the cheapest of the two. A misconfigured invocation exits 2, the usage-error class this
-# repository's own runner contract already uses, rather than 1 — which is what a gate that ran and
-# refused would exit.
-refuse() {
-    printf 'publish source: %s\n' "refusing \`$1\`: $2" >&2
-    exit 2
-}
-
-# The same two classes its sibling `scripts/merge-pr.sh` states, for the same reason: `2` is everything this
-# script could not judge — a misconfigured invocation, and an input it could not read — and `1` is a gate that
-# ran and refused. A gate that did NOT run belongs to the first class, however loudly its own message says so.
+# The two exit classes, chosen here and nowhere else — the same two its sibling `scripts/merge-pr.sh` states.
+#
+# `2` is everything this script could not judge: a misconfigured invocation, and an input it could not read.
+# `1` is a gate that ran and refused. A gate that did NOT run belongs to the first class, however loudly its
+# own message says so.
+#
+# The argument refusals below run BEFORE the gate, not after: a refusal must not depend on the gate's own
+# verdict, and reading the arguments is the cheaper of the two.
 cannot_judge() {
     printf 'publish source: %s\n' "$1" >&2
     exit 2
+}
+
+# One spelling of the refusal idiom, delegating the class to the function above rather than choosing it again.
+# `repository-checks` requires the classification to be chosen in ONE place per wrapper, and a second `exit 2`
+# beside a second `printf` is that choice made twice however correct each copy is.
+# `each_wrapper_chooses_its_exit_class_in_one_place` counts the `exit` statements both wrappers admit, so the
+# property is decided by a run rather than by reading either file — including this one.
+refuse() {
+    cannot_judge "refusing \`$1\`: $2"
 }
 
 # **The class a wrapper exits is now decided by construction, not by a sweep that must be exhaustive.**

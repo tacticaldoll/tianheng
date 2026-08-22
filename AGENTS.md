@@ -387,7 +387,9 @@ accepting it*, measured against `main`'s protection as `require_code_owner_revie
 there is its **naming** half: a structural amendment must now produce a second explicit artifact. The
 acceptance half is a judgement boundary, recorded as one, because a single-steward repository has no
 mechanical second party. The reason-perimeter falsifier, measured over four rounds and eight corrections, got
-neither, and was noticed only because a review put the two side by side. Filing counts as answering — a class with a measured
+neither at the moment the two were compared, and was noticed only because a review put them side by side —
+`BACKLOG.md` carries it as a `WATCH` from the same commit that wrote this sentence, so what the example
+records is the comparison rather than a class still open. Filing counts as answering — a class with a measured
 cost and a recorded trigger is not the same as one nobody has priced — but silence does not. Say which of the
 two the change is doing.
 

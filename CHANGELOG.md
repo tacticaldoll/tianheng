@@ -1172,6 +1172,31 @@ them.
 
 ### Self-governance
 
+- **A wrapper chose its exit class at four sites while the rule says one, and nothing counted them.**
+  `repository-checks` requires the classification to be chosen once per wrapper rather than at each site.
+  `gate_exit_classes` compared the class *constants* and the presence of `require_one_pass` across both
+  wrappers in both directions — so the **identities** could not drift while the **sites** could, and they had:
+  `scripts/merge-pr.sh` spelled `printf … >&2; exit 2` inline at the positional selector, the pull-request-URL
+  refusal, `require_value` and the body-file guard. Two of the four predated the helpers they should have
+  called, which is why they survived the round that converged every `case` arm. Two more carried no
+  `merge message:` prefix at all, so the refusals firing on the two commonest misinvocations — no pull request,
+  no body file — were invisible to an operator or a log filter keyed on it, and neither had a direction of any
+  kind.
+
+  Both wrappers now delegate every stop to a single `cannot_judge`; `scripts/publish.sh` had two helpers each
+  choosing the class, which is the same shape one degree smaller and is converged with it. Each file spelling
+  its diagnostic prefix once is a **consequence** of that and not a property anything holds — what is held is
+  the count of `exit` statements, and a second `printf` above a delegated exit would break no rule. Two directions replace the reading: `each_wrapper_chooses_its_exit_class_in_one_place`
+  counts the `exit` statements in executed shell text — exactly two may say `exit 2` (the class helper and the
+  gate's own verdict arm) and exactly one `exit 1` — and `every_usage_refusal_carries_the_wrappers_own_diagnostic`
+  holds each misconfigured invocation against the pair *(class, diagnostic form)* as a table, so a stop added
+  later lands as a row rather than as a finding in the next review. Negative runs, with only the wrappers
+  reverted: the first names all seven sites in `scripts/merge-pr.sh` with their line numbers, the second fails
+  on the zero-argument row with `got "usage: merge-pr.sh …"` and no prefix.
+
+  Executed text for the counting direction, because both wrappers' comments now discuss `exit 2` in prose and
+  a check reading the whole file would count the sentence describing the rule as an instance of breaking it.
+
 - **An ignore file on the machine running the gate could excuse a stale path reference, and silently omit a
   file from a fixture.** `reference_integrity::ignored` asked `git check-ignore` through a bare
   `Command::new("git")`, on the real repository, on the verdict path — and *ignored* there means the offence is

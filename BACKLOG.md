@@ -870,6 +870,68 @@ consumer for an undemonstrated deduplication.
   wrappers stand in front of the two acts that cannot be undone — the one place where a refactor's own risk
   outweighs the drift it removes until the release is out.
 
+  **The trigger has fired, and what answered it is the narrower half.** A `v0.4.0..HEAD` review found the
+  second form this entry names — *a defect found in one copy and not the other*: every refusal in
+  `scripts/publish.sh` reached its class through a helper, while `scripts/merge-pr.sh` chose it inline at four
+  sites, two of them defined above the helpers they should have called. Both wrappers now delegate every stop
+  to a single `cannot_judge`, so each spells its diagnostic prefix once, and
+  `each_wrapper_chooses_its_exit_class_in_one_place` counts the `exit` statements in executed shell text —
+  which turns *chosen in one place* from a property a reader checks into one a run decides. **The extraction
+  itself is still not done**, and the reason above is unchanged: it lands at a release cut, in front of the two
+  acts that cannot be undone. The convergence performed was inside each wrapper, adding no file and no
+  `source` path to resolve; the cross-wrapper library this entry proposes is what stays filed. Saying which
+  half a change did is what *A repair loop is a diagnosis* asks for, so it is said here rather than left to
+  the next review to re-derive.
+
+- **WATCH: A commit reaching a `release/*` branch without a pull request meets no CI.** *Class:* WATCH.
+  *Observed pressure:* `.github/workflows/ci.yml` triggers on `push` to `main` and on `pull_request`, so a
+  commit pushed straight onto a release branch runs no job at all — the branch that every development change
+  squashes into, and the one a release snapshot is cut from. *Observation source:* measured at `4c3b512` by
+  comparing every commit in `v0.4.0..HEAD` against the squash commit of every merged pull request
+  (`gh pr list --state merged --limit 800 --json mergeCommit`): **428 of 428 commits resolve to a pull
+  request**, so the pressure is structural rather than observed. The fifty that name no `release/0.5.0` pull
+  request are `release/0.4.1`'s, carried forward. *Current reaction or bound:* `require_changed_files` in
+  `scripts/merge-pr.sh` closes the adjacent shape this was first mistaken for — a pull request whose diff is
+  empty because the content was committed onto the release branch itself — and `require_ci_green` refuses a
+  merge whose rollup is not green, so every path *through the wrapper* is covered. Nothing covers a push that
+  never opens a pull request. *Risk:* a release snapshot cut from content no job ever built. *Promotion
+  trigger:* the first commit on a release branch that resolves to no pull request. *Version class:* patch; no
+  crate is touched. *Authority:* `repository-checks`. *Shape:* `branches: [main, 'release/**']` on the `push`
+  trigger — one line, whose cost is a full eight-job run on every push to a release branch, including the
+  worktree-building `pin_bites`. Filed rather than done because this repository's own rule is evidence before
+  promotion, and the evidence measured zero.
+
+- **WATCH: The declared MSRV is observable only in CI.** *Class:* WATCH. *Observed pressure:* `rust-version =
+  "1.85"` lives in `Cargo.toml` and nothing pins the local toolchain, so the Definition of Done compiles on
+  whatever the contributor has. Measured: a single `if let … && …` the default toolchain accepts and 1.85
+  refuses was green locally through **nineteen consecutive merges** and red in CI's `msrv` job the whole time.
+  *Observation source:* that window, recorded in `scripts/merge-pr.sh`'s own `require_ci_green` header.
+  *Current reaction or bound:* `require_ci_green` refuses a merge whose rollup is not green, so the specific
+  cost that window paid — merging past a red MSRV job — cannot recur through the wrapper. What remains is
+  latency: the contributor learns from CI rather than from the local list. *Risk:* a round trip per MSRV
+  regression. *Promotion trigger:* a second failure only the `msrv` job catches. *Version class:* patch.
+  *Authority:* `repository-checks`. *Shape:* **not** a `rust-toolchain` file — pinning the workspace to 1.85
+  would take `--all-features` clippy off the current toolchain, trading a live check for convenience. What
+  would close it is an MSRV step in the Definition of Done, which installs a toolchain and rebuilds, so it
+  belongs beside `pin_bites` as an env-gated line rather than in the ordinary list.
+
+- **WATCH: A constant's literal copies outside its reach are unheld.** *Class:* WATCH. *Observed pressure:*
+  `shengmo::workspace::MARKER` owns `TIANHENG_WORKSPACE_TESTS`, and seven sites in `tianheng`, `louke` and
+  `xuanji` spell it as a literal because those crates cannot depend on `shengmo` without closing a cycle.
+  `one_spelling`'s own module documentation puts them outside its subject, and that is right about the
+  repair — they are not sites anyone declined to converge. It does not follow that they are unobservable:
+  **`kanhe` sees both the constant and their text**, so a comparison is available where a convergence is not.
+  *Observation source:* measured at `4c3b512` — one `pub const`, seven literals, nothing comparing them.
+  *Current reaction or bound:* none; `one_spelling` states the exclusion and gives its reason.
+  *Risk:* a mistyped literal makes its guard's skip condition permanently true, so the test silently stops
+  running — a false negative, which is the one bug this project's Core Contract forbids, in the direction
+  nothing is watching. *Promotion trigger:* a second constant acquiring out-of-reach literal copies, or one
+  instance of the mistype. *Version class:* patch; test scaffolding only. *Authority:* `repository-checks`.
+  *Shape:* a direction in `kanhe` asserting every literal spelling of the token equals the constant, with a
+  non-empty assertion over the set so a rename cannot empty it into a vacuous pass. Filed rather than built
+  because it widens a check whose stated corpus was chosen deliberately, and changing that is a decision
+  rather than a repair.
+
 - **WATCH: A backticked identifier in a live document is resolved by nothing.** *Class:* WATCH. *Observed
   pressure:* `reference_integrity` resolves paths and `bound_register` resolves pinning-test names; a bare
   identifier cited in prose is resolved by no reaction. Two survived a full pre-release review and four review
