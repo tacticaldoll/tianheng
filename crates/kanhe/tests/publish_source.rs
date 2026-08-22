@@ -43,8 +43,8 @@ fn scratch(name: &str) -> PathBuf {
 
 /// Every `git` this file runs to BUILD a fixture goes through the shared builder, dates and all.
 ///
-/// **The second of two byte-identical copies.** Its twin in `release_coherence.rs` was converged one commit
-/// ago and this one was not, because the unit of reading was the file and the unit of duplication is the
+/// **The second of two byte-identical copies.** Its twin in `release_coherence.rs` was converged and this one
+/// was not, because the unit of reading was the file and the unit of duplication is the
 /// pair — the same shape `hermetic_git`'s own header records twice about the two gate modules these two test
 /// targets belong to. Fifteen commit- and tag-creating calls went through it, three of them fresh
 /// `release: 9.9.9` commits taking both dates from the clock.

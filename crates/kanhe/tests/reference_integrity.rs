@@ -1504,6 +1504,19 @@ fn relative_anchor_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSe
         for (index, line) in text.lines().enumerate() {
             match line.trim_start().strip_prefix(marker) {
                 Some(rest) => {
+                    // **A doc comment extends the marker, and the extension has to go too.** `FORMATS`
+                    // declares what a line comment *opens* with, which is right for it: `///` and `//!` both
+                    // open with `//`. Stripping only that leaves `/` or `!` at the front of the line's
+                    // contribution, and it lands inside the joined phrase — verbatim the failure this
+                    // function's own comment describes for an unstripped `#`. Measured: with only the
+                    // declared marker stripped, `publish_source.rs`'s wrapped `one commit / ago` joined as
+                    // `one commit / ago` and was reported clean, in a tracked file inside the corpus.
+                    //
+                    // Trimming rather than a longest-first table, because the table would be a second
+                    // declaration of what `FORMATS` already owns. Only leading glyphs are trimmed, so a
+                    // comment whose text begins with a path — `// /etc/hosts` — keeps it: the space after
+                    // the marker stops the trim.
+                    let rest = rest.trim_start_matches(['/', '!']);
                     let normalised = rest.split_whitespace().collect::<Vec<_>>().join(" ");
                     passage.push(' ');
                     origins.push((passage.len(), index + 1));
@@ -1519,6 +1532,83 @@ fn relative_anchor_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSe
         "no line-comment source was read, so this sweep would report clean over a corpus it never opened"
     );
     offences
+}
+
+/// The wrap, in both marker shapes, and the readings that must NOT react.
+///
+/// **The sweep claimed a negative fixture and had none**, which is how it shipped seeing only one of the two
+/// wrap shapes it is for. Its own doc said it was split from the check *so a negative fixture can call it*;
+/// nothing called it, so the only thing holding the wrap was the tree happening to contain a shell instance —
+/// and the tree's majority shape, a Rust doc comment, went unread. A residue a repair states is the next
+/// direction's specification, and this is that direction.
+///
+/// Four rows, and the quiet ones carry the weight. A sweep that stripped no marker would pass the first row
+/// and fail the rest; one that stripped only the declared marker would pass the first two and fail the doc
+/// forms — which is exactly what shipped. The executed row is what stops a matcher from reading the
+/// specimens on this page as the corpus.
+#[test]
+fn a_wrapped_anchor_reacts_in_every_marker_shape() {
+    let fixture = std::env::temp_dir().join(format!("kanhe-anchor-wrap-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&fixture);
+    xingbiao::claim_scratch(&fixture).expect("create the fixture root");
+
+    let shell = "wrapped.sh";
+    let doc = "wrapped_doc.rs";
+    let inner = "wrapped_inner.rs";
+    let executed = "executed.rs";
+    for (path, body) in [
+        (
+            shell,
+            "# the second question was missing for a
+# window, and the sibling paid for it
+",
+        ),
+        (
+            doc,
+            "/// the twin was converged one commit
+/// ago and this one was not
+",
+        ),
+        (
+            inner,
+            "//! a per-line predicate extracted in this
+//! window falsifies that reading
+",
+        ),
+        (
+            executed,
+            "const SPECIMEN: &str = \"extracted in this window\";\n",
+        ),
+    ] {
+        std::fs::write(fixture.join(path), body).expect("write fixture source");
+    }
+    let offences = relative_anchor_offences_in(
+        &fixture,
+        &[
+            shell.to_string(),
+            doc.to_string(),
+            inner.to_string(),
+            executed.to_string(),
+        ],
+    );
+    let _ = std::fs::remove_dir_all(&fixture);
+
+    let listed = offences.iter().cloned().collect::<Vec<_>>().join("\n");
+    assert_eq!(
+        offences.len(),
+        3,
+        "every wrapped marker shape must react and the executed line must not:\n{listed}"
+    );
+    for reacting in [shell, doc, inner] {
+        assert!(
+            offences.iter().any(|o| o.contains(reacting)),
+            "`{reacting}` wraps an anchor across two comment lines and must react:\n{listed}"
+        );
+    }
+    assert!(
+        !offences.iter().any(|o| o.contains(executed)),
+        "an anchor written as a string literal sits on an executed line and is not a comment:\n{listed}"
+    );
 }
 
 /// `AGENTS.md`'s relative-anchor row, held over every tracked line comment.
