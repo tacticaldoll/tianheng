@@ -1389,6 +1389,177 @@ fn a_pull_request_no_workflow_has_claimed_stops_before_the_merge() {
     );
 }
 
+/// Every shape the reader has to decide, and the ones it must leave alone.
+///
+/// **The direction reads one real file, so nothing exercised the shapes that file does not have.** Its
+/// documentation listed three ways a job could be lost and the repair closed two; the third — a job key at a
+/// depth the reader did not expect — stayed open because it loses a **key** rather than a **name**, so the set
+/// equality holds, nothing is carried, and the direction passes. A fixture is what asks the question the real
+/// file cannot.
+///
+/// The rows that must NOT react carry as much as the rows that must: a `steps:` entry may legitimately carry
+/// `if:` without the job's own conclusion moving, and a reader that refused it would refuse correct code —
+/// which is the narrowing the direction argues for and would silently lose if the depth rule were widened
+/// carelessly.
+#[test]
+fn the_workflow_reader_decides_every_shape_of_the_block() {
+    let base = |keys: &str| {
+        format!(
+            "name: ci\n\non:\n  push:\n    branches: [main]\n\njobs:\n  alpha:\n{keys}\n  beta:\n    name: B\n    runs-on: x\n"
+        )
+    };
+
+    // (label, document, jobs it must find, keys it must carry)
+    let rows: [(&str, String, usize, usize); 7] = [
+        ("clean", base("    name: A\n    runs-on: x\n"), 2, 0),
+        (
+            "if: at the file's own key depth",
+            base("    name: A\n    if: x\n    runs-on: x\n"),
+            2,
+            1,
+        ),
+        // The shape that shipped unread. Legal YAML — indentation only has to be consistent within one
+        // mapping — and the old reader found the job, held the equality, and examined no key.
+        (
+            "if: at a deeper key depth the whole job uses",
+            base("      name: A\n      if: x\n      runs-on: x\n"),
+            2,
+            1,
+        ),
+        // A column-0 comment inside the block: the round-3 defect, kept as a row so it cannot come back.
+        (
+            "a column-0 comment does not end the block",
+            format!(
+                "name: ci\n\njobs:\n  alpha:\n    name: A\n# --- divider ---\n  beta:\n    name: B\n    if: x\n"
+            ),
+            2,
+            1,
+        ),
+        // Must NOT react: a step's own `if:` leaves the job's conclusion alone.
+        (
+            "if: on a step is not the job's",
+            base("    name: A\n    steps:\n      - uses: x\n        if: y\n"),
+            2,
+            0,
+        ),
+        // A sequence item written at the key's own depth is still a sequence item.
+        (
+            "a sequence item at key depth is not a key",
+            base("    name: A\n    steps:\n    - uses: x\n"),
+            2,
+            0,
+        ),
+        // The same defect on the block's other axis, and the row this fixture lacked when it was written:
+        // the job **names** sit deeper than two. A reader assuming that width finds no job at all, and the
+        // set equality then reports every job missing rather than the key it never examined — loud, but for
+        // the wrong reason. Derived, it simply reads.
+        (
+            "the whole job block is indented deeper",
+            "name: ci\n\njobs:\n    alpha:\n      name: A\n      if: x\n    beta:\n      name: B\n"
+                .to_string(),
+            2,
+            1,
+        ),
+    ];
+
+    for (label, document, jobs, keys) in rows {
+        let shape = workflow_shape(&document);
+        assert_eq!(
+            shape.jobs.len(),
+            jobs,
+            "{label}: read {:?}, expected {jobs} job(s) — a reader that loses a job holds its set equality \
+             over whatever it reached",
+            shape.jobs
+        );
+        assert_eq!(
+            shape.carried.len(),
+            keys,
+            "{label}: carried {:?}, expected {keys}",
+            shape.carried
+        );
+    }
+}
+
+/// What a workflow's job block declares: the job names, and any key that lets a job skip.
+///
+/// Split from the direction so a fixture can hand it shapes the real file does not currently have — which is
+/// the half the previous form lacked, and the reason it shipped blind to one of the three losses its own
+/// documentation listed.
+///
+/// **Depths are read out of the file, not assumed.** The first form matched a job name at two spaces and a
+/// job key at four. YAML fixes neither: indentation only has to be consistent within a mapping, so a job
+/// whose keys sit at six is the same document. Measured — `pyyaml` parses it, and with `if:` among those
+/// six-space keys the old reader found the job, held the set equality, examined no key, and passed. Binding
+/// the width to a declared literal would have made that fail loudly, which is better than passing; deriving
+/// it makes the question not arise, and it removes a literal rather than adding one.
+///
+/// So: the job-name depth is whatever the first structural line under `jobs:` sits at, and each job's key
+/// depth is whatever its own first deeper non-sequence line sits at. A `-` opens a sequence item, so a
+/// `steps:` entry written at the key's own depth is not read as a key — which is what keeps the step-level
+/// narrowing the direction argues for.
+struct WorkflowShape {
+    jobs: BTreeSet<String>,
+    carried: Vec<String>,
+}
+
+fn workflow_shape(text: &str) -> WorkflowShape {
+    // On the job itself. A workflow-level path filter lives under `on:` and is read over the whole file,
+    // since those two keys have no other meaning anywhere in it.
+    const ON_THE_JOB: [&str; 3] = ["if:", "needs:", "continue-on-error:"];
+    const ANYWHERE: [&str; 2] = ["paths:", "paths-ignore:"];
+
+    let mut jobs = BTreeSet::new();
+    let mut carried = Vec::new();
+    let mut in_jobs = false;
+    let mut job_name_depth: Option<usize> = None;
+    let mut key_depth: Option<usize> = None;
+    let mut in_job = false;
+
+    for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim_start();
+        // A blank line and a comment end nothing — only a real top-level key does.
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let depth = line.len() - trimmed.len();
+
+        if let Some(key) = ANYWHERE.iter().find(|key| trimmed.starts_with(**key)) {
+            carried.push(format!("  ci.yml:{}: {key}", index + 1));
+        }
+
+        if depth == 0 {
+            in_jobs = line.starts_with("jobs:");
+            in_job = false;
+            job_name_depth = None;
+            continue;
+        }
+        if !in_jobs {
+            continue;
+        }
+
+        let sequence = trimmed.starts_with('-');
+        let names_depth = *job_name_depth.get_or_insert(depth);
+
+        if depth == names_depth && !sequence && trimmed.ends_with(':') {
+            jobs.insert(trimmed.trim_end_matches(':').to_string());
+            key_depth = None;
+            in_job = true;
+            continue;
+        }
+        if !in_job || depth <= names_depth || sequence {
+            continue;
+        }
+        let keys_depth = *key_depth.get_or_insert(depth);
+        if depth == keys_depth
+            && let Some(key) = ON_THE_JOB.iter().find(|key| trimmed.starts_with(**key))
+        {
+            carried.push(format!("  ci.yml:{}: {key}", index + 1));
+        }
+    }
+
+    WorkflowShape { jobs, carried }
+}
+
 /// The jobs `.github/workflows/ci.yml` declares, held against what the reader finds in both directions.
 ///
 /// A literal beside an enumerator, which `AGENTS.md` admits exactly where something downstream filters on the
@@ -1422,23 +1593,23 @@ const JOBS: [&str; 8] = [
 /// moves a job to `SKIPPED` is a key on the job itself, or a workflow-level path filter — so those are what
 /// this reads.
 ///
-/// **The guard is a set equality, because a count guarded only total loss.** The first form asserted the
-/// reader had found *some* job, which catches a read that found nothing and cannot catch one that found
-/// **fewer** — and this reader could lose jobs three ways: `in_jobs` was cleared by any column-0 non-empty
-/// line, a section comment included, so one `# …` inside the block latched it off for the rest of the file;
-/// a job indented other than two spaces is not counted; a job key at other than four is not read.
+/// **The names are held against [`JOBS`] both ways**, which is the form `AGENTS.md` prescribes for a claim
+/// something downstream filters on — *the literal is not a weakening here; it is what gives the enumerator
+/// something to disagree with*. The first form asserted only that the reader had found *some* job, which
+/// catches a read that found nothing and cannot catch one that found **fewer**.
 ///
-/// Reproduced against the real workflow rather than reasoned about. With an `if:` on the last job the
-/// direction fires. With that same `if:` **and one column-0 comment after the first job header** it read one
-/// job, found nothing, and **passed** — while `require_ci_green` went on telling an operator that no job here
-/// can legitimately skip. That is the failure this direction exists to prevent, arriving one layer up: a
-/// reader narrower than its claim, inside the guard for a claim.
+/// **Three ways this reader could lose a job were named, two were closed, and the third took another round.**
+/// The latch (a column-0 comment ending the block) and the equality landed together; the two indentation
+/// assumptions did not, and one of them — a job key at a depth other than the assumed four — loses a **key**
+/// rather than a **name**, so the equality holds, nothing is carried, and the direction passes. Measured, on
+/// a document `pyyaml` accepts: with `if:` among a job's six-space keys the reader found the job, held the
+/// equality, examined no key, and reported the premise intact. Both assumptions are now derived from the
+/// document instead — see [`workflow_shape`] — which removes a literal rather than adding one, and
+/// [`the_workflow_reader_decides_every_shape_of_the_block`] holds each shape including the two that must not
+/// react.
 ///
-/// So the names are read and held against [`JOBS`] **both ways**, which is the form `AGENTS.md` prescribes
-/// for a claim something downstream filters on — *the literal is not a weakening here; it is what gives the
-/// enumerator something to disagree with*. A narrowed read now names what it lost. The latch is repaired as
-/// well rather than left for the equality to catch, because a diagnostic naming two missing jobs is more use
-/// than one naming eight.
+/// What the equality is for is what remains after that: a loss nobody has thought of yet. It names which jobs
+/// went missing, so a reader meets the shape rather than the absence.
 #[test]
 fn no_workflow_job_can_legitimately_skip() {
     let Some(root) = workspace_root() else {
@@ -1448,46 +1619,8 @@ fn no_workflow_job_can_legitimately_skip() {
     let text = std::fs::read_to_string(&workflow)
         .expect("read .github/workflows/ci.yml, whose shape the no-evidence refusal asserts");
 
-    // On the job itself. A workflow-level path filter lives under `on:` and is read over the whole file,
-    // since those two keys have no other meaning anywhere in it.
-    const ON_THE_JOB: [&str; 3] = ["if:", "needs:", "continue-on-error:"];
-    const ANYWHERE: [&str; 2] = ["paths:", "paths-ignore:"];
-
-    let mut found: BTreeSet<String> = BTreeSet::new();
-    let mut carried: Vec<String> = Vec::new();
-    let mut in_jobs = false;
-    for (index, line) in text.lines().enumerate() {
-        let indented = line.starts_with([' ', '\t']);
-        let structural = !line.trim().is_empty() && !line.trim_start().starts_with('#');
-        // A blank line and a column-0 comment end nothing — only a real top-level key does. The first form
-        // cleared the flag on any column-0 non-empty line, so one section divider inside the block hid every
-        // job after it.
-        if !indented && structural {
-            in_jobs = line.starts_with("jobs:");
-            continue;
-        }
-        if let Some(key) = ANYWHERE
-            .iter()
-            .find(|key| line.trim_start().starts_with(**key))
-        {
-            carried.push(format!("  ci.yml:{}: {key}", index + 1));
-        }
-        if !in_jobs {
-            continue;
-        }
-        // Two spaces names a job; four is one of its own keys. Deeper is a step's.
-        if line.starts_with("  ") && !line.starts_with("   ") && line.trim_end().ends_with(':') {
-            found.insert(line.trim().trim_end_matches(':').to_string());
-        }
-        if line.starts_with("    ") && !line.starts_with("     ") {
-            if let Some(key) = ON_THE_JOB
-                .iter()
-                .find(|key| line.trim_start().starts_with(**key))
-            {
-                carried.push(format!("  ci.yml:{}: {key}", index + 1));
-            }
-        }
-    }
+    let shape = workflow_shape(&text);
+    let (found, carried) = (shape.jobs, shape.carried);
 
     let declared: BTreeSet<String> = JOBS.iter().map(|job| (*job).to_string()).collect();
     assert_eq!(
