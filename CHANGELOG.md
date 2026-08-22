@@ -1172,6 +1172,33 @@ them.
 
 ### Self-governance
 
+- **The isolation builder left open the channel that moves which repository git answers about, and the stop
+  was declared nowhere.** `hermetic` neutralises git's config files and names `core.excludesFile`, and its own
+  table recorded `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` as **not** closed — justified by *nothing in
+  this tree sets them, zero occurrences repository-wide*. That corpus cannot decide it: the channel is
+  ambient, so the variable arrives from outside the tree the sweep read. It is the reader-narrower-than-its-
+  claim shape this repository spends four rules closing, sitting in the justification for leaving a channel
+  open. And the stop reached no `openspec/specs/*` scenario, so it appeared in neither observation register —
+  a reader following this repository's own instruction to check the register before reporting a behaviour as
+  a defect would have found nothing to read.
+
+  The consequence sat in front of the one act that cannot be undone. `publish_source_gate::judge` reads the
+  worktree's cleanliness, `HEAD`'s subject, the release tag's presence and the tag object through this
+  builder; with `GIT_DIR` naming another checkout, every one of those answers about that checkout while
+  `cargo publish` packages the directory on disk. Measured against two repositories whose `HEAD` subjects and
+  tags differ: `log -1 --format=%s` and `for-each-ref refs/tags` both answered the second, and
+  `status --porcelain` reported the second tree against this index under `GIT_WORK_TREE`.
+
+  Closed rather than declared, because closing costs an `env_remove` and refuses no caller. The set is what
+  measurement admits rather than every `GIT_*`: `GIT_NAMESPACE` was measured in the same run and
+  `for-each-ref refs/tags` still answered this repository, so it is not in it — an entry that closes nothing
+  reads as a defence that was never there. `repository-checks` now carries the requirement and its scenario,
+  and `a_repository_selector_cannot_reach_a_hermetic_command` holds it: a behaviour control proving the
+  channel is real, then the removal read off the builder. That split is stated rather than glossed — making
+  the variable arrive as it really would needs this process's environment mutated, which is unsafe in this
+  edition and racy against a parallel run, and setting it on the builder's own `Command` would override the
+  `env_remove` and test the case's own last statement.
+
 - **A premise its own gate had falsified sat where an operator reads the branching rule first.**
   `AGENTS.md` closed *Branching and release* with *Like the self-describing-commit rule above, this is a
   convention for humans and agents, not a Tianheng boundary or repository check: a branching pattern is not an

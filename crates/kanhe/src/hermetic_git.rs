@@ -40,7 +40,7 @@ pub const EXCLUDES_SETTING: &str = "core.excludesFile";
 /// | global / system config file | yes |
 /// | `$XDG_CONFIG_HOME/git/ignore` | yes — see below; this row read **no** until a gate was found relying on it |
 /// | `GIT_CONFIG_COUNT` + `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` | **yes** — see below; this row read **no** until it was measured |
-/// | `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` | **no** — they move which repository `git` acts on, past `current_dir` entirely |
+/// | `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` | **yes** — cleared, see `REPOSITORY_SELECTORS` below; this row read **no** until a review asked why a stop nothing declared was policy |
 /// | `GIT_AUTHOR_NAME` / `GIT_COMMITTER_NAME` and their emails | **no** — they override the fixture's own `.git/config` identity |
 /// | `.git/info/exclude` | **no** — inside the repository, so no config setting reaches it |
 ///
@@ -68,12 +68,15 @@ pub const EXCLUDES_SETTING: &str = "core.excludesFile";
 /// value. A row saying **no** where the answer is **yes** is not a conservative error — it reads as governed
 /// policy and would send the next fixture author to build isolation they already have.
 ///
-/// **`GIT_DIR` and its siblings are the row this table did not have.** They are not an ignore channel; they
-/// move which repository `git` acts on, so they reach past `current_dir(dir)` and out of the fixture
-/// entirely. Measured: with `GIT_DIR` naming another repository, `git rev-parse --git-dir` under this builder
-/// answers that other repository rather than `.git`. Nothing in this tree sets them — zero occurrences,
-/// repository-wide — so this is a stated limit rather than a live defect, and it is stated because the
-/// table's own column is *ambient source* and a fixture author reads it as the set.
+/// **`GIT_DIR` and its siblings were the row this table did not have, and then the row it got wrong.** They
+/// are not an ignore channel; they move which repository `git` acts on, so they reach past `current_dir(dir)`
+/// entirely. The row stood at **no** on the ground that nothing in this tree sets them — zero occurrences,
+/// repository-wide — which is a corpus that cannot decide it: the channel is *ambient*, so the variable
+/// arrives from outside the tree the sweep read, and a review named the same defect class this crate spends
+/// four rules closing. The stop was also undeclared — no `openspec/specs/*` scenario carried it, so it
+/// appeared in neither observation register — and an undeclared stop is a defect rather than governed policy
+/// by this repository's own reading rule. It is closed instead of declared, because closing it costs an
+/// `env_remove` and refuses no caller.
 ///
 /// A caller needing its own key starts at `_1` and sets `GIT_CONFIG_COUNT` to `2`; overwriting the count
 /// without carrying index `0` forward reopens the ignore row. No caller in this workspace sets these
@@ -88,8 +91,42 @@ pub fn hermetic(program: &str) -> Command {
         .env("GIT_CONFIG_COUNT", "1")
         .env("GIT_CONFIG_KEY_0", EXCLUDES_SETTING)
         .env("GIT_CONFIG_VALUE_0", "/dev/null");
+    for selector in REPOSITORY_SELECTORS {
+        command.env_remove(selector);
+    }
     command
 }
+
+/// The environment variables that move **which repository** `git` answers about, cleared rather than set.
+///
+/// Named rather than linked from [`hermetic`]'s table above, for the reason `region.rs` already states for
+/// its own private `Rule`: this constant is private and that item is public, so an intra-doc link resolves
+/// only under `--document-private-items` and `-D rustdoc::private-intra-doc-links` refuses it. Measured by
+/// CI rather than reasoned about — the first form of that row was a link and failed the doc job.
+///
+/// Cleared because there is no value that means *the one `current_dir` names* — git's own default is their
+/// absence, so removing them restores discovery from the working directory, which is the property every caller
+/// here already believes it has.
+///
+/// **The set is what measurement admits, not every `GIT_*` git defines.** Measured on this machine against two
+/// repositories whose `HEAD` subjects and tags differ:
+///
+/// | variable | effect on a judgement's reads | in this set |
+/// |---|---|---|
+/// | `GIT_DIR` | `log -1 --format=%s` and `for-each-ref refs/tags` both answer the **other** repository | yes |
+/// | `GIT_WORK_TREE` | `status --porcelain` reports the other tree's differences against this index | yes |
+/// | `GIT_INDEX_FILE` | replaces the index `status` and `ls-files` compare against | yes |
+/// | `GIT_NAMESPACE` | `for-each-ref refs/tags` still answered this repository's tags — **no effect** | no |
+///
+/// The `GIT_NAMESPACE` row is why this is a measured set rather than a swept prefix: a list built by reading
+/// git's manual would carry it, and an entry that closes nothing reads as a defence that was never there —
+/// which this workspace's own manifest already argues about inert `exclude` entries.
+///
+/// **What it does not reach**, stated rather than left to be found: `GIT_OBJECT_DIRECTORY` and
+/// `GIT_ALTERNATE_OBJECT_DIRECTORIES` were measured against `rev-parse HEAD`, which reads refs and was
+/// unaffected; whether they move a read of an **object** — the tag body the signature check reconstructs — was
+/// not measured, and is filed rather than guessed at.
+const REPOSITORY_SELECTORS: [&str; 3] = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"];
 
 /// One read of `git` in `repo` through [`hermetic`], with the output/success/failure mapping every gate's
 /// own `git()` wrapper otherwise has to restate.

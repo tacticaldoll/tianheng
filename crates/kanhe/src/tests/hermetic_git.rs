@@ -40,6 +40,112 @@ fn the_global_config_file_cannot_reach_a_hermetic_command() {
     );
 }
 
+/// The repository-selector row of [`hermetic`]'s table, in the two halves this one can be built in.
+///
+/// **The channel is real, and that half is a behaviour case.** `GIT_DIR` reaches past `current_dir` entirely:
+/// a judgement that reads `HEAD`'s subject, the worktree's cleanliness and the release tag gets all three
+/// from whatever repository the variable names, while `cargo publish` packages the directory on disk. The
+/// gate and the act would then be about two different trees, in front of an upload that can be yanked and
+/// never replaced.
+///
+/// **The other half is a construction case, and the reason is this file's own.** Making the variable arrive
+/// the way it really would means mutating this process's environment — `set_var`, unsafe in this edition and
+/// racy against a parallel run, exactly as [`hermetic`]'s header already records for the `GIT_CONFIG_*` row.
+/// Setting it on the builder's own [`Command`] instead proves nothing: a later `env` overrides the
+/// `env_remove`, so the case would be testing its own last statement. So the removal is read off the builder,
+/// which is the strongest form available without the mutation — and it is a **difference** against a bare
+/// `Command`, so it cannot hold because the key was never there.
+///
+/// What this pair does not establish is the composition: that a variable inherited from a real environment is
+/// absent in the child. Stated rather than implied, and it is the same residue the sibling rows carry.
+#[test]
+fn a_repository_selector_cannot_reach_a_hermetic_command() {
+    let root = std::env::temp_dir().join(format!("kanhe-hermetic-selector-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("create the fixture root");
+
+    // Two repositories whose HEAD subjects differ, so a redirected read is legible as the wrong subject
+    // rather than as an error.
+    let build = |name: &str| {
+        let dir = root.join(name);
+        std::fs::create_dir(&dir).expect("create the fixture repository");
+        for args in [
+            vec!["init", "-q", "."],
+            vec!["config", "user.email", "t@example.invalid"],
+            vec!["config", "user.name", "t"],
+        ] {
+            assert!(
+                hermetic("git")
+                    .args(&args)
+                    .current_dir(&dir)
+                    .output()
+                    .expect("run git")
+                    .status
+                    .success()
+            );
+        }
+        std::fs::write(dir.join("f"), name).expect("write");
+        for args in [vec!["add", "f"], vec!["commit", "-qm", name]] {
+            assert!(
+                hermetic("git")
+                    .args(&args)
+                    .current_dir(&dir)
+                    .output()
+                    .expect("run git")
+                    .status
+                    .success()
+            );
+        }
+        dir
+    };
+    let judged = build("judged");
+    let elsewhere = build("elsewhere");
+
+    // The channel, demonstrated on a command that does NOT close it: the subject read in `judged` is
+    // `elsewhere`'s.
+    let redirected = Command::new("git")
+        .args(["log", "-1", "--format=%s"])
+        .env("GIT_DIR", elsewhere.join(".git"))
+        .current_dir(&judged)
+        .output()
+        .expect("run git");
+    let redirected = String::from_utf8_lossy(&redirected.stdout)
+        .trim()
+        .to_string();
+
+    // The removal, read off the builder rather than off a run — see this case's header for why.
+    let removed: Vec<String> = hermetic("git")
+        .get_envs()
+        .filter(|(_, value)| value.is_none())
+        .map(|(key, _)| key.to_string_lossy().into_owned())
+        .collect();
+    let bare: Vec<String> = Command::new("git")
+        .get_envs()
+        .filter(|(_, value)| value.is_none())
+        .map(|(key, _)| key.to_string_lossy().into_owned())
+        .collect();
+
+    std::fs::remove_dir_all(&root).ok();
+
+    assert_eq!(
+        redirected, "elsewhere",
+        "the control did not follow GIT_DIR, so the channel this case is about was not demonstrated and the \
+         assertion below would hold for the wrong reason"
+    );
+    assert!(
+        bare.is_empty(),
+        "a bare `Command` already clears something, so the comparison below is not a difference: {bare:?}"
+    );
+    for selector in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"] {
+        assert!(
+            removed.iter().any(|key| key == selector),
+            "`hermetic` does not clear {selector}, so a judgement's reads follow it past `current_dir` to \
+             whatever repository it names — while the act the gate stands in front of uses the directory on \
+             disk. Cleared: {removed:?}"
+        );
+    }
+}
+
 /// The ignore row of [`hermetic`]'s table, as a case rather than as a sentence.
 ///
 /// **This row read *not closed* for two windows and the sentence was correct.** Emptying the config *files*
