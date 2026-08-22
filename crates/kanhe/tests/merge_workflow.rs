@@ -192,7 +192,14 @@ elif [[ $1 == pr && $2 == view && $* == *"--json statusCheckRollup"* ]]; then
     ci-red-status) body='{"statusCheckRollup":[{"state":"FAILURE","context":"continuous-integration/legacy"},{"conclusion":"SUCCESS","name":"Definition of Done"}]}' ;;
     # And one still expected: required, never posted. Agreement would merge past it.
     ci-expected-status) body='{"statusCheckRollup":[{"state":"EXPECTED","context":"continuous-integration/legacy"},{"conclusion":"SUCCESS","name":"Definition of Done"}]}' ;;
-    *) body='{"statusCheckRollup":[{"conclusion":"SUCCESS","name":"Definition of Done"},{"conclusion":"SKIPPED","name":"Examples dogfood"}]}' ;;
+    # Two checks that finished and said nothing. Both conclusions sat beside `SUCCESS` with no measurement.
+    ci-no-evidence) body='{"statusCheckRollup":[{"conclusion":"SKIPPED","name":"Examples dogfood"},{"conclusion":"NEUTRAL","name":"Supply chain (cargo-deny)"},{"conclusion":"SUCCESS","name":"Definition of Done"}]}' ;;
+    # **The default is what a green suite looks like, so every conclusion in it must be one.** It carried a
+    # `SKIPPED` beside a `SUCCESS`, which made every success-path direction in this file assert — silently,
+    # as a premise nobody had written down — that a skipped check is agreement. Measured when that premise
+    # was withdrawn: four directions failed at once, none of them about CI, each having reached its own
+    # subject only because this fixture agreed on the way past.
+    *) body='{"statusCheckRollup":[{"conclusion":"SUCCESS","name":"Definition of Done"},{"conclusion":"SUCCESS","name":"Examples dogfood"}]}' ;;
     esac
     printf '%s' "$body" | jq -r "$filter"
 elif [[ $1 == pr && $2 == view && $* == *"--json headRefOid"* ]]; then
@@ -210,7 +217,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
+    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -1386,6 +1393,65 @@ fn a_pull_request_no_workflow_has_claimed_stops_before_the_merge() {
 /// **Three states, and the middle one is why a boolean would not do.** A run still in flight is not a run
 /// that failed; merging on *not success* would refuse a pull request nobody has answered yet, and merging on
 /// *not failure* would merge one nobody has answered yet. The wrapper says which of the two it met.
+/// A check that finished and produced no evidence is not a check that agreed.
+///
+/// **`NEUTRAL` and `SKIPPED` sat beside `SUCCESS` with no measurement**, while the `EXPECTED` classification
+/// beside them was reasoned about at length: it is unfinished because *reading it as agreement would merge past a
+/// required status that never arrived*. The identical argument covers a check that did not run — it produced
+/// no evidence, so agreement merges past whatever it would have said — and nothing had applied it.
+///
+/// Measured on this repository's own workflow rather than argued from GitHub's vocabulary: no job in
+/// `.github/workflows/ci.yml` carries `if:`, `needs:`, `paths:`, `paths-ignore:` or `continue-on-error:`, so
+/// a skip here cannot mean *legitimately not applicable*. It can only mean the workflow changed or the run
+/// was interfered with.
+///
+/// **The default fixture carried one**, which is how the premise stayed invisible: every success-path
+/// direction in this file was asserting, without saying so, that a skipped check is agreement. Withdrawing it
+/// failed four directions at once, none of them about CI.
+///
+/// Its own refusal rather than the unfinished one, because the operator action differs: an unfinished check
+/// is waited for and a skipped one is investigated. The assertion reads the sentence, not just the class,
+/// since both are cannot-judge and an exit code cannot tell them apart.
+#[test]
+fn a_check_that_produced_no_evidence_stops_before_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "ci-no-evidence", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a check that produced no evidence is the unjudged class, not a gate's disagreement; stderr was {:?}",
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("produced no evidence"),
+        "the refusal must say the checks produced no evidence rather than that they disagreed or have not \
+         finished, got {:?}",
+        run.stderr
+    );
+    for named in ["Examples dogfood", "Supply chain (cargo-deny)"] {
+        assert!(
+            run.stderr.contains(named),
+            "the refusal must name {named:?} so an operator can look at why it did not run, got {:?}",
+            run.stderr
+        );
+    }
+    assert!(
+        !run.stderr.contains("have not finished"),
+        "a skipped check is not an unfinished one — waiting is the wrong action and that sentence asks for \
+         it, got {:?}",
+        run.stderr
+    );
+    // The log carries every `gh` call, and this wrapper legitimately makes several before reading the
+    // rollup — so the question is whether the **merge** was reached, not whether the tool was.
+    assert!(
+        !run.gh_log.contains("pr merge"),
+        "`gh pr merge` must never be reached when a check produced no evidence, but it ran: {:?}",
+        run.gh_log
+    );
+}
+
 #[test]
 fn a_pull_request_whose_checks_have_not_finished_stops_before_the_merge() {
     let Some(root) = workspace_root() else {

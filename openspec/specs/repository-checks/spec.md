@@ -1455,11 +1455,29 @@ law itself did not change, and nothing refused them.
 ### Requirement: The merge wrapper reads what CI said, not only what ran locally
 
 The wrapper standing in front of `gh pr merge` SHALL read the pull request's check conclusions and refuse to
-reach the tool unless every finished check agrees. It SHALL separate three states: a check that disagreed, a
-check that has not finished, and a head no workflow has claimed — an unfinished run is not a failed one, and
-merging on *not success* would refuse a pull request nobody has answered yet.
+reach the tool unless every check agrees. It SHALL separate four states: a check that disagreed, a check that
+has not finished, a check that finished and produced **no evidence**, and a head no workflow has claimed — an
+unfinished run is not a failed one, and merging on *not success* would refuse a pull request nobody has
+answered yet.
 
-All three SHALL be **derived from one read** of the rollup. Asking a separate filter per state makes the
+**A check that did not run agreed with nothing.** `NEUTRAL` and `SKIPPED` classified as agreement, beside
+`SUCCESS`, with no measurement — while the `EXPECTED` classification was reasoned onto the unfinished side because
+*reading it as agreement would merge past a required status that never arrived*. The identical argument
+covers a check that did not run, and it is measured on this repository rather than argued from GitHub's
+vocabulary: no job in `.github/workflows/ci.yml` carries `if:`, `needs:`, `paths:`, `paths-ignore:` or
+`continue-on-error:`, so a skip here cannot mean *legitimately not applicable* — it can only mean the workflow
+changed or the run was interfered with. It SHALL therefore be its own refusal rather than folded into the
+unfinished one, because the operator action differs: an unfinished check is waited for and a skipped one is
+investigated. Where a job legitimately may skip, moving it back to agreement SHALL carry the measurement that
+earns it — which job, and why that skip is evidence.
+
+**A fixture standing for a green suite SHALL carry only agreeing conclusions.** The default rollup fixture
+carried a `SKIPPED` beside a `SUCCESS`, so every success-path direction over this wrapper asserted the
+classification above as an unwritten premise; withdrawing it failed four directions at once, none of them
+about CI. A fixture that encodes the property under test makes the suite agree with itself in place of the
+subject.
+
+All four SHALL be **derived from one read** of the rollup. Asking a separate filter per state makes the
 third unreachable by construction: a pull request with no checks at all produces the empty answer the
 disagreement filter gives for *nothing disagreed* and the zero the unfinished filter gives for *nothing is
 pending*, so neither refuses and the merge runs — the same false-negative direction this requirement exists
@@ -1477,9 +1495,18 @@ carry because it installs a toolchain and rebuilds the workspace.
 
 #### Scenario: A check disagreed
 
-- **WHEN** a pull request carries a check whose conclusion is neither success, neutral, nor skipped
+- **WHEN** a pull request carries a check whose conclusion is a failure, an error, a cancellation, a timeout,
+  or any class this wrapper has not met
 - **THEN** the wrapper refuses as a cannot-judge naming that check, and `gh pr merge` is never reached
 - **PINNED-BY** `a_pull_request_whose_checks_disagree_stops_before_the_merge`
+
+#### Scenario: A check finished and produced no evidence
+
+- **WHEN** a pull request carries a check whose conclusion is neutral or skipped
+- **THEN** the wrapper refuses as a cannot-judge naming that check and saying it produced no evidence — not
+  that it disagreed, and not that it has not finished, since the action a skip asks for is to look at why it
+  did not run rather than to wait
+- **PINNED-BY** `a_check_that_produced_no_evidence_stops_before_the_merge`
 
 #### Scenario: A check has not finished
 

@@ -1172,6 +1172,27 @@ them.
 
 ### Self-governance
 
+- **A skipped check was read as agreement, and the fixture standing for a green suite carried one.**
+  `require_ci_green` classified `NEUTRAL` and `SKIPPED` beside `SUCCESS` with no measurement, while the
+  `EXPECTED` classification was reasoned onto the unfinished side at length — *reading it as agreement would
+  merge past a required status that never arrived*. The identical argument covers a check that did not run: it
+  produced no evidence, so agreement merges past whatever it would have said. Measured on this repository
+  rather than argued from GitHub's vocabulary — no job in `.github/workflows/ci.yml` carries `if:`, `needs:`,
+  `paths:`, `paths-ignore:` or `continue-on-error:`, so a skip here cannot mean *legitimately not applicable*;
+  it can only mean the workflow changed or the run was interfered with.
+
+  **The premise was invisible because a fixture held it.** The default rollup body — the one standing for a
+  green suite, used by every success-path direction over this wrapper — carried a `SKIPPED` beside a
+  `SUCCESS`. So those directions asserted the classification as an unwritten premise, and withdrawing it
+  failed four of them at once, none about CI, each having reached its own subject only because the fixture
+  agreed on the way past. A fixture that encodes the property under test makes the suite agree with itself
+  in place of the subject; `repository-checks` now states that as a requirement.
+
+  Four states rather than three, and the fourth has its own refusal because the operator action differs: an
+  unfinished check is waited for and a skipped one is investigated. Negative run, with only the wrapper
+  reverted: the case fails on `left: Some(0)` against `right: Some(2)` — the old wrapper does not merely
+  misclassify, it reaches `gh pr merge` and returns success.
+
 - **The isolation builder left open the channel that moves which repository git answers about, and the stop
   was declared nowhere.** `hermetic` neutralises git's config files and names `core.excludesFile`, and its own
   table recorded `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` as **not** closed — justified by *nothing in
