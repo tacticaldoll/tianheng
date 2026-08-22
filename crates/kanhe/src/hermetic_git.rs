@@ -40,7 +40,7 @@ pub const EXCLUDES_SETTING: &str = "core.excludesFile";
 /// | global / system config file | yes |
 /// | `$XDG_CONFIG_HOME/git/ignore` | yes — see below; this row read **no** until a gate was found relying on it |
 /// | `GIT_CONFIG_COUNT` + `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` | **yes** — see below; this row read **no** until it was measured |
-/// | `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` | **yes** — cleared, see [`REPOSITORY_SELECTORS`]; this row read **no** until a review asked why a stop nothing declared was policy |
+/// | `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` | **yes** — cleared, see `REPOSITORY_SELECTORS` below; this row read **no** until a review asked why a stop nothing declared was policy |
 /// | `GIT_AUTHOR_NAME` / `GIT_COMMITTER_NAME` and their emails | **no** — they override the fixture's own `.git/config` identity |
 /// | `.git/info/exclude` | **no** — inside the repository, so no config setting reaches it |
 ///
@@ -98,6 +98,11 @@ pub fn hermetic(program: &str) -> Command {
 }
 
 /// The environment variables that move **which repository** `git` answers about, cleared rather than set.
+///
+/// Named rather than linked from [`hermetic`]'s table above, for the reason `region.rs` already states for
+/// its own private `Rule`: this constant is private and that item is public, so an intra-doc link resolves
+/// only under `--document-private-items` and `-D rustdoc::private-intra-doc-links` refuses it. Measured by
+/// CI rather than reasoned about — the first form of that row was a link and failed the doc job.
 ///
 /// Cleared because there is no value that means *the one `current_dir` names* — git's own default is their
 /// absence, so removing them restores discovery from the working directory, which is the property every caller
