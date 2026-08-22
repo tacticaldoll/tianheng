@@ -612,6 +612,17 @@ consumer for an undemonstrated deduplication.
   half a change did is what *A repair loop is a diagnosis* asks for, so it is said here rather than left to
   the next review to re-derive.
 
+  **Two review rounds later the copies still have not diverged, which reads as the trigger not-yet-fired
+  rather than as safe.** Four changes have touched `scripts/merge-pr.sh` since — the exit class, the
+  no-evidence class, a relative anchor, a reflowed comment — and every one landed outside the shared region or
+  was applied to both wrappers in the same commit. Measured at `8604a05`: of `scripts/publish.sh`'s 109
+  executed lines, 66 appear verbatim in its sibling. So the identities agree and the bodies agree, and nothing
+  made either of those happen — a reviewer did. An adversarial review named the consequence precisely: the
+  copies not having diverged is what makes the extraction **cheap now and expensive later**. That is an
+  argument about timing rather than against the reason this stays filed, which is unchanged — it lands at a
+  release cut, in front of the two acts that cannot be undone. Promoting it is the first work of the window
+  after this release rather than the last of this one.
+
 - **WATCH: A branch name is governed by prose alone, and the sentence saying so was wrong about why.**
   *Class:* WATCH. *Observed pressure:* `AGENTS.md` requires `<type>/<scope>-<slug>` with `<type>` drawn from
   the Conventional Commit set, and nothing reads a branch name at any point. Measured over every merged pull
