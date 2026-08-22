@@ -635,6 +635,25 @@ consumer for an undemonstrated deduplication.
   84 historical `change/` branches: a check that refused them would refuse nothing live, but a reader meeting
   it needs to know the rule governs new branches rather than the record.
 
+- **ACCEPTED DEBT: A release date is only held at the snapshot, and an earlier check would be noise.**
+  *Class:* ACCEPTED DEBT. *Observed pressure:* the dated CHANGELOG section for the version under preparation
+  carries a date nothing compares until the `release: X.Y.Z` commit exists. Measured on this repository: the
+  `0.5.0` section stood at `2026-08-16` while the branch tip was six days later, and one earlier release was
+  prepared four days behind its cut. *Observation source:* `release_coherence_gate`'s own comment records the
+  four-day instance, and the six-day one was found by an adversarial review of `v0.4.0..HEAD`.
+  *Current reaction or bound:* `release-coherence#release-date-disagrees-with-its-commit` holds the date
+  against the commit at `State::Snapshot`, so a stale date **cannot reach a release** — it fails the cut and
+  the operator fixes it before retrying. The cost is one failed cut, not a wrong published date.
+  *Risk:* bounded to that retry. *Promotion trigger:* a cut failing on this twice, which would mean the
+  ritual sentence is not being read. *Version class:* patch. *Authority:* `release-coherence`.
+  *Shape, and why the obvious one was declined:* the check could compare the dated section against **HEAD's**
+  date during preparation — a cut happens at or after HEAD, so a date earlier than HEAD is already wrong, and
+  that would have caught both instances the day they appeared. It is declined because preparation spans days:
+  the reaction would turn red on the first commit of every new day and ask for an edit whose value is a
+  guess, which is a refusal that is right at one moment and wrong the rest of the time — the same trade
+  `AGENTS.md` records for the untracked-file guard it declined for the Definition of Done. `AGENTS.md` states
+  the step instead, at the moment the value stops being a guess.
+
 - **WATCH: A commit reaching a `release/*` branch without a pull request meets no CI.** *Class:* WATCH.
   *Observed pressure:* `.github/workflows/ci.yml` triggers on `push` to `main` and on `pull_request`, so a
   commit pushed straight onto a release branch runs no job at all — the branch that every development change
