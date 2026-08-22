@@ -1245,6 +1245,27 @@ them.
   reverted: the case fails on `left: Some(0)` against `right: Some(2)` — the old wrapper does not merely
   misclassify, it reaches `gh pr merge` and returns success.
 
+- **A repair for an undeclared stop left an undeclared stop.** The selector repair recorded that
+  `GIT_OBJECT_DIRECTORY` and `GIT_ALTERNATE_OBJECT_DIRECTORIES` had been measured only against a ref read, and
+  that the object read — the tag body the signature check reconstructs — was *filed rather than guessed at*.
+  Nothing was filed: zero occurrences in `BACKLOG.md`, in any spec, in either register. So a private doc
+  comment was again the only carrier of a stop, which is verbatim the defect that repair had just closed,
+  arriving through the repair for it.
+
+  Measured rather than filed, against two repositories whose tag bodies differ: `GIT_OBJECT_DIRECTORY`
+  **replaces** the object store, so this repository's own tag object goes missing and the command exits 128 —
+  it refuses rather than answering wrongly; `GIT_ALTERNATE_OBJECT_DIRECTORIES` **appends** one, so the local
+  object still answers and nothing moves. Neither is admitted, and both reasons are recorded, because a
+  negative measurement kept is what stops the set growing by resemblance and stops the pair being
+  re-measured every review. Reading a different body through either would need the ref to resolve to an
+  object id whose content differs, and the refs come from this repository because `GIT_DIR` is cleared — so
+  it needs a collision, not a variable.
+
+  `repository-checks` also now carries the direction's own reach: a construction case establishes that the
+  builder marks the variables for removal and cannot establish the composition, since making the variable
+  arrive as it really would needs this process's environment mutated. That residue reads where the register
+  reads rather than only beside the case.
+
 - **The isolation builder left open the channel that moves which repository git answers about, and the stop
   was declared nowhere.** `hermetic` neutralises git's config files and names `core.excludesFile`, and its own
   table recorded `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` as **not** closed — justified by *nothing in
