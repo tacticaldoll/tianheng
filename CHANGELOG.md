@@ -1172,6 +1172,22 @@ them.
 
 ### Self-governance
 
+- **A premise its own gate had falsified sat where an operator reads the branching rule first.**
+  `AGENTS.md` closed *Branching and release* with *Like the self-describing-commit rule above, this is a
+  convention for humans and agents, not a Tianheng boundary or repository check: a branching pattern is not an
+  observable architectural fact, so the drift law keeps it out of the constitution.* The reason given reaches
+  the **constitution** and stops there, while the conclusion also claimed **repository check** — two things
+  this same file distinguishes in so many words, since `crates/kanhe` governs this repository without being
+  the product running on itself. And the comparison had gone stale: `merge_message_gate` refuses a subject
+  carrying `(#N)` and a body that is a bare commit list, which are the two decidable halves of the
+  self-describing rule, so that rule has a gate where its squash instance is concerned while a branch name has
+  none. This is the shape `scripts/merge-pr.sh`'s own header already records paying for — *a premise its own
+  new code had falsified, left standing where an operator reads it first*.
+
+  Repaired to say what the reason supports, with the branch-name question filed rather than answered.
+  Measured for that entry over every merged pull request into `release/0.5.0`: 84 head branches open with
+  `change/`, the role `AGENTS.md` records as retired, and seven carry no `/` at all.
+
 - **Thirteen closed entries sat under headings a reader consults to ask what is left to do.**
   `BACKLOG.md`'s governance says a closed item *leaves the live class it was filed under; it does not stay
   there struck through*, and gives the reason — *a class heading is read as a queue and an entry that carries a

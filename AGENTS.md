@@ -643,9 +643,21 @@ release preparation—and at the exact `release: X.Y.Z` snapshot—the dated CHA
 internal pins, and every workspace package entry in `Cargo.lock` must all name that version. The
 check is read-only and needs full git history; it never bumps, commits, tags, or publishes.
 
-Like the self-describing-commit rule above, this is a convention for humans and agents, not a
-Tianheng boundary or repository check: a branching pattern is not an observable architectural fact, so the drift law
-keeps it out of the constitution.
+A branching pattern is not an observable architectural fact, so the drift law keeps it out of the
+constitution: it is a convention for humans and agents rather than a Tianheng boundary.
+
+**That reason reaches the constitution and stops there, and this sentence used to carry it one word
+further.** It read *not a Tianheng boundary or repository check*, comparing itself to the
+self-describing-commit rule above — and the two halves are different things this file distinguishes in so
+many words: `crates/kanhe` holds hand-written `cargo test` gates that govern this repository without being
+the product running on itself, so *a claim about one is not a claim about the other*. The comparison had
+also gone stale. `merge_message_gate` refuses a subject carrying `(#N)` and a body that is a bare list of
+commit subjects — the two decidable halves of *not an issue/PR number as a crutch* and *understand the
+change from the message alone* — so that rule has a repository check where its squash instance is
+concerned, while a branch name has none anywhere. A premise a file's own new code has falsified, left where
+an operator reads it first, is the shape the merge wrapper's header already records paying for.
+
+Whether a branch name should acquire one is filed in `BACKLOG.md` rather than answered here.
 
 ## Self-governance — don't weaken the law to make CI pass
 
