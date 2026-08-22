@@ -1604,6 +1604,41 @@ one. What this requirement holds is membership.
 - **THEN** the check fails, because a name that outlives its reason certifies nothing
 - **PINNED-BY** `no_test_target_spawns_a_process_unnamed`
 
+### Requirement: A judgement SHALL close the ambient channel that moves which repository git answers about
+
+The shared command builder SHALL clear `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE`, so a judgement's reads
+are about the repository its working directory names. These are not an ignore channel and the difference is
+the severity: an ignore file changes **an answer**, while a repository selector changes **the subject** — the
+`HEAD` subject, the worktree's cleanliness and the release tag all come from whatever repository the variable
+names, while the act the gate stands in front of packages the directory on disk. The gate and the act are then
+about two different trees, before an upload that can be yanked and never replaced.
+
+They SHALL be **cleared** rather than set: git's own default is their absence, so removing them restores
+discovery from the working directory, and there is no value meaning *the one this process chose*.
+
+**The set SHALL be what measurement admits rather than every `GIT_*` git defines.** Measured against two
+repositories whose `HEAD` subjects and tags differ: with `GIT_DIR` naming the second, `log -1 --format=%s` and
+`for-each-ref refs/tags` both answer it; with `GIT_WORK_TREE` naming it, `status --porcelain` reports that
+tree against this index. `GIT_NAMESPACE` was measured in the same run and `for-each-ref refs/tags` still
+answered this repository, so it is **not** in the set — an entry that closes nothing reads as a defence that
+was never there.
+
+**A stop that is not declared is a defect rather than policy, which is how this requirement came to exist.**
+The builder left these open and said so in a doc-comment table, with the justification *nothing in this tree
+sets them — zero occurrences, repository-wide*. That corpus cannot decide it: the channel is ambient, so the
+variable arrives from outside the tree the sweep read — the reader-narrower-than-its-claim shape this
+repository spends four rules closing, in the justification for leaving a channel open. No
+`openspec/specs/*` scenario carried the stop either, so it reached neither observation register, and a
+reader following this repository's own instruction to check the register before reporting a behaviour as a
+defect would have found nothing.
+
+#### Scenario: The builder stops clearing a repository selector
+
+- **WHEN** the shared command builder no longer clears `GIT_DIR`, `GIT_WORK_TREE` or `GIT_INDEX_FILE`
+- **THEN** the case fails naming the selector, having first demonstrated on an unisolated control that the
+  variable does move the subject — so the assertion cannot hold because the key was never readable
+- **PINNED-BY** `a_repository_selector_cannot_reach_a_hermetic_command`
+
 ### Requirement: A judgement SHALL close the ambient channel of any read whose answer an ignore file changes
 
 A repository check SHALL name `core.excludesFile` as neutralised whenever it runs a git subcommand whose
