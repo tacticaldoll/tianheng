@@ -1429,9 +1429,8 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
         // A column-0 comment inside the block: the round-3 defect, kept as a row so it cannot come back.
         (
             "a column-0 comment does not end the block",
-            format!(
-                "name: ci\n\njobs:\n  alpha:\n    name: A\n# --- divider ---\n  beta:\n    name: B\n    if: x\n"
-            ),
+            "name: ci\n\njobs:\n  alpha:\n    name: A\n# --- divider ---\n  beta:\n    name: B\n    if: x\n"
+                .to_string(),
             2,
             1,
         ),
