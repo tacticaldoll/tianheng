@@ -31,24 +31,6 @@ usage() {
     printf '  The subject defaults to the pull request title, which is what the rule requires anyway.\n' >&2
 }
 
-pr=${1:-}
-if [[ -z $pr || $pr == -* ]]; then
-    usage
-    exit 2
-fi
-# A URL names its own repository, and this wrapper reads its evidence from several places. `gh pr view` and
-# `gh pr merge` would follow the URL while the live-commits endpoint is built from a repository reference of its
-# own — so a cross-repository URL has the gate judge one pull request and the merge record another, which is the
-# same hole a `--repo` flag opened and this positional selector reopens. A number or a branch name names no
-# repository and resolves against the one being pinned below, so both stay accepted.
-if [[ $pr == http://* || $pr == https://* ]]; then
-    printf 'merge message: %s\n' \
-        "refusing a pull-request URL: it names its own repository, while this wrapper reads the live commit \
-set from the repository it is run in. Pass the number, or run it from a checkout of that repository" >&2
-    exit 2
-fi
-shift
-
 # --- the two exit classes, chosen in one place ------------------------------------------------------------
 #
 # `2` is everything this wrapper could not judge: a misconfigured invocation, and an input it could not read.
@@ -64,21 +46,51 @@ shift
 # what its own gate calls unjudgeable — telling an operator, in the words of the sibling publish gate, "to go
 # looking for a disagreement that does not exist".
 #
-# Chosen here rather than at each site because the split survived precisely by being spelled out twenty times.
 cannot_judge() {
     printf 'merge message: %s\n' "$1" >&2
     exit 2
 }
 
-# **The classification is chosen in one place, which its governing clause requires and this wrapper did not
-# do.** Its argument arms each spelled `printf … >&2; exit 2` inline while its sibling routed every one
-# through a helper of exactly this shape. `repository-checks` says the class SHALL be chosen once per
-# wrapper, and two wrappers growing separate idioms for one lifecycle is the drift a review found by reading
-# them side by side.
+# The refusal idiom, delegating the class to the function above rather than choosing it again.
+#
+# **Converging the `case` arms onto this helper left four sites behind, and two of them predated it.** The
+# positional selector and the body-file guard exited through a bare `usage; exit 2` carrying none of the
+# prefix above; the URL refusal hand-copied that function's body because both helpers were defined below it;
+# and `require_value` re-spelled it fifty-nine lines after it. Every stop now delegates, and what decides that
+# is `each_wrapper_chooses_its_exit_class_in_one_place` rather than the next reader — a helper's existence was
+# never the property, since three of those four sites were written with it in scope.
 refuse() {
-    printf 'merge message: %s\n' "refusing \`$1\`: $2" >&2
-    exit 2
+    cannot_judge "refusing \`$1\`: $2"
 }
+
+# A misconfigured invocation: the same class, plus the usage line, since what the operator needs here is the
+# shape of the call rather than a fact about the pull request.
+#
+# `usage` runs BEFORE the message because the delegate exits; the reason is stated rather than left as an
+# ordering someone later reads as arbitrary, and it puts the cause on the last line where a terminal shows it.
+usage_error() {
+    usage
+    cannot_judge "$1"
+}
+
+pr=${1:-}
+if [[ -z $pr ]]; then
+    usage_error "this wrapper takes the pull request as its first positional argument, and none was given"
+fi
+if [[ $pr == -* ]]; then
+    usage_error "the first argument is the pull request, not a flag; \`$pr\` reads as one"
+fi
+# A URL names its own repository, and this wrapper reads its evidence from several places. `gh pr view` and
+# `gh pr merge` would follow the URL while the live-commits endpoint is built from a repository reference of its
+# own — so a cross-repository URL has the gate judge one pull request and the merge record another, which is the
+# same hole a `--repo` flag opened and this positional selector reopens. A number or a branch name names no
+# repository and resolves against the one being pinned below, so both stay accepted.
+if [[ $pr == http://* || $pr == https://* ]]; then
+    refuse "$pr" \
+        "a pull-request URL names its own repository, while this wrapper reads the live commit set from the \
+repository it is run in. Pass the number, or run it from a checkout of that repository"
+fi
+shift
 
 # **The class a wrapper exits is now decided by construction, not by a sweep that must be exhaustive.**
 #
@@ -136,11 +148,8 @@ passthrough=()
 # arithmetic from becoming the diagnostic.
 require_value() {
     if (($1 < 2)); then
-        printf 'merge message: %s\n' \
-            "refusing \`$2\` with no value: this wrapper reads every value as the argument after its flag, so \
-pass it that way or drop the flag" >&2
-        usage
-        exit 2
+        usage_error "refusing \`$2\` with no value: this wrapper reads every value as the argument after its \
+flag, so pass it that way or drop the flag"
     fi
 }
 
@@ -266,8 +275,8 @@ passed on, because the record it stands in front of cannot be repaired"
 done
 
 if [[ -z $body_file ]]; then
-    usage
-    exit 2
+    usage_error "the squash body is what the gate judges and what the merge records, so \`--body-file\` is \
+required rather than defaulted"
 fi
 if [[ ! -f $body_file ]]; then
     cannot_judge "cannot read the body file $body_file"

@@ -432,6 +432,69 @@ fn read(root: &Path, path: &str) -> String {
 ///
 /// A channel has no delimiter to forget. Two scalars travel: the variable name and the class spelling, and both
 /// are compared here against the module the gates call.
+/// A wrapper chooses its exit class in **one place**, which is a count rather than a reading.
+///
+/// `repository-checks` requires the classification to be chosen once per wrapper rather than at each site, and
+/// nothing held it: the class constants and `require_one_pass` were compared across both wrappers, so the
+/// **identities** could not drift while the **sites** could. `scripts/merge-pr.sh` grew four of them — the
+/// positional selector, the URL refusal, `require_value` and the body-file guard — two of which predated the
+/// helper they should have called, and a review found them by reading the two wrappers side by side.
+///
+/// **An `exit` statement IS the choice**, so counting them decides the property that reading them used to.
+/// Exactly two may say `exit 2`: the one class helper every refusal delegates to, and the gate's own verdict
+/// arm, which must distinguish a gate that refused from a run that reached no verdict. Exactly one may say
+/// `exit 1`, and it is that same arm — the sole site this repository's contract permits the violation class.
+///
+/// Executed text, because both wrappers' comments now discuss `exit 2` in prose, and a check that read the
+/// whole file would count the sentence describing the rule as an instance of breaking it.
+///
+/// **What this does not reach**, stated rather than left to be discovered: a refusal spelled `return` inside a
+/// function whose caller then exits, and a class chosen by an unguarded command's own status. The second is
+/// what the ERR trap and `every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class` below already
+/// close; the first has no instance in either wrapper and would need block structure to see.
+#[test]
+fn each_wrapper_chooses_its_exit_class_in_one_place() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    for wrapper in WRAPPERS {
+        let text = read(&root, wrapper);
+        let source = Source::of(text);
+        let executed = source.shell();
+        let mut sites: Vec<(usize, &str)> = Vec::new();
+        for (number, line) in executed.numbered_lines() {
+            let trimmed = line.trim();
+            if trimmed == "exit 1" || trimmed == "exit 2" {
+                sites.push((number, trimmed));
+            }
+        }
+        let shown = || {
+            sites
+                .iter()
+                .map(|(n, l)| format!("  {wrapper}:{n}: {l}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let unjudged = sites.iter().filter(|(_, l)| *l == "exit 2").count();
+        let violation = sites.iter().filter(|(_, l)| *l == "exit 1").count();
+        assert_eq!(
+            unjudged,
+            2,
+            "{wrapper} chooses the unjudged class at {unjudged} sites; exactly two may — the one class helper \
+             every refusal delegates to, and the gate's own verdict arm. Route the extras through that helper \
+             rather than spelling `printf … >&2; exit 2` again:\n{}",
+            shown()
+        );
+        assert_eq!(
+            violation,
+            1,
+            "{wrapper} chooses the violation class at {violation} sites; exactly one may, and it is the gate's \
+             own verdict arm — every other stop is a fact this wrapper could not judge:\n{}",
+            shown()
+        );
+    }
+}
+
 #[test]
 fn each_wrapper_uses_the_channel_the_gates_report_on() {
     let Some(root) = workspace_root() else {

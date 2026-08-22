@@ -534,6 +534,74 @@ fn a_value_taking_flag_with_no_value_is_named_and_refused() {
     }
 }
 
+/// Every **usage** refusal carries this wrapper's own diagnostic form, and none is a bare `usage; exit 2`.
+///
+/// **Two of them were exactly that**, printing none of the `merge message:` prefix every other refusal in the
+/// file carries — so an operator, or a log filter keyed on that prefix, lost the two refusals that fire on the
+/// commonest misinvocations: no pull request at all, and no body file. Neither had a direction of any kind,
+/// which is why the flag-value refusal above was converged and these two were not: a defect nothing observes
+/// is repaired only when someone happens to read the file.
+///
+/// **A table rather than three cases, so the description IS the run.** A stop added to the wrapper later lands
+/// here as a row instead of as a finding in the next review — which is what `AGENTS.md` asks for in place of a
+/// comment enumerating what a check decides.
+///
+/// The URL selector is deliberately **not** a row: it has its own direction below, which asserts the same
+/// pair over a claim this table does not make. A second assertion of one fact is the shape this repository
+/// removes rather than the coverage it reads as.
+///
+/// No controlled `PATH`: every row refuses before the wrapper reaches `gh` or its gate. It is **not** true
+/// that they refuse before any process runs — the body-file row is decided after the worktree comparison, so
+/// it spawns `git` and requires this process's directory to sit inside the repository, which
+/// `workspace_root` above has already established. Said exactly, because a claim one step wider is what the
+/// wrapper under test is being repaired for.
+#[test]
+fn every_usage_refusal_carries_the_wrappers_own_diagnostic() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    // The arguments, and a phrase the refusal must name so a row cannot pass on the prefix alone.
+    let shapes: [(&[&str], &str); 3] = [
+        (&[], "first positional argument"),
+        (&["--subject"], "not a flag"),
+        (&["42"], "--body-file"),
+    ];
+    // **No vacuity guard, and the difference from its neighbours is the reason.** The sweeps in this crate
+    // guard one because their corpus is *scanned* — a rename takes the last subject out of reach and the
+    // direction reports clean over nothing. This table is a literal whose length is in its own type, so an
+    // empty one is something a person wrote rather than a side effect of touching something else, and
+    // `clippy::const_is_empty` refuses the assertion as a constant expression besides.
+    for (args, phrase) in shapes {
+        let output = Command::new("bash")
+            .arg(root.join("scripts/merge-pr.sh"))
+            .args(args)
+            .output()
+            .expect("run the wrapper on a misconfigured invocation");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "{args:?} is a misconfigured invocation, which is the unjudged class rather than a gate's \
+             disagreement; got {:?} with stderr {stderr:?}",
+            output.status.code()
+        );
+        assert!(
+            stderr.contains("merge message:"),
+            "{args:?} must refuse in this wrapper's own diagnostic form rather than a bare `usage; exit 2`, \
+             got {stderr:?}"
+        );
+        assert!(
+            stderr.contains("usage:"),
+            "{args:?} must show the usage the operator needs, got {stderr:?}"
+        );
+        assert!(
+            stderr.contains(phrase),
+            "{args:?} must say which input is missing — expected the refusal to name {phrase:?}, got \
+             {stderr:?}"
+        );
+    }
+}
+
 /// A repository selector is refused **before** any evidence is read.
 ///
 /// The hole it closes: the title, the canonical pull-request number, the live commit subjects and the gate are
