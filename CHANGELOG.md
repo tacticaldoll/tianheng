@@ -1224,6 +1224,26 @@ them.
   `projection-register` records about a check whose subject is text. The list is now the single owner and the
   prose does not restate it.
 
+- **Entering a block and reading it were treated as exclusive, and that one was open.** The reader set its
+  scope from a top-level key and moved to the next line, so the rest of that line was seen by nothing — and
+  YAML's flow form puts the whole block there. Measured: with `on: {push: {paths: ['src/**']}}` the direction
+  reported the premise intact over a workflow carrying a real path filter, while `require_ci_green` went on
+  telling an operator that no job here can legitimately skip.
+
+  **This is the first of the reader's defects that failed open.** The depth assumptions and the scope
+  assumption each refused too much — a false refusal an operator meets and argues with. This one refuses too
+  little, silently, which is the direction the whole guard exists to close. Narrow: `on: [push, pull_request]`
+  is the common flow form and carries no filter, and GitHub's own documentation shows the block form for
+  `paths`. Narrow and open is still open.
+
+  **The job side keeps the asymmetry deliberately.** A flow-form `jobs: {alpha: {…}}` leaves no line ending in
+  a colon at the name depth, so no job is found and the set equality says so — measured, `missing
+  ["examples"]`. Reading that line the same way would turn a loud failure into a quiet pass unless the flow
+  body were parsed, which is a YAML parser rather than a line reader. It is pinned as a fixture row so the
+  asymmetry is on record rather than an omission someone later closes into silence.
+
+  Thirteen fixture rows now, five of which assert no reaction.
+
 - **The last of the reader's three assumptions about the file was a content claim, not a width.** Two were
   indentation and are gone; the third read `paths:` and `paths-ignore:` at any depth on any line, before the
   position gate the other three keys pass through, justified as *those two keys have no other meaning anywhere
