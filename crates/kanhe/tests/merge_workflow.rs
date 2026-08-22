@@ -3,6 +3,7 @@
 //! The wrapper gathers evidence and orders external commands; the message verdict remains in
 //! `merge_message.rs`. These directions replace `gh` and `cargo`, so no network call or merge can occur.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1388,11 +1389,23 @@ fn a_pull_request_no_workflow_has_claimed_stops_before_the_merge() {
     );
 }
 
-/// A pull request whose checks have not finished stops too, and for a different reason.
+/// The jobs `.github/workflows/ci.yml` declares, held against what the reader finds in both directions.
 ///
-/// **Three states, and the middle one is why a boolean would not do.** A run still in flight is not a run
-/// that failed; merging on *not success* would refuse a pull request nobody has answered yet, and merging on
-/// *not failure* would merge one nobody has answered yet. The wrapper says which of the two it met.
+/// A literal beside an enumerator, which `AGENTS.md` admits exactly where something downstream filters on the
+/// claim: *the literal is not a weakening here; it is what gives the enumerator something to disagree with*.
+/// A new job lands here after someone has looked at whether it can skip — which is the question this whole
+/// direction is about, asked at the one moment the answer is free.
+const JOBS: [&str; 8] = [
+    "dod",
+    "examples",
+    "license-files",
+    "msrv",
+    "packaged-selftest",
+    "reaction",
+    "release-coherence",
+    "supply-chain",
+];
+
 /// The premise the no-evidence refusal rests on, held against the workflow that has to keep it true.
 ///
 /// **The classification and the diagnostic both filter on this claim, and nothing held it.** The wrapper
@@ -1409,9 +1422,23 @@ fn a_pull_request_no_workflow_has_claimed_stops_before_the_merge() {
 /// moves a job to `SKIPPED` is a key on the job itself, or a workflow-level path filter — so those are what
 /// this reads.
 ///
-/// The count guards vacuity in the shape the indentation rule can actually lose: a renamed `jobs:` block or a
-/// re-indented file yields zero jobs, and zero jobs satisfy "none of them carries a forbidden key" while
-/// having read nothing.
+/// **The guard is a set equality, because a count guarded only total loss.** The first form asserted the
+/// reader had found *some* job, which catches a read that found nothing and cannot catch one that found
+/// **fewer** — and this reader could lose jobs three ways: `in_jobs` was cleared by any column-0 non-empty
+/// line, a section comment included, so one `# …` inside the block latched it off for the rest of the file;
+/// a job indented other than two spaces is not counted; a job key at other than four is not read.
+///
+/// Reproduced against the real workflow rather than reasoned about. With an `if:` on the last job the
+/// direction fires. With that same `if:` **and one column-0 comment after the first job header** it read one
+/// job, found nothing, and **passed** — while `require_ci_green` went on telling an operator that no job here
+/// can legitimately skip. That is the failure this direction exists to prevent, arriving one layer up: a
+/// reader narrower than its claim, inside the guard for a claim.
+///
+/// So the names are read and held against [`JOBS`] **both ways**, which is the form `AGENTS.md` prescribes
+/// for a claim something downstream filters on — *the literal is not a weakening here; it is what gives the
+/// enumerator something to disagree with*. A narrowed read now names what it lost. The latch is repaired as
+/// well rather than left for the equality to catch, because a diagnostic naming two missing jobs is more use
+/// than one naming eight.
 #[test]
 fn no_workflow_job_can_legitimately_skip() {
     let Some(root) = workspace_root() else {
@@ -1426,11 +1453,16 @@ fn no_workflow_job_can_legitimately_skip() {
     const ON_THE_JOB: [&str; 3] = ["if:", "needs:", "continue-on-error:"];
     const ANYWHERE: [&str; 2] = ["paths:", "paths-ignore:"];
 
-    let mut jobs = 0usize;
+    let mut found: BTreeSet<String> = BTreeSet::new();
     let mut carried: Vec<String> = Vec::new();
     let mut in_jobs = false;
     for (index, line) in text.lines().enumerate() {
-        if !line.starts_with([' ', '\t']) && !line.trim().is_empty() {
+        let indented = line.starts_with([' ', '\t']);
+        let structural = !line.trim().is_empty() && !line.trim_start().starts_with('#');
+        // A blank line and a column-0 comment end nothing — only a real top-level key does. The first form
+        // cleared the flag on any column-0 non-empty line, so one section divider inside the block hid every
+        // job after it.
+        if !indented && structural {
             in_jobs = line.starts_with("jobs:");
             continue;
         }
@@ -1445,7 +1477,7 @@ fn no_workflow_job_can_legitimately_skip() {
         }
         // Two spaces names a job; four is one of its own keys. Deeper is a step's.
         if line.starts_with("  ") && !line.starts_with("   ") && line.trim_end().ends_with(':') {
-            jobs += 1;
+            found.insert(line.trim().trim_end_matches(':').to_string());
         }
         if line.starts_with("    ") && !line.starts_with("     ") {
             if let Some(key) = ON_THE_JOB
@@ -1457,11 +1489,17 @@ fn no_workflow_job_can_legitimately_skip() {
         }
     }
 
-    assert!(
-        jobs > 0,
-        "no job was read out of {}, so this direction would report the premise held over a file it never \
-         parsed — the `jobs:` block or its indentation has moved, not the property",
-        workflow.display()
+    let declared: BTreeSet<String> = JOBS.iter().map(|job| (*job).to_string()).collect();
+    assert_eq!(
+        found,
+        declared,
+        "the jobs read out of {} are not the jobs this direction is declared over, so it judged a corpus \
+         other than the one it names — missing {:?}, unexpected {:?}. A read that loses jobs satisfies \
+         `none of them carries a forbidden key` over whatever it happened to reach: add a new job to `JOBS` \
+         after checking whether it can skip, or find what stopped the reader",
+        workflow.display(),
+        declared.difference(&found).collect::<Vec<_>>(),
+        found.difference(&declared).collect::<Vec<_>>()
     );
     assert!(
         carried.is_empty(),
@@ -1532,6 +1570,11 @@ fn a_check_that_produced_no_evidence_stops_before_the_merge() {
     );
 }
 
+/// A pull request whose checks have not finished stops too, and for a different reason.
+///
+/// **Three states, and the middle one is why a boolean would not do.** A run still in flight is not a run
+/// that failed; merging on *not success* would refuse a pull request nobody has answered yet, and merging on
+/// *not failure* would merge one nobody has answered yet. The wrapper says which of the two it met.
 #[test]
 fn a_pull_request_whose_checks_have_not_finished_stops_before_the_merge() {
     let Some(root) = workspace_root() else {
