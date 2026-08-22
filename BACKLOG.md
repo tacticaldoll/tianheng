@@ -612,6 +612,29 @@ consumer for an undemonstrated deduplication.
   half a change did is what *A repair loop is a diagnosis* asks for, so it is said here rather than left to
   the next review to re-derive.
 
+- **WATCH: A branch name is governed by prose alone, and the sentence saying so was wrong about why.**
+  *Class:* WATCH. *Observed pressure:* `AGENTS.md` requires `<type>/<scope>-<slug>` with `<type>` drawn from
+  the Conventional Commit set, and nothing reads a branch name at any point. Measured over every merged pull
+  request into `release/0.5.0`: **84 head branches open with `change/`** — the role `AGENTS.md` itself records
+  as retired — and **seven carry no `/` at all** (`release-prep`, `refusal-register-reads-rust-not-text`,
+  `docs-agents-bind-a-claim-to-its-measurement` among them), against 180 `fix/`, 69 `docs/`, 17 `test/`,
+  10 `feat/`, 9 `refactor/`, 2 `ci/` and 1 `build/`. Those are history and cannot be repaired; what they
+  measure is that the convention drifts unobserved, which is the condition under which `AGENTS.md` says a
+  governance rule *is read as license rather than law*. *Observation source:* measured at `94a42fb` by
+  `gh pr list --state merged --base release/0.5.0 --json headRefName`. *Current reaction or bound:* none. The
+  sentence that declined one has been repaired in the same change for a different fault — it gave the
+  constitution's reason for a repository check's conclusion, and compared itself to a rule that has since
+  acquired a gate — so the decision is now open rather than settled by a premise that did not hold.
+  *Risk:* low and bounded, since a branch name reaches no artifact and no adopter; the cost is that the type a
+  branch declares and the type its squash lands as can disagree, which is the disagreement the naming rule
+  exists to prevent. *Promotion trigger:* a squash whose subject type differs from its branch's, or a second
+  retired role accumulating. *Version class:* patch; no crate is touched. *Authority:* `repository-checks`.
+  *Shape:* `scripts/merge-pr.sh` already resolves the pull request and could read `headRefName` beside the
+  title it re-reads, and `merge_message_gate` already owns the admitted type set — so the judgement is one
+  comparison against a list that exists, not a new vocabulary. What it needs first is a decision about the
+  84 historical `change/` branches: a check that refused them would refuse nothing live, but a reader meeting
+  it needs to know the rule governs new branches rather than the record.
+
 - **WATCH: A commit reaching a `release/*` branch without a pull request meets no CI.** *Class:* WATCH.
   *Observed pressure:* `.github/workflows/ci.yml` triggers on `push` to `main` and on `pull_request`, so a
   commit pushed straight onto a release branch runs no job at all — the branch that every development change
