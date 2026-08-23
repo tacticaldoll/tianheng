@@ -40,6 +40,133 @@ fn the_global_config_file_cannot_reach_a_hermetic_command() {
     );
 }
 
+/// The probe half of [`no_ambient_configuration_reaches_a_hermetic_command`], reached as a child process.
+///
+/// It exists because the variables under test have to arrive by **inheritance**. Setting one on the builder's
+/// own [`Command`] would overwrite the removal and test the case's last statement; mutating this process's
+/// environment is unsafe in this edition and racy against a parallel run. A child inherits, so the parent
+/// sets the ambient environment and this runs `hermetic` inside it.
+///
+/// Returns without doing anything unless the parent asked, so the ordinary suite pays nothing for it.
+#[test]
+fn hermetic_configuration_probe() {
+    let Some(repo) = std::env::var_os("KANHE_HERMETIC_PROBE_REPO") else {
+        return;
+    };
+    let out = hermetic("git")
+        .args(["config", "--list", "--show-origin"])
+        .current_dir(std::path::Path::new(&repo))
+        .output()
+        .expect("run git config under the builder");
+    println!(
+        "PROBE_BEGIN\n{}PROBE_END",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
+
+/// No configuration reaches a hermetic command but this builder's own — asked of the run, not of a list.
+///
+/// **Three rounds widened this builder by name, and a name list is as complete as the last person's memory.**
+/// The config files went first, then the repository selectors, then the object-directory pair — each added
+/// after someone measured it. `GIT_CONFIG_PARAMETERS` was in none of them: it is a channel parallel to
+/// `GIT_CONFIG_COUNT`, so occupying index 0 does nothing to it, and git **exports it itself** under any
+/// `git -c …`, which reaches a gate run from a hook, an alias or `bisect run`. Measured, it moved
+/// `status --porcelain --untracked-files=all` into hiding an excluded file — the read
+/// `publish-source-integrity#worktree-is-not-clean` rests on.
+///
+/// So this asks the question the other way round. It sets an ambient environment, runs the builder in a child
+/// that inherits it, and requires that every **`command line:`** entry git reports be one this builder wrote.
+/// A channel nobody has named shows up as an extra line rather than as the next review's finding.
+///
+/// `file:` origins are the fixture's own `.git/config` and are not this builder's subject — it empties the
+/// global and system files and does not claim to govern the repository's own.
+#[test]
+fn no_ambient_configuration_reaches_a_hermetic_command() {
+    let root = std::env::temp_dir().join(format!("kanhe-hermetic-config-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("create the fixture root");
+    for args in [
+        vec!["init", "-q", "."],
+        vec!["config", "user.email", "t@example.invalid"],
+        vec!["config", "user.name", "t"],
+    ] {
+        assert!(
+            hermetic("git")
+                .args(&args)
+                .current_dir(&root)
+                .output()
+                .expect("run git")
+                .status
+                .success()
+        );
+    }
+
+    // Two settings on the ambient channel, and **neither is the ignore setting**, deliberately. The sibling
+    // sweep `no_judgement_reads_an_ambient_ignore_file` decides whether a file closed that channel by
+    // whether the file *names* the setting — a criterion its own requirement states — so writing the name
+    // here as an attack string would read as this file having neutralised it, and would take the
+    // channel-control exception with it. Measured: it does, and the sweep says so.
+    //
+    // Nothing is lost. The builder's defence against the indexed channel is occupying the count, and this
+    // channel bypasses the count whatever key it carries; the assertion below requires every reported
+    // `command line:` entry to be the builder's, so any setting at all is enough to fail it.
+    let ambient = "'user.name=ambient-probe' 'core.fileMode=false'";
+
+    // The control: the same channel, no builder. Without this the assertion below could hold because the
+    // variable was never readable on this machine.
+    let control = Command::new("git")
+        .args(["config", "--list", "--show-origin"])
+        .env("GIT_CONFIG_PARAMETERS", ambient)
+        .current_dir(&root)
+        .output()
+        .expect("run the control");
+    let control = String::from_utf8_lossy(&control.stdout).into_owned();
+
+    // The subject: a child of this test binary, inheriting the ambient environment, running the builder.
+    let probe = Command::new(std::env::current_exe().expect("this test binary"))
+        .args([
+            "--exact",
+            "tests::hermetic_git::hermetic_configuration_probe",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env("GIT_CONFIG_PARAMETERS", ambient)
+        .env("KANHE_HERMETIC_PROBE_REPO", &root)
+        .output()
+        .expect("run the probe child");
+    let probe = String::from_utf8_lossy(&probe.stdout).into_owned();
+    let reported = probe
+        .split_once("PROBE_BEGIN\n")
+        .and_then(|(_, rest)| rest.split_once("PROBE_END"))
+        .map(|(body, _)| body.to_string())
+        .unwrap_or_else(|| panic!("the probe child produced no reading:\n{probe}"));
+
+    std::fs::remove_dir_all(&root).ok();
+
+    assert!(
+        control.contains("ambient-probe"),
+        "the control did not read the ambient channel, so the assertion below would hold for the wrong \
+         reason:\n{control}"
+    );
+    let from_command_line: Vec<&str> = reported
+        .lines()
+        .filter(|line| line.starts_with("command line:"))
+        .collect();
+    assert!(
+        !from_command_line.is_empty(),
+        "the builder's own setting is not among what git reported, so this read is not about the builder:\n\
+         {reported}"
+    );
+    for line in &from_command_line {
+        assert!(
+            line.contains("core.excludesfile=/dev/null"),
+            "a configuration reached a hermetic command that this builder did not write: {line:?}. Whatever \
+             channel carried it is open for every caller — close it in `hermetic` beside `CONFIG_CHANNELS`, \
+             and keep this case as the thing that found it:\n{reported}"
+        );
+    }
+}
+
 /// The repository-selector row of [`hermetic`]'s table, in the two halves this one can be built in.
 ///
 /// **The channel is real, and that half is a behaviour case.** `GIT_DIR` reaches past `current_dir` entirely:

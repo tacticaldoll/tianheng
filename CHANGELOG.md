@@ -1224,6 +1224,32 @@ them.
   `projection-register` records about a check whose subject is text. The list is now the single owner and the
   prose does not restate it.
 
+- **A configuration channel parallel to the one the builder occupies was open for every caller.**
+  `hermetic` empties git's config files, occupies index 0 of `GIT_CONFIG_COUNT` — which is what closes the
+  indexed channel and, through it, the ignore channel — and clears the three repository selectors.
+  `GIT_CONFIG_PARAMETERS` is none of those: git parses it independently of the count, so occupying index 0
+  does nothing to it.
+
+  Measured on git 2.53.0 against the builder's full environment: `'core.excludesFile=/tmp/x'` on that channel
+  makes `config --get core.excludesFile` answer `/tmp/x`, and `status --porcelain --untracked-files=all` stops
+  reporting a file that path excludes — **the read `publish-source-integrity#worktree-is-not-clean` rests on**,
+  in front of an upload that can be yanked and never replaced. And it is ambient in the ordinary sense: git
+  exports it itself, measured — a `pre-commit` hook under `git -c probe.key=SET commit` sees
+  `GIT_CONFIG_PARAMETERS=['probe.key'='SET']`, and sees it unset without the `-c`.
+
+  **The list was the defect, not the missing name.** Three rounds widened this builder by name — the config
+  files, the selectors, the object pair — each after someone measured that variable, and a list grown that way
+  is as complete as the last person's memory. `no_ambient_configuration_reaches_a_hermetic_command` asks the
+  other way round: it runs the builder in a **child that inherits** an ambient environment and requires every
+  configuration git reports from the command line to be one the builder wrote. A channel nobody has named
+  shows up as an extra line. Inheritance is the delivery because setting the variable on the builder's own
+  command would overwrite the removal and test the case's last statement.
+
+  One interaction worth recording: the ambient settings deliberately do **not** name `core.excludesFile`. The
+  sibling ignore sweep decides whether a file closed that channel by whether the file names the setting, so an
+  attack string spelling it reads as this file having neutralised it — and takes the channel-control exception
+  down with it. Measured; the sweep says so.
+
 - **A refused flag reached `cargo publish` by sitting in the one selector the wrapper admits.** The
   `--package` arm checked that *something* followed and nothing else, and cargo does not consume a
   flag-shaped value. Measured on cargo 1.96.0: `cargo publish --package --no-verify` packages **without
