@@ -1224,6 +1224,24 @@ them.
   `projection-register` records about a check whose subject is text. The list is now the single owner and the
   prose does not restate it.
 
+- **The severity that repair set was right for three keys and rested on a file count for two.** Withdrawing
+  the false-negative framing said *a job acquiring `if:` reports `SKIPPED`, the silent arm refuses, nothing
+  reaches a merge either way*. True for `if:`, `needs:` and `continue-on-error:`, which move a **check's
+  conclusion**. `paths:` and `paths-ignore:` work the other way: a workflow-level filter stops the workflow
+  **triggering**, so its checks are absent from the rollup rather than reported skipped.
+
+  That still refuses today, and by arithmetic rather than design — `ci.yml` is the only file in
+  `.github/workflows/`, so a workflow that does not trigger leaves the rollup empty and the *no workflow has
+  claimed this head* arm stops the merge. Add a second workflow and a filtered-out `ci.yml` contributes
+  nothing to a rollup the other makes non-empty and green: the merge proceeds with none of its checks having
+  run, and a missed `paths:` filter is a false negative again.
+
+  So a claim about the wrapper was resting on the number of files in a directory — in the paragraph that
+  prices everything else. The severity is split per mechanism where the keys are declared, and the count is
+  held by `a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists` rather than assumed:
+  `.github/workflows/` gaining a second file fails, naming what changes and where the severity is stated.
+  `BACKLOG.md`'s promotion trigger becomes that second file rather than a sixth position in the reader.
+
 - **A refusal asserted a fact about the tree, and holding that fact cost seven review rounds.** The
   no-evidence refusal told an operator *no job in this repository's workflow carries `if:`, `needs:`, `paths:`
   or `continue-on-error:`* — true when written, false the moment anyone adds one, at which point the wrapper
