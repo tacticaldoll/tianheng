@@ -109,7 +109,7 @@ enum Match {
     Prefix,
 }
 
-const FORMATS: [(&str, Match, Prose); 14] = [
+const FORMATS: [(&str, Match, Prose); 15] = [
     (".md", Match::Extension, Prose::Whole),
     // JSON admits no comment syntax at all, so there is no prose here to carry a reference — `Prose::None`
     // is the honest classification rather than a narrowing. The tracked members are the pinned validator's
@@ -121,6 +121,7 @@ const FORMATS: [(&str, Match, Prose); 14] = [
     (".yml", Match::Extension, Prose::LineComment("#")),
     (".yaml", Match::Extension, Prose::LineComment("#")),
     (".gitignore", Match::Name, Prose::LineComment("#")),
+    (".npmrc", Match::Name, Prose::LineComment("#")),
     (".lock", Match::Extension, Prose::LineComment("#")),
     ("CODEOWNERS", Match::Name, Prose::LineComment("#")),
     (".txt", Match::Extension, Prose::None),

@@ -1180,6 +1180,8 @@ them.
   the hand-maintained half is filed with the action SHAs under the same accepted debt. The comment claiming
   the major was chosen by what the lock requires is corrected: the lock's floors are `>=20.19.0` and
   `^20.20.0 || >=22.22.0`, both of which Node 22 satisfies, so the major is a lifecycle choice and now says so.
+  `.npmrc` is classified in `FORMATS` as a `#`-commented format, which the format sweep required before it
+  would let the file exist — a new tracked format is read by nothing until it is named there.
 - **The two arm properties now scan disjoint surfaces, so neither testifies for the other.** The guard's own
   call carries the token the consumption scan reads — `require_a_value "$#" "$1" "${2-}"` satisfies both tests
   on one line — so for any arm using that form the two agreed by construction and the over-refusal direction
