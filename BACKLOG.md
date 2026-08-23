@@ -423,6 +423,25 @@ consumer for an undemonstrated deduplication.
   *Authority:* this entry, `AGENTS.self-law.md`, `crates/kanhe/tests/release_coherence.rs`'s documented bug
   history.
 
+  **A third reader of the same class arrived, and it is on the cheap side of this entry's own dividing line.**
+  `crates/kanhe/tests/merge_workflow.rs`'s `workflow_shape` reads `.github/workflows/ci.yml` line by line to
+  hold the premise `require_ci_green` states to an operator. Seven consecutive adversarial review rounds each
+  closed its finding and surfaced one more position in the same reader: the job-name indentation, the job-key
+  indentation, the scope of the two trigger keys, the flow form at the top level, and the flow form one level
+  down. Every repair was correct and every one was verified by a fixture row and a negative run; the count is
+  the argument rather than any single miss. Two of the five failed **open** — the reader reported a premise
+  intact over a workflow that carried a real path filter — which is the direction the Core Contract forbids.
+
+  **What this entry establishes and the YAML case inherits:** the Rust-side half closed with `syn` as a
+  `[dev-dependencies]`-only addition, needing no self-law amendment because `restrict_dependencies_to`
+  observes `DependencyKind::Normal` by default. `workflow_shape` lives in `crates/kanhe/tests/`, so a YAML
+  parser lands in the same table `syn` and `proc-macro2` already occupy. It is therefore **not** blocked on
+  the amendment ritual this entry's TOML half is blocked on — the two halves have different prices, and only
+  one of them was priced. *Promotion trigger for this third reader:* a sixth position, or the next window
+  opening, whichever is first. *Version class:* patch; `kanhe` is `publish = false` and the reader is a test.
+  *Deferred here rather than done* on the same ground as the wrapper extraction: a dependency is not added at
+  a release cut, and the reader is currently correct on every shape a fixture can construct.
+
 - **A claim about this tree, written as prose, is held only where its author declared it.** *Class:*
   READY-PATCH. *Observed pressure:* two claims were found false in the 0.5.0 window by the same shape — a
   statement about an enumerable property of this repository, written with no producer and an outer edge wider

@@ -1487,8 +1487,20 @@ spellings name the block.
 and reading it SHALL NOT be exclusive: a reader that sets its scope from a top-level key and then moves to the
 next line never examines the rest of that line, so `on: {push: {paths: ['src/**']}}` carries a real filter
 past a premise that reports itself intact. That direction is **open**, which is the one this requirement
-exists to close, and it is the only open direction the reader has had — the depth and scope defects above
-each refused too much rather than too little.
+exists to close: the depth and scope defects above each refused too much rather than too little.
+
+**The rule is general and SHALL be applied at every level, which the first statement of it was not.** Saying
+it of the top-level key alone left the same open direction one level down — a block-form `on:` whose event is
+written in flow form, `push: {branches: [main], paths: […]}`, which is the more ordinary of the two spellings.
+The reaction SHALL therefore ask *what does this line open, and what does it still carry* through one
+implementation used wherever that question arises, rather than through a branch that happens to have been
+corrected.
+
+**A key SHALL be recognised in key position, not as a substring.** The reaction asked that question in three
+spellings, and the one that was not positional reacted to a trailing comment: `# no paths: filter here` named
+a filter that is a word in a sentence. Splitting a flow body on its separators puts every key at the start of
+its own segment, and a block-form line is the degenerate case of the same rule — so one implementation answers
+for both forms at both levels, which is what stops a fourth spelling appearing.
 
 **The job side SHALL NOT be given the same treatment**, and the asymmetry is a decision rather than an
 oversight. A flow-form `jobs: {alpha: {…}}` leaves no line ending in a colon at the name depth, so no job is
@@ -1539,6 +1551,19 @@ sequence item written at a job key's depth.
   on the key
 - **THEN** the filter is still found, because entering the block and reading it are the same line's work; and
   a flow-form list carrying no filter still reacts to nothing
+- **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
+
+#### Scenario: An event under a block-form trigger is written in flow form
+
+- **WHEN** `on:` opens a block and one of its events carries its filter inline — `push: {paths: […]}`
+- **THEN** the filter is found, by the same rule the top-level key uses, since the rule is about lines rather
+  than about one position in the file
+- **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
+
+#### Scenario: A key is named in a comment
+
+- **WHEN** a trailing comment on a trigger line names one of the keys in prose
+- **THEN** nothing reacts, because the key is recognised in key position rather than as a substring
 - **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
 
 #### Scenario: A job body is written in flow form

@@ -1410,7 +1410,7 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
     };
 
     // (label, document, jobs it must find, keys it must carry)
-    let rows: [(&str, String, usize, usize); 13] = [
+    let rows: [(&str, String, usize, usize); 15] = [
         ("clean", base("    name: A\n    runs-on: x\n"), 2, 0),
         (
             "if: at the file's own key depth",
@@ -1477,6 +1477,24 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
                 .to_string(),
             1,
             1,
+        ),
+        // One level down, and the more ordinary spelling of the two: block at the top, compact flow event.
+        // This is where the rule stated at depth 0 was not applied.
+        (
+            "a flow-form event under a block-form trigger carries its filter",
+            "name: ci\n\non:\n  push: {branches: [main], paths: ['src/**']}\n\njobs:\n  alpha:\n    name: A\n"
+                .to_string(),
+            1,
+            1,
+        ),
+        // A key named in a trailing comment is a word in a sentence, not a key in key position. The
+        // non-positional `contains` this replaced reacted to it.
+        (
+            "a key named in a comment is not a key",
+            "name: ci\n\non: {push: {branches: [main]}} # no paths: filter here\n\njobs:\n  alpha:\n    name: A\n"
+                .to_string(),
+            1,
+            0,
         ),
         // The common flow form carries no filter and must stay quiet.
         (
@@ -1551,6 +1569,34 @@ struct WorkflowShape {
     carried: Vec<String>,
 }
 
+/// What a line opens, and what it still carries.
+///
+/// **One decision in one place.** A line that opens a block may also carry that block's content, and a reader
+/// treating the two as exclusive loses whatever sits after the colon. That rule was applied at the top level
+/// and not one level down, so a block-form `on:` whose event was written in flow form —
+/// `push: {branches: [main], paths: ['src/**']}`, ordinary YAML style — carried its filter past the reader.
+/// The key is decoded rather than prefix-matched, so `once:` is not `on:`.
+fn opens(line: &str) -> (&str, &str) {
+    let (key, rest) = line.split_once(':').unwrap_or((line, ""));
+    (key.trim().trim_matches(['"', '\'']), rest)
+}
+
+/// Whether `text` carries `key` **in key position** — the reader's one positional match.
+///
+/// **Three spellings of one question is what let a non-positional one in.** The reader asked it with
+/// `starts_with` twice and `contains` once, and the `contains` form reacted to a trailing comment:
+/// `on: {push: {branches: [main]}} # no paths: filter` named a filter that is a word in a sentence. Splitting
+/// on the flow separators puts every key at the start of its own segment, so a mention anywhere else is not
+/// one — which is the same distinction the attribution marks in `merge_message_gate` draw between a line that
+/// carries a trailer and a sentence that names it.
+///
+/// A block-form line is the degenerate case of the same rule: `paths:` alone splits to one segment that is
+/// itself. So one function answers for both forms, at both levels.
+fn carries(text: &str, key: &str) -> bool {
+    text.split(['{', ','])
+        .any(|segment| segment.trim_start().starts_with(key))
+}
+
 fn workflow_shape(text: &str) -> WorkflowShape {
     // Two key classes, each read at the position it can occupy. A path filter is a **trigger** condition
     // and lives under `on:`; the other three sit on a job. Reading the pair at any depth instead was
@@ -1581,8 +1627,7 @@ fn workflow_shape(text: &str) -> WorkflowShape {
         if depth == 0 {
             // YAML 1.1 reads a bare `on` as a boolean, so a workflow may quote the key; both spellings name
             // the same block. Taken off the key rather than matched as a prefix, so `once:` is not `on:`.
-            let (top, rest) = line.split_once(':').unwrap_or((line, ""));
-            let top = top.trim().trim_matches(['"', '\'']);
+            let (top, rest) = opens(line);
             in_jobs = top == "jobs";
             in_on = top == "on";
             in_job = false;
@@ -1598,7 +1643,7 @@ fn workflow_shape(text: &str) -> WorkflowShape {
             // would turn a loud failure into a quiet pass unless the flow body were parsed, which is a YAML
             // parser rather than a line reader.
             if in_on {
-                if let Some(key) = ON_THE_WORKFLOW.iter().find(|key| rest.contains(**key)) {
+                if let Some(key) = ON_THE_WORKFLOW.iter().find(|key| carries(rest, key)) {
                     carried.push(format!("  ci.yml:{}: {key}", index + 1));
                 }
             }
@@ -1606,10 +1651,9 @@ fn workflow_shape(text: &str) -> WorkflowShape {
             continue;
         }
         if in_on {
-            if let Some(key) = ON_THE_WORKFLOW
-                .iter()
-                .find(|key| trimmed.starts_with(**key))
-            {
+            // The same rule as the depth-0 branch, which is the point: an event may be written in flow form
+            // under a block-form `on:`, and `carries` reads a block-form line as the degenerate case.
+            if let Some(key) = ON_THE_WORKFLOW.iter().find(|key| carries(trimmed, key)) {
                 carried.push(format!("  ci.yml:{}: {key}", index + 1));
             }
             continue;

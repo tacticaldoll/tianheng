@@ -1224,6 +1224,27 @@ them.
   `projection-register` records about a check whose subject is text. The list is now the single owner and the
   prose does not restate it.
 
+- **The rule was general and the change was one branch.** *Entering a block and reading it are not exclusive*
+  was stated of the top-level key and applied there, leaving the same open direction one level down: a
+  block-form `on:` whose event is written in flow form — `push: {branches: [main], paths: ['src/**']}` — which
+  is the **more ordinary** of the two spellings. The reader now asks *what does this line open, and what does
+  it still carry* through one implementation used wherever that question arises.
+
+  **And the key was recognised as a substring in one of three spellings.** `starts_with` twice, `contains`
+  once — and the `contains` form reacted to a trailing comment, so `# no paths: filter here` named a filter
+  that is a word in a sentence. Splitting a flow body on its separators puts every key at the start of its own
+  segment, and a block-form line is the degenerate case of the same rule, so one function answers for both
+  forms at both levels. That is the same distinction `merge_message_gate` already draws between a line that
+  carries a trailer and a sentence that names one.
+
+  Fifteen fixture rows, six asserting no reaction; both negative runs land on their own row.
+
+  `BACKLOG.md` records what seven rounds of this measured: the reader has yielded one more position per round,
+  two of them failing open, and the entry that already carries this class for the TOML readers now carries it
+  for this one — on the **cheap** side of its own dividing line, since `workflow_shape` is a test and a YAML
+  parser lands in the `[dev-dependencies]` table `syn` already occupies rather than crossing the self-law
+  boundary its TOML half is blocked on.
+
 - **Entering a block and reading it were treated as exclusive, and that one was open.** The reader set its
   scope from a top-level key and moved to the next line, so the rest of that line was seen by nothing — and
   YAML's flow form puts the whole block there. Measured: with `on: {push: {paths: ['src/**']}}` the direction
