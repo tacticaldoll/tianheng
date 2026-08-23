@@ -1172,6 +1172,14 @@ them.
 
 ### Self-governance
 
+- **The interpreter running the pinned validator is pinned to a version, not a major, and the bound around it
+  stops rather than warns.** `node-version: '24'` resolved whatever 24.x the runner's mirror carried that day
+  — a repointable dependency inside the step that exists to close repointable dependencies, one field
+  narrower — while `engines.node: ">=24"` left the upper end open and npm, measured at 11.13.0, warns past an
+  unsatisfiable `engines` and exits 0. It is `'24.16.0'`, `">=24 <25"`, and `.npmrc`'s `engine-strict=true`;
+  the hand-maintained half is filed with the action SHAs under the same accepted debt. The comment claiming
+  the major was chosen by what the lock requires is corrected: the lock's floors are `>=20.19.0` and
+  `^20.20.0 || >=22.22.0`, both of which Node 22 satisfies, so the major is a lifecycle choice and now says so.
 - **The two arm properties now scan disjoint surfaces, so neither testifies for the other.** The guard's own
   call carries the token the consumption scan reads — `require_a_value "$#" "$1" "${2-}"` satisfies both tests
   on one line — so for any arm using that form the two agreed by construction and the over-refusal direction

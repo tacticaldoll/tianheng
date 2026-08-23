@@ -94,13 +94,25 @@ jobs:
         # bytes running the validator change, with nothing in this file, the specs or `BACKLOG.md` covering
         # it. A claim one word wider than what reacts to it is the shape this repository removes on sight.
         #
-        # The major is chosen by what the lock requires rather than by preference: `@fission-ai/openspec`
-        # declares `>=20.19.0` and `posthog-node` `^20.20.0 || >=22.22.0`, and Node 20 left support before
-        # this was written. `package.json`'s `engines.node` names the same floor, so a local run that cannot
-        # satisfy it says so rather than differing silently from CI.
+        # **The lock sets a floor and does not choose this major.** `@fission-ai/openspec` declares
+        # `>=20.19.0` and `posthog-node` `^20.20.0 || >=22.22.0` — Node 22 satisfies both, so an earlier
+        # comment here claiming the major was what the lock required was reading a floor as a selection. 24 is
+        # chosen by a lifecycle argument the lock cannot make: Node 20 left support before this was written
+        # and 22 follows it. The choice is stated rather than attributed.
+        #
+        # **Exact, because a major is a repointable dependency and that is what this step exists to close.**
+        # `'24'` resolves whatever 24.x the runner's mirror carries that day, so the bytes running the
+        # validator still changed with nothing in this file covering it — the same argument one field
+        # narrower. The cost is a hand-maintained pin nobody refreshes, which is the debt the action SHAs
+        # above already carry and is filed with them rather than pretended away.
+        #
+        # `package.json`'s `engines.node` bounds the same major at both ends and `.npmrc` makes npm **stop**
+        # on it rather than warn, so a local Definition of Done that cannot match CI says so instead of
+        # differing silently. Measured on npm 11.13.0: without `engine-strict`, an unsatisfiable `engines`
+        # exits 0; with it, `npm ci` exits 1 naming the requirement and what is actually installed.
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '24'
+          node-version: '24.16.0'
 
       - name: every spec validates
         # `npm ci` rather than `npx --yes @fission-ai/openspec@1.4.1`. The exact-version pin was real — npm
