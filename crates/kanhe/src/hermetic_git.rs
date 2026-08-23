@@ -125,7 +125,14 @@ pub fn hermetic(program: &str) -> Command {
 /// child under an ambient environment and requires that the configuration git reports come from this
 /// builder and nowhere else, so a channel nobody has named is found by the run rather than by the next
 /// review.
-const CONFIG_CHANNELS: [&str; 1] = ["GIT_CONFIG_PARAMETERS"];
+/// `GIT_CONFIG` is here for a different reason and it is worth the sentence. It does **not** move a
+/// judgement's reads — measured, `status --porcelain --untracked-files=all` reports an excluded file with and
+/// without it, because that command does not consult it. What it moves is a **write**: under it,
+/// `git config user.name t` lands in the file the variable names instead of the fixture's own `.git/config`,
+/// so `fixture` and `build_fixture` would build a repository with no identity and the commit after them
+/// fails. That is fail-loud, like the object-directory pair, and it is cleared for the reason the selector
+/// row gives: an `env_remove` costs nothing and refuses no caller in this workspace.
+const CONFIG_CHANNELS: [&str; 2] = ["GIT_CONFIG_PARAMETERS", "GIT_CONFIG"];
 
 /// The environment variables that move **which repository** `git` answers about, cleared rather than set.
 ///

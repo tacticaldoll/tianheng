@@ -1810,6 +1810,21 @@ reports as coming from the command line be one the builder wrote. A channel nobo
 an extra entry rather than as the next review's finding. Inheritance SHALL be the delivery, since setting the
 variable on the builder's own command would overwrite the removal and test the case's last statement.
 
+**The observation port SHALL be the whole listing, not one class of origin.** Filtering to command-line
+entries reads a channel that **adds** to what git reports and cannot see one that **replaces** it: measured
+with `GIT_CONFIG` naming a file, git lists that file alone, command-line entries number zero, and a case
+written that way fails on emptiness saying the read is not about the builder — naming neither the setting that
+arrived nor where to close it, which is the half of this requirement that does the work. Every line SHALL be
+classified against the origins the builder admits: what it wrote, and the repository's own config, which it
+does not claim to govern. The absence of the builder's own setting SHALL be asserted **after** that
+classification, so a replacing channel is named by its content rather than by what is missing.
+
+`GIT_CONFIG` SHALL be cleared alongside, for a different reason that SHALL be recorded rather than folded in:
+it does not move a judgement's reads — measured, `status --porcelain --untracked-files=all` reports an
+excluded file with and without it — but it redirects a **write**, so `git config` in a fixture builder lands
+outside the fixture and the commit after it fails for want of an identity. Fail-loud, like the
+object-directory pair, and cleared because an `env_remove` costs nothing.
+
 A control SHALL establish that the ambient channel is readable on the machine, so the assertion cannot hold
 because the variable was never live. The settings the control and the subject carry SHALL NOT name
 `core.excludesFile`: the sibling ignore sweep decides whether a file closed that channel by whether the file
