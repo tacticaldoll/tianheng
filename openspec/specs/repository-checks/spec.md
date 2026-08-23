@@ -568,6 +568,16 @@ an arm takes a value exactly when it asks for one, so the request is the marker 
 names exists to fall behind. The set read SHALL be held against a declared literal in both directions, so a
 new arm fails until someone has looked at whether it may take a value at all.
 
+**The reading SHALL rest on two properties of an arm that must agree, and SHALL fail on what it cannot
+attribute.** Taking the guard request as the sole marker makes the check its own evidence: an arm spelled in a
+shape the reader does not recognise asks to be guarded, is dropped from the set, is absent from the literal
+too, and both directions hold over two sets that agree by both missing it — measured with an arm spelled
+`-j)`, whose value-position refusal then never ran and nothing said so. So the reaction SHALL also read
+whether the arm **consumes** the following argument, which is what taking a value is and owes nothing to the
+wrapper's own helper, and SHALL require the two to name the same arms: one without the other is a refused flag
+reaching the tool, or a refusal never exercised. A guard request the reader cannot attribute to an arm SHALL
+stop it, because a reading that shrinks its own subject reports on a set that does not describe the wrapper.
+
 #### Scenario: A refused flag is written where a value belongs
 
 - **WHEN** a refused flag is passed as the value of an admitted value-taking argument
@@ -1827,10 +1837,17 @@ configuration that invocation set.
 **The reaction SHALL ask the question of a run rather than of a name list.** Three rounds widened this builder
 by name — the config files, the repository selectors, the object-directory pair — each after someone measured
 the variable, and a list grown that way is as complete as the last person's memory. The reaction SHALL run the
-builder in a **child process that inherits an ambient environment**, and require that every configuration git
-reports as coming from the command line be one the builder wrote. A channel nobody has named then appears as
-an extra entry rather than as the next review's finding. Inheritance SHALL be the delivery, since setting the
-variable on the builder's own command would overwrite the removal and test the case's last statement.
+builder in a **child process that inherits an ambient environment**, and classify every configuration git
+reports against the origins the builder admits. A channel nobody has named then carries a setting from none of
+them, and is named by what arrived rather than by anyone having thought of it. Inheritance SHALL be the
+delivery, since setting the variable on the builder's own command would overwrite the removal and test the
+case's last statement.
+
+**Every channel the builder clears SHALL be delivered by the reaction, not only named in it.** A member added
+to the cleared set with no input constructing it is the same list-grown-by-memory one level up: measured, the
+whole suite stayed green with `GIT_CONFIG` deleted from that set, because nothing ever put it in the child's
+environment. The reaction SHALL carry each member ambiently, so removing one from the builder makes it appear
+in what is classified.
 
 **The observation port SHALL be the whole listing, not one class of origin.** Filtering to command-line
 entries reads a channel that **adds** to what git reports and cannot see one that **replaces** it: measured
@@ -1838,7 +1855,11 @@ with `GIT_CONFIG` naming a file, git lists that file alone, command-line entries
 written that way fails on emptiness saying the read is not about the builder — naming neither the setting that
 arrived nor where to close it, which is the half of this requirement that does the work. Every line SHALL be
 classified against the origins the builder admits: what it wrote, and the repository's own config, which it
-does not claim to govern. The absence of the builder's own setting SHALL be asserted **after** that
+does not claim to govern. That classification SHALL match an origin **exactly** rather than by a fragment the
+ambient side chooses: measured, a substring test for the repository's own config admitted every line of a file
+`GIT_CONFIG` named `…/foreign.git/config` — that variable's ordinary use — including the ignore setting this
+surface exists to own, which is the shape this specification refuses elsewhere for naming a subcommand by a
+fragment of a diagnostic string. The absence of the builder's own setting SHALL be asserted **after** that
 classification, so a replacing channel is named by its content rather than by what is missing.
 
 `GIT_CONFIG` SHALL be cleared alongside, for a different reason that SHALL be recorded rather than folded in:

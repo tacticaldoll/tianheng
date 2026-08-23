@@ -8,7 +8,7 @@
 //! same sentence its sibling `scripts/merge-pr.sh` carried while three spellings walked past it. Nothing ran the
 //! script to find out.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -218,29 +218,75 @@ fn only_an_allowlisted_argument_reaches_the_publish() {
 
 /// The parser's value-taking arms, read out of the wrapper rather than copied beside it.
 ///
-/// **An arm takes a value exactly when it asks for one.** `require_a_value` is the single place the wrapper
-/// decides that, so the call is the marker — no second list of flag names, and an arm added without that call
-/// is not a value-taking arm by construction rather than by anyone remembering.
+/// **An arm takes a value exactly when it asks for one — and a reading that cannot attribute what it found
+/// must fail, not shrink its set.** The first form took `require_a_value` as the sole marker and dropped
+/// silently any call it could not attribute to a pattern line, because the pattern test required a leading
+/// `--`. Measured: an arm spelled `-j)` calls the helper, is dropped here, is absent from the literal too,
+/// and the both-ways equality holds over two sets that agree by both missing it — the value-position refusal
+/// for that arm never runs, and nothing says so. The reader's own blind spot became the subject's.
+///
+/// So each arm is read for **two properties that must agree**, neither of which is the other's evidence: it
+/// asks to be guarded (`require_a_value`), and it consumes the following argument (`$2` or `shift 2`).
+/// Consumption is what taking a value *is*, and owes nothing to this repository's helper; the request is what
+/// makes the refusal happen. An arm carrying one and not the other is the hole, named by which half is
+/// missing. A guard call belonging to no arm stops this reader rather than vanishing from it.
 ///
 /// Executed text, because the wrapper's comments discuss these flags at length and a reader over the whole
 /// file would collect the prose as parser arms.
-fn value_taking_arms(script: &str) -> BTreeSet<String> {
+fn parser_arms(script: &str) -> BTreeMap<String, (bool, bool)> {
     let source = kanhe::region::Source::of(script);
     let executed = source.shell();
-    let mut arms = BTreeSet::new();
-    let mut pattern: Option<String> = None;
-    for line in executed.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("--") && trimmed.ends_with(')') {
-            pattern = Some(trimmed.trim_end_matches(')').to_string());
-        } else if trimmed.starts_with("require_a_value") {
-            if let Some(open) = pattern.take() {
-                for flag in open.split('|') {
-                    arms.insert(flag.trim().to_string());
-                }
+    let mut arms: BTreeMap<String, (bool, bool)> = BTreeMap::new();
+    let mut open: Option<(Vec<String>, bool, bool)> = None;
+    let close = |open: &mut Option<(Vec<String>, bool, bool)>, arms: &mut BTreeMap<_, _>| {
+        if let Some((flags, guards, consumes)) = open.take() {
+            for flag in flags {
+                arms.insert(flag, (guards, consumes));
             }
         }
+    };
+    for line in executed.lines() {
+        let trimmed = line.trim();
+        // A `case` pattern: every alternative is a flag or the catch-all. Read this way rather than by a
+        // leading `--`, so the short and glued spellings the wrapper also carries are arms here too.
+        let flags: Vec<String> = trimmed
+            .trim_end_matches(')')
+            .split('|')
+            .map(|flag| flag.trim().to_string())
+            .collect();
+        if trimmed.ends_with(')')
+            && flags
+                .iter()
+                .all(|flag| flag.starts_with('-') || flag == "*")
+        {
+            close(&mut open, &mut arms);
+            open = Some((flags, false, false));
+            continue;
+        }
+        if trimmed == ";;" {
+            close(&mut open, &mut arms);
+            continue;
+        }
+        // The trailing space excludes the helper's own definition line, which would otherwise be attributed
+        // to whichever arm the reader had open — an order dependency between a function and the parser below
+        // it, invisible until someone moved one.
+        let guards = trimmed.starts_with("require_a_value ");
+        let consumes =
+            trimmed.contains("$2") || trimmed.contains("${2") || trimmed.contains("shift 2");
+        match open.as_mut() {
+            Some(arm) => {
+                arm.1 |= guards;
+                arm.2 |= consumes;
+            }
+            None => assert!(
+                !guards,
+                "a `require_a_value` call at `{trimmed}` belongs to no arm this reader could identify, so the \
+                 cross product below would run over a set that does not describe the wrapper. Either the arm \
+                 is spelled in a shape this reader does not recognise, or the call sits outside the parser"
+            ),
+        }
     }
+    close(&mut open, &mut arms);
     arms
 }
 
@@ -285,18 +331,39 @@ fn a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position() {
         "--target-dir",
     ];
     let declared: BTreeSet<String> = TAKES_A_VALUE.iter().map(|a| (*a).to_string()).collect();
-    let parsed = value_taking_arms(
+    let arms = parser_arms(
         &std::fs::read_to_string(root.join("scripts/publish.sh"))
             .expect("read scripts/publish.sh — the arms this cross product runs over are its own"),
     );
+    let asking: BTreeSet<String> = arms
+        .iter()
+        .filter(|(_, (guards, _))| *guards)
+        .map(|(flag, _)| flag.clone())
+        .collect();
+    let consuming: BTreeSet<String> = arms
+        .iter()
+        .filter(|(_, (_, consumes))| *consumes)
+        .map(|(flag, _)| flag.clone())
+        .collect();
+    // The wrapper against itself, before either is compared to what this file says. An arm that consumes the
+    // next argument without asking to be guarded reaches `cargo publish` with whatever stands there.
     assert_eq!(
-        parsed,
+        consuming,
+        asking,
+        "an arm of the wrapper's parser reads the following argument and does not ask `require_a_value` to \
+         judge it, or asks and never reads it — unguarded {:?}, unused {:?}. The first is a refused flag's \
+         way through the one gate standing in front of an irreversible upload",
+        consuming.difference(&asking).collect::<Vec<_>>(),
+        asking.difference(&consuming).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        asking,
         declared,
         "the wrapper's value-taking arms are not the set this cross product runs over, so it holds whichever \
          it happened to name — missing {:?}, unexpected {:?}. An arm that reads a following value and is not \
          here is one the value-position refusal is unexercised for",
-        declared.difference(&parsed).collect::<Vec<_>>(),
-        parsed.difference(&declared).collect::<Vec<_>>()
+        declared.difference(&asking).collect::<Vec<_>>(),
+        asking.difference(&declared).collect::<Vec<_>>()
     );
     // One per class the header refuses, plus one nobody has classified.
     const REFUSED: [&str; 5] = [

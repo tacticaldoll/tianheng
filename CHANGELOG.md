@@ -1172,6 +1172,25 @@ them.
 
 ### Self-governance
 
+- **A reading that cannot attribute what it found now fails rather than shrinking its set.** The reader that
+  takes the wrapper's value-taking arms from `scripts/publish.sh` used the guard request as its sole marker
+  and dropped, silently, any call it could not attribute to a pattern line — the test required a leading
+  `--`. Measured: an arm spelled `-j)` asks to be guarded, is dropped here, is absent from the declared
+  literal too, and the both-ways equality holds over two sets that agree by both missing it, with that arm's
+  value-position refusal never run. Each arm is now read for two properties that must agree and are not each
+  other's evidence — it asks to be guarded, and it consumes the following argument — and a guard request
+  belonging to no arm stops the reader. Three directions, each naming its own half.
+- **Both members of the hermetic builder's configuration channels are now delivered, not only listed.**
+  `GIT_CONFIG` was added to the cleared set with nothing constructing it: measured, deleting it from that set
+  left the whole suite green. The ambient environment now carries both channels — one control each, because
+  `GIT_CONFIG` replaces the listing and suppresses `GIT_CONFIG_PARAMETERS` entirely — so removing either from
+  the builder makes it appear in what is classified.
+- **The hermetic listing's classification matches an origin exactly rather than by a fragment the ambient
+  side chooses.** A substring test for the repository's own config admitted every line of a file `GIT_CONFIG`
+  named `…/foreign.git/config` — that variable's most ordinary use — `core.excludesFile` included, the one
+  setting the whole surface exists to own. The case then fell through to the absence assertion and reported
+  what was missing instead of what arrived. git renders the repository's own origin relative to the directory
+  it runs in, so exactness costs nothing.
 - **The release date is written at the cut, and the ritual did not say so.** The dated section for the version
   under preparation carries a date nothing compares until the `release: X.Y.Z` commit exists, and it drifted
   twice: one release was prepared four days behind its cut, and this section stood six days behind the branch
