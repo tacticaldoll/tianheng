@@ -110,6 +110,23 @@ jobs:
         # on it rather than warn, so a local Definition of Done that cannot match CI says so instead of
         # differing silently. Measured on npm 11.13.0: without `engine-strict`, an unsatisfiable `engines`
         # exits 0; with it, `npm ci` exits 1 naming the requirement and what is actually installed.
+        #
+        # **The pin carries its own expiry, because the debt it created had no mechanism and its own
+        # promotion trigger had already fired.** `BACKLOG.md` filed this beside the action SHAs under
+        # *a hand-maintained pin has no mechanism keeping it from rotting*, whose trigger reads *a second
+        # ecosystem arriving whose pinning would want the same answer* — and this pin is that second
+        # ecosystem, added to the entry that says so. The half with teeth is not falling behind within a
+        # major, which `engines` plus `engine-strict` already bound; it is running an interpreter past the
+        # point anyone ships fixes for it, silently, because nobody looked.
+        #
+        # The `NOT-BEYOND` declaration is a **commitment of this repository**, not an assertion about Node:
+        # this tree does not run major 24 beyond the date it names. `interpreter_support_window` holds it,
+        # refuses when the major beside it stops matching the pin, and refuses once the date is reached — so
+        # the reminder is a reaction rather than someone's memory. The date is chosen from the Node release schedule
+        # (`nodejs.org/en/about/previous-releases`: 24 entered LTS as 24.11.0 and is maintained to the end
+        # of April 2028); that choice is the one thing here nothing offline can hold, and it is a commitment
+        # precisely so the unheld part is a decision this repository owns rather than a fact it claims.
+        # NOT-BEYOND: 24 2028-04-30
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24.16.0'

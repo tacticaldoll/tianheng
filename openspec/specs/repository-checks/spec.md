@@ -299,6 +299,63 @@ uses; the check SHALL NOT claim to interpret arbitrary GitHub Actions.
   absent command
 - **THEN** the coherence check fails and names `cargo deny check` as missing from CI
 
+### Requirement: A hand-maintained pin SHALL carry the window it is good for
+
+A pin this repository maintains by hand SHALL declare the window it is good for, and a reaction SHALL hold
+that declaration. A pin nobody refreshes rots, and pinning the interpreter that executes a digest-pinned
+dependency tree traded a repointable major for exactly that.
+
+**The two halves of the rot are not equal and SHALL NOT be answered together.** Falling behind *within* a
+major is bounded by the declaration around the pin — `engines.node` with both ends and `engine-strict=true`,
+so npm stops rather than warns — and what remains is bounded risk on a tree resolved by digest. Running the
+interpreter **past the point its major is maintained** is the half with teeth, and nothing reacted to it: the
+only thing that would notice was someone remembering.
+
+The declaration SHALL sit beside the pin it bounds.
+The declaration SHALL name the **major it speaks for** as well as the date, so a pin moved without it refuses
+rather than inheriting a window chosen for something else. The reaction SHALL refuse when no window is
+declared, when more than one is — a reader that takes one leaves the others binding nothing — when the major
+declared is not the major pinned, and when the date has been reached.
+
+**The declaration SHALL be a commitment of this repository rather than an assertion about the tool.** Nothing
+here can hold a vendor's release calendar: it is not in this tree, and every reaction runs offline. A claim
+about the world needs something holding it, and this one would have nothing; a claim about what this tree will
+do needs only the file it is written in. The date is *chosen* with the vendor's schedule in view, and that
+choice is the one unheld thing left — which is why the declaration is a decision this repository owns rather
+than a fact it claims about the vendor.
+
+**The reading SHALL be a pure function of the workflow text and the day.** A bound whose only demonstration is
+the calendar reaching it is a bound nobody has seen work, and this one is written to sit dormant for years.
+Every direction it refuses in SHALL be constructed against a supplied day, and the day SHALL be taken in UTC,
+so the date a reader is refused on is the same date everywhere.
+
+#### Scenario: The pinned interpreter is inside its declared window
+
+- **WHEN** the workflow declares one window naming the major it pins, and the date it names is ahead of today
+- **THEN** the reaction passes
+- **PINNED-BY** `the_pinned_interpreter_is_within_its_declared_support_window`
+
+#### Scenario: The declared window has been reached
+
+- **WHEN** the date the workflow declares is today or earlier
+- **THEN** the reaction refuses, and names the three places that move together — the workflow pin, the
+  package manifest's engine range, and the declaration itself
+- **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
+
+#### Scenario: The pin moves and the window does not
+
+- **WHEN** the major the workflow pins is not the major the declaration speaks for
+- **THEN** the reaction refuses, rather than reading a window chosen for a major this workflow no longer runs
+- **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
+
+#### Scenario: The window is absent, doubled, or unreadable
+
+- **WHEN** the workflow declares no window, declares more than one, or declares one whose fields are not a
+  major and a `YYYY-MM-DD` date
+- **THEN** the reaction refuses and says what to write, rather than passing over a declaration it could not
+  read
+- **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
+
 ### Requirement: A generated projection SHALL be generated, and its freshness SHALL be falsifiable
 
 A document this repository generates SHALL be produced from the source it projects, and its freshness check

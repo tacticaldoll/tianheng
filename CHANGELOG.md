@@ -1172,6 +1172,19 @@ them.
 
 ### Self-governance
 
+- **The interpreter pin carries the window it is good for, and a reaction holds it.** Pinning the interpreter
+  exactly bought the property the step claims and created a hand-maintained pin nobody refreshes — filed
+  beside the action SHAs under an entry whose own promotion trigger reads *a second ecosystem arriving whose
+  pinning would want the same answer*. That trigger fired in the commit that added the Node pin to the entry
+  naming it, and was not read. The half with teeth is not lagging within a major, which `engines` plus
+  `engine-strict` already bound; it is running an interpreter past the point its major is maintained, which
+  nothing reacted to. `.github/workflows/ci.yml` now declares `NOT-BEYOND: <major> <date>` beside the pin and
+  `interpreter_support_window` refuses when that declaration is absent, doubled, unreadable, speaks for a
+  major the workflow no longer pins, or has been reached. The declaration is a **commitment of this
+  repository** rather than an assertion about Node's calendar: nothing offline can hold a vendor's release
+  schedule, and a claim about what this tree will do needs only the file it is written in. The reading is a
+  pure function of the workflow text and the day, so every refusal is constructed against a supplied date
+  rather than waited for — a bound written to sit dormant for years is otherwise one nobody has seen work.
 - **The interpreter running the pinned validator is pinned to a version, not a major, and the bound around it
   stops rather than warns.** `node-version: '24'` resolved whatever 24.x the runner's mirror carried that day
   — a repointable dependency inside the step that exists to close repointable dependencies, one field
