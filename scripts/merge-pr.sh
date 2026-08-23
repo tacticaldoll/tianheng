@@ -463,11 +463,15 @@ same fact as a suite that agreed"
         # **`NEUTRAL` and `SKIPPED` are their own class, and they agreed with nothing.** They sat beside
         # `SUCCESS` with no measurement while the arm above was reasoned about at length — and the same
         # argument covers them: a check that did not run produced no evidence, so reading it as agreement
-        # merges past whatever it would have said. Measured on this repository's own workflow: none of the
-        # jobs in `.github/workflows/ci.yml` carries `if:`, `needs:`, `paths:`, `paths-ignore:` or
-        # `continue-on-error:`, so a skip here cannot mean *legitimately not applicable* — it can only mean
-        # the workflow changed or the run was interfered with, and both are things to look at rather than
-        # merge past.
+        # merges past whatever it would have said. That holds whatever the workflow looks like, which is why
+        # neither this arm nor its refusal says anything about the workflow's shape.
+        #
+        # **The refusal used to.** It told the operator that no job in this repository's workflow carries
+        # `if:`, `needs:`, `paths:` or `continue-on-error:`, so a skip could only mean interference. True when
+        # written, and a sentence that goes stale the moment someone adds one — at which point the wrapper is
+        # telling an operator something false about the tree they are standing in. A diagnostic states what to
+        # do about the state it met; a claim about the world needs something holding it, and this one bought
+        # nothing the classification did not already have.
         #
         # Their own arm rather than the unfinished one, because the operator action differs: an unfinished
         # check is waited for, and a skipped one is investigated. When a job legitimately may skip — a
@@ -489,10 +493,10 @@ wrapper merged nineteen consecutive red runs on exactly that difference"
     fi
     if [[ -n $silent ]]; then
         cannot_judge \
-            "these checks produced no evidence: $silent. A check that did not run agreed with nothing, and \
-no job in this repository's workflow carries \`if:\`, \`needs:\`, \`paths:\` or \`continue-on-error:\` — so a skip \
-here is the workflow having changed or the run having been interfered with, not a job that legitimately did \
-not apply. Look at why it did not run"
+            "these checks produced no evidence: $silent. A check that did not run agreed with nothing, so \
+this is not a suite that agreed. Look at why it did not run. If a job in this workflow may now legitimately \
+skip, move that conclusion back beside \`SUCCESS\` in this script and record which job it is and why its skip \
+is evidence — the way the \`EXPECTED\` classification beside it states its own reason"
     fi
     if [[ -n $unfinished ]]; then
         cannot_judge \
