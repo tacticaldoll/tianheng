@@ -1172,6 +1172,15 @@ them.
 
 ### Self-governance
 
+- **The two arm properties now scan disjoint surfaces, so neither testifies for the other.** The guard's own
+  call carries the token the consumption scan reads — `require_a_value "$#" "$1" "${2-}"` satisfies both tests
+  on one line — so for any arm using that form the two agreed by construction and the over-refusal direction
+  was dead: a non-value arm given a guard by mistake refuses the *following flag*, and nothing saw it.
+- **The builder's own entry in the hermetic listing is matched exactly and derived from its constant.** Asking
+  whether a line *contained* `core.excludesfile=/dev/null` admitted an ambient `core.excludesfile=/dev/null-evil`
+  arriving on the channel the builder itself writes to — measured, with the case passing green while an
+  unnamed channel set the one key this surface exists to hold. The exactness rule reached the repository's
+  origin last round and not the builder's; it now covers the whole entry of both.
 - **A reading that cannot attribute what it found now fails rather than shrinking its set.** The reader that
   takes the wrapper's value-taking arms from `scripts/publish.sh` used the guard request as its sole marker
   and dropped, silently, any call it could not attribute to a pattern line — the test required a leading

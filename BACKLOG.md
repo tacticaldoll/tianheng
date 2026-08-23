@@ -490,7 +490,7 @@ consumer for an undemonstrated deduplication.
 
 - **`merge_workflow`'s fixture takes `jq` from the host without declaring it, and its absence reads as fifteen
   defects in the subject.** *Class:* WATCH. *Observed pressure:* measured 2026-08-23 on a machine where `jq`
-  is not installed — all 15 cases in `crates/kanhe/tests/merge_workflow.rs` fail, each reporting
+  is not installed — 15 of that target's 30 cases fail, each reporting
   `bin/gh: line 77: jq: command not found` alongside the merge message *cannot read what CI said about this
   pull request, which is not the same fact as CI having agreed*. **The wrapper is right and the fixture is
   not:** `scripts/merge-pr.sh` could not read a verdict, so it declined to judge and said so — exactly its

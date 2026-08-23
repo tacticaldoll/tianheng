@@ -271,8 +271,15 @@ fn parser_arms(script: &str) -> BTreeMap<String, (bool, bool)> {
         // to whichever arm the reader had open — an order dependency between a function and the parser below
         // it, invisible until someone moved one.
         let guards = trimmed.starts_with("require_a_value ");
-        let consumes =
-            trimmed.contains("$2") || trimmed.contains("${2") || trimmed.contains("shift 2");
+        // **The guard line is not evidence of consumption, because the guard's own call carries the token
+        // the consumption scan looks for.** `require_a_value "$#" "$1" "${2-}"` satisfies both tests at once,
+        // so for any arm using that call form the two properties agreed by construction and the `asks but
+        // never reads` direction was dead — a non-value arm given a guard by mistake refuses the *following
+        // flag*, which is the over-refusal this comparison claims to see. Excluded here by the same means as
+        // the helper's definition line: the scan surfaces are disjoint, so neither property can testify for
+        // the other.
+        let consumes = !guards
+            && (trimmed.contains("$2") || trimmed.contains("${2") || trimmed.contains("shift 2"));
         match open.as_mut() {
             Some(arm) => {
                 arm.1 |= guards;

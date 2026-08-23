@@ -575,7 +575,11 @@ too, and both directions hold over two sets that agree by both missing it — me
 `-j)`, whose value-position refusal then never ran and nothing said so. So the reaction SHALL also read
 whether the arm **consumes** the following argument, which is what taking a value is and owes nothing to the
 wrapper's own helper, and SHALL require the two to name the same arms: one without the other is a refused flag
-reaching the tool, or a refusal never exercised. A guard request the reader cannot attribute to an arm SHALL
+reaching the tool, or a refusal never exercised. **The two readings SHALL scan disjoint surfaces**, since a
+guard request's own arguments name the value it guards: the canonical call carries the very token consumption
+is read from, so an arm using it satisfied both tests on one line and the two properties agreed by
+construction. The direction that dies is over-refusal — a non-value arm given a guard by mistake refuses the
+*following flag* — which is the half a shape rule owes the caller. A guard request the reader cannot attribute to an arm SHALL
 stop it, because a reading that shrinks its own subject reports on a set that does not describe the wrapper.
 
 #### Scenario: A refused flag is written where a value belongs
@@ -1855,11 +1859,16 @@ with `GIT_CONFIG` naming a file, git lists that file alone, command-line entries
 written that way fails on emptiness saying the read is not about the builder — naming neither the setting that
 arrived nor where to close it, which is the half of this requirement that does the work. Every line SHALL be
 classified against the origins the builder admits: what it wrote, and the repository's own config, which it
-does not claim to govern. That classification SHALL match an origin **exactly** rather than by a fragment the
-ambient side chooses: measured, a substring test for the repository's own config admitted every line of a file
-`GIT_CONFIG` named `…/foreign.git/config` — that variable's ordinary use — including the ignore setting this
-surface exists to own, which is the shape this specification refuses elsewhere for naming a subcommand by a
-fragment of a diagnostic string. The absence of the builder's own setting SHALL be asserted **after** that
+does not claim to govern. **Both** admissions SHALL match **exactly** rather than by a fragment the ambient
+side chooses, and the exactness SHALL cover the whole entry — its origin, its key and its value — because a
+channel that reaches this listing chooses all three. Measured on each in turn: a substring test for the
+repository's own config admitted every line of a file `GIT_CONFIG` named `…/foreign.git/config`, that
+variable's ordinary use, the ignore setting this surface exists to own included; and a substring test for the
+builder's own entry admitted an ambient `core.excludesfile=/dev/null-evil`, whose value merely begins with the
+builder's, on the same channel the builder writes to — the case passing green while an unnamed channel set the
+one key this whole surface exists to hold. Both are the shape this specification refuses elsewhere for naming
+a subcommand by a fragment of a diagnostic string. The builder writes one setting from one constant, so its
+admitted entry SHALL be **derived** from that constant rather than spelled again here. The absence of the builder's own setting SHALL be asserted **after** that
 classification, so a replacing channel is named by its content rather than by what is missing.
 
 `GIT_CONFIG` SHALL be cleared alongside, for a different reason that SHALL be recorded rather than folded in:

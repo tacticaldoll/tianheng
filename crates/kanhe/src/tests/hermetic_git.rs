@@ -190,9 +190,17 @@ fn no_ambient_configuration_reaches_a_hermetic_command() {
     // So every line is classified, and the two admissible origins are named: what this builder wrote, and the
     // fixture's own repository config, which the builder empties the global and system files around and does
     // not claim to govern.
-    let builders = |line: &str| {
-        line.starts_with("command line:") && line.contains("core.excludesfile=/dev/null")
-    };
+    // **Exact and derived, for the reason the repository-origin predicate below gives.** Asking whether the
+    // line *contained* `core.excludesfile=/dev/null` admitted an ambient `core.excludesfile=/dev/null-evil`
+    // arriving on the same channel as this builder's own — measured. The value the builder writes is a
+    // prefix of every value that looks like it, and an unnamed channel is free to choose one. The builder
+    // writes exactly one setting, taken from the constant beside it, so the whole entry is derivable and the
+    // comparison is equality. `git config --list` lower-cases the section and key it echoes.
+    let builders_entry = format!(
+        "command line:\t{}=/dev/null",
+        crate::hermetic_git::EXCLUDES_SETTING.to_lowercase()
+    );
+    let builders = |line: &str| line == builders_entry;
     // **Exact, because the ambient side controls the path.** A substring test for `.git/config` admitted any
     // file whose path happens to contain it, and `GIT_CONFIG` pointing at another repository's config is that
     // variable's ordinary use: measured, every line of the foreign file passed as *the fixture's own*, so the
