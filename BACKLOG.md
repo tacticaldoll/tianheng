@@ -75,10 +75,14 @@ consumer for an undemonstrated deduplication.
 
 ### ACCEPTED DEBT
 
-- **A commit-pinned action has no mechanism keeping it from rotting.** *Class:* ACCEPTED DEBT.
+- **A hand-maintained pin has no mechanism keeping it from rotting — the action SHAs, and now the Node
+  version.** *Class:* ACCEPTED DEBT.
   *Observed pressure:* pinning `.github/workflows/ci.yml`'s `uses:` entries to commits closed the one
   ecosystem this repository resolved fresh on every run, and opened its dual — a SHA nobody refreshes drifts
-  from the upstream fix it was pinned before. *Observation source:* the `v0.4.0..HEAD` static review, which
+  from the upstream fix it was pinned before. `node-version` joined them for the same reason and at the same
+  cost: `'24'` resolved whatever 24.x the runner's mirror carried that day, so the interpreter executing the
+  digest-pinned validator tree was itself repointable while the step beside it was named *pinned*. It reads
+  `'24.16.0'` now, and inherits this entry rather than a promise that someone will notice. *Observation source:* the `v0.4.0..HEAD` static review, which
   found every action on a mutable major tag while `Cargo.lock` and `package-lock.json` pinned their own
   ecosystems by digest; the refresh gap is this repair's own consequence rather than a second finding.
   *Current reaction or bound:* none, and that is the entry. Nothing here reads the workflow, and no
@@ -89,6 +93,12 @@ consumer for an undemonstrated deduplication.
   unchosen — which is the direction the pin closed. *Promotion trigger:* a pinned action falling far enough
   behind to miss a security advisory, or a second ecosystem arriving whose pinning would want the same
   answer — either makes one dependency-refresh mechanism worth more than two hand-maintained pins.
+  Node's half of this debt is bounded differently from the actions': `package.json` declares
+  `"node": ">=24 <25"` and `.npmrc` sets `engine-strict=true`, so a runner or a contributor arriving on
+  another major **stops** rather than proceeding on different bytes — measured on npm 11.13.0, where an
+  unsatisfiable `engines` warns and exits 0 without it and exits 1 naming both sides with it. The pin can
+  therefore fall behind within its major, and cannot silently leave it.
+
   *Compatibility class:* patch; CI configuration ships in no crate. *Authority:* this entry, and the workflow
   comment's refresh recipe — `repos/<owner>/<repo>/commits/<tag>`, which dereferences an annotated tag to its
   commit where `git/ref/tags` returns the tag object.
