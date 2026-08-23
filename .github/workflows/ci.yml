@@ -86,6 +86,22 @@ jobs:
           cargo clippy --all-targets --all-features -- -D warnings
           cargo fmt --all --check
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items
+      - name: the interpreter that runs the pinned validator is pinned too
+        # **The argument the pinning above makes, applied to the one thing it left out.** A repointable
+        # dependency resolves fresh executable code on every run, so every `uses:` names a commit and the npm
+        # tree is reproduced from a committed lock with `--ignore-scripts`. The **Node** that executes that
+        # tree was whatever the runner image happened to carry: GitHub changes the image's Node major and the
+        # bytes running the validator change, with nothing in this file, the specs or `BACKLOG.md` covering
+        # it. A claim one word wider than what reacts to it is the shape this repository removes on sight.
+        #
+        # The major is chosen by what the lock requires rather than by preference: `@fission-ai/openspec`
+        # declares `>=20.19.0` and `posthog-node` `^20.20.0 || >=22.22.0`, and Node 20 left support before
+        # this was written. `package.json`'s `engines.node` names the same floor, so a local run that cannot
+        # satisfy it says so rather than differing silently from CI.
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+
       - name: every spec validates
         # `npm ci` rather than `npx --yes @fission-ai/openspec@1.4.1`. The exact-version pin was real — npm
         # forbids republishing a version — but it bound only the direct package, while `npx` resolved the

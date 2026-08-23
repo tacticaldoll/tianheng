@@ -1224,6 +1224,25 @@ them.
   `projection-register` records about a check whose subject is text. The list is now the single owner and the
   prose does not restate it.
 
+- **The pinning argument was applied to every dependency except the one that runs them.** The workflow's own
+  header argues that a repointable dependency resolves fresh executable code on every run: hence every `uses:`
+  naming a commit, and the npm tree reproduced from a committed lock with `--ignore-scripts --no-install`. The
+  **Node** executing that tree was whatever the runner image carried — no `actions/setup-node`, no
+  `engines` field, and nothing in the specs, `BACKLOG.md` or `AGENTS.md` covering it. GitHub changing the
+  image's Node major changes the bytes that run the validator, which is the claim-wider-than-its-reaction shape
+  this repository removes on sight.
+
+  The major is chosen by what the lock requires rather than by preference: `@fission-ai/openspec` declares
+  `>=20.19.0` and `posthog-node` `^20.20.0 || >=22.22.0`, and Node 20 left support before this was written.
+  `package.json` gains `engines.node` naming the same floor, so a local run that cannot satisfy it says so
+  rather than differing silently from CI.
+
+  **A pin whose comment is wrong is not a pin**, and the first form of this one had that defect: the
+  `actions/setup-node` release is `v7.0.0`, and the SHA first written was `v5`'s. Every `uses:` in the file
+  was then re-resolved against its own comment — `checkout` at `v5.1.0`, `cargo-deny-action` at `v2.1.1`,
+  `setup-node` at `v7.0.0` — and all three agree. Nothing holds that agreement, deliberately: resolving a tag
+  needs the network, and `BACKLOG.md` already carries refreshing these as a human act.
+
 - **A configuration channel parallel to the one the builder occupies was open for every caller.**
   `hermetic` empties git's config files, occupies index 0 of `GIT_CONFIG_COUNT` — which is what closes the
   indexed channel and, through it, the ignore channel — and clears the three repository selectors.
