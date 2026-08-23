@@ -1224,6 +1224,31 @@ them.
   `projection-register` records about a check whose subject is text. The list is now the single owner and the
   prose does not restate it.
 
+- **A refusal asserted a fact about the tree, and holding that fact cost seven review rounds.** The
+  no-evidence refusal told an operator *no job in this repository's workflow carries `if:`, `needs:`, `paths:`
+  or `continue-on-error:`* — true when written, false the moment anyone adds one, at which point the wrapper
+  says something false about the tree the operator is standing in. It was justified on the ground that the
+  classification filtered on the same claim.
+
+  **It did not.** The `case` in `require_ci_green` reads a check's conclusion and nothing else, and
+  `scripts/merge-pr.sh` named the workflow in exactly one place: that sentence. The premise was accepted from
+  a review and never checked against the script, and it is what put a line reader over YAML in front of a Core
+  Contract obligation. Five positions in that reader across seven rounds — two indentation widths, a key
+  scope, and the flow form at two levels — two of them failing open, every one correct to repair and none of
+  them the thing that was wrong.
+
+  The refusal states what to do now: look at why the check did not run, and if a job may legitimately skip,
+  move that conclusion back beside `SUCCESS` recording which job and why — the way the `EXPECTED`
+  classification beside it already states its own reason. A claim about what to do next needs nothing holding
+  it and buys the same thing.
+
+  **The reader is kept and reframed rather than deleted.** It decides *when* an operator learns a job may
+  skip, not *whether*: a skipping job reports `SKIPPED` and the wrapper refuses regardless, so what it buys is
+  that the local Definition of Done says so first, with the key and its line, instead of a round trip through
+  CI. Its remaining blind spots are recorded at that severity — minutes, not false negatives — and
+  `BACKLOG.md`'s promotion trigger changes accordingly: a sixth position no longer earns a parser, since a
+  sixth position costs a delay.
+
 - **The rule was general and the change was one branch.** *Entering a block and reading it are not exclusive*
   was stated of the top-level key and applied there, leaving the same open direction one level down: a
   block-form `on:` whose event is written in flow form — `push: {branches: [main], paths: ['src/**']}` — which

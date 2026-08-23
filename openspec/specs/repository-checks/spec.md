@@ -1471,13 +1471,20 @@ unfinished one, because the operator action differs: an unfinished check is wait
 investigated. Where a job legitimately may skip, moving it back to agreement SHALL carry the measurement that
 earns it — which job, and why that skip is evidence.
 
-**The workflow property this rests on SHALL be held against the workflow.** The classification and the
-refusal both filter on the claim that no job can legitimately skip, and the refusal states it to an operator
-as fact — so a job acquiring `if:`, `needs:` or `continue-on-error:`, or the workflow acquiring a path
-filter, makes that sentence false at the moment it is printed while the refusal it justifies goes on
-happening: a legitimate skip refused with a message asserting legitimate skips are impossible. `AGENTS.md`'s
-rule reaches it — *something downstream filters on the claim, so declare it and hold it to the producer both
-ways* — and the producer is a tracked file. **Every key SHALL be read at the position it can occupy**, and there are two classes. `if:`, `needs:` and
+**A refusal SHALL state what to do about the state it met, not what is true of the tree.** This one said
+*no job in this repository's workflow carries `if:`, `needs:`, `paths:` or `continue-on-error:`* — true when
+written, and false the moment anyone adds one, at which point the wrapper tells an operator something false
+about the tree they are standing in. It was justified on the ground that the classification filtered on it as
+well. **It did not**: the classification reads a check's conclusion and nothing else, and the wrapper named
+the workflow in exactly that one sentence. A claim about the world needs something holding it; a claim about
+what to do next does not, and buys the same thing.
+
+Removing it ends a class rather than closing an instance. A reader was built to hold that sentence, and seven
+review rounds found five positions in it — two failing open — each of which was a hole in something
+load-bearing only because the sentence was load-bearing. The reader SHALL be kept as a **convenience** and
+stated as one: it decides **when** an operator learns a job may now skip, not **whether**, since a skipping
+job reports `SKIPPED` and the wrapper refuses regardless. Its remaining blind spots SHALL therefore be
+recorded at that severity rather than as false negatives. **Every key SHALL be read at the position it can occupy**, and there are two classes. `if:`, `needs:` and
 `continue-on-error:` sit on a **job**: a `steps:` entry may carry `if:` or `continue-on-error:` without the
 job's own conclusion moving, so refusing those would refuse correct code. `paths:` and `paths-ignore:` are
 **trigger** conditions and sit under `on:`, quoted or not — YAML 1.1 reads a bare `on` as a boolean, so both
@@ -1532,9 +1539,9 @@ sequence item written at a job key's depth.
 
 - **WHEN** a job in the workflow carries `if:`, `needs:` or `continue-on-error:`, or the workflow carries a
   path filter
-- **THEN** the check fails naming the key and its line, and says the wrapper's refusal now asserts something
-  false — either that conclusion moves back beside agreement with the measurement that earns it, or the key
-  goes
+- **THEN** the check fails naming the key and its line, so the decision is made deliberately rather than met
+  at a merge — either `SKIPPED` moves back beside agreement with the measurement that earns it, or the key
+  goes. The merge is refused either way; what this changes is when the operator finds out
 - **PINNED-BY** `no_workflow_job_can_legitimately_skip`
 
 #### Scenario: The workflow is written at a different indentation

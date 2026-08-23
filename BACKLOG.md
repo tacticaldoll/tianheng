@@ -430,15 +430,23 @@ consumer for an undemonstrated deduplication.
   indentation, the scope of the two trigger keys, the flow form at the top level, and the flow form one level
   down. Every repair was correct and every one was verified by a fixture row and a negative run; the count is
   the argument rather than any single miss. Two of the five failed **open** — the reader reported a premise
-  intact over a workflow that carried a real path filter — which is the direction the Core Contract forbids.
+  intact over a workflow that carried a real path filter.
+
+  **That severity has since been withdrawn, and the withdrawal is the useful part of this paragraph.** The
+  premise existed because the wrapper's refusal asserted it to an operator; the classification never read the
+  workflow at all. With that sentence removed the reader decides **when** an operator learns a job may skip,
+  not **whether** — a skipping job reports `SKIPPED` and the wrapper refuses either way. So the two open
+  positions cost minutes rather than admitting a merge, and a sixth would too.
 
   **What this entry establishes and the YAML case inherits:** the Rust-side half closed with `syn` as a
   `[dev-dependencies]`-only addition, needing no self-law amendment because `restrict_dependencies_to`
   observes `DependencyKind::Normal` by default. `workflow_shape` lives in `crates/kanhe/tests/`, so a YAML
   parser lands in the same table `syn` and `proc-macro2` already occupy. It is therefore **not** blocked on
   the amendment ritual this entry's TOML half is blocked on — the two halves have different prices, and only
-  one of them was priced. *Promotion trigger for this third reader:* a sixth position, or the next window
-  opening, whichever is first. *Version class:* patch; `kanhe` is `publish = false` and the reader is a test.
+  one of them was priced. *Promotion trigger for this third reader:* **not** a sixth position, which now costs a
+  delay rather than a false negative. What would earn it is a use for a parsed document that a line reader
+  cannot serve at all — a second check over the same workflow, say — or the TOML half being promoted, since
+  the two would share the argument if not the dependency. *Version class:* patch; `kanhe` is `publish = false` and the reader is a test.
   *Deferred here rather than done* on the same ground as the wrapper extraction: a dependency is not added at
   a release cut, and the reader is currently correct on every shape a fixture can construct.
 

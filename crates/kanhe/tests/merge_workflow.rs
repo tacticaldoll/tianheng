@@ -1707,15 +1707,25 @@ const JOBS: [&str; 8] = [
     "supply-chain",
 ];
 
-/// The premise the no-evidence refusal rests on, held against the workflow that has to keep it true.
+/// A job that may now legitimately skip is named here rather than at the merge.
 ///
-/// **The classification and the diagnostic both filter on this claim, and nothing held it.** The wrapper
-/// tells an operator that a skip here *cannot* be legitimate — *no job in this repository's workflow carries
-/// `if:`, `needs:`, `paths:` or `continue-on-error:`* — and refuses on that basis. Add one of those keys and
-/// the sentence becomes false at the moment it is printed, while the refusal it justifies goes on happening:
-/// a legitimate skip refused with a message asserting legitimate skips are impossible. `AGENTS.md` names the
-/// rule this falls under — *something downstream filters on the claim → declare it, and hold it to the
-/// producer both ways* — and the producer is a tracked file a sibling direction already reads.
+/// **This is a convenience, and saying so is the repair that ended a class.** It was built to hold a claim the
+/// refusal used to make — *no job in this repository's workflow carries `if:`, `needs:`, `paths:` or
+/// `continue-on-error:`* — on the ground that the classification filtered on it too. It did not: the `case`
+/// in `require_ci_green` reads a check's conclusion and nothing else, and `scripts/merge-pr.sh` mentions the
+/// workflow in exactly one place, that sentence. A premise nobody had checked, accepted from a review, is
+/// what put a line reader over YAML in front of a Core Contract obligation.
+///
+/// The sentence is gone, so what this holds is **when** the operator learns, not **whether**. A job acquiring
+/// `if:` reports `SKIPPED`, `require_ci_green`'s silent arm refuses, and the operator is told to look at why
+/// it did not run. Nothing reaches a merge either way. What this buys is that the local Definition of Done
+/// says so first, with the key and its line, instead of the round trip through CI.
+///
+/// **Which is why its remaining blind spots are not false negatives.** Seven review rounds found five
+/// positions in the reader below, two of them failing open — and against the old framing each was a hole in
+/// something load-bearing. Against this one, a miss costs a few minutes. `BACKLOG.md` carries the class with
+/// that severity, and the reader is kept rather than deleted because a few minutes is worth fifteen fixture
+/// rows already written.
 ///
 /// **Job level, not the whole file, and the difference is not tidiness.** A `steps:` entry may carry `if:` or
 /// `continue-on-error:` without the job's own conclusion moving: the step is skipped and the job still reports
@@ -1766,10 +1776,11 @@ fn no_workflow_job_can_legitimately_skip() {
     );
     assert!(
         carried.is_empty(),
-        "a job can now legitimately skip, and `require_ci_green` says otherwise to an operator's face: its \
-         refusal reads \"no job in this repository's workflow carries `if:`, `needs:`, `paths:` or \
-         `continue-on-error:`\", which is now false. Either move that conclusion back beside `SUCCESS` with \
-         the measurement that earns it — which job, and why its skip is evidence — or drop the key:\n{}",
+        "a job in this workflow can now legitimately skip, and `require_ci_green` classifies every skip as \
+         evidence nobody produced. That is still the safe direction — the merge is refused either way — but \
+         the decision is now yours to make deliberately rather than to meet at a merge: either move `SKIPPED` \
+         back beside `SUCCESS` in the wrapper, recording which job and why its skip is evidence the way the \
+         `EXPECTED` classification does, or drop the key:\n{}",
         carried.join("\n")
     );
 }
