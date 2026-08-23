@@ -443,10 +443,17 @@ consumer for an undemonstrated deduplication.
   observes `DependencyKind::Normal` by default. `workflow_shape` lives in `crates/kanhe/tests/`, so a YAML
   parser lands in the same table `syn` and `proc-macro2` already occupy. It is therefore **not** blocked on
   the amendment ritual this entry's TOML half is blocked on — the two halves have different prices, and only
-  one of them was priced. *Promotion trigger for this third reader:* **not** a sixth position, which now costs a
-  delay rather than a false negative. What would earn it is a use for a parsed document that a line reader
-  cannot serve at all — a second check over the same workflow, say — or the TOML half being promoted, since
-  the two would share the argument if not the dependency. *Version class:* patch; `kanhe` is `publish = false` and the reader is a test.
+  one of them was priced. *Promotion trigger for this third reader:* **a second file in
+  `.github/workflows/`**, and not a sixth position in the reader. The severity above is per mechanism and only
+  three of the five keys carry it unconditionally: `if:`, `needs:` and `continue-on-error:` move a check's
+  conclusion, so the check reports `SKIPPED` and the wrapper refuses whatever the reader did. `paths:` and
+  `paths-ignore:` stop the workflow triggering, so its checks are **absent** from the rollup — which refuses
+  today only because `ci.yml` is the sole workflow and an empty rollup takes the *no workflow has claimed this
+  head* arm. Add a second and a filtered-out `ci.yml` contributes nothing to a rollup that is non-empty and
+  green, so a missed filter is a merge rather than a delay. That count is held by
+  `a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists` rather than assumed, which is what makes
+  this trigger a reaction instead of a sentence. The TOML half being promoted would also earn it, since the
+  two share the argument if not the dependency. *Version class:* patch; `kanhe` is `publish = false` and the reader is a test.
   *Deferred here rather than done* on the same ground as the wrapper extraction: a dependency is not added at
   a release cut, and the reader is currently correct on every shape a fixture can construct.
 

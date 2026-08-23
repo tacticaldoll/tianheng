@@ -1605,6 +1605,13 @@ fn workflow_shape(text: &str) -> WorkflowShape {
     // indentation widths. Measured: a step input named `paths` — the shape `dorny/paths-filter` and
     // `tj-actions/changed-files` take — made the direction refuse, telling a maintainer that a job can now
     // legitimately skip about an input that moves no job's conclusion.
+    //
+    // **They also reach the rollup by two mechanisms, so a miss costs two different things.** A job key moves
+    // a *check's conclusion*: the job runs, reports `SKIPPED`, and the silent arm refuses — missing one costs
+    // a delay. A trigger filter stops the workflow *running at all*, so its checks are **absent** from the
+    // rollup rather than skipped, and what happens then depends on whether anything else claimed the head.
+    // [`a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`] holds the condition that keeps
+    // the second cost equal to the first.
     const ON_THE_JOB: [&str; 3] = ["if:", "needs:", "continue-on-error:"];
     const ON_THE_WORKFLOW: [&str; 2] = ["paths:", "paths-ignore:"];
 
@@ -1707,6 +1714,57 @@ const JOBS: [&str; 8] = [
     "supply-chain",
 ];
 
+/// The trigger keys' severity rests on this directory holding one file, so that is held rather than assumed.
+///
+/// **Five keys, two mechanisms, and they were priced as one.** `if:`, `needs:` and `continue-on-error:` move
+/// a *check's conclusion*: the job runs, reports `SKIPPED`, appears in the rollup, and
+/// `require_ci_green`'s silent arm refuses. A workflow-level `paths:` filter does something else — the
+/// workflow **never triggers**, so its checks are absent from the rollup rather than reported skipped.
+///
+/// Today that still refuses, and by an accident of arithmetic: `ci.yml` is the only file here, so a
+/// non-triggering workflow leaves the rollup empty and the *no workflow has claimed this head* arm stops the
+/// merge. Add a second workflow and the rollup is non-empty and green while none of `ci.yml`'s checks have
+/// run — the merge proceeds, and a `paths:` filter this reader missed is a false negative rather than a
+/// delay.
+///
+/// So the severity stated on [`no_workflow_job_can_legitimately_skip`] holds unconditionally for three keys
+/// and conditionally for two, and the condition is a count of files in a directory. That is the shape this
+/// repository removes on sight; it is held here instead. A second workflow is legitimate work — this fails
+/// so that the trigger pair's cost is re-priced when it happens, not discovered afterwards.
+#[test]
+fn a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let dir = root.join(".github/workflows");
+    let mut present: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|error| {
+            panic!(
+                "read {} — the premise is about its contents: {error}",
+                dir.display()
+            )
+        })
+        .map(|entry| {
+            entry
+                .expect("read a workflow directory entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    present.sort();
+    assert_eq!(
+        present,
+        vec!["ci.yml".to_string()],
+        "this directory no longer holds exactly one workflow, which is what made a missed `paths:` filter \
+         cost a delay rather than a merge. With one file, a workflow that does not trigger leaves the rollup \
+         empty and `require_ci_green` refuses; with two, a filtered-out `ci.yml` contributes nothing to a \
+         rollup that is non-empty and green. Re-price the trigger keys where their severity is stated — on \
+         `no_workflow_job_can_legitimately_skip` and in `BACKLOG.md`'s hand-parse entry — and decide whether \
+         a parsed workflow is now worth its dependency"
+    );
+}
+
 /// A job that may now legitimately skip is named here rather than at the merge.
 ///
 /// **This is a convenience, and saying so is the repair that ended a class.** It was built to hold a claim the
@@ -1721,11 +1779,21 @@ const JOBS: [&str; 8] = [
 /// it did not run. Nothing reaches a merge either way. What this buys is that the local Definition of Done
 /// says so first, with the key and its line, instead of the round trip through CI.
 ///
-/// **Which is why its remaining blind spots are not false negatives.** Seven review rounds found five
-/// positions in the reader below, two of them failing open — and against the old framing each was a hole in
-/// something load-bearing. Against this one, a miss costs a few minutes. `BACKLOG.md` carries the class with
-/// that severity, and the reader is kept rather than deleted because a few minutes is worth fifteen fixture
-/// rows already written.
+/// **Which is why its remaining blind spots are not false negatives — for three of the five keys
+/// unconditionally, and for two of them on a condition that is held.** `if:`, `needs:` and
+/// `continue-on-error:` move a check's conclusion, so a job carrying one appears in the rollup as `SKIPPED`
+/// whatever this reader does. `paths:` and `paths-ignore:` stop the workflow triggering, so its checks are
+/// **absent**; that still refuses only while `ci.yml` is the sole workflow, because an empty rollup takes the
+/// *no workflow has claimed this head* arm.
+///
+/// Stating it once for all five would have rested a claim about the wrapper on the number of files in a
+/// directory. [`a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`] holds that count instead,
+/// so a second workflow re-opens the question where it is priced rather than after.
+///
+/// Seven review rounds found five positions in the reader below, two of them failing open — and against the
+/// old framing each was a hole in something load-bearing. Against this one, a miss costs a few minutes, and
+/// the reader is kept rather than deleted because a few minutes is worth fifteen fixture rows already
+/// written.
 ///
 /// **Job level, not the whole file, and the difference is not tidiness.** A `steps:` entry may carry `if:` or
 /// `continue-on-error:` without the job's own conclusion moving: the step is skipped and the job still reports

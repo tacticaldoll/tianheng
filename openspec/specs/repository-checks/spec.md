@@ -1483,8 +1483,18 @@ Removing it ends a class rather than closing an instance. A reader was built to 
 review rounds found five positions in it — two failing open — each of which was a hole in something
 load-bearing only because the sentence was load-bearing. The reader SHALL be kept as a **convenience** and
 stated as one: it decides **when** an operator learns a job may now skip, not **whether**, since a skipping
-job reports `SKIPPED` and the wrapper refuses regardless. Its remaining blind spots SHALL therefore be
-recorded at that severity rather than as false negatives. **Every key SHALL be read at the position it can occupy**, and there are two classes. `if:`, `needs:` and
+job reports `SKIPPED` and the wrapper refuses regardless. Its remaining blind spots SHALL be
+recorded at that severity rather than as false negatives — **per mechanism, since the five keys reach the
+rollup by two of them**. A job key moves a check's conclusion, so the check appears as `SKIPPED` and the
+refusal happens whatever the reader did. A trigger filter stops the workflow running, so its checks are
+**absent** from the rollup; that refuses only while one workflow exists, because an empty rollup takes the
+*no workflow has claimed this head* arm. A second workflow file makes a missed trigger filter a false
+negative again.
+
+**A severity resting on a count SHALL hold that count**, rather than stating the conclusion and leaving the
+condition unwritten. The reaction SHALL fail when the workflow directory stops holding exactly one file,
+naming what the second file changes and where the severity is stated, so the question is re-priced when it
+arises instead of after. **Every key SHALL be read at the position it can occupy**, and there are two classes. `if:`, `needs:` and
 `continue-on-error:` sit on a **job**: a `steps:` entry may carry `if:` or `continue-on-error:` without the
 job's own conclusion moving, so refusing those would refuse correct code. `paths:` and `paths-ignore:` are
 **trigger** conditions and sit under `on:`, quoted or not — YAML 1.1 reads a bare `on` as a boolean, so both
@@ -1534,6 +1544,13 @@ still holds, and the forbidden key is never examined. That is the one loss the e
 removed rather than guarded. The reader SHALL be exercised by a fixture over the shapes the tracked workflow
 does not currently have, including the two that must **not** react — a `steps:` entry's own `if:`, and a
 sequence item written at a job key's depth.
+
+#### Scenario: A second workflow file appears
+
+- **WHEN** `.github/workflows/` holds more than one file
+- **THEN** the check fails, because a missed trigger filter stops costing a delay and starts costing a merge:
+  a filtered-out workflow contributes nothing to a rollup the others make non-empty and green
+- **PINNED-BY** `a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`
 
 #### Scenario: A job acquires a key that lets it skip
 
