@@ -528,6 +528,30 @@ which this repository has already paid for. An argument whose effect outlives th
 cannot undo SHALL be refused, and its refusal SHALL name the consequence rather than the rule, because a
 refusal an operator cannot act on is one they work around.
 
+**A value position SHALL NOT be a place a refused argument may sit.** An arm that reads a following value
+SHALL refuse a flag-shaped one, because the tool does not consume it: measured on cargo 1.96.0,
+`cargo publish --package --no-verify` packages **without verifying** — byte-identical to passing `--no-verify`
+alone — and exits 0 with no complaint about a package by that name. Every refusal a wrapper argues for is
+otherwise reachable through the one selector it admits.
+
+This SHALL hold for **every** value-taking arm rather than the one measured to leak. How the tool handles a
+flag-shaped value differs per flag and per version — some consume it and fail later, some are refused by the
+argument parser — and a wrapper standing in front of an irreversible act does not rest on the tool failing
+correctly. It SHALL be decided by **shape**, a leading `-`, rather than against the refusal list: what makes
+the value wrong is that the tool reads it as an argument of its own, so an argument nobody has classified is
+refused for the same reason as a named one.
+
+**A direction over an argument allowlist SHALL cross its axes.** Sending each refused argument alone, and each
+admitted argument with a well-formed value, leaves the interaction between arguments owned by nothing — which
+is where the refusal above walked through. The reaction SHALL hold every value-taking arm against every class
+of refused argument.
+
+#### Scenario: A refused flag is written where a value belongs
+
+- **WHEN** a refused flag is passed as the value of an admitted value-taking argument
+- **THEN** the wrapper refuses, and the tool is never reached
+- **PINNED-BY** `a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position`
+
 Each admitted argument SHALL be accepted in one spelling, with its value as a separate argument, because parsing
 a tool's short, glued and equals forms is what a denylist has to get exhaustively right and an allowlist does
 not. A misconfigured invocation SHALL exit `2`, the usage-error class, rather than `1`, which is what a gate that

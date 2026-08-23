@@ -215,6 +215,74 @@ fn only_an_allowlisted_argument_reaches_the_publish() {
     }
 }
 
+/// A refused argument stays refused when it sits in an admitted argument's **value position**.
+///
+/// **The two directions around this one both read one axis: single arguments.** One sends each refused flag
+/// on its own and requires a refusal; the other sends admitted flags with well-formed values and requires
+/// arrival. Neither constructs the shape where the two meet — a refused flag standing where an admitted
+/// flag's value goes — so the interaction between arguments had no owner at all, and that is what a refusal
+/// walked through.
+///
+/// **Measured on cargo 1.96.0 rather than reasoned about.** `cargo publish --package --no-verify` packages
+/// **without verifying** — byte-identical to passing `--no-verify` alone — and exits 0 with no complaint
+/// about a package by that name. cargo does not consume a flag-shaped value; it parses it as an argument of
+/// its own and honours it. So `--no-verify` and `--allow-dirty`, the two the script's header argues at length
+/// for refusing, reached `cargo publish` through the one selector it admits.
+///
+/// The wrapper refuses by **shape** — a leading `-` is what makes cargo read a token as its own argument — so
+/// this cross product covers a flag no one has classified as well as the named ones, which is the property an
+/// allowlist exists to have. `--jobs` and the destination pair are included because they take values too:
+/// they fail loudly today (cargo consumes the value and then cannot parse it, or clap refuses), and a row
+/// each keeps that from being an accident nobody would notice changing.
+#[test]
+fn a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    // Every arm of the parser that reads a following value.
+    const TAKES_A_VALUE: [&str; 6] = [
+        "--package",
+        "--jobs",
+        "--color",
+        "--target-dir",
+        "--registry",
+        "--index",
+    ];
+    // One per class the header refuses, plus one nobody has classified.
+    const REFUSED: [&str; 5] = [
+        "--no-verify",
+        "--allow-dirty",
+        "--manifest-path",
+        "--config",
+        "--some-flag-a-future-cargo-adds",
+    ];
+
+    for admitted in TAKES_A_VALUE {
+        for refused in REFUSED {
+            let run = run_wrapper(&root, &[admitted, refused]);
+            assert_eq!(
+                run.status.code(),
+                Some(2),
+                "`{admitted} {refused}` must be refused: a value position is not a place a refused flag may \
+                 sit, because cargo reads a flag-shaped value as an argument of its own. Got {:?} with \
+                 stderr {:?}",
+                run.status.code(),
+                run.stderr
+            );
+            assert!(
+                run.stderr.contains("publish source: refusing"),
+                "`{admitted} {refused}` must be refused in this script's own diagnostic form, got {:?}",
+                run.stderr
+            );
+            assert!(
+                run.cargo_log.is_empty(),
+                "`{admitted} {refused}` must be refused before the gate runs, but cargo was invoked:\n{}",
+                run.cargo_log
+            );
+        }
+    }
+}
+
 /// An admitted argument reaches the publish as the SELECTION cargo would honour, not as the string the wrapper
 /// typed.
 ///

@@ -75,6 +75,32 @@ refuse() {
     cannot_judge "refusing \`$1\`: $2"
 }
 
+# A value-taking flag's value, checked for both ways it can be wrong: absent, and flag-shaped.
+#
+# **A value position is not a place a refused flag may sit.** The arms below checked only that *something*
+# followed, and cargo does not consume a flag-shaped value — measured on cargo 1.96.0,
+# `cargo publish --package --no-verify` packages **without verifying**, byte-identical to passing
+# `--no-verify` alone, and exits 0 with no complaint about a package by that name. So every refusal this file
+# argues for was reachable through the one selector it admits.
+#
+# Held for every value-taking arm rather than the one that leaked. cargo's own handling differs per flag —
+# some consume the value and fail later, some are refused by clap — but that is a fact about cargo's error
+# paths at one version, and a wrapper standing in front of an irreversible act does not rest on the tool
+# failing correctly. The property is the script's own: an argument it did not name does not travel, wherever
+# it was written.
+#
+# Checked by SHAPE rather than against the refusal list, because the list is not the property: what makes a
+# value wrong is that cargo reads a leading `-` as an argument of its own, so a flag no one has classified is
+# refused for the same reason as one this file names.
+require_a_value() {
+    if (($1 < 2)); then
+        refuse "$2" "this script reads every value as the argument after its flag, so pass it that way or drop the flag"
+    fi
+    if [[ $3 == -* ]]; then
+        refuse "$2" "its value is \`$3\`, which cargo reads as an argument of its own rather than as a value — measured, \`--package --no-verify\` packages without verifying and exits 0. Pass a value, or drop the flag"
+    fi
+}
+
 # **The class a wrapper exits is now decided by construction, not by a sweep that must be exhaustive.**
 #
 # Under `set -e` any unguarded failure exits with the TOOL's status, and this repository reserves `1` for a
@@ -122,9 +148,7 @@ while (($#)); do
     # The one admitted selector. It REPLACES the default rather than joining it, and may be repeated —
     # measured, two `--package` flags select two packages.
     --package)
-        if (($# < 2)); then
-            refuse "$1" "this script reads every value as the argument after its flag, so pass it that way or drop the flag"
-        fi
+        require_a_value "$#" "$1" "${2-}"
         if [[ ${selection[0]} == --workspace ]]; then
             selection=()
         fi
@@ -132,9 +156,7 @@ while (($#)); do
         shift 2
         ;;
     --jobs | --color | --target-dir | --registry | --index)
-        if (($# < 2)); then
-            refuse "$1" "this script reads every value as the argument after its flag, so pass it that way or drop the flag"
-        fi
+        require_a_value "$#" "$1" "${2-}"
         forwarded+=("$1" "$2")
         shift 2
         ;;

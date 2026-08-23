@@ -1224,6 +1224,24 @@ them.
   `projection-register` records about a check whose subject is text. The list is now the single owner and the
   prose does not restate it.
 
+- **A refused flag reached `cargo publish` by sitting in the one selector the wrapper admits.** The
+  `--package` arm checked that *something* followed and nothing else, and cargo does not consume a
+  flag-shaped value. Measured on cargo 1.96.0: `cargo publish --package --no-verify` packages **without
+  verifying** — byte-identical to passing `--no-verify` alone — and exits 0 with no complaint about a package
+  by that name. So the two flags this script's header argues at length for refusing, `--no-verify` and
+  `--allow-dirty`, were both reachable, in front of an upload that can be yanked and never replaced.
+
+  Held for **every** value-taking arm rather than the one measured to leak. cargo's handling differs per flag
+  — some consume the value and fail later, some are refused by clap — but that is a fact about one version's
+  error paths, and a wrapper in front of an irreversible act does not rest on the tool failing correctly. The
+  check is by **shape**: a leading `-` is what makes cargo read a token as its own argument, so a flag nobody
+  has classified is refused for the same reason as a named one. One helper, both arms.
+
+  **The axis, not the arm, is what was missing.** Both wrappers' directions read single arguments — each
+  refused flag alone, each admitted flag with a well-formed value — so the interaction between arguments had
+  no owner. `a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position` crosses them: six value-taking
+  arms against five classes of refused argument, including one nobody has classified.
+
 - **The severity that repair set was right for three keys and rested on a file count for two.** Withdrawing
   the false-negative framing said *a job acquiring `if:` reports `SKIPPED`, the silent arm refuses, nothing
   reaches a merge either way*. True for `if:`, `needs:` and `continue-on-error:`, which move a **check's
