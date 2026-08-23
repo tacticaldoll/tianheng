@@ -39,7 +39,8 @@ pub const EXCLUDES_SETTING: &str = "core.excludesFile";
 /// |---|---|
 /// | global / system config file | yes |
 /// | `$XDG_CONFIG_HOME/git/ignore` | yes — see below; this row read **no** until a gate was found relying on it |
-/// | `GIT_CONFIG_COUNT` + `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` | **yes** — see below; this row read **no** until it was measured |
+/// | `GIT_CONFIG_COUNT` + `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` | **yes** — by occupying index 0; this row read **no** until it was measured |
+/// | `GIT_CONFIG_PARAMETERS` | **yes** — cleared, see `CONFIG_CHANNELS` below; a channel parallel to the count, which occupying index 0 does nothing to, and which git exports itself under any `git -c …` |
 /// | `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` | **yes** — cleared, see `REPOSITORY_SELECTORS` below; this row read **no** until a review asked why a stop nothing declared was policy |
 /// | `GIT_AUTHOR_NAME` / `GIT_COMMITTER_NAME` and their emails | **no** — they override the fixture's own `.git/config` identity |
 /// | `.git/info/exclude` | **no** — inside the repository, so no config setting reaches it |
@@ -94,8 +95,37 @@ pub fn hermetic(program: &str) -> Command {
     for selector in REPOSITORY_SELECTORS {
         command.env_remove(selector);
     }
+    for channel in CONFIG_CHANNELS {
+        command.env_remove(channel);
+    }
     command
 }
+
+/// The environment variables that inject **configuration** past the files this builder empties.
+///
+/// `GIT_CONFIG_COUNT` and its indexed pairs are closed by **occupation**: this builder writes the count and
+/// index 0, so an ambient pair at any index is unreachable. `GIT_CONFIG_PARAMETERS` is a second, parallel
+/// channel git parses independently of that count, so occupying index 0 does nothing to it.
+///
+/// **And git itself exports it**, which is what makes this ambient rather than hypothetical. Measured on git
+/// 2.53.0: a `pre-commit` hook under `git -c probe.key=SET commit` sees
+/// `GIT_CONFIG_PARAMETERS=['probe.key'='SET']`, and sees it unset without the `-c`. So a gate run from a
+/// hook, an alias, or `bisect run` inherits whatever configuration that invocation set.
+///
+/// **The direction is under-refusal**, measured against this builder's full environment:
+/// `'core.excludesFile=/tmp/x'` makes `config --get core.excludesFile` answer `/tmp/x`, and
+/// `status --porcelain --untracked-files=all` stops reporting a file that path excludes. That read is the one
+/// `publish-source-integrity#worktree-is-not-clean` rests on, in front of an upload that can be yanked and
+/// never replaced.
+///
+/// **This list is not the defence; the case is.** Three rounds of widening this builder each added the
+/// variable someone had just measured — the config files, then the repository selectors, then the object
+/// pair — and a list grown that way is exactly as complete as the last person's memory.
+/// `no_ambient_configuration_reaches_a_hermetic_command` asks the question the other way round: it runs a
+/// child under an ambient environment and requires that the configuration git reports come from this
+/// builder and nowhere else, so a channel nobody has named is found by the run rather than by the next
+/// review.
+const CONFIG_CHANNELS: [&str; 1] = ["GIT_CONFIG_PARAMETERS"];
 
 /// The environment variables that move **which repository** `git` answers about, cleared rather than set.
 ///

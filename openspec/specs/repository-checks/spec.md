@@ -1788,6 +1788,41 @@ one. What this requirement holds is membership.
 - **THEN** the check fails, because a name that outlives its reason certifies nothing
 - **PINNED-BY** `no_test_target_spawns_a_process_unnamed`
 
+### Requirement: The isolation a builder claims SHALL be decided by a run, not by a list of names
+
+The shared command builder SHALL clear `GIT_CONFIG_PARAMETERS`. It is a channel **parallel** to
+`GIT_CONFIG_COUNT`: git parses it independently of the count, so occupying index 0 — which is what closes the
+indexed channel and, through it, the ignore channel — does nothing to it. Measured on git 2.53.0 against the
+builder's full environment, `'core.excludesFile=/tmp/x'` on that channel makes `config --get core.excludesFile`
+answer `/tmp/x` and `status --porcelain --untracked-files=all` stop reporting a file that path excludes — the
+read `publish-source-integrity#worktree-is-not-clean` rests on, in front of an act that cannot be undone.
+
+**It is ambient in the ordinary sense, not the hypothetical one.** git exports it itself: measured, a
+`pre-commit` hook under `git -c probe.key=SET commit` sees `GIT_CONFIG_PARAMETERS=['probe.key'='SET']` and
+sees it unset without the `-c`. A gate run from a hook, an alias, or `bisect run` inherits whatever
+configuration that invocation set.
+
+**The reaction SHALL ask the question of a run rather than of a name list.** Three rounds widened this builder
+by name — the config files, the repository selectors, the object-directory pair — each after someone measured
+the variable, and a list grown that way is as complete as the last person's memory. The reaction SHALL run the
+builder in a **child process that inherits an ambient environment**, and require that every configuration git
+reports as coming from the command line be one the builder wrote. A channel nobody has named then appears as
+an extra entry rather than as the next review's finding. Inheritance SHALL be the delivery, since setting the
+variable on the builder's own command would overwrite the removal and test the case's last statement.
+
+A control SHALL establish that the ambient channel is readable on the machine, so the assertion cannot hold
+because the variable was never live. The settings the control and the subject carry SHALL NOT name
+`core.excludesFile`: the sibling ignore sweep decides whether a file closed that channel by whether the file
+names the setting, so an attack string spelling it would read as this file having neutralised it and would
+take the channel-control exception with it — measured.
+
+#### Scenario: A configuration channel nobody named is open
+
+- **WHEN** any environment channel delivers configuration that the builder did not write
+- **THEN** the case fails naming the setting that arrived and where to close it, whether or not that channel
+  appears in the builder's own list
+- **PINNED-BY** `no_ambient_configuration_reaches_a_hermetic_command`
+
 ### Requirement: A judgement SHALL close the ambient channel that moves which repository git answers about
 
 The shared command builder SHALL clear `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE`, so a judgement's reads
