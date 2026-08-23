@@ -148,23 +148,38 @@ fn no_ambient_configuration_reaches_a_hermetic_command() {
         "the control did not read the ambient channel, so the assertion below would hold for the wrong \
          reason:\n{control}"
     );
-    let from_command_line: Vec<&str> = reported
+    // **The observation port is the whole listing, not one origin class.** The first form filtered to
+    // `command line:` entries and asserted each was the builder's — which reads a channel that *adds* to the
+    // listing and cannot see one that *replaces* it. Measured with `GIT_CONFIG` naming a file: git lists that
+    // file alone, `command line:` has zero entries, and the case failed on emptiness saying *this read is not
+    // about the builder* — neither naming the setting that arrived nor where to close it, which is the half
+    // of its own scenario that matters.
+    //
+    // So every line is classified, and the two admissible origins are named: what this builder wrote, and the
+    // fixture's own repository config, which the builder empties the global and system files around and does
+    // not claim to govern.
+    let builders = |line: &str| {
+        line.starts_with("command line:") && line.contains("core.excludesfile=/dev/null")
+    };
+    let the_repositorys = |line: &str| line.starts_with("file:") && line.contains(".git/config");
+    let unexpected: Vec<&str> = reported
         .lines()
-        .filter(|line| line.starts_with("command line:"))
+        .filter(|line| !line.trim().is_empty())
+        .filter(|line| !builders(line) && !the_repositorys(line))
         .collect();
     assert!(
-        !from_command_line.is_empty(),
-        "the builder's own setting is not among what git reported, so this read is not about the builder:\n\
+        unexpected.is_empty(),
+        "configuration reached a hermetic command that this builder did not write: {unexpected:?}. Whatever \
+         channel carried it is open for every caller — close it in `hermetic` beside `CONFIG_CHANNELS`, and \
+         keep this case as the thing that found it:\n{reported}"
+    );
+    assert!(
+        reported.lines().any(builders),
+        "the builder's own setting is absent from what git reported, so a channel did not add to this \
+         listing but REPLACED it — the repair is the same and the channel is whatever produced what is left. \
+         Asserted after the classification above so a replacing channel is named by its content first:\n\
          {reported}"
     );
-    for line in &from_command_line {
-        assert!(
-            line.contains("core.excludesfile=/dev/null"),
-            "a configuration reached a hermetic command that this builder did not write: {line:?}. Whatever \
-             channel carried it is open for every caller — close it in `hermetic` beside `CONFIG_CHANNELS`, \
-             and keep this case as the thing that found it:\n{reported}"
-        );
-    }
 }
 
 /// The repository-selector row of [`hermetic`]'s table, in the two halves this one can be built in.

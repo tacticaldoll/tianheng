@@ -1243,6 +1243,23 @@ them.
   `setup-node` at `v7.0.0` — and all three agree. Nothing holds that agreement, deliberately: resolving a tag
   needs the network, and `BACKLOG.md` already carries refreshing these as a human act.
 
+- **The case built to find unnamed channels could not name the next one.** It filtered git's report to
+  command-line entries and required each to be the builder's — which reads a channel that **adds** to the
+  listing and is blind to one that **replaces** it. Measured with `GIT_CONFIG` naming a file: git lists that
+  file alone, command-line entries number zero, and the case failed on emptiness saying *this read is not
+  about the builder* — naming neither the setting that arrived nor where to close it, which is exactly the
+  half of its own scenario that does the work.
+
+  Every line is classified now against the two origins the builder admits — what it wrote, and the
+  repository's own config — and the absence of the builder's setting is asserted **after** that, so a
+  replacing channel is named by its content rather than by what went missing. Negative run: it reports
+  `["file:/tmp/…\tprobe.key=INJECTED"]` and where to close it.
+
+  `GIT_CONFIG` is cleared alongside, for a reason recorded rather than folded in: it does **not** move a
+  judgement's reads — measured, `status --porcelain --untracked-files=all` reports an excluded file with and
+  without it — but it redirects a **write**, so `git config` in a fixture builder lands outside the fixture and
+  the commit after it fails for want of an identity. Fail-loud, like the object-directory pair.
+
 - **A configuration channel parallel to the one the builder occupies was open for every caller.**
   `hermetic` empties git's config files, occupies index 0 of `GIT_CONFIG_COUNT` — which is what closes the
   indexed channel and, through it, the ignore channel — and clears the three repository selectors.
