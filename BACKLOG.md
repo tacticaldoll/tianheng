@@ -90,9 +90,36 @@ consumer for an undemonstrated deduplication.
   actions are `actions/checkout` and `EmbarkStudios/cargo-deny-action`, both running under
   `permissions: contents: read` against a repository whose CI holds no secret beyond that grant. A stale
   checkout is a stale checkout; the failure it invites is missing an upstream fix, not executing something
-  unchosen — which is the direction the pin closed. *Promotion trigger:* a pinned action falling far enough
-  behind to miss a security advisory, or a second ecosystem arriving whose pinning would want the same
-  answer — either makes one dependency-refresh mechanism worth more than two hand-maintained pins.
+  unchosen — which is the direction the pin closed.
+
+  ***Promotion trigger, and it FIRED.*** As written, this entry promoted on *a pinned action falling far
+  enough behind to miss a security advisory, or **a second ecosystem arriving whose pinning would want the
+  same answer***. The Node interpreter pin is that second ecosystem, and it was added to this entry — the
+  trigger fired in the same commit that extended the entry naming it, and nobody read it. Recorded here
+  rather than repaired by rewording, because a trigger quietly widened after it fires is a trigger that
+  never fires.
+
+  *Disposition, 2026-08-24:* **the half with teeth was built, and no refresh bot was adopted.** The rot
+  splits in two and only one half was open. Falling *behind within* a major is bounded — `engines.node` at
+  `">=24 <25"` with `.npmrc`'s `engine-strict=true` — and the residue is a patch-level lag on a tree resolved
+  by digest and run under `--ignore-scripts`. Running the interpreter *past the point its major is
+  maintained* had nothing reacting to it at all, and `interpreter_support_window` now does: the pin declares
+  the window it is good for, and the reaction refuses when that window is absent, doubled, unreadable,
+  declared for a major the workflow no longer pins, or reached.
+
+  *And the evaluation below was of the wrong tool for half of this entry.* Dependabot's `github-actions`
+  ecosystem updates the action versions a workflow `uses:` — **not the inputs those actions take**, so
+  `node-version:` is outside it. Adopting Dependabot would have closed the action-SHA half and left the Node
+  half exactly where it was, which is not what the paragraph below assumes. Renovate reaches both, through
+  its custom managers and a Node datasource. That does not change the decision, and it does change what the
+  decision is *about*: the cost named below — a bot-authored pull-request stream entering a merge path whose
+  wrapper judges every squash message against its pull request — is unchanged, and is now the whole of it,
+  since the half a bot would uniquely buy is the one just closed by a reaction that needs no bot, no second
+  author, and no network.
+
+  *Promotion trigger, restated so it can fire again:* a pinned action falling far enough behind to miss a
+  security advisory; a **third** hand-maintained pin arriving, since two were answerable one at a time and
+  three is a mechanism; or the declared support window being reached with no maintained major to move to.
   Node's half of this debt is bounded differently from the actions': `package.json` declares
   `"node": ">=24 <25"` and `.npmrc` sets `engine-strict=true`, so a runner or a contributor arriving on
   another major **stops** rather than proceeding on different bytes — measured on npm 11.13.0, where an
@@ -103,10 +130,11 @@ consumer for an undemonstrated deduplication.
   comment's refresh recipe — `repos/<owner>/<repo>/commits/<tag>`, which dereferences an annotated tag to its
   commit where `git/ref/tags` returns the tag object.
 
-  Dependabot was considered and not adopted **now**, for a reason rather than by omission: it would add a
-  configuration file, a bot-authored pull-request stream, and a second squash-message author to a repository
-  whose merge path is a wrapper that judges every squash message against its pull request. That interaction
-  is real work and belongs to a change of its own, not to the pin that created the need.
+  A refresh bot — Dependabot for the actions, Renovate for both — was considered and not adopted **now**, for
+  a reason rather than by omission: it would add a configuration file, a bot-authored pull-request stream,
+  and a second squash-message author to a repository whose merge path is a wrapper that judges every squash
+  message against its pull request. That interaction is real work and belongs to a change of its own, not to
+  the pin that created the need.
 
 - **A check that never wrote a region decision is invisible.** *Class:* ACCEPTED DEBT. *Observed pressure:* the
   region classifier exists because six defects were one shape, and two more were found afterwards in a check
