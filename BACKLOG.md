@@ -488,6 +488,25 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **`merge_workflow`'s fixture takes `jq` from the host without declaring it, and its absence reads as fifteen
+  defects in the subject.** *Class:* WATCH. *Observed pressure:* measured 2026-08-23 on a machine where `jq`
+  is not installed — 15 of that target's 30 cases fail, each reporting
+  `bin/gh: line 77: jq: command not found` alongside the merge message *cannot read what CI said about this
+  pull request, which is not the same fact as CI having agreed*. **The wrapper is right and the fixture is
+  not:** `scripts/merge-pr.sh` could not read a verdict, so it declined to judge and said so — exactly its
+  contract. What is wrong is that the fixture's `gh` stub pipes through a host tool it never declares, so a
+  missing interpreter presents as a failing subject, and the operator reads fifteen findings about CI when
+  the state met was one absent binary. Same shape this window closed twice elsewhere: a diagnosis SHALL state
+  what to do about the state it met, not assert what is true of the world. *Observation source:* the
+  `v0.4.0..release/0.5.0` campaign's verification runs, where the suite passed earlier the same day and the
+  binary disappeared beneath it. *Current reaction or bound:* none — no capability spec states the host tools
+  a reaction requires, and nothing checks for one before the reaction runs. *Risk, bounded rather than
+  assumed:* local only. GitHub's `ubuntu-latest` images ship `jq`, so CI is unaffected, and `kanhe` publishes
+  nothing — no adopter build and no released artifact can meet this. *Promotion trigger:* a second reaction
+  fixture found taking a host tool it does not declare, or a CI image that stops shipping `jq`. Either makes
+  this a class rather than one stub, and the repair is then the same for both: the fixture states what it
+  needs and stops before the subject when it is absent.
+
 - **WATCH: a corrupt tag ref and an absent one are one exit status, so the publish gate cannot tell them
   apart.** *Class:* WATCH. *Observed pressure:* the tag read was split so that git declining to answer is no
   longer reported as *there is no tag*, and one residue survives the split: a ref FILE holding unparseable

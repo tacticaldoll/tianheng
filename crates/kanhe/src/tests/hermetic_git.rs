@@ -75,11 +75,15 @@ fn hermetic_configuration_probe() {
 /// `publish-source-integrity#worktree-is-not-clean` rests on.
 ///
 /// So this asks the question the other way round. It sets an ambient environment, runs the builder in a child
-/// that inherits it, and requires that every **`command line:`** entry git reports be one this builder wrote.
-/// A channel nobody has named shows up as an extra line rather than as the next review's finding.
+/// that inherits it, and **classifies every line git reports** against the two origins this builder admits:
+/// what it wrote, and the fixture's own `.git/config`, which it empties the global and system files around
+/// and does not claim to govern. A channel nobody has named carries a setting from neither, so it is named by
+/// what arrived rather than by anyone having thought of it.
 ///
-/// `file:` origins are the fixture's own `.git/config` and are not this builder's subject — it empties the
-/// global and system files and does not claim to govern the repository's own.
+/// Classifying the whole listing rather than the command-line entries is what lets a **replacing** channel be
+/// seen at all: `GIT_CONFIG` names a file and git then lists that file *alone*, so a reader filtering to
+/// command-line entries meets an empty set and reports the absence — naming neither the setting nor where to
+/// close it. Both channels are delivered here, and either one left uncleared shows up in what is classified.
 #[test]
 fn no_ambient_configuration_reaches_a_hermetic_command() {
     let root = std::env::temp_dir().join(format!("kanhe-hermetic-config-{}", std::process::id()));
@@ -110,17 +114,39 @@ fn no_ambient_configuration_reaches_a_hermetic_command() {
     // Nothing is lost. The builder's defence against the indexed channel is occupying the count, and this
     // channel bypasses the count whatever key it carries; the assertion below requires every reported
     // `command line:` entry to be the builder's, so any setting at all is enough to fail it.
-    let ambient = "'user.name=ambient-probe' 'core.fileMode=false'";
+    let parameters = "'user.name=ambient-probe' 'core.fileMode=false'";
 
-    // The control: the same channel, no builder. Without this the assertion below could hold because the
-    // variable was never readable on this machine.
-    let control = Command::new("git")
-        .args(["config", "--list", "--show-origin"])
-        .env("GIT_CONFIG_PARAMETERS", ambient)
-        .current_dir(&root)
-        .output()
-        .expect("run the control");
-    let control = String::from_utf8_lossy(&control.stdout).into_owned();
+    // The second member of `CONFIG_CHANNELS`, delivered rather than only named. The constant listed
+    // `GIT_CONFIG` and nothing constructed it: deleting it from there left the whole suite green, which is
+    // the shape this file's own header argues against — a list grown by memory, one entry longer.
+    //
+    // The file is placed at a path ending `.git/config`, which is this variable's most natural value and was
+    // the exact input that walked through the first classification: a substring test for the fixture's own
+    // config admitted every line of it, `core.excludesFile` included — the one setting this whole surface
+    // exists to own. The path stays as it is so that predicate cannot be loosened back without failing here.
+    let foreign = root.join("foreign.git");
+    std::fs::create_dir_all(&foreign).expect("create the foreign repository directory");
+    let foreign = foreign.join("config");
+    std::fs::write(
+        &foreign,
+        "[user]\n\tname = foreign-file-probe\n[core]\n\tfileMode = false\n",
+    )
+    .expect("write the foreign configuration file");
+
+    // A control per channel, because they do not compose: measured, `GIT_CONFIG` **replaces** the listing and
+    // suppresses `GIT_CONFIG_PARAMETERS` entirely, so one environment carrying both demonstrates only the
+    // second. Without these the assertions below could hold because a variable was never readable here.
+    let read_with = |key: &str, value: &std::ffi::OsStr| {
+        let out = Command::new("git")
+            .args(["config", "--list", "--show-origin"])
+            .env(key, value)
+            .current_dir(&root)
+            .output()
+            .expect("run the control");
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let by_parameters = read_with("GIT_CONFIG_PARAMETERS", std::ffi::OsStr::new(parameters));
+    let by_file = read_with("GIT_CONFIG", foreign.as_os_str());
 
     // The subject: a child of this test binary, inheriting the ambient environment, running the builder.
     let probe = Command::new(std::env::current_exe().expect("this test binary"))
@@ -130,7 +156,8 @@ fn no_ambient_configuration_reaches_a_hermetic_command() {
             "--nocapture",
             "--test-threads=1",
         ])
-        .env("GIT_CONFIG_PARAMETERS", ambient)
+        .env("GIT_CONFIG_PARAMETERS", parameters)
+        .env("GIT_CONFIG", &foreign)
         .env("KANHE_HERMETIC_PROBE_REPO", &root)
         .output()
         .expect("run the probe child");
@@ -143,11 +170,16 @@ fn no_ambient_configuration_reaches_a_hermetic_command() {
 
     std::fs::remove_dir_all(&root).ok();
 
-    assert!(
-        control.contains("ambient-probe"),
-        "the control did not read the ambient channel, so the assertion below would hold for the wrong \
-         reason:\n{control}"
-    );
+    for (channel, control, arrival) in [
+        ("GIT_CONFIG_PARAMETERS", &by_parameters, "ambient-probe"),
+        ("GIT_CONFIG", &by_file, "foreign-file-probe"),
+    ] {
+        assert!(
+            control.contains(arrival),
+            "the control did not read `{channel}`, so the assertions below would hold for the wrong \
+             reason:\n{control}"
+        );
+    }
     // **The observation port is the whole listing, not one origin class.** The first form filtered to
     // `command line:` entries and asserted each was the builder's — which reads a channel that *adds* to the
     // listing and cannot see one that *replaces* it. Measured with `GIT_CONFIG` naming a file: git lists that
@@ -158,10 +190,24 @@ fn no_ambient_configuration_reaches_a_hermetic_command() {
     // So every line is classified, and the two admissible origins are named: what this builder wrote, and the
     // fixture's own repository config, which the builder empties the global and system files around and does
     // not claim to govern.
-    let builders = |line: &str| {
-        line.starts_with("command line:") && line.contains("core.excludesfile=/dev/null")
-    };
-    let the_repositorys = |line: &str| line.starts_with("file:") && line.contains(".git/config");
+    // **Exact and derived, for the reason the repository-origin predicate below gives.** Asking whether the
+    // line *contained* `core.excludesfile=/dev/null` admitted an ambient `core.excludesfile=/dev/null-evil`
+    // arriving on the same channel as this builder's own — measured. The value the builder writes is a
+    // prefix of every value that looks like it, and an unnamed channel is free to choose one. The builder
+    // writes exactly one setting, taken from the constant beside it, so the whole entry is derivable and the
+    // comparison is equality. `git config --list` lower-cases the section and key it echoes.
+    let builders_entry = format!(
+        "command line:\t{}=/dev/null",
+        crate::hermetic_git::EXCLUDES_SETTING.to_lowercase()
+    );
+    let builders = |line: &str| line == builders_entry;
+    // **Exact, because the ambient side controls the path.** A substring test for `.git/config` admitted any
+    // file whose path happens to contain it, and `GIT_CONFIG` pointing at another repository's config is that
+    // variable's ordinary use: measured, every line of the foreign file passed as *the fixture's own*, so the
+    // classification fell through to the absence assertion below and reported what was missing instead of
+    // what arrived. The case already holds `root` and git renders the repository's own origin relative to the
+    // directory it runs in — measured, `file:.git/config` — so exactness costs nothing here.
+    let the_repositorys = |line: &str| line.starts_with("file:.git/config\t");
     let unexpected: Vec<&str> = reported
         .lines()
         .filter(|line| !line.trim().is_empty())
