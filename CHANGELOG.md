@@ -1286,6 +1286,35 @@ them.
   attack string spelling it reads as this file having neutralised it — and takes the channel-control exception
   down with it. Measured; the sweep says so.
 
+- **The refusal that closed that explained cargo's mechanism, and the mechanism differs per flag.** It told
+  the operator *its value is X, which cargo reads as an argument of its own* — true of
+  `--package --no-verify`, and false of most of what it stops. Measured: `--jobs --allow-dirty` has cargo
+  consume the value and fail later with `could not parse --allow-dirty`; `--registry --config` is refused by
+  clap with `a value is required for '--registry <REGISTRY>'`. Three mechanisms, one sentence, so the sentence
+  was wrong twice — in a repository whose own commit reads *the refusal says what to do, not what is true*.
+
+  It states the wrapper's own rule now, which holds for every arm and does not expire with a cargo version:
+  this script does not accept a value beginning with `-`.
+
+  **And the rule's sacrifice is declared rather than silent.** cargo documents a negative job count and
+  measured, `cargo publish --jobs -1 --dry-run` packages and verifies normally; this wrapper refuses it.
+  Admitting it needs a per-arm rule — a leading digit means nothing for `--package` — and a rule that differs
+  per arm is what one shape check exists to avoid. `repository-checks` carries it as a stated bound with its
+  own scenario, so a refusal of a call cargo documents is on record rather than discovered.
+
+  Declaring it exercised the machinery that exists for exactly this, and the chain is worth recording:
+  `bound_register` refused the prose until a scenario carried it; the scenario's `PINNED-BY` named a direction
+  that did not construct `--jobs -1`, so the case gained the row that makes the citation true;
+  `observation_bound_model` then refused a bound classified nowhere, so `bounds.rs` carries its extent —
+  `OverReacts`, the safe direction, with the reason; and `census` refused `BACKLOG.md`'s typed `91 bounds`
+  against an enumerator now producing 92. Four reactions, none of which had to be remembered.
+
+  **The cross product's own input was a hand-copied list.** Its six value-taking arms sat beside the parser
+  with an independent owner, so adding an arm without adding it there left the reaction green over a set that
+  no longer described the wrapper — the shape the cross product exists to close, one level up in its own
+  inputs. The arms are read from the wrapper now, by the marker that decides it there (`require_a_value`), and
+  held against the literal both ways. Negative run: a seventh arm reports `unexpected ["--token-file"]`.
+
 - **A refused flag reached `cargo publish` by sitting in the one selector the wrapper admits.** The
   `--package` arm checked that *something* followed and nothing else, and cargo does not consume a
   flag-shaped value. Measured on cargo 1.96.0: `cargo publish --package --no-verify` packages **without

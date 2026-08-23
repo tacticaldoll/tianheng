@@ -78,6 +78,20 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*",
         ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-negative-value-cargo-documents-is-refused-by-the-shape-rule-a-stated-bound",
+            ),
+            "a `--jobs` value cargo documents as a negative job count, refused by the wrapper's shape rule",
+            Extent::Reached(Reached::OverReacts {
+                because: "the shape rule asks one question of every value-taking arm, and a leading digit \
+                          means a job count for one arm and nothing for `--package` or `--registry`. \
+                          Admitting it means asking the shape question differently per arm, which is the \
+                          arrangement one check exists to replace. The caller passes the count instead"
+                    .into(),
+            }),
+            "a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position",
+        ),
         BoundDecl::unpinned(
             BoundId::new(
                 "release-coherence/a-dependency-declared-under-a-quoted-cfg-target-is-not-observed-a-stated-bound",

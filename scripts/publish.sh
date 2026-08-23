@@ -89,15 +89,27 @@ refuse() {
 # failing correctly. The property is the script's own: an argument it did not name does not travel, wherever
 # it was written.
 #
-# Checked by SHAPE rather than against the refusal list, because the list is not the property: what makes a
-# value wrong is that cargo reads a leading `-` as an argument of its own, so a flag no one has classified is
-# refused for the same reason as one this file names.
+# Checked by SHAPE rather than against the refusal list, because the list is not the property, and the refusal
+# SAYS the shape rather than explaining cargo. The first form told the operator that cargo *reads the value as
+# an argument of its own* — true of `--package --no-verify`, and false of most of what it stops: measured,
+# `--jobs --allow-dirty` has cargo consume the value and fail later with `could not parse --allow-dirty`, and
+# `--registry --config` is refused by clap with `a value is required for '--registry <REGISTRY>'`. Three
+# mechanisms, one sentence, so the sentence was wrong twice. What is true of every arm is this script's own
+# property: it does not accept a value beginning with `-`.
+#
+# **The sacrifice is `--jobs -N`, and it is named rather than left silent.** cargo documents a negative job
+# count — *If negative, it sets the maximum number of parallel jobs to the number of logical CPUs plus
+# provided value* — and measured, `cargo publish --jobs -1 --dry-run` packages and verifies normally. This
+# script refuses it. Admitting it would need a per-arm rule, since a leading digit means nothing for
+# `--package` or `--registry`, and a rule that differs per arm is the thing one shape check exists to avoid.
+# The cost is one arithmetic step for the caller: pass the count. `repository-checks` carries it as a stated
+# bound.
 require_a_value() {
     if (($1 < 2)); then
         refuse "$2" "this script reads every value as the argument after its flag, so pass it that way or drop the flag"
     fi
     if [[ $3 == -* ]]; then
-        refuse "$2" "its value is \`$3\`, which cargo reads as an argument of its own rather than as a value — measured, \`--package --no-verify\` packages without verifying and exits 0. Pass a value, or drop the flag"
+        refuse "$2" "its value is \`$3\`, and this script does not accept a value beginning with \`-\`. It does not read cargo's handling of a flag-shaped value, which differs by flag and by version, so it refuses the shape instead. Pass a value, or drop the flag"
     fi
 }
 

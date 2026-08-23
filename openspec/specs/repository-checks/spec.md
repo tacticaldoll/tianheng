@@ -541,10 +541,32 @@ correctly. It SHALL be decided by **shape**, a leading `-`, rather than against 
 the value wrong is that the tool reads it as an argument of its own, so an argument nobody has classified is
 refused for the same reason as a named one.
 
+**The refusal SHALL state the wrapper's own property, not the tool's mechanism.** Saying *the tool reads
+this value as an argument of its own* is true of one case and false of most: measured on cargo 1.96.0,
+`--jobs --allow-dirty` has cargo consume the value and fail later with `could not parse --allow-dirty`, and
+`--registry --config` is refused by clap with `a value is required for '--registry <REGISTRY>'`. Three
+mechanisms, one sentence, so the sentence was wrong twice. What holds for every arm and does not expire with a
+version is the wrapper's own rule: it does not accept a value beginning with `-`.
+
+#### Scenario: A negative value cargo documents is refused by the shape rule — a stated bound
+
+- **WHEN** a caller passes `--jobs -1`, which cargo documents — *If negative, it sets the maximum number of
+  parallel jobs to the number of logical CPUs plus provided value* — and measured, `cargo publish --jobs -1
+  --dry-run` packages and verifies normally
+- **THEN** the wrapper refuses it, and nothing will admit it short of a per-arm rule. A leading digit means a
+  job count for one arm and nothing for `--package` or `--registry`, so admitting it means the shape question
+  is asked differently per arm — which is the arrangement one shape check exists to replace, and the
+  arrangement whose per-arm reasoning the refusal wording above was just corrected for repeating. The engine
+  owns the narrowing: the caller passes the count instead, one arithmetic step
+- **PINNED-BY** `a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position`
+
 **A direction over an argument allowlist SHALL cross its axes.** Sending each refused argument alone, and each
 admitted argument with a well-formed value, leaves the interaction between arguments owned by nothing — which
 is where the refusal above walked through. The reaction SHALL hold every value-taking arm against every class
-of refused argument.
+of refused argument, and SHALL take that set of arms **from the wrapper** rather than copying it alongside:
+an arm takes a value exactly when it asks for one, so the request is the marker and no second list of flag
+names exists to fall behind. The set read SHALL be held against a declared literal in both directions, so a
+new arm fails until someone has looked at whether it may take a value at all.
 
 #### Scenario: A refused flag is written where a value belongs
 
