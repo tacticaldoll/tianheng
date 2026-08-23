@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**46 of 91 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**46 of 92 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -339,7 +339,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (11)
+## over-reacts (12)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -380,6 +380,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the classifier reads the marker's presence rather than its position, so a section describing the marking rule is required to carry a migration it does not owe. The reach is kept deliberately: a positional matcher would stop observing a real break whose marker sits anywhere but an entry's first token, buying a false negative in the floor to remove a refusal an author can argue with
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `prose_about_the_marker_is_read_as_a_marker_a_stated_bound`
+
+### `repository-checks/a-negative-value-cargo-documents-is-refused-by-the-shape-rule-a-stated-bound`
+
+> a `--jobs` value cargo documents as a negative job count, refused by the wrapper's shape rule
+
+- **because**: the shape rule asks one question of every value-taking arm, and a leading digit means a job count for one arm and nothing for `--package` or `--registry`. Admitting it means asking the shape question differently per arm, which is the arrangement one check exists to replace. The caller passes the count instead
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position`
 
 ### `repository-checks/a-shell-comment-opened-by-a-metacharacter-stays-in-the-executed-region-a-stated-bound`
 

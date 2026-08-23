@@ -8,6 +8,7 @@
 //! same sentence its sibling `scripts/merge-pr.sh` carried while three spellings walked past it. Nothing ran the
 //! script to find out.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -215,6 +216,34 @@ fn only_an_allowlisted_argument_reaches_the_publish() {
     }
 }
 
+/// The parser's value-taking arms, read out of the wrapper rather than copied beside it.
+///
+/// **An arm takes a value exactly when it asks for one.** `require_a_value` is the single place the wrapper
+/// decides that, so the call is the marker — no second list of flag names, and an arm added without that call
+/// is not a value-taking arm by construction rather than by anyone remembering.
+///
+/// Executed text, because the wrapper's comments discuss these flags at length and a reader over the whole
+/// file would collect the prose as parser arms.
+fn value_taking_arms(script: &str) -> BTreeSet<String> {
+    let source = kanhe::region::Source::of(script);
+    let executed = source.shell();
+    let mut arms = BTreeSet::new();
+    let mut pattern: Option<String> = None;
+    for line in executed.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("--") && trimmed.ends_with(')') {
+            pattern = Some(trimmed.trim_end_matches(')').to_string());
+        } else if trimmed.starts_with("require_a_value") {
+            if let Some(open) = pattern.take() {
+                for flag in open.split('|') {
+                    arms.insert(flag.trim().to_string());
+                }
+            }
+        }
+    }
+    arms
+}
+
 /// A refused argument stays refused when it sits in an admitted argument's **value position**.
 ///
 /// **The two directions around this one both read one axis: single arguments.** One sends each refused flag
@@ -239,15 +268,36 @@ fn a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position() {
     let Some(root) = workspace_root() else {
         return;
     };
-    // Every arm of the parser that reads a following value.
+    // **Read out of the parser, and held against a literal both ways.** The first form copied these six
+    // beside the parser, so the two had independent owners: adding an arm without adding it here left this
+    // cross product green over a set that no longer described the wrapper — the same shape the cross product
+    // was written to close, one level up in its own inputs.
+    //
+    // The literal stays, for the reason `AGENTS.md` gives where something downstream filters on a claim: it
+    // is what gives the enumerator something to disagree with. A new arm now fails here until someone has
+    // looked at it, which is the moment to decide whether it may take a value at all.
     const TAKES_A_VALUE: [&str; 6] = [
-        "--package",
-        "--jobs",
         "--color",
-        "--target-dir",
-        "--registry",
         "--index",
+        "--jobs",
+        "--package",
+        "--registry",
+        "--target-dir",
     ];
+    let declared: BTreeSet<String> = TAKES_A_VALUE.iter().map(|a| (*a).to_string()).collect();
+    let parsed = value_taking_arms(
+        &std::fs::read_to_string(root.join("scripts/publish.sh"))
+            .expect("read scripts/publish.sh — the arms this cross product runs over are its own"),
+    );
+    assert_eq!(
+        parsed,
+        declared,
+        "the wrapper's value-taking arms are not the set this cross product runs over, so it holds whichever \
+         it happened to name — missing {:?}, unexpected {:?}. An arm that reads a following value and is not \
+         here is one the value-position refusal is unexercised for",
+        declared.difference(&parsed).collect::<Vec<_>>(),
+        parsed.difference(&declared).collect::<Vec<_>>()
+    );
     // One per class the header refuses, plus one nobody has classified.
     const REFUSED: [&str; 5] = [
         "--no-verify",
@@ -256,6 +306,26 @@ fn a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position() {
         "--config",
         "--some-flag-a-future-cargo-adds",
     ];
+
+    // **The declared sacrifice, pinned here so admitting it later is a decision rather than a drift.** cargo
+    // documents a negative job count and accepts it — measured, `cargo publish --jobs -1 --dry-run` packages
+    // and verifies normally — and this wrapper refuses it, because a leading digit means a job count for one
+    // arm and nothing for `--package`. `repository-checks` carries that as a stated bound and cites this
+    // direction; without the row the citation would name a case that never constructs it.
+    let sacrificed = run_wrapper(&root, &["--jobs", "-1"]);
+    assert_eq!(
+        sacrificed.status.code(),
+        Some(2),
+        "`--jobs -1` is the declared sacrifice of the shape rule and must be refused by it; got {:?} with \
+         stderr {:?}",
+        sacrificed.status.code(),
+        sacrificed.stderr
+    );
+    assert!(
+        sacrificed.cargo_log.is_empty(),
+        "`--jobs -1` must be refused before the gate runs, but cargo was invoked:\n{}",
+        sacrificed.cargo_log
+    );
 
     for admitted in TAKES_A_VALUE {
         for refused in REFUSED {
