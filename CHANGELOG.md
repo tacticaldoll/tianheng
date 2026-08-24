@@ -1172,6 +1172,23 @@ them.
 
 ### Self-governance
 
+- **A branch a guard has already made unreachable is refused now, and the measurement that would have caught
+  it was already in the tree.** `str::split` and `str::rsplit` always yield at least one item, so a `.next()`
+  on either is always `Some` — `merge_message_gate` measured exactly this, wrote it down, and repaired its own
+  site. Twenty-four sibling sites across three crates kept the shape, two of them written *after* that
+  paragraph existed. One of them carried a comment saying the fallback names no state any input can reach,
+  with the `unwrap_or_default()` still standing beneath it.
+
+  `unreachable_branch` is the reaction, and it found four sites a line-at-a-time `grep` could not: `rustfmt`
+  breaks a long chain so `.next()` and its consumer land on their own lines. Every site moved to
+  `split_once`/`rsplit_once`, whose `None` is reachable and means something — the separator is absent. The
+  sweep's own positions come from the region reader rather than from re-counting, because `numbered_lines`
+  drops a whole-line comment and enumerating what `lines` returns numbers the remainder; the first run
+  reported four offences at lines holding something else.
+
+  `AGENTS.md`'s minimalism bound now names its one decidable instance and says plainly that the rest of the
+  bound is judgement with no reaction.
+
 - **A key is identified exactly, and it used to be identified by its prefix.** `manifest::publishable` reached
   the `publish` field with `strip_prefix("publish")`, so every `[package]` key beginning with those seven
   letters went down the value path: `publish-lockfile = true` — a key cargo itself once accepted — standing

@@ -381,6 +381,50 @@ so the date a reader is refused on is the same date everywhere.
   read
 - **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
 
+### Requirement: A branch a guard has already made unreachable SHALL NOT be written
+
+Where a receiver method's result cannot be absent, no consumer SHALL read it as if it could. `str::split` and
+`str::rsplit` always yield at least one item, so `.next()` on either is always `Some`; an `unwrap_or*` or `?`
+on it is a fallback nothing reaches, and reading it tells a later reader that the empty case happens.
+`.expect(…)` is admitted — it documents the impossibility instead of branching on it — and so is `.filter(…)`,
+which can genuinely produce `None`. `splitn` is outside this: `"".splitn(0, ' ').next()` is `None`.
+
+**The reaction exists because the measurement did not travel.** `merge_message_gate` measured this fact,
+recorded it in its own words, and repaired its own site; twenty-four sibling sites across three crates kept
+the shape, two of them written after that paragraph existed. A measurement that repairs one site and leaves
+its class open is what a reaction is for.
+
+#### Scenario: A dead fallback stands on an always-`Some` value
+
+- **WHEN** a tracked Rust source consumes `split(…).next()` or `rsplit(…).next()` through `unwrap_or`,
+  `unwrap_or_default`, `unwrap_or_else`, `?`, an `if let Some(…)` binding, or a `filter_map` closure
+- **THEN** the reaction refuses, naming the file, the line the chain starts on, and the consumer
+- **PINNED-BY** `no_branch_reads_an_always_some_value_as_if_it_could_be_absent`
+
+#### Scenario: The chain is broken across lines, or the separator is a parenthesis
+
+- **WHEN** `rustfmt` has put `.next()` and its consumer on their own lines, or the separator is `')'`
+- **THEN** the reader still decides it: the chain is joined to the line that starts it, and the argument list
+  ends where its quotes say it does. A line-at-a-time `grep` found twenty of these sites and this reader
+  found twenty-four
+- **PINNED-BY** `the_reader_separates_a_dead_fallback_from_a_reachable_one`
+
+#### Scenario: The reaction's own prose writes the shape it forbids
+
+- **WHEN** the sweep reads the file that declares it, whose comments state the forbidden shape and whose
+  fixtures are built from pieces so no literal holds it whole
+- **THEN** it reports nothing for them — the corpus is executed Rust, so a comment is not code, and a reader
+  matching the bare text would refuse its own reason
+- **PINNED-BY** `the_reader_separates_a_dead_fallback_from_a_reachable_one`
+
+#### Scenario: The corpus cannot be enumerated or a tracked source cannot be read
+
+- **WHEN** the enumeration fails, or a tracked `.rs` file cannot be opened
+- **THEN** the reaction refuses as *cannot judge* rather than sweeping what remains — an unread file is not a
+  file without an offence, and a corpus collapsed to nothing satisfies *no offence* exactly as a clean one
+  does
+- **PINNED-BY** `a_source_that_cannot_be_read_refuses_rather_than_being_skipped`
+
 ### Requirement: A workflow SHALL declare its shell strictness once
 
 `.github/workflows/ci.yml` SHALL declare `defaults.run.shell` as a strict `bash`, and no step SHALL take that

@@ -59,7 +59,7 @@ fn classified_classes(agents: &str) -> Result<Vec<String>, Refusal> {
         "backlog classification clause in AGENTS.md",
         agents.split("Classify live work by its").skip(1),
     )?;
-    let run = clause.split(". ").next().unwrap_or(clause);
+    let run = clause.split_once(". ").map_or(clause, |(run, _)| run);
     let classes: Vec<String> = run
         .split('`')
         .skip(1)

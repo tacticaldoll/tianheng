@@ -28,7 +28,7 @@ pub(crate) fn under_subtree(canonical: &str, subtree: &str) -> bool {
 /// a declared marker written with a raw identifier compares equal to the observed [`path_leaf`],
 /// which strips it. (Trait names are never keywords, so this is defensive symmetry, not a live gap.)
 pub(crate) fn leaf_of(path: &str) -> &str {
-    let leaf = path.rsplit("::").next().unwrap_or(path);
+    let leaf = path.rsplit_once("::").map_or(path, |(_, leaf)| leaf);
     leaf.strip_prefix("r#").unwrap_or(leaf)
 }
 

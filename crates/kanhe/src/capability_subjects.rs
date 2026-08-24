@@ -57,7 +57,7 @@ pub fn subject_globs(spec: &str) -> Declared {
         1 => sections[0],
         several => return Declared::SeveralSections(several),
     };
-    let block = block.split("\n## ").next().unwrap_or(block);
+    let block = block.split_once("\n## ").map_or(block, |(head, _)| head);
     let mut globs = Vec::new();
     for line in block.lines() {
         let Some(rest) = line.trim().strip_prefix("- ") else {
@@ -91,7 +91,7 @@ pub fn proposal_capabilities(proposal: &str) -> Result<BTreeSet<String>, usize> 
         1 => sections[0],
         several => return Err(several),
     };
-    let block = block.split("\n## ").next().unwrap_or(block);
+    let block = block.split_once("\n## ").map_or(block, |(head, _)| head);
     let mut named = BTreeSet::new();
     let mut rest = block;
     while let Some(open) = rest.find('`') {

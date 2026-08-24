@@ -822,9 +822,8 @@ fn check_one_root(
         // Both exit 2, never a silent pass; only the message differs.
         if inline_only.contains(&governed_module) {
             let leaf = governed_module
-                .rsplit("::")
-                .next()
-                .unwrap_or(&governed_module);
+                .rsplit_once("::")
+                .map_or(governed_module.as_str(), |(_, leaf)| leaf);
             return Ok(RootOutcome::ModuleAbsent(inline_module_target_error(
                 &boundary.module,
                 &boundary.crate_package,

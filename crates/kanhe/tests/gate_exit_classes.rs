@@ -55,7 +55,7 @@ const WRAPPERS: [&str; 2] = ["scripts/merge-pr.sh", "scripts/publish.sh"];
 ///
 /// The purpose beside each path is prose with no producer: a reader's aid for whoever adds the next one,
 /// not a fact this direction holds. What it holds is membership.
-const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 24] = [
+const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 25] = [
     (
         "crates/kanhe/tests/bound_register.rs",
         "git: enumerates, and builds a scratch repository's tree",
@@ -121,6 +121,10 @@ const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 24] = [
         "git: enumerates, initialises fixtures, reads the log, and asks about exclusion",
     ),
     ("crates/kanhe/tests/refusal_register.rs", "git: enumerates"),
+    (
+        "crates/kanhe/tests/unreachable_branch.rs",
+        "git: enumerates the tracked Rust sources it sweeps",
+    ),
     (
         "crates/kanhe/tests/whitespace_hygiene.rs",
         "git: enumerates",
@@ -701,11 +705,10 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
             // `x` rather than `local x`. `rsplit` always yields at least one piece — measured, `""` and `" "`
             // both give `Some("")` — so the fallback names no state any input can reach, and dressing it as
             // `left.trim()` claimed otherwise while evaluating the trim twice.
-            let variable = left
-                .trim()
-                .rsplit(char::is_whitespace)
-                .next()
-                .unwrap_or_default();
+            let trimmed = left.trim();
+            let variable = trimmed
+                .rsplit_once(char::is_whitespace)
+                .map_or(trimmed, |(_, variable)| variable);
             let guarded = statement.contains("cannot_judge")
                 || statement.contains("|| {")
                 || statement.contains(&format!("|| {variable}="));
