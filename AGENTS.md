@@ -789,7 +789,11 @@ version-bearing surfaces it enumerates; do not add a general prose-number detect
   at module, crate, and dimension granularity. Do not pre-create empty `semantic`/`runtime`
   crates or stub modules; a dimension's crate is born when it is built.
 - **Fail loud only on observable misconfiguration.** No defensive over-foolproofing of
-  impossible states.
+  impossible states. One decidable instance of this is observed: `str::split` and `str::rsplit`
+  always yield at least one item, so a `.next()` on either is always `Some`, and
+  `unreachable_branch`'s sweep refuses a consumer that reads it as if it could be absent. The
+  rest of the bound is judgement and has no reaction — a fallback nothing reaches still tells a
+  later reader that the case happens.
 
 ## Outward / irreversible actions — confirm first
 

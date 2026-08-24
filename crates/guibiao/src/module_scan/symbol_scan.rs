@@ -527,7 +527,7 @@ fn expand_use_leaves(tree: &str) -> Result<Vec<(String, String)>, String> {
                 let (path, alias) = match tree.split_once(" as ") {
                     Some((p, a)) => (p.trim().to_string(), a.trim().to_string()),
                     None => {
-                        let leaf = tree.rsplit("::").next().unwrap_or(tree).trim();
+                        let leaf = tree.rsplit_once("::").map_or(tree, |(_, leaf)| leaf).trim();
                         (tree.to_string(), leaf.to_string())
                     }
                 };

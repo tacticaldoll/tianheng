@@ -43,7 +43,10 @@ fn dod_commands(agents: &str) -> Vec<String> {
             if line.trim() == "```" {
                 break;
             }
-            let command = line.split('#').next().unwrap_or("").trim();
+            let command = line
+                .split_once('#')
+                .map_or(line, |(command, _)| command)
+                .trim();
             if !command.is_empty() {
                 commands.push(command.to_string());
             }

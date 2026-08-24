@@ -516,7 +516,7 @@ fn command_in(document: &str) -> String {
     for line in text.header().lines() {
         if let Some(start) = line.find("BLESS") {
             let rest = &line[start..];
-            let command = rest.split('`').next().unwrap_or(rest);
+            let command = rest.split_once('`').map_or(rest, |(command, _)| command);
             return format!("`{}`", command.trim().trim_end_matches(['.', ',']));
         }
     }

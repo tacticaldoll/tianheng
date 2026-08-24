@@ -260,7 +260,11 @@ fn a_token_with_a_constant_owner_has_no_second_spelling_in_reach() {
         // The declared corpus, against what the manifests produce — both directions.
         let declared: BTreeSet<String> = dirs
             .iter()
-            .map(|dir| dir.rsplit('/').next().unwrap_or(dir).to_string())
+            .map(|dir| {
+                dir.rsplit_once('/')
+                    .map_or(*dir, |(_, name)| name)
+                    .to_string()
+            })
             .collect();
         let reaching = members_reaching(&root, owning_crate);
         assert_eq!(

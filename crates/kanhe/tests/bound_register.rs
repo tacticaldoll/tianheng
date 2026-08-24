@@ -121,7 +121,11 @@ fn registered_tests(root: &Path) -> BTreeMap<String, BTreeSet<String>> {
         let names: BTreeSet<String> = listing
             .lines()
             .filter_map(|line| line.strip_suffix(": test"))
-            .map(|name| name.rsplit("::").next().unwrap_or(name).to_string())
+            .map(|name| {
+                name.rsplit_once("::")
+                    .map_or(name, |(_, leaf)| leaf)
+                    .to_string()
+            })
             .collect();
         by_package.insert(member, names);
     }

@@ -636,10 +636,9 @@ fn qualified_offence(
     // of the shape an offence. The rule needs the member set, which is why an empty one refuses in the
     // caller.
     if let Some(rest) = raw.strip_prefix("crates/") {
-        if let Some(name) = rest.split('/').next() {
-            if !members.iter().any(|m| m == name) {
-                return None;
-            }
+        let name = rest.split_once('/').map_or(rest, |(name, _)| name);
+        if !members.iter().any(|m| m == name) {
+            return None;
         }
     }
     Some(format!(
@@ -684,7 +683,7 @@ fn offences_in(
     let members: Vec<String> = all
         .iter()
         .filter_map(|p| p.strip_prefix("crates/"))
-        .filter_map(|rest| rest.split('/').next())
+        .map(|rest| rest.split_once('/').map_or(rest, |(name, _)| name))
         .map(str::to_string)
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -708,7 +707,10 @@ fn offences_in(
         std::collections::HashMap::new();
     for path in all {
         *basename_count
-            .entry(path.rsplit('/').next().unwrap_or(path))
+            .entry(
+                path.rsplit_once('/')
+                    .map_or(path.as_str(), |(_, base)| base),
+            )
             .or_default() += 1;
     }
 
@@ -734,8 +736,11 @@ fn offences_in(
         String::from_utf8_lossy(&out.stdout)
             .lines()
             .filter(|p| !p.is_empty() && !p.starts_with("openspec/changes/"))
-            .filter_map(|p| p.rsplit('/').next())
-            .filter(|base| !all.iter().any(|f| f.rsplit('/').next() == Some(*base)))
+            .map(|p| p.rsplit_once('/').map_or(p, |(_, base)| base))
+            .filter(|base| {
+                !all.iter()
+                    .any(|f| f.rsplit_once('/').map_or(f.as_str(), |(_, b)| b) == *base)
+            })
             .map(str::to_string)
             .collect()
     };
@@ -809,7 +814,7 @@ fn offences_in(
             }
             for reference in extract(line) {
                 let raw = reference.text.trim_end_matches(['.', ',', ')', '`']);
-                let raw = raw.split('#').next().unwrap_or(raw);
+                let raw = raw.split_once('#').map_or(raw, |(path, _)| path);
                 if raw.is_empty()
                     || raw.starts_with("http://")
                     || raw.starts_with("https://")

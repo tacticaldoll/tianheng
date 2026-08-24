@@ -122,7 +122,7 @@ fn support_window(workflow: &str, engines: &str, today: i64) -> Result<(), Strin
             pins.len()
         ));
     };
-    let pinned_major = pin.split('.').next().unwrap_or(pin);
+    let pinned_major = pin.split_once('.').map_or(*pin, |(major, _)| major);
     if pinned_major != major {
         return Err(format!(
             "the support window is declared for major `{major}` and the pin is `{pin}`, so the date beside \

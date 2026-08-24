@@ -176,9 +176,8 @@ fn cited_bounds(root: &Path) -> HashMap<String, Vec<String>> {
         for citation in citations_in(capability, path, &text) {
             let short = citation
                 .name
-                .rsplit("::")
-                .next()
-                .unwrap_or(&citation.name)
+                .rsplit_once("::")
+                .map_or(citation.name.as_str(), |(_, leaf)| leaf)
                 .to_string();
             by_name.entry(short).or_default().extend(citation.bound);
         }
@@ -348,8 +347,16 @@ fn ran_exactly_one(log: &str) -> bool {
         .filter_map(|line| line.strip_prefix("test result: "))
         .filter_map(|rest| {
             let (passed, tail) = rest.split_once(" passed; ")?;
-            let passed: usize = passed.rsplit(' ').next()?.parse().ok()?;
-            let failed: usize = tail.split(' ').next()?.parse().ok()?;
+            let passed: usize = passed
+                .rsplit_once(' ')
+                .map_or(passed, |(_, count)| count)
+                .parse()
+                .ok()?;
+            let failed: usize = tail
+                .split_once(' ')
+                .map_or(tail, |(count, _)| count)
+                .parse()
+                .ok()?;
             Some(passed + failed)
         })
         .next()

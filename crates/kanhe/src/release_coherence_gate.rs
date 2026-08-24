@@ -1450,9 +1450,8 @@ struct Shape {
 /// function answer two.
 fn section_of(line: &str) -> Option<String> {
     line.starts_with("## [").then(|| {
-        line.split(" - ")
-            .next()
-            .unwrap_or(line)
+        line.split_once(" - ")
+            .map_or(line, |(section, _)| section)
             .trim_end()
             .to_string()
     })
@@ -1576,9 +1575,11 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
             if unpublished {
                 machinery.push(path.to_string());
             } else {
-                // `str::rsplit` always yields at least one item, so the `if let` this replaced was a
-                // condition nothing could fail — the same fact `merge_message_gate` measured and recorded.
-                published.insert(path.rsplit('/').next().unwrap_or(path).to_string());
+                published.insert(
+                    path.rsplit_once('/')
+                        .map_or(path, |(_, base)| base)
+                        .to_string(),
+                );
                 let mut dir = path.to_string();
                 while let Some(cut) = dir.rfind('/') {
                     dir.truncate(cut + 1);
@@ -1618,7 +1619,9 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
     for path in &machinery {
         names.insert(path.clone());
         {
-            let base = path.rsplit('/').next().unwrap_or(path);
+            let base = path
+                .rsplit_once('/')
+                .map_or(path.as_str(), |(_, base)| base);
             // Unique across the tree, or it names a published crate's file as well and would refuse an
             // entry that is about the product rather than about the machinery.
             if !published.contains(base) {
