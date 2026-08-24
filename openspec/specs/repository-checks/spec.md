@@ -501,11 +501,13 @@ about a license for a fact about an absent interpreter. Under `pipefail` the sam
 
 - **WHEN** `defaults.run.shell` is absent or does not carry `-euo pipefail`
 - **THEN** the reaction refuses — with no default, a step's strictness is a property of whoever wrote it
+- **PINNED-BY** `shell_strictness_is_declared_once_for_the_whole_workflow`
 
 #### Scenario: A step takes the strictness back
 
 - **WHEN** a step declares `shell: bash` without the flags, or a `run:` block restates `set -e`
 - **THEN** the reaction refuses, naming the line — the second spelling is the one that drifts
+- **PINNED-BY** `shell_strictness_is_declared_once_for_the_whole_workflow`
 
 #### Scenario: The paragraph recording this writes the flags it forbids
 
@@ -514,12 +516,36 @@ about a license for a fact about an absent interpreter. Under `pipefail` the sam
   the bare string would refuse its own reason
 - **PINNED-BY** `shell_strictness_is_declared_once_for_the_whole_workflow`
 
+**A step SHALL NOT read a value through a pipeline whose consumer stops early.** This is `pipefail`'s cost,
+and it is held rather than remembered: `grep -q` exits at its first match, so the producer upstream takes
+SIGPIPE and that becomes the pipeline's status — measured 141 on five of five runs over a document the size of
+this workflow's SARIF fixture. The failure names the document, which is why nobody reads it as the pipeline's
+shape.
+
 #### Scenario: A pipeline's consumer exits before its producer finishes
 
-- **WHEN** a step reads a value through a pipe whose consumer stops early, such as `printf … | grep -q`
-- **THEN** the step reads it without a pipe instead. `pipefail` makes the producer's SIGPIPE the pipeline's
-  status — measured 141 on five of five runs over a SARIF document — so the assertion would have failed for
-  the shape of the check rather than for the document
+- **WHEN** a step reads a value through a pipe whose last stage stops early, such as `printf … | grep -q` or
+  `… | head -n1`
+- **THEN** the reaction refuses, naming the line and the consumer — the value is read without a pipe instead,
+  through a here-string or a glob become a value
+- **PINNED-BY** `no_step_reads_a_value_through_a_pipeline_that_stops_early`
+
+#### Scenario: A consumer that stops early is not on the reader's list — a stated bound
+
+- **WHEN** a pipeline's last stage exits before its producer finishes and is not one of `grep -q`, `grep -m`
+  or `head`
+- **THEN** the reaction reports nothing. The set of programs that exit early is not closed and no reader over
+  shell text can decide it, so the three names are what this shape looked like in the workflow's own history.
+  This closes the door that was open, not every door
+- **UNPINNED** `BACKLOG.md` — *the early-exit consumers the pipeline reader names*
+
+#### Scenario: A latent SIGPIPE waits on an output shape
+
+- **WHEN** a pipeline of this shape does not trip, because its producer happens to emit little enough — the
+  MSRV read through `sed … | head -n1` did not, since `cargo metadata` emits one line of JSON
+- **THEN** it is still refused. Not tripping is a property of the input rather than of the pipeline, and a
+  latent SIGPIPE waiting on an output shape is worse than a live one
+- **PINNED-BY** `no_step_reads_a_value_through_a_pipeline_that_stops_early`
 
 ### Requirement: One fact about a manifest SHALL have one reader
 

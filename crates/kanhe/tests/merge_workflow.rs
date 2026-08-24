@@ -2015,6 +2015,65 @@ fn a_flag_shaped_value_is_refused_in_every_value_position() {
     }
 }
 
+/// Consumers that stop before their producer finishes, so `pipefail` reports the producer's SIGPIPE.
+///
+/// **An approximation, and named as one.** These three are what the shape looks like in this workflow's own
+/// history; the set of programs that exit early is not closed, and a reader over shell text cannot decide it.
+/// A pipeline ending in something not listed here passes, so this closes the door that was open rather than
+/// every door.
+const EXITS_EARLY: [&str; 3] = ["grep -q", "grep -m", "head"];
+
+/// A step that reads a value does not read it through a pipeline whose consumer stops early.
+///
+/// **This is `pipefail`'s cost, and it is held rather than remembered.** `grep -q` exits at its first match,
+/// and under `pipefail` the `printf` upstream of it takes SIGPIPE and fails the whole pipeline: measured 141
+/// on five of five runs over a document the size of this workflow's SARIF fixture. The assertion would have
+/// failed for the shape of the check rather than for the document — and it is exactly the kind of failure
+/// nobody reads as *the pipeline shape*, because the message names the document.
+///
+/// Two more of the same shape were in this workflow when strictness was adopted, both reading a value: the
+/// MSRV through `sed … | head -n1`, and the packaged tarball through `ls … | head -1`. Neither tripped, for a
+/// reason that is not a property of the check: `cargo metadata` emits one line of JSON, so `sed` printed once
+/// and reached EOF. A latent SIGPIPE waiting on an output shape is worse than a live one.
+#[test]
+fn no_step_reads_a_value_through_a_pipeline_that_stops_early() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let path = root.join(".github/workflows/ci.yml");
+    let text = std::fs::read_to_string(&path)
+        .expect("read .github/workflows/ci.yml — the pipelines this holds are declared in it");
+
+    let mut standing = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        // Comments are excluded by position: the paragraphs recording this measurement name the very
+        // consumers they forbid, so a reader matching the bare text would refuse its own reason.
+        if trimmed.starts_with('#') || !trimmed.contains('|') {
+            continue;
+        }
+        // The last stage is the one whose early exit closes the pipe on everything upstream.
+        let Some((_, last)) = trimmed.rsplit_once('|') else {
+            continue;
+        };
+        let last = last.trim();
+        if let Some(consumer) = EXITS_EARLY.iter().find(|c| last.starts_with(**c)) {
+            standing.push(format!(
+                "  {}:{}: `{consumer}` closes the pipe before its producer finishes, and under `pipefail` \
+                 the producer's SIGPIPE is the pipeline's status — read the value without a pipe (a \
+                 here-string, or a glob become a value) instead",
+                path.display(),
+                number + 1
+            ));
+        }
+    }
+    assert!(
+        standing.is_empty(),
+        "these pipelines fail for their own shape rather than for what they read:\n{}",
+        standing.join("\n")
+    );
+}
+
 /// Shell strictness is the workflow's property, not each step author's.
 ///
 /// **One step set `set -euo pipefail` and another set nothing, so a pipeline's status was discarded.** The
