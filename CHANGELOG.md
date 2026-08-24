@@ -1172,6 +1172,17 @@ them.
 
 ### Self-governance
 
+- **The Definition of Done names the host tools it assumes.** The list is *a corpus with a name* — the phrase
+  is a completeness claim about a set someone can count — and its prerequisites were counted by nobody:
+  `cargo`, `git`, `npm` with a Node in `engines` range, `cargo-deny`, `jq` and `gh` must be on the path, and
+  only the Node range refuses when unsatisfied, through `.npmrc`'s `engine-strict`. `AGENTS.md` now says so,
+  and says in the same breath that this half has **no reaction** behind it, because a list of prerequisites
+  reads like a guarantee. What earns it the place is that a missing tool does not present as one: measured
+  2026-08-23 with `jq` absent, 15 of `merge_workflow`'s 30 cases failed reporting
+  `bin/gh: line 77: jq: command not found`, so an operator reads fifteen findings about the subject when the
+  state met was one absent binary. The half with teeth stays where it was — `BACKLOG.md`'s WATCH entry, whose
+  repair is the fixture declaring what it needs and stopping before the subject.
+
 - **The window's breaking-change classification has one owner again.** `BACKLOG.md`'s version-horizon
   paragraph classified the window itself — naming the bare-principal resolver closure as the one item that
   earns the minor, and calling the rest of the window's public surface additive and therefore free. Both
