@@ -1172,6 +1172,33 @@ them.
 
 ### Self-governance
 
+- **A key is identified exactly, and it used to be identified by its prefix.** `manifest::publishable` reached
+  the `publish` field with `strip_prefix("publish")`, so every `[package]` key beginning with those seven
+  letters went down the value path: `publish-lockfile = true` — a key cargo itself once accepted — standing
+  before a real `publish = false` read as *unreadable manifest* and refused the whole member, while cargo
+  treats a key it does not know as unused and carries on.
+
+  The same reader recognised one spelling of the key and one of the table header, and that direction is the
+  worse one. Measured on cargo 1.96.0: `"publish" = false`, `'publish' = false`, `[ package ]` and
+  `["package"]` all report `publish=[]`, and the reader answered **publishable** for every one of them —
+  a crate cargo refuses to publish, called publishable, because a spelling left the key or the whole table
+  unread. Two `publish` keys under one `[package]` now refuse rather than answering from the first, since
+  cargo refuses such a manifest outright. Eleven rows joined the matrix and all seventeen spellings agree
+  with cargo.
+
+  The Cargo.lock reader carried the same shape and two more: each arm asked `starts_with(key)` and
+  `contains('=')` and then split again behind an `unwrap_or_default()` the `contains` had already made
+  unreachable — two decisions about one character, and a default nothing could reach. It reads the key once
+  and matches it exactly. Two `if let Some(base) = path.rsplit('/').next()` guards in the same file were
+  conditions nothing could fail, which is the fact `merge_message_gate` had already measured and recorded;
+  they are gone.
+
+  A newly public `cargo_metadata` kept the private function's doc summary glued in front of its replacement,
+  pointing at machinery a reader of the public surface does not see. And the coverage floor added with the
+  both-ways check counted the loop's own iterations, which could only fail if the loop had a `continue` it
+  does not have — `f() == f()` reading as a coverage claim. It compares cargo's package set with the member
+  directories on disk now, an enumerator cargo did not produce.
+
 - **Shell strictness is the workflow's property now, not each step author's.** One CI step set
   `set -euo pipefail` and another set nothing, so a three-stage derivation ending in `tr` reported only its
   last stage: measured on all three failure paths — `cargo metadata` failing, malformed JSON, `jq` absent —

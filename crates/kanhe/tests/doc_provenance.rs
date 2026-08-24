@@ -224,20 +224,38 @@ fn the_text_reader_agrees_with_cargo_about_every_member() {
         packages.len()
     );
 
+    // **The coverage floor answers a different enumerator, because counting the loop's own iterations is
+    // `f() == f()`.** A `compared == packages.len()` assertion could only fail if this loop had a `continue`
+    // it does not have; it read as a coverage claim while observing nothing. The tree's own member
+    // directories are an enumerator cargo did not produce, so a member cargo does not report — or a
+    // directory holding a manifest cargo never resolved — is what this now sees.
+    let mut on_disk: Vec<String> = std::fs::read_dir(root.join("crates"))
+        .expect("read crates/ — the member directories are the second enumerator")
+        .map(|entry| {
+            entry
+                .expect("read a member directory entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .filter(|name| root.join("crates").join(name).join("Cargo.toml").is_file())
+        .collect();
+    on_disk.sort();
+
     let mut disagreements = Vec::new();
-    let mut compared = 0usize;
+    let mut reported: Vec<String> = Vec::new();
     for package in packages {
         let name = package["name"].as_str().expect("a package has a name");
         let manifest_path = package["manifest_path"]
             .as_str()
             .expect("a package has a manifest path");
         let text = std::fs::read_to_string(manifest_path).expect("a member manifest reads");
+        reported.push(name.to_string());
         // Cargo reports `[]` for `publish = false` and for every empty-array spelling of it, `null` for
         // absent or `true`, and the registry list otherwise.
         let cargo_says_no = package["publish"]
             .as_array()
             .is_some_and(|registries| registries.is_empty());
-        compared += 1;
         match kanhe::manifest::publishable(&text) {
             kanhe::manifest::Publishable::No if cargo_says_no => {}
             kanhe::manifest::Publishable::Yes if !cargo_says_no => {}
@@ -248,10 +266,12 @@ fn the_text_reader_agrees_with_cargo_about_every_member() {
             )),
         }
     }
+    reported.sort();
     assert_eq!(
-        compared,
-        packages.len(),
-        "every package cargo reported was compared"
+        reported, on_disk,
+        "the packages cargo reports and the member directories on disk are not the same set — a manifest \
+         under crates/ that cargo never resolved is read by no direction here, and a package cargo reports \
+         from outside crates/ is compared against a corpus that does not hold it"
     );
     assert!(
         disagreements.is_empty(),
