@@ -1186,6 +1186,14 @@ them.
   beside one ordinary one leaves their counters non-zero, which is exactly the partial case those guards were
   added for one level up.
 
+  **Where those guards do and do not reach is now measured rather than assumed, and it cost a direction.**
+  `requirements_here` is counted **per example**, so an escaped entry alone in its own example leaves that
+  counter at zero and the vacuity guard catches it. The first cut of the renamed-package direction put the
+  escaped entry and the ordinary one in two different examples — and it passed under the perturbation, which
+  is a restatement rather than a guard. Both entries now sit in one manifest, and the direction asserts the
+  refusal's **site** rather than only its kind, so a refusal the vacuity guard produced can no longer read as
+  this direction's evidence.
+
   **The repair is one branch, and deliberately not a decoder.** A backslash in a basic string always opens an
   escape, so `quoted_value` answers `Unreadable` on any — and every consumer already had an `Unreadable` arm
   that refuses as a cannot-judge, so nothing downstream needed changing. Writing a TOML escape decoder here

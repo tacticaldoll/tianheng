@@ -267,27 +267,33 @@ fn an_escaped_renamed_package_is_refused_and_an_ordinary_sibling_does_not_cover_
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("the scratch root is writable");
 
-    let write = |dir: &str, body: &str| {
-        let at = root.join("examples").join(dir);
-        std::fs::create_dir_all(&at).expect("the example directory is writable");
-        std::fs::write(at.join("Cargo.toml"), body).expect("the example manifest is writable");
-    };
-    write(
-        "escaped",
-        &format!(
+    let at = root.join("examples").join("escaped");
+    std::fs::create_dir_all(&at).expect("the example directory is writable");
+    // **Both entries in ONE example, which is what makes the guard blind.** `requirements_here` is counted
+    // per example, so an escaped entry alone in its own example leaves that counter at zero and the vacuity
+    // guard catches it — measured: with the two split across two examples this direction passed under the
+    // perturbation and was a restatement rather than a guard. Beside an ordinary family dependency in the
+    // same manifest the counter is non-zero and the escaped entry's silence is invisible.
+    std::fs::write(
+        at.join("Cargo.toml"),
+        format!(
             "[package]\nname = \"ex-escaped\"\n\n[dependencies]\n\
+             xingbiao = \"0.5.0\"\n\
              alias = {{ package = \"xuan{ESCAPED_J}i\", version = \"0.0.1\" }}\n"
         ),
-    );
-    write(
-        "ordinary",
-        "[package]\nname = \"ex-ordinary\"\n\n[dependencies]\nxuanji = \"0.5.0\"\n",
-    );
+    )
+    .expect("the example manifest is writable");
 
-    let manifests = [(
-        "crates/xuanji/Cargo.toml".to_string(),
-        "[package]\nname = \"xuanji\"\n".to_string(),
-    )];
+    let manifests = [
+        (
+            "crates/xuanji/Cargo.toml".to_string(),
+            "[package]\nname = \"xuanji\"\n".to_string(),
+        ),
+        (
+            "crates/xingbiao/Cargo.toml".to_string(),
+            "[package]\nname = \"xingbiao\"\n".to_string(),
+        ),
+    ];
 
     let refusal = super::super::release_coherence_gate::require_example_pins(
         &root, &manifests, "0.5.0",
@@ -297,6 +303,12 @@ fn an_escaped_renamed_package_is_refused_and_an_ordinary_sibling_does_not_cover_
                  neither be matched against the family nor passed over",
     );
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    // The SITE, not only the kind. Without it, a refusal the vacuity guard produced reads as this
+    // direction's evidence — which is exactly how its first version passed under the perturbation.
+    crate::refusal::expect(
+        "release-coherence#example-package-value-unreadable",
+        &refusal,
+    );
 
     let _ = std::fs::remove_dir_all(&root);
 }
