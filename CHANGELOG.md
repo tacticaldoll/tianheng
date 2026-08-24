@@ -1172,6 +1172,18 @@ them.
 
 ### Self-governance
 
+- **A `SHALL` that nothing observed is a convention now, and says so.** `repository-checks` required *the
+  declaration SHALL sit beside the pin it bounds* for the interpreter support window, and nothing held it:
+  the reader takes the workflow's whole text and a day and never computes a line index. Measured — the
+  declaration moved 92 lines from the pin and outside every job, and the reaction stayed green 3 of 3. It was
+  written in the same change as the reaction and neither reacted to nor filed, which is the class
+  `BACKLOG.md`'s *Every normative SHALL either has a reaction or is a declared bound* entry tracks, recurring
+  once more in a window whose own subject was closing it. The repair is not a reaction: defining how near
+  counts as *beside* would put a threshold on a property whose whole value is that a reader meets the two
+  together. So it takes the disposition a branch name already has — a convention for humans and agents,
+  stated as one rather than as law — and the requirement now says what the reaction *does* hold, which is
+  that the major and the date are read together and compared with the pin.
+
 - **The Definition of Done names the host tools it assumes.** The list is *a corpus with a name* — the phrase
   is a completeness claim about a set someone can count — and its prerequisites were counted by nobody:
   `cargo`, `git`, `npm` with a Node in `engines` range, `cargo-deny`, `jq` and `gh` must be on the path, and
