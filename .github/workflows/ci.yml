@@ -37,6 +37,23 @@ permissions:
 # Pinning is not upgrading: each SHA below is what that major tag pointed at when it was pinned, so this
 # changed which bytes run and not which version.
 
+# **Exit class by construction, not by remembering.** Both wrappers in `scripts/` argue that a script
+# choosing its exit class in one place beats every author choosing it again; a workflow whose steps each
+# decide their own strictness is the same defect one layer out. One `license-files` step set nothing while
+# `packaged-selftest` set `set -euo pipefail`, so a three-stage pipeline ending in `tr` discarded the status
+# of `cargo metadata` and of `jq` — measured, all three paths: cargo failing, malformed JSON, and `jq`
+# absent each gave exit 0 and an empty set, and every crate was then treated as publishable, reporting
+# *kanhe is missing LICENSE-MIT* for a fact about an absent interpreter. Loud only by circumstance: those
+# two crates carry no license texts today.
+#
+# `bash -euo pipefail {0}` makes it the workflow's property. Its cost is real and paid here rather than
+# discovered: `pipefail` turns a consumer that exits early into a failure of the whole pipeline —
+# `printf | grep -q` over the SARIF document measured 141 five times out of five — so a pipeline that
+# reads a value now stands alone or does not exist.
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
 jobs:
   release-coherence:
     name: Release coherence
@@ -158,8 +175,17 @@ jobs:
           fetch-depth: 0
       - name: build and test on the declared minimum supported Rust version
         run: |
-          msrv="$(cargo metadata --no-deps --format-version 1 \
-            | sed -n 's/.*"rust_version":"\([^"]*\)".*/\1/p' | head -n1)"
+          # **One `rust-version`, or this step says which members disagree.** A greedy `sed` over the
+          # single-line JSON followed by `head -n1` answered with one of the eight members' values and
+          # named neither the count nor which one — `kanhe::selection::the_only`'s subject, in shell. `jq`
+          # collects them, `unique` decides, and a disagreement is a refusal rather than a coin toss.
+          mapfile -t declared < <(cargo metadata --no-deps --format-version 1 \
+            | jq -r '[.packages[].rust_version] | unique | .[]')
+          if ((${#declared[@]} != 1)); then
+            echo "::error::the workspace declares ${#declared[@]} distinct rust-version values (${declared[*]}) — the MSRV this job builds on is not decidable"
+            exit 1
+          fi
+          msrv="${declared[0]}"
           echo "declared rust-version: ${msrv:?could not read rust-version}"
           rustup toolchain install "$msrv" --profile minimal --no-self-update
           cargo "+$msrv" build --workspace
@@ -187,12 +213,13 @@ jobs:
           # `publish.workspace = true` inheritance is invisible to a grep too, and cargo resolves it.
           # `kanhe::manifest::publishable` is the text-side owner of the same fact; here cargo is asked
           # directly, since this job has cargo and no build to pay for.
-          # `jq`, which `AGENTS.md`'s host-tool list already declares — not `python3`, which it does not. The
-          # first form here reached for `python3` and would have failed in the shape that paragraph exists
-          # for: `mapfile` reads zero lines from a failed process substitution and neither `set -e` nor
-          # `pipefail` sees inside `<(…)`, so the empty-set floor fires saying *no publishable crate was
-          # derived from cargo metadata* — a sentence about cargo for a fact about an absent interpreter.
-          # Measured: exit 0, array length 0. `jq`'s `null == []` is false, so the semantics are cargo's.
+          # `jq`, which `AGENTS.md`'s host-tool list already declares — not `python3`, which it does not.
+          # `jq`'s `null == []` is false, so the semantics are cargo's. The interpreter being declared is
+          # only half of it: an absent one used to reach the empty-set floor saying *no publishable crate
+          # was derived from cargo metadata* — a sentence about cargo for a fact about the tool — because
+          # neither `set -e` nor `pipefail` sees inside `<(…)`. Measured: exit 0, array length 0. The
+          # derivation below stands where its status is visible, so the tool's absence is now the tool's
+          # own error.
           unpublishable=$(cargo metadata --no-deps --format-version 1 \
             | jq -r '.packages[] | select(.publish == []) | .name' | tr '\n' ' ')
           missing=0
@@ -232,7 +259,6 @@ jobs:
           # patch` (NOT baked into the tarball — it stays the real publishable form; the patch only
           # satisfies resolution). This is what lets the gate run at the exact pre-publish version
           # it must guard, rather than only when the deps happen to already be published.
-          set -euo pipefail
           ws="$PWD"
           # **The set is derived, and it used to be written twice.** This job's name claims *every
           # publishable crate*, and the claim was two hand-written lists that nothing held. The
@@ -242,8 +268,16 @@ jobs:
           # silently skipped here, while this name went on saying every. One enumerator, one claim.
           # Cargo's own verdict, for the reason the `license-files` job above records: a grep for `false`
           # calls `publish = []` published, and cargo refuses it.
-          mapfile -t crates < <(cargo metadata --no-deps --format-version 1 \
-            | jq -r '.packages[] | select(.publish != []) | .name')
+          # `pipefail` cannot see inside `<(…)`, so the derivation stands alone as a command substitution
+          # where it can fail — and an empty value is caught before `mapfile`, because a here-string over
+          # one yields a single empty element and would satisfy the floor below.
+          derived="$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.publish != []) | .name')"
+          if [[ -z $derived ]]; then
+            echo "::error::cargo metadata and jq derived no publishable crate at all — the enumerator, not the set"
+            exit 1
+          fi
+          mapfile -t crates <<< "$derived"
           # **A derived set can be empty and a hand-written one cannot, so the reach is asserted.** With
           # `crates=()` empty, `for crate in "${crates[@]}"` expands to nothing, the loop body never runs and
           # this job reports success over zero crates — the exact shape `gate-shape-contract` was retired for
@@ -264,10 +298,23 @@ jobs:
           done
           for crate in "${crates[@]}"; do
             cargo package --no-verify -p "$crate" "${patch[@]}"
-            tarball="$(ls target/package/${crate}-*.crate | head -1)"
+            # `ls | head -1` answered with one of however many `.crate` files sat there and said nothing
+            # about the rest, so a stale tarball from an earlier version could be the one self-tested.
+            # The glob becomes a value first, then the count is answered.
+            shopt -s nullglob
+            tarballs=(target/package/"$crate"-*.crate)
+            if ((${#tarballs[@]} != 1)); then
+              echo "::error::expected exactly one packaged tarball for $crate, found ${#tarballs[@]}: ${tarballs[*]}"
+              exit 1
+            fi
             work="$(mktemp -d)"
-            tar xzf "$tarball" -C "$work"
-            dir="$(ls -d "$work"/${crate}-*/)"
+            tar xzf "${tarballs[0]}" -C "$work"
+            unpacked=("$work"/"$crate"-*/)
+            if ((${#unpacked[@]} != 1)); then
+              echo "::error::the tarball for $crate unpacked to ${#unpacked[@]} directories: ${unpacked[*]}"
+              exit 1
+            fi
+            dir="${unpacked[0]}"
             echo "::group::packaged self-test: $crate"
             ( cd "$dir" && cargo test --all-features "${patch[@]}" )
             echo "::endgroup::"
@@ -303,7 +350,11 @@ jobs:
           status=0
           out=$(cargo run -q -p tianheng -- check --manifest-path crates/tianheng/tests/fixtures/violating/Cargo.toml --format sarif) || status=$?
           printf '%s\n' "$out"
-          printf '%s' "$out" | grep -q '"version": "2.1.0"' \
+          # A here-string, not a pipe: `grep -q` exits at the first match, and under `pipefail` the
+          # `printf` upstream of it takes SIGPIPE and fails the pipeline — measured 141 on five of five
+          # runs over a document this size. The assertion would have failed for the shape of the check
+          # rather than for the document.
+          grep -q '"version": "2.1.0"' <<< "$out" \
             || { echo "::error::--format sarif did not emit a SARIF 2.1.0 document"; exit 1; }
           if [ "$status" -ne 1 ]; then
             echo "::error::--format sarif must still react with exit 1 on a violation, got $status"

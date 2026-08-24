@@ -381,6 +381,42 @@ so the date a reader is refused on is the same date everywhere.
   read
 - **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
 
+### Requirement: A workflow SHALL declare its shell strictness once
+
+`.github/workflows/ci.yml` SHALL declare `defaults.run.shell` as a strict `bash`, and no step SHALL take that
+strictness back — neither by naming `bash` without the flags nor by restating `set -` inside a `run:` block.
+Both wrappers in `scripts/` argue that a script choosing its exit class in one place beats every author
+choosing it again; a workflow whose steps each decide their own strictness is that defect one layer out.
+
+**Measured rather than assumed.** A three-stage pipeline ending in `tr` reports only its last stage's status:
+with `cargo metadata` failing, with malformed JSON, and with `jq` absent, all three gave exit 0 and an empty
+set, so every crate was treated as publishable and the job said *kanhe is missing LICENSE-MIT* — a sentence
+about a license for a fact about an absent interpreter. Under `pipefail` the same three give 1, 5 and 127.
+
+#### Scenario: The workflow declares no strict default
+
+- **WHEN** `defaults.run.shell` is absent or does not carry `-euo pipefail`
+- **THEN** the reaction refuses — with no default, a step's strictness is a property of whoever wrote it
+
+#### Scenario: A step takes the strictness back
+
+- **WHEN** a step declares `shell: bash` without the flags, or a `run:` block restates `set -e`
+- **THEN** the reaction refuses, naming the line — the second spelling is the one that drifts
+
+#### Scenario: The paragraph recording this writes the flags it forbids
+
+- **WHEN** the workflow's own comment states the measurement that motivated the rule, flags included
+- **THEN** the reaction reports nothing for it: a comment is excluded by position, because a reader matching
+  the bare string would refuse its own reason
+- **PINNED-BY** `shell_strictness_is_declared_once_for_the_whole_workflow`
+
+#### Scenario: A pipeline's consumer exits before its producer finishes
+
+- **WHEN** a step reads a value through a pipe whose consumer stops early, such as `printf … | grep -q`
+- **THEN** the step reads it without a pipe instead. `pipefail` makes the producer's SIGPIPE the pipeline's
+  status — measured 141 on five of five runs over a SARIF document — so the assertion would have failed for
+  the shape of the check rather than for the document
+
 ### Requirement: One fact about a manifest SHALL have one reader
 
 A property a judgement reads out of a `Cargo.toml` SHALL have exactly one implementation per language it is
