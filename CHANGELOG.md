@@ -1172,6 +1172,40 @@ them.
 
 ### Self-governance
 
+- **A multiline basic string is refused too, and it reached the same silence with no backslash in it.** The
+  escape branch below closed one door and left the neighbouring one open. TOML admits `"""…"""` wherever it
+  admits `"…"`, and cargo reads it — measured on cargo 1.96.0 against a scratch workspace:
+  `path = """crates/xuanji"""` resolves the member and `name = """xuanji"""` / `version = """0.5.0"""` read as
+  `xuanji` and `0.5.0`. This reader stripped the opening quote, found the next one immediately, and answered
+  `Value("")`: an empty path, an empty identity, an empty version, each of which its consumer compares and
+  passes over. Measured before the repair: `Value("")` where `Unreadable` was required. The check is three
+  quotes — two after the opening one is stripped — and it is a check of its own because the backslash branch
+  cannot see a shape that carries no backslash. An ordinary empty `""` is still a value it reads, and that
+  boundary has a direction of its own.
+
+  **Its position is not the property, and this entry's first draft said it was.** It reads the text before the
+  split rather than the value after it, so it answers the same either side of the backslash branch. Measured
+  by moving it past the body read: the direction over it stayed green. Recorded because a claim about ordering
+  that nothing holds is the shape this repository removes on sight — what the direction pins is that the check
+  exists, not where it sits.
+
+  **Two mechanisms, two directions.** The escape matrix and the multiline one were one test for a moment, and
+  its name said only the first — so they are separate now, each naming what it refuses.
+
+  **And one of the escaped-path positions was never a false negative, which this entry's first draft said it
+  was.** Measured by removing the backslash branch and running the direction: an escape **inside** the
+  `crates/` prefix was not selected, took the `continue`, and reached a release clean — that is the
+  regression direction. An escape **after** the prefix was still selected and still compared, and the old
+  reader answered `internal-pin-disagrees` naming the stale pin. Not clean, and not a missed check. The
+  direction keeps both, because the fail-closed rule is uniform, but only the first is evidence of the old
+  silence — and `require_internal_pins` never resolves a crate identity from a path, so the claim that one
+  was "compared against a name no crate has" described nothing.
+
+  `release-coherence`'s renamed-package scenario said the ordinary sibling sits in *another example*, while
+  the fixture deliberately puts both in one manifest — the only arrangement the per-example counter cannot
+  see. The scenario now says so, so its `PINNED-BY` is not a completion claim about a different
+  configuration.
+
 - **A TOML escape is a value the manifest reader refuses now, not one it answers undecoded.** `quoted_value`
   took the text up to the first `"` and returned it as a `Quoted::Value`, so a legal TOML basic string
   carrying an escape was reported as one this reader had read. Measured on cargo 1.96.0 against a scratch
