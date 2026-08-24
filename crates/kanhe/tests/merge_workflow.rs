@@ -2014,3 +2014,71 @@ fn a_flag_shaped_value_is_refused_in_every_value_position() {
         }
     }
 }
+
+/// Shell strictness is the workflow's property, not each step author's.
+///
+/// **One step set `set -euo pipefail` and another set nothing, so a pipeline's status was discarded.** The
+/// `license-files` derivation was three stages ending in `tr`, which is the stage whose status `$?` reports:
+/// measured on all three failure paths — `cargo metadata` failing, malformed JSON, and `jq` absent — the
+/// pipeline gave exit 0 and an empty set, every crate was then treated as publishable, and the job reported
+/// *kanhe is missing LICENSE-MIT* for a fact about an absent interpreter. Both wrappers in `scripts/` already
+/// argue that a script choosing its exit class in one place beats every author choosing it again; a workflow
+/// whose steps each decide their own strictness is that same defect one layer out.
+///
+/// `defaults.run.shell` makes it one decision. This holds the decision rather than the habit: a step-level
+/// `shell:` naming `bash` without the flags takes the strictness back, and a `set -` line inside a `run:`
+/// block puts the decision in two places again — the shape where one of them drifts.
+///
+/// The corpus is the one file [`a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`] holds this
+/// directory to. Comment lines are excluded by position: the paragraph in `ci.yml` that records this
+/// measurement writes the flags it forbids, so a reader matching the bare string would refuse its own reason.
+#[test]
+fn shell_strictness_is_declared_once_for_the_whole_workflow() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let path = root.join(".github/workflows/ci.yml");
+    let text = std::fs::read_to_string(&path)
+        .expect("read .github/workflows/ci.yml — the strictness this holds is declared in it");
+
+    const STRICT_SHELL: &str = "shell: bash -euo pipefail {0}";
+    assert!(
+        text.contains(&format!("defaults:\n  run:\n    {STRICT_SHELL}\n")),
+        "{} declares no workflow-level `defaults: run: {STRICT_SHELL}`, so every `run:` step decides \
+         its own strictness and a pipeline's status is whatever its last stage returns",
+        path.display()
+    );
+
+    let mut lax = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some(shell) = trimmed.strip_prefix("shell:") {
+            let shell = shell.trim();
+            if shell.starts_with("bash") && !shell.contains("-euo pipefail") {
+                lax.push(format!(
+                    "  {}:{}: `shell: {shell}` names bash without `-euo pipefail`, taking back the \
+                     strictness the workflow declares",
+                    path.display(),
+                    number + 1
+                ));
+            }
+            continue;
+        }
+        if trimmed.starts_with("set -") && trimmed.contains('e') {
+            lax.push(format!(
+                "  {}:{}: `{trimmed}` restates the strictness `defaults.run.shell` already declares — two \
+                 places to change and one of them drifts",
+                path.display(),
+                number + 1
+            ));
+        }
+    }
+    assert!(
+        lax.is_empty(),
+        "the workflow declares its shell strictness once, and these lines decide it again:\n{}",
+        lax.join("\n")
+    );
+}

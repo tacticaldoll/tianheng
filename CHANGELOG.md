@@ -1172,6 +1172,22 @@ them.
 
 ### Self-governance
 
+- **Shell strictness is the workflow's property now, not each step author's.** One CI step set
+  `set -euo pipefail` and another set nothing, so a three-stage derivation ending in `tr` reported only its
+  last stage: measured on all three failure paths — `cargo metadata` failing, malformed JSON, `jq` absent —
+  the pipeline gave exit 0 and an empty set, every crate was treated as publishable, and the job said *kanhe
+  is missing LICENSE-MIT* for a fact about an absent interpreter. Loud only by circumstance, since those two
+  crates carry no license texts. `defaults.run.shell: bash -euo pipefail {0}` makes it one decision, and
+  `shell_strictness_is_declared_once_for_the_whole_workflow` refuses a step that takes it back.
+
+  Adopting it has a cost, paid here rather than discovered: `pipefail` makes a consumer that exits early fail
+  the whole pipeline. `printf | grep -q` over the SARIF document measured 141 on five of five runs, so that
+  assertion reads a here-string. The same sweep found two shell readers picking one of several and saying
+  nothing about the rest — the MSRV read one of eight `rust_version` values through a greedy `sed` and
+  `head -n1`, and the packaged self-test read one of however many `.crate` files sat in `target/package`
+  through `ls | head -1`, where a stale tarball from an earlier version could be the one tested. Both answer
+  the count first now, which is `selection::the_only`'s question asked in shell.
+
 - **The two readers of that fact are held against each other now, and one of them was wrong by a whole
   spelling.** The previous entry gave *is this crate published* one criterion and left two deliberate readers
   — `manifest::publishable` over text, cargo in the workflow — with nothing between them. What connected them
