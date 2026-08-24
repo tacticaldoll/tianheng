@@ -1871,6 +1871,10 @@ fn no_reference_names_a_line_number() {
     let known: std::collections::BTreeSet<&str> = paths.iter().map(String::as_str).collect();
 
     let mut coordinates = Vec::new();
+    // A line this reader cannot pair up is not a line with no coordinate in it: an unpaired marker shifts
+    // every pair after it, so the spans read would be the prose between markers rather than the document's
+    // own backticked text — and a gate reading the wrong spans reports clean over the ones it never saw.
+    let mut unpaired: Vec<String> = Vec::new();
     let mut read = 0usize;
     for path in &paths {
         // A file this direction claims to have inspected must have been read. Skipping an unreadable one is
@@ -1884,8 +1888,31 @@ fn no_reference_names_a_line_number() {
             )
         });
         read += 1;
+        // **A code span may wrap a line, so on such a line this reader cannot say which text is inside one
+        // — and it scans the whole line instead.** Markdown wraps a span freely: measured when this was
+        // written, 331 lines across 68 tracked files carry an odd number of single backticks, and a per-line
+        // pairing reads the prose between one span's closer and the next opener as though it were the
+        // document's own backticked text. The requirement this serves says *every* tracked format, so the
+        // undecidable line is scanned entire rather than paired wrongly.
+        //
+        // That over-reacts, in the safe direction: a coordinate written *outside* a span on such a line is
+        // refused too. None of those 331 lines carries the shape today, so the over-reaction has an empty
+        // subject and the wrapped-span hole is closed rather than declared.
+        let mut spans: Vec<(usize, String)> = Vec::new();
         for (index, line) in text.lines().enumerate() {
-            for span in line.split('`').skip(1).step_by(2) {
+            if line.matches('`').count() % 2 == 0 {
+                match kanhe::reading::backticked("prose line", line) {
+                    Ok(runs) => spans.extend(runs.into_iter().map(|run| (index + 1, run))),
+                    Err(refusal) => {
+                        unpaired.push(format!("  {path}:{}: {}", index + 1, refusal.message))
+                    }
+                }
+            } else {
+                spans.push((index + 1, line.to_string()));
+            }
+        }
+        {
+            for (index, span) in &spans {
                 // Split on the FIRST colon, and require everything after it to be digits, optionally
                 // separated by further colons. `path:N`, `path:N:M` and the elided `:N` are then one shape.
                 //
@@ -1909,7 +1936,7 @@ fn no_reference_names_a_line_number() {
                 // of this direction. An elided reference is not a weaker coordinate, it is a coordinate
                 // whose reader has to carry the file in their head as well as the position.
                 if left.is_empty() || known.contains(left) {
-                    coordinates.push(format!("{path}:{}: `{span}`", index + 1));
+                    coordinates.push(format!("{path}:{index}: `{span}`"));
                 }
             }
         }
@@ -1917,6 +1944,12 @@ fn no_reference_names_a_line_number() {
     assert!(
         read > 0,
         "no tracked file was read, so this direction would report clean having examined none"
+    );
+    assert!(
+        unpaired.is_empty(),
+        "these lines carry a backtick that closes nothing, so the spans this check would read are not the \
+         document's:\n{}",
+        unpaired.join("\n")
     );
     assert!(
         coordinates.is_empty(),

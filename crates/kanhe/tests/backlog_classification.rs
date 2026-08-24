@@ -60,12 +60,10 @@ fn classified_classes(agents: &str) -> Result<Vec<String>, Refusal> {
         agents.split("Classify live work by its").skip(1),
     )?;
     let run = clause.split_once(". ").map_or(clause, |(run, _)| run);
-    let classes: Vec<String> = run
-        .split('`')
-        .skip(1)
-        .step_by(2)
-        .map(str::to_string)
-        .collect();
+    // One reader for a backticked run, and it decides the marker count before it takes a pair. Pairing them
+    // as they arrive lets one unpaired marker shift every pair after it, which reads as prose named and a
+    // name dropped rather than as an error.
+    let classes = kanhe::reading::backticked("backlog classification clause", run)?;
     if classes.is_empty() {
         Err(cannot_judge_at(
             "repository-checks#backlog-classification-clause-names-no-class",

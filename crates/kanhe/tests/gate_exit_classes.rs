@@ -123,7 +123,7 @@ const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 25] = [
     ("crates/kanhe/tests/refusal_register.rs", "git: enumerates"),
     (
         "crates/kanhe/tests/unreachable_branch.rs",
-        "git: enumerates the tracked Rust sources it sweeps",
+        "git: enumerates the tracked Rust sources its two sweeps read",
     ),
     (
         "crates/kanhe/tests/whitespace_hygiene.rs",

@@ -434,6 +434,13 @@ gave one rule two answers, and the correct half could tell the other nothing.
   state could not be expressed — a typed answer is what admits it
 - **PINNED-BY** `a_backtick_that_closes_nothing_is_refused_rather_than_shifting_every_pair`
 
+#### Scenario: A source outside the shared reader pairs markers itself
+
+- **WHEN** any tracked Rust source outside `reading` writes a hand-rolled backtick pairing
+- **THEN** the reaction refuses, naming the file and the line. The extraction closed the three sites a review
+  had named and left three more standing in the same window — the rule lived in whoever remembered it
+- **PINNED-BY** `no_source_outside_the_shared_reader_pairs_backticks_by_hand`
+
 #### Scenario: An even count reads, in order
 
 - **WHEN** the markers pair up

@@ -223,6 +223,16 @@ same rule that keeps a recognizer asserting its own emptiness elsewhere here.
 - **THEN** the reaction fails, naming the file, the line and the coordinate, because a position names no thing
   in any tense — while a positional *phrase* in the same file stays outside, unread
 
+#### Scenario: A line whose code-span membership cannot be decided
+
+- **WHEN** a tracked line carries an odd number of single backticks, because a Markdown code span wraps across
+  it — measured when this was written: 331 lines across 68 tracked files
+- **THEN** the whole line is scanned for the coordinate shape rather than paired. A per-line pairing reads the
+  prose between one span's closer and the next opener as the document's own backticked text, which is the
+  spans this check would have judged. Scanning entire over-reacts in the safe direction — a coordinate outside
+  a span on such a line is refused too — and none of those lines carries the shape today
+- **PINNED-BY** `no_reference_names_a_line_number`
+
 #### Scenario: A comment names a position rather than a thing
 
 - **WHEN** a comment in any line-comment format references an item by counted offset, bare article, or adverb

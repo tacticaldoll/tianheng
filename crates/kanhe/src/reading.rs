@@ -199,6 +199,20 @@ pub fn date(what: &str, text: &str) -> Result<Civil, Refusal> {
 /// not the document's. So the count is decided before any pair is taken. `what` names the subject in the
 /// refusal, because the marker's position alone does not tell a reader which document to open.
 pub fn backticked(what: &str, text: &str) -> Result<Vec<String>, Refusal> {
+    Ok(backticked_at(what, text)?
+        .into_iter()
+        .map(|(_, run)| run)
+        .collect())
+}
+
+/// Every backticked run in `text` with the one-based line its opener sits on, or the same refusal.
+///
+/// **A run may span a line, so the line is not the unit that pairs.** Markdown wraps a code span freely —
+/// `AGENTS.md` writes one across two lines in five places — and a per-line reader over such a document sees
+/// an odd count on each half and pairs the halves with whatever came next. `reference_integrity` scanned line
+/// by line and was reading exactly those shifted spans; the document is what pairs, and the line is only
+/// where the reader is sent.
+pub fn backticked_at(what: &str, text: &str) -> Result<Vec<(usize, String)>, Refusal> {
     let markers = text.matches('`').count();
     if markers % 2 != 0 {
         return Err(cannot_judge_at(
@@ -211,14 +225,16 @@ pub fn backticked(what: &str, text: &str) -> Result<Vec<String>, Refusal> {
         ));
     }
     let mut runs = Vec::new();
-    let mut rest = text;
-    while let Some(open) = rest.find('`') {
-        rest = &rest[open + 1..];
+    let mut at = 0usize;
+    while let Some(offset) = text[at..].find('`') {
+        let open = at + offset;
+        let line = text[..open].matches('\n').count() + 1;
+        let rest = &text[open + 1..];
         let close = rest
             .find('`')
             .expect("the marker count is even, so an opener has a closer");
-        runs.push(rest[..close].to_string());
-        rest = &rest[close + 1..];
+        runs.push((line, rest[..close].to_string()));
+        at = open + 1 + close + 1;
     }
     Ok(runs)
 }

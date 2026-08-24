@@ -1172,6 +1172,26 @@ them.
 
 ### Self-governance
 
+- **Every backtick pair now goes through the one reader, and a check that reads spans by line says which line
+  it cannot decide.** The entry two below extracted `reading::backticked` and converted the three sites a
+  review had named. Sweeping this session's own output found `split('`').skip(1).step_by(2)` still standing in
+  three more — `reference_integrity`, `bound_register`, `backlog_classification` — the exact shape, in the
+  window whose subject was that shape. `no_source_outside_the_shared_reader_pairs_backticks_by_hand` makes a
+  seventh impossible.
+
+  Converting `reference_integrity` measured something its per-line scan had been getting wrong all along: a
+  Markdown code span **wraps a line** freely, and 331 lines across 68 tracked files carry an odd number of
+  single backticks. On each of those the old scan paired the halves with whatever came next, so a gate whose
+  whole subject is what backticked text names was reading the prose between one span's closer and the next
+  opener. A whole-document pairing is not the answer either — fenced blocks and `` `` `` spans make an even
+  count wrong for a document — so a line this reader cannot decide is scanned entire. That over-reacts in the
+  safe direction: a coordinate written outside a span on such a line is refused too, and none of those 331
+  lines carries the shape today.
+
+  The three `trim_matches('`')` readers of a citation name stay as they are, measured rather than assumed: an
+  unbalanced marker on a `PINNED-BY` line is accepted and still names the right test, so that tolerance
+  repairs a typo instead of shifting a pairing. It is a different shape and it is left alone.
+
 - **A pipeline that reads a value stands alone, and that is held rather than remembered.** Adopting
   workflow-level `pipefail` in the previous entry made a consumer that stops before its producer finishes fail
   the whole pipeline, and the three sites were repaired by hand — which left the rule living in whoever
@@ -1209,9 +1229,11 @@ them.
   tail as a type. Neither could report the condition, because a shifted pairing is readable — it yields names,
   just not the document's.
 
-  `reading::backticked` decides the count before it takes a pair, and all three sites call it. The third site
-  was the one that refused correctly, and it refused by a shape check rather than by counting, so the correct
-  half of the module could tell the other two nothing.
+  `reading::backticked` decides the count before it takes a pair, and the three sites the review named call
+  it. One of them was the site that refused correctly, and it refused by a shape check rather than by
+  counting, so the correct half of the module could tell the other two nothing. **Three more sites of the
+  same shape were still standing when that was written, and the entry below closes them** — the sentence
+  claiming the rule was itself the round's residue.
 
   `proposal_capabilities` answered `Result<BTreeSet<String>, usize>` — an error channel with room for *how many
   sections* and none for *unreadable*, which is why the state was skipped in the module whose sibling reader

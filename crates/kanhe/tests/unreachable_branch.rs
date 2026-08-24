@@ -250,6 +250,48 @@ fn the_reader_separates_a_dead_fallback_from_a_reachable_one() {
     }
 }
 
+/// No source outside `reading` pairs backtick markers by hand.
+///
+/// **The extraction closed three sites and the class stayed open at three more.** `reading::backticked` was
+/// written because pairing markers as they arrive lets one unpaired marker shift every pair after it; the
+/// round that wrote it converted the three sites a review had named and claimed the rule. Sweeping this
+/// session's own output found `split('`').skip(1).step_by(2)` still standing in three test targets — the
+/// exact shape, in the window whose subject was that shape. A reaction is what makes the seventh impossible.
+///
+/// The corpus is executed Rust, so the paragraphs recording this — including this one — write the shape they
+/// forbid and are not read.
+#[test]
+fn no_source_outside_the_shared_reader_pairs_backticks_by_hand() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let sources = tracked_rust(&root).expect("enumerate and read the tracked Rust sources");
+    let mut standing = Vec::new();
+    for (path, text) in &sources {
+        // `reading` is where the pairing lives, so it is the one file that may write it.
+        if path.ends_with("src/reading.rs") {
+            continue;
+        }
+        for (number, line) in logical_lines(text) {
+            // Assembled from pieces, so the needle never appears whole in this file: the sweep reads this
+            // source too, and a plainly written detector is the offence it detects.
+            if line.contains(concat!(".split(", "'`')")) {
+                standing.push(format!(
+                    "  {path}:{number}: pairs backtick markers by hand — one unpaired marker shifts every \
+                     pair after it, and a shifted pairing reads as prose named and a name dropped rather \
+                     than as an error. Call `kanhe::reading::backticked`"
+                ));
+            }
+        }
+    }
+    assert!(
+        standing.is_empty(),
+        "these sites pair backticks themselves, so the reader that decides the count first is not the only \
+         one:\n{}",
+        standing.join("\n")
+    );
+}
+
 /// An unread file is not a file without an offence.
 #[test]
 fn a_source_that_cannot_be_read_refuses_rather_than_being_skipped() {
