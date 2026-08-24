@@ -626,12 +626,12 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 ### `repository-checks#the-only-found-none`
 
 - produced in `crates/kanhe/src/selection.rs`
-- observed by `crates/kanhe/src/tests/selection.rs`
+- observed by `crates/kanhe/src/tests/selection.rs, crates/kanhe/src/tests/wrapper_parser.rs`
 
 ### `repository-checks#the-only-found-several`
 
 - produced in `crates/kanhe/src/selection.rs`
-- observed by `crates/kanhe/src/tests/selection.rs`
+- observed by `crates/kanhe/src/tests/selection.rs, crates/kanhe/src/tests/wrapper_parser.rs`
 
 ### `repository-checks#wrapper-cites-no-gate`
 

@@ -1,5 +1,6 @@
 use crate::manifest::{
-    Quoted, WorkspaceVersion, is_semver, quoted_value, semver, workspace_version,
+    Publishable, Quoted, WorkspaceVersion, is_semver, publishable, quoted_value, semver,
+    workspace_version,
 };
 
 /// The two gates asked the same question about a version and answered differently.
@@ -197,5 +198,78 @@ fn a_multiline_basic_string_is_refused_rather_than_read_as_empty() {
         quoted_value(" \"\", version = \"0.5.0\" }"),
         Quoted::Value(String::new()),
         "an empty single-line string is a value this reader can read"
+    );
+}
+
+/// Every `publish` shape cargo honours, and the one this reader cannot decide.
+///
+/// **Measured against cargo 1.96.0, not assumed.** `cargo publish --dry-run` refuses `publish = false` and
+/// `publish = []` identically and both report `[]` from `cargo metadata`; a non-empty list publishes to a
+/// named registry; `publish.workspace = true` is honoured and reports whatever the workspace declared.
+/// Those measurements are what this direction's table encodes — before this, three readers in this repository
+/// looked for the word `false` and called the empty array published.
+#[test]
+fn every_publish_shape_cargo_honours_is_read_as_cargo_reads_it() {
+    let package = |body: &str| format!("[package]\nname = \"m\"\nversion = \"0.1.0\"\n{body}\n");
+
+    assert_eq!(
+        publishable(&package("")),
+        Publishable::Yes,
+        "no key publishes"
+    );
+    assert_eq!(
+        publishable(&package("publish = true")),
+        Publishable::Yes,
+        "an explicit true publishes"
+    );
+    assert_eq!(
+        publishable(&package("publish = false")),
+        Publishable::No,
+        "false does not"
+    );
+    assert_eq!(
+        publishable(&package("publish = []")),
+        Publishable::No,
+        "the empty registry list is what cargo reports for false, and it refuses the same way"
+    );
+    assert_eq!(
+        publishable(&package(r#"publish = ["crates-io"]"#)),
+        Publishable::Yes,
+        "a named registry is a crate that publishes"
+    );
+
+    // The shape whose text cannot answer: cargo honours it, and deciding it needs the workspace manifest.
+    assert!(
+        matches!(
+            publishable(&package("publish.workspace = true")),
+            Publishable::Unreadable(_)
+        ),
+        "a workspace inheritance is not a verdict this text carries"
+    );
+    assert!(
+        matches!(
+            publishable(&package("publish = { workspace = true }")),
+            Publishable::Unreadable(_)
+        ),
+        "nor is its inline-table spelling"
+    );
+
+    // `[workspace.package]`'s default is not a member's answer, and a commented-out key is not a key.
+    assert_eq!(
+        publishable("[workspace.package]\npublish = false\n"),
+        Publishable::Yes,
+        "a workspace default read as a member's verdict would report it for every member"
+    );
+    assert_eq!(
+        publishable(&package("# publish = false")),
+        Publishable::Yes,
+        "executed text only — a commented-out key is not a declared one"
+    );
+
+    // The tree's own six publishable crates and two unpublishable ones, so the rows above are not the only
+    // subject this reader is held over.
+    assert_eq!(
+        publishable("[package]\nname = \"kanhe\"\npublish = false\n"),
+        Publishable::No
     );
 }

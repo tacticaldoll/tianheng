@@ -229,3 +229,73 @@ pub fn semver(version: &str) -> Option<(u64, u64, u64)> {
 pub fn is_semver(version: &str) -> bool {
     semver(version).is_some()
 }
+
+/// Whether a member manifest's `[package]` permits publication, as far as its own text can say.
+///
+/// **One owner for a fact four readers had answered separately.** Two CI jobs grepped
+/// `^\s*publish\s*=\s*false`, a repository check asked `starts_with("publish") && contains("false")`, and
+/// `shengmo`'s self-governance read cargo's own report — and only the last one carried cargo's semantics.
+/// `manifest`'s own header states the class: *two readers of one fact reaching different verdicts, in front
+/// of `cargo publish`*.
+///
+/// **The shapes are measured against cargo 1.96.0 rather than assumed.** `cargo publish --dry-run` refuses
+/// `publish = false` and refuses `publish = []` identically, and `cargo metadata` reports `[]` for both —
+/// so a crate spelling its exclusion as the empty array is unpublishable, and every text reader looking for
+/// the word `false` called it published. A non-empty array is a crate that publishes, to a named registry.
+///
+/// [`Publishable::Unreadable`] is not defensive: `publish.workspace = true` is legal and cargo honours it —
+/// measured, a member inheriting `publish = false` from `[workspace.package]` reports `[]`. Its text alone
+/// cannot say, so this refuses rather than guessing, exactly as `Quoted::Unreadable` does for a value one
+/// field over. Written as prose rather than a link because this type is public and that one is
+/// `pub(crate)`: rustdoc refuses the link form under `-D warnings`, which is `reference-integrity`'s
+/// declared bound about prose-form references met from the other side — the link form has a reaction, so
+/// the shape it refuses is the one left.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Publishable {
+    /// No `publish` key, an explicit `true`, or a non-empty registry list.
+    Yes,
+    /// `publish = false`, or the empty registry list cargo treats identically.
+    No,
+    /// A value this reader cannot decide from the manifest alone, quoted as written — a workspace
+    /// inheritance, an inline table, or a shape it does not know.
+    Unreadable(String),
+}
+
+/// What a member manifest's own `[package]` says about publication.
+///
+/// Reads the `[package]` table only: a `publish` under `[workspace.package]` is the *default* a member may
+/// inherit, not that member's answer, and treating the two alike would report the workspace's verdict for
+/// every member.
+///
+/// Executed TOML text, so a commented-out `publish = false` is not read as a declared one — the reason
+/// `require_internal_pins` records for the same corpus.
+pub fn publishable(text: &str) -> Publishable {
+    let mut in_package = false;
+    for line in crate::region::Source::of(text).toml().lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_package = trimmed == "[package]";
+            continue;
+        }
+        if !in_package {
+            continue;
+        }
+        let Some(rest) = trimmed.strip_prefix("publish") else {
+            continue;
+        };
+        // `publish.workspace` and `publish = { … }` both need the workspace manifest, and `publishx` is
+        // another key entirely — so the character after the name decides which of the three this is.
+        let value = match rest.trim_start().strip_prefix('=') {
+            Some(value) => value.trim(),
+            None => return Publishable::Unreadable(trimmed.to_string()),
+        };
+        return match value {
+            "false" => Publishable::No,
+            "true" => Publishable::Yes,
+            "[]" => Publishable::No,
+            other if other.starts_with('[') && other.ends_with(']') => Publishable::Yes,
+            _ => Publishable::Unreadable(trimmed.to_string()),
+        };
+    }
+    Publishable::Yes
+}

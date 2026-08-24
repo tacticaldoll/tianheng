@@ -178,14 +178,18 @@ fn the_published_set_is_the_one_the_manifests_declare() {
             continue;
         }
         let text = std::fs::read_to_string(&manifest).expect("a member manifest reads");
-        let unpublished = kanhe::region::Source::of(text.as_str())
-            .toml()
-            .lines()
-            .any(|line| {
-                let trimmed = line.trim();
-                trimmed.starts_with("publish") && trimmed.contains("false")
-            });
-        if !unpublished {
+        // **`kanhe::manifest::publishable`, not a `contains("false")` of my own.** That predicate called
+        // `publish = []` published — legal TOML that `cargo publish` refuses exactly as it refuses `false`,
+        // measured on cargo 1.96.0. The fact has one owner now, and an `Unreadable` value refuses here
+        // rather than being guessed either way.
+        let publishable = kanhe::manifest::publishable(&text);
+        assert!(
+            !matches!(publishable, kanhe::manifest::Publishable::Unreadable(_)),
+            "{}: this reader cannot decide whether the crate publishes ({publishable:?}), so the set it \
+             compares against would be a guess",
+            manifest.display()
+        );
+        if publishable == kanhe::manifest::Publishable::Yes {
             declared.push(
                 dir.file_name()
                     .expect("a crate directory has a name")
