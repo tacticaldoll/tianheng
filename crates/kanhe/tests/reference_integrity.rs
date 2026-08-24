@@ -889,6 +889,21 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
             "crates/tianheng/probe-member.md",
             "See `tests/zzz_absent_probe.rs`.\n",
         ),
+        // **The basename below must be one this repository once tracked and deleted, and that is the
+        // extraction form's definition rather than an oversight.** `bare_basename_offence` reports a bare
+        // run only when `deleted_outside_changes` holds it — otherwise a bare word is a word, not a
+        // reference. So the `zzz`-sentinel form its neighbours use would leave this row inert: measured, a
+        // rename to a never-tracked sentinel left it seen by nothing and this direction said so.
+        //
+        // Re-adding that script therefore does not silently repoint the probe — it fails this assertion,
+        // naming the form. The premise is owned by a deletion, and this direction is what holds it; a review
+        // reading the neighbours' sentinels as the rule proposed the rename, which is why the reason is
+        // written here rather than left to the next one.
+        //
+        // The name is NOT repeated in this comment, deliberately: `in_repository_references_resolve` reads
+        // executed Rust text, and a comment naming a deleted path is a stale reference to it. The row below
+        // survives that check only because a backtick inside a string literal is written `\``, which the
+        // reference form does not match — so an explanation of the row cannot be spelled the way the row is.
         (
             "a bare basename",
             "probe-basename.md",
@@ -1055,7 +1070,7 @@ fn comment_bearing_sources_and_live_test_claims_are_inspected() {
         (
             "Rust test comment",
             "crates/kanhe/tests/probe.rs",
-            "// `scripts/check_reference_integrity.sh` holds this.\n",
+            "// `scripts/zzz_absent_integrity_probe.sh` holds this.\n",
         ),
         // The wrappers are shell, and they cite the Rust gates they sequence by path. A shebang above the
         // comment, because that is the shape every tracked script actually has and the line must not be read

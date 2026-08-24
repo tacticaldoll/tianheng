@@ -1172,6 +1172,29 @@ them.
 
 ### Self-governance
 
+- **The set a job claims to cover is the one it derives.** `packaged-selftest` is named *every publishable
+  crate's tests pass from its packaged tarball* and then hand-listed them twice — once for the resolve
+  patches and once for the packaging loop — with nothing holding either list. The `license-files` job beside
+  it derives the same set from the same two facts (`crates/*/Cargo.toml` and `publish = false`), and
+  `release_coherence_gate` derives it from `cargo metadata` for the recorded reason that a path-shaped corpus
+  went stale, so a seventh publishable crate would have been caught there and silently skipped here while
+  this job's name went on saying *every*. Both lists are now one derivation from those two facts. Measured
+  against the lists it replaces: the same members, and `cargo package --no-verify` exits 0 with every derived
+  member patched, so the second hand-written fact a partial derivation would have needed — *which of them is
+  the shell nobody depends on* — is not needed either. An unused patch is a warning, not a failure.
+
+- **A fixture's premise moved into the fixture where it could, and is written down where it could not.** Two
+  absent-reference probes named real files this window deleted while their neighbours use `zzz` sentinels.
+  One was the neighbours' shape and became one. The other **cannot be**, and that asymmetry is now recorded
+  at the row rather than left for the next reader: `bare_basename_offence` reports a bare run only when
+  `deleted_outside_changes` holds it, because otherwise a bare word is a word and not a reference — so a
+  sentinel leaves that row inert, measured directly by renaming it and watching the direction report it seen
+  by nothing. The concern that re-adding either script would *silently* repoint a probe does not hold in
+  either case: both directions assert that every planted form is seen, so a re-added file turns one red and
+  names the form. What is genuinely fragile is the explanation — a comment naming the deleted path is itself
+  a stale reference to it, and the row survives only because a backtick inside a string literal is written
+  `\``, which the reference form does not match. The comment therefore does not spell the name it explains.
+
 - **A `SHALL` that nothing observed is a convention now, and says so.** `repository-checks` required *the
   declaration SHALL sit beside the pin it bounds* for the interpreter support window, and nothing held it:
   the reader takes the workflow's whole text and a day and never computes a line index. Measured — the

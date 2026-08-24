@@ -218,11 +218,26 @@ jobs:
           # it must guard, rather than only when the deps happen to already be published.
           set -euo pipefail
           ws="$PWD"
+          # **The set is derived, and it used to be written twice.** This job's name claims *every
+          # publishable crate*, and the claim was two hand-written lists that nothing held. The
+          # `license-files` job above derives the same set from the same two facts, and
+          # `release_coherence_gate` derives it from `cargo metadata` for the recorded reason that a
+          # path-shaped corpus went stale — so a seventh publishable crate would have been caught there and
+          # silently skipped here, while this name went on saying every. One enumerator, one claim.
+          crates=()
+          for manifest in crates/*/Cargo.toml; do
+            grep -qE '^[[:space:]]*publish[[:space:]]*=[[:space:]]*false' "$manifest" && continue
+            crates+=("$(basename "$(dirname "$manifest")")")
+          done
+          # Every derived member is patched, including one this packaging does not reach. An unused patch is
+          # a warning and exit 0 — measured on cargo 1.96.0 packaging `xuanji` with all six patched — and
+          # the alternative is a second hand-written fact, "which of them is the shell nobody depends on",
+          # replacing the one just removed.
           patch=()
-          for s in xuanji xingbiao guibiao hunyi louke; do
+          for s in "${crates[@]}"; do
             patch+=(--config "patch.crates-io.$s.path=\"$ws/crates/$s\"")
           done
-          for crate in xuanji xingbiao guibiao hunyi louke tianheng; do
+          for crate in "${crates[@]}"; do
             cargo package --no-verify -p "$crate" "${patch[@]}"
             tarball="$(ls target/package/${crate}-*.crate | head -1)"
             work="$(mktemp -d)"
