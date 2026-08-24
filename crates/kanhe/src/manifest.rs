@@ -60,6 +60,23 @@ pub(crate) fn quoted_value(value: &str) -> Quoted {
     let Some(rest) = value.trim_start().strip_prefix('"') else {
         return Quoted::Unreadable;
     };
+    // **A multiline basic string opens with three quotes, and this reader reads one.** TOML admits
+    // `"""…"""` wherever it admits `"…"`, and cargo reads it — measured on cargo 1.96.0,
+    // `path = """crates/xuanji"""` resolves the member and `name = """xuanji"""` reads as `xuanji`. Stripping
+    // one quote and taking the next left `body` EMPTY, so this answered `Value("")`: an empty path, an empty
+    // identity, an empty version, each of which its consumer compares and passes over. That is the same
+    // silence the backslash branch below closes, reached without a backslash — so that branch cannot see this
+    // shape and a check of its own is what closes it.
+    //
+    // **Its position is not the property, and an earlier version of this comment said it was.** It reads
+    // `rest`, not `body`, so it answers the same before or after the split. Measured by moving it past the
+    // body read: the direction over it stayed green. What matters is that it exists, not where it sits.
+    //
+    // Two quotes rather than three is what is tested, because `rest` has already lost the opening one. An
+    // ordinary empty string is `""` — one quote here — and stays a value it can read.
+    if rest.starts_with("\"\"") {
+        return Quoted::Unreadable;
+    }
     let Some((body, _)) = rest.split_once('"') else {
         return Quoted::Unreadable;
     };

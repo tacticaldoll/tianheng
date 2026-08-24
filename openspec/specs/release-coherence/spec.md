@@ -571,8 +571,9 @@ read, and the undecoded source then decided a comparison.
 
 #### Scenario: An escaped renamed package
 
-- **WHEN** a renamed dependency's `package` carries an escape, beside an ordinary family dependency in
-  another example
+- **WHEN** a renamed dependency's `package` carries an escape, beside an ordinary family dependency **in the
+  same example manifest** — which is the configuration the guards cannot see, because `requirements_here` is
+  counted per example and an escaped entry alone in its own example leaves that counter at zero
 - **THEN** the judgement refuses, rather than reading the entry as naming no family crate at all
 - **PINNED-BY** `an_escaped_renamed_package_is_refused_and_an_ordinary_sibling_does_not_cover_for_it`
 

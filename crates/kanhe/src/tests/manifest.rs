@@ -166,3 +166,36 @@ fn a_toml_escape_is_refused_rather_than_returned_undecoded() {
         "a backslash after the closing quote is not part of the value"
     );
 }
+
+/// A multiline basic string is refused rather than read as an empty value.
+///
+/// **Not an escape case, and that is why the backslash branch could not see it.** TOML admits `"""…"""`
+/// wherever it admits `"…"`, and cargo reads it: measured on cargo 1.96.0, `path = """crates/xuanji"""`
+/// resolves the member and `name = """xuanji"""` reads as `xuanji`. This reader stripped the opening quote,
+/// found the next one immediately, and answered `Value("")` — an empty path, an empty identity, an empty
+/// version — which every consumer compares and passes over. The same silence the escape branch closes,
+/// reached with no backslash in sight.
+#[test]
+fn a_multiline_basic_string_is_refused_rather_than_read_as_empty() {
+    for written in [
+        r#" """crates/xuanji""""#,
+        r#" """xuanji""""#,
+        r#" """0.5.0""""#,
+        r#" """""#,
+    ] {
+        assert_eq!(
+            quoted_value(written),
+            Quoted::Unreadable,
+            "{written} opens a multiline basic string this reader does not read, so it must refuse rather \
+             than answer with an empty value"
+        );
+    }
+
+    // An ordinary EMPTY single-line string is still a value, and is the shape the multiline guard must not
+    // reach: `""` is two quotes and a multiline opener is three.
+    assert_eq!(
+        quoted_value(" \"\", version = \"0.5.0\" }"),
+        Quoted::Value(String::new()),
+        "an empty single-line string is a value this reader can read"
+    );
+}

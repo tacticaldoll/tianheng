@@ -223,22 +223,30 @@ const ESCAPED_X: &str = "\\u0078";
 /// The TOML escape for `j`, for the reason [`ESCAPED_X`] records.
 const ESCAPED_J: &str = "\\u006A";
 
-/// An escaped path is not an internal dependency this check may pass over, and a sibling cannot cover for it.
+/// An escaped path is refused, and only one of the two positions was ever a false negative.
 ///
 /// **Cargo decodes the escape and this reader decodes none.** Measured on cargo 1.96.0 against a scratch
-/// workspace: a `path` of `crates/` + [`ESCAPED_X`] + `uanji` resolves the member at `crates/xuanji`. Before
-/// `quoted_value` refused a backslash this reader answered the raw source as a `Value`, the
-/// `starts_with("crates/")` selection then decided on undecoded text, and the ordinary sibling kept the
-/// vacuity counter non-zero — so *found no internal path dependency* never fired, and the escaped entry's
-/// stale `0.0.1` reached a release as clean.
+/// workspace: a `path` of `crates/` + [`ESCAPED_X`] + `uanji` resolves the member at `crates/xuanji`.
 ///
-/// Both positions, because they fail differently: after the prefix the entry is selected and then compared
-/// against a name no crate has; inside the prefix it is not selected at all.
+/// **The two positions are not two instances of one defect, and an earlier version of this comment said they
+/// were.** Measured by removing the backslash branch and running this direction:
+///
+/// - **inside the prefix** (`cr` + [`ESCAPED_X`] + `tes/xuanji`) — the raw source does not begin `crates/`,
+///   so `starts_with` did not select the entry, `continue` took it, and the ordinary sibling kept the
+///   vacuity counter non-zero so *found no internal path dependency* never fired. The stale `0.0.1` reached
+///   a release as clean. **This is the false-negative regression direction.**
+/// - **after the prefix** (`crates/` + [`ESCAPED_X`] + `uanji`) — the raw source still begins `crates/`, so
+///   the entry WAS selected and its version WAS compared. Measured: the old reader answered
+///   `release-coherence#internal-pin-disagrees`, naming *internal dependency xuanji is pinned to 0.0.1;
+///   expected 0.5.0*. Not clean, and not a missed check. **This position is coverage of the uniform
+///   fail-closed rule, not evidence of the old silence** — and `require_internal_pins` never resolves a
+///   crate identity from a path, so nothing here was ever "compared against a name no crate has".
 #[test]
 fn an_escaped_path_is_refused_and_an_ordinary_sibling_does_not_cover_for_it() {
+    // Ordered as the doc comment reads them: the regression direction first, then the uniform-rule one.
     for path in [
-        format!("crates/{ESCAPED_X}uanji"),
         format!("cr{ESCAPED_X}tes/xuanji"),
+        format!("crates/{ESCAPED_X}uanji"),
     ] {
         let manifest = format!(
             "[workspace.dependencies]\n\
