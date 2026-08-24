@@ -381,6 +381,42 @@ so the date a reader is refused on is the same date everywhere.
   read
 - **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
 
+### Requirement: A backticked name SHALL have one reader, and an unpaired marker SHALL refuse
+
+Reading backticked identifiers out of prose SHALL go through one implementation, and that implementation SHALL
+decide the marker count before it takes a pair. Pairing markers as they arrive means one unpaired marker
+shifts every pair after it, and a shifted pairing is **readable** — it yields names, just not the document's —
+so no site doing it can report the condition.
+
+**Measured at both sites that had this shape.** A `## Capabilities` section listing `` `alpha` ``, a stray
+marker, then `` `beta` `` answered `{" here\n- ", "alpha"}`: the prose between the stray marker and `beta`'s
+opener admitted as a capability name, and `beta` dropped. An admitted-types clause reading
+`` `feat`, `fix` and `chore `` answered `["feat", "fix", "chore"]`, admitting the unterminated tail as a type.
+The third site of the same rule refused correctly — by a shape check rather than by counting — so one module
+gave one rule two answers, and the correct half could tell the other nothing.
+
+#### Scenario: A marker closes nothing
+
+- **WHEN** the text a reader takes backticked names from carries an odd number of markers
+- **THEN** the reader refuses as *cannot judge*, saying how many markers were found and that one closes
+  nothing — never a shifted pairing's names
+- **PINNED-BY** `an_unpaired_backtick_refuses_rather_than_shifting_every_pair`
+
+#### Scenario: The section names capabilities the reader cannot pair
+
+- **WHEN** a proposal's `## Capabilities` section carries an unpaired marker
+- **THEN** the join refuses rather than accounting for a capability the proposal never listed. The reader's
+  error channel was a bare `usize`, which had room for *how many sections* and none for *unreadable*, so the
+  state could not be expressed — a typed answer is what admits it
+- **PINNED-BY** `a_backtick_that_closes_nothing_is_refused_rather_than_shifting_every_pair`
+
+#### Scenario: An even count reads, in order
+
+- **WHEN** the markers pair up
+- **THEN** every run is returned in the order it appears, an empty run included — the count is decided, so a
+  pair is whatever it holds
+- **PINNED-BY** `an_unpaired_backtick_refuses_rather_than_shifting_every_pair`
+
 ### Requirement: A branch a guard has already made unreachable SHALL NOT be written
 
 Where a receiver method's result cannot be absent, no consumer SHALL read it as if it could. `str::split` and

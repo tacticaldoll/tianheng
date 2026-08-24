@@ -28,6 +28,23 @@ pub enum Declared {
     SeveralSections(usize),
 }
 
+/// What a proposal's `## Capabilities` section names.
+///
+/// Sibling of [`Declared`], and the same four answers minus the one this section cannot give: a proposal with
+/// no such section names nothing, which is [`Named::Names`] over an empty set rather than an absence. The
+/// error channel this replaced was a bare `usize`, which had room for *how many sections* and none for
+/// *unreadable* — so the reader that could not express the state skipped it, in the module whose sibling
+/// reader refuses it.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Named {
+    /// The capability names the section mentions.
+    Names(BTreeSet<String>),
+    /// A section this reader cannot pair up, quoted as the refusal put it.
+    Unreadable(String),
+    /// Several `## Capabilities` sections, so which one names the capabilities is not this reader's to pick.
+    SeveralSections(usize),
+}
+
 /// What a spec's `## Subject` section declares, refusing a bullet it cannot read.
 ///
 /// **A bullet this reader cannot understand is refused, never dropped.** The form it reads is one backticked
@@ -63,11 +80,15 @@ pub fn subject_globs(spec: &str) -> Declared {
         let Some(rest) = line.trim().strip_prefix("- ") else {
             continue;
         };
-        match rest
-            .strip_prefix('`')
-            .and_then(|rest| rest.strip_suffix('`'))
-        {
-            Some(glob) if !glob.contains('`') => globs.push(glob.to_string()),
+        // One reader for a backticked run, shared with [`proposal_capabilities`] and
+        // `merge_message_gate::admitted_types`. This site was the one of the three that refused correctly,
+        // and it refused by a shape check rather than by counting the markers — so it could not have told
+        // the two siblings anything. The form is still *one backticked glob and nothing else*: exactly one
+        // run, and the bullet is that run with its markers.
+        match crate::reading::backticked("subject bullet", rest) {
+            Ok(runs) if runs.len() == 1 && rest == format!("`{}`", runs[0]) => {
+                globs.push(runs[0].clone());
+            }
             _ => return Declared::Unreadable(line.trim().to_string()),
         }
     }
@@ -84,23 +105,24 @@ pub fn subject_globs(spec: &str) -> Declared {
 /// document over: reading past a second section drops exactly the capabilities it names, and [`join_offences`]
 /// then reports a change as having accounted for a capability it never listed. An empty set is the honest
 /// answer for a proposal carrying **no** such section — it names nothing — and that stays `Ok`.
-pub fn proposal_capabilities(proposal: &str) -> Result<BTreeSet<String>, usize> {
+pub fn proposal_capabilities(proposal: &str) -> Named {
     let sections = crate::selection::all_of(proposal.split("\n## Capabilities\n").skip(1));
     let block = match sections.len() {
-        0 => return Ok(BTreeSet::new()),
+        0 => return Named::Names(BTreeSet::new()),
         1 => sections[0],
-        several => return Err(several),
+        several => return Named::SeveralSections(several),
     };
     let block = block.split_once("\n## ").map_or(block, |(head, _)| head);
-    let mut named = BTreeSet::new();
-    let mut rest = block;
-    while let Some(open) = rest.find('`') {
-        rest = &rest[open + 1..];
-        let Some(close) = rest.find('`') else { break };
-        named.insert(rest[..close].to_string());
-        rest = &rest[close + 1..];
+    // **The error channel used to be a bare `usize`, so there was nowhere to put *unreadable*.** The loop
+    // this replaced paired markers as it found them and `break`d on an opener with no closer, which drops
+    // everything after it and shifts every pair before that: measured on a section listing `` `alpha` ``, a
+    // stray marker, then `` `beta` ``, it answered `{" here\n- ", "alpha"}` — prose admitted as a capability
+    // name and `beta` gone. Its sibling [`subject_globs`] returned a four-state enum and refused; this one
+    // could not express the state, which is how the same rule got two answers in one module.
+    match crate::reading::backticked("proposal's `## Capabilities` section", block) {
+        Ok(runs) => Named::Names(runs.into_iter().collect()),
+        Err(refusal) => Named::Unreadable(refusal.message),
     }
-    Ok(named)
 }
 
 /// Every capability that claims `path`.

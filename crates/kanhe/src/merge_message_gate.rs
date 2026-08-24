@@ -332,12 +332,11 @@ pub fn admitted_types(agents: &str) -> Result<Vec<String>, Refusal> {
     // the contract falls where it belongs: it names no backticked type, which is what the refusal below
     // says and is true of it. A diagnostic that cannot be produced is not a distinction the reader draws.
     let (run, _) = clause.split_once(". ").unwrap_or((clause, ""));
-    let types: Vec<String> = run
-        .split('`')
-        .skip(1)
-        .step_by(2)
-        .map(str::to_string)
-        .collect();
+    // **The pairing is decided before a pair is taken.** `split('`').skip(1).step_by(2)` paired markers as
+    // they came, so an odd count shifted every pair after it: measured, `` `feat`, `fix` and `chore ``
+    // — an unterminated trailing run — read as `["feat", "fix", "chore"]`, admitting the tail as a type. A
+    // shifted pairing is readable, which is why neither this site nor its two siblings could report it.
+    let types = crate::reading::backticked("admitted-types clause", run)?;
     if types.is_empty() {
         return Err(cannot_judge_at(
             "repository-checks#admitted-types-clause-names-no-type",

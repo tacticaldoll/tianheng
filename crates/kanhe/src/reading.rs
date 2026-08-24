@@ -184,3 +184,41 @@ pub fn date(what: &str, text: &str) -> Result<Civil, Refusal> {
     }
     Ok(Civil { year, month, day })
 }
+
+/// Every backticked run in `text`, in order, or a refusal naming the marker that closes nothing.
+///
+/// **An odd marker shifts every pair after it, so the reader answers with prose and drops a name.** Three
+/// sites read backticked identifiers by pairing markers as they came: `find('`')` twice in a loop, and
+/// `split('`').skip(1).step_by(2)`. Measured on a `## Capabilities` section listing `` `alpha` ``, a stray
+/// marker, then `` `beta` ``: the reader answered `{" here\n- ", "alpha"}` — the prose between the stray
+/// marker and `beta`'s opener admitted as a capability name, and `beta` itself gone. The same shape in the
+/// admitted-types clause took an unterminated trailing run as a type: `` `feat`, `fix` and `chore `` read
+/// as `["feat", "fix", "chore"]`.
+///
+/// Neither site could report the condition, because a shifted pairing is *readable* — it produces names, just
+/// not the document's. So the count is decided before any pair is taken. `what` names the subject in the
+/// refusal, because the marker's position alone does not tell a reader which document to open.
+pub fn backticked(what: &str, text: &str) -> Result<Vec<String>, Refusal> {
+    let markers = text.matches('`').count();
+    if markers % 2 != 0 {
+        return Err(cannot_judge_at(
+            "repository-checks#backticks-unpaired",
+            format!(
+                "the {what} carries {markers} backticks, so one of them closes nothing. Every pair after it \
+                 shifts, and a shifted pairing reads as prose named and a name dropped rather than as an \
+                 error"
+            ),
+        ));
+    }
+    let mut runs = Vec::new();
+    let mut rest = text;
+    while let Some(open) = rest.find('`') {
+        rest = &rest[open + 1..];
+        let close = rest
+            .find('`')
+            .expect("the marker count is even, so an opener has a closer");
+        runs.push(rest[..close].to_string());
+        rest = &rest[close + 1..];
+    }
+    Ok(runs)
+}
