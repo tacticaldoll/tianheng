@@ -26,22 +26,6 @@ use std::path::PathBuf;
 
 use kanhe::reading;
 
-/// Days from 1970-01-01 to `y-m-d`, proleptic Gregorian, by Howard Hinnant's civil-calendar algorithm.
-///
-/// Arithmetic rather than a dependency: this crate takes `serde_json` for cargo's message stream and nothing
-/// else, and a date library would be a dependency added for one comparison. The algorithm is closed-form and
-/// exercised below on the boundaries that make it wrong when transcribed carelessly — a leap day, a century
-/// that is not a leap year, and the epoch itself.
-fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let year_of_era = y - era * 400;
-    let shifted_month = (m + 9) % 12;
-    let day_of_year = (153 * shifted_month + 2) / 5 + d - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
-}
-
 /// Today in the same units, in UTC.
 ///
 /// UTC rather than local time, so the day this refuses on is the same day everywhere. A bound that fires on
@@ -123,21 +107,18 @@ fn support_window(workflow: &str, today: i64) -> Result<(), String> {
         ));
     }
 
-    let parts: Vec<i64> = date
-        .split('-')
-        .filter_map(|part| part.parse::<i64>().ok())
-        .collect();
-    let [year, month, day] = parts.as_slice() else {
-        return Err(format!(
-            "the support window's date reads `{date}` and this expects `YYYY-MM-DD`"
-        ));
-    };
-    if !(1..=12).contains(month) || !(1..=31).contains(day) {
-        return Err(format!(
-            "the support window's date reads `{date}`, which names no day"
-        ));
-    }
-    if today >= days_from_civil(*year, *month, *day) {
+    // **The date goes through `kanhe::reading` too, and that closes two measured defects.** What stood here
+    // was `filter_map(|part| part.parse::<i64>().ok())` followed by a destructure of three and a
+    // `1..=12`/`1..=31` range check. Both halves were wrong in the same direction — they accepted a date
+    // this reader could not read and then answered for it:
+    //
+    //   `2028--4-30`  the empty field was dropped, three survivors destructured, read as 2028-04-30
+    //   `2028-02-31`  in range, off the calendar, and `days_from_civil` answered for it as 2028-03-02
+    //
+    // Neither is caught by a wider range or a stricter parse alone, which is why the reader is shared rather
+    // than repaired in place: the field count and the calendar are one question asked of one input.
+    let window = reading::date("support window's date", date).map_err(|refusal| refusal.message)?;
+    if today >= window.days_from_epoch() {
         return Err(format!(
             "this repository declared that it does not run Node major `{major}` beyond {date}, and that date \
              has been reached. Move `node-version` in `.github/workflows/ci.yml`, `engines.node` in \
@@ -156,25 +137,6 @@ fn workspace_root() -> Option<PathBuf> {
     )
 }
 
-/// The date arithmetic, on the values that make a careless transcription wrong.
-#[test]
-fn the_calendar_arithmetic_holds_at_its_awkward_days() {
-    for (y, m, d, expected) in [
-        (1970, 1, 1, 0),
-        (1970, 1, 2, 1),
-        (1972, 2, 29, 789),
-        (2000, 2, 29, 11016),
-        (2100, 3, 1, 47541),
-        (2028, 4, 30, 21304),
-    ] {
-        assert_eq!(
-            days_from_civil(y, m, d),
-            expected,
-            "{y}-{m}-{d} is not {expected} days from the epoch"
-        );
-    }
-}
-
 /// Every shape the declaration can be in, including the ones that must not react.
 ///
 /// **The date direction is constructed rather than waited for.** A bound whose only demonstration is the
@@ -186,7 +148,9 @@ fn the_window_reader_decides_every_shape_of_the_declaration() {
             "        {declaration}\n        uses: actions/setup-node@abc # v7.0.0\n        with:\n          node-version: '{pin}'\n"
         )
     };
-    let day = days_from_civil(2026, 8, 24);
+    let day = reading::date("the supplied day", "2026-08-24")
+        .expect("a real day")
+        .days_from_epoch();
     for (declaration, pin, reacts, because) in [
         ("# NOT-BEYOND: 24 2028-04-30", "24.16.0", false, "open"),
         (
@@ -231,6 +195,24 @@ fn the_window_reader_decides_every_shape_of_the_declaration() {
             "24.16.0",
             true,
             "no such month",
+        ),
+        (
+            "# NOT-BEYOND: 24 2028-02-31",
+            "24.16.0",
+            true,
+            "in range and off the calendar — this was ACCEPTED before, and read as 2028-03-02",
+        ),
+        (
+            "# NOT-BEYOND: 24 2028--4-30",
+            "24.16.0",
+            true,
+            "a doubled delimiter is a fourth field — this was ACCEPTED before, and read as 2028-04-30",
+        ),
+        (
+            "# NOT-BEYOND: 24 2028-4-30",
+            "24.16.0",
+            true,
+            "one date has one spelling here; a two-digit month is the declared form",
         ),
         (
             "# NOT-BEYOND: 24 April 2028",
