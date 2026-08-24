@@ -418,11 +418,28 @@ consumer for an undemonstrated deduplication.
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
-  the drift class this family already refuses. *First step, and why it is not simply "add a gate":* the binding must
-  be **derived**, not declared — which test defends a requirement is nowhere written, so the honest first move is to
-  find a derivation (a naming convention between requirement and reaction, or a reaction that enumerates what it
-  covers) rather than to require an annotation. That is a capability to design, and designing it inside the closing
-  review of a window would be the same haste this entry documents. *Version class:* not release-affecting; a new
+  the drift class this family already refuses.
+
+  *The binding is written in 62 places, and this entry said it was written nowhere.* Measured at `36152c0`, by
+  `grep -c '^- \*\*PINNED-BY\*\*'` over `openspec/specs/*/spec.md` and a per-name resolution against every
+  `fn` definition under `crates/` and `examples/`: **161** `PINNED-BY` citations, covering **62 of 364**
+  requirements, and every one of the 161 names a test that exists. They are not unheld either —
+  `crates/kanhe/tests/bound_register.rs` resolves each through `cargo test -p <member> -- --list`, per package,
+  and refuses an empty member enumeration as the vacuity direction; `pin_bites` runs **13** of them against a
+  perturbed tree and requires each to fail. The one ambiguous name carries a crate prefix
+  (`hunyi::a_cfg_gated_module_with_no_file_is_skipped_not_errored`) because it is defined in two crates, so the
+  convention already handles the case a bare citation could not.
+
+  *First step, in two parts, and the order is what the measurement changes.* **One:** extend the existing
+  citation to the requirements whose reaction already exists and is uncited. Sampled in `repository-checks`,
+  where 18 of 32 requirements carry citations and 14 do not, every one of five sampled uncited requirements has
+  a reaction — `gate_exit_classes`, `projection_register`, `dod_coherence`, `one_spelling`,
+  `backlog_classification`. That half needs no capability, and it is what makes *no reaction* distinguishable
+  from *a reaction nobody cited*, which is the state this entry is actually filed for. **Two:** for what a
+  citation cannot reach — 302 requirements, and a citation per SHALL would be the thousand hand-maintained
+  pointers this entry already refuses — find a derivation. That half is a capability to design, and designing
+  it inside the closing review of a window would be the same haste this entry documents. What the earlier
+  draft got wrong was not the second part; it was reaching it by asserting that the first part did not exist. *Version class:* not release-affecting; a new
   capability with its own gate, preserving every published API. *Authority:* `observation-bound-register`, which
   solves the same problem for bounds and is the shape any answer here would have to generalize.
 
@@ -544,6 +561,16 @@ consumer for an undemonstrated deduplication.
   fixture found taking a host tool it does not declare, or a CI image that stops shipping `jq`. Either makes
   this a class rather than one stub, and the repair is then the same for both: the fixture states what it
   needs and stops before the subject when it is absent.
+
+  *Trigger measured, not waited for — at `36152c0`, and it has not fired.* The decidable half of it is
+  enumerable: a stub is executed only where a test puts its directory on `PATH`, and exactly **two** test
+  targets do — `publish_workflow` and `merge_workflow`. `merge_workflow`'s `gh` stub pipes through `jq`, which
+  is this entry. `publish_workflow`'s `cargo` stub uses `printf` and `[[` and reaches no host tool at all. Every
+  other occurrence of a host-tool name under `crates/*/tests` is either prose or a fixture's *subject* rather
+  than something executed — `echo tail # cut` and `curl "$url#frag"` in `source_regions`, which are text the
+  region classifier reads. So the class has one instance by measurement rather than by nobody having looked,
+  and the `PATH` criterion is what a later sweep should re-run rather than a tool-name list, which cannot be
+  known to be complete.
 
 - **WATCH: a corrupt tag ref and an absent one are one exit status, so the publish gate cannot tell them
   apart.** *Class:* WATCH. *Observed pressure:* the tag read was split so that git declining to answer is no

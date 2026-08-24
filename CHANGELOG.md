@@ -1172,6 +1172,29 @@ them.
 
 ### Self-governance
 
+- **Two backlog entries carried an unmeasured premise, and each now carries the measurement instead.** Both
+  were found by the `openspec/specs/**` review pass — the one the two earlier passes had declared their
+  largest coverage gap — which found no defect inside that scope and these two outside it.
+
+  *The un-reacted-SHALL entry said the binding is written nowhere.* Its `First step` rested on that: *the
+  binding must be **derived**, not declared — which test defends a requirement is nowhere written*. Measured
+  at `36152c0`: **161** `PINNED-BY` citations cover **62 of 364** requirements, every one names a test that
+  exists, `bound_register` resolves each through `cargo test -p <member> -- --list` per package while refusing
+  an empty enumeration as the vacuity direction, and `pin_bites` runs 13 of them against a perturbed tree
+  requiring each to fail. The absolute was true of the other 302 and false of exactly the half that would make
+  the first step cheap. The step is now two, in order: extend the citation where the reaction already exists
+  and is uncited — sampled in `repository-checks`, 18 of 32 requirements carry one and all five sampled
+  uncited requirements have a reaction — then design a derivation for what a citation cannot reach.
+
+  *The host-tool-fixture entry's promotion trigger had never been run.* It reads *a second reaction fixture
+  found taking a host tool it does not declare*, and the decidable half is enumerable by a criterion sharper
+  than a tool-name list, which cannot be known complete: a stub is executed only where a test puts its
+  directory on `PATH`, and exactly **two** targets do. `merge_workflow`'s `gh` stub pipes through `jq`, which
+  is the entry; `publish_workflow`'s `cargo` stub reaches no host tool at all. Every other host-tool name under
+  `crates/*/tests` is prose or a fixture's own *subject* — `echo tail # cut` and `curl "$url#frag"` are text
+  the region classifier reads. So the class has one instance by measurement rather than by nobody having
+  looked, and the entry records the `PATH` criterion for whoever re-runs it.
+
 - **Both wrappers refuse a flag-shaped value now, and a reaction holds the property across them.**
   `repository-checks` already required it — *a value position SHALL NOT be a place a refused argument may
   sit*, *this SHALL hold for every value-taking arm rather than the one measured to leak* — under a
