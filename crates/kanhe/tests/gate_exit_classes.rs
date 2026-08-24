@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use kanhe::refusal::Kind;
 use kanhe::region::Source;
 use kanhe::verdict_channel;
+use kanhe::wrapper_parser;
 
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
@@ -773,70 +774,88 @@ fn every_gate_running_wrapper_is_named() {
     );
 }
 
-/// Both wrappers refuse a **flag-shaped value**, and the guard that does it is found by its call shape.
+/// Both wrappers refuse a **flag-shaped value**, and every arm that takes one is held to it.
 ///
 /// **This is the second instance of one class, so it is held rather than repaired twice.**
-/// `scripts/publish.sh` grew the shape check with a paragraph arguing for it, and `scripts/merge-pr.sh` kept a
-/// guard that checked only that *something* followed. The consequences differ — cargo does not consume a
+/// `scripts/publish.sh` grew the shape check with a paragraph arguing for it, and `scripts/merge-pr.sh` kept
+/// a guard that checked only that *something* followed. The consequences differ — cargo does not consume a
 /// flag-shaped value, `gh`'s caller here does, so one leaked a refused flag past the wrapper and the other
 /// swallowed an admitted one as text — and both are the wrong diagnosis at the moment before an irreversible
 /// act. Two implementations of one rule agree by maintenance; a direction over both agrees by running.
 ///
 /// **The guard's NAME is derived from how it is called, not written here.** The two wrappers spell it
 /// differently (`require_value`, `require_a_value`), and a literal pair would be a third thing to keep in
-/// step — the shape this file exists to remove. What is common is the call: three arguments, the count, the
-/// flag, and the value. So an arm calling it with two, or a wrapper whose guard stops checking the shape, is
-/// what fails here, and a third wrapper is covered on the day it is written.
+/// step — the shape this file exists to remove.
 ///
-/// Executed text, because both wrappers discuss `-`-leading values in prose at length.
+/// **Three properties, because two could not see the arity.** A first cut asserted only that *some* guard
+/// call carried a value and that the guard judged the shape. Measured: with `--subject`'s call shortened to
+/// two arguments, that passed — the other arm still carried a value, so the guard was still found and still
+/// checked. The arm-level reading closes it: an arm that consumes the following argument must hand its guard
+/// that argument, which `kanhe::wrapper_parser::Arm` separates from merely naming the guard.
 #[test]
 fn each_wrapper_refuses_a_flag_shaped_value_in_every_value_position() {
     let Some(root) = workspace_root() else {
         return;
     };
-    const CALL: &str = r#" "$#" "$1" "${2-}""#;
     for wrapper in WRAPPERS {
         let text = read(&root, wrapper);
+        let guard = wrapper_parser::value_guard(&text).unwrap_or_else(|| {
+            panic!(
+                "{wrapper} hands no value to any guard — no arm calls one as \
+                 `<name>{}`, so no arm's value can have its shape judged",
+                wrapper_parser::VALUE_GUARD_CALL
+            )
+        });
+
+        // Every arm that takes a value must hand it over, and every arm handed one must take it. Both
+        // directions, because one alone is satisfied by two sets agreeing on the wrong answer.
+        let arms = wrapper_parser::parser_arms(&text, &guard);
+        let takes: BTreeSet<&str> = arms
+            .iter()
+            .filter(|(_, arm)| arm.consumes)
+            .map(|(flag, _)| flag.as_str())
+            .collect();
+        let judged: BTreeSet<&str> = arms
+            .iter()
+            .filter(|(_, arm)| arm.guards_with_value)
+            .map(|(flag, _)| flag.as_str())
+            .collect();
+        assert_eq!(
+            takes, judged,
+            "{wrapper}: an arm reads the following argument without handing it to `{guard}` to judge, or is \
+             handed one it never reads — takes {takes:?}, judged {judged:?}. The first is a refused flag \
+             reaching the tool as a value, or an admitted one swallowed as text; the second is a refusal \
+             that never runs"
+        );
+        assert!(
+            !takes.is_empty(),
+            "{wrapper}: no arm takes a value, so this direction compared two empty sets and reported \
+             agreement over nothing"
+        );
+
+        // The guard's own body: from its definition to the closing brace at column zero.
         let source = Source::of(text.as_str());
         let executed: Vec<String> = source
             .shell()
             .lines()
             .map(|line| line.trim().to_string())
             .collect();
-
-        // Every call of the three-argument form, so a second guard cannot hide behind the first.
-        let called: BTreeSet<&str> = executed
+        let opens = format!("{guard}() {{");
+        let start = executed
             .iter()
-            .filter_map(|line| line.strip_suffix(CALL))
+            .position(|line| *line == opens)
+            .unwrap_or_else(|| {
+                panic!("{wrapper} calls `{guard}` and this direction found no `{opens}` to read")
+            });
+        let body: Vec<&String> = executed[start + 1..]
+            .iter()
+            .take_while(|line| *line != "}")
             .collect();
         assert!(
-            !called.is_empty(),
-            "{wrapper} has no value guard called as `<name>{CALL}` — either its value-taking arms pass fewer \
-             arguments than the value's shape can be judged from, or the call is spelled in a form this \
-             direction cannot see. Both mean the shape is unchecked for some arm"
+            body.iter().any(|line| line.contains("== -*")),
+            "{wrapper}'s `{guard}` is handed a value and never judges its shape: a refused argument does \
+             not become admitted by sitting in a value position, and an admitted one does not reach the \
+             tool by being read as text. Its sibling wrapper refuses `-`-leading values; this one must too"
         );
-
-        for guard in called {
-            // The guard's own body: from its definition to the closing brace at column zero.
-            let opens = format!("{guard}() {{");
-            let start = executed
-                .iter()
-                .position(|line| *line == opens)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "{wrapper} calls `{guard}` and this direction found no `{opens}` to read"
-                    )
-                });
-            let body: Vec<&String> = executed[start + 1..]
-                .iter()
-                .take_while(|line| *line != "}")
-                .collect();
-            assert!(
-                body.iter().any(|line| line.contains("== -*")),
-                "{wrapper}'s `{guard}` takes a value and never judges its shape: a refused argument does not \
-                 become admitted by sitting in a value position, and an admitted one does not reach the tool \
-                 by being read as text. Its sibling wrapper refuses `-`-leading values; this one must too"
-            );
-        }
     }
 }

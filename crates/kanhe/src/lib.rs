@@ -58,6 +58,7 @@ pub mod restatement;
 pub mod selection;
 pub mod supplied;
 pub mod verdict_channel;
+pub mod wrapper_parser;
 
 #[cfg(test)]
 mod tests;

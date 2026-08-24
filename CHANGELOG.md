@@ -1189,8 +1189,21 @@ them.
   wrappers from `gate_exit_classes`'s existing `WRAPPERS` pair and finds each guard by **the shape of its
   call** — three arguments: the count, the flag, the value — rather than by its name, because the two spell
   it differently (`require_value`, `require_a_value`) and a literal pair of names would be a third thing to
-  keep in step. An arm calling it with two arguments, or a guard that stops judging the shape, is what fails
-  there; a third wrapper is covered on the day it is written.
+  keep in step. A third wrapper is covered on the day it is written.
+
+  **The first cut of that reaction was not enough, and its own negative run is what said so.** It asserted
+  that *some* guard call carried a value and that the guard judged the shape. Perturbed by shortening one
+  arm's call to two arguments, it stayed green — the other arm still carried a value, so the guard was still
+  found and still checked. A reader whose input is narrower than the claim it makes, in the direction written
+  to close exactly that. The reading is now **arm-level**: an arm that consumes the following argument must
+  hand its guard that argument, held in both directions, and the assertion names the arm that does not.
+
+  **So the reader moved to `crates/kanhe/src/wrapper_parser.rs`,** where it is one implementation with two
+  consumers rather than the copy the sibling direction would have been. It gained a third property in the
+  move — `guards_with_value` beside `guards` and `consumes` — because two could not tell an arm asking for
+  nothing from an arm handing its guard nothing to judge: the shortened call still opened with the guard's
+  name, so it still read as guarded. `publish_workflow` now reads through it and keeps using `guards`, which
+  is the property its own assertion was written for.
 
 - **The set a job claims to cover is the one it derives.** `packaged-selftest` is named *every publishable
   crate's tests pass from its packaged tarball* and then hand-listed them twice — once for the resolve
