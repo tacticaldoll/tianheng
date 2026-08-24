@@ -1172,6 +1172,40 @@ them.
 
 ### Self-governance
 
+- **A specification's prose and its scenarios are edited in one pass, and two measured repairs are declined
+  rather than attempted.** The requirement added last commit had both halves of one seam wrong: *The scope
+  SHALL be stated rather than implied* is a `SHALL` about that specification's own prose, which nothing can
+  hold, and the third direction (`the_published_set_is_the_one_the_manifests_declare`) was pinned by a
+  scenario the requirement never declared a property for. The first is now prose, the second has its sentence,
+  and `AGENTS.md` names the reverse direction its existing rule did not own: a scenario must name its
+  reaction, and requirement prose must not gain a clause with no scenario.
+
+  **A Rust identifier named in a doc comment's prose is resolved by nothing, and that is now a declared bound
+  rather than an open question.** Found by a grep run for another purpose: `uses_by_file` sat in published-crate
+  rustdoc against **0** occurrences anywhere in the tree. `reference_integrity` matches paths and
+  `gate_identity` matches `--exact` citations in scripts, so neither sees it.
+
+  Two repairs were designed, measured, and declined — which is the whole content of the bound:
+
+  - *A text check resolving each backticked name against the tree's declarations.* Measured over every
+    published crate's `src`: 2,373 such tokens, **859** matching no declaration — and the 30 most frequent of
+    those are 19 Rust keywords (`use`, `mod`, `dyn`, `fn`, `impl`), attribute names (`cfg_attr`) and std
+    method names (`create_new`, `strip_prefix`, `remove_dir_all`). Separating them needs type information
+    about a receiver, which `inline-symbol-path-confinement` already declares unobserved.
+  - *Rewriting such a token as `[`name`]`, making `rustdoc -D warnings` the reaction.* That half is real —
+    measured, an unresolvable link form fails with `unresolved link to …` while the prose form is silent. But
+    of 8 candidates sampled as *a name declared in the same crate*, **8 of 8** were parameters, fields or
+    locals whose link form correctly fails. A rule asking for the link form is wrong for the majority of
+    prose backticks.
+
+  So `reference-integrity` declares it, `BACKLOG.md` tracks it, and the register's own figure moves from 92
+  bounds to 93 with the unpinned count from 20 to 21.
+
+  **`doc_provenance`'s vacuity floor now states the property it stood for.** A `> 50` threshold sat against an
+  actual 131 — a number answering nothing, and blind to a single crate dropping out of the enumeration. It
+  asserts instead that every published crate contributed at least one source, which is what a lost `ls-files`
+  argument or a renamed directory would actually break.
+
 - **A doc comment no longer indexes its own provenance by review round, and a reaction holds it.** `AGENTS.md`
   settles the disposition — *a review round number, a pull request number → provenance* — and 28 doc lines
   across five published crates carried one anyway. Eleven carried it as the index to *see `PROJECT.md`'s

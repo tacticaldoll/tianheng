@@ -539,6 +539,29 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not",
         ),
+        // The second one, and it is `Unpinned` because the natural pin was measured and is the wrong
+        // instrument. `rustdoc -D warnings` DOES refuse an unresolvable `[`name`]` — so rewriting a prose
+        // backtick as a link would make an existing reaction the pin. Measured over 8 candidates selected as
+        // *a name declared in the same crate*: 8 of 8 were parameters, fields or locals, whose link form
+        // correctly fails to resolve. The rule that would pin this is wrong for the majority of prose
+        // backticks, and telling the minority apart needs type information about a receiver.
+        BoundDecl::unpinned(
+            BoundId::new(
+                "reference-integrity/a-rust-identifier-named-in-prose-is-not-resolved-a-stated-bound",
+            ),
+            "a backticked snake_case name written in a doc comment's prose rather than as an intra-doc link",
+            Extent::Reached(Reached::UnderReacts {
+                because: "no reader of text can tell a name that should resolve from one that should not: \
+                          measured over every published crate's `src`, 859 of 2,373 such tokens match no \
+                          declaration in the tree, and the most frequent of those are Rust keywords, \
+                          attribute names and std method names. Separating them needs type information \
+                          about a receiver, which `inline-symbol-path-confinement` already declares \
+                          unobserved"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *a Rust identifier named in prose is resolved by no reaction*",
+        ),
         // --- publish-source-integrity ---
         //
         // Its check is a Rust gate invoked by shell, and `PINNED-BY` resolves only a harness-registered Rust function — so

@@ -2209,10 +2209,15 @@ carried its invariant with it, so none was lost to the repair. Eleven carried th
 *see `PROJECT.md`'s Decisions*, and `PROJECT.md` holds **no** entry organised by round — those eleven pointed
 at a structure that does not exist.
 
-**The scope SHALL be stated rather than implied.** None of the twenty-eight attached to a `pub` item, so
+**The scope is narrower than the wording invites, and this states it rather than leaving it implied.** None
+of the twenty-eight attached to a `pub` item, so
 `cargo doc --no-deps` generates none and no adopter reads any: this is a claim about the source a maintainer
 and an agent-in-context read, not about a published document. Overstating it would be the reason-perimeter
 defect this repository refuses elsewhere.
+
+**The set of crates the reaction reads SHALL be held against the manifests' `publish = false` in both
+directions**, so a crate added or retired on one side only refuses. A literal beside no enumerator agrees
+with nothing, and one direction catches an omission while missing a member that has outlived its subject.
 
 **The reaction's corpus SHALL stop at doc comments, and the stop SHALL be observed rather than claimed.** A
 `//` inner comment is a note to whoever edits the line rather than part of an item's contract; twenty-seven

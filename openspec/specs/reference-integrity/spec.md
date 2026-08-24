@@ -380,3 +380,19 @@ that reads no CHANGELOG at all.
   record. The engine owns the narrowing: it is this check's rule that declines to look, not a limit an
   adopter chose
 - **PINNED-BY** `a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not`
+
+#### Scenario: A Rust identifier named in prose is not resolved — a stated bound
+
+- **WHEN** a doc comment writes a backticked snake_case name in prose rather than as an intra-doc link
+- **THEN** nothing reacts, and no reader of text can make it. Measured over every published crate's `src`:
+  2,373 such tokens, of which 859 match no declaration anywhere in the tree — and the 30 most frequent
+  unmatched ones are 19 Rust keywords (`use`, `mod`, `dyn`, `fn`, `impl`), attribute names (`cfg_attr`), and
+  std method names (`create_new`, `strip_prefix`, `remove_dir_all`). Telling a name that should resolve from
+  one that should not needs type information about a receiver, which `inline-symbol-path-confinement` already
+  declares unobserved.
+- **AND** the natural alternative was measured and is worse: rewriting such a token as `[`name`]` makes
+  `rustdoc -D warnings` the reaction, and it does refuse an unresolvable one — but 8 of 8 sampled candidates,
+  selected as *a name declared in the same crate*, were parameters, fields or locals whose link form
+  correctly fails to resolve. A rule asking for the link form would be wrong for the majority of prose
+  backticks.
+- **UNPINNED** `BACKLOG.md` — *a Rust identifier named in prose is resolved by no reaction*

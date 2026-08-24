@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**20 of 92 declared bounds have no pinning test.** That figure is the register's
+**21 of 93 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -258,6 +258,12 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing reacts, and nothing ever will. The exemption is by section, not by whether the path was once right, and distinguishing the two needs the tree as it stood at that date — a per-section historical checkout this check does not make and whose cost is not proportionate to a mistyped path in a frozen record. The engine owns the narrowing: it is this check's rule that declines to look, not a limit an adopter chose
 
 - **pinned by**: `a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not`
+
+### `reference-integrity/a-rust-identifier-named-in-prose-is-not-resolved-a-stated-bound`
+
+> nothing reacts, and no reader of text can make it. Measured over every published crate's `src`: 2,373 such tokens, of which 859 match no declaration anywhere in the tree — and the 30 most frequent unmatched ones are 19 Rust keywords (`use`, `mod`, `dyn`, `fn`, `impl`), attribute names (`cfg_attr`), and std method names (`create_new`, `strip_prefix`, `remove_dir_all`). Telling a name that should resolve from one that should not needs type information about a receiver, which `inline-symbol-path-confinement` already declares unobserved.
+
+- **unpinned**, tracked by: `BACKLOG.md` — *a Rust identifier named in prose is resolved by no reaction*
 
 ## release-coherence
 
