@@ -557,6 +557,25 @@ its own. A slug shared between two sites excuses whichever one was looked at.
 - **WHEN** iterating an enumerated directory fails part-way
 - **THEN** the judgement refuses rather than continuing over the entries it did receive
 
+#### Scenario: A value cargo decodes and this reader does not
+
+The scenarios above reach a **file** that cannot be read. This reaches a **value**, which is where the
+requirement was not being met: a quoted value carrying a TOML escape was answered as one this reader could
+read, and the undecoded source then decided a comparison.
+
+- **WHEN** a `path`, a `package` or a `version` is written as a TOML basic string carrying an escape — legal
+  TOML, which cargo decodes — and an ordinary sibling entry keeps the vacuity counters non-zero
+- **THEN** the judgement refuses as a cannot-judge, rather than comparing the undecoded source, failing to
+  match a `crates/` prefix or a family crate, and passing the entry over with its stale pin unchecked
+- **PINNED-BY** `an_escaped_path_is_refused_and_an_ordinary_sibling_does_not_cover_for_it`
+
+#### Scenario: An escaped renamed package
+
+- **WHEN** a renamed dependency's `package` carries an escape, beside an ordinary family dependency in
+  another example
+- **THEN** the judgement refuses, rather than reading the entry as naming no family crate at all
+- **PINNED-BY** `an_escaped_renamed_package_is_refused_and_an_ordinary_sibling_does_not_cover_for_it`
+
 ### Requirement: A release section is dated on the day its release commit was made
 
 At the release snapshot the dated section for the workspace version SHALL carry the date of the

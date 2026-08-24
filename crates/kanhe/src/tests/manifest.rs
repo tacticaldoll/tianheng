@@ -106,3 +106,63 @@ fn a_value_that_is_not_a_string_does_not_borrow_the_next_one() {
         "a value that does open with a quote is still read to its closing quote"
     );
 }
+
+/// A TOML escape is a value this reader cannot read, not a value it can.
+///
+/// **Cargo decodes escapes and this reader decodes none**, so returning the raw source as a `Value` hands
+/// every consumer an identity, path or version that is not the one cargo resolves. Measured on cargo 1.96.0
+/// against a scratch workspace: `path = "crates/\u0078uanji"` resolves the member at `crates/xuanji`,
+/// `name = "xuan\u006Ai"` reads as `xuanji`, and `version = "0.\u0035.0"` reads as `0.5.0`.
+///
+/// What that cost: each consumer compares the undecoded text and takes a `continue` when the comparison
+/// fails, so an internal dependency or a renamed family crate stops being checked in silence — and the
+/// per-manifest vacuity guards cannot see it, because one escaped entry beside one ordinary one leaves their
+/// counters non-zero.
+///
+/// Every escape form TOML admits is given, not one representative: a reader that refused `\u` and admitted
+/// `\n` would read as covering the class while leaving it open.
+#[test]
+fn a_toml_escape_is_refused_rather_than_returned_undecoded() {
+    for written in [
+        r#" "crates/\u0078uanji""#,
+        r#" "xuan\u006Ai""#,
+        r#" "0.\u0035.0""#,
+        r#" "\U0001F600""#,
+        r#" "a\\b""#,
+        r#" "a\nb""#,
+        r#" "a\tb""#,
+        r#" "a\rb""#,
+        r#" "a\bb""#,
+        r#" "a\fb""#,
+    ] {
+        assert_eq!(
+            quoted_value(written),
+            Quoted::Unreadable,
+            "{written} carries an escape this reader does not decode, so it must refuse rather than answer \
+             with the source"
+        );
+    }
+
+    // An escaped quote is the narrower shape the same check missed: the split landed on it and answered a
+    // value ending in a backslash, which no manifest declares.
+    assert_eq!(
+        quoted_value(r#" "a\"b""#),
+        Quoted::Unreadable,
+        "an escaped quote must not be read as the closing one"
+    );
+
+    // Unescaped values are untouched, including a backslash OUTSIDE the string, which is not this value's.
+    assert_eq!(
+        quoted_value(" \"crates/xuanji\""),
+        Quoted::Value("crates/xuanji".to_string())
+    );
+    assert_eq!(
+        quoted_value(" \"0.5.0\", package = \"xuanji\" }"),
+        Quoted::Value("0.5.0".to_string())
+    );
+    assert_eq!(
+        quoted_value(" \"abc\" \\ trailing"),
+        Quoted::Value("abc".to_string()),
+        "a backslash after the closing quote is not part of the value"
+    );
+}

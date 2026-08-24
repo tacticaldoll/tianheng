@@ -212,3 +212,103 @@ fn a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped() {
 
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// The TOML escape for `x`, built rather than typed.
+///
+/// **Typed into a literal it silently becomes the decoded value**, and that is measured rather than feared:
+/// writing these two directions produced a plain `crates/xuanji` four times in a row, each time reading as
+/// though it carried the escape. Naming the sequence puts the substitution where a reader sees it.
+const ESCAPED_X: &str = "\\u0078";
+
+/// The TOML escape for `j`, for the reason [`ESCAPED_X`] records.
+const ESCAPED_J: &str = "\\u006A";
+
+/// An escaped path is not an internal dependency this check may pass over, and a sibling cannot cover for it.
+///
+/// **Cargo decodes the escape and this reader decodes none.** Measured on cargo 1.96.0 against a scratch
+/// workspace: a `path` of `crates/` + [`ESCAPED_X`] + `uanji` resolves the member at `crates/xuanji`. Before
+/// `quoted_value` refused a backslash this reader answered the raw source as a `Value`, the
+/// `starts_with("crates/")` selection then decided on undecoded text, and the ordinary sibling kept the
+/// vacuity counter non-zero — so *found no internal path dependency* never fired, and the escaped entry's
+/// stale `0.0.1` reached a release as clean.
+///
+/// Both positions, because they fail differently: after the prefix the entry is selected and then compared
+/// against a name no crate has; inside the prefix it is not selected at all.
+#[test]
+fn an_escaped_path_is_refused_and_an_ordinary_sibling_does_not_cover_for_it() {
+    for path in [
+        format!("crates/{ESCAPED_X}uanji"),
+        format!("cr{ESCAPED_X}tes/xuanji"),
+    ] {
+        let manifest = format!(
+            "[workspace.dependencies]\n\
+             xingbiao = {{ path = \"crates/xingbiao\", version = \"0.5.0\" }}\n\
+             xuanji = {{ path = \"{path}\", version = \"0.0.1\" }}\n"
+        );
+        let refusal = require_internal_pins(&manifest, "0.5.0").expect_err(
+            "cargo resolves this path and this reader cannot, so whether the entry is an internal \
+             dependency is what could not be read",
+        );
+        crate::refusal::expect("release-coherence#dependency-path-unreadable", &refusal);
+        assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    }
+}
+
+/// An escaped renamed package is refused, and an ordinary family dependency does not cover for it.
+///
+/// `release-coherence` requires a renamed dependency to be resolved by its `package` identity. Measured on
+/// cargo 1.96.0: a `package` of `xuan` + [`ESCAPED_J`] + `i` reads as `xuanji`. Before `quoted_value` refused
+/// a backslash, the `family.contains(&package)` filter compared the undecoded source, found no family crate,
+/// and took the `continue` — while the ordinary sibling kept `requirements_here` non-zero, so the per-example
+/// vacuity guard stayed silent and the stale `0.0.1` reached a release as clean.
+#[test]
+fn an_escaped_renamed_package_is_refused_and_an_ordinary_sibling_does_not_cover_for_it() {
+    let root = std::env::temp_dir().join(format!("kanhe-escaped-rename-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("the scratch root is writable");
+
+    let at = root.join("examples").join("escaped");
+    std::fs::create_dir_all(&at).expect("the example directory is writable");
+    // **Both entries in ONE example, which is what makes the guard blind.** `requirements_here` is counted
+    // per example, so an escaped entry alone in its own example leaves that counter at zero and the vacuity
+    // guard catches it — measured: with the two split across two examples this direction passed under the
+    // perturbation and was a restatement rather than a guard. Beside an ordinary family dependency in the
+    // same manifest the counter is non-zero and the escaped entry's silence is invisible.
+    std::fs::write(
+        at.join("Cargo.toml"),
+        format!(
+            "[package]\nname = \"ex-escaped\"\n\n[dependencies]\n\
+             xingbiao = \"0.5.0\"\n\
+             alias = {{ package = \"xuan{ESCAPED_J}i\", version = \"0.0.1\" }}\n"
+        ),
+    )
+    .expect("the example manifest is writable");
+
+    let manifests = [
+        (
+            "crates/xuanji/Cargo.toml".to_string(),
+            "[package]\nname = \"xuanji\"\n".to_string(),
+        ),
+        (
+            "crates/xingbiao/Cargo.toml".to_string(),
+            "[package]\nname = \"xingbiao\"\n".to_string(),
+        ),
+    ];
+
+    let refusal = super::super::release_coherence_gate::require_example_pins(
+        &root, &manifests, "0.5.0",
+    )
+    .expect_err(
+        "cargo reads this package as a family crate and this reader cannot, so the entry can \
+                 neither be matched against the family nor passed over",
+    );
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    // The SITE, not only the kind. Without it, a refusal the vacuity guard produced reads as this
+    // direction's evidence — which is exactly how its first version passed under the perturbation.
+    crate::refusal::expect(
+        "release-coherence#example-package-value-unreadable",
+        &refusal,
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}

@@ -2137,6 +2137,13 @@ third scenario's, one layer up.
 - **THEN** the empty field between them is counted, so a reader asking for three fields refuses four
 - **PINNED-BY** `a_character_separator_keeps_the_empty_field_a_collapsing_reader_would_drop`
 
+#### Scenario: A TOML escape is not a value a manifest reader can read
+
+- **WHEN** a quoted manifest value carries any escape — `\uXXXX`, `\UXXXXXXXX`, `\\`, `\n`, or an escaped quote
+- **THEN** the reader refuses rather than answering with the undecoded source, because cargo decodes the
+  escape and this reader decodes none — and decoding it here would be a second hand-rolled TOML grammar
+- **PINNED-BY** `a_toml_escape_is_refused_rather_than_returned_undecoded`
+
 #### Scenario: The interpreter support window reads its declaration through it
 
 - **WHEN** the support window's declaration carries one field, or three

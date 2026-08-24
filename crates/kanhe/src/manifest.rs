@@ -60,10 +60,33 @@ pub(crate) fn quoted_value(value: &str) -> Quoted {
     let Some(rest) = value.trim_start().strip_prefix('"') else {
         return Quoted::Unreadable;
     };
-    match rest.split_once('"') {
-        Some((value, _)) => Quoted::Value(value.to_string()),
-        None => Quoted::Unreadable,
+    let Some((body, _)) = rest.split_once('"') else {
+        return Quoted::Unreadable;
+    };
+    // **A backslash opens an escape, and this reader decodes none — so it refuses instead of returning the
+    // source as though it were the value.** In a TOML *basic* string a `\\` is never literal; cargo decodes
+    // the escape and this reader would hand its consumers the raw sequence. Measured on cargo 1.96.0 against
+    // a scratch workspace: `path = "crates/\\u0078uanji"` resolves the member at `crates/xuanji`,
+    // `name = "xuan\\u006Ai"` reads as `xuanji`, and `version = "0.\\u0035.0"` reads as `0.5.0`. Every
+    // consumer here then compares the *undecoded* text — against a family crate list, against a
+    // `crates/` prefix, against a version — and a comparison that fails takes a `continue`, so an internal
+    // dependency or a renamed family crate stops being checked with nothing saying so. The per-manifest
+    // vacuity guards cannot see it either: one escaped entry beside one ordinary one leaves their counters
+    // non-zero.
+    //
+    // `Unreadable` is what this type exists for, and each consumer already answers it by refusing to judge.
+    // Decoding the escapes here is deliberately NOT done: that is a TOML grammar, and writing a second
+    // hand-rolled one is the defect class `BACKLOG.md` already carries for these readers.
+    //
+    // It also closes the narrower shape the same check missed: `"a\\"b"` split at the ESCAPED quote and
+    // answered `a\\`, an identity no manifest declares.
+    //
+    // No tracked manifest carries a backslash in a quoted value — measured over `git ls-files '*.toml'` —
+    // so this refuses nothing this repository writes today.
+    if body.contains('\\') {
+        return Quoted::Unreadable;
     }
+    Quoted::Value(body.to_string())
 }
 
 /// What `[workspace.package]` declares its version to be, or why this reader could not tell.
