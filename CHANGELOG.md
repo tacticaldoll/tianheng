@@ -1172,6 +1172,21 @@ them.
 
 ### Self-governance
 
+- **A pipeline that reads a value stands alone, and that is held rather than remembered.** Adopting
+  workflow-level `pipefail` in the previous entry made a consumer that stops before its producer finishes fail
+  the whole pipeline, and the three sites were repaired by hand — which left the rule living in whoever
+  remembered it. `no_step_reads_a_value_through_a_pipeline_that_stops_early` refuses the shape by name now.
+
+  Two of those three had not tripped, and not for a reason belonging to the pipeline: `cargo metadata` emits
+  one line of JSON, so `sed … | head -n1` printed once and reached EOF. A latent SIGPIPE waiting on an output
+  shape is worse than a live one, so the reaction refuses those too.
+
+  The reader recognises its consumer from a list of three — `grep -q`, `grep -m`, `head` — which is an
+  approximation and is declared as one: the set of programs that exit early is not closed, and the question
+  behind it, *does this stage read its input to EOF*, is not one a reader over shell text can answer. That
+  residue is a declared observation bound with a `BACKLOG.md` entry rather than a sentence in a doc comment,
+  and the two strictness scenarios that were already observed now say which direction observes them.
+
 - **A figure the census sweep cannot represent refuses, and the answer it used to give was not silence but a
   fabricated number.** `number_at` sent an overflowing digit run to `parse().ok()?`, which is the same answer
   as *there is nothing numeric here* — the conflation `reading`'s module doc names as the one bug this

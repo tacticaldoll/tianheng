@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**21 of 93 declared bounds have no pinning test.** That figure is the register's
+**22 of 94 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -334,6 +334,12 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing triages it. The register reads `crates/kanhe/src`, and a construction there is either held by a direction or declared unheld; a construction beside its own directions is neither, because *which direction observes this branch* has no answer when every direction in the file can see it. Reaching further means deciding what a file that is both judgement and test is being asked, which is a question about where those gates should live rather than about this register
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a gate that is its own test is outside the refusal register*
+
+### `repository-checks/a-consumer-that-stops-early-is-not-on-the-reader-s-list-a-stated-bound`
+
+> the reaction reports nothing. The set of programs that exit early is not closed and no reader over shell text can decide it, so the three names are what this shape looked like in the workflow's own history. This closes the door that was open, not every door
+
+- **unpinned**, tracked by: `BACKLOG.md` — *the early-exit consumers the pipeline reader names*
 
 ### `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
 

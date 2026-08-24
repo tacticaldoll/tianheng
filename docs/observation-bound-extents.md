@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**47 of 93 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**48 of 94 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -35,6 +35,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound` — owner: engine
 - `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound` — owner: engine
+- `repository-checks/a-consumer-that-stops-early-is-not-on-the-reader-s-list-a-stated-bound` — owner: engine
 - `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
 - `repository-checks/a-figure-written-in-words-at-one-hundred-or-above-is-not-matched-a-stated-bound` — owner: engine
 - `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
@@ -438,7 +439,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (47)
+## under-reacts (48)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -679,6 +680,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the register's reader used to be text over Rust and not exhaustive over the language, where a byte char literal, a raw string, or a two-line closure parameter list could desynchronise a character scan entirely -- invisible to both of its readings at once, the unsafe direction this bound named. Reading this repository's own Rust with a real parser instead of scanning it closed that floor; what remains is not lexical. Whether a bare reference names the constructor taken by value or a local sharing its spelling is not written down anywhere a parse tree carries, and answering it needs name resolution, which a reader of syntax alone does not have
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a bare reference to a registered constructor's name cannot be told from a local variable sharing its spelling without name resolution*
+
+### `repository-checks/a-consumer-that-stops-early-is-not-on-the-reader-s-list-a-stated-bound`
+
+> a pipeline whose last stage exits before its producer finishes under a program name this reader does not list
+
+- **because**: the reader recognises `grep -q`, `grep -m` and `head`, which is what this shape looked like in the workflow's own history. The set of programs that exit early is not closed, and the question behind it -- does this stage read its input to EOF -- is not one a reader over shell text can answer. The three names close the door that was open rather than every door
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *the early-exit consumers the pipeline reader names*
 
 ### `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound`
 

@@ -414,7 +414,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated —
   at `ee15665`, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
   **1048** lines carrying `SHALL`, across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **93 bounds across 25 capabilities** — a live figure rather than part of the measurement
+  currently holds **94 bounds across 25 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -1540,6 +1540,23 @@ consumer for an undemonstrated deduplication.
   package, which is what closes the equivalent window on the merge path; until then narrowing is the only
   available move and it is already taken. *Authority:* engine. *Compatibility:* patch; the wrapper ships in
   no crate.
+
+- **WATCH: the early-exit consumers the pipeline reader names.** *Observed pressure:* adopting
+  `defaults.run.shell: bash -euo pipefail {0}` made a consumer that stops before its producer finishes fail
+  the whole pipeline — `printf … | grep -q` measured 141 on five of five runs over a document the size of the
+  SARIF fixture. `no_step_reads_a_value_through_a_pipeline_that_stops_early` refuses the shape, and it
+  recognises the consumer by name from a list of three: `grep -q`, `grep -m`, `head`. *Observation source:*
+  the round that adopted workflow-level strictness, which found three pipelines of this shape and measured
+  each; two of them had not tripped, for a reason belonging to the input rather than to the pipeline — `cargo
+  metadata` emits one line of JSON, so `sed` printed once and reached EOF. *Current reaction or bound:*
+  `repository-checks/a-consumer-that-stops-early-is-not-on-the-reader-s-list-a-stated-bound`. *Risk:* a
+  pipeline whose last stage exits early under some other program's name passes, and the failure it eventually
+  produces names the data rather than the shape — which is the whole reason this is refused by construction
+  rather than remembered. Bounded by the corpus being one workflow file that a reviewer reads whole. *Next
+  trigger:* a fourth spelling arriving, or a `run:` step reading a value through a program outside this list —
+  the second would mean the list is the wrong instrument and the question is *does this stage read its input
+  to EOF*, which no reader over shell text can answer. *Authority:* engine. *Compatibility:* patch; the
+  reaction is repository machinery and ships in no package.
 
 - **WATCH: the title race the wrapper can only narrow.** *Observed pressure:* the merge wrapper judges three
   inputs and pins two by construction — the body travels as the value the gate judged, and the commit set
