@@ -1172,6 +1172,19 @@ them.
 
 ### Self-governance
 
+- **A figure the census sweep cannot represent refuses, and the answer it used to give was not silence but a
+  fabricated number.** `number_at` sent an overflowing digit run to `parse().ok()?`, which is the same answer
+  as *there is nothing numeric here* — the conflation `reading`'s module doc names as the one bug this
+  repository forbids. But `figures_in` advances one byte and retries, so the next attempt saw the same run one
+  digit shorter, and eventually one that fits: measured, a 26-digit run read as `9999999999999999999`, and
+  that figure — which no document wrote — was compared against the declared census. In the module whose whole
+  subject is a declared figure disagreeing with a produced one.
+
+  The three states travel from `number_at` through `match_from` and `figures_in` to `sweep`, which reports
+  `repository-checks#census-figure-unreadable` naming the document, the line, and the run. Restoring the old
+  answer no longer compiles at the call site; the typed perturbation that does compile reproduces the
+  truncation exactly.
+
 - **A backticked name has one reader, and a marker that closes nothing refuses.** Three sites paired markers
   as they arrived — `find('`')` twice in a loop, and `split('`').skip(1).step_by(2)` — so one unpaired marker
   shifted every pair after it. Measured at both sites that had the defect: a `## Capabilities` section listing

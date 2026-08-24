@@ -60,10 +60,10 @@ pub struct Census {
 /// digits, `53`, were still available to start a fresh match. Skipping to the end of the **whole** matched
 /// span rather than only its first number's token closes both at once, because every figure the match
 /// consumed — first, middle, or last — sits inside that span.
-fn figures_in(line: &str, phrase: &str) -> Vec<Vec<usize>> {
+fn figures_in(line: &str, phrase: &str) -> Result<Vec<Vec<usize>>, String> {
     let parts: Vec<&str> = phrase.split("{}").collect();
     if parts.len() < 2 {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     let mut found = Vec::new();
     let mut start = 0usize;
@@ -72,7 +72,7 @@ fn figures_in(line: &str, phrase: &str) -> Vec<Vec<usize>> {
             start += 1;
             continue;
         }
-        match match_from(&line[start..], &parts) {
+        match match_from(&line[start..], &parts)? {
             Some((figures, matched_len)) => {
                 found.push(figures);
                 start += matched_len.max(1);
@@ -80,24 +80,31 @@ fn figures_in(line: &str, phrase: &str) -> Vec<Vec<usize>> {
             None => start += 1,
         }
     }
-    found
+    Ok(found)
 }
 
 /// One attempt, anchored at the front of `rest`. Returns the figures alongside how many bytes of `rest` the
 /// whole match consumed, so [`figures_in`] can skip past it entirely rather than re-reading any of its
 /// figures — first, middle, or last — as the start of a fresh, shorter match.
-fn match_from(rest: &str, parts: &[&str]) -> Option<(Vec<usize>, usize)> {
-    let mut tail_rest = rest.strip_prefix(parts[0])?;
+fn match_from(rest: &str, parts: &[&str]) -> Result<Option<(Vec<usize>, usize)>, String> {
+    let Some(mut tail_rest) = rest.strip_prefix(parts[0]) else {
+        return Ok(None);
+    };
     let mut found = Vec::with_capacity(parts.len() - 1);
     for tail in &parts[1..] {
-        let (value, consumed) = number_at(tail_rest)?;
+        let Some((value, consumed)) = number_at(tail_rest)? else {
+            return Ok(None);
+        };
         tail_rest = &tail_rest[consumed..];
         found.push(value);
         if !tail.is_empty() {
-            tail_rest = tail_rest.strip_prefix(*tail)?;
+            let Some(next) = tail_rest.strip_prefix(*tail) else {
+                return Ok(None);
+            };
+            tail_rest = next;
         }
     }
-    Some((found, rest.len() - tail_rest.len()))
+    Ok(Some((found, rest.len() - tail_rest.len())))
 }
 
 /// The count written at the front of `rest`, in digits **or in words**, and how many bytes it took.
@@ -116,10 +123,20 @@ fn match_from(rest: &str, parts: &[&str]) -> Option<(Vec<usize>, usize)> {
 ///
 /// The need outlives every instance. This repository's prose writes counts as words, so a document stating a
 /// declared census that way is invisible to a digit reader while being exactly the sentence it declares.
-fn number_at(rest: &str) -> Option<(usize, usize)> {
+fn number_at(rest: &str) -> Result<Option<(usize, usize)>, String> {
     let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
     if !digits.is_empty() {
-        return Some((digits.parse().ok()?, digits.len()));
+        // **A number this sweep cannot represent is not the absence of a number, and the old answer was
+        // worse than absence.** `parse().ok()?` sent an overflowing run to the same answer as *there is
+        // nothing numeric here* — and [`figures_in`] advances one byte and retries, so the next attempt saw
+        // the same run one digit shorter, and eventually one that fits. Measured: a 26-digit run read as
+        // `9999999999999999999`, a figure the document never wrote, and that was compared against the
+        // declared census. Not silence — a fabricated figure. It refuses instead, and the refusal quotes the
+        // run so the sentence can be found.
+        return match digits.parse() {
+            Ok(value) => Ok(Some((value, digits.len()))),
+            Err(_) => Err(digits),
+        };
     }
     const UNITS: [(&str, usize); 21] = [
         ("zero", 0),
@@ -162,7 +179,7 @@ fn number_at(rest: &str) -> Option<(usize, usize)> {
             if let Some(after) = lower.strip_prefix(&prefix) {
                 for (unit_word, unit) in UNITS.iter().take(10).skip(1) {
                     if after.starts_with(unit_word) {
-                        return Some((tens + unit, prefix.len() + unit_word.len()));
+                        return Ok(Some((tens + unit, prefix.len() + unit_word.len())));
                     }
                 }
             }
@@ -175,7 +192,7 @@ fn number_at(rest: &str) -> Option<(usize, usize)> {
             best = Some((*value, word.len()));
         }
     }
-    best
+    Ok(best)
 }
 
 /// Every tracked document stating a declared census with the wrong figures, and every one it could not read.
@@ -239,7 +256,24 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusa
         };
         for (index, line) in text.lines().enumerate() {
             for census in declared {
-                for written in figures_in(line, census.phrase) {
+                let written_here = match figures_in(line, census.phrase) {
+                    Ok(written) => written,
+                    // A figure past `usize` is a sentence this sweep cannot compare, not a sentence with no
+                    // census in it. Naming the run is what lets a reader find it.
+                    Err(digits) => {
+                        offences.push(cannot_judge_at(
+                            "repository-checks#census-figure-unreadable",
+                            format!(
+                                "  {path}:{} writes `{digits}` where {} declares a count, and this sweep \
+                                 cannot represent it — an unreadable figure is not an absent one",
+                                index + 1,
+                                census.subject
+                            ),
+                        ));
+                        continue;
+                    }
+                };
+                for written in written_here {
                     if written != census.figures {
                         offences.push(violation_at(
                             "repository-checks#census-figure-disagrees",
@@ -262,35 +296,74 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusa
 mod tests {
     use super::*;
 
+    /// Every figure the phrase reads on this line, where the line carries no number this sweep cannot hold.
+    ///
+    /// The refusing path has its own direction below; this keeps the reading rows about reading.
+    fn read(line: &str, phrase: &str) -> Vec<Vec<usize>> {
+        figures_in(line, phrase).expect("this line writes no figure past `usize`")
+    }
+
     #[test]
     fn a_phrase_reads_its_figures_wherever_the_sentence_carries_it() {
         let phrase = "{} bounds across {} capabilities";
         assert_eq!(
-            figures_in(
+            read(
                 "the register currently holds **73 bounds across 22 capabilities** today",
                 phrase
             ),
             vec![vec![73, 22]]
         );
-        assert_eq!(
-            figures_in("no figures here", phrase),
-            Vec::<Vec<usize>>::new()
-        );
+        assert_eq!(read("no figures here", phrase), Vec::<Vec<usize>>::new());
         // Words, which is how this repository's prose actually writes a count.
         assert_eq!(
-            figures_in(
+            read(
                 "seventy-three bounds across twenty-two capabilities",
                 phrase
             ),
             vec![vec![73, 22]]
         );
         assert_eq!(
-            figures_in("nineteen bounds across nine capabilities", phrase),
+            read("nineteen bounds across nine capabilities", phrase),
             vec![vec![19, 9]]
         );
         assert_eq!(
-            figures_in("73 bounds across many capabilities", phrase),
+            read("73 bounds across many capabilities", phrase),
             Vec::<Vec<usize>>::new()
+        );
+    }
+
+    /// A figure this sweep cannot represent refuses, where it used to read as no figure at all.
+    ///
+    /// **`parse().ok()?` spelled *unreadable* the same as *absent*.** A document writing a count past `usize`
+    /// was compared against nothing and the sweep reported clean over the sentence it exists for — the
+    /// conflation `reading`'s module doc names as the one bug this repository forbids, in the module whose
+    /// whole subject is a declared figure disagreeing with a produced one.
+    #[test]
+    fn a_figure_this_sweep_cannot_represent_refuses_rather_than_reading_as_absent() {
+        let phrase = "{} bounds across {} capabilities";
+        let refused = figures_in(
+            "99999999999999999999999999 bounds across 22 capabilities",
+            phrase,
+        )
+        .expect_err("a run of digits past `usize` is not the absence of a number");
+        assert_eq!(
+            refused, "99999999999999999999999999",
+            "the refusal quotes the run, so the sentence can be found"
+        );
+        // Measured with the old answer restored: this same line read `[[9999999999999999999, 22]]` — the
+        // sweep retried one byte along, the run fitted at nineteen digits, and a figure the document never
+        // wrote was compared against the census. Truncation, not silence.
+        // The same sentence with a figure this sweep can hold reads, so the refusal is about the width and
+        // not about the phrase.
+        assert_eq!(read("73 bounds across 22 capabilities", phrase), [[73, 22]]);
+        // And the second figure's position refuses too — the reader does not stop caring after the first.
+        assert!(
+            figures_in(
+                "73 bounds across 99999999999999999999999999 capabilities",
+                phrase
+            )
+            .is_err(),
+            "a figure past `usize` anywhere in the phrase is one this sweep cannot compare"
         );
     }
 
@@ -300,7 +373,7 @@ mod tests {
     fn every_occurrence_on_one_line_is_read_not_only_the_first() {
         let phrase = "{} bounds across {} capabilities";
         assert_eq!(
-            figures_in(
+            read(
                 "73 bounds across 22 capabilities, earlier drafts said 12 bounds across 5 capabilities",
                 phrase
             ),
@@ -309,7 +382,7 @@ mod tests {
         // The reverse order: the stale figure first, the correct one trailing — already caught before this
         // fix, kept as the control.
         assert_eq!(
-            figures_in(
+            read(
                 "earlier drafts said 12 bounds across 5 capabilities, corrected to 73 bounds across 22 \
                  capabilities",
                 phrase
@@ -326,6 +399,6 @@ mod tests {
     #[test]
     fn a_later_placeholder_s_figure_does_not_start_a_second_spurious_match() {
         let phrase = "{} of {}";
-        assert_eq!(figures_in("3 of 53 of 9", phrase), vec![vec![3, 53]]);
+        assert_eq!(read("3 of 53 of 9", phrase), vec![vec![3, 53]]);
     }
 }
