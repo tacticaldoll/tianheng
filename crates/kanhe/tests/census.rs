@@ -113,6 +113,65 @@ fn a_tracked_document_the_sweep_cannot_read_is_a_cannot_judge() {
     );
 }
 
+/// A figure this sweep cannot represent is reported as **cannot judge**, not read as no figure at all.
+///
+/// **`parse().ok()?` spelled *unreadable* the same as *absent*.** A document writing a count past `usize` was
+/// compared against nothing, so the sweep reported clean over exactly the sentence it exists for — the
+/// conflation `reading`'s module doc names as the one bug this repository forbids, in the module whose whole
+/// subject is a declared figure disagreeing with a produced one. Shown rather than asserted about: the tree
+/// carries no such figure, so this writes one.
+#[test]
+fn a_figure_the_sweep_cannot_represent_is_a_cannot_judge() {
+    let declared = vec![Census {
+        subject: "a control",
+        phrase: "{} bounds across {} capabilities",
+        figures: vec![1, 1],
+    }];
+    let scratch = std::env::temp_dir().join(format!("tianheng-census-wide-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    std::fs::write(
+        scratch.join("wide.md"),
+        "  a line writing 99999999999999999999999999 bounds across 1 capabilities
+",
+    )
+    .expect("write");
+    let offences = sweep(&scratch, &["wide.md".to_string()], &declared);
+    // The control, in the same directory: the phrase and the sweep are both alive, so the refusal above is
+    // about the width of the figure and not about either of them.
+    std::fs::write(
+        scratch.join("narrow.md"),
+        "  a line writing 2 bounds across 1 capabilities
+",
+    )
+    .expect("write");
+    let control = sweep(&scratch, &["narrow.md".to_string()], &declared);
+    let _ = std::fs::remove_dir_all(&scratch);
+
+    assert_eq!(
+        offences.len(),
+        1,
+        "a figure past `usize` must produce exactly one refusal, got {offences:?}"
+    );
+    refusal::expect("repository-checks#census-figure-unreadable", &offences[0]);
+    assert_eq!(
+        offences[0].kind,
+        Kind::CannotJudge,
+        "a figure this sweep cannot hold is a fact about the sweep, not a document disagreeing with it"
+    );
+    assert!(
+        offences[0].message.contains("99999999999999999999999999"),
+        "the refusal must quote the run so the sentence can be found, got {:?}",
+        offences[0].message
+    );
+    assert_eq!(
+        control.len(),
+        1,
+        "the control must disagree, or the refusal above could be the phrase matching nothing: {control:?}"
+    );
+    refusal::expect("repository-checks#census-figure-disagrees", &control[0]);
+}
+
 /// The sweep must be able to see a disagreement, or its silence says nothing.
 ///
 /// Every census here asserts agreement, and agreement has more than one cause: a phrase nothing matches is

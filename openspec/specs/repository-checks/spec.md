@@ -381,6 +381,30 @@ so the date a reader is refused on is the same date everywhere.
   read
 - **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
 
+### Requirement: A figure a sweep cannot represent SHALL refuse
+
+Where a reader takes a number out of prose, a run of digits it cannot represent SHALL refuse rather than
+answering *no number here*. The two are different facts, and in this sweep the second is not even silence: the
+scan advances one byte and retries, so the same run one digit shorter is tried, and eventually one that fits.
+
+**Measured with the old answer in place.** A 26-digit run read as `9999999999999999999` — a figure the
+document never wrote — and that was compared against the declared census. The module whose whole subject is a
+declared figure disagreeing with a produced one was fabricating the declared figure.
+
+#### Scenario: A document writes a figure past the sweep's width
+
+- **WHEN** a tracked document states a declared census with a run of digits the sweep cannot represent
+- **THEN** the sweep refuses as *cannot judge*, naming the document, the line, and quoting the run — never a
+  truncated prefix of it, and never silence
+- **PINNED-BY** `a_figure_the_sweep_cannot_represent_is_a_cannot_judge`
+
+#### Scenario: The same line with a representable figure still reads
+
+- **WHEN** the same phrase carries a figure the sweep can hold
+- **THEN** it is read and compared, so the refusal above is about the width and not about the phrase or the
+  sweep being asleep
+- **PINNED-BY** `a_figure_this_sweep_cannot_represent_refuses_rather_than_reading_as_absent`
+
 ### Requirement: A backticked name SHALL have one reader, and an unpaired marker SHALL refuse
 
 Reading backticked identifiers out of prose SHALL go through one implementation, and that implementation SHALL
