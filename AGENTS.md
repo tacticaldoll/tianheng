@@ -700,6 +700,21 @@ This has no repository check, and the reason is worth stating rather than leavin
 nothing is ever untracked, so a check would be vacuous exactly where it runs, and locally it would fire on
 every scratch file mid-edit — a refusal that is right at one moment of the day and wrong the rest of it.
 
+**The list assumes host tools it does not install, and only one of them refuses when absent.** `cargo`,
+`git`, `npm` with a Node in `package.json`'s `engines` range, `cargo-deny`, `jq` and `gh` must be on the path.
+`.npmrc`'s `engine-strict` makes `npm ci` stop on the Node range rather than warn past it; nothing stops on
+the others. This paragraph is the **documented** half and has no reaction behind it, which is said plainly
+because a list of prerequisites reads like a guarantee.
+
+What earns it a place is that a missing tool does not present as a missing tool. Measured 2026-08-23 with
+`jq` absent: 15 of `merge_workflow`'s 30 cases failed, each reporting `bin/gh: line 77: jq: command not
+found` alongside the merge message *cannot read what CI said about this pull request* — so the operator reads
+fifteen findings about the subject when the state met was one absent binary. The wrapper was right and the
+fixture was not: its `gh` stub pipes through a host tool it never declares. `BACKLOG.md` carries that
+instance with the repair that has teeth — the fixture states what it needs and stops before the subject — and
+its promotion trigger is a second fixture found doing the same. This half is the reminder; that half is the
+reaction.
+
 ```bash
 cargo build --workspace
 cargo clippy --all-targets --all-features -- -D warnings
