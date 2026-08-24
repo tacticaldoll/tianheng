@@ -377,9 +377,8 @@ impl Rule {
     /// (a common doctest/dogfooding pattern, `main = { path = "." }`), which `cargo metadata
     /// --no-deps` emits verbatim — a real edge, not a parse artifact. A self-dependency is
     /// never an inter-crate layering violation (there is no OTHER crate to leak across a
-    /// boundary to), so it must never be governed as one (found on a round-11 adversarial
-    /// review — see `PROJECT.md`'s Decisions; a stale comment here previously claimed this
-    /// case was "harmless" while `workspace_members` still included the target's own name
+    /// boundary to), so it must never be governed as one (calling this case "harmless" while
+    /// `workspace_members` still included the target's own name
     /// unfiltered, which is what actually made it flag).
     #[cfg(test)]
     pub(crate) fn findings(

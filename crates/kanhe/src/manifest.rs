@@ -224,8 +224,8 @@ pub fn semver(version: &str) -> Option<(u64, u64, u64)> {
 
 /// Whether `version` is a semantic version — [`semver`]'s question, asked for a yes or no.
 ///
-/// Delegates rather than re-deciding: the two used to be separate implementations and answered differently
-/// at the overflow boundary.
+/// Delegates rather than re-deciding, so one question has one answer. Measured while the two were separate
+/// implementations: they disagreed at the overflow boundary.
 pub fn is_semver(version: &str) -> bool {
     semver(version).is_some()
 }

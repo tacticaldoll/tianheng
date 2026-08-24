@@ -55,7 +55,7 @@ const WRAPPERS: [&str; 2] = ["scripts/merge-pr.sh", "scripts/publish.sh"];
 ///
 /// The purpose beside each path is prose with no producer: a reader's aid for whoever adds the next one,
 /// not a fact this direction holds. What it holds is membership.
-const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 23] = [
+const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 24] = [
     (
         "crates/kanhe/tests/bound_register.rs",
         "git: enumerates, and builds a scratch repository's tree",
@@ -65,6 +65,10 @@ const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 23] = [
         "git: enumerates and reads a scratch repository's state; its one commit goes through the builder",
     ),
     ("crates/kanhe/tests/census.rs", "git: enumerates"),
+    (
+        "crates/kanhe/tests/doc_provenance.rs",
+        "git: enumerates the published crates' sources, through the hermetic builder",
+    ),
     (
         "crates/kanhe/tests/gate_exit_classes.rs",
         "git: two enumerations — the test targets this direction reads, and the tracked scripts the \

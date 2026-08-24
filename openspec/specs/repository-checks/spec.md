@@ -2196,3 +2196,46 @@ unreachable arm is either a fail-loud over an impossible state or a registered s
 - **WHEN** the epoch, a leap day, a century that is not a leap year, and a divisible-by-400 year are read
 - **THEN** each answers its known distance from the epoch
 - **PINNED-BY** `the_calendar_arithmetic_holds_at_its_awkward_days`
+
+### Requirement: A doc comment SHALL NOT index its own provenance by review round
+
+A `///` or `//!` passage in a published crate SHALL NOT name a review round. `AGENTS.md`'s
+*What earns a place in a doc comment* table settles the disposition — **a review round number, a pull request
+number → provenance** — and the number names *when*, not *what*, so nothing downstream reads it.
+
+Where such a passage describes a past defect, the **invariant it violated stays** and the round goes. Twenty-
+eight doc lines across five published crates carried the round anyway, and every one of the twenty-eight
+carried its invariant with it, so none was lost to the repair. Eleven carried the round as the index to
+*see `PROJECT.md`'s Decisions*, and `PROJECT.md` holds **no** entry organised by round — those eleven pointed
+at a structure that does not exist.
+
+**The scope SHALL be stated rather than implied.** None of the twenty-eight attached to a `pub` item, so
+`cargo doc --no-deps` generates none and no adopter reads any: this is a claim about the source a maintainer
+and an agent-in-context read, not about a published document. Overstating it would be the reason-perimeter
+defect this repository refuses elsewhere.
+
+**The reaction's corpus SHALL stop at doc comments, and the stop SHALL be observed rather than claimed.** A
+`//` inner comment is a note to whoever edits the line rather than part of an item's contract; twenty-seven
+carry a round number and `BACKLOG.md` holds that residue. A direction SHALL give the reader both forms and
+require it to separate them.
+
+#### Scenario: A doc comment names a review round
+
+- **WHEN** a `///` or `//!` line under a published crate's `src` names a review round
+- **THEN** the reaction refuses, naming the file, line and passage, rather than leaving the number for a
+  reader to mistake for a reason
+- **PINNED-BY** `no_doc_comment_in_a_published_crate_indexes_its_provenance_by_round`
+
+#### Scenario: An inner comment names one, and a doc comment names a rounding
+
+- **WHEN** the reader is given a `//` line naming a round, and a `///` line whose text merely contains
+  `rounds to 3 decimal places`
+- **THEN** it reports neither — the corpus boundary and the token boundary are each decided by a run
+- **PINNED-BY** `the_reader_separates_a_doc_comment_from_an_inner_one`
+
+#### Scenario: The published-crate literal outlives its subject
+
+- **WHEN** a crate is added or retired, or its `publish = false` moves, and the reaction's literal is not
+  updated
+- **THEN** the reaction refuses, holding the literal against the manifests in both directions
+- **PINNED-BY** `the_published_set_is_the_one_the_manifests_declare`

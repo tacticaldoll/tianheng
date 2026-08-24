@@ -525,8 +525,8 @@ pub(super) fn async_subtree_errors_on_a_non_cfg_missing_submodule() {
 /// A cfg_attr(path)-hidden submodule is observed, whichever candidate file exists — the identical
 /// `resolve_child_modules`/`walk_subtree_modules` mechanism fixed by
 /// `hunyi-cfg-attr-path-module-loss` for `scan_crate`'s own consumers. Not named in that change's
-/// own commit message (a documentation gap a round-3 adversarial review found and closed) but the
-/// same shared walker, independently reproduced here before being counted as fixed.
+/// own commit message, but the same shared walker — independently reproduced here before being
+/// counted as fixed.
 #[test]
 pub(super) fn async_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule() {
     let files = &[
