@@ -1172,6 +1172,37 @@ them.
 
 ### Self-governance
 
+- **A TOML escape is a value the manifest reader refuses now, not one it answers undecoded.** `quoted_value`
+  took the text up to the first `"` and returned it as a `Quoted::Value`, so a legal TOML basic string
+  carrying an escape was reported as one this reader had read. Measured on cargo 1.96.0 against a scratch
+  workspace, which is the half that makes it a defect rather than a limitation: `path = "crates/\u0078uanji"`
+  resolves the member at `crates/xuanji`, `name = "xuan\u006Ai"` reads as `xuanji`, and
+  `version = "0.\u0035.0"` reads as `0.5.0`. **Cargo decodes; this reader decoded nothing and said it had.**
+
+  What that cost is silence rather than a wrong answer. Every consumer compares the undecoded text — against a
+  `crates/` prefix, against the family crate list, against a version — and a comparison that fails takes a
+  `continue`. So an internal dependency with a stale pin, or a renamed family dependency with one, stopped
+  being checked. The per-manifest and per-example vacuity guards could not see it either: one escaped entry
+  beside one ordinary one leaves their counters non-zero, which is exactly the partial case those guards were
+  added for one level up.
+
+  **The repair is one branch, and deliberately not a decoder.** A backslash in a basic string always opens an
+  escape, so `quoted_value` answers `Unreadable` on any — and every consumer already had an `Unreadable` arm
+  that refuses as a cannot-judge, so nothing downstream needed changing. Writing a TOML escape decoder here
+  would be a second hand-rolled grammar, which is the defect class `BACKLOG.md` already carries for these
+  readers. Measured over `git ls-files '*.toml'`: no tracked manifest carries a backslash in a quoted value,
+  so this refuses nothing this repository writes.
+
+  It also closes the narrower shape the same read missed — `"a\"b"` split at the **escaped** quote and
+  answered `a\`, an identity no manifest declares.
+
+  `release-coherence` already required this: *every enumeration SHALL distinguish absent from unreadable, and
+  SHALL refuse as a cannot-judge on the second*. Its scenarios reached a file that cannot be read; the value
+  level is where the requirement was not being met, and it now has scenarios of its own. **An earlier review
+  of this window saw the escaped-quote half and filed it as latent** on the ground that no package name, path
+  or version can legally contain a `"` — true, and the wrong perimeter: the class is every escape, and
+  `\uXXXX` is legal in all three.
+
 - **Two backlog entries carried an unmeasured premise, and each now carries the measurement instead.** Both
   were found by the `openspec/specs/**` review pass — the one the two earlier passes had declared their
   largest coverage gap — which found no defect inside that scope and these two outside it.
