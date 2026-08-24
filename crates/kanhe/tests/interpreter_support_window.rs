@@ -24,6 +24,8 @@
 
 use std::path::PathBuf;
 
+use kanhe::reading;
+
 /// Days from 1970-01-01 to `y-m-d`, proleptic Gregorian, by Howard Hinnant's civil-calendar algorithm.
 ///
 /// Arithmetic rather than a dependency: this crate takes `serde_json` for cargo's message stream and nothing
@@ -79,13 +81,26 @@ fn support_window(workflow: &str, today: i64) -> Result<(), String> {
         }
     };
 
-    let mut fields = declaration.split_whitespace();
-    let (Some(major), Some(date), None) = (fields.next(), fields.next(), fields.next()) else {
-        return Err(format!(
-            "the support window reads `{declaration}` and this expects `<major> <YYYY-MM-DD>` — two fields, \
-             so that the major it speaks for is compared with the pin rather than assumed"
-        ));
-    };
+    // **The field count is answered by `kanhe::reading`, not by a destructure over survivors.** The three
+    // `next()` calls this replaces made no claim about how many fields arrived: they read two and checked
+    // that a third was absent, which is the same reading spelled longer. What the shared reader adds is that
+    // the count is the refusal — and it is the same reader the date below goes through, so the two cannot
+    // disagree about what "this input has the wrong number of parts" means.
+    //
+    // The reader says what arrived; this says what to write. A generic reader cannot know the form its
+    // caller wanted, and `repository-checks` requires the refusal to say what to write.
+    let [major, date] = reading::fields::<2>(
+        "support window",
+        declaration,
+        reading::Sep::Whitespace,
+    )
+    .map_err(|refusal| {
+        format!(
+            "{}. Write `<major> <YYYY-MM-DD>`, so the major it speaks for is compared with the pin \
+             rather than assumed",
+            refusal.message
+        )
+    })?;
 
     let pins: Vec<&str> = workflow
         .lines()

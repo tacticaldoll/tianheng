@@ -49,6 +49,7 @@ pub mod manifest;
 pub mod merge_message_gate;
 pub mod prelude_promise;
 pub mod publish_source_gate;
+pub mod reading;
 pub mod refusal;
 pub mod refusal_bounds;
 pub mod region;

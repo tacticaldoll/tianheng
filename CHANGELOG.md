@@ -1172,6 +1172,20 @@ them.
 
 ### Self-governance
 
+- **A reader that cannot understand its input now refuses it, and the field count is the refusal.**
+  `crates/kanhe/src/reading.rs` is the sibling of `selection` for the other half of one measured class:
+  `selection` answers *how many candidates are there*, and this answers *could this be read at all*. They
+  stay apart because they are different mechanisms, and one instrument for two of them is the shape this
+  repository removes on sight. `fields::<N>` divides a text and refuses a count it was not asked for, so
+  the survivors of a `filter_map` can no longer destructure as if nothing was dropped; `Sep` separates a
+  delimiter whose repetition is a **defect** from whitespace a writer spaces freely, which is the
+  distinction that made a doubled `-` invisible. The refusal is a cannot-judge naming the count that
+  arrived, and the form to write instead comes from the caller — a shared reader does not know what form
+  its caller wanted. `interpreter_support_window` reads its declaration's two fields through it, replacing
+  three `next()` calls that read two and checked a third was absent: the same reading spelled longer, and
+  making no claim about how many arrived. Exit classes and the set of shapes that react are unchanged; only
+  the refusal's wording moves, now naming the count. The date half of the same reader is a separate change.
+
 - **The interpreter pin carries the window it is good for, and a reaction holds it.** Pinning the interpreter
   exactly bought the property the step claims and created a hand-maintained pin nobody refreshes — filed
   beside the action SHAs under an entry whose own promotion trigger reads *a second ecosystem arriving whose

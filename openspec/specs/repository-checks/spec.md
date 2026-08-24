@@ -2068,3 +2068,42 @@ rather than refuses.
 - **WHEN** no file in the corpus matches any named subcommand
 - **THEN** the check fails rather than reporting clean, because the reach was lost and not the risk
 - **PINNED-BY** `no_judgement_reads_an_ambient_ignore_file`
+
+### Requirement: A reader SHALL refuse input it cannot understand rather than skip it
+
+A judgement dividing a text into a fixed number of fields SHALL answer *how many arrived* and SHALL refuse a
+count it did not ask for. Dropping what it cannot parse and destructuring the survivors states a verdict over
+an input the reader never read: measured, `filter_map(|part| part.parse().ok())` over `2028--4-30` yielded
+three values from four fields, so a reader asking for three succeeded and the date read as `2028-04-30`.
+
+The division SHALL distinguish a separator whose repetition is a **defect** from whitespace a writer spaces
+freely. Collapsing runs is right for the second and wrong for the first, and one rule serving both is what
+made a repeated delimiter invisible.
+
+The refusal SHALL be a **cannot-judge** — a field count the reader did not expect is a fact about the input,
+not a subject disagreeing with what it is judged against — and SHALL name the count that arrived, since none
+and one are different facts. What to write **instead** SHALL come from the caller: a shared reader does not
+know the form its caller wanted, and a refusal an operator cannot act on is one they work around.
+
+The two scenarios below are pinned by unit directions in `crates/kanhe/src/tests/`, which is the first time
+this capability cites one. The reader is library code under `crates/kanhe/src`, so its matrix sits beside it
+as `AGENTS.md`'s *What lives where* requires; the repository check that runs it over the real workflow is the
+third scenario's, one layer up.
+
+#### Scenario: A field count the reader did not expect
+
+- **WHEN** a text divides into more or fewer fields than the reader asked for
+- **THEN** the reader refuses as a cannot-judge, naming the count that arrived
+- **PINNED-BY** `a_field_count_this_reader_did_not_expect_is_refused_either_way`
+
+#### Scenario: A repeated delimiter is a field, not a collapse
+
+- **WHEN** a character separator occurs twice in succession
+- **THEN** the empty field between them is counted, so a reader asking for three fields refuses four
+- **PINNED-BY** `a_character_separator_keeps_the_empty_field_a_collapsing_reader_would_drop`
+
+#### Scenario: The interpreter support window reads its declaration through it
+
+- **WHEN** the support window's declaration carries one field, or three
+- **THEN** the reaction refuses through the shared reader, and adds the form to write
+- **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
