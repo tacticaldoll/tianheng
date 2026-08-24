@@ -20,15 +20,14 @@ use crate::resolve::{
 /// mutually-exclusive `#[cfg]` branches are never compiled together, so merging their `use`
 /// declarations into one map lets the branch unioned last silently overwrite an earlier branch's
 /// alias for the same local name (a realistic per-platform shim), misresolving a bare reference in
-/// the FIRST branch through the SECOND branch's `use` — a confirmed false negative, found on a
-/// round-6 adversarial review; see `PROJECT.md`'s Decisions. Keyed on the branch index, not the
-/// file alone: two mutually-exclusive **inline** `#[cfg]` siblings share one identical enclosing
-/// file, so a file-keyed map would re-merge them — the identical conflation one hop past item
-/// observation, found on a round-8 adversarial review; see `PROJECT.md`'s Decisions.
+/// the FIRST branch through the SECOND branch's `use` — a confirmed false negative. Keyed on the
+/// branch index, not the file alone: two mutually-exclusive **inline** `#[cfg]` siblings share one
+/// identical enclosing file, so a file-keyed map would re-merge them — the identical conflation one
+/// hop past item observation.
 /// Group `items_with_files` by their branch index, dropping the file. Keyed on the branch index
 /// rather than file alone: two mutually-exclusive inline `#[cfg]` siblings share one identical
-/// enclosing file, so a file-keyed map would re-merge them (round-8 adversarial review; see
-/// `PROJECT.md`'s Decisions). Shared by [`uses_by_branch`] and [`operand_module_findings`], which
+/// enclosing file, so a file-keyed map would re-merge them. Shared by [`uses_by_branch`] and
+/// [`operand_module_findings`], which
 /// each derive a different per-branch map (a `UseMap`, a `FileExternScope`) from the identical
 /// grouping.
 fn group_items_by_branch(

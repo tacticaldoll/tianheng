@@ -13,9 +13,9 @@ pub type Subjects = BTreeMap<String, Vec<String>>;
 
 /// What a spec's `## Subject` section declares.
 ///
-/// Four outcomes, because two of them used to be one and a third was not answered at all. A bullet this
-/// reader cannot parse is not a section listing fewer globs, and several sections are not the first of
-/// them — see [`subject_globs`].
+/// A bullet this reader cannot parse is not a section listing fewer globs, and several sections are not the
+/// first of them — see [`subject_globs`]. Four outcomes are what keeps those four answers apart; collapsing
+/// any two of them is how one becomes the other's report.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Declared {
     /// The spec carries no `## Subject` section.

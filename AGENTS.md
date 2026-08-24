@@ -95,6 +95,14 @@ Applied to the shapes a review is likely to file:
 | a rejected alternative with no measurement | provenance |
 | **a relative anchor — `this window`, `the previous round`** | neither: it names a moving reference, so it is stale the moment the window closes. Anchor it to the moment, or drop it |
 
+**Invariant first, observation second, in separate sentences.** The disposition above decides what stays; this
+decides how it is written, and it is what makes the table applicable without a re-read. A passage that fuses
+the two — *delegates rather than re-deciding: the two used to be separate implementations and answered
+differently at the overflow boundary* — cannot have its provenance trimmed without taking the observation
+with it, and a reviewer reaching for the debrief proposes deleting the falsifier. Measured: two reviews of
+this repository proposed exactly that substitution for two such passages, and in both the replacement left an
+assertion nothing could falsify. Split into two sentences, each edit reaches only what it means to.
+
 **No reaction, and the reason is structural rather than a count.** The decidable subset collides with itself:
 the bare `#NNN` shape a detector would match includes the **fixture** for the squash-serial check, so a
 detector for that shape would refuse the very check that forbids it. The larger classes are not decidable at

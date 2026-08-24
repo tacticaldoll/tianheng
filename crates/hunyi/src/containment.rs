@@ -53,8 +53,8 @@ pub(crate) fn path_leaf(path: &syn::Path) -> String {
 /// (`impl<T> Marker for T {}`'s `T`), the identical shadowing the exposure collectors already
 /// apply ([`crate::collect::exposure::type_param_names`]) for every OTHER impl-site position — see
 /// `semantic-forbidden-marker`'s "Anchor resolution and observation bounds" requirement (the
-/// blanket-impl/projection/qualified-path shadow scenarios) for the full rationale. Found missing
-/// on a round-9 adversarial review: a blanket `impl<T> Marker for T {}` beside an unrelated `use
+/// blanket-impl/projection/qualified-path shadow scenarios) for the full rationale. Without the
+/// shadow, a blanket `impl<T> Marker for T {}` beside an unrelated `use
 /// crate::domain::Innocent as T;` fabricated a marker-acquisition finding on `Innocent`, which the
 /// source never actually impls the marker for.
 ///

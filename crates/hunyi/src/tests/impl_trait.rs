@@ -478,8 +478,8 @@ pub(super) fn impl_trait_subtree_reacts_to_a_submodule_return_the_seam_scope_mis
 /// A cfg_attr(path)-hidden submodule is observed, whichever candidate file exists — the identical
 /// `resolve_child_modules`/`walk_subtree_modules` mechanism fixed by
 /// `hunyi-cfg-attr-path-module-loss` for `scan_crate`'s own consumers. Not named in that change's
-/// own commit message (a documentation gap a round-3 adversarial review found and closed) but the
-/// same shared walker, independently reproduced here before being counted as fixed.
+/// own commit message, but the same shared walker — independently reproduced here before being
+/// counted as fixed.
 #[test]
 pub(super) fn impl_trait_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule() {
     let files = &[

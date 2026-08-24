@@ -136,16 +136,16 @@ struct FileScope {
 /// computation over the flattened cross-branch union: two mutually-exclusive `#[cfg]` branches are
 /// never compiled together, so deriving a shadow set (a `use`-map, a child-module-name set, a
 /// rename map) from their UNION lets one branch's own declarations silently apply to the OTHER,
-/// mutually-exclusive branch's resolution — a confirmed false negative, found on round-6/7
-/// adversarial reviews; see `PROJECT.md`'s Decisions. `uses_by_file` was fixed in round 6;
-/// `externs_type`/`externs_reexport`/`renames_bare` (all derived from each file's own child-module
-/// names) had the identical conflation left unfixed, found in round 7 — e.g. a branch with no
+/// mutually-exclusive branch's resolution — a confirmed false negative. **Every** derivation is
+/// per-branch, not only the `use`-map: `externs_type`/`externs_reexport`/`renames_bare` are all
+/// derived from each file's own child-module names and carry the identical conflation — e.g. a
+/// branch with no
 /// local `mod net` had its genuine `pub use net::Something;` (the real extern crate) silently
 /// suppressed merely because a MUTUALLY-EXCLUSIVE sibling branch happened to declare its own local
 /// `mod net`. Grouping by FILE ALONE is itself insufficient: two mutually-exclusive **inline**
 /// `#[cfg]` siblings share one identical enclosing file, so a file-keyed group re-merges them —
-/// the identical conflation one hop past item observation, found on a round-8 adversarial review;
-/// see `PROJECT.md`'s Decisions. The branch index `resolve_module_items_with_cfg_tags` pairs each
+/// the identical conflation one hop past item observation. The branch index
+/// `resolve_module_items_with_cfg_tags` pairs each
 /// item with is the finer key that keeps them apart.
 fn build_file_scopes(
     items_by_branch: &HashMap<usize, Vec<FlatItem>>,
@@ -183,8 +183,7 @@ fn build_file_scopes(
 /// still not fine enough for this: two mutually-exclusive `#[cfg]`/`cfg_if!` SIBLING ITEMS (a
 /// `#[cfg(unix)] mod x;` beside a `#[cfg(not(unix))] pub use x::Y;`, or the two arms of one
 /// `cfg_if!`) share the identical branch — there is no module-path split to lean on, since the
-/// governed module itself resolves to exactly one branch here (round-9 finding; see
-/// `PROJECT.md`'s Decisions).
+/// governed module itself resolves to exactly one branch here.
 fn collect_all_exposures(
     items_with_files: &[(FlatItem, PathBuf, usize)],
     scopes: &HashMap<usize, FileScope>,

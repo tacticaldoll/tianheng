@@ -237,18 +237,16 @@ pub(crate) struct ModPreambleAttrs {
 /// without first knowing where that literal started — so an EARLIER attribute's own string value
 /// containing one of those bytes (e.g. `#[doc = "Handles A; falls back to B."]`) stopped the old
 /// backward scan mid-literal, desyncing the subsequent forward attribute walk and silently losing a
-/// later `#[path = "…"]` on the same preamble (found on a round-9 adversarial review — see
-/// `PROJECT.md`'s Decisions).
+/// later `#[path = "…"]` on the same preamble.
 ///
 /// The forward scan is not merely literal-aware but **attribute-group-aware**: an entire `#[…]` /
 /// `#![…]` is skipped as one atomic unit via [`attr_group_end`], the identical primitive the
 /// second (attribute-matching) pass below already uses. Attribute syntax permits an arbitrary
 /// token-tree argument, including a brace-delimited one (`#[foo({ 1 })]`) that is not a string
-/// literal — treating only the FIRST pass's own literal-awareness as sufficient (round 9's fix)
-/// still let such a brace be mistaken for a top-level item terminator, resetting `start` to a
-/// point AFTER an earlier, real `#[path = "…"]` attribute and silently losing it — the identical
-/// failure mode round 9 closed, reached through a different vector (found on a round-10
-/// adversarial review of round 9's own fix — see `PROJECT.md`'s Decisions). A non-attribute `{…}`
+/// literal — literal-awareness in the first pass alone still let such a brace be mistaken for a
+/// top-level item terminator, resetting `start` to a point AFTER an earlier, real
+/// `#[path = "…"]` attribute and silently losing it: the identical failure mode above, reached
+/// through a different vector. A non-attribute `{…}`
 /// (a preceding sibling item's own block body, or a macro invocation's body) is likewise skipped
 /// as one atomic unit via [`balanced_brace_end`], landing on its own matching `}` — the real
 /// boundary — rather than treating the interior's own bytes as candidates.

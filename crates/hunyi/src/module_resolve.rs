@@ -185,8 +185,8 @@ struct Branch {
 /// their items into one shared items list also merges everything a downstream caller derives from
 /// those items — a `use`-map, a child-module-name shadow set — even though the two arms are never
 /// simultaneously open in any real build. That conflation is the identical false-negative class
-/// this whole resolver exists to prevent, just one hop past item observation itself (found on a
-/// round-8 adversarial review; see `PROJECT.md`'s Decisions): merging genuinely produces every
+/// this whole resolver exists to prevent, just one hop past item observation itself: merging
+/// genuinely produces every
 /// item, but a caller resolving one arm's own bare reference through the OTHER arm's
 /// `use`/child-module declaration silently misresolves it. Keeping every inline occurrence as its
 /// own independent branch — exactly like [`push_file_form_branches`] already does — means

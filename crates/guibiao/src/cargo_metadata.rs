@@ -85,8 +85,8 @@ fn kind_matches(dependency: &Value, kind: DependencyKind) -> bool {
 /// target's own self-referential edge (see [`is_self_dependency`]) — the shared filter every
 /// consuming rule ([`external_dependencies`] / [`dependencies`] /
 /// [`dependencies_with_disallowed_source`]) needs, so kind-matching and self-dependency
-/// exclusion cannot silently diverge across them (the round-11→round-12 fix
-/// [`is_self_dependency`]'s own doc names). [`external_dependencies`] passes
+/// exclusion cannot silently diverge across them — the shared-filter reason
+/// [`is_self_dependency`]'s own doc states. [`external_dependencies`] passes
 /// `exclude_self: false`: its own `!source.is_null()` filter already excludes a self-dependency
 /// (always a null-source `path` edge), so an extra explicit exclusion there would be redundant,
 /// not a divergence.
@@ -139,7 +139,7 @@ pub(crate) fn external_dependencies(package: &Value, kind: DependencyKind) -> Ve
 /// scenario for why `source.is_null()` must gate the name match. Filtering here, at the shared
 /// observation source, is what every consuming rule ([`dependencies`] /
 /// [`dependencies_with_disallowed_source`]) relies on — a per-rule copy left the identical false
-/// positive live in every sibling rule (the round-11→round-12 fix; see `PROJECT.md`'s Decisions).
+/// positive live in every sibling rule.
 fn is_self_dependency(package: &Value, dependency: &Value) -> bool {
     let own_name = package["name"].as_str();
     own_name.is_some() && dependency["name"].as_str() == own_name && dependency["source"].is_null()

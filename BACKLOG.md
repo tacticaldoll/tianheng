@@ -543,6 +543,25 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **Twenty-seven inner comments in published crates index their provenance by review round, and the reaction
+  over doc comments does not reach them.** *Class:* WATCH. *Observed pressure:* measured at `11674bc`, by
+  `grep -rnE 'round[- ][0-9]+'` over every published crate's `src`: 28 doc-comment
+  lines and **27** inner-comment (`//`) lines carried a round number. The 28 are repaired and
+  `crates/kanhe/tests/doc_provenance.rs` now refuses them; the 27 are outside its corpus by construction, and
+  that boundary is asserted by a direction rather than claimed. *Observation source:* the `v0.4.0..HEAD`
+  comment-hygiene review, and the enumeration its triage produced. *Current reaction or bound:* none over the
+  inner form. *Risk, bounded rather than assumed:* a `//` note is not part of any item's contract and reaches
+  no rustdoc — measured, none of the 28 doc sites attached to a `pub` item either, so nothing here was ever
+  adopter-facing. What it costs is a reader of the source meeting a moment-name instead of a reason, and an
+  agent with the file in context imitating it. *Promotion trigger:* an inner comment whose round number is the
+  only identifier of the invariant it guards — the shape that makes stripping it lossy — or the doc-comment
+  corpus being widened for an unrelated reason, at which point widening it once more costs nothing. *Version
+  class:* patch; comments in published crates, no API or behaviour. *Authority:* `AGENTS.md`'s *What earns a
+  place in a doc comment* table, whose disposition for a review round number is `provenance`, and
+  `repository-checks`'s requirement holding the doc-comment half.
+
+ / ACCEPTED / DECLINED / BUILT
+
 - **`merge_workflow`'s fixture takes `jq` from the host without declaring it, and its absence reads as fifteen
   defects in the subject.** *Class:* WATCH. *Observed pressure:* measured 2026-08-23 on a machine where `jq`
   is not installed — 15 of that target's 30 cases fail, each reporting

@@ -103,9 +103,9 @@ pub(crate) fn extern_resolution(
 /// exactly one `#[cfg]`-branch's own items, never a cross-branch union. Two mutually-exclusive
 /// `#[cfg]` branches are never compiled together, so a shadow set (a child-module name, hence a
 /// shrunk extern/rename map) derived from one branch's items must never suppress resolution for a
-/// DIFFERENT, mutually-exclusive branch's own principal path (a confirmed false negative, found on
-/// a round-7 adversarial review; see `PROJECT.md`'s Decisions — the identical conflation class
-/// round 6 fixed for the `use`-map and `module_findings`'s own `externs_type`/`renames_bare`).
+/// DIFFERENT, mutually-exclusive branch's own principal path — a confirmed false negative, and the
+/// identical conflation class the `use`-map and `module_findings`'s own
+/// `externs_type`/`renames_bare` each carry per branch for the same reason.
 pub(crate) struct FileExternScope {
     pub(crate) externs_type: HashSet<String>,
     /// The crate-root rename map with aliases shadowed by a same-named child `mod` **of this

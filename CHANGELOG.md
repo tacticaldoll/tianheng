@@ -1172,6 +1172,30 @@ them.
 
 ### Self-governance
 
+- **A doc comment no longer indexes its own provenance by review round, and a reaction holds it.** `AGENTS.md`
+  settles the disposition — *a review round number, a pull request number → provenance* — and 28 doc lines
+  across five published crates carried one anyway. Eleven carried it as the index to *see `PROJECT.md`'s
+  Decisions*, and `PROJECT.md` holds **no** entry organised by round, so those eleven pointed at a structure
+  that does not exist. Every one of the 28 carried its invariant alongside the round, so the repair kept all
+  28 invariants and dropped only the moment-names; `crates/kanhe/tests/doc_provenance.rs` refuses the next
+  one.
+
+  **The scope is narrower than a first reading suggests, and that is measured rather than softened.** None of
+  the 28 attached to a `pub` item — 10 private, 8 `pub(crate)`, one private-module `//!` — so
+  `cargo doc --no-deps` generates none of them and docs.rs showed none. This was never adopter-facing. The
+  reader it cost is whoever opens the source, an agent with the file in context included, and the round number
+  names *when* rather than *what*.
+
+  **The corpus stops at doc comments and the stop is a run, not a sentence.** 27 `//` inner comments carry a
+  round number and sit outside by construction; a direction gives the reader both forms and requires it to
+  separate them, alongside a `rounds to 3 decimal places` case for the token boundary. `BACKLOG.md` carries
+  the 27 as a WATCH with the trigger that would widen the corpus.
+
+  **And the ordering rule the two review passes kept tripping over is now stated.** Both proposed replacements
+  that would have deleted an invariant while reaching for its provenance — because the two sat in one
+  sentence. `AGENTS.md`'s table now asks for **invariant first, observation second, in separate sentences**,
+  and the two passages that prompted it (`is_semver`, `Declared`) are written that way.
+
 - **A multiline basic string is refused too, and it reached the same silence with no backslash in it.** The
   escape branch below closed one door and left the neighbouring one open. TOML admits `"""…"""` wherever it
   admits `"…"`, and cargo reads it — measured on cargo 1.96.0 against a scratch workspace:

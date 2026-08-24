@@ -3,8 +3,7 @@
 //! metadata is collected directly at the site that produced it (an item's own resolved branch for
 //! a single-module capability, or `ImplSite`/`TypeDef`/`UnsafeSite`/the subtree walker's own
 //! per-branch file for a whole-crate-scan one) — never re-resolved afterward from a module string,
-//! which misattributes a finding whenever two `#[cfg]`-split branches share one module path (see
-//! `PROJECT.md`'s Decisions, the round-5 addendum).
+//! which misattributes a finding whenever two `#[cfg]`-split branches share one module path.
 
 use std::path::PathBuf;
 
