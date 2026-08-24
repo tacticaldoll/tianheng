@@ -164,6 +164,13 @@ The spec and the reaction move together **because they are one change**, not bec
 merges them later. A pull request that edits a requirement and ships no reaction for it is the thing
 this arrangement exists to make visible.
 
+**The seam runs both ways, and only one direction had an owner.** The rule below asks a *scenario* to name
+its reaction. The reverse — requirement prose gaining a clause with no scenario, or a scenario gaining a
+`PINNED-BY` with no clause declaring what it pins — had none, and both halves of it landed in one commit whose
+own subject was doc-comment discipline: a `SHALL` about that specification's own prose that nothing could hold,
+and a third direction pinned by a scenario the requirement never mentioned. Requirement prose and scenarios are
+edited in one pass, or they diverge in whichever direction was not looked at.
+
 **Every new or materially changed scenario carries its observation evidence in that same pull
 request**: either name the existing reaction or repository check in the PR's `## Verification`, or
 add a new guard and record the required negative run. If a property cannot fail because the data

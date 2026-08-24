@@ -92,12 +92,19 @@ fn published_sources(root: &Path) -> Vec<(String, String)> {
         .collect();
     // The enumeration is an input like any other: a corpus that collapsed to nothing satisfies "no doc
     // comment names a round" exactly as a clean one does.
-    assert!(
-        files.len() > 50,
-        "`git ls-files` enumerated {} sources under the published crates — a corpus that small is not this \
-         family's, and reporting clean over it is the vacuity direction",
-        files.len()
-    );
+    //
+    // **The property, not a threshold.** A `> 50` floor stood here against an actual 131 — a number answering
+    // a question nobody asked, and one that says nothing about a single crate dropping out. What the floor was
+    // standing in for is that **every** published crate contributed, which is what a lost `ls-files` argument
+    // or a renamed directory would break, and which no count can see.
+    for krate in PUBLISHED {
+        let prefix = format!("crates/{krate}/src/");
+        assert!(
+            files.iter().any(|(path, _)| path.starts_with(&prefix)),
+            "`git ls-files` enumerated no source under {prefix} — this sweep would report clean over a crate \
+             it never opened. The corpus is every published crate's `src`, and one of them is missing"
+        );
+    }
     files
 }
 
