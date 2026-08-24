@@ -1972,3 +1972,45 @@ fn a_gate_that_passes_without_judging_stops_before_the_merge() {
         run.stderr
     );
 }
+
+/// A flag-shaped value is refused in every value position, admitted flag or refused one alike.
+///
+/// **The door this closes had a different consequence here than at its sibling, and both are misdiagnoses.**
+/// `scripts/publish.sh` refuses a value beginning with `-` because cargo does not consume one — measured,
+/// `cargo publish --package --no-verify` packages WITHOUT verifying. Here the wrapper does consume it: with
+/// no shape check, `--subject --admin` made the subject the literal string `--admin`, so the operator's flag
+/// never reached `gh` while the gate reported a subject disagreeing with the title. It failed closed and
+/// diagnosed the wrong thing.
+///
+/// Both classes of `-`-leading token are given, because they fail differently and a check over one would read
+/// as covering both: `--admin` is the one flag this wrapper **admits** and forwards, and `--repo`,
+/// `--delete-branch` and `-t` are refused. Neither becomes text by sitting after a value-taking flag.
+///
+/// No controlled `PATH` is needed, and that is part of the claim: the refusal happens while the arguments are
+/// being read, before the wrapper reaches `gh` or the gate.
+#[test]
+fn a_flag_shaped_value_is_refused_in_every_value_position() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    for arm in ["--subject", "--body-file"] {
+        for value in ["--admin", "--repo", "--delete-branch", "-t"] {
+            let output = Command::new("bash")
+                .arg(root.join("scripts/merge-pr.sh"))
+                .args(["42", arm, value])
+                .output()
+                .expect("run the wrapper with a flag-shaped value");
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(
+                output.status.code(),
+                Some(2),
+                "`{arm} {value}` is a usage refusal, not a value; got {:?} with stderr {stderr:?}",
+                output.status.code()
+            );
+            assert!(
+                stderr.contains("merge message:") && stderr.contains(arm) && stderr.contains(value),
+                "the refusal must name the flag and the value it would not take, got {stderr:?}"
+            );
+        }
+    }
+}

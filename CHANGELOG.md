@@ -1172,6 +1172,39 @@ them.
 
 ### Self-governance
 
+- **Both wrappers refuse a flag-shaped value now, and a reaction holds the property across them.**
+  `repository-checks` already required it — *a value position SHALL NOT be a place a refused argument may
+  sit*, *this SHALL hold for every value-taking arm rather than the one measured to leak* — under a
+  requirement about any sanctioned irreversible act. `scripts/publish.sh` implemented it with a paragraph
+  arguing for it; `scripts/merge-pr.sh` kept a guard that checked only that *something* followed. So the
+  requirement had an unsatisfied instance, not a missing clause. The consequences differ, which is why
+  stating the rule at one wrapper read as covering both: where the tool does not consume a flag-shaped value
+  the refused argument reaches it, and where the caller **does** — `gh`'s does — the admitted flag is
+  swallowed as text and the gate then reports a subject disagreeing with the title. Measured:
+  `--subject --admin` made the subject the literal string `--admin`, the operator's flag never reached `gh`,
+  and the refusal was about the wrong thing one step before a record that cannot be repaired.
+
+  **The repair is a reaction over both, not a second copy of the guard.** Two implementations of one rule
+  agree by maintenance. `each_wrapper_refuses_a_flag_shaped_value_in_every_value_position` reads both
+  wrappers from `gate_exit_classes`'s existing `WRAPPERS` pair and finds each guard by **the shape of its
+  call** — three arguments: the count, the flag, the value — rather than by its name, because the two spell
+  it differently (`require_value`, `require_a_value`) and a literal pair of names would be a third thing to
+  keep in step. A third wrapper is covered on the day it is written.
+
+  **The first cut of that reaction was not enough, and its own negative run is what said so.** It asserted
+  that *some* guard call carried a value and that the guard judged the shape. Perturbed by shortening one
+  arm's call to two arguments, it stayed green — the other arm still carried a value, so the guard was still
+  found and still checked. A reader whose input is narrower than the claim it makes, in the direction written
+  to close exactly that. The reading is now **arm-level**: an arm that consumes the following argument must
+  hand its guard that argument, held in both directions, and the assertion names the arm that does not.
+
+  **So the reader moved to `crates/kanhe/src/wrapper_parser.rs`,** where it is one implementation with two
+  consumers rather than the copy the sibling direction would have been. It gained a third property in the
+  move — `guards_with_value` beside `guards` and `consumes` — because two could not tell an arm asking for
+  nothing from an arm handing its guard nothing to judge: the shortened call still opened with the guard's
+  name, so it still read as guarded. `publish_workflow` now reads through it and keeps using `guards`, which
+  is the property its own assertion was written for.
+
 - **The set a job claims to cover is the one it derives.** `packaged-selftest` is named *every publishable
   crate's tests pass from its packaged tarball* and then hand-listed them twice — once for the resolve
   patches and once for the packaging loop — with nothing holding either list. The `license-files` job beside
