@@ -2665,14 +2665,21 @@ it before assigning a horizon here; the entries below are horizons, not a second
   reason and must not be quoted as one: neither shipped, so neither is an upgrade anyone performs.
   `CHANGELOG.md` marks it `**BREAKING**` accordingly, and states the same delta from the same baseline.
 
-  What earns the minor is one item, and it is named rather than counted: the bare-principal resolver closure in
-  `crates/hunyi/src/crate_scope.rs`, the only change in the window that moves behaviour an adopter already had.
-  The window has since added a substantial **additive** public surface — the observation protocol (`Observer`,
-  `Run`, the three dimension observers), the typed bound model, and each dimension's `observation_bounds()` — which
-  is minor-class on its own terms and does not change the reasoning above: additive API asks nothing of an adopter,
-  while a recorded baseline going stale does. Re-derive the range rather than trusting a figure here — the counts
-  this paragraph used to carry ("of the 44 commits … the two other product-code touches") were written early and
-  falsified by the window itself:
+  **What earns the minor is not classified here, and that is the repair rather than a smaller claim.**
+  `CHANGELOG.md`'s `[0.5.0]` marks every entry requiring adopter action `**BREAKING**` and its `### Migration`
+  section states each step. That classification has one owner and this is not it. What belongs here is the
+  version *consequence*: pre-1.0, an adopter having to act earns a minor whatever the diff size, and a recorded
+  baseline going stale is such an action — which is why this window is `0.5.0` rather than `0.4.1`.
+
+  This paragraph used to classify it anyway: it named the bare-principal resolver closure as the one item, and
+  called the rest of the window's public surface additive and therefore free. Both halves went stale inside the
+  window. Another entry earned the mark — `Outcome::Clean` gaining the subject it was measured over — and it is
+  part of the very surface the sentence called additive, carrying a `### Migration` bullet that reads *the
+  compiler names every site*. Two owners for one classification, and the one with no producer drifted, which is
+  the shape *Bind a claim to its measurement* refuses everywhere else.
+
+  Re-derive the range rather than trusting a figure here — the counts this paragraph used to carry ("of the 44
+  commits … the two other product-code touches") were written early and falsified by the window itself:
 
   ```bash
   git rev-list --count v0.4.0..HEAD                                   # commits in the window

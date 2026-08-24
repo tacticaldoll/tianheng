@@ -1172,6 +1172,17 @@ them.
 
 ### Self-governance
 
+- **The window's breaking-change classification has one owner again.** `BACKLOG.md`'s version-horizon
+  paragraph classified the window itself — naming the bare-principal resolver closure as the one item that
+  earns the minor, and calling the rest of the window's public surface additive and therefore free. Both
+  halves went stale inside the window: another entry here earned the `**BREAKING**` mark, `Outcome::Clean`
+  gaining the subject it was measured over, and it is part of the very surface that sentence called additive
+  — with a `### Migration` bullet reading *the compiler names every site*. Two owners for one fact, and the
+  one with no producer drifted. The paragraph now states the version **consequence** (pre-1.0, an adopter
+  having to act earns a minor whatever the diff size) and points here for which entries those are, rather
+  than re-deriving the answer in prose. Nothing about the release changes: `0.5.0` was already right, and the
+  marks and migration steps it rests on were already complete.
+
 - **Two ways the interpreter support window read a date it could not read are closed, and both were
   accepted before.** The reaction's date reading was `filter_map(|part| part.parse::<i64>().ok())` followed
   by a destructure of three and a `1..=12`/`1..=31` range check, and each half admitted an input it then
