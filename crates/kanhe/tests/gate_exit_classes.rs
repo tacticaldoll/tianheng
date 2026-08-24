@@ -772,3 +772,71 @@ fn every_gate_running_wrapper_is_named() {
         fronting.len()
     );
 }
+
+/// Both wrappers refuse a **flag-shaped value**, and the guard that does it is found by its call shape.
+///
+/// **This is the second instance of one class, so it is held rather than repaired twice.**
+/// `scripts/publish.sh` grew the shape check with a paragraph arguing for it, and `scripts/merge-pr.sh` kept a
+/// guard that checked only that *something* followed. The consequences differ — cargo does not consume a
+/// flag-shaped value, `gh`'s caller here does, so one leaked a refused flag past the wrapper and the other
+/// swallowed an admitted one as text — and both are the wrong diagnosis at the moment before an irreversible
+/// act. Two implementations of one rule agree by maintenance; a direction over both agrees by running.
+///
+/// **The guard's NAME is derived from how it is called, not written here.** The two wrappers spell it
+/// differently (`require_value`, `require_a_value`), and a literal pair would be a third thing to keep in
+/// step — the shape this file exists to remove. What is common is the call: three arguments, the count, the
+/// flag, and the value. So an arm calling it with two, or a wrapper whose guard stops checking the shape, is
+/// what fails here, and a third wrapper is covered on the day it is written.
+///
+/// Executed text, because both wrappers discuss `-`-leading values in prose at length.
+#[test]
+fn each_wrapper_refuses_a_flag_shaped_value_in_every_value_position() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    const CALL: &str = r#" "$#" "$1" "${2-}""#;
+    for wrapper in WRAPPERS {
+        let text = read(&root, wrapper);
+        let source = Source::of(text.as_str());
+        let executed: Vec<String> = source
+            .shell()
+            .lines()
+            .map(|line| line.trim().to_string())
+            .collect();
+
+        // Every call of the three-argument form, so a second guard cannot hide behind the first.
+        let called: BTreeSet<&str> = executed
+            .iter()
+            .filter_map(|line| line.strip_suffix(CALL))
+            .collect();
+        assert!(
+            !called.is_empty(),
+            "{wrapper} has no value guard called as `<name>{CALL}` — either its value-taking arms pass fewer \
+             arguments than the value's shape can be judged from, or the call is spelled in a form this \
+             direction cannot see. Both mean the shape is unchecked for some arm"
+        );
+
+        for guard in called {
+            // The guard's own body: from its definition to the closing brace at column zero.
+            let opens = format!("{guard}() {{");
+            let start = executed
+                .iter()
+                .position(|line| *line == opens)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{wrapper} calls `{guard}` and this direction found no `{opens}` to read"
+                    )
+                });
+            let body: Vec<&String> = executed[start + 1..]
+                .iter()
+                .take_while(|line| *line != "}")
+                .collect();
+            assert!(
+                body.iter().any(|line| line.contains("== -*")),
+                "{wrapper}'s `{guard}` takes a value and never judges its shape: a refused argument does not \
+                 become admitted by sitting in a value position, and an admitted one does not reach the tool \
+                 by being read as text. Its sibling wrapper refuses `-`-leading values; this one must too"
+            );
+        }
+    }
+}

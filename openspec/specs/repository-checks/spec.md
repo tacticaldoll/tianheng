@@ -613,6 +613,18 @@ this value as an argument of its own* is true of one case and false of most: mea
 mechanisms, one sentence, so the sentence was wrong twice. What holds for every arm and does not expire with a
 version is the wrapper's own rule: it does not accept a value beginning with `-`.
 
+**This SHALL hold at every sanctioned wrapper, and the consequence of its absence differs at each.** The
+requirement above is written from the measurement that produced it, and the measurement was cargo's; stating
+it only there left the sibling wrapper's own value positions unchecked while this text read as covering both.
+Where the tool does **not** consume a flag-shaped value, the refused argument reaches the tool. Where the
+caller **does** — `gh`'s does — the admitted flag is swallowed as text, never reaches the tool, and the gate
+then reports a subject disagreeing with the title: a refusal about the wrong thing, one step before a record
+that cannot be repaired. Both are misdiagnoses at the moment the wrapper exists for.
+
+Two implementations of one rule agree by maintenance. A reaction SHALL therefore hold the property across
+**every** wrapper, and SHALL find each guard by the **shape of its call** rather than by its name — the
+wrappers spell it differently, and a literal pair of names is a third thing to keep in step.
+
 #### Scenario: A negative value cargo documents is refused by the shape rule — a stated bound
 
 - **WHEN** a caller passes `--jobs -1`, which cargo documents — *If negative, it sets the maximum number of
@@ -690,6 +702,21 @@ for the diagnostics they carry, but they SHALL decide nothing the default refusa
 - **THEN** it is refused, and the refusal names what the act does to a pull request stacked on that branch, so
   the operator can tell when it is safe to do by hand
 - **PINNED-BY** `only_an_allowlisted_flag_reaches_the_merge`
+
+#### Scenario: A flag-shaped value at the merge wrapper
+
+- **WHEN** an admitted or refused flag is passed where the merge wrapper reads a value
+- **THEN** it is refused naming both the flag and the value, rather than read as the value's text — which
+  would send an admitted flag nowhere and have the gate report a subject that disagrees with the title
+- **PINNED-BY** `a_flag_shaped_value_is_refused_in_every_value_position`
+
+#### Scenario: A wrapper whose value guard stops judging the shape
+
+- **WHEN** a wrapper's value-taking arm calls a guard that does not judge the value's shape, or calls it with
+  fewer arguments than the shape can be judged from
+- **THEN** the reaction refuses, having found the guard by the shape of its call rather than by its name, so
+  a wrapper added later is covered on the day it is written
+- **PINNED-BY** `each_wrapper_refuses_a_flag_shaped_value_in_every_value_position`
 
 #### Scenario: An admitted argument reaches the act
 

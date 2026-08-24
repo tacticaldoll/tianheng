@@ -1172,6 +1172,26 @@ them.
 
 ### Self-governance
 
+- **Both wrappers refuse a flag-shaped value now, and a reaction holds the property across them.**
+  `repository-checks` already required it — *a value position SHALL NOT be a place a refused argument may
+  sit*, *this SHALL hold for every value-taking arm rather than the one measured to leak* — under a
+  requirement about any sanctioned irreversible act. `scripts/publish.sh` implemented it with a paragraph
+  arguing for it; `scripts/merge-pr.sh` kept a guard that checked only that *something* followed. So the
+  requirement had an unsatisfied instance, not a missing clause. The consequences differ, which is why
+  stating the rule at one wrapper read as covering both: where the tool does not consume a flag-shaped value
+  the refused argument reaches it, and where the caller **does** — `gh`'s does — the admitted flag is
+  swallowed as text and the gate then reports a subject disagreeing with the title. Measured:
+  `--subject --admin` made the subject the literal string `--admin`, the operator's flag never reached `gh`,
+  and the refusal was about the wrong thing one step before a record that cannot be repaired.
+
+  **The repair is a reaction over both, not a second copy of the guard.** Two implementations of one rule
+  agree by maintenance. `each_wrapper_refuses_a_flag_shaped_value_in_every_value_position` reads both
+  wrappers from `gate_exit_classes`'s existing `WRAPPERS` pair and finds each guard by **the shape of its
+  call** — three arguments: the count, the flag, the value — rather than by its name, because the two spell
+  it differently (`require_value`, `require_a_value`) and a literal pair of names would be a third thing to
+  keep in step. An arm calling it with two arguments, or a guard that stops judging the shape, is what fails
+  there; a third wrapper is covered on the day it is written.
+
 - **The set a job claims to cover is the one it derives.** `packaged-selftest` is named *every publishable
   crate's tests pass from its packaged tarball* and then hand-listed them twice — once for the resolve
   patches and once for the packaging loop — with nothing holding either list. The `license-files` job beside

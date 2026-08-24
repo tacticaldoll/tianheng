@@ -146,22 +146,39 @@ passthrough=()
 # stopped with no output at all — while every other refusal below prints `merge message: …`. Reproduced by
 # running the wrapper with `--subject` last: empty output, exit 1. Validating before shifting is what keeps the
 # arithmetic from becoming the diagnostic.
+# A value-taking flag's value, checked for both ways it can be wrong: absent, and flag-shaped.
+#
+# **A value position is not a place a refused argument may sit, and this arm was missing while its sibling
+# argued the point at length.** `scripts/publish.sh` refuses a value beginning with `-` and says why —
+# measured on cargo 1.96.0, `--package --no-verify` packages WITHOUT verifying. The same door stood open here
+# and had a different consequence: `--subject --admin` made the subject the literal string `--admin`, so the
+# operator's flag never reached `gh` while the gate reported a subject disagreeing with the title. It fails
+# closed and diagnoses the wrong thing, which is the class both wrappers spend paragraphs closing.
+#
+# Checked by SHAPE rather than against the refusal list, for the reason the sibling records: the list is not
+# the property. What is true here is this wrapper's own — it does not accept a value beginning with `-`, and
+# it does not read `gh`'s handling of a flag-shaped value, which differs by flag and by version.
 require_value() {
     if (($1 < 2)); then
         usage_error "refusing \`$2\` with no value: this wrapper reads every value as the argument after its \
 flag, so pass it that way or drop the flag"
+    fi
+    if [[ $3 == -* ]]; then
+        usage_error "refusing \`$2\`: its value is \`$3\`, and this wrapper does not accept a value \
+beginning with \`-\`. A refused argument does not become admitted by sitting in a value position, and an \
+admitted one does not reach \`gh\` by being read as text. Pass a value, or drop the flag"
     fi
 }
 
 while (($#)); do
     case $1 in
     --subject)
-        require_value "$#" "$1"
+        require_value "$#" "$1" "${2-}"
         subject=$2
         shift 2
         ;;
     --body-file)
-        require_value "$#" "$1"
+        require_value "$#" "$1" "${2-}"
         body_file=$2
         shift 2
         ;;
