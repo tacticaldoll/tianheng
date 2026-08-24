@@ -493,7 +493,19 @@ fn every_unpinned_bound_names_a_tracked_tracker() {
         // first checked, so a second, untracked name passed — in the check whose whole subject is that debt
         // filed where nobody looks is debt nobody owns. Every backticked name is taken and each is held
         // against the tracked set.
-        let names: Vec<String> = all_of(tracker.split('`').skip(1).step_by(2).map(str::to_string));
+        // The shared reader, which answers the marker count before it takes a pair — a tracker with an
+        // unpaired marker used to yield the prose between it and the next opener as a document name.
+        let names: Vec<String> =
+            match kanhe::reading::backticked("unpinned bound's tracker", tracker) {
+                Ok(names) => all_of(names),
+                Err(refusal) => {
+                    offences.push(format!(
+                        "  {} cites a tracker this reader cannot pair up: {}",
+                        bound.id, refusal.message
+                    ));
+                    continue;
+                }
+            };
         let untracked: Vec<&String> = names.iter().filter(|n| !tracked.contains(*n)).collect();
         if names.is_empty() || !untracked.is_empty() {
             let named = if names.is_empty() {
