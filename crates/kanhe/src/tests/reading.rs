@@ -1,4 +1,4 @@
-use crate::reading::{Sep, date, fields};
+use crate::reading::{Sep, backticked, date, fields};
 use crate::refusal::Kind;
 
 /// Both ways [`fields`] refuses, and the one way it answers.
@@ -147,4 +147,35 @@ fn a_date_outside_the_declared_spelling_is_refused() {
         crate::refusal::expect("repository-checks#fields-miscounted", &refusal);
     }
     assert!(date("support window's date", "2028-04-30").is_ok());
+}
+
+/// A marker that closes nothing is refused, where a pairing reader answered with prose instead.
+///
+/// **Measured before the repair, at both sites that had this shape.** A `## Capabilities` section listing
+/// `` `alpha` ``, a stray marker, then `` `beta` `` answered `{" here\n- ", "alpha"}` — prose named, `beta`
+/// dropped. An admitted-types clause reading `` `feat`, `fix` and `chore `` answered
+/// `["feat", "fix", "chore"]`, admitting the unterminated tail as a type. Neither could report the condition,
+/// because a shifted pairing produces names — just not the document's.
+#[test]
+fn an_unpaired_backtick_refuses_rather_than_shifting_every_pair() {
+    for text in [
+        "`alpha` a stray ` here `beta`",
+        "`feat`, `fix` and `chore",
+        "`",
+    ] {
+        let refusal = backticked("clause", text).expect_err("an odd marker count closes nothing");
+        assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+        crate::refusal::expect("repository-checks#backticks-unpaired", &refusal);
+    }
+
+    // Even counts read, in order, including an empty run and a run holding punctuation.
+    let read = |text: &str| backticked("clause", text).expect("an even marker count pairs up");
+    assert_eq!(read("`feat`, `fix` and `chore`"), ["feat", "fix", "chore"]);
+    assert!(read("no markers at all").is_empty());
+    assert_eq!(
+        read("a `` b"),
+        [""],
+        "an empty run is a run — the count decided, and the pair is what it is"
+    );
+    assert_eq!(read("`BREAKING CHANGE:`"), ["BREAKING CHANGE:"]);
 }

@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::capability_subjects::{
-    Declared, declaration_offences, join_offences, proposal_capabilities, subject_globs,
+    Declared, Named, declaration_offences, join_offences, proposal_capabilities, subject_globs,
 };
 use crate::refusal::Kind;
 
@@ -301,15 +301,47 @@ fn two_capabilities_sections_are_refused_rather_than_read_as_the_first() {
         "# p\n\n## Capabilities\n\n- `first`\n\n## Why\n\nw\n\n## Capabilities\n\n- `second`\n";
     assert_eq!(
         proposal_capabilities(proposal),
-        Err(2),
+        Named::SeveralSections(2),
         "the second section's capabilities were dropped, so a change could name one and be filed as complete"
     );
     let single = "## Why\n\nw\n\n## Capabilities\n\n- `only`\n";
-    assert_eq!(proposal_capabilities(single), Ok(listed(&["only"])));
+    assert_eq!(
+        proposal_capabilities(single),
+        Named::Names(listed(&["only"]))
+    );
 }
 
 #[test]
 fn a_capability_named_outside_the_capabilities_section_is_not_read_as_named() {
     let proposal = "## Why\n\nTouching `elsewhere`.\n\n## Capabilities\n\n- `here`: a reason\n\n## Impact\n\n`later`\n";
-    assert_eq!(proposal_capabilities(proposal), Ok(listed(&["here"])));
+    assert_eq!(
+        proposal_capabilities(proposal),
+        Named::Names(listed(&["here"]))
+    );
+}
+
+/// A marker that closes nothing is refused, where it used to shift every pair after it.
+///
+/// **Measured before the repair:** this exact section answered `{" here\n- ", "alpha"}` — the prose between
+/// the stray marker and `beta`'s opener admitted as a capability name, and `beta` dropped. The sibling
+/// [`subject_globs`] refused the analogous bullet, so one module gave one rule two answers; the error channel
+/// being a bare `usize` is why.
+#[test]
+fn a_backtick_that_closes_nothing_is_refused_rather_than_shifting_every_pair() {
+    let proposal = "# p\n\n## Capabilities\n\n- `alpha`\n- a stray ` here\n- `beta`\n";
+    match proposal_capabilities(proposal) {
+        Named::Unreadable(message) => assert!(
+            message.contains("closes nothing"),
+            "the refusal must say what is wrong with the section, got {message:?}"
+        ),
+        other => panic!(
+            "an unpaired marker shifts every pair after it and is not a reading, got {other:?}"
+        ),
+    }
+    // Paired again, the same section reads both names — so the refusal is about the marker, not the prose.
+    let paired = "# p\n\n## Capabilities\n\n- `alpha`\n- a stray `x` here\n- `beta`\n";
+    assert_eq!(
+        proposal_capabilities(paired),
+        Named::Names(listed(&["alpha", "beta", "x"]))
+    );
 }

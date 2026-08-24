@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use kanhe::capability_subjects::{
-    Declared, declaration_offences, join_offences, proposal_capabilities, subject_globs,
+    Declared, Named, declaration_offences, join_offences, proposal_capabilities, subject_globs,
 };
 use kanhe::refusal::{Kind, Refusal, cannot_judge};
 
@@ -253,12 +253,21 @@ fn a_change_names_every_capability_whose_subject_it_touches() {
         // Several `## Capabilities` sections is a fact about the proposal this reader may not resolve:
         // reading the first drops the capabilities the others name, and the join would then report the
         // change as having accounted for one it never listed.
-        let listed = proposal_capabilities(&proposal).unwrap_or_else(|count| {
-            panic!(
+        let listed = match proposal_capabilities(&proposal) {
+            Named::Names(listed) => listed,
+            Named::SeveralSections(count) => panic!(
                 "capability subjects (cannot judge): {proposal_path} carries {count} `## Capabilities` \
                  sections, so which one lists what the change touches is decided by file order"
-            )
-        });
+            ),
+            // A section whose markers do not pair up is not a section naming fewer capabilities. The reader
+            // that used to answer here admitted the prose between a stray marker and the next opener as a
+            // name and dropped the one after it, and the join then reported the change as accounting for a
+            // capability it never listed.
+            Named::Unreadable(why) => panic!(
+                "capability subjects (cannot judge): {proposal_path}'s `## Capabilities` section cannot be \
+                 read — {why}"
+            ),
+        };
         // The change's own directory is what a proposal is, not what it governs.
         let own = format!("openspec/changes/{change}/");
         let touched: Vec<String> = touched_all

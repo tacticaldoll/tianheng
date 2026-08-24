@@ -1172,6 +1172,24 @@ them.
 
 ### Self-governance
 
+- **A backticked name has one reader, and a marker that closes nothing refuses.** Three sites paired markers
+  as they arrived — `find('`')` twice in a loop, and `split('`').skip(1).step_by(2)` — so one unpaired marker
+  shifted every pair after it. Measured at both sites that had the defect: a `## Capabilities` section listing
+  `` `alpha` ``, a stray marker, then `` `beta` `` answered `{" here\n- ", "alpha"}`, admitting the prose
+  between the stray marker and `beta`'s opener as a capability name and dropping `beta`; an admitted-types
+  clause reading `` `feat`, `fix` and `chore `` answered `["feat", "fix", "chore"]`, taking the unterminated
+  tail as a type. Neither could report the condition, because a shifted pairing is readable — it yields names,
+  just not the document's.
+
+  `reading::backticked` decides the count before it takes a pair, and all three sites call it. The third site
+  was the one that refused correctly, and it refused by a shape check rather than by counting, so the correct
+  half of the module could tell the other two nothing.
+
+  `proposal_capabilities` answered `Result<BTreeSet<String>, usize>` — an error channel with room for *how many
+  sections* and none for *unreadable*, which is why the state was skipped in the module whose sibling reader
+  refuses it. It answers `Named` now, the sibling of `Declared`, and its consumer names the third state
+  rather than treating a section it cannot read as a section naming fewer capabilities.
+
 - **A branch a guard has already made unreachable is refused now, and the measurement that would have caught
   it was already in the tree.** `str::split` and `str::rsplit` always yield at least one item, so a `.next()`
   on either is always `Some` — `merge_message_gate` measured exactly this, wrote it down, and repaired its own
