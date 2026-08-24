@@ -803,10 +803,11 @@ fn each_wrapper_refuses_a_flag_shaped_value_in_every_value_position() {
     };
     for wrapper in WRAPPERS {
         let text = read(&root, wrapper);
-        let guard = wrapper_parser::value_guard(&text).unwrap_or_else(|| {
+        let guard = wrapper_parser::value_guard(&text, wrapper).unwrap_or_else(|refusal| {
             panic!(
-                "{wrapper} hands no value to any guard — no arm calls one as \
-                 `<name>{}`, so no arm's value can have its shape judged",
+                "{wrapper}: {} — no arm hands a value to a guard as `<name>{}`, or several differently-named \
+                 guards do, so no arm's value can have its shape judged",
+                refusal.message,
                 wrapper_parser::VALUE_GUARD_CALL
             )
         });

@@ -180,12 +180,22 @@ jobs:
           # them (a packaging defect latent in 0.1.0/0.1.1). This is release hygiene, not
           # architectural drift, so it is a CI check here — not a Tianheng boundary. Catch a
           # new crate that forgets the texts before it is ever published.
+          # **Cargo decides whether a crate publishes, not a grep for the word `false`.** Measured on cargo
+          # 1.96.0: `publish = []` is legal TOML that `cargo publish` refuses exactly as it refuses `false`,
+          # and `cargo metadata` reports `[]` for both — so a grep for `false` called the empty array
+          # published and would have demanded license texts from a crate that ships nowhere. A
+          # `publish.workspace = true` inheritance is invisible to a grep too, and cargo resolves it.
+          # `kanhe::manifest::publishable` is the text-side owner of the same fact; here cargo is asked
+          # directly, since this job has cargo and no build to pay for.
+          unpublishable=$(cargo metadata --no-deps --format-version 1 \
+            | python3 -c 'import sys,json; print(" ".join(p["name"] for p in json.load(sys.stdin)["packages"] if p["publish"] == []))')
           missing=0
           for manifest in crates/*/Cargo.toml; do
             dir="${manifest%/Cargo.toml}"
-            if grep -qE '^[[:space:]]*publish[[:space:]]*=[[:space:]]*false' "$manifest"; then
-              continue  # not published — its directory need not carry license texts
-            fi
+            name="$(basename "$dir")"
+            case " $unpublishable " in
+            *" $name "*) continue ;;  # cargo refuses to publish it — its directory need not carry license texts
+            esac
             for f in LICENSE-MIT LICENSE-APACHE; do
               if [ ! -s "$dir/$f" ]; then
                 echo "::error file=$dir/$f::$dir is missing $f — cargo publish ships only crate-local files, so the crate would publish without its license text (the SPDX license field is not enough)"
@@ -224,19 +234,17 @@ jobs:
           # `release_coherence_gate` derives it from `cargo metadata` for the recorded reason that a
           # path-shaped corpus went stale — so a seventh publishable crate would have been caught there and
           # silently skipped here, while this name went on saying every. One enumerator, one claim.
-          crates=()
-          for manifest in crates/*/Cargo.toml; do
-            grep -qE '^[[:space:]]*publish[[:space:]]*=[[:space:]]*false' "$manifest" && continue
-            crates+=("$(basename "$(dirname "$manifest")")")
-          done
+          # Cargo's own verdict, for the reason the `license-files` job above records: a grep for `false`
+          # calls `publish = []` published, and cargo refuses it.
+          mapfile -t crates < <(cargo metadata --no-deps --format-version 1 \
+            | python3 -c 'import sys,json; [print(p["name"]) for p in json.load(sys.stdin)["packages"] if p["publish"] != []]')
           # **A derived set can be empty and a hand-written one cannot, so the reach is asserted.** With
           # `crates=()` empty, `for crate in "${crates[@]}"` expands to nothing, the loop body never runs and
           # this job reports success over zero crates — the exact shape `gate-shape-contract` was retired for
           # reaching, "enumerating zero gates and reporting clean over all of it". The hand lists this
           # replaces could not do that. So the enumerator states its own floor.
           if ((${#crates[@]} == 0)); then
-            echo "::error::no publishable crate was derived from crates/*/Cargo.toml — this job packages and \
-          tests every one of them, and it will not report success over none"
+            echo "::error::no publishable crate was derived from cargo metadata — this job packages and tests every one of them, and it will not report success over none"
             exit 1
           fi
           echo "derived ${#crates[@]} publishable crates: ${crates[*]}"

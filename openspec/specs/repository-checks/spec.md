@@ -320,6 +320,14 @@ value is that a reader meets the two together, so it stays where a branch name s
 and agents, stated as one rather than as law. What the reaction holds instead is that the major and the date
 are read together and compared with the pin — which is the half that can go wrong silently.
 
+**The pin has three legs and the reaction SHALL read all three.** `node-version` in the workflow, the
+declaration beside it, and `engines.node` in the package manifest are one commitment written three times, and
+only two of them were held against each other. Widening `engines.node` to a range with no upper bound passes
+every other reaction while letting a local Definition of Done take a different major than CI — the
+local-versus-CI divergence the merge wrapper's CI read exists for. What the reaction SHALL hold is that the
+range admits **exactly** the pinned major: its lower bound names that major and its upper bound names the
+successor. A manifest declaring several ranges, or none, SHALL refuse.
+
 The declaration SHALL name the **major it speaks for** as well as the date, so a pin moved without it refuses
 rather than inheriting a window chosen for something else. The reaction SHALL refuse when no window is
 declared, when more than one is — a reader that takes one leaves the others binding nothing — when the major
@@ -356,6 +364,15 @@ so the date a reader is refused on is the same date everywhere.
 - **THEN** the reaction refuses, rather than reading a window chosen for a major this workflow no longer runs
 - **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
 
+#### Scenario: The package manifest's range admits a major the workflow does not pin
+
+- **WHEN** `engines.node` bounds a range that is not exactly the pinned major and its successor — no upper
+  bound, an upper bound a major too high, a lower bound below the pin, a different major, an exact version,
+  none at all, or several
+- **THEN** the reaction refuses, naming the declared range and the pinned major, rather than holding two of
+  the three legs against each other and resting the third on prose
+- **PINNED-BY** `the_engines_range_is_held_against_the_major_the_workflow_pins`
+
 #### Scenario: The window is absent, doubled, or unreadable
 
 - **WHEN** the workflow declares no window, declares more than one, or declares one whose fields are not a
@@ -363,6 +380,35 @@ so the date a reader is refused on is the same date everywhere.
 - **THEN** the reaction refuses and says what to write, rather than passing over a declaration it could not
   read
 - **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
+
+### Requirement: One fact about a manifest SHALL have one reader
+
+A property a judgement reads out of a `Cargo.toml` SHALL have exactly one implementation per language it is
+read in, and every reader SHALL carry the semantics the tool it stands in for actually has. Two readers of one
+fact reaching different verdicts is the class `manifest`'s own header exists for, and it stood in front of
+`cargo publish`.
+
+**Measured on cargo 1.96.0 rather than assumed.** `cargo publish --dry-run` refuses `publish = false` and
+refuses `publish = []` identically, and `cargo metadata` reports `[]` for both — so the empty registry list is
+an unpublishable crate, while three separate readers here looked for the word `false` and called it published.
+A `publish.workspace = true` inheritance is honoured by cargo and invisible to any of them.
+
+Where the reader is Rust it SHALL answer a **third state** for a value the manifest alone cannot decide, as
+the workspace inheritance is. Where the reader is a workflow step it SHALL ask cargo, which owns the semantics
+and needs no build to answer.
+
+#### Scenario: A crate spells its exclusion as the empty registry list
+
+- **WHEN** a member declares `publish = []`, which cargo refuses to publish exactly as it refuses `false`
+- **THEN** every reader of that fact classifies it unpublishable
+- **PINNED-BY** `every_publish_shape_cargo_honours_is_read_as_cargo_reads_it`
+
+#### Scenario: A crate inherits the field from the workspace
+
+- **WHEN** a member declares `publish.workspace = true`, whose verdict its own text cannot carry
+- **THEN** the Rust reader answers unreadable rather than guessing either way, and a judgement resting on it
+  refuses
+- **PINNED-BY** `every_publish_shape_cargo_honours_is_read_as_cargo_reads_it`
 
 ### Requirement: A generated projection SHALL be generated, and its freshness SHALL be falsifiable
 

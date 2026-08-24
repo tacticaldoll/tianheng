@@ -1172,6 +1172,48 @@ them.
 
 ### Self-governance
 
+- **One fact about a manifest has one reader per language, and cargo's own semantics reach all of them.**
+  *Is this crate published* had four readers on two criteria, and the previous round's repair added two of
+  them: two CI jobs grepped `^\s*publish\s*=\s*false`, `doc_provenance` asked
+  `starts_with("publish") && contains("false")`, and only `shengmo`'s self-governance read cargo's report.
+  Measured on cargo 1.96.0: `cargo publish --dry-run` refuses `publish = []` **exactly as** it refuses
+  `false`, and `cargo metadata` reports `[]` for both — so a crate spelling its exclusion as the empty
+  registry list was classified *published* by all three text readers. `publish.workspace = true` is honoured
+  by cargo and invisible to every one of them.
+
+  `kanhe::manifest::publishable` is the text-side owner, with a third state for the value a manifest alone
+  cannot decide — the workspace inheritance is a real instance of it, not a defensive arm. The two workflow
+  jobs ask **cargo**, which owns the semantics and needs no build to answer. Six shapes are pinned, including
+  that a `[workspace.package]` default is not a member's verdict and a commented-out key is not a key.
+
+- **The interpreter pin's third leg is read now, and the prose that rested on it was the finding.** The pin is
+  `node-version`, the `NOT-BEYOND` declaration beside it, and `engines.node` — one commitment written three
+  times, of which two were held against each other. The module header rested on *`package.json` declares
+  `">=24 <25"`* and the date refusal tells the operator *the three move together*, while the reaction saw two.
+  Widening `engines.node` to `">=24"` passed every reaction and let a local Definition of Done take a
+  different Node major than CI's `24.16.0`, silently. The reaction now holds that the range admits **exactly**
+  the pinned major — lower bound the major, upper bound its successor — and eight constructed directions cover
+  no upper bound, an upper bound a major too high, a lower bound below the pin, a different major, an exact
+  version, none, and two.
+
+- **Two rules this repository already owned were broken by the code that repaired them, and both are
+  repaired at the rule rather than the instance.** `wrapper_parser::value_guard` reduced a set of guard names
+  with `.next()` — the habit `selection` exists to end, in a module whose own header forbids shrinking a set
+  two paragraphs up. It answers `selection::the_only` over the distinct names now, so several guards in one
+  wrapper is a finding rather than a silent pick. And `parser_arms` read every `case` in the script: correct
+  only because `merge-pr.sh`'s inner `case $conclusion in` writes each body on its pattern line, so no line
+  there ends in `)`. Reformatting it would have collided that `*)` with the parser's own `*` and
+  `BTreeMap::insert` would have dropped one — a dropped catch-all being the arm every refusal rests on. The
+  scan is bounded to `case $1 in … esac` now, removing a dependency on someone else's formatting.
+
+  **Both got a direction of their own, and the first perturbation of the boundary proved nothing.** Removing
+  the boundary and reformatting the wrapper's inner case left the suite **green**: the wrapper's two
+  catch-alls carry identical properties today, so the collision is real and its consequence there is not. A
+  constructed script gives the second `case` arms whose properties differ from the parser's — a `--subject`
+  that consumes without guarding, a catch-all that consumes — and removing the boundary then reports the
+  parser's own `--subject` as unguarded. That is the difference between a guard and a restatement, and only
+  running it says which.
+
 - **A specification's prose and its scenarios are edited in one pass, and two measured repairs are declined
   rather than attempted.** The requirement added last commit had both halves of one seam wrong: *The scope
   SHALL be stated rather than implied* is a `SHALL` about that specification's own prose, which nothing can

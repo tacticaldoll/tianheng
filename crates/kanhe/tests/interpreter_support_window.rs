@@ -26,6 +26,22 @@ use std::path::PathBuf;
 
 use kanhe::reading;
 
+/// The `engines.node` range the tree's own pin requires, as `package.json` writes it.
+///
+/// A literal in a direction rather than a read of the file, so a row moves one thing: the live tree is held
+/// by `the_pinned_interpreter_is_within_its_declared_support_window`, which reads the real manifest.
+const ENGINES_FOR_24: &str = "  \"node\": \">=24 <25\"";
+
+/// The major after `major`, as text — `24` yields `25`.
+///
+/// A range's upper bound names the successor, so holding `engines.node` against the pin needs it. A
+/// non-numeric major yields itself, which the declaration's own two-field check has already refused.
+fn major_after(major: &str) -> String {
+    major
+        .parse::<u32>()
+        .map_or_else(|_| major.to_string(), |n| (n + 1).to_string())
+}
+
 /// Today in the same units, in UTC.
 ///
 /// UTC rather than local time, so the day this refuses on is the same day everywhere. A bound that fires on
@@ -37,11 +53,19 @@ fn today() -> i64 {
     (since_epoch.as_secs() / 86_400) as i64
 }
 
-/// What the workflow's declaration and its pin say together, or why they cannot be read.
+/// What the workflow's declaration, its pin and the package manifest's range say together — or why they
+/// cannot be read.
+///
+/// **`engines` is the third leg, and nothing read it until now.** The module header rested on *`package.json`
+/// declares `">=24 <25"`* and the date refusal tells the operator *the three move together*, while this
+/// function saw two. Widening `engines.node` to `">=24"` passed every reaction and let a contributor's local
+/// Definition of Done run a different Node major than CI's, silently — the local-versus-CI divergence
+/// `require_ci_green` exists for, one file over. A claim one word wider than what reacts to it was standing
+/// in this check's own header.
 ///
 /// Every refusal names what to do about the state it met rather than asserting something about Node, for the
 /// reason the module header gives.
-fn support_window(workflow: &str, today: i64) -> Result<(), String> {
+fn support_window(workflow: &str, engines: &str, today: i64) -> Result<(), String> {
     let declarations: Vec<&str> = workflow
         .lines()
         .filter_map(|line| line.trim().strip_prefix("# NOT-BEYOND:"))
@@ -117,6 +141,32 @@ fn support_window(workflow: &str, today: i64) -> Result<(), String> {
     //
     // Neither is caught by a wider range or a stricter parse alone, which is why the reader is shared rather
     // than repaired in place: the field count and the calendar are one question asked of one input.
+    //
+    // **The third leg, compared against the same major the other two agree on.** `engines.node` bounds a
+    // range rather than pinning a version, so what is held is that the range admits exactly this major: the
+    // lower bound names it and the upper bound names its successor. `.npmrc`'s `engine-strict` then makes npm
+    // stop rather than warn, which is what turns that declaration into a reaction instead of advice.
+    let expected_engines = format!(">={major} <{}", major_after(major));
+    let declared: Vec<&str> = engines
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("\"node\":"))
+        .map(|value| value.trim().trim_matches([',', '"']))
+        .collect();
+    let [declared] = declared.as_slice() else {
+        return Err(format!(
+            "`package.json` declares {} `\"node\"` ranges, and a pin bounded by one range cannot be held \
+             against several. Declare it once under `engines`",
+            declared.len()
+        ));
+    };
+    if *declared != expected_engines {
+        return Err(format!(
+            "`package.json` declares `engines.node` as `{declared}` while the workflow pins major `{major}` \
+             — the same commitment written twice, and only the workflow's half carries the date. Write \
+             `{expected_engines}`, or move the pin, the range and the window together"
+        ));
+    }
+
     let window = reading::date("support window's date", date).map_err(|refusal| refusal.message)?;
     if today >= window.days_from_epoch() {
         return Err(format!(
@@ -227,7 +277,9 @@ fn the_window_reader_decides_every_shape_of_the_declaration() {
             "a major-only pin still matches its own major",
         ),
     ] {
-        let reacted = support_window(&workflow(declaration, pin), day).is_err();
+        // The engines range is held constant at the one matching the tree's pin, so each row moves exactly
+        // one thing. The third leg's own directions are below.
+        let reacted = support_window(&workflow(declaration, pin), ENGINES_FOR_24, day).is_err();
         assert_eq!(
             reacted,
             reacts,
@@ -242,7 +294,7 @@ fn the_window_reader_decides_every_shape_of_the_declaration() {
         "        # NOT-BEYOND: 24 2030-01-01\n"
     );
     assert!(
-        support_window(&two, day).is_err(),
+        support_window(&two, ENGINES_FOR_24, day).is_err(),
         "two declared windows must refuse, since a reader that takes one leaves the other binding nothing"
     );
 }
@@ -255,7 +307,70 @@ fn the_pinned_interpreter_is_within_its_declared_support_window() {
     };
     let workflow = std::fs::read_to_string(root.join(".github/workflows/ci.yml"))
         .expect("read .github/workflows/ci.yml — the pin this bounds is declared in it");
-    if let Err(refusal) = support_window(&workflow, today()) {
+    let engines = std::fs::read_to_string(root.join("package.json"))
+        .expect("read package.json — the third leg of the pin this bounds is declared in it");
+    if let Err(refusal) = support_window(&workflow, &engines, today()) {
         panic!("{refusal}");
+    }
+}
+
+/// The third leg refuses in every direction it can be wrong, and passes in the one it can be right.
+///
+/// **Constructed rather than waited for, like the date half.** Each row moves the `engines` range while the
+/// workflow's pin and window stay at the tree's own values, so a refusal is attributable to the leg under
+/// test. The widening that motivated this — `">=24"` with no upper bound — is the first row: it satisfies
+/// npm, satisfies `engine-strict`, and lets a local run take Node 25 while CI takes 24.16.0.
+#[test]
+fn the_engines_range_is_held_against_the_major_the_workflow_pins() {
+    let workflow = "        # NOT-BEYOND: 24 2028-04-30\n          node-version: '24.16.0'\n";
+    let day = reading::date("the supplied day", "2026-08-24")
+        .expect("a real day")
+        .days_from_epoch();
+
+    for (engines, reacts, because) in [
+        (
+            r#"  "node": ">=24 <25""#,
+            false,
+            "the range admits exactly the pinned major",
+        ),
+        (
+            r#"  "node": ">=24""#,
+            true,
+            "no upper bound admits 25, which CI does not run",
+        ),
+        (
+            r#"  "node": ">=24 <26""#,
+            true,
+            "an upper bound one major too high admits the same",
+        ),
+        (
+            r#"  "node": ">=22 <25""#,
+            true,
+            "a lower bound below the pin admits a major CI does not run",
+        ),
+        (
+            r#"  "node": ">=25 <26""#,
+            true,
+            "the range names a different major than the pin",
+        ),
+        (
+            r#"  "node": "24""#,
+            true,
+            "an exact version is not the range this holds",
+        ),
+        ("", true, "no range declared at all"),
+        (
+            "  \"node\": \">=24 <25\"\n  \"node\": \">=24 <25\"",
+            true,
+            "two ranges, and a pin bounded by one cannot be held against several",
+        ),
+    ] {
+        let reacted = support_window(workflow, engines, day).is_err();
+        assert_eq!(
+            reacted,
+            reacts,
+            "`{engines}` should {} — {because}",
+            if reacts { "react" } else { "pass" }
+        );
     }
 }

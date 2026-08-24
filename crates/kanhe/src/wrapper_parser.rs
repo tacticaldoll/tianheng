@@ -11,9 +11,16 @@
 //! absent from the literal it was compared against too, and the both-ways equality then held over two sets
 //! agreeing by both missing it.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
+use crate::refusal::Refusal;
 use crate::region::Source;
+
+/// The line opening the parser both wrappers write: `case $1 in`, over the positional arguments.
+///
+/// A wrapper whose parser is spelled otherwise yields no arms, and the both-ways equality over an
+/// empty set is what refuses — the same floor `value_guard` states one function up.
+const PARSER_CASE: &str = "case $1 in";
 
 /// The call shape a value guard is recognised by: the count, the flag, and the value.
 ///
@@ -40,16 +47,23 @@ pub struct Arm {
 
 /// The value guard's name, derived from the shape of its call.
 ///
-/// `None` where no arm calls anything in that shape, which is itself a finding for a wrapper that takes
-/// values: it means no arm hands its guard a value to judge.
-pub fn value_guard(script: &str) -> Option<String> {
+/// **The candidates are a value first, and *how many* is answered explicitly.** The first form here took
+/// `.next()` over the call lines — the habit [`crate::selection`] exists to end, and the one this module's
+/// own header forbids in so many words. A wrapper with two differently-named guards would have had one
+/// silently picked, the other's arms reading as unguarded.
+///
+/// [`crate::selection::the_only`] over the **distinct** names rather than the lines: one guard called from
+/// several arms is the ordinary shape, and several guards in one wrapper is the finding. A refusal rather than
+/// `None`, so a wrapper taking values with no guard at all says which way the count was wrong.
+pub fn value_guard(script: &str, wrapper: &str) -> Result<String, Refusal> {
     let source = Source::of(script);
-    source
+    let names: BTreeSet<String> = source
         .shell()
         .lines()
         .filter_map(|line| line.trim().strip_suffix(VALUE_GUARD_CALL))
         .map(str::to_string)
-        .next()
+        .collect();
+    crate::selection::the_only(&format!("value guard in {wrapper}"), names)
 }
 
 /// Every arm of the wrapper's `case`, by flag, read against the named guard.
@@ -67,6 +81,13 @@ pub fn parser_arms(script: &str, guard: &str) -> BTreeMap<String, Arm> {
     // The trailing space excludes the guard's own definition line, which would otherwise be attributed to
     // whichever arm the reader had open — an order dependency between a function and the parser below it.
     let call = format!("{guard} ");
+    // **Bounded to the parser's own `case`, not every `case` in the file.** This read every
+    // `)`-terminated line in the script, and was correct only because `scripts/merge-pr.sh`'s inner
+    // `case $conclusion in` writes each body on its pattern line (`SUCCESS) ;;`), so no line there ends in
+    // `)`. Reformatting that inner case onto separate lines would have its `*)` open an arm and collide with
+    // the parser's own `*` in the map below — `BTreeMap::insert` would drop one silently, and a dropped
+    // catch-all is the arm every refusal rests on. The dependency was on someone else's formatting.
+    let mut in_parser = false;
     let mut arms: BTreeMap<String, Arm> = BTreeMap::new();
     let mut open: Option<(Vec<String>, Arm)> = None;
     let close = |open: &mut Option<(Vec<String>, Arm)>, arms: &mut BTreeMap<String, Arm>| {
@@ -78,6 +99,17 @@ pub fn parser_arms(script: &str, guard: &str) -> BTreeMap<String, Arm> {
     };
     for line in executed.lines() {
         let trimmed = line.trim();
+        if trimmed == PARSER_CASE {
+            in_parser = true;
+            continue;
+        }
+        if in_parser && trimmed == "esac" {
+            in_parser = false;
+            continue;
+        }
+        if !in_parser {
+            continue;
+        }
         // A `case` pattern: every alternative is a flag or the catch-all. Read this way rather than by a
         // leading `--`, so the short and glued spellings the wrappers also carry are arms here too.
         let flags: Vec<String> = trimmed

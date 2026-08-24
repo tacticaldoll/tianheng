@@ -265,8 +265,8 @@ fn a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position() {
     let declared: BTreeSet<String> = TAKES_A_VALUE.iter().map(|a| (*a).to_string()).collect();
     let script = std::fs::read_to_string(root.join("scripts/publish.sh"))
         .expect("read scripts/publish.sh — the arms this cross product runs over are its own");
-    let guard = kanhe::wrapper_parser::value_guard(&script)
-        .expect("scripts/publish.sh hands a value to a guard, and this reads the guard's name from that call");
+    let guard = kanhe::wrapper_parser::value_guard(&script, "scripts/publish.sh")
+        .expect("scripts/publish.sh hands a value to exactly one guard, and this reads its name from that call");
     let arms = kanhe::wrapper_parser::parser_arms(&script, &guard);
     let asking: BTreeSet<String> = arms
         .iter()
