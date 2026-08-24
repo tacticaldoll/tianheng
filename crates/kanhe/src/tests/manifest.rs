@@ -238,6 +238,35 @@ fn every_publish_shape_cargo_honours_is_read_as_cargo_reads_it() {
         "a named registry is a crate that publishes"
     );
 
+    // **The same two arrays, spelled with whitespace.** A literal `"[]"` arm answered *publishable* for
+    // `[ ]` — one space, legal TOML, and refused by `cargo publish` exactly as `[]` is. Measured on cargo
+    // 1.96.0: `cargo metadata` reports `[]` for it and the dry run errors. The verdict follows the contents.
+    assert_eq!(
+        publishable(&package("publish = [ ]")),
+        Publishable::No,
+        "an empty array is empty however it is spaced, and cargo refuses it"
+    );
+    assert_eq!(
+        publishable(&package("publish = [   ]")),
+        Publishable::No,
+        "and however much it is spaced"
+    );
+    assert_eq!(
+        publishable(&package(r#"publish = [ "crates-io" ]"#)),
+        Publishable::Yes,
+        "a spaced non-empty array still names a registry"
+    );
+
+    // A bracket opened and not closed on this line needs the rest of the table, which this reader does not
+    // take — so it refuses rather than reading an unterminated array as empty.
+    assert!(
+        matches!(
+            publishable(&package("publish = [")),
+            Publishable::Unreadable(_)
+        ),
+        "an unterminated array is not an empty one"
+    );
+
     // The shape whose text cannot answer: cargo honours it, and deciding it needs the workspace manifest.
     assert!(
         matches!(
