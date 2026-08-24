@@ -229,6 +229,17 @@ jobs:
             grep -qE '^[[:space:]]*publish[[:space:]]*=[[:space:]]*false' "$manifest" && continue
             crates+=("$(basename "$(dirname "$manifest")")")
           done
+          # **A derived set can be empty and a hand-written one cannot, so the reach is asserted.** With
+          # `crates=()` empty, `for crate in "${crates[@]}"` expands to nothing, the loop body never runs and
+          # this job reports success over zero crates — the exact shape `gate-shape-contract` was retired for
+          # reaching, "enumerating zero gates and reporting clean over all of it". The hand lists this
+          # replaces could not do that. So the enumerator states its own floor.
+          if ((${#crates[@]} == 0)); then
+            echo "::error::no publishable crate was derived from crates/*/Cargo.toml — this job packages and \
+          tests every one of them, and it will not report success over none"
+            exit 1
+          fi
+          echo "derived ${#crates[@]} publishable crates: ${crates[*]}"
           # Every derived member is patched, including one this packaging does not reach. An unused patch is
           # a warning and exit 0 — measured on cargo 1.96.0 packaging `xuanji` with all six patched — and
           # the alternative is a second hand-written fact, "which of them is the shell nobody depends on",

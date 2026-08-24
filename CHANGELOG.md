@@ -1183,6 +1183,13 @@ them.
   member patched, so the second hand-written fact a partial derivation would have needed — *which of them is
   the shell nobody depends on* — is not needed either. An unused patch is a warning, not a failure.
 
+  **The derivation states its own floor, because a derived set can be empty where a hand-written one cannot.**
+  With the array empty, `for crate in "${crates[@]}"` expands to nothing, the loop body never runs, and the
+  job reports success over zero crates — which is the shape `gate-shape-contract` was retired for reaching,
+  enumerating zero gates and reporting clean over all of it. The lists this replaces could not do that, so
+  removing them without the floor would have traded one silent failure for another. Both directions of the
+  guard were run standalone, and the job now prints the set it derived.
+
 - **A fixture's premise moved into the fixture where it could, and is written down where it could not.** Two
   absent-reference probes named real files this window deleted while their neighbours use `zzz` sentinels.
   One was the neighbours' shape and became one. The other **cannot be**, and that asymmetry is now recorded
