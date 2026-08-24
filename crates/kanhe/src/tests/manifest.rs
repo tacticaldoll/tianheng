@@ -295,6 +295,77 @@ fn every_publish_shape_cargo_honours_is_read_as_cargo_reads_it() {
         "executed text only — a commented-out key is not a declared one"
     );
 
+    // **A key that merely begins with those seven letters is not that key.** `strip_prefix("publish")` sent
+    // every such key down the value path, so an unrelated one standing before the real field refused the
+    // whole member — while cargo treats a key it does not know as unused and carries on. Measured on cargo
+    // 1.96.0: both of these report `publish=[]`. `publish-lockfile` is not hypothetical; cargo itself once
+    // accepted it.
+    assert_eq!(
+        publishable(&package("publishx = true\npublish = false")),
+        Publishable::No,
+        "an unrelated key sharing the prefix is skipped, and the real field still answers"
+    );
+    assert_eq!(
+        publishable(&package("publish-lockfile = true\npublish = false")),
+        Publishable::No,
+        "including a key cargo itself once had"
+    );
+    assert_eq!(
+        publishable(&package("publishx = true")),
+        Publishable::Yes,
+        "and on its own it leaves the key absent, which is cargo's publishable default"
+    );
+
+    // **The quoted spellings of the key, which the raw comparison saw as no key at all.** This is the
+    // direction that answers *publishable* for a crate cargo refuses — measured on cargo 1.96.0, both
+    // report `publish=[]`.
+    assert_eq!(
+        publishable(&package(r#""publish" = false"#)),
+        Publishable::No,
+        "a basic-quoted key is the key"
+    );
+    assert_eq!(
+        publishable(&package("'publish' = false")),
+        Publishable::No,
+        "and a literal-quoted one"
+    );
+
+    // The same direction one level out: a header spelling the reader skipped left the table unread, and an
+    // unread `[package]` answers *publishable*. Measured on cargo 1.96.0: each reports `publish=[]`.
+    assert_eq!(
+        publishable("[ package ]\nname = \"m\"\npublish = false\n"),
+        Publishable::No,
+        "a spaced header opens the same table to cargo"
+    );
+    assert_eq!(
+        publishable("[\"package\"]\nname = \"m\"\npublish = false\n"),
+        Publishable::No,
+        "and a quoted one"
+    );
+    assert_eq!(
+        publishable(&(package("publish = false") + "[package.metadata]\npublish = true\n")),
+        Publishable::No,
+        "while `[package.metadata]` is a different table and its keys are not the package's"
+    );
+
+    // Cargo refuses a manifest declaring one key twice, so a reader answering from the first of two would
+    // speak for a file cargo will not read at all.
+    assert!(
+        matches!(
+            publishable(&package("publish = false\npublish = true")),
+            Publishable::Unreadable(_)
+        ),
+        "two `publish` keys is not a verdict — cargo refuses the manifest"
+    );
+
+    // A trailing comment is not part of the value: `region::Source::toml` ends the line at the `#`, outside
+    // strings. Measured on cargo 1.96.0: `publish=[]`.
+    assert_eq!(
+        publishable(&package("publish = false # why")),
+        Publishable::No,
+        "a trailing comment is not part of the value"
+    );
+
     // The tree's own six publishable crates and two unpublishable ones, so the rows above are not the only
     // subject this reader is held over.
     assert_eq!(

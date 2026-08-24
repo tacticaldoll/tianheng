@@ -454,6 +454,30 @@ and needs no build to answer.
   own defect one layer up
 - **PINNED-BY** `every_publish_shape_cargo_honours_is_read_as_cargo_reads_it`
 
+#### Scenario: A key merely begins with the field's name
+
+- **WHEN** a `[package]` key such as `publishx` or `publish-lockfile` — a key cargo itself once accepted —
+  stands beside the real `publish` field
+- **THEN** the reader skips it and answers from the field. Cargo treats a key it does not know as unused and
+  carries on; a reader identifying the field by its prefix refused the whole member instead. A prefix is not
+  a key
+- **PINNED-BY** `every_publish_shape_cargo_honours_is_read_as_cargo_reads_it`
+
+#### Scenario: The key or the table header is quoted, or spaced
+
+- **WHEN** a member writes `"publish" = false`, `'publish' = false`, `[ package ]`, or `["package"]`
+- **THEN** the reader answers as cargo does — measured on cargo 1.96.0, each reports `publish=[]`. This is the
+  direction that matters: a spelling the reader does not recognise leaves the key or the whole table unread,
+  and an unread `[package]` answers *publishable* for a crate cargo refuses to publish
+- **PINNED-BY** `every_publish_shape_cargo_honours_is_read_as_cargo_reads_it`
+
+#### Scenario: One `[package]` table declares `publish` twice
+
+- **WHEN** two `publish` keys appear under one `[package]`
+- **THEN** the reader refuses, naming both. Cargo refuses such a manifest outright, so a reader answering from
+  the first of two would speak for a file cargo will not read at all
+- **PINNED-BY** `every_publish_shape_cargo_honours_is_read_as_cargo_reads_it`
+
 #### Scenario: The two readers are held against each other
 
 - **WHEN** the text reader's verdict for any workspace member differs from what `cargo metadata` reports for

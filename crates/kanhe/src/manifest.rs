@@ -271,45 +271,95 @@ pub enum Publishable {
 /// `require_internal_pins` records for the same corpus.
 pub fn publishable(text: &str) -> Publishable {
     let mut in_package = false;
-    for line in crate::region::Source::of(text).toml().lines() {
+    let mut declared: Option<(&str, Publishable)> = None;
+    let source = crate::region::Source::of(text);
+    for line in source.toml().lines() {
         let trimmed = line.trim();
         if trimmed.starts_with('[') {
-            in_package = trimmed == "[package]";
+            in_package = names_the_package_table(trimmed);
             continue;
         }
         if !in_package {
             continue;
         }
-        let Some(rest) = trimmed.strip_prefix("publish") else {
+        // **The key is identified exactly, and it used to be identified by its prefix.** A
+        // `strip_prefix("publish")` sent every `[package]` key beginning with those seven letters down this
+        // path: `publish-lockfile = true`, which cargo itself once accepted, read as *unreadable manifest*
+        // and refused the whole member — and cargo treats a key it does not know as unused and carries on.
+        // A prefix is not a key.
+        let Some((key, value)) = trimmed.split_once('=') else {
             continue;
         };
-        // `publish.workspace` and `publish = { … }` both need the workspace manifest to decide, so neither is
-        // a verdict this text carries. Requiring an `=` next sends both to `Unreadable`, and sends a
-        // hypothetical `publishx` there too — the three are not distinguished, and nothing needs them to be:
-        // no `[package]` key other than `publish` starts with that prefix, so the third arm is unreachable
-        // rather than conflated.
-        let value = match rest.trim_start().strip_prefix('=') {
-            Some(value) => value.trim(),
-            None => return Publishable::Unreadable(trimmed.to_string()),
+        // `publish.workspace = true` and `publish = { workspace = true }` both defer to the workspace
+        // manifest, so neither is a verdict this text carries; the dotted spelling is recognised here and
+        // the inline table falls to the value arms below.
+        let (head, dotted) = match key.trim().split_once('.') {
+            Some((head, _)) => (head, true),
+            None => (key.trim(), false),
         };
-        return match value {
-            "false" => Publishable::No,
-            "true" => Publishable::Yes,
-            // **The array is decided by its contents, not by matching one spelling of it.** A literal `"[]"`
-            // arm stood here and every other bracketed value went to `Yes`, so `publish = [ ]` — one space,
-            // legal TOML, and refused by `cargo publish` exactly as `[]` is (measured on cargo 1.96.0:
-            // `cargo metadata` reports `[]` and the dry run errors) — was answered *publishable*. In the
-            // function written because text readers called the empty array published, recognising one of its
-            // spellings.
-            other if other.starts_with('[') && other.ends_with(']') => {
-                if other[1..other.len() - 1].trim().is_empty() {
-                    Publishable::No
-                } else {
-                    Publishable::Yes
-                }
-            }
-            _ => Publishable::Unreadable(trimmed.to_string()),
+        if unquoted(head.trim()) != "publish" {
+            continue;
+        }
+        let verdict = if dotted {
+            Publishable::Unreadable(trimmed.to_string())
+        } else {
+            classify(value.trim(), trimmed)
         };
+        // Cargo refuses a manifest that declares one key twice, so a reader answering from the first of two
+        // would speak for a file cargo will not read at all.
+        if let Some((first, _)) = declared {
+            return Publishable::Unreadable(format!(
+                "two `publish` keys in one `[package]` table ({first}, {trimmed})"
+            ));
+        }
+        declared = Some((trimmed, verdict));
     }
-    Publishable::Yes
+    // An absent key is cargo's default, which is publishable.
+    declared.map_or(Publishable::Yes, |(_, verdict)| verdict)
+}
+
+/// Whether a table header opens `[package]`, in every spelling cargo honours.
+///
+/// **Measured on cargo 1.96.0, because the equality this replaced was one spelling of three.** `[ package ]`
+/// and `["package"]` are the same table to cargo — each reports `publish=[]` for a `publish = false` beneath
+/// it — while `trimmed == "[package]"` skipped both, and a reader that skips the table answers *publishable*
+/// for a crate cargo refuses to publish. `[package.metadata]` is a different table and stays one.
+fn names_the_package_table(header: &str) -> bool {
+    let inner = header.trim_start_matches('[').trim_end_matches(']').trim();
+    unquoted(inner) == "package"
+}
+
+/// A TOML key or header segment with its quotes removed, in both quoted forms cargo accepts.
+///
+/// `"publish" = false` and `'publish' = false` are the `publish` key to cargo — measured, each reports
+/// `publish=[]` — and a reader comparing the raw text saw neither, which is the direction that answers
+/// *publishable* for a crate that publishes nowhere.
+pub(crate) fn unquoted(text: &str) -> &str {
+    for quote in ['"', '\''] {
+        if let Some(inner) = text.strip_prefix(quote).and_then(|r| r.strip_suffix(quote)) {
+            return inner;
+        }
+    }
+    text
+}
+
+/// What a `publish` value says, once the key is known to be exactly `publish`.
+fn classify(value: &str, line: &str) -> Publishable {
+    match value {
+        "false" => Publishable::No,
+        "true" => Publishable::Yes,
+        // **The array is decided by its contents, not by matching one spelling of it.** A literal `"[]"` arm
+        // stood here and every other bracketed value went to `Yes`, so `publish = [ ]` — one space, legal
+        // TOML, and refused by `cargo publish` exactly as `[]` is (measured on cargo 1.96.0: `cargo
+        // metadata` reports `[]` and the dry run errors) — was answered *publishable*, in the function
+        // written because text readers called the empty array published.
+        other if other.starts_with('[') && other.ends_with(']') => {
+            if other[1..other.len() - 1].trim().is_empty() {
+                Publishable::No
+            } else {
+                Publishable::Yes
+            }
+        }
+        _ => Publishable::Unreadable(line.to_string()),
+    }
 }

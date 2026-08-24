@@ -1322,40 +1322,53 @@ fn require_lock_versions(
             in_package = trimmed == "[[package]]";
         } else if !in_package {
             continue;
-        } else if trimmed.starts_with("source") && trimmed.contains('=') {
-            sourced = true;
-        } else if trimmed.starts_with("name") && trimmed.contains('=') {
-            // An unreadable name defaulted to the empty string, which the `!name.is_empty()` guard below
-            // then read as *no package here* — so that entry's version never entered the map and the
-            // workspace lookup reported it missing, or found a stale one under the previous name.
-            match quoted_value(trimmed.split_once('=').map(|(_, v)| v).unwrap_or_default()) {
-                Quoted::Value(value) => name = value,
-                Quoted::Unreadable => {
-                    return Err(cannot_judge_at(
-                        "release-coherence#lock-package-name-unreadable",
-                        format!(
-                            "Cargo.lock carries a package name this check cannot read ({}), so the versions it \
-                         records cannot be compared",
-                            trimmed
-                        ),
-                    ));
+        } else if let Some((key, value)) = trimmed.split_once('=') {
+            // **The key is identified exactly, and `=` is decided once.** Each arm used to ask
+            // `starts_with(..) && contains('=')` and then split again with an `unwrap_or_default()` the
+            // `contains` had already made unreachable — two decisions about the same character and a
+            // default nothing could reach. A prefix is also not a key: `versionx = 1` would have entered
+            // the version arm, and cargo treats a key it does not know as unused.
+            //
+            // The header stays an exact `[[package]]` rather than sharing the manifest reader's tolerance
+            // for `[ package ]`: cargo generates this file and writes one spelling, so admitting others
+            // here would be a tolerance no measurement asked for.
+            match crate::manifest::unquoted(key.trim()) {
+                "source" => sourced = true,
+                "name" => {
+                    // An unreadable name defaulted to the empty string, which the `!name.is_empty()` guard
+                    // below then read as *no package here* — so that entry's version never entered the map
+                    // and the workspace lookup reported it missing, or found a stale one under the previous
+                    // name.
+                    match quoted_value(value) {
+                        Quoted::Value(value) => name = value,
+                        Quoted::Unreadable => {
+                            return Err(cannot_judge_at(
+                                "release-coherence#lock-package-name-unreadable",
+                                format!(
+                                    "Cargo.lock carries a package name this check cannot read ({}), so the \
+                                     versions it records cannot be compared",
+                                    trimmed
+                                ),
+                            ));
+                        }
+                    }
                 }
-            }
-        } else if trimmed.starts_with("version") && trimmed.contains('=') && !name.is_empty() {
-            match quoted_value(trimmed.split_once('=').map(|(_, v)| v).unwrap_or_default()) {
-                Quoted::Value(value) => {
-                    version_of = Some(value);
-                }
-                Quoted::Unreadable => {
-                    return Err(cannot_judge_at(
-                        "release-coherence#lock-version-unreadable",
-                        format!(
-                            "Cargo.lock records a version for {name} that this check cannot read ({}), so \
-                         whether it matches the workspace cannot be decided",
-                            trimmed
-                        ),
-                    ));
-                }
+                "version" if !name.is_empty() => match quoted_value(value) {
+                    Quoted::Value(value) => {
+                        version_of = Some(value);
+                    }
+                    Quoted::Unreadable => {
+                        return Err(cannot_judge_at(
+                            "release-coherence#lock-version-unreadable",
+                            format!(
+                                "Cargo.lock records a version for {name} that this check cannot read ({}), \
+                                 so whether it matches the workspace cannot be decided",
+                                trimmed
+                            ),
+                        ));
+                    }
+                },
+                _ => {}
             }
         }
     }
@@ -1563,9 +1576,9 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
             if unpublished {
                 machinery.push(path.to_string());
             } else {
-                if let Some(base) = path.rsplit('/').next() {
-                    published.insert(base.to_string());
-                }
+                // `str::rsplit` always yields at least one item, so the `if let` this replaced was a
+                // condition nothing could fail — the same fact `merge_message_gate` measured and recorded.
+                published.insert(path.rsplit('/').next().unwrap_or(path).to_string());
                 let mut dir = path.to_string();
                 while let Some(cut) = dir.rfind('/') {
                     dir.truncate(cut + 1);
@@ -1604,7 +1617,8 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
     let mut names: BTreeSet<String> = BTreeSet::new();
     for path in &machinery {
         names.insert(path.clone());
-        if let Some(base) = path.rsplit('/').next() {
+        {
+            let base = path.rsplit('/').next().unwrap_or(path);
             // Unique across the tree, or it names a published crate's file as well and would refuse an
             // entry that is about the product rather than about the machinery.
             if !published.contains(base) {
@@ -1628,7 +1642,6 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
     Ok(names)
 }
 
-/// `cargo metadata` for the workspace at `repo`, so the corpus above comes from the build.
 /// The workspace as cargo reports it, `--no-deps`.
 ///
 /// `pub` so a direction outside this module can hold a text reader against cargo's own answer, which is what
