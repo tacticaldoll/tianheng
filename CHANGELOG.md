@@ -1172,6 +1172,33 @@ them.
 
 ### Self-governance
 
+- **Two ways the interpreter support window read a date it could not read are closed, and both were
+  accepted before.** The reaction's date reading was `filter_map(|part| part.parse::<i64>().ok())` followed
+  by a destructure of three and a `1..=12`/`1..=31` range check, and each half admitted an input it then
+  answered for. Measured against the released reaction: `# NOT-BEYOND: 24 2028--4-30` passed, the empty
+  field between the doubled delimiter dropped and the three survivors read as `2028-04-30`; and
+  `# NOT-BEYOND: 24 2028-02-31` passed, in range and off the calendar, which the civil-calendar arithmetic
+  answered for as `2028-03-02`. The refusal for a malformed date said *names no day* while checking neither.
+  `kanhe::reading::date` now answers both as one question of one input: the field count comes from a
+  division that does not collapse a repeated delimiter, the widths are held at four-two-two so one date has
+  one spelling, and the day is held against its month's length with the leap rule in all three directions.
+  `Civil`'s fields are private so `date` is the only way in — a struct literal would otherwise build
+  `2028-02-31` and answer `days_from_epoch` for it, which is the defect made unconstructible rather than
+  caught. This also **narrows** one accepted spelling: `2028-4-30` was read as April 30th and is now
+  refused, because `YYYY-MM-DD` is the declared form and admitting both makes the reader accept two
+  spellings while its own message names one. The civil-calendar arithmetic moved to
+  `crates/kanhe/src/reading.rs` with the awkward-days table that caught a real off-by-one in it.
+
+- **A registered refusal site names one branch, which cost a repair mid-change and is worth recording.**
+  The first cut of the date reader gave two branches the same identity twice over —
+  `#date-not-the-declared-shape` for both a width failure and an unreachable parse arm, and
+  `#date-names-no-day` for both a month and a day out of range. `refusal_register` refused it in so many
+  words: *a direction citing one vouches for the others*. The month now carries
+  `#date-names-no-month`, and the unreachable parse arm is **gone** rather than re-identified — three runs
+  of ASCII digits of established width are read rather than parsed, so there is no failure arm to answer
+  for. An unreachable arm is either a fail-loud over an impossible state, which the minimalism bound
+  forbids, or a registered site no direction can observe, which is a declared gap where there is no gap.
+
 - **A reader that cannot understand its input now refuses it, and the field count is the refusal.**
   `crates/kanhe/src/reading.rs` is the sibling of `selection` for the other half of one measured class:
   `selection` answers *how many candidates are there*, and this answers *could this be read at all*. They

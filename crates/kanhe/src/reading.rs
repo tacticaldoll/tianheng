@@ -66,3 +66,121 @@ pub fn fields<'a, const N: usize>(
         )
     })
 }
+
+/// A civil date, and its distance from the epoch.
+///
+/// **The fields are private so [`date`] is the only way in.** A struct literal would build a `Civil` that
+/// no calendar has — `2028-02-31` — and then answer `days_from_epoch` for it, which is the defect this type
+/// exists to make unconstructible rather than to catch. Same argument as [`Refusal`]'s own private `site`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Civil {
+    year: i64,
+    month: i64,
+    day: i64,
+}
+
+impl Civil {
+    /// Days from 1970-01-01, proleptic Gregorian, by Howard Hinnant's civil-calendar algorithm.
+    ///
+    /// Arithmetic rather than a dependency: this crate takes `serde_json` for cargo's message stream and
+    /// nothing else, and a date library would be one added for a comparison. The algorithm is closed-form,
+    /// and the values that make a careless transcription wrong — a leap day, a century that is not a leap
+    /// year, the epoch itself — are asserted beside it.
+    pub const fn days_from_epoch(self) -> i64 {
+        let year = if self.month <= 2 {
+            self.year - 1
+        } else {
+            self.year
+        };
+        let era = if year >= 0 { year } else { year - 399 } / 400;
+        let year_of_era = year - era * 400;
+        let shifted_month = (self.month + 9) % 12;
+        let day_of_year = (153 * shifted_month + 2) / 5 + self.day - 1;
+        let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+        era * 146_097 + day_of_era - 719_468
+    }
+}
+
+/// How many days a month has, leap years included.
+const fn days_in_month(year: i64, month: i64) -> i64 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        _ => {
+            if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
+                29
+            } else {
+                28
+            }
+        }
+    }
+}
+
+/// Whether every character is an ASCII digit, and there are exactly `width` of them.
+fn digits(text: &str, width: usize) -> bool {
+    text.len() == width && text.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// The value of a run of ASCII digits, which [`digits`] establishes before this is called.
+///
+/// **No `Result`, because there is no failure.** Two or four ASCII digits cannot overflow an `i64`, and a
+/// non-digit cannot reach here.
+fn digit_value(text: &str) -> i64 {
+    text.bytes()
+        .fold(0i64, |value, byte| value * 10 + i64::from(byte - b'0'))
+}
+
+/// A `YYYY-MM-DD` date the calendar actually has, or a refusal saying which way it was not one.
+///
+/// **Two mechanisms made a date wrong here, and one repair closes both.** A component that could not be
+/// parsed was *dropped* — `filter_map(|part| part.parse().ok())` over `2028--4-30` yielded three values from
+/// four fields, so a destructure of three succeeded and the date read as `2028-04-30`. And a component in
+/// range was not checked against the calendar — `1..=12` with `1..=31` admits `2028-02-31`, which
+/// [`Civil::days_from_epoch`] then answers for as the following March. A reader whose refusal said *names no
+/// day* did neither.
+///
+/// The field count is [`fields`]'s, with `Sep::Char('-')` **not** collapsing, so a repeated delimiter is the
+/// extra field it is rather than an absence. The width is checked because `YYYY-MM-DD` is the declared form
+/// and `2028-4-30` is not it: admitting it would make the reader accept two spellings of one date while its
+/// own message names one.
+///
+/// Every refusal is a **cannot-judge**: a date this reader cannot read is a fact about the input, not a
+/// subject disagreeing with what it is judged against.
+pub fn date(what: &str, text: &str) -> Result<Civil, Refusal> {
+    let [year, month, day] = fields::<3>(what, text, Sep::Char('-'))?;
+    if !digits(year, 4) || !digits(month, 2) || !digits(day, 2) {
+        return Err(cannot_judge_at(
+            "repository-checks#date-not-the-declared-shape",
+            format!(
+                "the {what} reads `{text}`, and this reads `YYYY-MM-DD` — four digits, two, then two, so \
+                 one date has one spelling here"
+            ),
+        ));
+    }
+    // **Read rather than parsed, so there is no failure arm to answer for.** `parse::<i64>()` hands back a
+    // `Result` these three cannot take: the widths above have already established each is a run of two or
+    // four ASCII digits. An arm for it would be a fail-loud over an impossible state, which the minimalism
+    // bound forbids — and worse, the refusal register would then hold a registered site no direction can
+    // reach, which is a declared gap where there is no gap.
+    let (year, month, day) = (digit_value(year), digit_value(month), digit_value(day));
+    // The month is answered before the day, because `days_in_month` is only defined against a real month —
+    // asked about a thirteenth it falls to its February arm and the refusal would say a thirteenth month has
+    // 28 days, which is a sentence about nothing.
+    if !(1..=12).contains(&month) {
+        return Err(cannot_judge_at(
+            "repository-checks#date-names-no-month",
+            format!("the {what} reads `{text}`, and the calendar has no month {month}"),
+        ));
+    }
+    if day < 1 || day > days_in_month(year, month) {
+        return Err(cannot_judge_at(
+            "repository-checks#date-names-no-day",
+            format!(
+                "the {what} reads `{text}`, and the calendar has no such day — {year}-{month:02} has {} \
+                 days. A date past its month's end is not a later date, it is no date",
+                days_in_month(year, month)
+            ),
+        ));
+    }
+    Ok(Civil { year, month, day })
+}

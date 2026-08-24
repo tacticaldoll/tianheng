@@ -2107,3 +2107,50 @@ third scenario's, one layer up.
 - **WHEN** the support window's declaration carries one field, or three
 - **THEN** the reaction refuses through the shared reader, and adds the form to write
 - **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
+
+### Requirement: A date SHALL be one the calendar has, in one spelling
+
+A judgement reading a `YYYY-MM-DD` date SHALL refuse a text that is not that spelling, and SHALL refuse a
+date the calendar does not have. **Two mechanisms made a date wrong here and a repair closing one reads as
+closing both**, so both are stated: a component the reader could not take was *dropped*, and a component in
+range was never held against the calendar.
+
+Measured, on the interpreter support window before this: `filter_map(|part| part.parse::<i64>().ok())` over
+`2028--4-30` yielded three values from four fields, so a destructure of three succeeded and the date read as
+`2028-04-30`; and `1..=12` with `1..=31` admitted `2028-02-31`, which the civil-calendar arithmetic then
+answered for as `2028-03-02`. Both passed the reaction, and its refusal for a malformed date said *names no
+day*.
+
+The field count SHALL come from a division that does **not** collapse a repeated delimiter, so a doubled `-`
+is the extra field it is rather than an absence. The widths SHALL be held at four, two and two, so one date
+has one spelling: a reader admitting `2028-4-30` accepts two spellings while its own message names one. The
+day SHALL be held against its month's length, leap years included.
+
+Each refusal SHALL carry its **own** registered site, and no site SHALL name two branches — a direction
+citing a shared identity vouches for a branch it never reached. The arithmetic SHALL take no failure arm it
+cannot reach: three runs of ASCII digits of established width are read rather than parsed, because an
+unreachable arm is either a fail-loud over an impossible state or a registered site no direction can observe.
+
+#### Scenario: A date component the reader cannot take
+
+- **WHEN** a text carries a repeated delimiter, so it divides into more fields than a date has
+- **THEN** the field count refuses, rather than the survivors standing in for the whole
+- **PINNED-BY** `a_date_this_reader_cannot_read_is_refused_and_says_which_way`
+
+#### Scenario: A day the calendar does not have
+
+- **WHEN** every component is in range and the day is past its month's end, leap years included
+- **THEN** the reader refuses, rather than answering for it as a date in the following month
+- **PINNED-BY** `a_date_this_reader_cannot_read_is_refused_and_says_which_way`
+
+#### Scenario: A spelling that is not the declared one
+
+- **WHEN** the components are not four digits, two, then two
+- **THEN** the reader refuses, so one date has one spelling here
+- **PINNED-BY** `a_date_outside_the_declared_spelling_is_refused`
+
+#### Scenario: The civil-calendar arithmetic at its awkward days
+
+- **WHEN** the epoch, a leap day, a century that is not a leap year, and a divisible-by-400 year are read
+- **THEN** each answers its known distance from the epoch
+- **PINNED-BY** `the_calendar_arithmetic_holds_at_its_awkward_days`
