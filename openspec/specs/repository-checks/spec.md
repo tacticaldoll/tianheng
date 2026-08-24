@@ -311,7 +311,15 @@ so npm stops rather than warns — and what remains is bounded risk on a tree re
 interpreter **past the point its major is maintained** is the half with teeth, and nothing reacted to it: the
 only thing that would notice was someone remembering.
 
-The declaration SHALL sit beside the pin it bounds.
+**Adjacency is a convention rather than a requirement, and this says so because it read as one.** The
+sentence here was *the declaration SHALL sit beside the pin it bounds*, and nothing observed it: the reader
+takes the workflow's whole text and a day, and never computes a line index. Measured in the `v0.4.0..HEAD`
+static review — the declaration moved 92 lines from the pin and outside every job, and the reaction stayed
+green 3 of 3. Giving it a reaction would mean defining how near counts as *beside*, for a property whose whole
+value is that a reader meets the two together, so it stays where a branch name stays: a convention for humans
+and agents, stated as one rather than as law. What the reaction holds instead is that the major and the date
+are read together and compared with the pin — which is the half that can go wrong silently.
+
 The declaration SHALL name the **major it speaks for** as well as the date, so a pin moved without it refuses
 rather than inheriting a window chosen for something else. The reaction SHALL refuse when no window is
 declared, when more than one is — a reader that takes one leaves the others binding nothing — when the major
