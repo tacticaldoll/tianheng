@@ -187,8 +187,14 @@ jobs:
           # `publish.workspace = true` inheritance is invisible to a grep too, and cargo resolves it.
           # `kanhe::manifest::publishable` is the text-side owner of the same fact; here cargo is asked
           # directly, since this job has cargo and no build to pay for.
+          # `jq`, which `AGENTS.md`'s host-tool list already declares — not `python3`, which it does not. The
+          # first form here reached for `python3` and would have failed in the shape that paragraph exists
+          # for: `mapfile` reads zero lines from a failed process substitution and neither `set -e` nor
+          # `pipefail` sees inside `<(…)`, so the empty-set floor fires saying *no publishable crate was
+          # derived from cargo metadata* — a sentence about cargo for a fact about an absent interpreter.
+          # Measured: exit 0, array length 0. `jq`'s `null == []` is false, so the semantics are cargo's.
           unpublishable=$(cargo metadata --no-deps --format-version 1 \
-            | python3 -c 'import sys,json; print(" ".join(p["name"] for p in json.load(sys.stdin)["packages"] if p["publish"] == []))')
+            | jq -r '.packages[] | select(.publish == []) | .name' | tr '\n' ' ')
           missing=0
           for manifest in crates/*/Cargo.toml; do
             dir="${manifest%/Cargo.toml}"
@@ -237,7 +243,7 @@ jobs:
           # Cargo's own verdict, for the reason the `license-files` job above records: a grep for `false`
           # calls `publish = []` published, and cargo refuses it.
           mapfile -t crates < <(cargo metadata --no-deps --format-version 1 \
-            | python3 -c 'import sys,json; [print(p["name"]) for p in json.load(sys.stdin)["packages"] if p["publish"] != []]')
+            | jq -r '.packages[] | select(.publish != []) | .name')
           # **A derived set can be empty and a hand-written one cannot, so the reach is asserted.** With
           # `crates=()` empty, `for crate in "${crates[@]}"` expands to nothing, the loop body never runs and
           # this job reports success over zero crates — the exact shape `gate-shape-contract` was retired for

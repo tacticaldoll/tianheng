@@ -1172,6 +1172,30 @@ them.
 
 ### Self-governance
 
+- **The two readers of that fact are held against each other now, and one of them was wrong by a whole
+  spelling.** The previous entry gave *is this crate published* one criterion and left two deliberate readers
+  — `manifest::publishable` over text, cargo in the workflow — with nothing between them. What connected them
+  was a hand-kept six-crate literal in `doc_provenance`, a third owner, and `publishable`'s own matrix, which
+  is `f(literal) == expected` over strings no manifest in the tree contains: it encoded a belief about cargo
+  rather than cargo's answer.
+
+  The belief was wrong. `publish = [ ]` — one space, legal TOML, and refused by `cargo publish` exactly as
+  `[]` is (measured on cargo 1.96.0: `cargo metadata` reports `[]`, the dry run errors) — was answered
+  **publishable**, because the arms matched one spelling of the empty array and sent every other bracketed
+  value to `Yes`. In the function written because text readers called the empty array published. The verdict
+  follows the array's contents now, the literal is retired in favour of a derivation, and
+  `the_text_reader_agrees_with_cargo_about_every_member` compares every member's text verdict with cargo's own
+  report in both directions.
+
+- **A workflow step uses a host tool this repository declares.** The previous entry's repair reached for
+  `python3` in two CI jobs — in neither `AGENTS.md`'s host-tool list nor any reaction, while `jq`, already on
+  that list, does the same filter in one expression. Its absence would have failed in the shape that
+  paragraph exists for: `mapfile` reads zero lines from a failed process substitution and neither `set -e`
+  nor `pipefail` sees inside `<(…)`, so the empty-set floor fires saying *no publishable crate was derived
+  from cargo metadata* — a sentence about cargo for a fact about an absent interpreter, which is verbatim the
+  `jq` measurement that paragraph records. Measured: exit 0, array length 0. Both jobs use `jq`, whose
+  `null == []` is false, so the semantics stay cargo's.
+
 - **One fact about a manifest has one reader per language, and cargo's own semantics reach all of them.**
   *Is this crate published* had four readers on two criteria, and the previous round's repair added two of
   them: two CI jobs grepped `^\s*publish\s*=\s*false`, `doc_provenance` asked

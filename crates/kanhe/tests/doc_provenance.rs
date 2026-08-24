@@ -20,13 +20,48 @@
 
 use std::path::{Path, PathBuf};
 
-/// The crates whose `src` this reads: every workspace member that publishes.
+/// Every workspace member cargo will publish, derived rather than listed.
 ///
-/// A literal beside no enumerator would be the shape this repository refuses, so it is held against
-/// `publish = false` in the manifests by [`the_published_set_is_the_one_the_manifests_declare`].
-const PUBLISHED: [&str; 6] = [
-    "xuanji", "xingbiao", "guibiao", "hunyi", "louke", "tianheng",
-];
+/// **The literal that stood here was a third owner of one fact.** It named six crates while
+/// `kanhe::manifest::publishable` read the manifests and cargo read them too — and nothing held any pair of
+/// the three equal, so the literal was the only thing connecting the text reader to cargo's answer. It is
+/// gone: this derives the set from `publishable`, and
+/// [`the_text_reader_agrees_with_cargo_about_every_member`] holds that derivation against cargo itself.
+fn published_crates(root: &Path) -> Vec<String> {
+    let mut published = Vec::new();
+    for entry in std::fs::read_dir(root.join("crates")).expect("crates/ enumerates") {
+        let dir = entry.expect("a crates/ entry").path();
+        let manifest = dir.join("Cargo.toml");
+        if !manifest.is_file() {
+            continue;
+        }
+        let text = std::fs::read_to_string(&manifest).expect("a member manifest reads");
+        match kanhe::manifest::publishable(&text) {
+            kanhe::manifest::Publishable::Yes => published.push(
+                dir.file_name()
+                    .expect("a crate directory has a name")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            kanhe::manifest::Publishable::No => {}
+            unreadable @ kanhe::manifest::Publishable::Unreadable(_) => panic!(
+                "{}: whether this crate publishes cannot be decided from its manifest ({unreadable:?}), so \
+                 the corpus this sweep reads would be a guess",
+                manifest.display()
+            ),
+        }
+    }
+    published.sort();
+    // The enumeration is an input like any other: a corpus derived down to nothing satisfies "no doc comment
+    // names a round" exactly as a clean one does.
+    assert!(
+        published.len() > 1,
+        "{} publishable crates were derived from crates/*/Cargo.toml — this family has several, and a sweep \
+         over one is not the subject this check claims",
+        published.len()
+    );
+    published
+}
 
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
@@ -69,7 +104,8 @@ fn is_doc_line(line: &str) -> bool {
 ///
 /// Read through `kanhe::hermetic_git`, so no ambient git configuration decides which repository answers.
 fn published_sources(root: &Path) -> Vec<(String, String)> {
-    let dirs: Vec<String> = PUBLISHED
+    let published = published_crates(root);
+    let dirs: Vec<String> = published
         .iter()
         .map(|krate| format!("crates/{krate}/src"))
         .collect();
@@ -97,7 +133,7 @@ fn published_sources(root: &Path) -> Vec<(String, String)> {
     // a question nobody asked, and one that says nothing about a single crate dropping out. What the floor was
     // standing in for is that **every** published crate contributed, which is what a lost `ls-files` argument
     // or a renamed directory would break, and which no count can see.
-    for krate in PUBLISHED {
+    for krate in &published {
         let prefix = format!("crates/{krate}/src/");
         assert!(
             files.iter().any(|(path, _)| path.starts_with(&prefix)),
@@ -161,49 +197,65 @@ fn the_reader_separates_a_doc_comment_from_an_inner_one() {
     }
 }
 
-/// The published set this check reads is the set the manifests declare.
+/// The text reader and cargo agree about every member.
 ///
-/// A literal beside no enumerator agrees with nothing. Held **both ways**, because one direction catches an
-/// omission and misses a member that has outlived its subject.
+/// **Two deliberate readers of one fact needed a reaction between them, and had none.** `publishable` reads
+/// manifest text; the two workflow jobs ask cargo. What connected them was a hand-kept literal in this file —
+/// a third owner — and `publishable`'s own matrix, which is `f(literal) == expected` over strings no manifest
+/// in the tree contains: it encodes a belief about cargo rather than cargo's answer. The belief was wrong by
+/// one whole spelling, `publish = [ ]`, which cargo refuses and that reader called publishable.
+///
+/// This is the both-ways check. `Unreadable` is admitted only where the manifest genuinely defers to the
+/// workspace, which is the one case text cannot decide and cargo can — and the tree has none today, so the
+/// arm says so rather than being silently permissive.
 #[test]
-fn the_published_set_is_the_one_the_manifests_declare() {
+fn the_text_reader_agrees_with_cargo_about_every_member() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let mut declared: Vec<String> = Vec::new();
-    for entry in std::fs::read_dir(root.join("crates")).expect("crates/ enumerates") {
-        let dir = entry.expect("a crates/ entry").path();
-        let manifest = dir.join("Cargo.toml");
-        if !manifest.is_file() {
-            continue;
-        }
-        let text = std::fs::read_to_string(&manifest).expect("a member manifest reads");
-        // **`kanhe::manifest::publishable`, not a `contains("false")` of my own.** That predicate called
-        // `publish = []` published — legal TOML that `cargo publish` refuses exactly as it refuses `false`,
-        // measured on cargo 1.96.0. The fact has one owner now, and an `Unreadable` value refuses here
-        // rather than being guessed either way.
-        let publishable = kanhe::manifest::publishable(&text);
-        assert!(
-            !matches!(publishable, kanhe::manifest::Publishable::Unreadable(_)),
-            "{}: this reader cannot decide whether the crate publishes ({publishable:?}), so the set it \
-             compares against would be a guess",
-            manifest.display()
-        );
-        if publishable == kanhe::manifest::Publishable::Yes {
-            declared.push(
-                dir.file_name()
-                    .expect("a crate directory has a name")
-                    .to_string_lossy()
-                    .into_owned(),
-            );
+    let metadata = kanhe::release_coherence_gate::cargo_metadata(&root)
+        .expect("cargo metadata reads this workspace");
+    let packages = metadata["packages"]
+        .as_array()
+        .expect("cargo reports its packages as an array");
+    assert!(
+        packages.len() > 1,
+        "cargo reported {} packages — a comparison over one is not this workspace",
+        packages.len()
+    );
+
+    let mut disagreements = Vec::new();
+    let mut compared = 0usize;
+    for package in packages {
+        let name = package["name"].as_str().expect("a package has a name");
+        let manifest_path = package["manifest_path"]
+            .as_str()
+            .expect("a package has a manifest path");
+        let text = std::fs::read_to_string(manifest_path).expect("a member manifest reads");
+        // Cargo reports `[]` for `publish = false` and for every empty-array spelling of it, `null` for
+        // absent or `true`, and the registry list otherwise.
+        let cargo_says_no = package["publish"]
+            .as_array()
+            .is_some_and(|registries| registries.is_empty());
+        compared += 1;
+        match kanhe::manifest::publishable(&text) {
+            kanhe::manifest::Publishable::No if cargo_says_no => {}
+            kanhe::manifest::Publishable::Yes if !cargo_says_no => {}
+            other => disagreements.push(format!(
+                "  {name}: the text reader answers {other:?} while cargo reports \
+                 publish={} — one fact, two verdicts, in front of `cargo publish`",
+                package["publish"]
+            )),
         }
     }
-    declared.sort();
-    let mut read: Vec<String> = PUBLISHED.iter().map(|s| (*s).to_string()).collect();
-    read.sort();
     assert_eq!(
-        read, declared,
-        "this check's published-crate literal and the set the manifests declare disagree — a crate added or \
-         retired on one side only"
+        compared,
+        packages.len(),
+        "every package cargo reported was compared"
+    );
+    assert!(
+        disagreements.is_empty(),
+        "the manifest text reader and cargo disagree:\n{}",
+        disagreements.join("\n")
     );
 }

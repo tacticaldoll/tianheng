@@ -410,6 +410,35 @@ and needs no build to answer.
   refuses
 - **PINNED-BY** `every_publish_shape_cargo_honours_is_read_as_cargo_reads_it`
 
+#### Scenario: The empty array is spelled with whitespace
+
+- **WHEN** a member declares `publish = [ ]`, which cargo refuses exactly as it refuses `[]`
+- **THEN** the reader answers unpublishable — the verdict follows the array's contents rather than one
+  spelling of it, because a reader recognising a single spelling of the value it exists for is that value's
+  own defect one layer up
+- **PINNED-BY** `every_publish_shape_cargo_honours_is_read_as_cargo_reads_it`
+
+#### Scenario: The two readers are held against each other
+
+- **WHEN** the text reader's verdict for any workspace member differs from what `cargo metadata` reports for
+  it — in either direction
+- **THEN** the reaction refuses, naming the member and both verdicts. A matrix over literals encodes a
+  **belief** about cargo; only cargo's own answer over the real manifests holds the belief. The `Unreadable`
+  verdict is admitted only where the manifest genuinely defers to the workspace, which is the one case text
+  cannot decide and cargo can
+- **PINNED-BY** `the_text_reader_agrees_with_cargo_about_every_member`
+
+**A workflow step SHALL use a host tool `AGENTS.md` declares.** A step reaching for an undeclared interpreter
+fails in the shape that paragraph exists for rather than in its own: `mapfile` reads zero lines from a failed
+process substitution and neither `set -e` nor `pipefail` sees inside `<(…)`, so an empty-set floor fires with
+a sentence about the data for a fact about the tool. Measured: exit 0, array length 0.
+
+#### Scenario: A step reaches for an interpreter the host-tool list does not name
+
+- **WHEN** a workflow step needs a tool outside that list to read its own input
+- **THEN** the step uses a declared tool instead, or the list names the new one and which jobs need it — the
+  paragraph is the documented half with no reaction, so keeping it current is the only thing holding it
+
 ### Requirement: A generated projection SHALL be generated, and its freshness SHALL be falsifiable
 
 A document this repository generates SHALL be produced from the source it projects, and its freshness check
@@ -2284,9 +2313,10 @@ require it to separate them.
 - **THEN** it reports neither — the corpus boundary and the token boundary are each decided by a run
 - **PINNED-BY** `the_reader_separates_a_doc_comment_from_an_inner_one`
 
-#### Scenario: The published-crate literal outlives its subject
+#### Scenario: A crate is added, retired, or stops being published
 
-- **WHEN** a crate is added or retired, or its `publish = false` moves, and the reaction's literal is not
-  updated
-- **THEN** the reaction refuses, holding the literal against the manifests in both directions
-- **PINNED-BY** `the_published_set_is_the_one_the_manifests_declare`
+- **WHEN** a crate enters or leaves the workspace, or its `publish` key changes
+- **THEN** the corpus this reaction sweeps follows, because it derives the published set from the member
+  manifests rather than carrying a literal — a written-down set beside the source it must cover is a second
+  owner of one fact, and the reaction whose corpus is wrong reports a clean sweep
+- **PINNED-BY** `no_doc_comment_in_a_published_crate_indexes_its_provenance_by_round`

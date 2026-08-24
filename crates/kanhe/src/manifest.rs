@@ -283,8 +283,11 @@ pub fn publishable(text: &str) -> Publishable {
         let Some(rest) = trimmed.strip_prefix("publish") else {
             continue;
         };
-        // `publish.workspace` and `publish = { … }` both need the workspace manifest, and `publishx` is
-        // another key entirely — so the character after the name decides which of the three this is.
+        // `publish.workspace` and `publish = { … }` both need the workspace manifest to decide, so neither is
+        // a verdict this text carries. Requiring an `=` next sends both to `Unreadable`, and sends a
+        // hypothetical `publishx` there too — the three are not distinguished, and nothing needs them to be:
+        // no `[package]` key other than `publish` starts with that prefix, so the third arm is unreachable
+        // rather than conflated.
         let value = match rest.trim_start().strip_prefix('=') {
             Some(value) => value.trim(),
             None => return Publishable::Unreadable(trimmed.to_string()),
@@ -292,8 +295,19 @@ pub fn publishable(text: &str) -> Publishable {
         return match value {
             "false" => Publishable::No,
             "true" => Publishable::Yes,
-            "[]" => Publishable::No,
-            other if other.starts_with('[') && other.ends_with(']') => Publishable::Yes,
+            // **The array is decided by its contents, not by matching one spelling of it.** A literal `"[]"`
+            // arm stood here and every other bracketed value went to `Yes`, so `publish = [ ]` — one space,
+            // legal TOML, and refused by `cargo publish` exactly as `[]` is (measured on cargo 1.96.0:
+            // `cargo metadata` reports `[]` and the dry run errors) — was answered *publishable*. In the
+            // function written because text readers called the empty array published, recognising one of its
+            // spellings.
+            other if other.starts_with('[') && other.ends_with(']') => {
+                if other[1..other.len() - 1].trim().is_empty() {
+                    Publishable::No
+                } else {
+                    Publishable::Yes
+                }
+            }
             _ => Publishable::Unreadable(trimmed.to_string()),
         };
     }

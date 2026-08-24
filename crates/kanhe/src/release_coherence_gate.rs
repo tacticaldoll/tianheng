@@ -1629,7 +1629,12 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
 }
 
 /// `cargo metadata` for the workspace at `repo`, so the corpus above comes from the build.
-fn cargo_metadata(repo: &Path) -> Result<serde_json::Value, Refusal> {
+/// The workspace as cargo reports it, `--no-deps`.
+///
+/// `pub` so a direction outside this module can hold a text reader against cargo's own answer, which is what
+/// `repository-checks`'s *one fact about a manifest has one reader* asks for: two deliberate readers of one
+/// fact need a reaction between them, or the second encodes a belief about the first.
+pub fn cargo_metadata(repo: &Path) -> Result<serde_json::Value, Refusal> {
     let out = std::process::Command::new(env!("CARGO"))
         .args(["metadata", "--no-deps", "--format-version", "1"])
         .current_dir(repo)
