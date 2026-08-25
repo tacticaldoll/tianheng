@@ -1172,6 +1172,39 @@ them.
 
 ### Self-governance
 
+- **A signature verifier that could not run was reported as a signature that does not verify, one line before
+  an irreversible upload.** `check_novalidate` returned a `bool`, and that single `false` carried four
+  different facts: the verifier could not be spawned, could not be handed its payload, could not be reaped, or
+  **ran and rejected the signature**. The caller turned every one of them into
+  `signature-does-not-verify` — a **violation**. `publish-source-integrity` states the rule the other way in so
+  many words: *a signature this gate cannot read SHALL be a cannot-judge, never a violation*, and the three
+  refusals guarding armour, suffix and writability already answered that way. So a machine out of processes
+  would have been told its release tag's signature was bad, and `scripts/publish.sh` would have exited `1` —
+  *a gate ran and refused* — where the fact was `2`.
+
+  **The round-trip probe is why this survived review, and it narrows rather than closes.** The gate proves the
+  mechanism before trusting it to judge, and its own comment says why: *without it, a broken `ssh-keygen -Y`
+  would refuse every signature and read as a violation*. That catches a broken verifier before any verdict.
+  What it cannot catch is the second invocation failing where the first succeeded.
+
+  The verification result carries the distinction in its type now, and `pipe_into` — the wrapper whose whole
+  job was that collapse — is gone with it. The two directions over it moved to `deliver_and_reap` and were
+  strengthened on the way: *undeliverable* is asserted as `None` rather than as *not a success*.
+
+  **One refusal site, not two, and the reason is that a site must be observable.** Splitting *could not spawn*
+  from *could not deliver* would register a site no direction can construct, since process exhaustion and a
+  broken pipe are not states a test may manufacture. Naming the verifier is the one perturbation that reaches
+  the arm honestly, so `verify_with` takes the program and `check_novalidate` passes `ssh-keygen`.
+
+  **Asserted as the exit class, not as "it refused".** A direction checking only that verification failed
+  passes under both implementations — non-zero cannot see `1` from `2`, which is the shape both wrappers spend
+  paragraphs on. The direction reads the refusal's kind and its registered site, and carries the opposite arm
+  in the same fixture: a verifier that *did* run and rejected must stay `Ok(false)`, or closing the
+  cannot-judge class would close the violation with it.
+
+  `refusal_register` refused the new site until a direction observed it, and `reference_integrity` refused two
+  phrasings in the prose written for this repair — a positional *arms above* and a relative *this window*.
+
 - **Three audited backlog entries close their causes rather than staying open on a measurement nobody would
   re-run.** `AGENTS.md` requires it in so many words — *a governance rule measured as un-reacted is given a
   reaction or filed, in the same change*, because *the measurement is the expensive part and it is already
