@@ -226,7 +226,7 @@ same rule that keeps a recognizer asserting its own emptiness elsewhere here.
 #### Scenario: A line whose code-span membership cannot be decided
 
 - **WHEN** a tracked line carries an odd number of single backticks, because a Markdown code span wraps across
-  it — measured when this was written: 331 lines across 68 tracked files
+  it
 - **THEN** the whole line is scanned for the coordinate shape rather than paired. A per-line pairing reads the
   prose between one span's closer and the next opener as the document's own backticked text, which is the
   spans this check would have judged. Scanning entire over-reacts in the safe direction — a coordinate outside
@@ -394,12 +394,11 @@ that reads no CHANGELOG at all.
 #### Scenario: A Rust identifier named in prose is not resolved — a stated bound
 
 - **WHEN** a doc comment writes a backticked snake_case name in prose rather than as an intra-doc link
-- **THEN** nothing reacts, and no reader of text can make it. Measured over every published crate's `src`:
-  2,373 such tokens, of which 859 match no declaration anywhere in the tree — and the 30 most frequent
-  unmatched ones are 19 Rust keywords (`use`, `mod`, `dyn`, `fn`, `impl`), attribute names (`cfg_attr`), and
-  std method names (`create_new`, `strip_prefix`, `remove_dir_all`). Telling a name that should resolve from
-  one that should not needs type information about a receiver, which `inline-symbol-path-confinement` already
-  declares unobserved.
+- **THEN** nothing reacts, and no reader of text can make it. Such tokens routinely match no declaration
+  anywhere in the tree, and the most frequent of those are Rust keywords (`use`, `mod`, `dyn`, `fn`, `impl`),
+  attribute names (`cfg_attr`) and std method names (`create_new`, `strip_prefix`, `remove_dir_all`). Telling
+  a name that should resolve from one that should not needs type information about a receiver, which
+  `inline-symbol-path-confinement` already declares unobserved.
 - **AND** the natural alternative was measured and is worse: rewriting such a token as `[`name`]` makes
   `rustdoc -D warnings` the reaction, and it does refuse an unresolvable one — but 8 of 8 sampled candidates,
   selected as *a name declared in the same crate*, were parameters, fields or locals whose link form

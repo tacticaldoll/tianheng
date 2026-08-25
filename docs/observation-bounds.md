@@ -261,7 +261,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `reference-integrity/a-rust-identifier-named-in-prose-is-not-resolved-a-stated-bound`
 
-> nothing reacts, and no reader of text can make it. Measured over every published crate's `src`: 2,373 such tokens, of which 859 match no declaration anywhere in the tree — and the 30 most frequent unmatched ones are 19 Rust keywords (`use`, `mod`, `dyn`, `fn`, `impl`), attribute names (`cfg_attr`), and std method names (`create_new`, `strip_prefix`, `remove_dir_all`). Telling a name that should resolve from one that should not needs type information about a receiver, which `inline-symbol-path-confinement` already declares unobserved.
+> nothing reacts, and no reader of text can make it. Such tokens routinely match no declaration anywhere in the tree, and the most frequent of those are Rust keywords (`use`, `mod`, `dyn`, `fn`, `impl`), attribute names (`cfg_attr`) and std method names (`create_new`, `strip_prefix`, `remove_dir_all`). Telling a name that should resolve from one that should not needs type information about a receiver, which `inline-symbol-path-confinement` already declares unobserved.
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a Rust identifier named in prose is resolved by no reaction*
 
@@ -331,7 +331,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `repository-checks/a-marker-is-reached-through-some-other-primitive-a-stated-bound`
 
-> the reaction reports nothing. Those five are in live use for reading a *single* delimited value rather than pairing a sequence — measured when this was written: five sites, none of them a pairing — so refusing them would refuse the honest use, and telling the two apart needs the expression's shape rather than the primitive's name
+> the reaction reports nothing. Those five are in live use for reading a *single* delimited value rather than pairing a sequence, and none of their live uses is a pairing — so refusing them would refuse the honest use, and telling the two apart needs the expression's shape rather than the primitive's name
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the backtick primitives the pairing reader names*
 

@@ -81,8 +81,8 @@ pub enum Named {
 /// is a capability quietly governing less than it says, which is the condition this whole module exists to
 /// make falsifiable, performed by the module.
 ///
-/// Measured when this was written: 87 subject bullets across the specs, none of them unparseable — so the
-/// silent narrowing was latent, and running the check could not have found it.
+/// No spec's subject bullet was unparseable when this was written, so the silent narrowing was latent and
+/// running the check could not have found it.
 ///
 /// **And the same rule reaches the section, which `.nth(1)` did not.** Taking the text after the *first*
 /// marker made no choice about how many there are: a spec carrying two `## Subject` sections had the second

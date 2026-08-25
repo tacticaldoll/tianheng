@@ -155,8 +155,8 @@ fn every_gate_a_wrapper_cites_is_a_test_that_exists() {
 ///
 /// Markdown only, deliberately. A Rust source carries these pairs as **fixture input** — the directions in
 /// `reference_integrity.rs` plant `-p k --test t` as text for a parser to chew on — and admitting them would
-/// report a test asserting its own parser as a broken command. Measured: 35 occurrences across the tree, of
-/// which those fixtures are two and the `COOKBOOK.md` line was the one real defect.
+/// report a test asserting its own parser as a broken command. The one real defect this was written for was
+/// a `COOKBOOK.md` line.
 #[test]
 fn every_command_a_document_hands_a_reader_names_a_target_that_exists() {
     let Some(root) = workspace_root() else {
