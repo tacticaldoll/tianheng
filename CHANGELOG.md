@@ -1172,6 +1172,44 @@ them.
 
 ### Self-governance
 
+- **The same misclassification, one state further in: the repair that lifted three no-verdict facts out of a
+  boolean wrote `Ok(status.success())` and folded a fourth back.** On Unix a process terminated by a signal
+  answers `success() == false` with `code() == None`. It was **reaped**, so delivery succeeded, and it rejected
+  nothing — it never ran to a verdict. The caller would have reported `signature-does-not-verify`, a violation,
+  for a process the kernel killed, one line before an irreversible upload.
+
+  **Why the first repair missed it, stated because the shape is the lesson.** That change replaced a return
+  *type*, and the attention went there: three failure paths were lifted out by name and the predicate reading
+  the reaped status was carried across unread. A repair that swaps a channel moves attention onto the channel
+  and off the clause — so the verdict is read from the exit **code** now, in three arms, rather than from a
+  predicate that answers the same for a rejection and a killing.
+
+  `verdict_of` takes the status and answers `Some(0)`, `Some(n)`, `None`. **The three are exhaustive and that
+  was checked rather than assumed**: `ExitStatus` has no fourth answer, the `None` arm is Unix-only, and on a
+  platform where every exit carries a code it is unreachable rather than wrong. A verifier that *hangs* is not
+  among them — nothing here times out, so it stalls the gate instead of misclassifying, which is a different
+  property and not this function's to answer.
+
+  **The direction gets its status from the kernel, not from a constructor.** A fabricated `ExitStatus` would
+  assert against someone's idea of what a signalled exit looks like; `sh -c 'kill -9 $$'` makes a real one, and
+  the fixture first checks that the status it built *carries no code* — so a platform where every exit does
+  would report that rather than pass vacuously. All three arms sit in one direction, because a clean exit must
+  verify, a non-zero exit must stay the rejection the caller turns into a violation, and no code at all must be
+  unjudgeable.
+
+  The refusal site is a module-level function now rather than a closure, since `refusal_register` identifies a
+  site by the literal opening its constructor: one fact, one literal, one place to read it from.
+
+  **The direction had to move, and where it moved is the point.** Written first in
+  `crates/kanhe/src/tests/publish_source_gate.rs`, it made `no_judgement_reads_an_ambient_ignore_file` refuse
+  that file: the check is a file-level conjunction — an ignore-sensitive git literal **and** a bare
+  `Command::new` — and the fixture builder there already spelled `"add"`. Its own documentation calls that
+  granularity out and offers naming `core.excludesFile` as the way past, which here would have meant writing a
+  git setting into a file whose three new spawns are `sh`, `true` and `false`. So the direction moved to the
+  gate module's own tests instead, which the check already passes because that file neutralises the channel
+  explicitly — `-c core.excludesFile=/dev/null`, measured in its own table. The observation of the refusal site
+  stays with its sibling in the register's corpus; naming it twice would claim two observations of one site.
+
 - **A signature verifier that could not run was reported as a signature that does not verify, one line before
   an irreversible upload.** `check_novalidate` returned a `bool`, and that single `false` carried four
   different facts: the verifier could not be spawned, could not be handed its payload, could not be reaped, or
