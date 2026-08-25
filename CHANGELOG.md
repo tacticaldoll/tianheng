@@ -1172,6 +1172,35 @@ them.
 
 ### Self-governance
 
+- **The pipeline reaction's corpus is a parameter now, and the two places the class mattered most were
+  outside it.** The reaction was written for `ci.yml` and both wrappers ran
+  `printf '%s' "$output" | grep -qE 'test result: ok\. 1 passed'` under `set -Eeuo pipefail`, in front of
+  `cargo publish` and `gh pr merge`. If it had fired, a passing gate would have reported *the gate did not
+  run — its invocation selected no passing test* and stopped the act: a refusal about a renamed test for a
+  fact about a closed pipe, immediately before something that cannot be undone.
+
+  It is not live, and why it is not live is the point. Measured over a 405 KB stream: with the token at the
+  end — where a `cargo test` summary sits — 0 of 8 runs returned non-zero, because `grep` must read
+  essentially everything before matching; with the same token near the start, 8 of 8 did. Both wrappers were
+  holding by where the token happened to sit, which nothing declares and nothing keeps true. Both read a
+  here-string now.
+
+  The reader was narrow in two more ways. It took only the segment after the **last** `|`, so a `grep -q`
+  standing mid-pipeline was invisible; it now tests every stage fed by a pipe, and only those — a
+  `grep -q … <<< "$value"` opening a line closes nothing, and testing every segment reported the SARIF
+  assertion this rule exists to have repaired. And it matched three literal prefixes, so `grep -Eq` — the
+  same request with the cluster written the other way round — matched none of them; the consumer is decided
+  by what its flags ask for, long forms included.
+
+- **A derivation stands where its status is visible, and the entry stating that added a second one.** The
+  commit that converted `packaged-selftest`'s `mapfile -t crates < <(…)` wrote *the tool's absence is now the
+  tool's own error* and added a new `mapfile -t declared < <(…)` to the `msrv` job in the same diff.
+  `pipefail` cannot see inside `<(…)`: measured, an absent `jq` gives exit 0 and zero lines through the
+  process substitution, against exit 127 through a command substitution. The `!= 1` floor caught it and named
+  the workspace for a fact about the tool — the exact misdirection the sibling job's comment records as
+  removed. `no_step_reads_a_value_through_a_process_substitution` refuses the shape now, over the same
+  three-file corpus.
+
 - **Every backtick pair now goes through the one reader, and a check that reads spans by line says which line
   it cannot decide.** The entry two below extracted `reading::backticked` and converted the three sites a
   review had named. Sweeping this session's own output found `split('`').skip(1).step_by(2)` still standing in

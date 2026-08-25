@@ -335,9 +335,9 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a gate that is its own test is outside the refusal register*
 
-### `repository-checks/a-consumer-that-stops-early-is-not-on-the-reader-s-list-a-stated-bound`
+### `repository-checks/a-consumer-that-stops-early-is-neither-head-nor-grep-a-stated-bound`
 
-> the reaction reports nothing. The set of programs that exit early is not closed and no reader over shell text can decide it, so the three names are what this shape looked like in the workflow's own history. This closes the door that was open, not every door
+> the reaction reports nothing. Naming programs is the instrument: the set that exits early is not closed, and the question behind it — *does this stage read its input to EOF* — is not one a reader over shell text can decide. This closes the door that was open, not every door
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the early-exit consumers the pipeline reader names*
 

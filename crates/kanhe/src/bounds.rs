@@ -127,16 +127,17 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::unpinned(
             BoundId::new(
-                "repository-checks/a-consumer-that-stops-early-is-not-on-the-reader-s-list-a-stated-bound",
+                "repository-checks/a-consumer-that-stops-early-is-neither-head-nor-grep-a-stated-bound",
             ),
             "a pipeline whose last stage exits before its producer finishes under a program name this \
              reader does not list",
             Extent::Reached(Reached::UnderReacts {
-                because: "the reader recognises `grep -q`, `grep -m` and `head`, which is what this shape \
-                          looked like in the workflow's own history. The set of programs that exit early is \
-                          not closed, and the question behind it -- does this stage read its input to EOF -- \
-                          is not one a reader over shell text can answer. The three names close the door \
-                          that was open rather than every door"
+                because: "the reader decides by what a stage's flags ask for -- `head`, or a `grep` whose \
+                          flag cluster carries `q` or `m` -- rather than by literal spellings, which is why \
+                          `grep -Eq` is caught where three prefix names missed it. Naming programs is still \
+                          the instrument: the set that exits early is not closed, and the question behind \
+                          it -- does this stage read its input to EOF -- is not one a reader over shell text \
+                          can answer"
                     .into(),
                 owner: Owner::Engine,
             }),

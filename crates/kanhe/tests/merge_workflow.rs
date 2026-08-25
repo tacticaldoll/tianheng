@@ -2015,61 +2015,175 @@ fn a_flag_shaped_value_is_refused_in_every_value_position() {
     }
 }
 
-/// Consumers that stop before their producer finishes, so `pipefail` reports the producer's SIGPIPE.
+/// Every tracked text this repository owns that runs shell under `pipefail`.
 ///
-/// **An approximation, and named as one.** These three are what the shape looks like in this workflow's own
-/// history; the set of programs that exit early is not closed, and a reader over shell text cannot decide it.
-/// A pipeline ending in something not listed here passes, so this closes the door that was open rather than
-/// every door.
-const EXITS_EARLY: [&str; 3] = ["grep -q", "grep -m", "head"];
+/// **The corpus is a parameter, and it used to be one file.** The reaction was written for `ci.yml` and the
+/// two places the class matters most were left out: both wrappers front an irreversible act and both ran
+/// `printf '%s' "$output" | grep -qE …` under `set -Eeuo pipefail`. `scripts/` is where `gate_exit_classes`
+/// already keeps its own wrapper corpus, so this is a list rather than new machinery.
+const RUNS_SHELL_UNDER_PIPEFAIL: [&str; 3] = [
+    ".github/workflows/ci.yml",
+    "scripts/merge-pr.sh",
+    "scripts/publish.sh",
+];
 
-/// A step that reads a value does not read it through a pipeline whose consumer stops early.
+/// Whether a pipeline stage stops before its producer finishes, and under what name.
+///
+/// **Decided by what the flags ask for, not by three literal spellings.** The first reader matched
+/// `grep -q`, `grep -m` and `head` as prefixes, so `grep -Eq` — the same request with the cluster written the
+/// other way round — matched none of them. A flag cluster carrying `q` or `m` is the request; `--quiet` and
+/// `--max-count` are its long forms.
+fn stops_early(segment: &str) -> Option<String> {
+    let mut words = segment.split_whitespace();
+    let program = words.next()?;
+    // `head` reads what it was asked for and closes the pipe, whatever its flags say.
+    if program == "head" {
+        return Some("head".to_string());
+    }
+    if program != "grep" && program != "egrep" && program != "fgrep" {
+        return None;
+    }
+    for word in words {
+        if word == "--quiet" || word == "--silent" || word.starts_with("--max-count") {
+            return Some(format!("{program} {word}"));
+        }
+        // A short cluster: one `-` and no second one, so `--exclude` is not read as `-e -x …`.
+        if let Some(cluster) = word.strip_prefix('-').filter(|c| !c.starts_with('-')) {
+            if cluster.contains('q') || cluster.contains('m') {
+                return Some(format!("{program} -{cluster}"));
+            }
+        }
+    }
+    None
+}
+
+/// Every stage on one line that is fed by a pipe, with `||` kept out of it.
+///
+/// **Every fed stage, not the last one.** The first reader took the text after the final `|`, so a `grep -q`
+/// standing mid-pipeline — which closes the pipe on everything upstream of it exactly as a final one does —
+/// was invisible.
+///
+/// **And only the fed ones.** A `grep -q … <<< "$value"` opening a line reads a here-string and closes
+/// nothing; widening the reader to every segment reported the SARIF assertion that this whole rule exists to
+/// have repaired. The first stage of each `||`-separated run is the producer, so it is not a consumer of
+/// anything.
+fn pipeline_stages(line: &str) -> Vec<&str> {
+    line.split("||")
+        .flat_map(|run| run.split('|').skip(1))
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+        .collect()
+}
+
+/// No shell this repository runs reads a value through a pipeline stage that stops early.
 ///
 /// **This is `pipefail`'s cost, and it is held rather than remembered.** `grep -q` exits at its first match,
-/// and under `pipefail` the `printf` upstream of it takes SIGPIPE and fails the whole pipeline: measured 141
-/// on five of five runs over a document the size of this workflow's SARIF fixture. The assertion would have
-/// failed for the shape of the check rather than for the document — and it is exactly the kind of failure
-/// nobody reads as *the pipeline shape*, because the message names the document.
+/// and under `pipefail` the producer upstream takes SIGPIPE and that becomes the pipeline's status: measured
+/// 141 on five of five runs over a document the size of this workflow's SARIF fixture. The message names the
+/// data, which is why nobody reads it as the pipeline's shape.
 ///
-/// Two more of the same shape were in this workflow when strictness was adopted, both reading a value: the
-/// MSRV through `sed … | head -n1`, and the packaged tarball through `ls … | head -1`. Neither tripped, for a
-/// reason that is not a property of the check: `cargo metadata` emits one line of JSON, so `sed` printed once
-/// and reached EOF. A latent SIGPIPE waiting on an output shape is worse than a live one.
+/// **And whether it fires is a property of the payload, not of the pipeline.** Both wrappers ran this shape
+/// in front of `cargo publish` and `gh pr merge`. Measured over a 405 KB stream: with the token at the end,
+/// where a `cargo test` summary sits, 0 of 8 runs returned non-zero — `grep` must read essentially all of it
+/// before matching; with the same token near the start, 8 of 8 did. They were holding by where the token
+/// happened to sit, and a refusal there says *the gate did not run* about a closed pipe, immediately before
+/// an act that cannot be undone.
+///
+/// Two more of the same shape were in `ci.yml` when strictness was adopted and did not trip either, for the
+/// same kind of reason: `cargo metadata` emits one line of JSON, so `sed … | head -n1` printed once and
+/// reached EOF. A latent SIGPIPE waiting on an output shape is worse than a live one.
 #[test]
 fn no_step_reads_a_value_through_a_pipeline_that_stops_early() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let path = root.join(".github/workflows/ci.yml");
-    let text = std::fs::read_to_string(&path)
-        .expect("read .github/workflows/ci.yml — the pipelines this holds are declared in it");
-
     let mut standing = Vec::new();
-    for (number, line) in text.lines().enumerate() {
-        let trimmed = line.trim();
-        // Comments are excluded by position: the paragraphs recording this measurement name the very
-        // consumers they forbid, so a reader matching the bare text would refuse its own reason.
-        if trimmed.starts_with('#') || !trimmed.contains('|') {
-            continue;
-        }
-        // The last stage is the one whose early exit closes the pipe on everything upstream.
-        let Some((_, last)) = trimmed.rsplit_once('|') else {
-            continue;
-        };
-        let last = last.trim();
-        if let Some(consumer) = EXITS_EARLY.iter().find(|c| last.starts_with(**c)) {
-            standing.push(format!(
-                "  {}:{}: `{consumer}` closes the pipe before its producer finishes, and under `pipefail` \
-                 the producer's SIGPIPE is the pipeline's status — read the value without a pipe (a \
-                 here-string, or a glob become a value) instead",
-                path.display(),
-                number + 1
-            ));
+    let mut read = 0usize;
+    for name in RUNS_SHELL_UNDER_PIPEFAIL {
+        let path = root.join(name);
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|error| {
+            panic!("read {name} — the pipelines this holds are written in it: {error}")
+        });
+        read += 1;
+        for (number, line) in text.lines().enumerate() {
+            let trimmed = line.trim();
+            // Comments are excluded by position: the paragraphs recording this measurement name the very
+            // consumers they forbid, in both wrappers and in the workflow.
+            if trimmed.starts_with('#') {
+                continue;
+            }
+            for segment in pipeline_stages(trimmed) {
+                if let Some(consumer) = stops_early(segment) {
+                    standing.push(format!(
+                        "  {name}:{}: `{consumer}` closes the pipe before its producer finishes, and under \
+                         `pipefail` the producer's SIGPIPE is the pipeline's status — read the value without \
+                         a pipe (a here-string, or a glob become a value) instead",
+                        number + 1
+                    ));
+                }
+            }
         }
     }
+    assert_eq!(
+        read,
+        RUNS_SHELL_UNDER_PIPEFAIL.len(),
+        "every file in the corpus must be read, or this reports clean over the ones it never opened"
+    );
     assert!(
         standing.is_empty(),
         "these pipelines fail for their own shape rather than for what they read:\n{}",
+        standing.join("\n")
+    );
+}
+
+/// No shell this repository runs reads a value through a process substitution.
+///
+/// **`pipefail` cannot see inside `<(…)`, and stating that in a comment did not stop the next one.** The
+/// commit that converted `packaged-selftest`'s `mapfile -t crates < <(…)` — and wrote *the derivation stands
+/// where its status is visible, so the tool's absence is now the tool's own error* — added a new
+/// `mapfile -t declared < <(…)` to the `msrv` job in the same diff. Measured on the shape it replaced:
+/// exit 0, array length 0, and a floor that then names the data for a fact about the tool.
+///
+/// A command substitution puts the status back where `pipefail` reads it. The guard for an empty value is
+/// the other half: a here-string over an empty string yields one empty element, which satisfies a
+/// `${#a[@]} == 0` floor.
+#[test]
+fn no_step_reads_a_value_through_a_process_substitution() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let mut standing = Vec::new();
+    let mut read = 0usize;
+    for name in RUNS_SHELL_UNDER_PIPEFAIL {
+        let path = root.join(name);
+        let text =
+            std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("read {name}: {error}"));
+        read += 1;
+        for (number, line) in text.lines().enumerate() {
+            let trimmed = line.trim();
+            // By position, as its siblings do: the paragraphs recording this write the shape they forbid.
+            if trimmed.starts_with('#') {
+                continue;
+            }
+            if trimmed.contains("< <(") {
+                standing.push(format!(
+                    "  {name}:{}: a process substitution — neither `set -e` nor `pipefail` sees inside \
+                     `<(…)`, so a failure there arrives as an empty value and the floor that catches it \
+                     names the data. Read it with a command substitution and guard the empty value before \
+                     `mapfile`",
+                    number + 1
+                ));
+            }
+        }
+    }
+    assert_eq!(
+        read,
+        RUNS_SHELL_UNDER_PIPEFAIL.len(),
+        "every file in the corpus must be read, or this reports clean over the ones it never opened"
+    );
+    assert!(
+        standing.is_empty(),
+        "these derivations stand where their status cannot be seen:\n{}",
         standing.join("\n")
     );
 }

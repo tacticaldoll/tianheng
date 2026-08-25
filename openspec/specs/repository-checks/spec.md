@@ -523,27 +523,52 @@ about a license for a fact about an absent interpreter. Under `pipefail` the sam
   the bare string would refuse its own reason
 - **PINNED-BY** `shell_strictness_is_declared_once_for_the_whole_workflow`
 
-**A step SHALL NOT read a value through a pipeline whose consumer stops early.** This is `pipefail`'s cost,
-and it is held rather than remembered: `grep -q` exits at its first match, so the producer upstream takes
-SIGPIPE and that becomes the pipeline's status — measured 141 on five of five runs over a document the size of
-this workflow's SARIF fixture. The failure names the document, which is why nobody reads it as the pipeline's
-shape.
+**Shell this repository runs SHALL NOT read a value through a pipeline stage that stops early, and SHALL NOT
+read one through a process substitution.** This is `pipefail`'s cost, and it is held rather than remembered.
+`grep -q` exits at its first match, so the producer upstream takes SIGPIPE and that becomes the pipeline's
+status — measured 141 on five of five runs over a document the size of this workflow's SARIF fixture. The
+failure names the document, which is why nobody reads it as the pipeline's shape. And `pipefail` cannot see
+inside `<(…)`: a failure there arrives as an empty value, so the floor that catches it names the data for a
+fact about the tool — measured, exit 0 and array length 0.
 
-#### Scenario: A pipeline's consumer exits before its producer finishes
+The corpus is every tracked text this repository runs shell in — the workflow and both wrappers — because the
+two places the class matters most stand in front of the irreversible acts.
 
-- **WHEN** a step reads a value through a pipe whose last stage stops early, such as `printf … | grep -q` or
-  `… | head -n1`
-- **THEN** the reaction refuses, naming the line and the consumer — the value is read without a pipe instead,
-  through a here-string or a glob become a value
+#### Scenario: A pipeline stage exits before its producer finishes
+
+- **WHEN** any stage fed by a pipe stops early — `printf … | grep -q`, `… | head -n1`, or one standing
+  mid-pipeline, in the workflow or in either wrapper
+- **THEN** the reaction refuses, naming the file, the line and the consumer — the value is read without a pipe
+  instead, through a here-string or a glob become a value
 - **PINNED-BY** `no_step_reads_a_value_through_a_pipeline_that_stops_early`
 
-#### Scenario: A consumer that stops early is not on the reader's list — a stated bound
+#### Scenario: The flag cluster is written the other way round
 
-- **WHEN** a pipeline's last stage exits before its producer finishes and is not one of `grep -q`, `grep -m`
-  or `head`
-- **THEN** the reaction reports nothing. The set of programs that exit early is not closed and no reader over
-  shell text can decide it, so the three names are what this shape looked like in the workflow's own history.
-  This closes the door that was open, not every door
+- **WHEN** a stage asks for the same thing under another spelling — `grep -Eq` rather than `grep -qE`, or
+  `--quiet`, or `--max-count`
+- **THEN** it is refused all the same. The consumer is decided by what its flags ask for; three literal
+  prefixes matched one order of one cluster and called the other clean
+
+#### Scenario: A stage opens a line rather than being fed by a pipe
+
+- **WHEN** a line begins with `grep -q … <<< "$value"`, reading a here-string
+- **THEN** nothing reacts: it closes no pipe. Only a stage downstream of a `|` can take a producer's SIGPIPE,
+  and a reader testing every segment reported the very assertion this rule exists to have repaired
+
+#### Scenario: A derivation stands inside a process substitution
+
+- **WHEN** a value is read through `mapfile … < <(…)`
+- **THEN** the reaction refuses. Neither `set -e` nor `pipefail` reaches inside, so a failed producer or an
+  absent tool arrives as an empty value and the floor that catches it speaks about the data. Measured on the
+  shape: exit 0, array length 0, against exit 127 for the same failure read through a command substitution
+- **PINNED-BY** `no_step_reads_a_value_through_a_process_substitution`
+
+#### Scenario: A consumer that stops early is neither head nor grep — a stated bound
+
+- **WHEN** a fed stage exits before its producer finishes under some other program's name
+- **THEN** the reaction reports nothing. Naming programs is the instrument: the set that exits early is not
+  closed, and the question behind it — *does this stage read its input to EOF* — is not one a reader over
+  shell text can decide. This closes the door that was open, not every door
 - **UNPINNED** `BACKLOG.md` — *the early-exit consumers the pipeline reader names*
 
 #### Scenario: A latent SIGPIPE waits on an output shape
