@@ -51,8 +51,10 @@ pub struct Section<T = String> {
     /// The sentinel line as the document wrote it.
     ///
     /// **A name a predicate derives can be lossy, and one of them is.** `release_coherence_gate`'s predicate
-    /// drops a ` - DATE` suffix, so the section it names `## [0.5.0]` was written `## [0.5.0] - 2026-08-22`,
-    /// and a reader asking *which date* has nothing to ask. Carrying the line makes the cut lossless: a
+    /// drops a ` - DATE` suffix, so a section it names `## [0.5.0]` was written with a date after that
+    /// heading, and a reader asking *which date* has nothing to ask. The date is deliberately not spelled
+    /// here: it is a live value in `CHANGELOG.md`, and a doc comment naming it goes stale on the day of the
+    /// cut — which is when nobody is reading doc comments. Carrying the line makes the cut lossless: a
     /// caller that wants the derived name takes [`Section::name`], and one that wants what was written takes
     /// this. Keeping only the name would push every such caller back onto its own line walk, which is the
     /// habit this module exists to end.
