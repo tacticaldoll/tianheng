@@ -1172,6 +1172,32 @@ them.
 
 ### Self-governance
 
+- **Two more pinning citations have been seen to fail, and the first two candidates were refused for a reason
+  worth recording.** `pin_bites` decides that a cited test *runs*; a declared mutation is what decides it
+  *bites*. The gate prints the remainder on every clean run — two mutations covering two of 162 cited tests
+  before this, four now — and the remainder is the point rather than an embarrassment: a gate reporting only
+  the mutations it ran would be the reads-as-coverage failure it exists to end one level up.
+
+  **A declared mutation must name a citation that defends a declared bound**, not merely one a spec cites.
+  `every_declared_mutation_s_name_resolves_to_a_real_bound_id` says so, and it refused the first pair written
+  here: one pin's scenario is an ordinary requirement, and the other defended a bound retired earlier in this
+  same window. Both were removed rather than the check widened. The candidate set is the tests the bound
+  register's projection lists as pinning something.
+
+  The two recorded defend `self-law-projection`'s two declared false refusals, each run before being written
+  down, which is the record file's own rule:
+
+  - `a_comment_naming_every_member_for_another_reason_is_refused` dies when
+    `comment_block_copies_allowlist`'s `all` becomes `any` — the block then reads as a copy for naming one
+    member rather than every one.
+  - `a_doc_example_of_the_dependency_dsl_is_refused` dies when `comment_restates_the_declaration` narrows to
+    one spelling of the DSL call. `all → any` was tried against this one first and **did not kill it**, which
+    is why it has a mutation of its own: one perturbation covering two pins would have been a set, not a site.
+
+  **The gate reads its records from `git show HEAD:`, not from the worktree**, so a record is invisible until
+  it is committed — staging is not enough here, which is the opposite of the tree-wide gates' rule and worth
+  knowing before reading a run as clean.
+
 - **The last table walker is gone, and with it the `Option` that existed only to hold a half-built record.**
   `declared_dependencies` carried a `Table` cursor and a `pending: Option<Detailed>` flushed at the next
   heading — because a `[dependencies.NAME]` table's `package`, `version` and `path` arrive across separate
