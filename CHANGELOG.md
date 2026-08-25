@@ -7092,6 +7092,31 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   No published API, outcome, report, exit class, or manifest moves; the gate ships in no package.
 
+- **A package name is not a directory, and two CI jobs were joining them as if it were.** `license-files`
+  derived the unpublishable packages from `cargo metadata` as *names* and then tested each against
+  `basename` of a `crates/*/Cargo.toml` glob; `packaged-selftest` derived the publishable ones as names and
+  built its resolve patches as `$ws/crates/$name`. Both read cargo's identity for a filesystem location, an
+  equality nothing in this repository holds — `machinery_names` refuses the same coupling in Rust for the
+  recorded reason that "`manifest_path` is canonical". Under a directory that differs from its package name,
+  the first would skip the wrong crate and ship a publishable one with no license texts, and the second would
+  patch a path that does not exist. Both now take the path cargo gives: the same enumerator emits
+  `.manifest_path`, and `packaged-selftest` carries name and path as one `@tsv` pair so the two cannot drift
+  apart between the derivation and the patch.
+
+  Latent today, and latent is where a coupling is cheapest to remove: all eight package names equal their
+  directory basenames, so no run of either job was wrong. Measured rather than reasoned — both jobs' bodies
+  were extracted and run against the real workspace (six publishable crates paired, every derived path
+  present, `license-files` skipping exactly `kanhe` and `shengmo`), and then against a metadata document
+  whose directories differ from its names, where the old `license-files` logic checks the directory holding
+  the unpublishable package and would skip a directory merely *named* like it, while the new one skips
+  correctly. One comparison needed resolving on both sides, since cargo emits an absolute path and the glob
+  yields a relative one: compared as written they would never match, every crate would be checked, and the
+  comparison would decide nothing while looking like it decided something — the safe direction, which is why
+  it needed saying.
+
+  No published API, outcome, report, exit class, or manifest moves; the change is confined to CI.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
