@@ -155,13 +155,14 @@ fn no_governance_document_restates_a_declared_allowlist() {
         }
         let text = std::fs::read_to_string(root.join(path))
             .unwrap_or_else(|err| panic!("cannot read tracked {path}: {err}"));
-        if declares_itself_generated(&Source::of(text.clone()).header()) {
+        let source = Source::of(text);
+        if declares_itself_generated(&source.header()) {
             continue;
         }
         read += 1;
         offences.extend(kanhe::restatement::document_offences(
             path,
-            &text,
+            source.prose(),
             &allowlists,
         ));
     }
@@ -177,20 +178,25 @@ fn no_governance_document_restates_a_declared_allowlist() {
 ///
 /// **A figure is produced or it is nothing.** `region`'s header narrows its governing claim to executed text
 /// and states the residue: `release_coherence_gate::{require_changelog_state, require_section_shape,
-/// unreleased_has_item}` and `restatement::document_offences` still take a bare `&str` and call `.lines()` on
-/// it, so a **fenced** `## [Unreleased]` or `### Added` reads as the section it resembles and an HTML comment
-/// span reads as prose. The reason that is filed and not fixed is that the corpora carry neither shape — and
-/// that reason was three typed zeroes in a doc comment and a `BACKLOG` entry, measured once, with a promotion
-/// trigger only a person re-reading the tree could ever notice. This produces them instead.
+/// unreleased_has_item}` still take a bare `&str` and call `.lines()` on it, so a **fenced**
+/// `## [Unreleased]` or `### Added` reads as the section it resembles and an HTML comment span reads as prose.
+/// The reason that is filed and not fixed is that the corpora carry neither shape — and that reason was three
+/// typed zeroes in a doc comment and a `BACKLOG` entry, measured once, with a promotion trigger only a person
+/// re-reading the tree could ever notice. This produces them instead.
 ///
 /// So the trigger fires itself. A fenced block appearing in `CHANGELOG.md` or in a capability spec is not a
 /// formatting question: it makes a latent misread live, and the repair named in the `BACKLOG` entry is to give
-/// `Prose` a numbered form and take it in those four signatures — not to delete the block.
+/// `Prose` a numbered form and take it in those signatures — not to delete the block. **The trigger has
+/// fired**, and the first half of that repair landed because of it: `Prose::numbered_lines` exists and
+/// `restatement::document_offences` takes a region, so this direction's subject is three readers rather than
+/// four. It stays until the last of them moves.
 ///
-/// **This does not reach** `document_offences`'s wider corpus. Its residue is conditional rather than a count
-/// — a fenced block naming a crate together with *every* member of its allowlist — and holding that would mean
-/// running the restatement rule inside a fence, which is the reader this WATCH exists to replace. That half
-/// stays prose, and says so.
+/// **`document_offences` is out of this direction's reach and no longer needs to be in it.** Its residue was
+/// conditional rather than a count — a fenced block naming a crate together with *every* member of its
+/// allowlist — so holding it would have meant running the restatement rule inside a fence. Taking a `Prose`
+/// closed it instead: the rule never sees the fence at all. Measured before moving it, over every tracked
+/// file the check reads: the bare and the prose corpus reported the identical offence set, so the migration
+/// changed which documents it *could* misread and not which it did.
 #[test]
 fn the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span() {
     let Some(root) = workspace_root() else {
@@ -244,7 +250,7 @@ fn the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span()
         carrying.is_empty(),
         "a corpus judged by a reader that takes a bare `&str` now carries a shape that reader misreads, so \
          the misread this repository filed as latent is live. The repair is the one the `BACKLOG` entry \
-         names — give `region::Prose` a numbered form and take it in those four signatures — not removing \
+         names — take `region::Prose` in the three signatures that still read bare text — not removing \
          what is below:\n{}",
         carrying.join("\n")
     );

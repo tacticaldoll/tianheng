@@ -442,3 +442,52 @@ fn a_heading_at_position_zero_leaves_no_header() {
         "a document with no section heading is all header"
     );
 }
+
+/// A prose line's position is the original document's, never a count of the lines that survived.
+///
+/// **A fence's lines are dropped entirely rather than yielded blank**, so a counter over what
+/// `Prose::numbered_lines` hands back drifts from the document by the size of every fence above it — and a
+/// caller reporting that number names a line the reader cannot find. `restatement::document_offences` reports
+/// exactly such a number.
+///
+/// Given both shapes at once, because they fail in opposite directions and a fixture carrying one would let
+/// the other pass: a **fence** is the case that must skip positions, and a **fully-commented line** is the
+/// case that must not — it survives as an empty string and keeps its place, which a reader dropping blank
+/// lines would silently renumber past.
+#[test]
+fn a_prose_lines_position_is_the_documents_own_not_a_count_of_survivors() {
+    let document = Source::of(
+        "intro\n\
+         ```\n\
+         fenced one\n\
+         fenced two\n\
+         ```\n\
+         after the fence\n\
+         <!-- a whole line of comment -->\n\
+         tail\n",
+    );
+    let numbered: Vec<(usize, String)> = document.prose().numbered_lines().collect();
+
+    assert_eq!(
+        numbered,
+        vec![
+            (1, "intro".to_string()),
+            (6, "after the fence".to_string()),
+            (7, String::new()),
+            (8, "tail".to_string()),
+        ],
+        "the fence's four lines (2..=5) leave no entries and consume four positions; `after the fence` is the \
+         document's line 6, not the second line to survive. A fully-commented line stays as an empty string at \
+         its own position rather than vanishing"
+    );
+
+    assert_eq!(
+        document.prose().lines().collect::<Vec<_>>(),
+        numbered
+            .iter()
+            .map(|(_, line)| line.clone())
+            .collect::<Vec<_>>(),
+        "`lines` delegates, so the two cannot answer differently about what a reader sees — asserted over the \
+         value above rather than by calling both, which would compare a function with itself"
+    );
+}

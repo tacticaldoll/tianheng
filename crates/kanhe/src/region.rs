@@ -23,21 +23,24 @@
 //!
 //! **What this does not yet cover, stated because this module's own governing claim used to cover it.** These
 //! Markdown readers in this crate still take `&str` and call `.lines()` on it: `release_coherence_gate`'s
-//! `require_changelog_state`, `require_section_shape` and `unreleased_has_item`, and
-//! `restatement::document_offences`. A fenced `## [Unreleased]` or `### Added` would be read as the section it
-//! resembles, and a fenced block naming a whole dependency allowlist would be read as a restatement.
+//! `require_changelog_state`, `require_section_shape` and `unreleased_has_item`. A fenced `## [Unreleased]`
+//! or `### Added` would be read as the section it resembles.
 //!
 //! It is **latent, and that is produced rather than asserted here**:
 //! `the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span` holds that `CHANGELOG.md` and
 //! every `openspec/specs/*/spec.md` carry no fenced block and no HTML comment span, so the day one appears the
 //! misread is reported as live instead of waiting for someone to re-read this paragraph. This comment carried
 //! the figures as three typed zeroes before that, which is the shape [`crate::refusal::Site`]'s own doc is
-//! about. `document_offences`'s wider corpus is not covered: its residue is conditional rather than a count,
-//! and holding it means running the restatement rule inside a fence.
+//! about.
 //!
-//! Not closed by taking [`Prose`] in those four signatures for a stated reason: `Prose` drops the lines it
-//! excludes, so it has no positions, and `document_offences` reports the line a block starts at. Closing it
-//! means giving [`Prose`] a numbered form first.
+//! **The prerequisite that blocked all four is gone, and one of them has moved.** This paragraph said `Prose`
+//! drops the lines it excludes so it has no positions, and that `restatement::document_offences` reports the
+//! line a block starts at — so closing any of it meant giving `Prose` a numbered form first.
+//! [`Prose::numbered_lines`] is that form: it enumerates before it filters, so a fenced block consumes its
+//! positions rather than renumbering what follows. `document_offences` takes a [`Prose`] now and reads the
+//! start off the first line the block actually holds, which is why its wider corpus — the conditional residue
+//! that could not be reduced to a count — no longer needs one. The three above are ordinary work whose only
+//! cost is rippling into their callers.
 //!
 //! [`Source::whole`] is the deliberate escape, spelled out so it is greppable. The family already handles `dyn`
 //! this way: not forbidden globally, but every appearance visible where it matters.
@@ -499,9 +502,24 @@ impl<'a> Prose<'a> {
         self.lines().any(|line| line.contains(needle))
     }
 
-    /// Prose lines, each carrying only the text a reader sees. A fence opens on a run of three or more backticks
+    /// Prose lines alone, for a judgement that has no use for where they sat.
+    ///
+    /// Delegates, so the two cannot answer differently about what a reader sees.
+    pub fn lines(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.numbered_lines().map(|(_, line)| line)
+    }
+
+    /// Prose lines with their one-based position in the original source, each carrying only the text a reader
+    /// sees. A fence opens on a run of three or more backticks
     /// or tildes and closes only on a bare run of the same character, at least as long; an HTML comment spans
     /// from `<!--` to `-->`, which may be one line or several.
+    ///
+    /// **The position is the original line's, never a count of what survived.** A fence's delimiters and every
+    /// line inside it are dropped entirely rather than yielded blank, so a counter over the surviving lines
+    /// drifts from the document by the size of every fence above — and a caller reporting that number would
+    /// name a line the reader cannot find. The enumeration therefore happens before the filter, which is the
+    /// same rule [`Executed::numbered_lines`] states for the same reason. A fully-commented line is not that
+    /// case: it survives as an empty string and keeps its position.
     ///
     /// The comment **span** is excised, never the line holding it. The requirement this serves says a path
     /// appearing *only* inside an HTML comment is not a mention — so a line carrying a visible mention *and* a
@@ -511,10 +529,10 @@ impl<'a> Prose<'a> {
     ///
     /// Yields owned text because excision produces a new string; a fully-commented line yields an empty one,
     /// which is what the whole-line drop it replaces already amounted to for every caller.
-    pub fn lines(&self) -> impl Iterator<Item = String> + use<'a> {
+    pub fn numbered_lines(&self) -> impl Iterator<Item = (usize, String)> + use<'a> {
         let mut fence: Option<(char, usize)> = None;
         let mut commented = false;
-        self.0.lines().filter_map(move |line| {
+        self.0.lines().enumerate().filter_map(move |(index, line)| {
             let trimmed = line.trim_start();
             if let Some(delimiter) = fence_run(trimmed) {
                 match fence {
@@ -565,7 +583,7 @@ impl<'a> Prose<'a> {
                     }
                 }
             }
-            Some(visible)
+            Some((index + 1, visible))
         })
     }
 }
