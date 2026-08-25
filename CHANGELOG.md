@@ -1172,6 +1172,26 @@ them.
 
 ### Self-governance
 
+- **A lock block's fields are the block's by construction, where they were the block's by a rule.**
+  `require_lock_versions` walked `Cargo.lock` with `name`, `version` and `source` as function-level state and
+  a `close` closure called on **every** table header. That call was not incidental: `[[patch.unused]]`, which
+  cargo writes whenever a `[patch]` section exists, carries all three of those keys, and read as ordinary
+  content they overwrote the block above — so the last member's version was replaced before it was filed and
+  the workspace lookup reported that member absent from a lock recording it. The rule was right, and it was a
+  *rule*: delete the call on the foreign header and the defect returns.
+
+  With the predicate answering *is this a heading* before *is it mine*, a foreign table's body belongs to no
+  `[[package]]` at all. The three values are per-block locals, the closure is gone, and filing happens after
+  the body rather than at whatever header comes next.
+
+  **The existing direction over that shape could not tell the two implementations apart**, which is why a new
+  one was written rather than the old one cited. `a_non_package_table_does_not_absorb_the_block_above_it` goes
+  through `judge` and passes under both — the rule and the construction reach the same verdict, which is what
+  a rule that works looks like. `a_foreign_table_heading_still_closes_the_block` reads the cut directly, and
+  its negative run is a predicate recognising only `[[package]]` as a boundary: with that, `9.9.9` and
+  `some-patched-crate` land in the member's own body. That is the shape the `close` call existed to patch,
+  named as a fixture instead of as a comment.
+
 - **`manifest`'s two readers take the cut, and one of them had been answering for a manifest cargo will not
   read.** `publishable` and `workspace_version` each walked the root `Cargo.toml`'s tables with their own
   state, alongside the two in `release_coherence_gate` — four copies of *a heading opens, the next closes* over
