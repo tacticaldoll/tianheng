@@ -78,6 +78,7 @@ pub(crate) fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
 /// `[target.<triple>.dependencies]` and its `.NAME` form are read like any other. `[target.'cfg(…)'.…]` is
 /// **not**, and that is a declared bound rather than an oversight: its second key is a quoted cfg
 /// expression, and which configurations it selects is a grammar of its own. See [`past_the_context`].
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Table {
     /// `[dependencies]` and its dev/build siblings: each line names one dependency.
     Entries,
@@ -268,83 +269,80 @@ struct Detailed {
 /// line's start, or after a table delimiter inside a value.
 fn declared_dependencies(text: &str) -> Vec<Dependency> {
     let mut found = Vec::new();
-    let mut table = Table::Other;
-    // A detailed table is one dependency spread over its lines, so it is emitted at the boundary that closes
-    // it — the next heading, or the end of the text.
-    let mut pending: Option<Detailed> = None;
-    let flush = |pending: &mut Option<Detailed>, found: &mut Vec<Dependency>| {
-        if let Some(table) = pending.take() {
-            found.push(Dependency {
-                package: Package::of(table.packages, &table.key),
-                key: table.key,
-                pin: Declared::of(table.versions, &table.written),
-                path: Declared::of(table.paths, &table.written),
-            });
-        }
-    };
-    for line in crate::region::Source::of(text).toml().lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') {
-            flush(&mut pending, &mut found);
-            table = dependency_table(trimmed);
-            if let Table::One(name) = &table {
-                pending = Some(Detailed {
+    // **A detailed table is one dependency spread over its own lines, and that is now what it is.** This
+    // walked the manifest with a `Table` cursor and a `pending: Option<Detailed>` flushed at the next
+    // heading — the `Option` existed for exactly one reason, that a `[dependencies.NAME]` table's fields
+    // arrive across lines and the record could only be filed once the *next* heading proved the table over.
+    // With each table carrying its own body, `Detailed` is a local built and filed inside one iteration, so
+    // there is no half-built record to hold and no boundary to remember to flush at.
+    let tables = crate::sections::cut(
+        crate::region::Source::of(text).toml().numbered_lines(),
+        |line| is_table(line).then(|| dependency_table(line.trim())),
+    );
+    for table in &tables {
+        match &table.name {
+            Table::Entries => {
+                for (_, line) in &table.body {
+                    let trimmed = line.trim();
+                    let Some((key, rest)) = trimmed.split_once('=') else {
+                        continue;
+                    };
+                    let key = key.trim();
+                    let package = Package::of(inline_assignments(rest, "package"), key);
+                    // A bare `xuanji = "0.5"` carries its requirement as the value itself; an inline table
+                    // carries it under a `version` key.
+                    let inline = rest.trim_start().starts_with('{');
+                    let versions = if inline {
+                        inline_assignments(rest, "version")
+                    } else {
+                        vec![quoted_value(rest)]
+                    };
+                    // A bare `xuanji = "0.5"` declares no path at all; only an inline table can carry one.
+                    let paths = if inline {
+                        inline_assignments(rest, "path")
+                    } else {
+                        Vec::new()
+                    };
+                    found.push(Dependency {
+                        key: key.to_string(),
+                        package,
+                        pin: Declared::of(versions, rest),
+                        path: Declared::of(paths, rest),
+                    });
+                }
+            }
+            Table::One(name) => {
+                let mut detailed = Detailed {
                     key: name.clone(),
                     packages: Vec::new(),
                     versions: Vec::new(),
                     paths: Vec::new(),
                     written: String::new(),
-                });
-            }
-            continue;
-        }
-        match &table {
-            Table::Entries => {
-                let Some((key, rest)) = trimmed.split_once('=') else {
-                    continue;
                 };
-                let key = key.trim();
-                let package = Package::of(inline_assignments(rest, "package"), key);
-                // A bare `xuanji = "0.5"` carries its requirement as the value itself; an inline table
-                // carries it under a `version` key.
-                let inline = rest.trim_start().starts_with('{');
-                let versions = if inline {
-                    inline_assignments(rest, "version")
-                } else {
-                    vec![quoted_value(rest)]
-                };
-                // A bare `xuanji = "0.5"` declares no path at all; only an inline table can carry one.
-                let paths = if inline {
-                    inline_assignments(rest, "path")
-                } else {
-                    Vec::new()
-                };
-                found.push(Dependency {
-                    key: key.to_string(),
-                    package,
-                    pin: Declared::of(versions, rest),
-                    path: Declared::of(paths, rest),
-                });
-            }
-            Table::One(_) => {
-                if let Some(table) = pending.as_mut() {
-                    table
+                for (_, line) in &table.body {
+                    let trimmed = line.trim();
+                    detailed
                         .packages
                         .extend(inline_assignments(trimmed, "package"));
-                    table
+                    detailed
                         .versions
                         .extend(inline_assignments(trimmed, "version"));
-                    table.paths.extend(inline_assignments(trimmed, "path"));
+                    detailed.paths.extend(inline_assignments(trimmed, "path"));
                     if !trimmed.is_empty() {
-                        table.written.push_str(trimmed);
-                        table.written.push(' ');
+                        detailed.written.push_str(trimmed);
+                        detailed.written.push(' ');
                     }
                 }
+                found.push(Dependency {
+                    package: Package::of(detailed.packages, &detailed.key),
+                    pin: Declared::of(detailed.versions, &detailed.written),
+                    path: Declared::of(detailed.paths, &detailed.written),
+                    key: detailed.key,
+                });
             }
             Table::Other => {}
         }
     }
-    flush(&mut pending, &mut found);
     found
 }
 
