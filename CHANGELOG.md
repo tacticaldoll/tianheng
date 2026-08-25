@@ -1172,6 +1172,34 @@ them.
 
 ### Self-governance
 
+- **Four walks over one document became one cut, and a declared false negative closed as a side effect of
+  reading a region instead of text.** `release_coherence_gate` carried four section walks over `CHANGELOG.md`,
+  each with its own cursor over the same predicate: `require_changelog_state` counted a sentinel line,
+  `unreleased_has_item` ran an `inside: bool`, and `section_shape` and `adopter_cited_machinery` were twins
+  on a `section: String` cursor — the derivation they share was already noted as written twice byte-identical,
+  and the walk around it was the half nobody had extracted. `sections::cut` owns the **boundary** question and `section_of` the **naming**
+  one, which is the split `section_of`'s own doc asked for in so many words — *folding it in would make one
+  function answer two*. Two of the four move here; the counting pair follows.
+
+  What the migration also did was retire a bound rather than restate it. *A heading inside a fenced code
+  block* was an `UnderReacts` owned by the engine: the gate walked the document's line grammar without
+  tracking fences, so a fenced `### Self-governance` set the exempt heading in force and every entry after it
+  went unreported. **Its stated cost is what retired it** — *a second, stateful reading of a document this
+  gate reads once* — because `region::Prose` already tracks fences for every reader in the crate, so the
+  second reading is one that already existed. The bound's own fixture is unchanged and stands as the
+  direction's WHEN; only the THEN moved, from *nothing reacts* to the refusal it now names.
+
+  Three of this repository's own reactions caught the retirement mid-flight, which is what they are for.
+  `every_bare_bound_reference_resolves_to_a_declared_bound` refused the retired id left in a doc comment as a
+  record — an id resolving to nothing reads exactly like an undeclared bound, so it is named in words there
+  now. `every_declared_census_agrees_with_what_produces_it` refused the register's typed figure against its
+  enumerator. And `backlog_classification` had already refused, one change earlier, an entry filed under a
+  heading its own class contradicted.
+
+  `heading` resets per section by construction now rather than by a hand-written `clear()` beside the cursor
+  assignment, and `require_adopter_narrative` stopped taking the document text at all: it took it only to hand
+  it on.
+
 - **A latency that was held became a repair, because the trigger it was waiting for fired — and what noticed
   was the direction rather than a person.** `region`'s header declared four Markdown readers as taking a bare
   `&str` against its own absolute claim, with the misread **latent** and its latency produced by

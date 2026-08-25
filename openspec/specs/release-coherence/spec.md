@@ -498,13 +498,14 @@ always enters; a convenience has to earn its place.
   a foreign host's layout as though it were this repository's
 - **PINNED-BY** `a_name_reached_only_through_a_url_is_a_stated_bound`
 
-#### Scenario: A heading inside a fenced code block — a stated bound
+#### Scenario: A heading inside a fenced code block
 
 - **WHEN** a `### ` line sits inside a fenced code block, followed by entries that name machinery
-- **THEN** nothing reacts for those entries, because that line set the heading in force and may name the one
-  exempt heading. The reaction walks the document's line grammar and does not track fences; it is latent
-  rather than live, this repository's changelog carrying no fenced block at all
-- **PINNED-BY** `a_heading_inside_a_fenced_block_is_a_stated_bound`
+- **THEN** the reaction reports those entries, because a fenced line sets no heading in force and cannot name
+  the one exempt heading. This was a declared bound whose stated cost was a second, stateful reading of a
+  document read once; the reaction reads a prose region now, whose fence tracking is shared with every other
+  reader in the crate, so that reading is one that already existed
+- **PINNED-BY** `a_heading_inside_a_fenced_block_does_not_reattribute_a_later_entry`
 
 #### Scenario: The directory itself, and a derived ancestor
 

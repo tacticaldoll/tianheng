@@ -13,6 +13,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::refusal::{Refusal, cannot_judge_at, violation_at};
+use crate::region::Source;
+use crate::sections::Section;
 
 use crate::hermetic_git::fixture as run;
 pub use crate::hermetic_git::hermetic;
@@ -754,8 +756,8 @@ fn require_changelog_state(
 /// `## [` section, and the exactly-one-`[Unreleased]` check in the caller already refuses a changelog with
 /// none — more specifically, and as a violation rather than an undecidable. A guard whose input an earlier
 /// check forecloses cannot fire, and keeping it would read as coverage. Found by trying to write its WHEN.
-fn require_section_shape(changelog: &str) -> Result<(), Refusal> {
-    let shape = section_shape(changelog);
+fn require_section_shape(sections: &[Section]) -> Result<(), Refusal> {
+    let shape = section_shape(sections);
     let mut duplicates: Vec<String> = shape
         .headings
         .iter()
@@ -803,11 +805,11 @@ fn require_section_shape(changelog: &str) -> Result<(), Refusal> {
 /// The adopter-facing narrative names none of this repository's own machinery.
 fn require_adopter_narrative(
     repo: &Path,
-    changelog: &str,
+    sections: &[Section],
     version: &str,
     spine: &Spine,
 ) -> Result<(), Refusal> {
-    let leaked = adopter_cited_machinery(repo, changelog, version, spine.state)?;
+    let leaked = adopter_cited_machinery(repo, sections, version, spine.state)?;
     if !leaked.is_empty() {
         return Err(violation_at(
             "release-coherence#adopter-entry-names-own-machinery",
@@ -883,6 +885,12 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
         ));
     };
     let changelog = read(repo, "CHANGELOG.md")?;
+    // Cut **once**, and hand the value down. Four walks in this file each carried their own section cursor
+    // over the same predicate; `sections::cut` owns the boundary question and `section_of` the naming one,
+    // which is the split `section_of`'s own doc asks for. Over a `Prose` region, so a fenced `## [` heading
+    // is not a section — the misread `region`'s header declares for the readers still below.
+    let changelog_source = Source::of(changelog.clone());
+    let changelog_sections = crate::sections::cut(changelog_source.prose(), section_of);
 
     // The phases, in the order a reader meets a refusal in. **The order is observable**: a repository with
     // two problems is refused for whichever phase reaches its own first, and the failure matrix asserts the
@@ -890,8 +898,8 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     let spine = release_spine(repo, &version, version_parts)?;
     let manifests = require_version_surfaces(repo, &root_manifest, &version)?;
     require_changelog_state(repo, &changelog, &manifests, &version, &spine)?;
-    require_section_shape(&changelog)?;
-    require_adopter_narrative(repo, &changelog, &version, &spine)?;
+    require_section_shape(&changelog_sections)?;
+    require_adopter_narrative(repo, &changelog_sections, &version, &spine)?;
 
     Ok(format!(
         "ok release coherence ({}: {version})",
@@ -1466,30 +1474,24 @@ fn section_of(line: &str) -> Option<String> {
 /// The line between this and an entry's *content* is where the decidable stops: whether an entry is accurate,
 /// whether "no adopter action" is true, whether a named symbol exists are judgements over prose, and the
 /// detector they would need is the one this repository measured three times and rejected.
-fn section_shape(changelog: &str) -> Shape {
+fn section_shape(sections: &[Section]) -> Shape {
     let mut shape = Shape {
         headings: BTreeMap::new(),
         breaking: BTreeSet::new(),
     };
-    let mut section = String::new();
-    for line in changelog.lines() {
-        if let Some(named) = section_of(line) {
-            section = named;
-            // The `continue` stands on its own: a section heading carries no `### …` and marks no break, so
-            // the arms below must not see it.
-            continue;
-        }
-        if section.is_empty() {
-            continue;
-        }
-        if let Some(heading) = line.strip_prefix("### ") {
-            *shape
-                .headings
-                .entry((section.clone(), heading.trim_end().to_string()))
-                .or_default() += 1;
-        }
-        if line.contains("**BREAKING**") {
-            shape.breaking.insert(section.clone());
+    // The section heading itself is not in `body`, so the arms below cannot see it — which the cursor form
+    // had to arrange with a `continue` that stood on its own and could be deleted without anything noticing.
+    for section in sections {
+        for (_, line) in &section.body {
+            if let Some(heading) = line.strip_prefix("### ") {
+                *shape
+                    .headings
+                    .entry((section.name.clone(), heading.trim_end().to_string()))
+                    .or_default() += 1;
+            }
+            if line.contains("**BREAKING**") {
+                shape.breaking.insert(section.name.clone());
+            }
         }
     }
     shape
@@ -1703,7 +1705,7 @@ pub fn cargo_metadata(repo: &Path) -> Result<serde_json::Value, Refusal> {
 /// stay exempt* would refuse it, which is the reading this comment exists to keep anyone from adopting.
 fn adopter_cited_machinery(
     repo: &Path,
-    changelog: &str,
+    sections: &[Section],
     version: &str,
     state: State,
 ) -> Result<Vec<String>, Refusal> {
@@ -1712,41 +1714,39 @@ fn adopter_cited_machinery(
     let names = machinery_names(repo)?;
 
     let mut found: BTreeSet<String> = BTreeSet::new();
-    let mut section = String::new();
-    let mut heading = String::new();
-    for line in changelog.lines() {
-        if let Some(named) = section_of(line) {
-            section = named;
-            heading.clear();
-            continue;
-        }
-        if section.is_empty() {
-            continue;
-        }
-        if let Some(next) = line.strip_prefix("### ") {
-            heading = next.trim_end().to_string();
-        }
-        let being_written = matches!(state, State::ReleaseReady | State::Snapshot)
-            && section == format!("## [{version}]");
-        if (section != "## [Unreleased]" && !being_written) || heading == "Self-governance" {
-            continue;
-        }
-        for run in
-            line.split(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '/' | '-')))
-        {
-            let token = run.strip_prefix("./").unwrap_or(run).trim_end_matches('.');
-            if token.is_empty() {
+    // `heading` resets at each section by construction now. The cursor form cleared it by hand beside the
+    // section assignment, which is one statement holding a structural fact — delete it and headings leak
+    // across a section boundary with nothing to say so.
+    for section in sections {
+        let mut heading = String::new();
+        for (_, line) in &section.body {
+            if let Some(next) = line.strip_prefix("### ") {
+                heading = next.trim_end().to_string();
+            }
+            let being_written = matches!(state, State::ReleaseReady | State::Snapshot)
+                && section.name == format!("## [{version}]");
+            if (section.name != "## [Unreleased]" && !being_written) || heading == "Self-governance"
+            {
                 continue;
             }
-            if names.contains(token) {
-                found.insert(format!(
-                    "  {section} under `### {}` names {token}",
-                    if heading.is_empty() {
-                        "(no heading)"
-                    } else {
-                        &heading
-                    }
-                ));
+            for run in line
+                .split(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '/' | '-')))
+            {
+                let token = run.strip_prefix("./").unwrap_or(run).trim_end_matches('.');
+                if token.is_empty() {
+                    continue;
+                }
+                if names.contains(token) {
+                    found.insert(format!(
+                        "  {} under `### {}` names {token}",
+                        section.name,
+                        if heading.is_empty() {
+                            "(no heading)"
+                        } else {
+                            &heading
+                        }
+                    ));
+                }
             }
         }
     }
