@@ -7179,6 +7179,29 @@ no adopter runs. They are here rather than under the adopter headings above beca
   report, exit class or manifest changes.
 
 
+- **No doc comment or fixture mirrors the live release heading, because the release ritual edits that
+  heading.** `sections`'s doc explained why a cut carries the sentinel line by naming the real instance — *the
+  section it names `## [0.5.0]` was written `## [0.5.0] - 2026-08-22`* — and a sibling fixture used that same
+  live heading as its input while every other fixture in the file invents `## [0.1.0] - 2020-01-01`. The date
+  in a `## [X.Y.Z]` heading is a live value that the last edit before the cut rewrites, so the doc comment was
+  a claim that goes stale on exactly the day nobody is reading doc comments, and the fixture read as a
+  quotation of a document it does not depend on.
+
+  The hazard is not hypothetical: this window already attempted a tree-wide edit of that heading and an
+  assertion, not the fixture, is what stopped it from rewriting the second occurrence. The doc now states the
+  property — a name that drops a ` - DATE` suffix leaves a reader asking *which date* with nothing to ask —
+  and says why the date is deliberately not spelled. The fixture invents its dated form like its siblings, and
+  the assertion on the derived name moved with it.
+
+  A *released* heading is a different thing and stays: `reference_integrity`'s `## [0.4.0] - 2026-08-04`
+  fixture names a section whose date is frozen history, which nothing will edit again.
+
+  The fixture was seen to fail after the literal changed, not merely re-run: with `Section::line` built as
+  `String::new()` it reports `left: ["", ""]` against `right: ["## [Unreleased]", "## [0.1.0] - 2020-01-01"]`.
+  A first perturbation was discarded for not compiling, since a perturbation that does not build is not a
+  negative run. No behaviour moves and no published API, outcome, report, exit class or manifest changes.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

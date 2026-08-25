@@ -107,14 +107,18 @@ fn a_fenced_sentinel_opens_no_section() {
 /// returned the name for both would pass a fixture holding only the undated form.
 #[test]
 fn a_section_keeps_the_sentinel_line_the_document_wrote() {
-    let both = Source::of("## [Unreleased]\n- pending\n## [0.5.0] - 2026-08-22\n- shipped\n");
+    // The dated form is invented rather than copied from `CHANGELOG.md`, as every sibling fixture here
+    // already does. A fixture mirroring the live release heading reads as a quotation of it, and a tree-wide
+    // edit of that heading — which the release ritual performs — would silently rewrite this input. That
+    // very edit was attempted while preparing `0.5.0` and caught by an assertion, not by the fixture.
+    let both = Source::of("## [Unreleased]\n- pending\n## [0.1.0] - 2020-01-01\n- shipped\n");
     let sections = cut(both.prose().numbered_lines(), version_section);
     let names: Vec<&str> = sections.iter().map(|s| s.name.as_str()).collect();
     let lines: Vec<&str> = sections.iter().map(|s| s.line.as_str()).collect();
-    assert_eq!(names, vec!["## [Unreleased]", "## [0.5.0]"]);
+    assert_eq!(names, vec!["## [Unreleased]", "## [0.1.0]"]);
     assert_eq!(
         lines,
-        vec!["## [Unreleased]", "## [0.5.0] - 2026-08-22"],
+        vec!["## [Unreleased]", "## [0.1.0] - 2020-01-01"],
         "the dated section's line keeps its date where its name cannot; the undated one is identical in both, \
          which is why the fixture carries one of each"
     );
