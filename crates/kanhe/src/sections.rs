@@ -22,17 +22,32 @@
 //! boolean was *right* in `release_coherence_gate`'s readers and wrong in that one. The same shape, two grammars, opposite
 //! verdicts — so the grammar is stated here instead of being inferred from whichever caller arrives next.
 //!
-//! Cuts a [`Prose`] region, never a bare `&str`: a fenced `## [Unreleased]` is not a
-//! section, and every reader this replaces could be told otherwise.
-
-use crate::region::Prose;
+//! **Takes numbered lines rather than one region kind, and that is what keeps this to one skeleton.** The
+//! readers it replaces span two grammars: Markdown headings over a [`Prose`](crate::region::Prose) region, and TOML table headings
+//! over a [`toml`](crate::region::Source::toml) one. Both hand out `(position, line)`; both then need
+//! *sentinel opens, next sentinel closes, preamble belongs to none*. Writing a second `cut` for the second
+//! grammar would be this module's own subject performed on itself — the skeleton is the shared thing, and the
+//! grammar is a parameter exactly as the predicate is. The line type is generic for the same reason and no
+//! other: `Prose` hands out owned text because excising a comment span builds a new string, and `Executed`
+//! hands out borrowed slices because cutting a tail comment does not. Requiring one of them would push a
+//! `.map()` onto every call site of the other kind.
+//!
+//! A region either way, never a bare `&str`. On the Markdown side a fenced `## [Unreleased]` is not a section;
+//! on the TOML side a `[table]` inside a string or behind a `#` is not a table. Every reader this replaces
+//! could be told otherwise.
 
 /// One flat section: the sentinel that opened it, where it opened, and the lines it holds until the next
 /// sentinel.
+///
+/// **Generic in what the predicate answers, defaulting to a name.** A Markdown heading names its section with
+/// a string; a TOML table heading answers a *classification* — `[dependencies]`, `[dependencies.NAME]` and
+/// anything else are three different things to the reader walking them, and collapsing those into a string
+/// would put the caller back to re-deciding from the text. `T` is whatever the predicate returns, and the
+/// default keeps every existing call site spelled `Section`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Section {
+pub struct Section<T = String> {
     /// What the predicate named this section — the caller's own vocabulary, not a normalised form.
-    pub name: String,
+    pub name: T,
     /// The sentinel line as the document wrote it.
     ///
     /// **A name a predicate derives can be lossy, and one of them is.** `release_coherence_gate`'s predicate
@@ -58,20 +73,23 @@ pub struct Section {
 /// **Repeats are yielded, never merged.** Two sections the predicate names identically are two entries — that
 /// is what lets a caller ask [`crate::selection::the_only`] and be refused. Collapsing them here would answer
 /// *how many* on the caller's behalf, which is the habit `selection`'s own header exists to end.
-pub fn cut(prose: Prose<'_>, sentinel: impl Fn(&str) -> Option<String>) -> Vec<Section> {
-    let mut out: Vec<Section> = Vec::new();
-    for (number, line) in prose.numbered_lines() {
-        if let Some(name) = sentinel(&line) {
+pub fn cut<T, S: AsRef<str> + Into<String>>(
+    lines: impl Iterator<Item = (usize, S)>,
+    sentinel: impl Fn(&str) -> Option<T>,
+) -> Vec<Section<T>> {
+    let mut out: Vec<Section<T>> = Vec::new();
+    for (number, line) in lines {
+        if let Some(name) = sentinel(line.as_ref()) {
             out.push(Section {
                 name,
-                line,
+                line: line.into(),
                 start: number,
                 body: Vec::new(),
             });
             continue;
         }
         if let Some(open) = out.last_mut() {
-            open.body.push((number, line));
+            open.body.push((number, line.into()));
         }
     }
     out

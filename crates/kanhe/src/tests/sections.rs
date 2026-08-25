@@ -27,7 +27,7 @@ fn version_section(line: &str) -> Option<String> {
 fn a_preamble_belongs_to_no_section_and_no_sentinel_yields_nothing() {
     let with_preamble =
         Source::of("# Changelog\n\nsome intro prose\n\n## [0.1.0] - 2020-01-01\n- a thing\n");
-    let sections = cut(with_preamble.prose(), version_section);
+    let sections = cut(with_preamble.prose().numbered_lines(), version_section);
     assert_eq!(sections.len(), 1, "{sections:?}");
     assert_eq!(sections[0].name, "## [0.1.0]");
     assert_eq!(
@@ -38,7 +38,7 @@ fn a_preamble_belongs_to_no_section_and_no_sentinel_yields_nothing() {
 
     let no_sentinel = Source::of("# Changelog\n\nnothing but prose\n");
     assert_eq!(
-        cut(no_sentinel.prose(), version_section),
+        cut(no_sentinel.prose().numbered_lines(), version_section),
         Vec::new(),
         "an empty vector, not one section holding the whole document — a document with no sentinel declares \
          no section, and answering otherwise would invent one"
@@ -54,7 +54,7 @@ fn a_repeated_name_yields_two_sections_rather_than_one() {
     let doubled = Source::of(
         "## [Unreleased]\n- one\n## [0.1.0] - 2020-01-01\n- two\n## [Unreleased]\n- three\n",
     );
-    let sections = cut(doubled.prose(), version_section);
+    let sections = cut(doubled.prose().numbered_lines(), version_section);
     assert_eq!(
         sections
             .iter()
@@ -90,7 +90,7 @@ fn a_fenced_sentinel_opens_no_section() {
          ```\n\
          - still the same section\n",
     );
-    let sections = cut(fenced.prose(), version_section);
+    let sections = cut(fenced.prose().numbered_lines(), version_section);
     assert_eq!(sections.len(), 1, "{sections:?}");
     assert_eq!(
         sections[0].body.last(),
@@ -108,7 +108,7 @@ fn a_fenced_sentinel_opens_no_section() {
 #[test]
 fn a_section_keeps_the_sentinel_line_the_document_wrote() {
     let both = Source::of("## [Unreleased]\n- pending\n## [0.5.0] - 2026-08-22\n- shipped\n");
-    let sections = cut(both.prose(), version_section);
+    let sections = cut(both.prose().numbered_lines(), version_section);
     let names: Vec<&str> = sections.iter().map(|s| s.name.as_str()).collect();
     let lines: Vec<&str> = sections.iter().map(|s| s.line.as_str()).collect();
     assert_eq!(names, vec!["## [Unreleased]", "## [0.5.0]"]);

@@ -1,5 +1,5 @@
 use crate::manifest::{
-    Publishable, Quoted, WorkspaceVersion, is_semver, publishable, quoted_value, semver,
+    Publishable, Quoted, WorkspaceVersion, is_semver, is_table, publishable, quoted_value, semver,
     workspace_version,
 };
 
@@ -372,4 +372,43 @@ fn every_publish_shape_cargo_honours_is_read_as_cargo_reads_it() {
         publishable("[package]\nname = \"kanhe\"\npublish = false\n"),
         Publishable::No
     );
+}
+
+/// A table heading needs both brackets, so an array's continuation line is not a table.
+///
+/// **The readers this predicate replaces each wrote `starts_with('[')`.** That also matches `  [1, 2],` — a
+/// multi-line array's continuation — which would close whatever table was open and drop every key after it.
+/// No manifest here writes that shape, so the over-inclusion was latent rather than live; requiring the
+/// closing bracket refuses it and costs a real heading nothing.
+///
+/// Given both ends of the boundary rather than one: the arrays that must **not** open a table, and the
+/// headings that must. A fixture holding only the first passes for a predicate that answers `false` always.
+#[test]
+fn a_table_heading_needs_both_brackets() {
+    for heading in [
+        "[package]",
+        "[[package]]",
+        "[dependencies.serde_json]",
+        "  [workspace.dependencies]",
+        "[package] ",
+    ] {
+        assert!(
+            is_table(heading),
+            "`{heading}` opens a table and must be read as one"
+        );
+    }
+    for value in [
+        "  [1, 2],",
+        "include = [",
+        "  \"src/**/*.rs\",",
+        "]",
+        "features = [\"a\"]",
+        "",
+    ] {
+        assert!(
+            !is_table(value),
+            "`{value}` is value text, not a heading; reading it as one closes the open table and drops \
+             every key after it"
+        );
+    }
 }

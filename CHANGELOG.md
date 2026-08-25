@@ -1172,6 +1172,39 @@ them.
 
 ### Self-governance
 
+- **One cut for two grammars, because a second cut would have been this module's own subject performed on
+  itself.** `sections::cut` was built for Markdown headings; the TOML readers in `release_coherence_gate` and
+  `manifest` need the identical skeleton — *a heading opens, the next heading closes, the preamble belongs to
+  none* — over a different grammar. Writing `tables::cut` beside it would have been the third such skeleton this
+  line spent four changes removing. It takes numbered lines rather than one region kind now, and is generic in what
+  the predicate answers: a Markdown heading names its section with a string, while a TOML heading answers a
+  *classification*, and collapsing those would hand the decision back to the caller's text.
+
+  The line type is generic for one reason and no other: `Prose` yields owned text because excising a comment
+  span builds a new string, `Executed` yields borrowed slices because cutting a tail comment does not.
+  Requiring either would push a `.map()` onto every call site of the other kind. The default type parameter
+  keeps all eight existing call sites spelled `Section`.
+
+  **`package_name` is the first TOML reader across, and the shared predicate tightened on the way.** Each of
+  the three wrote `starts_with('[')` for itself, which also matches a multi-line array's continuation —
+  `  [1, 2],` trims to something starting with `[`, so it would close the open table and drop every key after
+  it. `manifest::is_table` requires the closing bracket too. Latent rather than live: no manifest here writes
+  that shape, which is why three copies could carry it. Held by
+  `a_table_heading_needs_both_brackets`, whose fixture carries both ends of the boundary — the arrays that
+  must not open a table and the headings that must — because one alone passes for a predicate that always
+  answers `false`.
+
+  **The entry's own list was wrong twice, and both were found before touching code.** It says four readers and
+  names `prelude_promise::block_body` among them; there are **six** TOML readers — `manifest`'s
+  `workspace_version` and `publishable` are the two it omits — and `block_body` reads Rust, not TOML. Its
+  earlier sibling undercounted the same way. A set enumerated once in prose is a set nothing re-counts, which
+  is the second time this line has paid for that in the same document.
+
+  Five bug shapes the entry cites are **history rather than an open well**: the `[lib]`-before-`[package]`
+  misread, a comment on a table heading, single- versus double-quoted values, `[[patch.unused]]` fields
+  bleeding upward, and a comment glued to a value are each closed, with the repair recorded at its site. What
+  remained was the duplication, and that is what this closes.
+
 - **The Markdown residue `region` declared is closed, and the direction that held its latency is retired
   rather than kept.** `capability_subjects`'s two readers were the last that took a bare `&str`:
   `subject_globs` split on `"\n## Subject\n"` and then truncated at `"\n## "`, and `proposal_capabilities` did
