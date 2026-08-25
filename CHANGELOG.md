@@ -1172,6 +1172,27 @@ them.
 
 ### Self-governance
 
+- **The last table walker is gone, and with it the `Option` that existed only to hold a half-built record.**
+  `declared_dependencies` carried a `Table` cursor and a `pending: Option<Detailed>` flushed at the next
+  heading — because a `[dependencies.NAME]` table's `package`, `version` and `path` arrive across separate
+  lines, so the record could be filed only once a *following* heading proved the table over. With each table
+  carrying its own body, `Detailed` is built and filed inside one iteration: no half-built record, and no
+  boundary to remember to flush at. The `flush` closure is gone with it.
+
+  **`kanhe` now has no hand-rolled TOML table walk left.** Six readers over three files each carried one —
+  `package_name`, `require_lock_versions`, `declared_dependencies`, `workspace_version`, `publishable`, and the
+  `is_table` predicate they each spelled for themselves. What remains matching `starts_with('[')` in that
+  crate's product code is `is_table` itself and `publishable`'s value arm, which asks whether `publish = []` is
+  an empty array — a different question about a different thing, kept apart deliberately.
+
+  The direction goes through `require_internal_pins` rather than through the reader, so nothing's visibility is
+  widened for a test: the pin verdict is what a wrong boundary changes, and it was already reachable. Its
+  fixture puts a foreign table **between** two detailed ones, which is the arrangement that separates the two
+  implementations — two detailed tables in a row pass either way, since the second heading flushes the first
+  correctly. Negative run, with the predicate reduced to treating only dependency tables as boundaries:
+  *internal dependency xuanji declares 2 `version` keys*, the second being a `[package.metadata.docs.rs]` key
+  folded into the table above it.
+
 - **A lock block's fields are the block's by construction, where they were the block's by a rule.**
   `require_lock_versions` walked `Cargo.lock` with `name`, `version` and `source` as function-level state and
   a `close` closure called on **every** table header. That call was not incidental: `[[patch.unused]]`, which

@@ -320,3 +320,38 @@ fn an_escaped_renamed_package_is_refused_and_an_ordinary_sibling_does_not_cover_
 
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A detailed dependency table is filed from its own body, not from wherever the next heading falls.
+///
+/// **The `Option` that held a half-built record is what this closes.** `declared_dependencies` carried a
+/// `pending: Option<Detailed>` flushed at the next heading, because a `[dependencies.NAME]` table's `package`,
+/// `version` and `path` arrive across separate lines and the record could only be filed once a following
+/// heading proved the table over. Every table now carries its own body, so `Detailed` is built and filed
+/// inside one iteration — no half-built record to hold, and no boundary to remember to flush at.
+///
+/// Read through `require_internal_pins` rather than through the reader itself, so nothing's visibility is
+/// widened for a test: the pin verdict is what a wrong boundary changes, and it is already reachable.
+///
+/// **A foreign table sits between two detailed ones, which is the arrangement that separates the two
+/// implementations.** A record surviving a heading folds `[package.metadata.docs.rs]`'s `version` into the
+/// table above it, and the pin then disagrees with the workspace version. Two detailed tables in a row would
+/// pass either way, since the second heading flushes the first correctly.
+#[test]
+fn a_detailed_table_is_filed_from_its_own_body() {
+    let manifest = "\
+[dependencies.xuanji]
+path = \"crates/xuanji\"
+version = \"0.5.0\"
+
+[package.metadata.docs.rs]
+version = \"9.9.9\"
+
+[dependencies.xingbiao]
+path = \"crates/xingbiao\"
+version = \"0.5.0\"
+";
+    require_internal_pins(manifest, "0.5.0").expect(
+        "both internal dependencies pin the workspace version; the `9.9.9` between them is a docs.rs key and \
+         belongs to neither table",
+    );
+}
