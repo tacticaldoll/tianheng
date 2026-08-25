@@ -22,6 +22,15 @@ use crate::region::Source;
 /// empty set is what refuses — the same floor `value_guard` states one function up.
 const PARSER_CASE: &str = "case $1 in";
 
+/// Whether a line opens a `case` block.
+///
+/// The shape rather than [`PARSER_CASE`] itself, because the two questions differ: that constant asks *is
+/// this the parser's opener*, and this asks *does another block open here*. A nested `case $1 in` answers
+/// yes to both, and reading it through the constant alone is what let that spelling past.
+fn opens_a_case(trimmed: &str) -> bool {
+    trimmed.starts_with("case ") && trimmed.ends_with(" in")
+}
+
 /// The call shape a value guard is recognised by: the count, the flag, and the value.
 ///
 /// **The shape rather than the name, because the two wrappers spell the name differently.** A literal pair of
@@ -73,8 +82,14 @@ pub fn value_guard(script: &str, wrapper: &str) -> Result<String, Refusal> {
 ///
 /// # Panics
 ///
-/// When a guard call belongs to no arm this reader could identify — the read stops rather than dropping it,
-/// for the reason the module header gives.
+/// Twice, and both are the module header's rule rather than two policies: **the read stops rather than
+/// shrinking.**
+///
+/// * When a guard call belongs to no arm this reader could identify — the call is a hole in the claim, not
+///   an absence from it.
+/// * When a `case` opens inside the parser — the region this reader is bounded to is a boolean, so the
+///   inner block's `esac` would end the read at the wrong `esac` and the arms after it would leave the map
+///   unannounced.
 pub fn parser_arms(script: &str, guard: &str) -> BTreeMap<String, Arm> {
     let source = Source::of(script);
     let executed = source.shell();
@@ -99,6 +114,29 @@ pub fn parser_arms(script: &str, guard: &str) -> BTreeMap<String, Arm> {
     };
     for line in executed.lines() {
         let trimmed = line.trim();
+        // **A `case` opened inside the parser stops the read.** `in_parser` is a boolean and shell's `case`
+        // nests, so the inner `esac` clears it and every arm after the inner block leaves the map — the
+        // catch-all included, which is the arm every refusal rests on. Nothing downstream reports the loss:
+        // an arm dropped before either side of a both-ways equality is built is missing from both, and two
+        // sets agreeing by both missing it is what this module's header forbids in so many words.
+        //
+        // **Above the `PARSER_CASE` arm, not below it.** A nested `case $1 in` is spelled exactly as the
+        // parser's own opener, so a check below that arm takes its `continue` and never sees the worse of
+        // the two spellings — measured on the fixture below: the differently-spelled nest answered
+        // `["--subject"]` where three arms were declared, and the parser's own spelling answered
+        // `["--nested", "--subject"]`, admitting the inner block's arm as the parser's AND dropping the rest.
+        //
+        // **A refusal rather than a depth counter.** Neither wrapper nests a `case`, and this family
+        // does not build machinery for a state that does not occur; the floor says what it cannot read, which
+        // is the same answer the unattributable-guard arm below already gives. A wrapper that needs a nested
+        // `case` is a reason to build the counter, not a reason this refusal is wrong.
+        assert!(
+            !(in_parser && opens_a_case(trimmed)),
+            "a `case` opens at `{trimmed}` inside the parser this reader is bounded to, and the arm set it \
+             would return stops at that block's `esac` rather than at the parser's. A claim over these arms \
+             would run over a set that does not describe the wrapper — the catch-all included. Read the \
+             arguments in one `case`, or give this reader nesting before nesting it"
+        );
         if trimmed == PARSER_CASE {
             in_parser = true;
             continue;

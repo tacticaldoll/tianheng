@@ -126,3 +126,93 @@ fn several_value_guards_in_one_wrapper_refuse_and_one_called_twice_does_not() {
         .expect_err("a wrapper taking a value with no guard hands nothing to be judged");
     crate::refusal::expect("repository-checks#the-only-found-none", &refusal);
 }
+
+/// A `case` opened INSIDE the parser stops the read, rather than ending it at the inner `esac`.
+///
+/// **The region flag is a `bool` and shell's `case` nests.** The inner `esac` clears it, so every arm after
+/// the inner block leaves the map — the catch-all `*` included, which is the arm every refusal rests on. No
+/// existing direction saw this: [`the_scan_reads_the_parsers_case_and_no_other`] places its second `case`
+/// *after* `esac`, where the flag is already clear, so it measures a sibling and says nothing about a nest.
+///
+/// Nothing downstream would report the loss either. `gate_exit_classes` compares *takes* against *judged*
+/// and `publish_workflow` compares *asking* against *consuming*: an arm dropped before either set is built
+/// is missing from both, and two sets agreeing by both missing it is the failure this module's header names
+/// in so many words.
+///
+/// **Given two spellings, because the second is the one this reader would have dropped differently.** A
+/// nested `case $conclusion in` is invisible to the loop and merely truncates. A nested `case $1 in` is
+/// spelled exactly as the parser's own opener, so it takes that arm's `continue`, admits the inner block's
+/// arms as the parser's own, and *then* truncates — wrong in both directions at once. A check placed below
+/// the `PARSER_CASE` arm would close the first and leave the second, which is why both are here.
+#[test]
+fn a_case_opened_inside_the_parser_stops_the_read() {
+    // The inner block is invisible to the loop: it opens no arm, and its `esac` is what does the damage.
+    let differently_spelled = "\
+while (($#)); do
+    case $1 in
+    --subject)
+        require_value \"$#\" \"$1\" \"${2-}\"
+        case $conclusion in
+        ok) subject=$2 ;;
+        esac
+        shift 2
+        ;;
+    --body-file)
+        require_value \"$#\" \"$1\" \"${2-}\"
+        body_file=$2
+        shift 2
+        ;;
+    *)
+        refuse \"$1\" \"not admitted\"
+        ;;
+    esac
+done
+";
+    let refused = std::panic::catch_unwind(|| parser_arms(differently_spelled, "require_value"));
+    assert!(
+        refused.is_err(),
+        "a nested `case` truncates the arm set at the inner `esac` — `--body-file` and the catch-all `*` \
+         never enter the map, and a claim over these arms would run over a set that does not describe the \
+         wrapper. Read instead of refused: {:?}",
+        refused
+            .map(|arms| arms.keys().cloned().collect::<Vec<_>>())
+            .ok()
+    );
+
+    // The parser's own spelling: taken by the `PARSER_CASE` arm's `continue`, so the inner block's arms are
+    // admitted as the parser's before the inner `esac` drops the rest.
+    let parsers_own_spelling = "\
+while (($#)); do
+    case $1 in
+    --subject)
+        require_value \"$#\" \"$1\" \"${2-}\"
+        case $1 in
+        --nested)
+            nested=$2
+            shift 2
+            ;;
+        esac
+        shift 2
+        ;;
+    --body-file)
+        require_value \"$#\" \"$1\" \"${2-}\"
+        body_file=$2
+        shift 2
+        ;;
+    *)
+        refuse \"$1\" \"not admitted\"
+        ;;
+    esac
+done
+";
+    let refused = std::panic::catch_unwind(|| parser_arms(parsers_own_spelling, "require_value"));
+    assert!(
+        refused.is_err(),
+        "a nested `case` spelled as the parser's own opener admits the inner block's arms as the parser's \
+         AND truncates at the inner `esac`. A check placed below the `PARSER_CASE` arm never sees this one. \
+         Read instead of refused: {:?}",
+        refused
+            .map(|arms| arms.keys().cloned().collect::<Vec<_>>())
+            .ok()
+    );
+}

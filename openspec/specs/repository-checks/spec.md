@@ -1056,6 +1056,18 @@ for the diagnostics they carry, but they SHALL decide nothing the default refusa
   a wrapper added later is covered on the day it is written
 - **PINNED-BY** `each_wrapper_refuses_a_flag_shaped_value_in_every_value_position`
 
+#### Scenario: A `case` opened inside a wrapper's own argument parser
+
+- **WHEN** a wrapper opens another `case` inside one of its parser's arms, in either spelling — a distinct
+  one, or the parser's own `case $1 in`
+- **THEN** the reading refuses, rather than ending the arm set at that inner block's `esac`. The region the
+  reader is bounded to is a boolean, so the inner `esac` closes the outer read: a distinct spelling truncates
+  the arm set, and the parser's own spelling additionally admits the inner block's arms as the wrapper's.
+  Both are invisible to the scenario above, which compares two sets a dropped arm has already left — and the
+  arm most likely to be dropped is the catch-all every refusal rests on. A refusal rather than nesting
+  analysis, because neither wrapper nests one and the floor is what covers a wrapper written later
+- **PINNED-BY** `a_case_opened_inside_the_parser_stops_the_read`
+
 #### Scenario: An admitted argument reaches the act
 
 - **WHEN** a sanctioned wrapper is given an argument that changes only whether and how the act proceeds
