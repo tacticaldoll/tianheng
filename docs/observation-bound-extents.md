@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**50 of 96 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**49 of 95 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -29,7 +29,6 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound` — owner: engine
 - `release-coherence/a-dependency-declared-under-a-quoted-cfg-target-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound` — owner: engine
-- `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound` — owner: engine
 - `release-coherence/a-name-reached-only-through-a-url-a-stated-bound` — owner: engine
 - `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound` — owner: engine
 - `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound` — owner: engine
@@ -441,7 +440,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (50)
+## under-reacts (49)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -634,14 +633,6 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: directories are derived slash-terminated, and stripping that slash leaves a word indistinguishable from ordinary prose — `scripts` is an English plural this document already uses as one. Admitting the unslashed form for deeper names only, where the collision is less likely, would make the check judge which of its own keys read as English
 - **its defence must show**: does not react
 - **pinned by**: `a_directory_named_without_its_slash_is_a_stated_bound`
-
-### `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound`
-
-> a `### ` line inside a fenced code block, followed by entries that name machinery
-
-- **because**: the check walks the document's line grammar and does not track fences, so such a line sets the heading in force and can name the one exempt heading; it is latent rather than live — this repository's changelog carries no fenced block — and closing it means a second, stateful reading of a document this gate reads once
-- **its defence must show**: does not react
-- **pinned by**: `a_heading_inside_a_fenced_block_is_a_stated_bound`
 
 ### `release-coherence/a-name-reached-only-through-a-url-a-stated-bound`
 

@@ -55,6 +55,7 @@ pub mod refusal_bounds;
 pub mod region;
 pub mod release_coherence_gate;
 pub mod restatement;
+pub mod sections;
 pub mod selection;
 pub mod supplied;
 pub mod verdict_channel;

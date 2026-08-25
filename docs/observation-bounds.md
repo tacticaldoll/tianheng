@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**24 of 96 declared bounds have no pinning test.** That figure is the register's
+**24 of 95 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -308,12 +308,6 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing reacts. A word is a maximal run of path characters, so a scheme and host fuse with the path into one run that equals no tracked name; splitting a URL into its path would make the reaction judge a foreign host's layout as though it were this repository's
 
 - **pinned by**: `a_name_reached_only_through_a_url_is_a_stated_bound`
-
-### `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound`
-
-> nothing reacts for those entries, because that line set the heading in force and may name the one exempt heading. The reaction walks the document's line grammar and does not track fences; it is latent rather than live, this repository's changelog carrying no fenced block at all
-
-- **pinned by**: `a_heading_inside_a_fenced_block_is_a_stated_bound`
 
 ### `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound`
 

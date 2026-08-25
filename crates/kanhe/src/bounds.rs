@@ -803,20 +803,5 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_name_reached_only_through_a_url_is_a_stated_bound",
         ),
-        BoundDecl::pinned(
-            BoundId::new(
-                "release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound",
-            ),
-            "a `### ` line inside a fenced code block, followed by entries that name machinery",
-            Extent::Reached(Reached::UnderReacts {
-                because: "the check walks the document's line grammar and does not track fences, so such a \
-                          line sets the heading in force and can name the one exempt heading; it is latent \
-                          rather than live — this repository's changelog carries no fenced block — and closing \
-                          it means a second, stateful reading of a document this gate reads once"
-                    .into(),
-                owner: Owner::Engine,
-            }),
-            "a_heading_inside_a_fenced_block_is_a_stated_bound",
-        ),
     ]
 }

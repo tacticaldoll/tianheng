@@ -1320,13 +1320,23 @@ fn a_name_reached_only_through_a_url_is_a_stated_bound() {
     );
 }
 
-/// `release-coherence/a-heading-inside-a-fenced-code-block-a-stated-bound`
+/// A `### ` line inside a fence does not set the heading in force, so it cannot exempt a later entry.
 ///
-/// `UnderReacts`, owned by the engine. The check walks the document's line grammar and does not track
-/// fences, so a `### ` line inside a fenced block sets the heading in force — and can name the one exempt
-/// heading. Latent rather than live: this repository's changelog carries no fenced block at all.
+/// **A retired bound, with its own WHEN re-run rather than deleted.** It was declared under
+/// `release-coherence` as *a heading inside a fenced code block*, an `UnderReacts` owned by the
+/// engine — named in words here rather than by its id, because a retired id resolving to nothing is what
+/// `every_bare_bound_reference_resolves_to_a_declared_bound` refuses, and it is right to: an id that points
+/// nowhere reads exactly like an undeclared bound. The check walked the document's line grammar without
+/// tracking fences, so a fenced
+/// `### Self-governance` set the exempt heading and every entry after it went unreported — a false negative,
+/// latent only because this repository's changelog carried no fenced block.
+///
+/// The bound's stated cost was *a second, stateful reading of a document this gate reads once*, and that
+/// premise is what retired it rather than a decision to pay the cost. `region::Prose` already tracks fences,
+/// for every reader in the crate, so the gate reads a region instead of text and the second reading is one
+/// that already existed. The fixture below is the bound's own WHEN, unchanged; only the THEN moved.
 #[test]
-fn a_heading_inside_a_fenced_block_is_a_stated_bound() {
+fn a_heading_inside_a_fenced_block_does_not_reattribute_a_later_entry() {
     let root = scratch("bound-fenced");
     assert_reaction_is_live(&root);
     let fixture = build_fixture(&root, "fenced", "0.2.0");
@@ -1339,10 +1349,13 @@ fn a_heading_inside_a_fenced_block_is_a_stated_bound() {
     commit(&fixture.repo, "docs: put a heading inside a fence");
     let verdict = judge(&fixture.repo);
     let _ = std::fs::remove_dir_all(&root);
-    assert!(
-        verdict.is_ok(),
-        "the check must stay silent when a fenced heading reattributes a later entry. Got: {:?}",
-        verdict.err()
+    let refusal = verdict.expect_err(
+        "a fenced `### Self-governance` no longer sets the heading in force, so the entry naming machinery \
+         after it is reported rather than exempt",
+    );
+    refusal::expect(
+        "release-coherence#adopter-entry-names-own-machinery",
+        &refusal,
     );
 }
 
