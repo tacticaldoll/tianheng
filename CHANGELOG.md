@@ -1172,6 +1172,35 @@ them.
 
 ### Self-governance
 
+- **The unreachable-branch reader decides the consumer by what it does, and it used to decide by four
+  spellings.** The list held `.unwrap_or`, `.unwrap_or_default`, `.unwrap_or_else` and `?`, so the same dead
+  default written `.map_or(d, f)` was invisible — and two live sites used a fifth and a sixth:
+  `guibiao`'s `symbol_scan` read `.rsplit("::").next().is_some_and(…)`, in a published crate, and
+  `one_spelling` read `.rsplit('/').next() == Some(…)`. Thirteen consumers now, every one of them total over
+  `Option` and a no-op on an always-`Some` one; `.map(`, `.and_then(`, `.filter(` and `.expect(` stay out for
+  reasons the constant states. Both sites are repaired.
+
+  It also reported code that was correct. `if let Some(x) = lookup() { let f = v.split('/').next(); }` was
+  called a dead branch, because the reader asked whether the text *before* the call contained the marker
+  rather than whether the construct consumes that expression. Between a construct and the expression it
+  consumes there is no statement boundary, so a `;`, `{` or `}` in between now says it consumes something
+  else. `match` and the `let … else` binding joined the constructs at the same time.
+
+  The backtick rule had the same shape one file over: `reading`'s own doc names **two** primitives it
+  replaced — a `find` twice in a loop and a `split` with `step_by(2)` — and the reaction closed only the
+  second, so pasting the loop that had just been deleted anywhere else swept clean. Both are refused now, and
+  the five other primitives that reach a backtick literal are a declared bound: all five are in live use for
+  reading one delimited value, where they are correct.
+
+- **A guard that could never fire stood in a repository check, written in the same batch as the reaction for
+  that class.** The wrapped-span repair put a `line.matches('`').count() % 2 == 0` test in front of
+  `reading::backticked` — the same predicate the reader itself decides — so the `Err` arm behind it was
+  unreachable, the vector it filled was always empty, and the assertion holding that vector empty was a
+  guard nothing could make fire. The parity decision lives in one place now and the two arms are the two
+  answers. Two leftover bare blocks from the earlier mechanical rewrite went with it, and a comment
+  describing the policy that was rejected — a reader met two comments stating opposite policies and the code
+  did the second.
+
 - **The pipeline reaction's corpus is a parameter now, and the two places the class mattered most were
   outside it.** The reaction was written for `ci.yml` and both wrappers ran
   `printf '%s' "$output" | grep -qE 'test result: ok\. 1 passed'` under `set -Eeuo pipefail`, in front of

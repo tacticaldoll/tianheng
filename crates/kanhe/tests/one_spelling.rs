@@ -63,7 +63,7 @@ fn members_reaching(root: &Path, crate_name: &str) -> BTreeSet<String> {
             if dep != name
                 && members
                     .iter()
-                    .any(|m| m.rsplit('/').next() == Some(&dep[..]))
+                    .any(|m| m.rsplit_once('/').map_or(m.as_str(), |(_, name)| name) == dep)
             {
                 edges.push((name.clone(), dep));
             }

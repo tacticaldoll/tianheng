@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**48 of 94 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**50 of 96 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -39,11 +39,13 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
 - `repository-checks/a-figure-written-in-words-at-one-hundred-or-above-is-not-matched-a-stated-bound` — owner: engine
 - `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
+- `repository-checks/a-marker-is-reached-through-some-other-primitive-a-stated-bound` — owner: engine
 - `repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound` — owner: engine
 - `repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound` — owner: engine
 - `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound` — owner: engine
 - `repository-checks/files-no-capability-claims-a-stated-bound` — owner: engine
+- `repository-checks/the-consumer-stands-on-a-later-statement-a-stated-bound` — owner: engine
 - `repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound` — owner: engine
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
 - `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound` — owner: engine
@@ -439,7 +441,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (48)
+## under-reacts (50)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -713,6 +715,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
 
+### `repository-checks/a-marker-is-reached-through-some-other-primitive-a-stated-bound`
+
+> a sequence of backtick-delimited names paired by hand through `split_once`, `strip_prefix`, `strip_suffix`, `trim_matches` or `matches`
+
+- **because**: the reaction names two primitives, `split` and `find`, which are the two shapes `reading`'s own doc records replacing. The other five are in live use for reading a SINGLE delimited value, where they are correct -- measured when this was written: five sites, none of them a pairing -- so refusing them by name would refuse the honest use, and telling the two apart needs the expression's shape rather than the primitive's name
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *the backtick primitives the pairing reader names*
+
 ### `repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound`
 
 > a refusal constructed by a gate implemented under `crates/kanhe/tests`, beside the directions over it
@@ -752,6 +762,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: subjects are declared where a capability has something to say, and requiring them to tile the repository would buy coverage with a claim per capability that nobody could defend. The join reports how many tracked paths went unclaimed, so a clean verdict is not read as a complete one
 - **its defence must show**: does not react
 - **pinned by**: `files_no_capability_claims_are_reported_rather_than_implied_judged`
+
+### `repository-checks/the-consumer-stands-on-a-later-statement-a-stated-bound`
+
+> an always-`Some` value bound to a name and read as if it could be absent on a later statement
+
+- **because**: the reader joins a chain `rustfmt` broke and decides one logical line, so a consumer reached through a binding is outside what it can see. Following the binding is name resolution, which no reader over text performs. Measured when this was written: no site in the tree binds a `split(..).next()` and consumes it later
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *the always-Some consumer reached through a binding*
 
 ### `repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound`
 

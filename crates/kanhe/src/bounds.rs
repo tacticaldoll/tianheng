@@ -127,6 +127,38 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::unpinned(
             BoundId::new(
+                "repository-checks/a-marker-is-reached-through-some-other-primitive-a-stated-bound",
+            ),
+            "a sequence of backtick-delimited names paired by hand through `split_once`, `strip_prefix`, \
+             `strip_suffix`, `trim_matches` or `matches`",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the reaction names two primitives, `split` and `find`, which are the two shapes \
+                          `reading`'s own doc records replacing. The other five are in live use for reading \
+                          a SINGLE delimited value, where they are correct -- measured when this was \
+                          written: five sites, none of them a pairing -- so refusing them by name would \
+                          refuse the honest use, and telling the two apart needs the expression's shape \
+                          rather than the primitive's name"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *the backtick primitives the pairing reader names*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new("repository-checks/the-consumer-stands-on-a-later-statement-a-stated-bound"),
+            "an always-`Some` value bound to a name and read as if it could be absent on a later statement",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the reader joins a chain `rustfmt` broke and decides one logical line, so a \
+                          consumer reached through a binding is outside what it can see. Following the \
+                          binding is name resolution, which no reader over text performs. Measured when \
+                          this was written: no site in the tree binds a `split(..).next()` and consumes it \
+                          later"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *the always-Some consumer reached through a binding*",
+        ),
+        BoundDecl::unpinned(
+            BoundId::new(
                 "repository-checks/a-consumer-that-stops-early-is-neither-head-nor-grep-a-stated-bound",
             ),
             "a pipeline whose last stage exits before its producer finishes under a program name this \

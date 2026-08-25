@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**22 of 94 declared bounds have no pinning test.** That figure is the register's
+**24 of 96 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -334,6 +334,18 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing triages it. The register reads `crates/kanhe/src`, and a construction there is either held by a direction or declared unheld; a construction beside its own directions is neither, because *which direction observes this branch* has no answer when every direction in the file can see it. Reaching further means deciding what a file that is both judgement and test is being asked, which is a question about where those gates should live rather than about this register
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a gate that is its own test is outside the refusal register*
+
+### `repository-checks/a-marker-is-reached-through-some-other-primitive-a-stated-bound`
+
+> the reaction reports nothing. Those five are in live use for reading a *single* delimited value rather than pairing a sequence — measured when this was written: five sites, none of them a pairing — so refusing them would refuse the honest use, and telling the two apart needs the expression's shape rather than the primitive's name
+
+- **unpinned**, tracked by: `BACKLOG.md` — *the backtick primitives the pairing reader names*
+
+### `repository-checks/the-consumer-stands-on-a-later-statement-a-stated-bound`
+
+> the reaction reports nothing. It joins a chain `rustfmt` broke and reads one logical line, so a consumer reached through a binding is outside what a line-scoped reader can decide; following the binding is name resolution, which no reader over text performs. Measured when this was written: no site in the tree binds a `split(…).next()` and consumes it later
+
+- **unpinned**, tracked by: `BACKLOG.md` — *the always-Some consumer reached through a binding*
 
 ### `repository-checks/a-consumer-that-stops-early-is-neither-head-nor-grep-a-stated-bound`
 

@@ -1221,10 +1221,10 @@ fn should_react_on_occurrence(
     } else if let Some(verbs) = verbs {
         // narrowed: the terminal segment must be a declared read verb (leaf-exact, never a prefix
         // or substring match — `now_ish` is not `now`)
-        resolved
-            .rsplit("::")
-            .next()
-            .is_some_and(|leaf| verbs.iter().any(|v| v == leaf))
+        let leaf = resolved
+            .rsplit_once("::")
+            .map_or(resolved, |(_, leaf)| leaf);
+        verbs.iter().any(|v| v == leaf)
     } else {
         // default call, no narrowing: every call under the prefix
         true

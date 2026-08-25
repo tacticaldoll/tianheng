@@ -41,15 +41,35 @@ fn workspace_root() -> Option<PathBuf> {
 const INFALLIBLE: [&str; 2] = [".split(", ".rsplit("];
 
 /// Consumers that read an always-`Some` value as if it could be absent.
-const AS_IF_FALLIBLE: [&str; 4] = [
+///
+/// **Chosen by what each does to the `Option`, not by the spellings one round happened to meet.** The first
+/// list held four, so the same dead default written `.map_or(d, f)` was invisible and two live sites — one in
+/// a published crate — used `.is_some_and(` and `== Some(`. Every entry here is total over `Option` and a
+/// no-op on an always-`Some` one: it either carries a value nothing reaches, or answers a question whose
+/// answer is fixed. `.map(`, `.and_then(`, `.filter(` and `.expect(` are absent deliberately — the first two
+/// keep the `Option`, `.filter` can genuinely produce `None`, and `.expect` documents the impossibility
+/// instead of branching on it.
+const AS_IF_FALLIBLE: [&str; 13] = [
+    "?",
     ".unwrap_or(",
     ".unwrap_or_default(",
     ".unwrap_or_else(",
-    "?",
+    ".map_or(",
+    ".map_or_else(",
+    ".ok_or(",
+    ".ok_or_else(",
+    ".is_some(",
+    ".is_none(",
+    ".is_some_and(",
+    "== Some(",
+    "!= Some(",
 ];
 
 /// Constructs that consume the `Option` itself, so the offence is the enclosing form rather than a suffix.
-const CONSUMES_THE_OPTION: [&str; 2] = ["if let Some(", "filter_map(|"];
+///
+/// `let Some(` covers both `if let Some(… ) = …` and the `let … else` binding; `match` covers the arm pair
+/// whose `None` half nothing reaches.
+const CONSUMES_THE_OPTION: [&str; 3] = ["let Some(", "match ", "filter_map(|"];
 
 /// Where a call's argument list ends, counting nested parentheses and skipping quoted text.
 ///
@@ -122,17 +142,28 @@ fn offences(path: &str, text: &str) -> Vec<String> {
                 let Some(tail) = after.strip_prefix(".next()") else {
                     continue;
                 };
-                let suffix = AS_IF_FALLIBLE.iter().find(|c| tail.starts_with(**c));
+                let after = tail.trim_start();
+                let suffix = AS_IF_FALLIBLE.iter().find(|c| after.starts_with(**c));
+                // **The construct must consume *this* expression, not merely stand earlier on the line.**
+                // Asking whether the prefix *contains* the marker reported
+                // `if let Some(x) = lookup() { let first = value.split('/').next(); }` — where the `if let`
+                // judges `lookup()`. Between a construct that consumes an expression and that expression
+                // there is no statement boundary, so a `;`, `{` or `}` in between says it consumes
+                // something else.
                 let enclosing = CONSUMES_THE_OPTION
                     .iter()
-                    .find(|c| line[..call].contains(**c))
-                    .filter(|_| {
-                        let rest = tail.trim_start();
-                        rest.is_empty()
-                            || rest.starts_with(')')
-                            || rest.starts_with(',')
-                            || rest.starts_with(';')
-                            || rest.starts_with('{')
+                    .filter(|marker| {
+                        line[..call].rfind(**marker).is_some_and(|at| {
+                            !line[at + marker.len()..call].contains([';', '{', '}'])
+                        })
+                    })
+                    .find(|_| {
+                        after.is_empty()
+                            || after.starts_with(')')
+                            || after.starts_with(',')
+                            || after.starts_with(';')
+                            || after.starts_with('{')
+                            || after.starts_with("else")
                     });
                 let (consumer, how) = match (suffix, enclosing) {
                     (Some(consumer), _) => (*consumer, "the fallback is dead"),
@@ -218,6 +249,15 @@ fn the_reader_separates_a_dead_fallback_from_a_reachable_one() {
         format!("let a = b\n    {split}\n    .next()\n    .unwrap_or(b);"),
         format!("if let Some(a) = b{split}.next() {{}}"),
         format!("c.filter_map(|b| b{split}.next()).collect()"),
+        // The spellings the first vocabulary missed, two of them taken from live sites — one in a published
+        // crate. Each is total over `Option` and a no-op on an always-`Some` one.
+        format!("let a = b{rsplit}.next().is_some_and(|leaf| leaf == c);"),
+        format!("let a = b{rsplit}.next() == Some(c);"),
+        format!("let a = b{split}.next().map_or(d, f);"),
+        format!("let a = b{split}.next().ok_or(e)?;"),
+        format!("let a = b{split}.next().is_none();"),
+        format!("let Some(a) = b{split}.next() else {{ return }};"),
+        format!("match b{split}.next() {{ Some(a) => a, None => d }}"),
     ];
     for subject in &offending {
         assert_eq!(
@@ -240,6 +280,17 @@ fn the_reader_separates_a_dead_fallback_from_a_reachable_one() {
         "let a = b.split(')').next().expect(\"one item\");".to_string(),
         // Comments are not code: this file's own prose writes the shape it forbids.
         format!("// let a = b{split}.next().unwrap_or(b);"),
+        // **The construct must consume this expression, not merely stand earlier on the line.** Both of
+        // these are legal code the first reader called a dead branch, because it asked whether the text
+        // before the call *contained* the marker: the `if let` judges `lookup()`, and the `filter_map`
+        // closure returns a `String`.
+        format!("if let Some(x) = lookup() {{ let f = v{split}.next(); g(x, f); }}"),
+        format!(
+            "c.filter_map(|r| r.strip_prefix(p)).map(|r| {{ let h = r{split}.next(); h.unwrap_or(r).to_string() }})"
+        ),
+        // `.map(` and `.and_then(` keep the `Option`, so neither reads it as absent.
+        format!("let a = b{split}.next().map(str::trim);"),
+        format!("let a = b{split}.next().and_then(|s| s.parse().ok());"),
     ];
     for subject in &reachable {
         assert_eq!(
@@ -275,12 +326,20 @@ fn no_source_outside_the_shared_reader_pairs_backticks_by_hand() {
         for (number, line) in logical_lines(text) {
             // Assembled from pieces, so the needle never appears whole in this file: the sweep reads this
             // source too, and a plainly written detector is the offence it detects.
-            if line.contains(concat!(".split(", "'`')")) {
-                standing.push(format!(
-                    "  {path}:{number}: pairs backtick markers by hand — one unpaired marker shifts every \
-                     pair after it, and a shifted pairing reads as prose named and a name dropped rather \
-                     than as an error. Call `kanhe::reading::backticked`"
-                ));
+            // Assembled from pieces, so no needle appears whole in this file: the sweep reads this source
+            // too, and a plainly written detector is the offence it detects. Both primitives, because
+            // `reading`'s own doc names two shapes — a `find` twice in a loop, and a `split` with
+            // `step_by(2)` — and the reader that closed the second called the first clean. Measured: no
+            // site outside `reading` uses either today, so this closes the door rather than a set of them.
+            for needle in [concat!(".split(", "'`')"), concat!(".find(", "'`')")] {
+                if line.contains(needle) {
+                    standing.push(format!(
+                        "  {path}:{number}: searches for a backtick marker itself — pairing them as they \
+                         arrive lets one unpaired marker shift every pair after it, which reads as prose \
+                         named and a name dropped rather than as an error. Call \
+                         `kanhe::reading::backticked`"
+                    ));
+                }
             }
         }
     }
