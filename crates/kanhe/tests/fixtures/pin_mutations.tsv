@@ -12,3 +12,5 @@
 # gate's own matrix is what proves the refusal rather than a record standing in for it.
 a_trait_object_on_a_continuation_line_is_not_recognized	crates/kanhe/tests/observer_protocol.rs	trimmed.starts_with("pub ") && trimmed.contains("dyn ")	trimmed.contains("dyn ")
 the_derived_origin_honors_its_stated_shape_bounds	crates/louke/src/dsl.rs	    let head = match type_path.find('<') {\n        Some(open) => &type_path[..open],\n        None => type_path,\n    };	    let head = type_path;
+a_comment_naming_every_member_for_another_reason_is_refused	crates/kanhe/src/restatement.rs	    !allowlist.is_empty() && allowlist.iter().all(|member| names(block, member))	    !allowlist.is_empty() && allowlist.iter().any(|member| names(block, member))
+a_doc_example_of_the_dependency_dsl_is_refused	crates/kanhe/src/restatement.rs	    line.contains("restrict_dependencies_to(")	    line.contains("restrict_dependencies_to(guibiao")
