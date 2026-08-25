@@ -231,14 +231,25 @@ jobs:
           # neither `set -e` nor `pipefail` sees inside `<(…)`. Measured: exit 0, array length 0. The
           # derivation below stands where its status is visible, so the tool's absence is now the tool's
           # own error.
+          # **The manifest path, not the package name, because only one of the two is a location.** This
+          # derived unpublishable package NAMES and then tested them against `basename "$dir"` from a glob —
+          # joining cargo's identity to the filesystem by assuming the two are equal, which nothing holds. A
+          # publishable crate sharing a name with an unpublishable package's directory would be skipped and
+          # ship without its license texts. The same repository already refuses this coupling in Rust:
+          # `machinery_names` takes `manifest_path` "because `manifest_path` is canonical". One rule, one
+          # answer. Latent today — all eight directories match their package names — and latent is where a
+          # coupling is cheapest to remove.
           unpublishable=$(cargo metadata --no-deps --format-version 1 \
-            | jq -r '.packages[] | select(.publish == []) | .name' | tr '\n' ' ')
+            | jq -r '.packages[] | select(.publish == []) | .manifest_path' | tr '\n' ' ')
           missing=0
           for manifest in crates/*/Cargo.toml; do
             dir="${manifest%/Cargo.toml}"
-            name="$(basename "$dir")"
+            # Resolved on both sides: cargo emits an absolute path and the glob yields a relative one, so
+            # comparing the two as written would never match and every crate would be checked — the safe
+            # direction, and still a comparison that decides nothing.
+            resolved="$(cd "$dir" && pwd)/Cargo.toml"
             case " $unpublishable " in
-            *" $name "*) continue ;;  # cargo refuses to publish it — its directory need not carry license texts
+            *" $resolved "*) continue ;;  # cargo refuses to publish it — its directory need not carry license texts
             esac
             for f in LICENSE-MIT LICENSE-APACHE; do
               if [ ! -s "$dir/$f" ]; then
@@ -282,13 +293,21 @@ jobs:
           # `pipefail` cannot see inside `<(…)`, so the derivation stands alone as a command substitution
           # where it can fail — and an empty value is caught before `mapfile`, because a here-string over
           # one yields a single empty element and would satisfy the floor below.
+          # **Name and path from the one enumerator, as a pair.** The patch below was built as
+          # `crates/$s` from the name alone, which points nowhere for a crate whose directory differs — the
+          # same name-is-a-location assumption the `license-files` job above just stopped making.
           derived="$(cargo metadata --no-deps --format-version 1 \
-            | jq -r '.packages[] | select(.publish != []) | .name')"
+            | jq -r '.packages[] | select(.publish != []) | [.name, .manifest_path] | @tsv')"
           if [[ -z $derived ]]; then
             echo "::error::cargo metadata and jq derived no publishable crate at all — the enumerator, not the set"
             exit 1
           fi
-          mapfile -t crates <<< "$derived"
+          crates=(); paths=()
+          while IFS=$'\t' read -r cname cmanifest; do
+            [[ -z $cname ]] && continue
+            crates+=("$cname")
+            paths+=("$(dirname "$cmanifest")")
+          done <<< "$derived"
           # **A derived set can be empty and a hand-written one cannot, so the reach is asserted.** With
           # `crates=()` empty, `for crate in "${crates[@]}"` expands to nothing, the loop body never runs and
           # this job reports success over zero crates — the exact shape `gate-shape-contract` was retired for
@@ -304,8 +323,8 @@ jobs:
           # the alternative is a second hand-written fact, "which of them is the shell nobody depends on",
           # replacing the one just removed.
           patch=()
-          for s in "${crates[@]}"; do
-            patch+=(--config "patch.crates-io.$s.path=\"$ws/crates/$s\"")
+          for i in "${!crates[@]}"; do
+            patch+=(--config "patch.crates-io.${crates[i]}.path=\"${paths[i]}\"")
           done
           for crate in "${crates[@]}"; do
             cargo package --no-verify -p "$crate" "${patch[@]}"
