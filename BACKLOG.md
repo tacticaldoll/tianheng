@@ -414,7 +414,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated —
   at `ee15665`, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
   **1048** lines carrying `SHALL`, across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **94 bounds across 25 capabilities** — a live figure rather than part of the measurement
+  currently holds **96 bounds across 25 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -1540,6 +1540,37 @@ consumer for an undemonstrated deduplication.
   package, which is what closes the equivalent window on the merge path; until then narrowing is the only
   available move and it is already taken. *Authority:* engine. *Compatibility:* patch; the wrapper ships in
   no crate.
+
+- **WATCH: the backtick primitives the pairing reader names.** *Observed pressure:* pairing markers as they
+  arrive lets one unpaired marker shift every pair after it, which reads as prose named and a name dropped
+  rather than as an error. `no_source_outside_the_shared_reader_pairs_backticks_by_hand` refuses `split` and
+  `find` with a backtick literal outside `reading`. *Observation source:* the round that extracted
+  `reading::backticked` converted the three sites a review named and left three more standing; the round
+  after it added the reaction, and a review then found the reaction closed only one of the two primitives
+  `reading`'s own doc names. Measured when this was written: no site outside `reading` uses either, and five
+  sites use `split_once`, `strip_prefix`, `strip_suffix`, `trim_matches` or `matches` with a backtick literal
+  — none of them a pairing. *Current reaction or bound:*
+  `repository-checks/a-marker-is-reached-through-some-other-primitive-a-stated-bound`. *Risk:* a sequence
+  paired by hand through one of those five passes, and the shifted pairing it produces is readable, so
+  nothing downstream reports it either. Bounded by all five being in live use for reading one delimited value,
+  where they are correct. *Next trigger:* a site using one of the five to walk a sequence — which would mean
+  the primitive's name is the wrong instrument and the question is the expression's shape. *Authority:*
+  engine. *Compatibility:* patch; the reaction is repository machinery and ships in no package.
+
+- **WATCH: the always-Some consumer reached through a binding.** *Observed pressure:* `str::split` and
+  `str::rsplit` always yield at least one item, so every consumer treating `.next()` as fallible is a branch
+  nothing reaches. `no_branch_reads_an_always_some_value_as_if_it_could_be_absent` decides the consumer by
+  what it does to the `Option` — thirteen suffixes and three enclosing constructs — on one logical line.
+  *Observation source:* the round that added the reaction listed four suffixes and two constructs, and a
+  review then found two live sites using a fifth and a sixth, one of them in a published crate. Widening the
+  vocabulary closed those; what stays open is reach, not vocabulary. Measured when this was written: no site
+  in the tree binds a `split(…).next()` and consumes it on a later statement. *Current reaction or bound:*
+  `repository-checks/the-consumer-stands-on-a-later-statement-a-stated-bound`. *Risk:* a dead default written
+  through a binding passes, and it reads to a later maintainer as though the empty case happens. Bounded by
+  the reader joining chains `rustfmt` broke, which is where the shape usually lands. *Next trigger:* a site
+  binding the value and consuming it later — following that binding is name resolution, which is the point at
+  which a reader over text is the wrong instrument. *Authority:* engine. *Compatibility:* patch; the reaction
+  is repository machinery and ships in no package.
 
 - **WATCH: the early-exit consumers the pipeline reader names.** *Observed pressure:* adopting
   `defaults.run.shell: bash -euo pipefail {0}` made a consumer that stops before its producer finishes fail

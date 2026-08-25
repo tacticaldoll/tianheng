@@ -434,12 +434,23 @@ gave one rule two answers, and the correct half could tell the other nothing.
   state could not be expressed — a typed answer is what admits it
 - **PINNED-BY** `a_backtick_that_closes_nothing_is_refused_rather_than_shifting_every_pair`
 
-#### Scenario: A source outside the shared reader pairs markers itself
+#### Scenario: A source outside the shared reader searches for a marker itself
 
-- **WHEN** any tracked Rust source outside `reading` writes a hand-rolled backtick pairing
-- **THEN** the reaction refuses, naming the file and the line. The extraction closed the three sites a review
-  had named and left three more standing in the same window — the rule lived in whoever remembered it
+- **WHEN** any tracked Rust source outside `reading` calls `split` or `find` with a backtick literal
+- **THEN** the reaction refuses, naming the file and the line. Those are the two primitives `reading`'s own
+  doc names as the shapes it replaced — a `find` twice in a loop, and a `split` with `step_by(2)` — and the
+  first reader closed only the second. Measured when this was written: no site outside `reading` uses either
 - **PINNED-BY** `no_source_outside_the_shared_reader_pairs_backticks_by_hand`
+
+#### Scenario: A marker is reached through some other primitive — a stated bound
+
+- **WHEN** a source pairs markers using `split_once`, `strip_prefix`, `strip_suffix`, `trim_matches` or
+  `matches` with a backtick literal
+- **THEN** the reaction reports nothing. Those five are in live use for reading a *single* delimited value
+  rather than pairing a sequence — measured when this was written: five sites, none of them a pairing — so
+  refusing them would refuse the honest use, and telling the two apart needs the expression's shape rather
+  than the primitive's name
+- **UNPINNED** `BACKLOG.md` — *the backtick primitives the pairing reader names*
 
 #### Scenario: An even count reads, in order
 
@@ -483,6 +494,16 @@ its class open is what a reaction is for.
 - **THEN** it reports nothing for them — the corpus is executed Rust, so a comment is not code, and a reader
   matching the bare text would refuse its own reason
 - **PINNED-BY** `the_reader_separates_a_dead_fallback_from_a_reachable_one`
+
+#### Scenario: The consumer stands on a later statement — a stated bound
+
+- **WHEN** the `Option` is bound to a name and read as if it could be absent on a later statement, rather
+  than consumed in the same expression
+- **THEN** the reaction reports nothing. It joins a chain `rustfmt` broke and reads one logical line, so a
+  consumer reached through a binding is outside what a line-scoped reader can decide; following the binding
+  is name resolution, which no reader over text performs. Measured when this was written: no site in the tree
+  binds a `split(…).next()` and consumes it later
+- **UNPINNED** `BACKLOG.md` — *the always-Some consumer reached through a binding*
 
 #### Scenario: The corpus cannot be enumerated or a tracked source cannot be read
 

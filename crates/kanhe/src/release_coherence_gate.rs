@@ -1618,15 +1618,13 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
     let mut names: BTreeSet<String> = BTreeSet::new();
     for path in &machinery {
         names.insert(path.clone());
-        {
-            let base = path
-                .rsplit_once('/')
-                .map_or(path.as_str(), |(_, base)| base);
-            // Unique across the tree, or it names a published crate's file as well and would refuse an
-            // entry that is about the product rather than about the machinery.
-            if !published.contains(base) {
-                names.insert(base.to_string());
-            }
+        let base = path
+            .rsplit_once('/')
+            .map_or(path.as_str(), |(_, base)| base);
+        // Unique across the tree, or it names a published crate's file as well and would refuse an
+        // entry that is about the product rather than about the machinery.
+        if !published.contains(base) {
+            names.insert(base.to_string());
         }
         // The same rule as the basename, for the same reason and found the same way: widening the corpus
         // made `crates/` a machinery name, because it is an ancestor of `crates/kanhe/`. It is equally an
