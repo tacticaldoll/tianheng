@@ -412,3 +412,44 @@ fn a_table_heading_needs_both_brackets() {
         );
     }
 }
+
+/// Two `version` keys in `[workspace.package]` refuse, rather than the first one answering.
+///
+/// **One of three readers over the same root manifest disagreed with the other two.** `publishable` states
+/// the reason in its own words — *cargo refuses a manifest that declares one key twice, so a reader answering
+/// from the first of two would speak for a file cargo will not read at all* — and `package_name` answers the
+/// same way. `workspace_version` returned on the first `version` it met, so it spoke for a manifest cargo
+/// will not read.
+///
+/// Taking the values as a value first is what made the count askable at all: the shape that returned early
+/// could not have counted them, which is `crate::selection`'s whole subject one module over.
+///
+/// Given the legal case beside it, because a reader that refuses everything also passes the duplicate case.
+#[test]
+fn two_workspace_version_keys_refuse_rather_than_the_first_answering() {
+    let doubled = "[workspace.package]\nversion = \"0.5.0\"\nversion = \"0.6.0\"\n";
+    match workspace_version(doubled) {
+        WorkspaceVersion::Unreadable(what) => assert!(
+            what.contains('2') && what.contains("version"),
+            "the refusal says how many and which key: {what}"
+        ),
+        other => panic!(
+            "two `version` keys must refuse rather than answer from the first; got {other:?}"
+        ),
+    }
+
+    assert_eq!(
+        workspace_version("[workspace.package]\nversion = \"0.5.0\"\n"),
+        WorkspaceVersion::Declared("0.5.0".to_string()),
+        "and one key still answers, so the refusal above is about the count rather than about reading at all"
+    );
+
+    // A `version` under another table is not this key, so two tables each carrying one are not two keys.
+    assert_eq!(
+        workspace_version(
+            "[package]\nversion = \"9.9.9\"\n[workspace.package]\nversion = \"0.5.0\"\n"
+        ),
+        WorkspaceVersion::Declared("0.5.0".to_string()),
+        "the cut keeps each table's keys to itself; counting across tables would refuse a legal manifest"
+    );
+}

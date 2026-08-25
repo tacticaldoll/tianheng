@@ -1172,6 +1172,30 @@ them.
 
 ### Self-governance
 
+- **`manifest`'s two readers take the cut, and one of them had been answering for a manifest cargo will not
+  read.** `publishable` and `workspace_version` each walked the root `Cargo.toml`'s tables with their own
+  state, alongside the two in `release_coherence_gate` — four copies of *a heading opens, the next closes* over
+  one file.
+
+  `workspace_version` walked a heading **twice**: an equality that opened `[workspace.package]`, then a
+  `starts_with('[')` that closed it — so a heading failing the first matched the second and closed a table
+  that had never opened. That is what its own recorded bug was made of, and reading a `toml()` region only
+  stopped the comment that triggered it. Taking the cut removes the second test, so the shape cannot recur for
+  a spelling nobody thought of.
+
+  It also returned on the **first** `version` key it met. `publishable` states the reason not to, in its own
+  words — *cargo refuses a manifest that declares one key twice, so a reader answering from the first of two
+  would speak for a file cargo will not read at all* — and `package_name` answers the same way. One of three
+  readers over the same file disagreed, and it disagreed **because** its shape could not count: an early
+  return has nothing to ask *how many* of, which is `selection`'s subject one module over. Taking the values as
+  a value first made the count askable, and the count now refuses.
+
+  **A fourth predicate that looks identical is deliberately left alone.** `publishable`'s value arm tests
+  `starts_with('[') && ends_with(']')` to decide whether `publish = []` is an empty array — byte-identical to
+  `is_table`, and about a **value** rather than a heading. Converging them would file two questions under one
+  answer, which is the shape this line has spent five changes separating rather than merging. Recorded because
+  the resemblance is the trap, and a later sweep for `is_table`'s copies will meet it.
+
 - **One cut for two grammars, because a second cut would have been this module's own subject performed on
   itself.** `sections::cut` was built for Markdown headings; the TOML readers in `release_coherence_gate` and
   `manifest` need the identical skeleton — *a heading opens, the next heading closes, the preamble belongs to
