@@ -766,9 +766,12 @@ fn verify_tag_signature(repo: &Path, tag: &str, tag_object: &str) -> Result<(), 
             format!("could not write the signature for checking: {err}"),
         )
     })?;
+    // The guard is dropped whichever way the verdict went, and **before** the result is consulted: a
+    // `?` on the verification result before this line would leave the scratch directory behind on exactly
+    // the paths this repair adds.
     let verified = check_novalidate(payload, &sig_path);
     drop(guard);
-    if !verified {
+    if !verified? {
         return Err(violation_at(
             "publish-source-integrity#signature-does-not-verify",
             format!(
@@ -787,19 +790,6 @@ impl Drop for Scratch {
     }
 }
 
-/// Deliver `payload` to the child's stdin and report whether the whole round trip succeeded.
-///
-/// **The write outcome is part of the answer, not a side effect.** A discarded write lets a short or failed
-/// delivery reach `wait()` as if the payload had arrived: the child then judges something other than what it
-/// was given, and its verdict is reported as the verdict about the payload. [`sign_probe`] already checks its
-/// own write and says why — an unnoticed empty payload makes `ssh-keygen` sign
-/// nothing and the round trip fail, "reporting the mechanism broken when only the harness was". This function
-/// sits under release-tag signature verification, in front of the one irreversible act, where a refusal
-/// invented by the harness is exactly as costly as a miss.
-fn pipe_into(child: std::process::Child, payload: &str) -> bool {
-    deliver_and_reap(child, payload).is_some_and(|out| out.status.success())
-}
-
 /// Write `payload` to `child`'s stdin, close it, and **reap the child whichever way the write went**.
 ///
 /// `None` is *the child did not complete successfully as a delivery* — the write failed, or the wait did.
@@ -807,7 +797,7 @@ fn pipe_into(child: std::process::Child, payload: &str) -> bool {
 ///
 /// **That re-implementation is why this exists.** `sign_probe` hand-rolled the same three steps and diverged
 /// on the failure path: it returned on a failed `write_all` **before** dropping stdin and before any wait,
-/// leaving an `ssh-keygen` unreaped — while [`pipe_into`]'s own comment claimed reaping on every path. One
+/// leaving an `ssh-keygen` unreaped — while the wrapper above it claimed reaping on every path. One
 /// of the two copies was the counterexample to the other's documentation. Two callers, one implementation,
 /// and the reap is now unforgettable rather than remembered twice.
 ///
@@ -848,21 +838,62 @@ fn sign_probe(key: &Path, scratch: &Path) -> bool {
     if !out.status.success() || std::fs::write(&sig, &out.stdout).is_err() {
         return false;
     }
-    check_novalidate("probe", &sig)
+    // The probe asks only *did the round trip work*, so a verifier that could not run and one that rejected
+    // the probe are one answer here — and that is the whole reason it runs: its caller turns either into the
+    // `signature-mechanism-round-trip-failed` cannot-judge. Collapsing the two is right in this one place and
+    // wrong in the other, which is why the distinction lives in the return type rather than in a convention.
+    check_novalidate("probe", &sig).unwrap_or(false)
 }
 
-fn check_novalidate(payload: &str, signature: &Path) -> bool {
-    let Ok(child) = Command::new("ssh-keygen")
+/// Whether `ssh-keygen -Y check-novalidate` accepts `payload` under `signature`, or why it could not say.
+///
+/// **Three facts, three answers, where a `bool` had one.** A verifier that could not be spawned, could not be
+/// written to, or could not be reaped is *not* a signature that failed to verify — and this returned `false`
+/// for all three, so the caller reported `signature-does-not-verify`, a **violation**, for a machine that ran
+/// out of processes. `publish-source-integrity` states the rule the other way round in so many words: *a
+/// signature this gate cannot read SHALL be a cannot-judge, never a violation*, and the three refusals guarding armour, suffix and writability
+/// already answer that way.
+///
+/// **The round-trip probe narrows the 0.5.0 window and does not close it**, which is why the collapse survived
+/// review: a broken `ssh-keygen -Y` is caught before any verdict, so what remains is a second invocation
+/// failing where the first succeeded — process exhaustion, an I/O failure on the pipe. Narrow, and on the one
+/// path where a refusal the harness invented costs exactly what a miss costs, in front of an act that cannot
+/// be undone.
+///
+/// `Ok(false)` is reserved for a verifier that ran and rejected the payload.
+fn check_novalidate(payload: &str, signature: &Path) -> Result<bool, Refusal> {
+    verify_with("ssh-keygen", payload, signature)
+}
+
+/// [`check_novalidate`] with the verifier named, so the *could not run* arm is reachable from a direction.
+///
+/// **One refusal site, not two.** A failed spawn, a failed write and a failed reap are one fact to the
+/// caller — *the verifier reached no verdict* — and splitting them would register a second site no direction
+/// can construct: process exhaustion and a broken pipe are states a test may not manufacture. Naming the
+/// program is the one perturbation that reaches this arm honestly, and it is the only reason this parameter
+/// exists.
+pub(crate) fn verify_with(program: &str, payload: &str, signature: &Path) -> Result<bool, Refusal> {
+    let unjudgeable = |what: String| {
+        cannot_judge_at(
+            "publish-source-integrity#signature-verifier-reached-no-verdict",
+            format!(
+                "the signature verifier reached no verdict ({what}), which is not the same fact as a \
+                 signature that does not verify — so whether the tag is signed is undecided here"
+            ),
+        )
+    };
+    let child = Command::new(program)
         .args(["-Y", "check-novalidate", "-n", "git", "-s"])
         .arg(signature)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-    else {
-        return false;
-    };
-    pipe_into(child, payload)
+        .map_err(|err| unjudgeable(format!("`{program}` could not be started: {err}")))?;
+    let out = deliver_and_reap(child, payload).ok_or_else(|| {
+        unjudgeable("its payload was not delivered, or it was not reaped".to_string())
+    })?;
+    Ok(out.status.success())
 }
 
 // --- the fixture ------------------------------------------------------------------------------------------
@@ -977,8 +1008,8 @@ mod tests {
             .spawn()
             .expect("`true` is spawnable");
         assert!(
-            !pipe_into(child, "a payload nobody can receive"),
-            "an undeliverable payload must not report a successful round trip, however the child exits"
+            deliver_and_reap(child, "a payload nobody can receive").is_none(),
+            "an undeliverable payload must not report a completed delivery, however the child exits"
         );
     }
 
@@ -994,7 +1025,8 @@ mod tests {
             .spawn()
             .expect("`cat` is spawnable");
         assert!(
-            pipe_into(child, "a payload that arrives"),
+            deliver_and_reap(child, "a payload that arrives")
+                .is_some_and(|out| out.status.success()),
             "a delivered payload reaching a child that exits 0 is a successful round trip"
         );
     }

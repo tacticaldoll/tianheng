@@ -85,6 +85,30 @@ case. Reporting it as a wrong source would be a false refusal before an irrevers
 
 A failure to read the tag object SHALL likewise be a **cannot-judge**, never a violation.
 
+**A verifier that reached no verdict is likewise a cannot-judge**, and the rule reaches the *mechanism* and
+not only the signature's text. A verifier that could not be started, could not be handed its payload, or could
+not be reaped has not rejected anything, so reporting it as an invalid signature names a fact nobody observed.
+The round-trip probe narrows this and does not close it: it proves the mechanism before any verdict, so what
+remains is a second invocation failing where the first succeeded. The verification result SHALL therefore
+distinguish *did not run* from *ran and rejected* in its own type, rather than by a convention at the call
+site — a boolean collapses the two and the caller cannot recover them.
+
+#### Scenario: The signature verifier reaches no verdict
+
+- **WHEN** the verifier cannot be started, cannot be handed the payload, or cannot be reaped
+- **THEN** the gate refuses as a **cannot-judge** naming the mechanism, never as an invalid signature — the
+  exit class `scripts/publish.sh` reads is `2` rather than `1`, because a gate that did not judge is not a
+  gate that disagreed
+- **PINNED-BY** `a_verifier_that_could_not_run_is_not_a_bad_signature`
+
+#### Scenario: The signature verifier runs and rejects the payload
+
+- **WHEN** the verifier executes and exits non-zero over the reconstructed payload
+- **THEN** the gate refuses as a **violation**, because a completed verification rejecting the payload is a
+  disagreement about the tag rather than a fact about the machine. Held in the same direction as the arm
+  above, so closing the cannot-judge class cannot close this one with it
+- **PINNED-BY** `a_verifier_that_could_not_run_is_not_a_bad_signature`
+
 #### Scenario: An unsigned tag quotes a signature block in its message
 
 - **WHEN** `vX.Y.Z` is annotated, unsigned, and its message contains a `-----BEGIN SSH SIGNATURE-----` line
