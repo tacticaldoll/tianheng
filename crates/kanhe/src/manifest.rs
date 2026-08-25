@@ -140,33 +140,40 @@ pub enum WorkspaceVersion {
 /// under two different region decisions inside a single judgement.
 pub fn workspace_version(text: &str) -> WorkspaceVersion {
     let source = crate::region::Source::of(text);
-    let mut inside = false;
-    for line in source.toml().lines() {
-        let trimmed = line.trim();
-        if trimmed == "[workspace.package]" {
-            inside = true;
-            continue;
-        }
-        if trimmed.starts_with('[') {
-            inside = false;
-            continue;
-        }
-        if !inside {
-            continue;
-        }
-        // `version` then `=`, so `version.workspace` and any other `version…` key is not this key.
-        let Some(rest) = trimmed
-            .strip_prefix("version")
-            .and_then(|rest| rest.trim_start().strip_prefix('='))
-        else {
-            continue;
-        };
-        return match quoted_value(rest) {
+    // **One predicate where there were two, which is what the bug above was made of.** This walked a heading
+    // twice — an equality that opened the table, then a `starts_with('[')` that closed it — so a heading
+    // failing the first matched the second and closed a table that had never opened. Reading a `toml()` region
+    // stopped the comment from causing that; taking the cut removes the second test entirely, so the shape
+    // cannot recur for a spelling nobody thought of.
+    let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
+        is_table(line).then(|| line.trim() == "[workspace.package]")
+    });
+    // `version` then `=`, so `version.workspace` and any other `version…` key is not this key.
+    let values: Vec<&str> = tables
+        .iter()
+        .filter(|table| table.name)
+        .flat_map(|table| table.body.iter())
+        .filter_map(|(_, line)| {
+            line.trim()
+                .strip_prefix("version")
+                .and_then(|rest| rest.trim_start().strip_prefix('='))
+        })
+        .collect();
+    // **Two keys refuse rather than the first one answering, which its two siblings already did.** This
+    // returned on the first `version` it met. `publishable` states the reason in its own words — *cargo
+    // refuses a manifest that declares one key twice, so a reader answering from the first of two would speak
+    // for a file cargo will not read at all* — and `package_name` answers the same way. One of three reading
+    // the same root manifest disagreed, and taking a value first is what made the count askable.
+    match values.len() {
+        0 => WorkspaceVersion::Absent,
+        1 => match quoted_value(values[0]) {
             Quoted::Value(version) => WorkspaceVersion::Declared(version),
-            Quoted::Unreadable => WorkspaceVersion::Unreadable(rest.trim().to_string()),
-        };
+            Quoted::Unreadable => WorkspaceVersion::Unreadable(values[0].trim().to_string()),
+        },
+        several => WorkspaceVersion::Unreadable(format!(
+            "{several} `version` keys in `[workspace.package]`"
+        )),
     }
-    WorkspaceVersion::Absent
 }
 
 /// What both git-reading gates tell an operator when `[workspace.package]` names no version.
@@ -270,18 +277,19 @@ pub enum Publishable {
 /// Executed TOML text, so a commented-out `publish = false` is not read as a declared one — the reason
 /// `require_internal_pins` records for the same corpus.
 pub fn publishable(text: &str) -> Publishable {
-    let mut in_package = false;
     let mut declared: Option<(&str, Publishable)> = None;
     let source = crate::region::Source::of(text);
-    for line in source.toml().lines() {
+    // The cut owns the table boundary; `names_the_package_table` says which heading is this reader's, which
+    // is the only part that was ever specific to it.
+    let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
+        is_table(line).then(|| names_the_package_table(line.trim()))
+    });
+    for (_, line) in tables
+        .iter()
+        .filter(|table| table.name)
+        .flat_map(|table| table.body.iter())
+    {
         let trimmed = line.trim();
-        if trimmed.starts_with('[') {
-            in_package = names_the_package_table(trimmed);
-            continue;
-        }
-        if !in_package {
-            continue;
-        }
         // **The key is identified exactly, and it used to be identified by its prefix.** A
         // `strip_prefix("publish")` sent every `[package]` key beginning with those seven letters down this
         // path: `publish-lockfile = true`, which cargo itself once accepted, read as *unreadable manifest*
