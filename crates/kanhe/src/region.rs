@@ -22,16 +22,17 @@
 //! exists to produce.
 //!
 //! **What this does not yet cover, stated because this module's own governing claim used to cover it.** These
-//! Markdown readers in this crate still take `&str` and call `.lines()` on it: `release_coherence_gate`'s
-//! `require_changelog_state`, `require_section_shape` and `unreleased_has_item`. A fenced `## [Unreleased]`
-//! or `### Added` would be read as the section it resembles.
+//! Markdown readers in this crate still take `&str` and call `.lines()` on it:
+//! `capability_subjects::{subject_globs, proposal_capabilities}`. A fenced `## Subject` or `## Capabilities`
+//! would be read as the section it resembles.
 //!
 //! It is **latent, and that is produced rather than asserted here**:
-//! `the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span` holds that `CHANGELOG.md` and
-//! every `openspec/specs/*/spec.md` carry no fenced block and no HTML comment span, so the day one appears the
+//! `the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span` holds that every
+//! `openspec/specs/*/spec.md` carries no fenced block and no HTML comment span, so the day one appears the
 //! misread is reported as live instead of waiting for someone to re-read this paragraph. This comment carried
 //! the figures as three typed zeroes before that, which is the shape [`crate::refusal::Site`]'s own doc is
-//! about.
+//! about. `CHANGELOG.md` left that corpus when the last reader judging it took a region: a protection kept
+//! past the instance it protected turns its next firing into a false alarm.
 //!
 //! **The prerequisite that blocked all four is gone, and one of them has moved.** This paragraph said `Prose`
 //! drops the lines it excludes so it has no positions, and that `restatement::document_offences` reports the

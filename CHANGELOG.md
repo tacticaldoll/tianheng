@@ -1172,6 +1172,38 @@ them.
 
 ### Self-governance
 
+- **The last reader that judged `CHANGELOG.md` as text took a region, so the protection over that file was
+  narrowed rather than left to fire on nothing.** `require_changelog_state` counted `## [Unreleased]` lines
+  across the whole document — which could not tell a real heading from one inside a fence, and it is the check
+  every other arm of that function reasons from. `unreleased_has_item` ran the `inside: bool` that
+  `section_of`'s doc had deliberately left alone, since folding a boundary into a naming function makes one
+  function answer two. Both take the cut now, so nothing in that file decides where a section ends.
+
+  `Section` carries the sentinel line as the document wrote it, because the derived name is lossy for this
+  predicate by design: it drops the ` - DATE` suffix, so `## [0.5.0] - 2026-08-22` is named `## [0.5.0]` and a
+  reader asking *which date* had nothing to ask. That reader used to sweep the whole document for a dated
+  prefix, which also accepted a dated line belonging to no section at all; it reads the section's own line
+  now.
+
+  **This entry carries a fenced block on purpose.** `the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span`
+  refused exactly that, twice in this window, and it was right both times — a fence in this file made a latent
+  misread live. It no longer does, and the narrowing is what proves it rather than a claim that it should not:
+
+  ```
+  before the migration: 93 passed; 1 failed   (the retired bound's own fixture)
+  after:                94 passed; 0 failed
+  ```
+
+  A protection kept past the instance it protected turns its next firing into a false alarm — an ordinary
+  changelog entry carrying a code block would have tripped it. The specs stay in the corpus, because
+  `capability_subjects`'s two readers are the last that read bare text.
+
+  The component also gained its own failure matrix, which it landed without: four directions over the cut
+  itself — a preamble belongs to no section, a document with no sentinel yields nothing rather than one
+  section holding everything, a repeated name yields two entries so `selection::the_only` can refuse the
+  count, and a fenced sentinel opens nothing. Directions through `judge` cannot say any of that; they can only
+  say the verdict came out the same.
+
 - **Four walks over one document became one cut, and a declared false negative closed as a side effect of
   reading a region instead of text.** `release_coherence_gate` carried four section walks over `CHANGELOG.md`,
   each with its own cursor over the same predicate: `require_changelog_state` counted a sentinel line,

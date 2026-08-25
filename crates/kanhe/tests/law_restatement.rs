@@ -177,9 +177,9 @@ fn no_governance_document_restates_a_declared_allowlist() {
 /// The premise that keeps four bare-`&str` Markdown readers filed as debt rather than repaired.
 ///
 /// **A figure is produced or it is nothing.** `region`'s header narrows its governing claim to executed text
-/// and states the residue: `release_coherence_gate::{require_changelog_state, require_section_shape,
-/// unreleased_has_item}` still take a bare `&str` and call `.lines()` on it, so a **fenced**
-/// `## [Unreleased]` or `### Added` reads as the section it resembles and an HTML comment span reads as prose.
+/// and states the residue: `capability_subjects::{subject_globs, proposal_capabilities}` still take a bare
+/// `&str` and call `.lines()` on it, so a **fenced** `## Subject` or `## Capabilities` reads as the section it
+/// resembles and an HTML comment span reads as prose.
 /// The reason that is filed and not fixed is that the corpora carry neither shape — and that reason was three
 /// typed zeroes in a doc comment and a `BACKLOG` entry, measured once, with a promotion trigger only a person
 /// re-reading the tree could ever notice. This produces them instead.
@@ -203,7 +203,7 @@ fn the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span()
         return; // outside a checkout — the authored repository source is not present
     };
     let listing = std::process::Command::new("git")
-        .args(["ls-files", "-z", "CHANGELOG.md", "openspec/specs"])
+        .args(["ls-files", "-z", "openspec/specs"])
         .current_dir(&root)
         .output()
         .expect("git ls-files is runnable");
@@ -213,15 +213,17 @@ fn the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span()
     );
     let corpus: Vec<String> = String::from_utf8_lossy(&listing.stdout)
         .split('\0')
-        .filter(|path| *path == "CHANGELOG.md" || path.ends_with("/spec.md"))
+        .filter(|path| path.ends_with("/spec.md"))
         .map(str::to_string)
         .collect();
-    // Both halves, because either alone can go to zero on its own: the changelog is one path and the specs are
-    // a glob, and a glob that stops matching reports clean over nothing.
-    assert!(
-        corpus.iter().any(|path| path == "CHANGELOG.md"),
-        "the changelog did not enter the corpus, so the readers that judge it went unmeasured"
-    );
+    // **`CHANGELOG.md` left this corpus, and that is a narrowing with a reason rather than a convenience.**
+    // Every reader that judged it — `require_changelog_state`, `require_section_shape`,
+    // `unreleased_has_item`, `adopter_cited_machinery` — takes a region now, so a fence in that file misreads
+    // for nobody. A protection kept past the instance it protected turns its next firing into a false alarm,
+    // and this one would have fired on an ordinary changelog entry carrying a code block.
+    //
+    // The specs are a glob, and a glob that stops matching reports clean over nothing, so the vacuity guard
+    // stays.
     assert!(
         corpus.iter().any(|path| path.ends_with("/spec.md")),
         "no capability spec entered the corpus, so this direction would report clean over nothing"
@@ -250,8 +252,8 @@ fn the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span()
         carrying.is_empty(),
         "a corpus judged by a reader that takes a bare `&str` now carries a shape that reader misreads, so \
          the misread this repository filed as latent is live. The repair is the one the `BACKLOG` entry \
-         names — take `region::Prose` in the three signatures that still read bare text — not removing \
-         what is below:\n{}",
+         names — take `region::Prose` in `capability_subjects`'s two readers, the last that read bare \
+         text — not removing what is below:\n{}",
         carrying.join("\n")
     );
 }
