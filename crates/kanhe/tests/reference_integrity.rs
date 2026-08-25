@@ -1884,27 +1884,24 @@ fn no_reference_names_a_line_number() {
             )
         });
         read += 1;
-        // **A code span may wrap a line, so on such a line this reader cannot say which text is inside one
-        // — and it scans the whole line instead.** Markdown wraps a span freely: measured when this was
-        // written, 331 lines across 68 tracked files carry an odd number of single backticks, and a per-line
-        // pairing reads the prose between one span's closer and the next opener as though it were the
-        // document's own backticked text. The requirement this serves says *every* tracked format, so the
-        // undecidable line is scanned entire rather than paired wrongly.
+        // **The paragraph is the unit that pairs, and a line is not.** A Markdown code span wraps a line
+        // freely, so a per-line reader joins one span's closer to the next line's opener and judges the
+        // prose between them — measured when this was written, 503 lines across 88 tracked files carry an
+        // odd number of backticks. A span cannot contain a blank line, so the paragraph is where they close:
+        // 59 paragraphs across 21 files remain odd, and those are fenced blocks and doubled markers.
         //
-        // That over-reacts, in the safe direction: a coordinate written *outside* a span on such a line is
-        // refused too, which was measured to have an empty subject when this was written.
+        // The previous repair scanned an undecidable *line* entire and called that an over-reaction in the
+        // safe direction. It was inert: the span then contains a backtick, so its left half is neither a
+        // tracked path nor empty and the coordinate shape can never match. The hole was declared closed and
+        // was not.
         //
-        // **Whether a line pairs is `backticked`'s answer, asked once.** A `% 2 == 0` guard stood in front
-        // of this call and decided the same predicate the reader decides — so the `Err` arm behind it was a
-        // branch nothing could take, and the vector it filled was asserted empty by a guard that could never
-        // fire. One rule, one implementation, and the two arms are the two answers.
-        let mut spans: Vec<(usize, String)> = Vec::new();
-        for (index, line) in text.lines().enumerate() {
-            match kanhe::reading::backticked("prose line", line) {
-                Ok(runs) => spans.extend(runs.into_iter().map(|run| (index + 1, run))),
-                Err(_) => spans.push((index + 1, line.to_string())),
-            }
-        }
+        // **Whether a line pairs is the reader's answer, asked once, and which answer this check wants is
+        // in the name it calls.** A `% 2 == 0` guard stood in front of `backticked` and decided the same
+        // predicate the reader decides, so the `Err` arm behind it was a branch nothing could take and the
+        // vector it filled was asserted empty by a guard that could never fire. Then the two arms were
+        // written here, which kept this check's *scan the whole line* reading apart from its three siblings'
+        // *refuse* reading by maintenance rather than by construction.
+        let spans = kanhe::reading::backticked_by_paragraph(&text);
         for (index, span) in &spans {
             // Split on the FIRST colon, and require everything after it to be digits, optionally
             // separated by further colons. `path:N`, `path:N:M` and the elided `:N` are then one shape.
