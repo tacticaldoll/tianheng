@@ -1172,6 +1172,37 @@ them.
 
 ### Self-governance
 
+- **Two rules this repository already states were each carrying an unreacted instance in the dimension
+  crates, and both were found by sweeping a corpus no review had opened.** The `v0.4.0..HEAD` window was
+  reviewed at partial coverage, with the dimension crates' scanner changes recorded as `triage-only`. Five
+  mechanical class sweeps over that corpus — lossy readers, hand-written censuses, new public surface against
+  the changelog, relative anchors, suppressed lints — produced one real finding each from the first two, and
+  three of the five are dry. The reading cost was a pass rather than an audit because the funnel is steep:
+  measured at `902ad52` over the window's non-test dimension-crate sources, 37 lossy-reader candidates yielded
+  one, the rest dying on the first question — *can the input hold more than one?* — since splitting a path
+  into segments and reading a stack's top are not selections.
+
+  `xingbiao::path_label` wrote a fallback nothing reaches. `std::str::from_utf8` on the prefix
+  `Utf8Error::valid_up_to()` bounds cannot return `Err` — the comment beside it said exactly that — and
+  `unwrap_or_default()` branched on it anyway, which is the shape *fail loud only on observable
+  misconfiguration* forbids and which `unreachable_branch`'s own header describes: the fallback is dead, and
+  reading it tells a later reader that the empty case happens. The same file already answers the same question
+  with `unreachable!()` for `RootDir`/`CurDir`, so one file held both answers. It is `expect` now, which that
+  check admits by name for documenting an impossibility instead of branching on it.
+
+  **The check could not have found it, and the reason is structural rather than a gap in its corpus.**
+  `unreachable_branch` recognises an always-`Some` value by the **receiver** — `.split(`, `.rsplit(` — and here
+  the guarantee comes from where the argument was cut. Widening the receiver list would not reach it, since
+  `str::from_utf8` is genuinely fallible everywhere else it is called. The class arrived through a second door
+  that the instrument's shape cannot open, so the instance is repaired and the door is stated rather than
+  papered over with a list.
+
+  `hunyi::driver::eval_into`'s doc typed a census. *All eight capabilities* counted the fields of
+  `SemanticBoundaries`, which is right today and held by nothing: a ninth capability would leave the sentence
+  wrong with no producer to disagree. `census::sweep` reads tracked Markdown, so a Rust doc comment sits
+  outside every reaction that could have caught it. Disposed as *dropped* rather than declared or anchored,
+  by the test the rule gives — the sentence says the same thing with the number gone.
+
 - **A `case` opened inside a wrapper's parser truncated the arm set, and the arm most likely to go was the
   catch-all.** `wrapper_parser::parser_arms` bounds itself to the parser's own `case` with a boolean, and
   shell's `case` nests — so an inner `esac` closed the outer read and every arm after that block left the map
