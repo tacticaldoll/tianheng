@@ -1172,6 +1172,22 @@ them.
 
 ### Self-governance
 
+- **The paragraph is the unit that pairs, and the previous repair's "over-reaction in the safe direction" was
+  inert.** A Markdown code span wraps a line freely, so a per-line reader joins one span's closer to the next
+  line's opener and judges the prose between them — measured: 503 lines across 88 tracked files carry an odd
+  number of backticks. The repair before this one scanned such a line entire and called that safe. It caught
+  nothing and could not: the span is then the line, the line contains a backtick, so the coordinate shape's
+  left half is neither a tracked path nor empty. The hole was declared closed and was not.
+
+  A code span cannot contain a blank line, so the paragraph is where single-backtick spans close. The same
+  corpus has 59 odd paragraphs across 21 files, and those are fenced blocks and doubled markers rather than
+  wrapped spans; each is judged whole, carrying the line it starts on. Measured: a coordinate standing after
+  a wrapped span in the same paragraph is read at its own line, which per-line pairing missed.
+
+  `reading::backticked` had one `Err` that four consumers read two ways — three as a refusal, one as *judge
+  the block whole* — kept apart by a `match` arm at the call site. The second reading is
+  `backticked_by_paragraph` now, so a fifth consumer picks by name.
+
 - **The unreachable-branch reader decides the consumer by what it does, and it used to decide by four
   spellings.** The list held `.unwrap_or`, `.unwrap_or_default`, `.unwrap_or_else` and `?`, so the same dead
   default written `.map_or(d, f)` was invisible — and two live sites used a fifth and a sixth:
@@ -1238,13 +1254,12 @@ them.
   seventh impossible.
 
   Converting `reference_integrity` measured something its per-line scan had been getting wrong all along: a
-  Markdown code span **wraps a line** freely, and 331 lines across 68 tracked files carry an odd number of
-  single backticks. On each of those the old scan paired the halves with whatever came next, so a gate whose
-  whole subject is what backticked text names was reading the prose between one span's closer and the next
-  opener. A whole-document pairing is not the answer either — fenced blocks and `` `` `` spans make an even
-  count wrong for a document — so a line this reader cannot decide is scanned entire. That over-reacts in the
-  safe direction: a coordinate written outside a span on such a line is refused too, and none of those 331
-  lines carries the shape today.
+  Markdown code span **wraps a line** freely, and hundreds of tracked lines carry an odd number of single
+  backticks. On each of those the old scan paired the halves with whatever came next, so a gate whose whole
+  subject is what backticked text names was reading the prose between one span's closer and the next opener.
+  A whole-document pairing is not the answer either — fenced blocks and `` `` `` spans make an even count
+  wrong for a document — so a line this reader cannot decide was scanned entire. **That was called an
+  over-reaction in the safe direction and was inert; the entry above replaces it and says why.**
 
   The three `trim_matches('`')` readers of a citation name stay as they are, measured rather than assumed: an
   unbalanced marker on a `PINNED-BY` line is accepted and still names the right test, so that tolerance

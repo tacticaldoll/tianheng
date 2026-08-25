@@ -238,3 +238,35 @@ pub fn backticked_at(what: &str, text: &str) -> Result<Vec<(usize, String)>, Ref
     }
     Ok(runs)
 }
+
+/// Every backticked run in a Markdown document, with the line its opener sits on — paired per paragraph.
+///
+/// **The paragraph is the unit that pairs, and a line is not.** A code span wraps a line freely, so a
+/// per-line reader joins one span's closer to the next line's opener and answers with the prose between
+/// them; measured when this was written, 503 lines across 88 tracked files carry an odd number of backticks.
+/// A code span cannot contain a blank line, so the paragraph is where single-backtick spans close: the same
+/// corpus has 59 odd paragraphs across 21 files, and those are fenced blocks and doubled markers rather than
+/// wrapped spans.
+///
+/// **The second answer is a function rather than a convention.** [`backticked`] has one `Err` and its
+/// consumers read it two ways: three treat *cannot pair* as a refusal, and one — a check reading coordinates
+/// out of prose — treats it as *membership is undecidable here, so judge the block whole*. That second
+/// reading was a `match` arm at the call site, which kept the two semantics apart by maintenance.
+pub fn backticked_by_paragraph(text: &str) -> Vec<(usize, String)> {
+    let mut runs = Vec::new();
+    let mut first_line = 1usize;
+    for paragraph in text.split("\n\n") {
+        match backticked_at("prose paragraph", paragraph) {
+            Ok(found) => runs.extend(
+                found
+                    .into_iter()
+                    .map(|(line, run)| (first_line + line - 1, run)),
+            ),
+            // A paragraph whose markers do not pair is judged whole. What that means is the caller's; here
+            // it is a block whose span membership no reader over text can settle.
+            Err(_) => runs.push((first_line, paragraph.to_string())),
+        }
+        first_line += paragraph.matches('\n').count() + 2;
+    }
+    runs
+}

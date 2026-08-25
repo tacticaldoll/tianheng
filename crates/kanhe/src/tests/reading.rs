@@ -1,4 +1,4 @@
-use crate::reading::{Sep, backticked, date, fields};
+use crate::reading::{Sep, backticked, backticked_by_paragraph, date, fields};
 use crate::refusal::Kind;
 
 /// Both ways [`fields`] refuses, and the one way it answers.
@@ -178,4 +178,38 @@ fn an_unpaired_backtick_refuses_rather_than_shifting_every_pair() {
         "an empty run is a run — the count decided, and the pair is what it is"
     );
     assert_eq!(read("`BREAKING CHANGE:`"), ["BREAKING CHANGE:"]);
+}
+
+/// The second reading of *cannot pair* is its own function, so a consumer picks by name.
+///
+/// [`backticked`] has one `Err` and its consumers read it two ways — three refuse, and a check reading
+/// coordinates out of prose a line at a time judges the whole line, because a Markdown code span wraps a
+/// line freely and membership is then undecidable. Written as a `match` arm at that call site, the two
+/// semantics were kept apart by maintenance.
+#[test]
+fn a_span_wrapping_a_line_pairs_inside_its_paragraph() {
+    // The shape a per-line reader gets wrong: the span opens on one line and closes on the next.
+    assert_eq!(
+        backticked_by_paragraph("read the `--format\n   json` flag"),
+        [(1, "--format\n   json".to_string())],
+        "a code span wraps a line, and the paragraph is where it closes"
+    );
+    // Positions are the opener's line within the document, across paragraphs.
+    assert_eq!(
+        backticked_by_paragraph("`a`\n\nsecond\n`b`\n\n`c`"),
+        [
+            (1, "a".to_string()),
+            (4, "b".to_string()),
+            (6, "c".to_string())
+        ]
+    );
+    // A paragraph whose markers do not pair — a fence, a doubled marker — is judged whole rather than
+    // paired wrongly, and the block carries the line it starts on.
+    assert_eq!(
+        backticked_by_paragraph("x\n\na `` b `c"),
+        [(3, "a `` b `c".to_string())]
+    );
+    assert!(backticked_by_paragraph("no markers at all").is_empty());
+    // The refusing reading is unchanged for the three consumers that want it.
+    assert!(backticked("clause", "a `--format").is_err());
 }

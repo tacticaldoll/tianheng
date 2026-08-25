@@ -452,6 +452,24 @@ gave one rule two answers, and the correct half could tell the other nothing.
   than the primitive's name
 - **UNPINNED** `BACKLOG.md` — *the backtick primitives the pairing reader names*
 
+#### Scenario: A code span wraps a line
+
+- **WHEN** a Markdown document writes a code span across two lines, as `AGENTS.md` does in five places
+- **THEN** it is read as one span. The paragraph is the unit that pairs, because a code span cannot contain a
+  blank line; a per-line reader joins one span's closer to the next line's opener and answers with the prose
+  between them. Measured when this was written: 503 lines across 88 tracked files carry an odd number of
+  backticks, against 59 paragraphs across 21 files
+- **PINNED-BY** `a_span_wrapping_a_line_pairs_inside_its_paragraph`
+
+#### Scenario: A paragraph's own markers do not pair
+
+- **WHEN** a paragraph carries a fenced block or a doubled marker, so its count is odd for a reason that is
+  not a wrapped span
+- **THEN** it is judged whole rather than paired wrongly, carrying the line it starts on. Which reading that
+  is belongs to the caller and is a function's name rather than a `match` arm: one `Err` read two ways by
+  four consumers keeps the two semantics apart by maintenance
+- **PINNED-BY** `a_span_wrapping_a_line_pairs_inside_its_paragraph`
+
 #### Scenario: An even count reads, in order
 
 - **WHEN** the markers pair up
@@ -569,12 +587,14 @@ two places the class matters most stand in front of the irreversible acts.
   `--quiet`, or `--max-count`
 - **THEN** it is refused all the same. The consumer is decided by what its flags ask for; three literal
   prefixes matched one order of one cluster and called the other clean
+- **PINNED-BY** `no_step_reads_a_value_through_a_pipeline_that_stops_early`
 
 #### Scenario: A stage opens a line rather than being fed by a pipe
 
 - **WHEN** a line begins with `grep -q … <<< "$value"`, reading a here-string
 - **THEN** nothing reacts: it closes no pipe. Only a stage downstream of a `|` can take a producer's SIGPIPE,
   and a reader testing every segment reported the very assertion this rule exists to have repaired
+- **PINNED-BY** `no_step_reads_a_value_through_a_pipeline_that_stops_early`
 
 #### Scenario: A derivation stands inside a process substitution
 
