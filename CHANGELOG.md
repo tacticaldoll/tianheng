@@ -1172,6 +1172,35 @@ them.
 
 ### Self-governance
 
+- **A `case` opened inside a wrapper's parser truncated the arm set, and the arm most likely to go was the
+  catch-all.** `wrapper_parser::parser_arms` bounds itself to the parser's own `case` with a boolean, and
+  shell's `case` nests — so an inner `esac` closed the outer read and every arm after that block left the map
+  unannounced. Nothing downstream could report it: `gate_exit_classes` compares *takes* against *judged* and
+  `publish_workflow` compares *asking* against *consuming*, and an arm dropped before either set is built is
+  missing from both, which is two sets agreeing over a subject neither read.
+
+  The existing direction did not cover it and could not be read as covering it. `the_scan_reads_the_parsers_case_and_no_other`
+  places its second `case` **after** `esac`, where the flag is already clear — a sibling, not a nest — so it
+  measured the over-inclusion that had already been repaired and said nothing about this direction.
+
+  Two spellings, because the second is the one a check written for the first would have missed. Measured
+  against the unrepaired reader, on a parser declaring `--subject`, `--body-file` and `*`: the differently
+  spelled nest (`case $conclusion in`) answered `Some(["--subject"])`, and the parser's own spelling
+  (`case $1 in`) answered `Some(["--nested", "--subject"])`. Written inline rather than in a fenced block,
+  because a fence in this file is the shape `the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span`
+  reports as live — this entry drafted one and that direction refused it, which is the declared latent
+  misread doing exactly what it was declared to do.
+
+  The first truncates. The second is worse and is why the refusal sits **above** the `PARSER_CASE` arm rather
+  than below it: spelled as the parser's own opener, the nested block takes that arm's `continue`, so its arms
+  enter the map as the wrapper's — admitting an arm the wrapper does not have — and the inner `esac` then drops
+  the real ones. A check placed below that arm closes the first spelling and leaves the second.
+
+  Repaired as a refusal rather than as nesting analysis. Neither wrapper nests a `case`, and this family does
+  not build machinery for a state that does not occur; the read stops rather than shrinking, which is the answer
+  the unattributable-guard arm beside it already gives. A wrapper that needs a nested `case` is the reason to
+  build the counter, and is not one this repository has.
+
 - **The paragraph is the unit that pairs, and the previous repair's "over-reaction in the safe direction" was
   inert.** A Markdown code span wraps a line freely, so a per-line reader joins one span's closer to the next
   line's opener and judges the prose between them — measured: 503 lines across 88 tracked files carry an odd
