@@ -282,22 +282,65 @@ fn declared_dependencies(text: &str) -> Vec<Dependency> {
     for table in &tables {
         match &table.name {
             Table::Entries => {
+                // **A dotted key is one dependency spread over its own lines, which is what the detailed
+                // table already is.** `xuanji.path = "crates/xuanji"` with `xuanji.version = "0.5.0"` beneath
+                // it is the form a maintainer reaches for — `version.workspace = true` is that spelling in
+                // every member's `[package]` table — and reading the two lines as two dependencies is what let
+                // a stale pin through: the `path` line carried a path and no version, the `version` line a
+                // version and no path, and `require_internal_pins` selects on **path**, so neither was
+                // internal to it. Measured before this repair: four correct inline siblings plus a stale
+                // dotted pair answered `Ok(())`, where the same staleness written inline is a violation.
+                //
+                // **Grouped by head key, not repaired per line.** Filing each dotted line as its own record
+                // was tried and refused itself: it reports `xuanji.path is pinned to crates/xuanji; expected
+                // 0.5.0` — a false refusal of a manifest cargo reads correctly, with the path read as the
+                // requirement. False refusal is the direction the Core Contract forbids more strictly than a
+                // miss, so the head key is the record and the tail names the field.
+                //
+                // Only `path`, `version` and `package` are read from a tail. Every other dotted key —
+                // `features`, `default-features`, `optional` — is ignored exactly as its inline counterpart
+                // is, because nothing here judges them.
+                let mut dotted: BTreeMap<String, Detailed> = BTreeMap::new();
                 for (_, line) in &table.body {
                     let trimmed = line.trim();
                     let Some((key, rest)) = trimmed.split_once('=') else {
                         continue;
                     };
                     let key = key.trim();
+                    let inline = rest.trim_start().starts_with('{');
+                    if !inline {
+                        if let Some((head, tail)) = key.split_once('.') {
+                            let head = head.trim();
+                            let entry =
+                                dotted.entry(head.to_string()).or_insert_with(|| Detailed {
+                                    key: head.to_string(),
+                                    packages: Vec::new(),
+                                    versions: Vec::new(),
+                                    paths: Vec::new(),
+                                    written: String::new(),
+                                });
+                            match tail.trim() {
+                                "path" => entry.paths.push(quoted_value(rest)),
+                                "version" => entry.versions.push(quoted_value(rest)),
+                                "package" => entry.packages.push(quoted_value(rest)),
+                                _ => continue,
+                            }
+                            entry.written.push_str(trimmed);
+                            entry.written.push(' ');
+                            continue;
+                        }
+                    }
                     let package = Package::of(inline_assignments(rest, "package"), key);
                     // A bare `xuanji = "0.5"` carries its requirement as the value itself; an inline table
                     // carries it under a `version` key.
-                    let inline = rest.trim_start().starts_with('{');
                     let versions = if inline {
                         inline_assignments(rest, "version")
                     } else {
                         vec![quoted_value(rest)]
                     };
-                    // A bare `xuanji = "0.5"` declares no path at all; only an inline table can carry one.
+                    // A bare `xuanji = "0.5"` declares no path at all; an inline table carries one under a
+                    // `path` key, and a dotted key under its own `.path` line — handled above, where the head
+                    // key holds the record.
                     let paths = if inline {
                         inline_assignments(rest, "path")
                     } else {
@@ -308,6 +351,14 @@ fn declared_dependencies(text: &str) -> Vec<Dependency> {
                         package,
                         pin: Declared::of(versions, rest),
                         path: Declared::of(paths, rest),
+                    });
+                }
+                for (_, detailed) in dotted {
+                    found.push(Dependency {
+                        package: Package::of(detailed.packages, &detailed.key),
+                        pin: Declared::of(detailed.versions, &detailed.written),
+                        path: Declared::of(detailed.paths, &detailed.written),
+                        key: detailed.key,
                     });
                 }
             }
@@ -1006,6 +1057,20 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
         // A dependency with no path is not an internal one; one whose path this reader cannot name might be,
         // and *might be* is not an answer. The old selection asked whether the **line** carried `path` and
         // `"crates/`, which is why it could not tell a path from the key of the dependency declaring it.
+        //
+        // **That premise now holds for a reason rather than by luck, and the reason is upstream.** It is true
+        // only while every form cargo accepts reaches this loop as *one* dependency carrying its own path.
+        // A dotted key did not: `xuanji.path` and `xuanji.version` arrived as two records, one with a path and
+        // no version and one with a version and no path, so a stale pin was internal to neither and passed.
+        // `declared_dependencies` groups a dotted key under its head now, so *no path* means the dependency
+        // declares none rather than that the reader split it in half.
+        //
+        // **`Package` is deliberately not consulted here, and that asymmetry with `require_example_pins` is
+        // earned.** An example depends by registry version and carries no path, so identity is its only
+        // selector and all four of its arms are reachable. This selects on path, and identity never
+        // participates: measured, a quoted key, a detailed table and a renamed dependency are each already
+        // refused by the pin comparison whatever `Package::of` answered about them. Matching it here would add
+        // three arms no input can reach — the dead-branch shape this file refuses one read earlier.
         let path = match path {
             Declared::Value(path) => path,
             Declared::Absent => continue,

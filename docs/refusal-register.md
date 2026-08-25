@@ -346,7 +346,7 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 ### `release-coherence#internal-pin-disagrees`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
-- observed by `crates/kanhe/tests/release_coherence.rs`
+- observed by `crates/kanhe/src/tests/release_coherence_gate.rs, crates/kanhe/tests/release_coherence.rs`
 
 ### `release-coherence#internal-pin-several`
 

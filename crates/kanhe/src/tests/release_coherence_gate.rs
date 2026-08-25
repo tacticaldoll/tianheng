@@ -355,3 +355,54 @@ version = \"0.5.0\"
          belongs to neither table",
     );
 }
+
+/// A dotted internal pin is read, and a stale one in that form is refused.
+///
+/// **The gate passed a stale pin written this way.** `require_internal_pins` selects on **path**, and the
+/// per-line reading gave the `.path` line a path with no version and the `.version` line a version with no
+/// path — so neither was internal to it. Measured before the repair: four correct inline siblings plus a stale
+/// dotted pair answered `Ok(())`, where the same staleness written inline is a violation. Not a shape nobody
+/// writes: `version.workspace = true` is that spelling in every member's `[package]` table.
+///
+/// **Each case carries an ordinary inline sibling, so the vacuity counter cannot cover for it.**
+/// `require_internal_pins` returns early when it finds no internal pins at all, and a fixture holding only the
+/// dotted pair would take that arm — passing for having read nothing rather than for reading correctly.
+///
+/// **Both directions, because the repair has two ways to be wrong.** Reading nothing leaves the miss; reading
+/// per line produces a *false refusal* — measured, the naive form reports `xuanji.path is pinned to
+/// crates/xuanji; expected 0.5.0`, the path read as the requirement, over a manifest cargo accepts. False
+/// refusal is the direction the Core Contract forbids more strictly than a miss, so the correct case is
+/// asserted first.
+#[test]
+fn a_dotted_internal_pin_is_read_and_a_stale_one_refused() {
+    let sibling = "xingbiao = { path = \"crates/xingbiao\", version = \"0.5.0\" }\n";
+
+    let correct = format!(
+        "[workspace.dependencies]\n{sibling}xuanji.path = \"crates/xuanji\"\nxuanji.version = \"0.5.0\"\n"
+    );
+    require_internal_pins(&correct, "0.5.0").expect(
+        "a dotted internal pin at the workspace version is read and passes; refusing it would be a false \
+         refusal over a manifest cargo accepts",
+    );
+
+    let stale = format!(
+        "[workspace.dependencies]\n{sibling}xuanji.path = \"crates/xuanji\"\nxuanji.version = \"0.4.0\"\n"
+    );
+    let refusal = require_internal_pins(&stale, "0.5.0")
+        .expect_err("a stale dotted pin is the defect this direction exists for");
+    crate::refusal::expect("release-coherence#internal-pin-disagrees", &refusal);
+    assert!(
+        refusal.message.contains("xuanji") && refusal.message.contains("0.4.0"),
+        "the refusal names the dependency by its head key and the pin it found, not the dotted line: {}",
+        refusal.message
+    );
+
+    // A tail this reader does not judge is ignored exactly as its inline counterpart is, rather than
+    // becoming a record of its own.
+    let with_features = format!(
+        "[workspace.dependencies]\n{sibling}xuanji.path = \"crates/xuanji\"\nxuanji.version = \"0.5.0\"\n\
+         xuanji.features = [\"serde\"]\n"
+    );
+    require_internal_pins(&with_features, "0.5.0")
+        .expect("`features` is not a field this reader judges, dotted or inline");
+}

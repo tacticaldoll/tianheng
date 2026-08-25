@@ -1172,6 +1172,36 @@ them.
 
 ### Self-governance
 
+- **The release gate passed a stale internal pin written with a dotted key, and the shape is one a maintainer
+  reaches for.** `xuanji.path = "crates/xuanji"` with `xuanji.version = "0.4.0"` beneath it is legal TOML that
+  cargo accepts, resolves and builds — a member taking `{ workspace = true }` gets `^0.4.0` from it — and
+  `version.workspace = true` is that same spelling in every member's `[package]` table. The reader filed the
+  two lines as two dependencies: one with a path and no version, one with a version and no path. Since
+  `require_internal_pins` selects on **path**, a stale pin was internal to neither. Measured before the repair:
+  four correct inline siblings plus a stale dotted pair answered `Ok(())`, where the same staleness written
+  inline is a violation.
+
+  **Grouped by head key, because repairing it per line refuses a manifest cargo reads correctly.** That was
+  tried and measured: filing each dotted line as its own record reports `xuanji.path is pinned to
+  crates/xuanji; expected 0.5.0` — the path read as the requirement — for a **correct** pin as readily as a
+  stale one. False refusal is the direction the Core Contract forbids more strictly than a miss. So a dotted
+  key is what it already is elsewhere in this reader: one dependency spread over its own lines, which is the
+  `Detailed` record the detailed-table arm builds. Only `path`, `version` and `package` are read from a tail;
+  `features` and its neighbours are ignored dotted exactly as they are inline.
+
+  **The consumer is deliberately not changed, and that was decided by a probe rather than by symmetry.** The
+  obvious second half — have `require_internal_pins` match `Package` exhaustively as `require_example_pins`
+  does — would add three arms no input can reach. Measured across four shapes, each with a correct inline
+  sibling so the vacuity counter stayed silent: a quoted key, a detailed table and a renamed dependency are
+  **already** refused by the pin comparison whatever `Package::of` answers about them, because a path's
+  readability and a key's decodability are independent. Only the dotted form escaped, and it escaped on the
+  path branch. The asymmetry with the example reader is earned rather than drift: an example depends by
+  registry version and carries no path, so identity is its only selector and all four of its arms are live.
+
+  What the premise *a dependency with no path is not an internal one* rests on is written beside it now. It
+  holds only while every form cargo accepts reaches that loop as one dependency carrying its own path — which
+  is a property of `declared_dependencies`, one function away, and was false for a dotted key.
+
 - **The same misclassification, one state further in: the repair that lifted three no-verdict facts out of a
   boolean wrote `Ok(status.success())` and folded a fourth back.** On Unix a process terminated by a signal
   answers `success() == false` with `code() == None`. It was **reaped**, so delivery succeeded, and it rejected
