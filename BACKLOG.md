@@ -201,6 +201,39 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
+- **READY-PATCH: Markdown readers in `release_coherence_gate` still take a bare `&str` where `region` exists.**
+  *Class:* READY-PATCH — **the promotion trigger below has fired**, and the prerequisite it named is built.
+  No count in the title: the set shrinks as the migration proceeds, and nothing produces the figure.
+  *Observed pressure:* `region`'s own header made this an absolute — *a corpus is never handed to a
+  recognizer as `&str`* — and the readers in the same crate that contradict it are now
+  `release_coherence_gate::{require_changelog_state, require_section_shape, unreleased_has_item}`. A fenced
+  `## [Unreleased]` or `### Added` would be read as the section it resembles. *Observation source:* a review read the sentence against the crate, and the
+  sentence is now narrowed to executed text with the residue stated where it was claimed away.
+  *Current reaction or bound:* the misread itself is unheld; its **latency** is held —
+  `the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span` produces the figures this
+  entry used to type, over `CHANGELOG.md` and every `openspec/specs/*/spec.md`, with a vacuity guard on each
+  half. Not covered there: `document_offences`'s wider corpus, whose residue is conditional rather than a
+  count — a fenced block naming a crate together with *every* member of its allowlist — since holding that
+  means running the restatement rule inside a fence, which is the reader this entry exists to replace.
+  *Risk:* a release gate reading a fenced heading as a section, or a restatement check skipping a document it
+  should judge — both toward a false pass, which is the direction the Core Contract forbids.
+  *Promotion trigger:* **fired.** It was *the first fenced block in `CHANGELOG.md` or in a spec* — and one
+  arrived, in a changelog entry recording a negative run, which the direction refused. The trigger was filed
+  as one only a person re-reading the tree could notice; what noticed it was the direction, on an ordinary
+  run, which is the whole reason it produces its figures instead of typing them.
+  *Version class:* patch; every site is in a crate that ships in no package.
+  *Authority:* `release-coherence` and `self-law-projection`. *Shape:* give `Prose` a numbered form —
+  `numbered_lines`, as `Executed` already has — then take `Prose` in the signatures.
+  **The prerequisite is built and one signature has moved.** `Prose::numbered_lines` enumerates before it
+  filters, so a fenced block consumes its positions rather than renumbering what follows;
+  `restatement::document_offences` takes a region and reads a block's start off the first line it actually
+  holds, rather than deriving it from the blank line above — arithmetic that pointed into the fence prose had
+  just dropped. That also closed this entry's one *conditional* residue: the restatement rule never sees a
+  fence now, so it no longer has to be run inside one. Measured before moving it, over every tracked file the
+  check reads: the bare corpus and the prose corpus reported the identical offence set, so what changed is
+  which documents it *could* misread rather than which it did. What remains is the three above, whose cost is
+  rippling into their callers.
+
 - **The `**BREAKING**` marking rule is paired per section, so an unmarked breaking entry beside a marked
   one is invisible.** *Class:* READY-PATCH. *Observed pressure:* `require_section_shape` collects
   `shape.breaking` as a set of **section names**, and requires each such section to carry a `### Migration`
@@ -670,31 +703,6 @@ consumer for an undemonstrated deduplication.
   prose. *Promotion trigger:* a third window in which this class costs a review round after the `READY-PATCH`
   above lands. *Version class:* patch. *Authority:* `AGENTS.md`'s *A repair loop is a diagnosis, not a
   schedule*.
-
-- **WATCH: Four Markdown readers still take a bare `&str` where `region` exists.** *Class:* WATCH.
-  *Observed pressure:* `region`'s own header made this an absolute — *a corpus is never handed to a
-  recognizer as `&str`* — and four readers in the same crate contradict it:
-  `release_coherence_gate::{require_changelog_state, require_section_shape, unreleased_has_item}` and
-  `restatement::document_offences`. A fenced `## [Unreleased]` or `### Added` would be read as the section it
-  resembles, and a fenced block naming a crate together with every member of its dependency allowlist would
-  be read as a restatement. *Observation source:* a review read the sentence against the crate, and the
-  sentence is now narrowed to executed text with the residue stated where it was claimed away.
-  *Current reaction or bound:* the misread itself is unheld; its **latency** is held —
-  `the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span` produces the figures this
-  entry used to type, over `CHANGELOG.md` and every `openspec/specs/*/spec.md`, with a vacuity guard on each
-  half. Not covered there: `document_offences`'s wider corpus, whose residue is conditional rather than a
-  count — a fenced block naming a crate together with *every* member of its allowlist — since holding that
-  means running the restatement rule inside a fence, which is the reader this entry exists to replace.
-  *Risk:* a release gate reading a fenced heading as a section, or a restatement check skipping a document it
-  should judge — both toward a false pass, which is the direction the Core Contract forbids.
-  *Promotion trigger:* that direction failing. It was *the first fenced block in `CHANGELOG.md` or in a spec*
-  — a trigger only a person re-reading the tree could notice, over three zeroes measured once, which is a
-  premise with no observation source and the class this repository refuses everywhere else. *Version class:* patch; every site is in a crate that ships in no package.
-  *Authority:* `release-coherence` and `self-law-projection`. *Shape:* give `Prose` a numbered form —
-  `numbered_lines`, as `Executed` already has — then take `Prose` in the four signatures.
-  `document_offences` reports the line a block starts at, so the numbered form is the prerequisite and not a
-  nicety. Filed rather than done because the release is being cut and the four signatures ripple into their
-  callers, where a latent misread does not.
 
 - **WATCH: The Definition of Done and CI mirror each other in one direction only.** *Class:* WATCH.
   *Observed pressure:* `dod_coherence` asserts that every command in `AGENTS.md`'s list appears in CI, and

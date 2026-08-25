@@ -1,5 +1,6 @@
 //! The restatement judgement's failure matrix: what it refuses, and what it over-refuses.
 
+use crate::region::Source;
 use crate::restatement::{
     comment_block_copies_allowlist, comment_restates_the_declaration, document_offences,
 };
@@ -82,11 +83,9 @@ fn lists() -> Vec<(String, Vec<String>)> {
 
 #[test]
 fn a_block_naming_a_crate_and_every_member_of_its_allowlist_is_refused() {
-    let offences = document_offences(
-        "PROBE.md",
-        "- `guibiao` depends on `xuanji`, `xingbiao`, and `serde_json` only.\n",
-        &lists(),
-    );
+    let source =
+        Source::of("- `guibiao` depends on `xuanji`, `xingbiao`, and `serde_json` only.\n");
+    let offences = document_offences("PROBE.md", source.prose(), &lists());
     assert_eq!(offences.len(), 1, "{offences:?}");
     assert!(offences[0].contains("guibiao"), "{offences:?}");
 }
@@ -98,7 +97,7 @@ fn a_block_naming_the_members_but_not_the_crate_is_not_observed() {
     assert!(
         document_offences(
             "PROBE.md",
-            "- The bases are `xuanji`, `xingbiao`, and `serde_json`.\n",
+            Source::of("- The bases are `xuanji`, `xingbiao`, and `serde_json`.\n").prose(),
             &lists(),
         )
         .is_empty()
@@ -108,7 +107,8 @@ fn a_block_naming_the_members_but_not_the_crate_is_not_observed() {
 /// The same bound's other half: an allowlist of one cannot be told from a mention of that crate.
 #[test]
 fn a_single_member_allowlist_is_not_observed() {
-    assert!(document_offences("PROBE.md", "- `xuanji` needs `serde_json`.\n", &lists()).is_empty());
+    let source = Source::of("- `xuanji` needs `serde_json`.\n");
+    assert!(document_offences("PROBE.md", source.prose(), &lists()).is_empty());
 }
 
 /// A list is read one item at a time, so a census assembled across separate entries is not one block.
@@ -117,9 +117,41 @@ fn a_census_spread_across_separate_items_is_not_one_block() {
     assert!(
         document_offences(
             "PROBE.md",
-            "- `guibiao` reads through `xingbiao`.\n- It also uses `xuanji`.\n- And `serde_json`.\n",
+            Source::of("- `guibiao` reads through `xingbiao`.\n- It also uses `xuanji`.\n- And `serde_json`.\n")
+                .prose(),
             &lists(),
         )
         .is_empty()
+    );
+}
+
+/// A block's reported line is the document's own, across a fence that prose drops.
+///
+/// **The start cannot be derived from the blank line before it.** The old reader counted its own lines and
+/// set `block_start = number + 1` on a blank, which names *the line after this one* — true only while every
+/// following line survives. Prose drops a fenced block entirely, so that arithmetic points into the fence and
+/// the offence cites a line the reader cannot find. Taking the start from the first line the block actually
+/// holds is right in both readings.
+///
+/// The fixture puts the fence *between* the blank and the block, which is the only arrangement where the two
+/// rules disagree: with the block opening on a list item both answers are the current line, so a fixture
+/// built that way would pass either way.
+#[test]
+fn a_blocks_reported_line_survives_a_fence_above_it() {
+    let source = Source::of(
+        "intro\n\
+         \n\
+         ```text\n\
+         a fenced sample\n\
+         ```\n\
+         `guibiao` depends on `xuanji`, `xingbiao`, and `serde_json` only.\n",
+    );
+    let offences = document_offences("PROBE.md", source.prose(), &lists());
+    assert_eq!(offences.len(), 1, "{offences:?}");
+    assert!(
+        offences[0].contains("PROBE.md:6"),
+        "the block opens on the document's line 6; deriving it from the blank line at 2 names line 3, which \
+         is inside the fence prose just dropped. Got: {}",
+        offences[0]
     );
 }

@@ -95,13 +95,15 @@ fn names_the_crate(block: &str, crate_name: &str) -> bool {
 /// whether the census appears together, not whether the words appear at all in a long document.
 pub fn document_offences(
     path: &str,
-    text: &str,
+    prose: crate::region::Prose<'_>,
     allowlists: &[(String, Vec<String>)],
 ) -> Vec<String> {
     let mut offences = Vec::new();
     let mut block = String::new();
-    let mut block_start = 1usize;
-    let mut number = 0usize;
+    // `0` is *no block open*. The start is the first line the block actually holds, taken from the document
+    // rather than derived from the blank line before it: prose drops a fenced block's lines entirely, so
+    // "the line after this blank one" is not a position the reader can find once a fence follows.
+    let mut block_start = 0usize;
     let flush = |block: &str, start: usize, offences: &mut Vec<String>| {
         if block.trim().is_empty() {
             return;
@@ -126,8 +128,7 @@ pub fn document_offences(
             }
         }
     };
-    for line in text.lines() {
-        number += 1;
+    for (number, line) in prose.numbered_lines() {
         // A blank line ends a block, and so does the start of a list item: a reader takes in one bullet,
         // not the whole list, and treating a list as one block reported a census that no single entry
         // carries — measured, it named four crates' allowlists against one architecture section.
@@ -136,12 +137,13 @@ pub fn document_offences(
         if line.trim().is_empty() || starts_an_item {
             flush(&block, block_start, &mut offences);
             block.clear();
-            block_start = number;
+            block_start = 0;
         }
-        if line.trim().is_empty() {
-            block_start = number + 1;
-        } else {
-            block.push_str(line);
+        if !line.trim().is_empty() {
+            if block_start == 0 {
+                block_start = number;
+            }
+            block.push_str(&line);
             block.push('\n');
         }
     }

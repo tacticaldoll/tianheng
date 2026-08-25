@@ -1172,6 +1172,33 @@ them.
 
 ### Self-governance
 
+- **A latency that was held became a repair, because the trigger it was waiting for fired — and what noticed
+  was the direction rather than a person.** `region`'s header declared four Markdown readers as taking a bare
+  `&str` against its own absolute claim, with the misread **latent** and its latency produced by
+  `the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span`. `BACKLOG.md` filed the
+  promotion trigger as *the first fenced block in `CHANGELOG.md` or in a spec*, and called it a trigger only a
+  person re-reading the tree could notice. One arrived — in a changelog entry recording a negative run — and
+  the direction refused it on an ordinary run. That is the whole argument for producing a figure instead of
+  typing it, made by the mechanism rather than about it.
+
+  `region::Prose` has a numbered form now. It enumerates **before** it filters, so a fenced block consumes its
+  own positions rather than renumbering everything below: a counter over the surviving lines drifts from the
+  document by the size of every fence above, and a caller reporting that number names a line the reader cannot
+  find. `Prose::lines` delegates to it, so the two cannot answer differently about what a reader sees.
+
+  `restatement::document_offences` is the first signature to take a region rather than text, and it exposed a
+  second defect in the same move: it derived a block's start from *the blank line before it* (`number + 1`),
+  which is only true while every following line survives. With a fence between the blank and the block, that
+  arithmetic points **into the fence** — the offence cited line 3 where the block opens at line 6. The start
+  is read off the first line the block actually holds now.
+
+  Migrating it also closed this entry's one *conditional* residue rather than leaving it stated: holding a
+  fenced restatement used to mean running the restatement rule inside a fence, and a reader that never sees
+  the fence needs no such rule. Measured before the move, over every tracked file the check reads: the bare
+  corpus and the prose corpus reported the identical offence set — so what changed is which documents it
+  *could* misread, not which it did. Three readers in `release_coherence_gate` still read bare text; the
+  entry is `READY-PATCH` and names them.
+
 - **Two rules this repository already states were each carrying an unreacted instance in the dimension
   crates, and both were found by sweeping a corpus no review had opened.** The `v0.4.0..HEAD` window was
   reviewed at partial coverage, with the dimension crates' scanner changes recorded as `triage-only`. Five
