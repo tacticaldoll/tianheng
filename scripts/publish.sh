@@ -255,7 +255,13 @@ trap 'rm -f "$verdict_file"' EXIT
 # Asserted here rather than inside the gate: a renamed or silenced test cannot report that it did not run.
 require_one_pass() {
     local output=$1
-    if ! printf '%s' "$output" | grep -qE 'test result: ok\. 1 passed'; then
+    # A here-string, not a pipe. `grep -q` exits at its first match, and under `set -o pipefail` the
+    # `printf` upstream takes SIGPIPE and that becomes the pipeline's status — so this would report *the
+    # gate did not run* for a closed pipe, immediately before an irreversible act. Measured: with the token
+    # at the end of a 405 KB stream, which is where a `cargo test` summary sits, 0 of 8 runs returned
+    # non-zero; with the same token near the start, 8 of 8 did. Both wrappers were holding by where the
+    # token happened to sit, which nothing declares and nothing keeps true.
+    if ! grep -qE 'test result: ok\. 1 passed' <<< "$output"; then
         printf '%s\n' "$output" >&2
         cannot_judge \
             "the gate did not run — its invocation selected no passing test, so the name in this script no longer names one. libtest exits 0 for a filter that matches nothing, which is why this is checked rather than trusted"

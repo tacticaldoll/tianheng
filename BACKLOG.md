@@ -1544,18 +1544,22 @@ consumer for an undemonstrated deduplication.
 - **WATCH: the early-exit consumers the pipeline reader names.** *Observed pressure:* adopting
   `defaults.run.shell: bash -euo pipefail {0}` made a consumer that stops before its producer finishes fail
   the whole pipeline — `printf … | grep -q` measured 141 on five of five runs over a document the size of the
-  SARIF fixture. `no_step_reads_a_value_through_a_pipeline_that_stops_early` refuses the shape, and it
-  recognises the consumer by name from a list of three: `grep -q`, `grep -m`, `head`. *Observation source:*
+  SARIF fixture. `no_step_reads_a_value_through_a_pipeline_that_stops_early` refuses the shape over every
+  tracked text this repository runs shell in, deciding the consumer by what its flags ask for — `head`, or a
+  `grep` whose cluster carries `q` or `m`, in either order and in the long forms. *Observation source:*
   the round that adopted workflow-level strictness, which found three pipelines of this shape and measured
   each; two of them had not tripped, for a reason belonging to the input rather than to the pipeline — `cargo
-  metadata` emits one line of JSON, so `sed` printed once and reached EOF. *Current reaction or bound:*
-  `repository-checks/a-consumer-that-stops-early-is-not-on-the-reader-s-list-a-stated-bound`. *Risk:* a
+  metadata` emits one line of JSON, so `sed` printed once and reached EOF. The round after it found two more,
+  in both wrappers, standing in front of the two irreversible acts: measured over a 405 KB stream, 0 of 8 runs
+  returned non-zero with the token at the end and 8 of 8 with it near the start, so those held by where the
+  token happened to sit. *Current reaction or bound:*
+  `repository-checks/a-consumer-that-stops-early-is-neither-head-nor-grep-a-stated-bound`. *Risk:* a
   pipeline whose last stage exits early under some other program's name passes, and the failure it eventually
   produces names the data rather than the shape — which is the whole reason this is refused by construction
-  rather than remembered. Bounded by the corpus being one workflow file that a reviewer reads whole. *Next
-  trigger:* a fourth spelling arriving, or a `run:` step reading a value through a program outside this list —
-  the second would mean the list is the wrong instrument and the question is *does this stage read its input
-  to EOF*, which no reader over shell text can answer. *Authority:* engine. *Compatibility:* patch; the
+  rather than remembered. Bounded by the corpus being three tracked files a reviewer reads whole. *Next
+  trigger:* a stage reading a value through a program that exits early and is neither `head` nor `grep` —
+  which would mean naming programs is the wrong instrument, and the question behind it is *does this stage
+  read its input to EOF*, which no reader over shell text can answer. *Authority:* engine. *Compatibility:* patch; the
   reaction is repository machinery and ships in no package.
 
 - **WATCH: the title race the wrapper can only narrow.** *Observed pressure:* the merge wrapper judges three

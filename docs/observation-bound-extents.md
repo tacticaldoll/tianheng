@@ -35,7 +35,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound` — owner: engine
 - `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound` — owner: engine
-- `repository-checks/a-consumer-that-stops-early-is-not-on-the-reader-s-list-a-stated-bound` — owner: engine
+- `repository-checks/a-consumer-that-stops-early-is-neither-head-nor-grep-a-stated-bound` — owner: engine
 - `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
 - `repository-checks/a-figure-written-in-words-at-one-hundred-or-above-is-not-matched-a-stated-bound` — owner: engine
 - `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
@@ -681,11 +681,11 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a bare reference to a registered constructor's name cannot be told from a local variable sharing its spelling without name resolution*
 
-### `repository-checks/a-consumer-that-stops-early-is-not-on-the-reader-s-list-a-stated-bound`
+### `repository-checks/a-consumer-that-stops-early-is-neither-head-nor-grep-a-stated-bound`
 
 > a pipeline whose last stage exits before its producer finishes under a program name this reader does not list
 
-- **because**: the reader recognises `grep -q`, `grep -m` and `head`, which is what this shape looked like in the workflow's own history. The set of programs that exit early is not closed, and the question behind it -- does this stage read its input to EOF -- is not one a reader over shell text can answer. The three names close the door that was open rather than every door
+- **because**: the reader decides by what a stage's flags ask for -- `head`, or a `grep` whose flag cluster carries `q` or `m` -- rather than by literal spellings, which is why `grep -Eq` is caught where three prefix names missed it. Naming programs is still the instrument: the set that exits early is not closed, and the question behind it -- does this stage read its input to EOF -- is not one a reader over shell text can answer
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *the early-exit consumers the pipeline reader names*
 
