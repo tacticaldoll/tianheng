@@ -33,6 +33,15 @@ use crate::region::Prose;
 pub struct Section {
     /// What the predicate named this section — the caller's own vocabulary, not a normalised form.
     pub name: String,
+    /// The sentinel line as the document wrote it.
+    ///
+    /// **A name a predicate derives can be lossy, and one of them is.** `release_coherence_gate`'s predicate
+    /// drops a ` - DATE` suffix, so the section it names `## [0.5.0]` was written `## [0.5.0] - 2026-08-22`,
+    /// and a reader asking *which date* has nothing to ask. Carrying the line makes the cut lossless: a
+    /// caller that wants the derived name takes [`Section::name`], and one that wants what was written takes
+    /// this. Keeping only the name would push every such caller back onto its own line walk, which is the
+    /// habit this module exists to end.
+    pub line: String,
     /// The one-based line the sentinel sits on, in the original document.
     pub start: usize,
     /// The lines between this sentinel and the next, each with its own original position.
@@ -55,6 +64,7 @@ pub fn cut(prose: Prose<'_>, sentinel: impl Fn(&str) -> Option<String>) -> Vec<S
         if let Some(name) = sentinel(&line) {
             out.push(Section {
                 name,
+                line,
                 start: number,
                 body: Vec::new(),
             });

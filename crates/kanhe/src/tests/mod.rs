@@ -12,5 +12,6 @@ mod publish_source_gate;
 mod reading;
 mod release_coherence_gate;
 mod restatement;
+mod sections;
 mod selection;
 mod wrapper_parser;

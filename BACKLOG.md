@@ -201,13 +201,14 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **READY-PATCH: Markdown readers in `release_coherence_gate` still take a bare `&str` where `region` exists.**
-  *Class:* READY-PATCH — **the promotion trigger below has fired**, and the prerequisite it named is built.
-  No count in the title: the set shrinks as the migration proceeds, and nothing produces the figure.
+- **READY-PATCH: Markdown readers in `capability_subjects` still take a bare `&str` where `region` exists.**
+  *Class:* READY-PATCH — **the promotion trigger below has fired**, the prerequisite it named is built, and
+  every reader over `CHANGELOG.md` has moved. No count in the title: the set shrinks as the migration
+  proceeds, and nothing produces the figure.
   *Observed pressure:* `region`'s own header made this an absolute — *a corpus is never handed to a
   recognizer as `&str`* — and the readers in the same crate that contradict it are now
-  `release_coherence_gate::{require_changelog_state, require_section_shape, unreleased_has_item}`. A fenced
-  `## [Unreleased]` or `### Added` would be read as the section it resembles. *Observation source:* a review read the sentence against the crate, and the
+  `capability_subjects::{subject_globs, proposal_capabilities}`. A fenced `## Subject` or `## Capabilities`
+  would be read as the section it resembles. *Observation source:* a review read the sentence against the crate, and the
   sentence is now narrowed to executed text with the residue stated where it was claimed away.
   *Current reaction or bound:* the misread itself is unheld; its **latency** is held —
   `the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span` produces the figures this
@@ -231,8 +232,16 @@ consumer for an undemonstrated deduplication.
   just dropped. That also closed this entry's one *conditional* residue: the restatement rule never sees a
   fence now, so it no longer has to be run inside one. Measured before moving it, over every tracked file the
   check reads: the bare corpus and the prose corpus reported the identical offence set, so what changed is
-  which documents it *could* misread rather than which it did. What remains is the three above, whose cost is
-  rippling into their callers.
+  which documents it *could* misread rather than which it did.
+
+  **Four of the five signatures have moved, and the corpus the latency is held over narrowed with them.**
+  `sections::cut` owns the boundary question and each caller's predicate the naming one, which is the split
+  `section_of`'s own doc asked for; `Section` carries the sentinel line as written, because a derived name is
+  lossy where a ` - DATE` suffix is dropped. `CHANGELOG.md` left the latency corpus when the last reader
+  judging it took a region — a protection kept past the instance it protected turns its next firing into a
+  false alarm, and an ordinary changelog entry carrying a code block would have tripped it. What remains is
+  `capability_subjects`'s two, whose predicate differs from the changelog's (one exact heading, closing on any
+  `## `) and whose cost is rippling into their callers.
 
 - **The `**BREAKING**` marking rule is paired per section, so an unmarked breaking entry beside a marked
   one is invisible.** *Class:* READY-PATCH. *Observed pressure:* `require_section_shape` collects

@@ -644,14 +644,18 @@ fn require_version_surfaces(
 /// The changelog surfaces whose required shape depends on which phase of the ritual this is.
 fn require_changelog_state(
     repo: &Path,
-    changelog: &str,
+    prose: crate::region::Prose<'_>,
+    sections: &[Section],
     manifests: &[(String, String)],
     version: &str,
     spine: &Spine,
 ) -> Result<(), Refusal> {
-    let unreleased_sections = changelog
-        .lines()
-        .filter(|line| line.trim_end() == "## [Unreleased]")
+    // The cut answers this. It was a line count over the whole document, which could not tell a real
+    // `## [Unreleased]` from one inside a fence — and this is the check the *rest* of this function's
+    // reasoning rests on, since every arm below assumes exactly one such section exists.
+    let unreleased_sections = sections
+        .iter()
+        .filter(|section| section.name == "## [Unreleased]")
         .count();
     if unreleased_sections != 1 {
         return Err(violation_at(
@@ -659,7 +663,7 @@ fn require_changelog_state(
             "CHANGELOG must contain exactly one [Unreleased] section".to_string(),
         ));
     }
-    let has_item = unreleased_has_item(changelog);
+    let has_item = unreleased_has_item(sections);
     match spine.state {
         State::Development => {
             if !has_item {
@@ -670,7 +674,7 @@ fn require_changelog_state(
                 ));
             }
             let link = format!("[Unreleased]: {COMPARE}/v{version}...HEAD");
-            if !changelog.lines().any(|line| line.trim_end() == link) {
+            if !prose.lines().any(|line| line.trim_end() == link) {
                 return Err(violation_at(
                     "release-coherence#unreleased-comparison-link-wrong",
                     format!(
@@ -689,11 +693,14 @@ fn require_changelog_state(
                     ),
                 ));
             }
+            // Read off the section's own sentinel line rather than swept for across the document: the
+            // derived name drops the ` - DATE` suffix, so this is the one question the name cannot answer and
+            // `Section::line` exists for. A sweep also accepted a dated line belonging to no section at all.
             let prefix = format!("## [{version}] - ");
-            let dated: Option<&str> = changelog
-                .lines()
-                .map(str::trim_end)
-                .filter_map(|line| line.strip_prefix(&prefix))
+            let dated: Option<&str> = sections
+                .iter()
+                .filter(|section| section.name == format!("## [{version}]"))
+                .filter_map(|section| section.line.trim_end().strip_prefix(&prefix))
                 .find(|rest| is_iso_date(rest));
             let Some(dated) = dated else {
                 return Err(violation_at(
@@ -730,7 +737,7 @@ fn require_changelog_state(
                 Some(previous) => format!("[{version}]: {COMPARE}/v{previous}...v{version}"),
                 None => format!("[{version}]: {RELEASES}/v{version}"),
             };
-            if !changelog.lines().any(|line| line.trim_end() == expected) {
+            if !prose.lines().any(|line| line.trim_end() == expected) {
                 return Err(violation_at(
                     "release-coherence#release-comparison-link-wrong",
                     match &from {
@@ -889,7 +896,7 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     // over the same predicate; `sections::cut` owns the boundary question and `section_of` the naming one,
     // which is the split `section_of`'s own doc asks for. Over a `Prose` region, so a fenced `## [` heading
     // is not a section — the misread `region`'s header declares for the readers still below.
-    let changelog_source = Source::of(changelog.clone());
+    let changelog_source = Source::of(changelog);
     let changelog_sections = crate::sections::cut(changelog_source.prose(), section_of);
 
     // The phases, in the order a reader meets a refusal in. **The order is observable**: a repository with
@@ -897,7 +904,14 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     // message. So these are a sequence rather than a set, and moving one moves what gets reported.
     let spine = release_spine(repo, &version, version_parts)?;
     let manifests = require_version_surfaces(repo, &root_manifest, &version)?;
-    require_changelog_state(repo, &changelog, &manifests, &version, &spine)?;
+    require_changelog_state(
+        repo,
+        changelog_source.prose(),
+        &changelog_sections,
+        &manifests,
+        &version,
+        &spine,
+    )?;
     require_section_shape(&changelog_sections)?;
     require_adopter_narrative(repo, &changelog_sections, &version, &spine)?;
 
@@ -1423,24 +1437,27 @@ fn require_lock_versions(
     Ok(())
 }
 
-fn unreleased_has_item(changelog: &str) -> bool {
-    let mut inside = false;
-    for line in changelog.lines() {
-        if line.trim_end() == "## [Unreleased]" {
-            inside = true;
-            continue;
-        }
-        if inside && line.starts_with("## [") {
-            return false;
-        }
-        if inside {
-            let trimmed = line.trim_start();
-            if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
-                return true;
-            }
-        }
-    }
-    false
+/// Whether the `[Unreleased]` section carries an adopter-facing item.
+///
+/// **The boundary question is the cut's now.** This ran an `inside: bool` that opened on the sentinel and
+/// closed on the next `## [` — the same shape `wrapper_parser::parser_arms` was repaired for, correct here
+/// only because Markdown headings do not nest. `section_of`'s doc left it alone deliberately, since folding a
+/// boundary into a naming function makes one function answer two; `sections::cut` answers the boundary half
+/// instead, so nothing here decides where a section ends.
+///
+/// `any` over the matching sections rather than the first of them: the caller refuses a changelog with more
+/// than one before reaching here, so the two agree — and reading *the first* would be a choice this function
+/// has no reason to make.
+fn unreleased_has_item(sections: &[Section]) -> bool {
+    sections
+        .iter()
+        .filter(|section| section.name == "## [Unreleased]")
+        .any(|section| {
+            section.body.iter().any(|(_, line)| {
+                let trimmed = line.trim_start();
+                trimmed.starts_with("- ") || trimmed.starts_with("* ")
+            })
+        })
 }
 
 struct Shape {
