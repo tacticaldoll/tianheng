@@ -75,6 +75,59 @@ consumer for an undemonstrated deduplication.
 
 ### ACCEPTED DEBT
 
+- **The bounds-method reader anchors on a whole-line occurrence that is not the definition.** *Class:*
+  ACCEPTED DEBT — **reclassified from READY-PATCH, which claimed a patch this entry's own Shape refutes.** All
+  three closures it names are refused there: literal adjacency to `impl Observer for` was measured against the
+  three real files and would refuse the real definitions; scope containment survives that and still admits a
+  perturbation wrapping the whole fake `impl` block; and reading what the compiler resolves needs Rust parsing
+  `kanhe`'s declared allowlist forbids. The remaining closure — a **shared** nested-span lexer serving this
+  reader and `region.rs`'s identical residue — exists as `guibiao::module_scan`, and `kanhe` may not depend on
+  圭表. Debt accepted with a declared bound and a named instrument it cannot reach is what ACCEPTED DEBT is
+  for; READY-PATCH said *someone may patch this now*. *Observed pressure:* the reader requires the signature to occur exactly once and at a line
+  start, and knows nothing of comments or literals. So where the definition has moved out of the inspected
+  file, any surviving **whole-line** copy anchors — reproduced with a block-comment copy, and again with a
+  copy inside a `&str` constant, both giving
+  `every_observer_declares_exactly_its_dimension_s_bounds ... ok`. *Observation source:* those two
+  perturbations, run during the closing review of the 0.5.0 window.
+  *Current reaction or bound:* the declared bound
+  `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`.
+  *Risk, measured rather than assumed:* **narrower than it first reads.** A *divergent* second list does not
+  pass — `observation-bound-model` reads every dimension through `Observer::bounds` and holds a bijection with
+  the specs, so a difference in membership or content fails `the_extent_projection_is_fresh` and the
+  classification test one capability over. What passes is a second, hand-maintained path that **agrees today**
+  and is maintained by hand from now on: re-run with a list rebuilt element by element from
+  `observation_bounds()`, the whole workspace suite is green. *Promotion trigger:* fired; both perturbations
+  are tree artefacts rather than reports. *Version class:* patch; a `tests/` reaction of this repository,
+  shipping in no crate. *Authority:* `observer-protocol`.
+
+  *Shape, with the corpus measured rather than borrowed:* comment stripping does **not** close this — a string
+  literal is not a comment — so the register's rejection of comment-delimiter lexing is not the reason here,
+  and citing it was wrong. This reader's corpus is the three files `DIMENSIONS` names, none of which carries a
+  string literal with a comment delimiter, so the register's measurement does not transfer in
+  either direction. Two candidate closures, **neither adopted, and neither actually closes the class** —
+  checked against the real corpus rather than left as an abstract choice. Requiring the anchor to be preceded
+  by an `impl Observer for` line was measured against the three real files and refuted as stated: every real
+  `fn bounds(&self)` sits several lines and one sibling method below its `impl Observer for` line (a doc
+  comment and `fn observe` come between them), so a literal adjacency rule would refuse the real definitions
+  too. A looser scope-containment version (nested inside *some* `impl Observer for … { … }` block, not
+  necessarily adjacent) survives that check, but only raises the bar rather than closing the class: a
+  perturbation that wraps the *whole* fake `impl Observer for` block — not just the `fn bounds` line — inside
+  the same comment or string would still be accepted, because a scope tracker blind to comments and literals
+  reads a fake `impl` line inside a comment exactly as it reads a real one. The other candidate — reading the
+  definition the compiler resolves rather than a textual condition — needs real Rust parsing, which `kanhe`'s
+  declared dependency allowlist (`AGENTS.self-law.md`) currently forbids; adopting it would first require
+  amending that law, not just this reader.
+
+  **Not a defect unique to this reader.** `crates/kanhe/src/region.rs`'s own `Executed` abstraction declares
+  the identical residue for the same reason (a `/\* … \*/` span and a string-literal marker both need
+  nested-span lexing this tree has "defeated repeatedly," in that module's own words) and cites this exact
+  bound as its precedent — the citation was one-directional until the 0.5.0 window closed it: see the
+  `observer-protocol` spec, now amended to cite `region.rs` back. Filing them separately let each be
+  rediscovered as a fresh problem; they are one class. If this is ever closed, the closure is a **shared**
+  nested-span lexer serving both sites, not a point patch to either — `guibiao::module_scan` already scans
+  nested block comments and is the instrument `region.rs`'s own doc comment names as existing if the residue
+  is ever worth closing.
+
 - **A hand-maintained pin has no mechanism keeping it from rotting — the action SHAs, and now the Node
   version.** *Class:* ACCEPTED DEBT.
   *Observed pressure:* pinning `.github/workflows/ci.yml`'s `uses:` entries to commits closed the one
@@ -262,72 +315,6 @@ consumer for an undemonstrated deduplication.
   All of which is why the entry is filed at its measured size rather than repaired inside the release window
   that found it: the only candidate that is both a theorem and covers its own instance is a capability, not a
   tightening.
-
-- **The bounds-method reader anchors on a whole-line occurrence that is not the definition.** *Class:*
-  READY-PATCH. *Observed pressure:* the reader requires the signature to occur exactly once and at a line
-  start, and knows nothing of comments or literals. So where the definition has moved out of the inspected
-  file, any surviving **whole-line** copy anchors — reproduced with a block-comment copy, and again with a
-  copy inside a `&str` constant, both giving
-  `every_observer_declares_exactly_its_dimension_s_bounds ... ok`. *Observation source:* those two
-  perturbations, run during the closing review of the 0.5.0 window.
-  *Current reaction or bound:* the declared bound
-  `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`.
-  *Risk, measured rather than assumed:* **narrower than it first reads.** A *divergent* second list does not
-  pass — `observation-bound-model` reads every dimension through `Observer::bounds` and holds a bijection with
-  the specs, so a difference in membership or content fails `the_extent_projection_is_fresh` and the
-  classification test one capability over. What passes is a second, hand-maintained path that **agrees today**
-  and is maintained by hand from now on: re-run with a list rebuilt element by element from
-  `observation_bounds()`, the whole workspace suite is green. *Promotion trigger:* fired; both perturbations
-  are tree artefacts rather than reports. *Version class:* patch; a `tests/` reaction of this repository,
-  shipping in no crate. *Authority:* `observer-protocol`.
-
-  *Shape, with the corpus measured rather than borrowed:* comment stripping does **not** close this — a string
-  literal is not a comment — so the register's rejection of comment-delimiter lexing is not the reason here,
-  and citing it was wrong. This reader's corpus is the three files `DIMENSIONS` names, none of which carries a
-  string literal with a comment delimiter, so the register's measurement does not transfer in
-  either direction. Two candidate closures, **neither adopted, and neither actually closes the class** —
-  checked against the real corpus rather than left as an abstract choice. Requiring the anchor to be preceded
-  by an `impl Observer for` line was measured against the three real files and refuted as stated: every real
-  `fn bounds(&self)` sits several lines and one sibling method below its `impl Observer for` line (a doc
-  comment and `fn observe` come between them), so a literal adjacency rule would refuse the real definitions
-  too. A looser scope-containment version (nested inside *some* `impl Observer for … { … }` block, not
-  necessarily adjacent) survives that check, but only raises the bar rather than closing the class: a
-  perturbation that wraps the *whole* fake `impl Observer for` block — not just the `fn bounds` line — inside
-  the same comment or string would still be accepted, because a scope tracker blind to comments and literals
-  reads a fake `impl` line inside a comment exactly as it reads a real one. The other candidate — reading the
-  definition the compiler resolves rather than a textual condition — needs real Rust parsing, which `kanhe`'s
-  declared dependency allowlist (`AGENTS.self-law.md`) currently forbids; adopting it would first require
-  amending that law, not just this reader.
-
-  **Not a defect unique to this reader.** `crates/kanhe/src/region.rs`'s own `Executed` abstraction declares
-  the identical residue for the same reason (a `/\* … \*/` span and a string-literal marker both need
-  nested-span lexing this tree has "defeated repeatedly," in that module's own words) and cites this exact
-  bound as its precedent — the citation was one-directional until the 0.5.0 window closed it: see the
-  `observer-protocol` spec, now amended to cite `region.rs` back. Filing them separately let each be
-  rediscovered as a fresh problem; they are one class. If this is ever closed, the closure is a **shared**
-  nested-span lexer serving both sites, not a point patch to either — `guibiao::module_scan` already scans
-  nested block comments and is the instrument `region.rs`'s own doc comment names as existing if the residue
-  is ever worth closing.
-
-
-- **`observation-bound-model`'s projection discloses its own bounds by a typed list; its sibling requires a
-  derived one.** *Class:* READY-PATCH. *Observed pressure:* `gate-shape-contract` hit this and wrote the
-  requirement — *"That disclosure SHALL be **derived from the specification, not typed into the generator**,
-  and held to it in both directions"* — with `the_projection_discloses_every_declared_bound` holding it and a
-  vacuity guard. `observation-bound-model` has the same shape and only the weaker requirement (*"The projection
-  SHALL state what it does not claim, in its own header"*), so its "what this document does not claim"
-  paragraph enumerated members as a literal in the generator's template, where the freshness check compares
-  that text with itself. *Observation source:* the final sweep of the 0.5.0 window, which found the paragraph
-  naming two limits while the capability declared three; the enumeration is removed from the template as an
-  immediate stop, so what remains is the missing requirement rather than a live falsehood. *Current reaction or
-  bound:* none — the projection now points at `docs/observation-bound-extents.md` instead of listing.
-  *Risk:* the same class the sibling already paid for, in the one place a freshness check structurally cannot
-  see. *Promotion trigger:* fired — the sibling's requirement exists and this one's absence was measured.
-  *Version class:* patch; repository-internal, shipping in no crate. *Authority:* `gate-shape-contract`, whose
-  requirement is the shape to copy, and `observation-bound-model`, which would carry it.
-  *Shape:* lift the derived-disclosure requirement into `observation-bound-model`, and give it a holder
-  of the same shape — declared headings read from the spec, held
-  set-equal to what the projection discloses, both directions, with the empty-enumeration guard.
 
 - **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
   register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
@@ -1866,6 +1853,42 @@ consumer for an undemonstrated deduplication.
   - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
 ### Closed — reproduction records (0.4.0 onward)
+
+- ~~**`observation-bound-model`'s projection discloses its own bounds by a typed list; its sibling requires a**~~ **DISSOLVED** — both of its premises are gone, and so is the problem.
+
+  *The sibling it was to copy no longer exists.* The Shape reads *lift the derived-disclosure requirement
+  into `observation-bound-model`* — that requirement belonged to `gate-shape-contract`, whose spec was
+  retired in this window (`5abda1f`); its holder `the_projection_discloses_every_declared_bound` is gone with
+  it. There is nothing left to lift, and the entry's Authority named it as the shape to copy.
+
+  *And the problem it describes is not the tree's state.* `docs/observation-bound-extents.md` is rendered
+  wholly derived: the leading figure is `false_negatives.len()` against `code.len()`, and every disclosed id
+  comes out of a loop over the declared bounds. Its own prose states the reason this entry was filed for —
+  *a list typed here is a literal in a template and the freshness check compares that text with itself* —
+  and then does not type one.
+
+  Dissolved rather than rewritten, because a retirement swept its Authority away and the state it warned
+  about was answered independently. **Recorded rather than deleted**: the measurement that found both is the
+  expensive part, and an entry silently removed is one the next audit re-derives. The entry is kept verbatim
+  below.
+
+  derived one.** *Class:* READY-PATCH. *Observed pressure:* `gate-shape-contract` hit this and wrote the
+  requirement — *"That disclosure SHALL be **derived from the specification, not typed into the generator**,
+  and held to it in both directions"* — with `the_projection_discloses_every_declared_bound` holding it and a
+  vacuity guard. `observation-bound-model` has the same shape and only the weaker requirement (*"The projection
+  SHALL state what it does not claim, in its own header"*), so its "what this document does not claim"
+  paragraph enumerated members as a literal in the generator's template, where the freshness check compares
+  that text with itself. *Observation source:* the final sweep of the 0.5.0 window, which found the paragraph
+  naming two limits while the capability declared three; the enumeration is removed from the template as an
+  immediate stop, so what remains is the missing requirement rather than a live falsehood. *Current reaction or
+  bound:* none — the projection now points at `docs/observation-bound-extents.md` instead of listing.
+  *Risk:* the same class the sibling already paid for, in the one place a freshness check structurally cannot
+  see. *Promotion trigger:* fired — the sibling's requirement exists and this one's absence was measured.
+  *Version class:* patch; repository-internal, shipping in no crate. *Authority:* `gate-shape-contract`, whose
+  requirement is the shape to copy, and `observation-bound-model`, which would carry it.
+  *Shape:* lift the derived-disclosure requirement into `observation-bound-model`, and give it a holder
+  of the same shape — declared headings read from the spec, held
+  set-equal to what the projection discloses, both directions, with the empty-enumeration guard.
 
 - ~~**Markdown readers in `capability_subjects` still take a bare `&str` where `region` exists.**~~ **CLOSED** in the open window across four changes: `Prose` gained a numbered form and
   `restatement::document_offences` took a region; `sections::cut` was built and `section_shape` /
