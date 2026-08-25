@@ -164,8 +164,19 @@ pub fn path_label(path: &Path) -> String {
                 }
                 Err(err) => {
                     let (valid, invalid) = rest.split_at(err.valid_up_to());
-                    // `valid_up_to()` bounds a checked-valid prefix, so this cannot fail.
-                    push_text(out, std::str::from_utf8(valid).unwrap_or_default());
+                    // `valid_up_to()` bounds a checked-valid prefix, so this cannot fail — and it
+                    // says so rather than branching on it. `unwrap_or_default()` was a fallback
+                    // nothing reaches, which tells a later reader that the empty case happens; the
+                    // `unreachable!()` this file already writes for `RootDir`/`CurDir` is the same
+                    // answer to the same question. `unreachable_branch` states the rule and its own
+                    // corpus cannot see this door: it recognises an always-`Some` value by the
+                    // RECEIVER (`.split(`, `.rsplit(`), and here the guarantee comes from where the
+                    // argument was cut instead.
+                    push_text(
+                        out,
+                        std::str::from_utf8(valid)
+                            .expect("`valid_up_to()` bounds a checked-valid prefix"),
+                    );
                     // `error_len() == None` means the input ends mid-sequence: every remaining byte is
                     // unusable, so escape all of them rather than looping forever on the same slice.
                     let skip = err.error_len().unwrap_or(invalid.len()).max(1);
