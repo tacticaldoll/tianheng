@@ -363,3 +363,23 @@ fn classify(value: &str, line: &str) -> Publishable {
         _ => Publishable::Unreadable(line.to_string()),
     }
 }
+
+/// Whether a line of executed TOML opens a table.
+///
+/// **Both ends, not just the opening bracket.** A bare `starts_with('[')` — which each reader this replaces
+/// wrote for itself — also matches a multi-line array's continuation, since `  [1, 2],` trims to something
+/// starting with `[`. Requiring the closing `]` refuses that and costs a real heading nothing: the comment a
+/// heading may carry (`[package] # …`) is already gone, because this reads a
+/// [`toml`](crate::region::Source::toml) region rather than raw text.
+///
+/// `[table]` and `[[array-of-tables]]` are both headings and both answer `true`; **which** heading matters is
+/// the caller's predicate, not this function's.
+///
+/// **Residue, declared:** a nested array whose last element sits alone on a line — `  [1, 2]` with no
+/// trailing comma — still answers `true`. Neither `Cargo.toml` nor `Cargo.lock` writes that shape: cargo
+/// generates the lock, and the manifests here carry flat arrays only. Closing it needs value-level structure
+/// this reader does not have and no caller has asked for.
+pub fn is_table(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.starts_with('[') && trimmed.ends_with(']')
+}

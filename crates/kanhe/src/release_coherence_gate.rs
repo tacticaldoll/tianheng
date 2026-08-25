@@ -18,7 +18,9 @@ use crate::sections::Section;
 
 use crate::hermetic_git::fixture as run;
 pub use crate::hermetic_git::hermetic;
-use crate::manifest::{Quoted, WorkspaceVersion, quoted_value, semver, workspace_version};
+use crate::manifest::{
+    Quoted, WorkspaceVersion, is_table, quoted_value, semver, workspace_version,
+};
 
 fn git(repo: &Path, args: &[&str]) -> Result<String, crate::hermetic_git::Failure> {
     crate::hermetic_git::run(repo, &[], args)
@@ -434,27 +436,24 @@ fn package_name(manifest: &str) -> PackageName {
     // was refuted by a reviewer, and stating a benefit a reader could have checked against the function ten
     // lines up is the cheaper half of the discipline the previous commit wrote down.
     let source = crate::region::Source::of(manifest);
-    let mut in_package = false;
-    let mut names: Vec<&str> = Vec::new();
-    for line in source.toml().lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') {
-            // `[package]` exactly. `[package.metadata.docs.rs]` is a different table and names no package.
-            in_package = trimmed == "[package]";
-            continue;
-        }
-        if !in_package {
-            continue;
-        }
+    // The cut owns the table boundary. `in_package` was a boolean walked by hand here, in
+    // `require_lock_versions`, and once more as a `Table` cursor in `declared_dependencies` — three copies of
+    // *a heading opens, the next heading closes*, which is the one thing all three shared. `is_table` says
+    // which lines are headings and this predicate says which heading matters; `[package.metadata.docs.rs]` is
+    // a different table and names no package.
+    let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
+        is_table(line).then(|| line.trim() == "[package]")
+    });
+    let names: Vec<&str> = tables
+        .iter()
+        .filter(|table| table.name)
+        .flat_map(|table| table.body.iter())
         // `name` then `=`, so `name_of` and any other `name…` key is not this key.
-        let Some(rest) = trimmed.strip_prefix("name") else {
-            continue;
-        };
-        let Some(value) = rest.trim_start().strip_prefix('=') else {
-            continue;
-        };
-        names.push(value.trim());
-    }
+        .filter_map(|(_, line)| {
+            let rest = line.trim().strip_prefix("name")?;
+            Some(rest.trim_start().strip_prefix('=')?.trim())
+        })
+        .collect();
     match names.len() {
         0 => PackageName::Absent,
         1 => match quoted_value(names[0]) {
@@ -897,7 +896,8 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     // which is the split `section_of`'s own doc asks for. Over a `Prose` region, so a fenced `## [` heading
     // is not a section — the misread `region`'s header declares for the readers still below.
     let changelog_source = Source::of(changelog);
-    let changelog_sections = crate::sections::cut(changelog_source.prose(), section_of);
+    let changelog_sections =
+        crate::sections::cut(changelog_source.prose().numbered_lines(), section_of);
 
     // The phases, in the order a reader meets a refusal in. **The order is observable**: a repository with
     // two problems is refused for whichever phase reaches its own first, and the failure matrix asserts the

@@ -95,7 +95,7 @@ pub enum Named {
 /// reports none and several as one refusal, and here they are different facts — no section means the
 /// capability declared nothing, several means it declared twice and this reader may not pick.
 pub fn subject_globs(spec: Prose<'_>) -> Declared {
-    let document = crate::sections::cut(spec, heading_section);
+    let document = crate::sections::cut(spec.numbered_lines(), heading_section);
     let sections = named_sections(&document, "## Subject");
     let block = match sections.len() {
         0 => return Declared::Absent,
@@ -133,7 +133,7 @@ pub fn subject_globs(spec: Prose<'_>) -> Declared {
 /// then reports a change as having accounted for a capability it never listed. An empty set is the honest
 /// answer for a proposal carrying **no** such section — it names nothing — and that stays `Ok`.
 pub fn proposal_capabilities(proposal: Prose<'_>) -> Named {
-    let document = crate::sections::cut(proposal, heading_section);
+    let document = crate::sections::cut(proposal.numbered_lines(), heading_section);
     let sections = named_sections(&document, "## Capabilities");
     let block = match sections.len() {
         0 => return Named::Names(BTreeSet::new()),
