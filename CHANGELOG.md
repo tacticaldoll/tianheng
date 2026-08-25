@@ -1172,6 +1172,39 @@ them.
 
 ### Self-governance
 
+- **Three audited backlog entries close their causes rather than staying open on a measurement nobody would
+  re-run.** `AGENTS.md` requires it in so many words — *a governance rule measured as un-reacted is given a
+  reaction or filed, in the same change*, because *the measurement is the expensive part and it is already
+  done* — and adds that filing counts as answering while silence does not. Each of the three was audited
+  against the tree, and each closes differently.
+
+  **Dissolved: the derived-disclosure entry.** Its Shape read *lift the derived-disclosure requirement into
+  `observation-bound-model`*, and that requirement belonged to `gate-shape-contract`, whose spec was retired in
+  this same window; its holder is gone with it, so there is nothing left to lift. The state it warned about is
+  also not the tree's: `docs/observation-bound-extents.md` renders wholly derived — the leading figure is
+  `false_negatives.len()` against `code.len()`, every disclosed id comes out of a loop — and its own prose
+  gives the reason the entry existed, *a list typed here is a literal in a template and the freshness check
+  compares that text with itself*, and then does not type one. **Kept verbatim under the closed section rather
+  than deleted**, because an entry silently removed is one the next audit re-derives.
+
+  **Reclassified: the whole-line anchor entry, READY-PATCH → ACCEPTED DEBT.** READY-PATCH says *someone may
+  patch this now*, and the entry's own Shape refutes every closure it lists: literal adjacency to
+  `impl Observer for` was measured against the three real files and would refuse the real definitions; scope
+  containment survives that and still admits a perturbation wrapping the whole fake `impl` block; and reading
+  what the compiler resolves needs Rust parsing `kanhe`'s allowlist forbids. The closure it does name — a
+  **shared** nested-span lexer for this reader and `region.rs`'s identical residue — exists as
+  `guibiao::module_scan`, which `kanhe` may not depend on. A declared bound plus a named instrument out of
+  legal reach is accepted debt, not promotable work. `backlog_classification` refused the entry under its old
+  heading, so it moved with its class.
+
+  **Constrained: the `**BREAKING**` marking entry.** Its trigger reads *a second unmarked breaking entry*, and
+  `[0.3.0]` looks like one — a `### Migration` telling an adopter to regenerate a baseline, and zero marks. It
+  is not: the marking rule was written `2026-08-05` and `[0.3.0]` was cut `2026-07-26`, so that section
+  predates the rule it appears to break. The useful half is what that measurement does to the entry's own
+  cheap candidate: *a migration section that marks nothing* **fires on `[0.3.0]` today**, the one hit across
+  every release section, so adopting it needs a rule-effective floor the Shape never mentions — it was reasoned
+  from `[0.5.0]` alone. Without the floor, the theorem's first act is to refuse a record nobody may change.
+
 - **Two more pinning citations have been seen to fail, and the first two candidates were refused for a reason
   worth recording.** `pin_bites` decides that a cited test *runs*; a declared mutation is what decides it
   *bites*. The gate prints the remainder on every clean run — two mutations covering two of 162 cited tests
