@@ -865,23 +865,53 @@ fn check_novalidate(payload: &str, signature: &Path) -> Result<bool, Refusal> {
     verify_with("ssh-keygen", payload, signature)
 }
 
+/// The one refusal a reached-no-verdict fact is reported under.
+///
+/// A module-level function rather than a closure per call site, because `refusal_register` identifies a site
+/// by the literal opening its constructor: one fact, one literal, one place to read it from.
+fn verifier_reached_no_verdict(what: &str) -> Refusal {
+    cannot_judge_at(
+        "publish-source-integrity#signature-verifier-reached-no-verdict",
+        format!(
+            "the signature verifier reached no verdict ({what}), which is not the same fact as a signature \
+             that does not verify — so whether the tag is signed is undecided here"
+        ),
+    )
+}
+
+/// What a **reaped** verifier's exit status says, and what it does not.
+///
+/// **`success()` is not the question, and reading it as the question is what the previous repair missed.** That
+/// repair split *could not spawn*, *could not deliver* and *could not reap* out of the boolean and then wrote
+/// `Ok(out.status.success())` — which folds a fourth no-verdict state back in. On Unix a process terminated by
+/// a signal answers `success() == false` and `code() == None`: it was reaped, so the delivery succeeded, and it
+/// rejected nothing. Reporting that as `signature-does-not-verify` is the same misclassification one state
+/// further in, and it survived because the repair's attention was on the return *type* while the predicate
+/// stayed unread.
+///
+/// **The three states are exhaustive, checked rather than assumed.** `ExitStatus` answers `code()` with
+/// `Some(0)`, `Some(n)`, or `None`; the last is Unix-only, and on a platform where every exit carries a code
+/// the `Err` arm is simply unreachable rather than wrong. A verifier that *hangs* is not among these: nothing
+/// here times out, so it stalls the gate rather than misclassifying — a different property, and not this
+/// function's to answer.
+pub(crate) fn verdict_of(status: std::process::ExitStatus) -> Result<bool, Refusal> {
+    match status.code() {
+        Some(0) => Ok(true),
+        Some(_) => Ok(false),
+        None => Err(verifier_reached_no_verdict(
+            "it was terminated without an exit code, so it reached no verdict to report",
+        )),
+    }
+}
+
 /// [`check_novalidate`] with the verifier named, so the *could not run* arm is reachable from a direction.
 ///
-/// **One refusal site, not two.** A failed spawn, a failed write and a failed reap are one fact to the
-/// caller — *the verifier reached no verdict* — and splitting them would register a second site no direction
-/// can construct: process exhaustion and a broken pipe are states a test may not manufacture. Naming the
-/// program is the one perturbation that reaches this arm honestly, and it is the only reason this parameter
-/// exists.
+/// **One refusal site, not four.** A failed spawn, a failed write, a failed reap and a signalled death are one
+/// fact to the caller — *the verifier reached no verdict* — and splitting them would register sites no
+/// direction can construct: process exhaustion and a broken pipe are states a test may not manufacture.
+/// Naming the program is the one perturbation that reaches the spawn arm honestly, and it is the only reason
+/// this parameter exists; [`verdict_of`] takes a real status, so the signalled arm needs no parameter at all.
 pub(crate) fn verify_with(program: &str, payload: &str, signature: &Path) -> Result<bool, Refusal> {
-    let unjudgeable = |what: String| {
-        cannot_judge_at(
-            "publish-source-integrity#signature-verifier-reached-no-verdict",
-            format!(
-                "the signature verifier reached no verdict ({what}), which is not the same fact as a \
-                 signature that does not verify — so whether the tag is signed is undecided here"
-            ),
-        )
-    };
     let child = Command::new(program)
         .args(["-Y", "check-novalidate", "-n", "git", "-s"])
         .arg(signature)
@@ -889,11 +919,13 @@ pub(crate) fn verify_with(program: &str, payload: &str, signature: &Path) -> Res
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map_err(|err| unjudgeable(format!("`{program}` could not be started: {err}")))?;
+        .map_err(|err| {
+            verifier_reached_no_verdict(&format!("`{program}` could not be started: {err}"))
+        })?;
     let out = deliver_and_reap(child, payload).ok_or_else(|| {
-        unjudgeable("its payload was not delivered, or it was not reaped".to_string())
+        verifier_reached_no_verdict("its payload was not delivered, or it was not reaped")
     })?;
-    Ok(out.status.success())
+    verdict_of(out.status)
 }
 
 // --- the fixture ------------------------------------------------------------------------------------------
@@ -1010,6 +1042,66 @@ mod tests {
         assert!(
             deliver_and_reap(child, "a payload nobody can receive").is_none(),
             "an undeliverable payload must not report a completed delivery, however the child exits"
+        );
+    }
+
+    /// A verifier terminated by a signal reached no verdict, and did not reject the signature.
+    ///
+    /// **The state the first repair left folded in.** That repair lifted *could not spawn*, *could not deliver*
+    /// and *could not reap* out of a boolean and then wrote `Ok(out.status.success())` — and on Unix a signalled
+    /// process answers `success() == false` with `code() == None`. It was reaped, so delivery succeeded; it
+    /// rejected nothing, because it never ran to a verdict. The caller would have reported
+    /// `signature-does-not-verify`, a violation, for a process the kernel killed.
+    ///
+    /// **The status comes from the kernel rather than from a constructor.** A test that fabricated an
+    /// `ExitStatus` would be asserting against its own idea of what a signalled exit looks like; `sh -c 'kill -9
+    /// $$'` makes a real one, and the assertion below first checks that the fixture *is* what it claims — a
+    /// status with no code — so a platform where every exit carries one reports that rather than passing
+    /// vacuously.
+    ///
+    /// All three states in one direction, because each is a different way to be wrong: a clean exit must verify,
+    /// a non-zero exit must be the rejection the caller turns into a violation, and no code at all must be
+    /// unjudgeable.
+    #[test]
+    fn a_signalled_verifier_reached_no_verdict() {
+        let signalled = std::process::Command::new("sh")
+            .args(["-c", "kill -9 $$"])
+            .output()
+            .expect("`sh` is spawnable");
+        assert!(
+            signalled.status.code().is_none(),
+            "this direction needs a status carrying no exit code; got {:?} — on a platform where every exit \
+             carries one, the arm under test is unreachable rather than wrong",
+            signalled.status.code()
+        );
+        let refusal = verdict_of(signalled.status)
+            .expect_err("a process the kernel killed reached no verdict about any signature");
+        // The site is observed by `a_verifier_that_could_not_run_is_not_a_bad_signature`, which lives in
+        // the register's corpus; naming it twice would claim two observations of one site.
+        assert_eq!(
+            refusal.kind,
+            crate::refusal::Kind::CannotJudge,
+            "a signalled verifier is unjudgeable, never a disagreement: {}",
+            refusal.message
+        );
+
+        // The two arms that must survive closing the one above.
+        let clean = std::process::Command::new("true")
+            .output()
+            .expect("`true` is spawnable");
+        assert_eq!(
+            verdict_of(clean.status).as_ref().ok().copied(),
+            Some(true),
+            "a verifier exiting 0 accepted the payload"
+        );
+        let rejected = std::process::Command::new("false")
+            .output()
+            .expect("`false` is spawnable");
+        assert_eq!(
+            verdict_of(rejected.status).as_ref().ok().copied(),
+            Some(false),
+            "a verifier exiting non-zero rejected the payload, which is the caller's violation and must stay \
+             reachable"
         );
     }
 
