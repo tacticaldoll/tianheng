@@ -1306,54 +1306,48 @@ fn require_lock_versions(
     // workspace member sharing a name with something from a registry. Nothing here stated that premise, and
     // `source` is what tells the two apart: a workspace member has none, everything fetched has one.
     let mut entries: BTreeMap<String, Vec<(String, bool)>> = BTreeMap::new();
-    let mut name = String::new();
-    let mut version_of: Option<String> = None;
-    let mut sourced = false;
-    // A block ends at the next **table header** or at end of input, so the record is filed on the boundary
-    // rather than when its version is read — `source` is written after `version` in cargo's own output, and
-    // filing early would record every entry as source-less.
+    // **A block's fields are the block's by construction, where they were the block's by a boundary rule.**
+    // This walked the lock with `name`, `version_of` and `sourced` as function-level state and a `close`
+    // closure called on *every* table header — because `[[patch.unused]]`, written whenever a `[patch]`
+    // section exists, carries its own `name`, `version` and `source`, and read as ordinary content it
+    // overwrote the block above. That rule was correct and it was a *rule*: drop the call on the foreign
+    // header and the fields bleed again.
     //
-    // **`[[package]]` is not the only table a lock carries, and the boundary is not the only thing that
-    // depended on believing it was.** `[[patch.unused]]` — written whenever a `[patch]` section exists — has
-    // its own `name`, `version` and `source`, and `[metadata]` closes an older lock. Read as ordinary content
-    // they left the block above still open and overwrote its fields, so the last member's version was
-    // replaced before it was ever filed and the workspace lookup reported that member missing from a lock
-    // that records it. Every table therefore closes the record, and only `[[package]]` reopens one.
-    let close = |name: &mut String,
-                 version_of: &mut Option<String>,
-                 sourced: &mut bool,
-                 entries: &mut BTreeMap<String, Vec<(String, bool)>>| {
-        if let (false, Some(found)) = (name.is_empty(), version_of.take()) {
-            entries
-                .entry(name.clone())
-                .or_default()
-                .push((found, *sourced));
-        }
-        name.clear();
-        *sourced = false;
-    };
-    // Whether the lines being read belong to a `[[package]]` block. A foreign table's keys are not this
-    // package's, and skipping them by name would be a list of the tables someone thought of.
-    let mut in_package = false;
-    // Executed text here too. A lock file is generated and rarely carries comments, but the reader is the
-    // same shape as its two siblings and a corpus narrower than the claim is the defect all three shared.
-    for line in crate::region::Source::of(lock.as_str()).toml().lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') {
-            close(&mut name, &mut version_of, &mut sourced, &mut entries);
-            in_package = trimmed == "[[package]]";
-        } else if !in_package {
-            continue;
-        } else if let Some((key, value)) = trimmed.split_once('=') {
+    // The cut gives each `[[package]]` its own body, so the three values are per-block locals and a foreign
+    // table's keys are not reachable from here at all. Filing still happens after the body rather than when
+    // the version is read — `source` is written after `version` in cargo's own output, and filing early would
+    // record every entry as source-less — but *after the body* is where the block ends now, rather than where
+    // the next header happens to be.
+    //
+    // The header stays an exact `[[package]]` rather than sharing the manifest readers' tolerance for
+    // `[ package ]`: cargo generates this file and writes one spelling, so admitting others here would be a
+    // tolerance no measurement asked for.
+    //
+    // **Every entry under a name, and whether each carries a `source`.** A single-valued map keyed on the
+    // name kept the first entry and dropped the rest, which is only right while no name appears twice — and
+    // two entries under one name is ordinary in a lock, either as two versions of one crate or as a workspace
+    // member sharing a name with something from a registry. `source` tells the two apart: a workspace member
+    // has none, everything fetched has one.
+    let blocks = crate::sections::cut(
+        crate::region::Source::of(lock.as_str())
+            .toml()
+            .numbered_lines(),
+        |line| is_table(line).then(|| line.trim() == "[[package]]"),
+    );
+    for block in blocks.iter().filter(|block| block.name) {
+        let mut name = String::new();
+        let mut version_of: Option<String> = None;
+        let mut sourced = false;
+        for (_, line) in &block.body {
+            let trimmed = line.trim();
             // **The key is identified exactly, and `=` is decided once.** Each arm used to ask
             // `starts_with(..) && contains('=')` and then split again with an `unwrap_or_default()` the
-            // `contains` had already made unreachable — two decisions about the same character and a
-            // default nothing could reach. A prefix is also not a key: `versionx = 1` would have entered
-            // the version arm, and cargo treats a key it does not know as unused.
-            //
-            // The header stays an exact `[[package]]` rather than sharing the manifest reader's tolerance
-            // for `[ package ]`: cargo generates this file and writes one spelling, so admitting others
-            // here would be a tolerance no measurement asked for.
+            // `contains` had already made unreachable — two decisions about the same character and a default
+            // nothing could reach. A prefix is also not a key: `versionx = 1` would have entered the version
+            // arm, and cargo treats a key it does not know as unused.
+            let Some((key, value)) = trimmed.split_once('=') else {
+                continue;
+            };
             match crate::manifest::unquoted(key.trim()) {
                 "source" => sourced = true,
                 "name" => {
@@ -1393,8 +1387,12 @@ fn require_lock_versions(
                 _ => {}
             }
         }
+        if !name.is_empty() {
+            if let Some(found) = version_of {
+                entries.entry(name).or_default().push((found, sourced));
+            }
+        }
     }
-    close(&mut name, &mut version_of, &mut sourced, &mut entries);
 
     for (_path, package) in members {
         let package = package.clone();

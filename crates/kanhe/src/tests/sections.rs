@@ -5,7 +5,7 @@
 //! the verdict came out the same. A component's contract is not a consequence of its callers agreeing.
 
 use crate::region::Source;
-use crate::sections::cut;
+use crate::sections::{Section, cut};
 
 /// The predicate `release_coherence_gate` uses, restated here so this matrix does not depend on its private
 /// spelling: a `## [` line, named by the part before any ` - `.
@@ -118,4 +118,53 @@ fn a_section_keeps_the_sentinel_line_the_document_wrote() {
         "the dated section's line keeps its date where its name cannot; the undated one is identical in both, \
          which is why the fixture carries one of each"
     );
+}
+
+/// Any table heading closes the block, so a foreign table's keys are never the previous block's.
+///
+/// **This is the structural half of a rule that used to be a rule.** `require_lock_versions` walked
+/// `Cargo.lock` with `name`, `version` and `source` as function-level state and called a `close` closure on
+/// *every* table header — because `[[patch.unused]]`, which cargo writes whenever a `[patch]` section exists,
+/// carries all three of those keys. Read as ordinary content they overwrote the block above, so the last
+/// member's version was replaced before it was filed and the workspace lookup reported that member absent
+/// from a lock recording it. The call on the foreign header was what stopped it, and deleting that one call
+/// brought the defect back.
+///
+/// With the predicate answering *is this a heading* before *is it mine*, a foreign table's body belongs to no
+/// `[[package]]` at all, so the state cannot bleed whether it is a local or not. The negative run for this
+/// direction is a predicate that recognises only `[[package]]` as a boundary — which is exactly the shape the
+/// `close` call existed to patch.
+#[test]
+fn a_foreign_table_heading_still_closes_the_block() {
+    let lock = Source::of(
+        "[[package]]\n\
+         name = \"member\"\n\
+         version = \"0.5.0\"\n\
+         \n\
+         [[patch.unused]]\n\
+         name = \"some-patched-crate\"\n\
+         version = \"9.9.9\"\n\
+         source = \"registry+https://example.invalid/index\"\n",
+    );
+    let blocks = cut(lock.toml().numbered_lines(), |line| {
+        crate::manifest::is_table(line).then(|| line.trim() == "[[package]]")
+    });
+
+    let mine: Vec<&Section<bool>> = blocks.iter().filter(|block| block.name).collect();
+    assert_eq!(mine.len(), 1, "{blocks:?}");
+    let body: Vec<&str> = mine[0].body.iter().map(|(_, l)| l.as_str()).collect();
+    assert!(
+        body.iter().any(|l| l.contains("\"member\"")),
+        "the package's own keys are its own: {body:?}"
+    );
+    assert!(
+        !body
+            .iter()
+            .any(|l| l.contains("9.9.9") || l.contains("some-patched-crate")),
+        "a `[[patch.unused]]` table carries its own name and version, and none of them belong to the block \
+         above it: {body:?}"
+    );
+    // The foreign table is a block of its own rather than dropped, which is what makes it *not* the previous
+    // one's — a reader that discarded it entirely would pass this by never having read it.
+    assert_eq!(blocks.len(), 2, "{blocks:?}");
 }
