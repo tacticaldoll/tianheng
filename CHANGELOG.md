@@ -7117,6 +7117,68 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class, or manifest moves; the change is confined to CI.
 
 
+- **A typed count in law-bearing text is a claim with no observation source, and there were thirteen of
+  them.** `AGENTS.md` states both halves of this: a census this repository can produce is *declared*, and **a
+  count of something it does not produce is not written** — where the count matters, produce it and let the
+  producing document carry it; where it does not, write the property and leave the number out. Enforcement of
+  the second half is deliberately assigned to review rather than to a reaction, so a sweep is the only thing
+  that finds these. One was run over every `measured when this was written` in law text, nineteen sites, and
+  each was classified as a count, a property, or a record of a set that is gone. Thirteen distinct figures at
+  twenty-seven occurrences across seven files were counts; the second option applies to all of them, and every
+  sentence says what it said before without its number.
+
+  **The figures, each re-measured with an instrument built for it rather than re-read.** The wrapped-span pair
+  `503 lines across 88 tracked files` and `59 paragraphs across 21 files` measures `524` / `94` and `60` / `20`
+  now — every figure wrong, and the paragraph pair wrong in opposite directions. `331 lines across 68 tracked
+  files`, which `reference-integrity` states for a set its words describe identically, measures `360` / `73`:
+  the two specs were measured by different readings — all backticks against single backticks only — while
+  describing one set, so at least one was never a measurement of the sentence it sat in. `87 subject bullets`
+  measures `90`. `35 occurrences across the tree` does not reproduce at all — a defensible reading gives `42`.
+
+  **The largest one was not drift, and saying so takes a measurement the review that found it did not have.**
+  The bound on a Rust identifier named in prose stated `859 of 2,373` such tokens matching no declaration.
+  The denominator reproduces **exactly**, today, over every published crate's `src` — but only with intra-doc
+  links *included*, which is the one thing the bound's own WHEN excludes (*"rather than as an intra-doc
+  link"*); excluding them the denominator is `2,061`. So the figure did not drift out from under its sentence:
+  it was measured over a corpus wider than the bound it justifies, and the tree can say which. The numerator
+  cannot be reproduced under any reading. *Matches no declaration in the tree* was measured three ways —
+  declarations including fields, locals and parameters (`399`), item names only (`866`), item names with Rust
+  keywords removed from the declaration set, since `pub const fn` otherwise enters `fn` as a declared name
+  (`1,222`). A figure whose value swings threefold on an unstated definition is not re-derivable; it is
+  re-typable, which is the whole of what the rule forbids.
+
+  **A proposed replacement wording was refused, because it asserts something false.** The repair offered was
+  *"most such tokens match no declaration in the tree"*. At the widest of the three readings that share is
+  `51%` and at the narrowest `17%`; *most* is not assertable at either. The surviving sentence says *routinely*
+  and keeps only what is checkable by inspection — that the most frequent unmatched tokens are Rust keywords,
+  attribute names and std method names, with all nine named examples verified present in the unmatched set.
+
+  **One figure was correct and is removed anyway, for a reason the finding did not give.** *`AGENTS.md` writes
+  a code span across two lines in five places* is exactly right: pairing single backticks per paragraph over
+  `AGENTS.md`'s prose with fenced blocks stripped yields five wrapped spans, and both of the surprising ones
+  are genuine. The finding's instrument counted twelve odd-backtick lines, which is a different set and does
+  not bear on it. What condemns the clause is the rule itself — nothing in the tree produces *how many wrapped
+  spans a document carries*, so the number is right today and unfalsifiable tomorrow, and the WHEN needs the
+  existence and not the magnitude.
+
+  **The class came through five doors the finding named three of.** Beyond the two sites it cited: a fourth
+  copy of the wrapped-span pair in `reference_integrity`'s own directions, a second *in five places* in
+  `reading`'s doc, a *five sites* count inside a second stated bound's reason — the identical shape one bound
+  over — and a fifth copy of the occurrence count in `gate_identity`. A figure restated at four sites
+  independently can disagree with itself, and did.
+
+  **What stays, so the deletions are decisions rather than a sweep run to exhaustion.** `CHANGELOG` and
+  `BACKLOG` records keep their measurements: an entry is dated, and a rejected alternative with what measuring
+  it showed is what stops the next person re-running it. `repository-checks`'s *no site outside `reading` uses
+  either* and *no site in the tree binds a `split(…).next()`* stay — they are properties a reader can
+  re-derive, and one of them is held by its own reaction. `gate_exit_classes`'s *five sites spelled out one at
+  a time* stays because those five sites no longer exist, which is the record form `AGENTS.md` names.
+
+  No behaviour moves. Every `PINNED-BY` still names the reaction it named, the two projections were
+  regenerated under `BLESS=1` from the edited sources rather than hand-patched, and no published API, outcome,
+  report, exit class or manifest changes.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

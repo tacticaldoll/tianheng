@@ -1886,9 +1886,8 @@ fn no_reference_names_a_line_number() {
         read += 1;
         // **The paragraph is the unit that pairs, and a line is not.** A Markdown code span wraps a line
         // freely, so a per-line reader joins one span's closer to the next line's opener and judges the
-        // prose between them — measured when this was written, 503 lines across 88 tracked files carry an
-        // odd number of backticks. A span cannot contain a blank line, so the paragraph is where they close:
-        // 59 paragraphs across 21 files remain odd, and those are fenced blocks and doubled markers.
+        // prose between them. A span cannot contain a blank line, so the paragraph is where they close, and
+        // the paragraphs left odd are fenced blocks and doubled markers.
         //
         // The previous repair scanned an undecidable *line* entire and called that an over-reaction in the
         // safe direction. It was inert: the span then contains a backtick, so its left half is neither a

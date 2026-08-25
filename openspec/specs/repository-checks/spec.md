@@ -447,18 +447,16 @@ gave one rule two answers, and the correct half could tell the other nothing.
 - **WHEN** a source pairs markers using `split_once`, `strip_prefix`, `strip_suffix`, `trim_matches` or
   `matches` with a backtick literal
 - **THEN** the reaction reports nothing. Those five are in live use for reading a *single* delimited value
-  rather than pairing a sequence — measured when this was written: five sites, none of them a pairing — so
-  refusing them would refuse the honest use, and telling the two apart needs the expression's shape rather
-  than the primitive's name
+  rather than pairing a sequence, and none of their live uses is a pairing — so refusing them would refuse
+  the honest use, and telling the two apart needs the expression's shape rather than the primitive's name
 - **UNPINNED** `BACKLOG.md` — *the backtick primitives the pairing reader names*
 
 #### Scenario: A code span wraps a line
 
-- **WHEN** a Markdown document writes a code span across two lines, as `AGENTS.md` does in five places
+- **WHEN** a Markdown document writes a code span across two lines, as `AGENTS.md` does
 - **THEN** it is read as one span. The paragraph is the unit that pairs, because a code span cannot contain a
   blank line; a per-line reader joins one span's closer to the next line's opener and answers with the prose
-  between them. Measured when this was written: 503 lines across 88 tracked files carry an odd number of
-  backticks, against 59 paragraphs across 21 files
+  between them
 - **PINNED-BY** `a_span_wrapping_a_line_pairs_inside_its_paragraph`
 
 #### Scenario: A paragraph's own markers do not pair
@@ -1495,8 +1493,8 @@ resolution in string form, which this repository has already shipped a false neg
 
 The corpus is tracked Markdown. A Rust source carries these pairs as **fixture input** — a parser direction
 plants a package-and-target pair as text — and admitting them would report a test asserting its own parser as a broken
-command. Measured when this was written: 35 occurrences across the tree, two of them those fixtures, and one
-review-reported defect; running the check found **four more**, every one in an example README.
+command. Running the check found **four more** than the one review-reported defect it was written for, every
+one of them in an example README.
 
 #### Scenario: A document names a package that does not carry the target
 

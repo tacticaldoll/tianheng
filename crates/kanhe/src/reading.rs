@@ -208,7 +208,7 @@ pub fn backticked(what: &str, text: &str) -> Result<Vec<String>, Refusal> {
 /// Every backticked run in `text` with the one-based line its opener sits on, or the same refusal.
 ///
 /// **A run may span a line, so the line is not the unit that pairs.** Markdown wraps a code span freely —
-/// `AGENTS.md` writes one across two lines in five places — and a per-line reader over such a document sees
+/// `AGENTS.md` writes one across two lines — and a per-line reader over such a document sees
 /// an odd count on each half and pairs the halves with whatever came next. `reference_integrity` scanned line
 /// by line and was reading exactly those shifted spans; the document is what pairs, and the line is only
 /// where the reader is sent.
@@ -243,10 +243,8 @@ pub fn backticked_at(what: &str, text: &str) -> Result<Vec<(usize, String)>, Ref
 ///
 /// **The paragraph is the unit that pairs, and a line is not.** A code span wraps a line freely, so a
 /// per-line reader joins one span's closer to the next line's opener and answers with the prose between
-/// them; measured when this was written, 503 lines across 88 tracked files carry an odd number of backticks.
-/// A code span cannot contain a blank line, so the paragraph is where single-backtick spans close: the same
-/// corpus has 59 odd paragraphs across 21 files, and those are fenced blocks and doubled markers rather than
-/// wrapped spans.
+/// them. A code span cannot contain a blank line, so the paragraph is where single-backtick spans close, and
+/// the paragraphs left odd are fenced blocks and doubled markers rather than wrapped spans.
 ///
 /// **The second answer is a function rather than a convention.** [`backticked`] has one `Err` and its
 /// consumers read it two ways: three treat *cannot pair* as a refusal, and one — a check reading coordinates

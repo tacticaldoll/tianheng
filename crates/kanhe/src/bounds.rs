@@ -134,8 +134,8 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::Reached(Reached::UnderReacts {
                 because: "the reaction names two primitives, `split` and `find`, which are the two shapes \
                           `reading`'s own doc records replacing. The other five are in live use for reading \
-                          a SINGLE delimited value, where they are correct -- measured when this was \
-                          written: five sites, none of them a pairing -- so refusing them by name would \
+                          a SINGLE delimited value, where they are correct, and none of their live uses \
+                          is a pairing -- so refusing them by name would \
                           refuse the honest use, and telling the two apart needs the expression's shape \
                           rather than the primitive's name"
                     .into(),
@@ -602,11 +602,10 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a backticked snake_case name written in a doc comment's prose rather than as an intra-doc link",
             Extent::Reached(Reached::UnderReacts {
                 because: "no reader of text can tell a name that should resolve from one that should not: \
-                          measured over every published crate's `src`, 859 of 2,373 such tokens match no \
-                          declaration in the tree, and the most frequent of those are Rust keywords, \
-                          attribute names and std method names. Separating them needs type information \
-                          about a receiver, which `inline-symbol-path-confinement` already declares \
-                          unobserved"
+                          such tokens routinely match no declaration in the tree, and the most frequent of \
+                          those are Rust keywords, attribute names and std method names. Separating them \
+                          needs type information about a receiver, which \
+                          `inline-symbol-path-confinement` already declares unobserved"
                     .into(),
                 owner: Owner::Engine,
             }),

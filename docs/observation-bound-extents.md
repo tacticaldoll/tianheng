@@ -606,7 +606,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > a backticked snake_case name written in a doc comment's prose rather than as an intra-doc link
 
-- **because**: no reader of text can tell a name that should resolve from one that should not: measured over every published crate's `src`, 859 of 2,373 such tokens match no declaration in the tree, and the most frequent of those are Rust keywords, attribute names and std method names. Separating them needs type information about a receiver, which `inline-symbol-path-confinement` already declares unobserved
+- **because**: no reader of text can tell a name that should resolve from one that should not: such tokens routinely match no declaration in the tree, and the most frequent of those are Rust keywords, attribute names and std method names. Separating them needs type information about a receiver, which `inline-symbol-path-confinement` already declares unobserved
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a Rust identifier named in prose is resolved by no reaction*
 
@@ -710,7 +710,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > a sequence of backtick-delimited names paired by hand through `split_once`, `strip_prefix`, `strip_suffix`, `trim_matches` or `matches`
 
-- **because**: the reaction names two primitives, `split` and `find`, which are the two shapes `reading`'s own doc records replacing. The other five are in live use for reading a SINGLE delimited value, where they are correct -- measured when this was written: five sites, none of them a pairing -- so refusing them by name would refuse the honest use, and telling the two apart needs the expression's shape rather than the primitive's name
+- **because**: the reaction names two primitives, `split` and `find`, which are the two shapes `reading`'s own doc records replacing. The other five are in live use for reading a SINGLE delimited value, where they are correct, and none of their live uses is a pairing -- so refusing them by name would refuse the honest use, and telling the two apart needs the expression's shape rather than the primitive's name
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *the backtick primitives the pairing reader names*
 
