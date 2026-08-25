@@ -84,7 +84,8 @@ fn claimed(
         // is not a bullet claiming nothing. `unwrap_or_default()` collapsed *both* of the reader's non-glob
         // answers into an empty claim, so an unparseable bullet shrank the claimed set exactly as an
         // unresolved glob would have — the case `claimed` already refuses, arrived at one line sooner.
-        let globs = match subject_globs(spec) {
+        let source = kanhe::region::Source::of(spec.as_str());
+        let globs = match subject_globs(source.prose()) {
             Declared::Globs(globs) => globs,
             // A capability with no `## Subject` claims nothing *here* and is reported by the sibling
             // direction, which is where that fact belongs.
@@ -253,7 +254,8 @@ fn a_change_names_every_capability_whose_subject_it_touches() {
         // Several `## Capabilities` sections is a fact about the proposal this reader may not resolve:
         // reading the first drops the capabilities the others name, and the join would then report the
         // change as having accounted for one it never listed.
-        let listed = match proposal_capabilities(&proposal) {
+        let source = kanhe::region::Source::of(proposal.as_str());
+        let listed = match proposal_capabilities(source.prose()) {
             Named::Names(listed) => listed,
             Named::SeveralSections(count) => panic!(
                 "capability subjects (cannot judge): {proposal_path} carries {count} `## Capabilities` \

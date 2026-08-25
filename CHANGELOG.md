@@ -1172,6 +1172,31 @@ them.
 
 ### Self-governance
 
+- **The Markdown residue `region` declared is closed, and the direction that held its latency is retired
+  rather than kept.** `capability_subjects`'s two readers were the last that took a bare `&str`:
+  `subject_globs` split on `"\n## Subject\n"` and then truncated at `"\n## "`, and `proposal_capabilities` did
+  the same one heading over. Both take a prose region and `sections::cut` now, so a fenced `## Subject` opens
+  no section — and the predicate is *any* `## ` heading with the exact one filtered by the caller, because
+  terminating a section is what a sentinel does and matching only the wanted heading makes every other one
+  part of its body. That is the same shape `release_coherence_gate` uses over `## [`, which is the evidence
+  the parameter had to be a predicate rather than a heading level.
+
+  **The retired direction was held to its own WHEN before it went.** A fence planted in a tracked spec was
+  refused by it — `governance-dogfood/spec.md: 2 fence line(s), 1 comment span(s)` — while the migrated
+  readers read that same file correctly, six of six. Then it went, because what it protected does not exist
+  and a protection kept past its instance turns its next firing into a false alarm: an ordinary document
+  carrying a code block would have been the next thing to trip it. Its shapes are decided by
+  `a_fenced_subject_heading_opens_no_section`, whose fixture carries three that fail in different
+  directions — a fenced heading opening nothing, a real one after it still being found, and the fenced
+  heading's own bullet staying out of the claimed globs — plus a comment-span sibling, since over-exclusion
+  would falsely refuse a conforming spec and under-exclusion would claim a file no capability governs.
+
+  **The `BACKLOG` entry said four signatures and there were five.** It named three in
+  `release_coherence_gate` and `restatement::document_offences`, and missed `adopter_cited_machinery` — a
+  fifth walk over the same document, on the same predicate, twin of `section_shape`'s. Found by reading
+  `section_of`'s callers rather than by re-reading the entry: a set enumerated once in prose is a set nothing
+  re-counts. The entry is closed with that correction rather than without it.
+
 - **The last reader that judged `CHANGELOG.md` as text took a region, so the protection over that file was
   narrowed rather than left to fire on nothing.** `require_changelog_state` counted `## [Unreleased]` lines
   across the whole document — which could not tell a real heading from one inside a fence, and it is the check

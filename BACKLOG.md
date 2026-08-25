@@ -201,48 +201,6 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **READY-PATCH: Markdown readers in `capability_subjects` still take a bare `&str` where `region` exists.**
-  *Class:* READY-PATCH — **the promotion trigger below has fired**, the prerequisite it named is built, and
-  every reader over `CHANGELOG.md` has moved. No count in the title: the set shrinks as the migration
-  proceeds, and nothing produces the figure.
-  *Observed pressure:* `region`'s own header made this an absolute — *a corpus is never handed to a
-  recognizer as `&str`* — and the readers in the same crate that contradict it are now
-  `capability_subjects::{subject_globs, proposal_capabilities}`. A fenced `## Subject` or `## Capabilities`
-  would be read as the section it resembles. *Observation source:* a review read the sentence against the crate, and the
-  sentence is now narrowed to executed text with the residue stated where it was claimed away.
-  *Current reaction or bound:* the misread itself is unheld; its **latency** is held —
-  `the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span` produces the figures this
-  entry used to type, over `CHANGELOG.md` and every `openspec/specs/*/spec.md`, with a vacuity guard on each
-  half. Not covered there: `document_offences`'s wider corpus, whose residue is conditional rather than a
-  count — a fenced block naming a crate together with *every* member of its allowlist — since holding that
-  means running the restatement rule inside a fence, which is the reader this entry exists to replace.
-  *Risk:* a release gate reading a fenced heading as a section, or a restatement check skipping a document it
-  should judge — both toward a false pass, which is the direction the Core Contract forbids.
-  *Promotion trigger:* **fired.** It was *the first fenced block in `CHANGELOG.md` or in a spec* — and one
-  arrived, in a changelog entry recording a negative run, which the direction refused. The trigger was filed
-  as one only a person re-reading the tree could notice; what noticed it was the direction, on an ordinary
-  run, which is the whole reason it produces its figures instead of typing them.
-  *Version class:* patch; every site is in a crate that ships in no package.
-  *Authority:* `release-coherence` and `self-law-projection`. *Shape:* give `Prose` a numbered form —
-  `numbered_lines`, as `Executed` already has — then take `Prose` in the signatures.
-  **The prerequisite is built and one signature has moved.** `Prose::numbered_lines` enumerates before it
-  filters, so a fenced block consumes its positions rather than renumbering what follows;
-  `restatement::document_offences` takes a region and reads a block's start off the first line it actually
-  holds, rather than deriving it from the blank line above — arithmetic that pointed into the fence prose had
-  just dropped. That also closed this entry's one *conditional* residue: the restatement rule never sees a
-  fence now, so it no longer has to be run inside one. Measured before moving it, over every tracked file the
-  check reads: the bare corpus and the prose corpus reported the identical offence set, so what changed is
-  which documents it *could* misread rather than which it did.
-
-  **Four of the five signatures have moved, and the corpus the latency is held over narrowed with them.**
-  `sections::cut` owns the boundary question and each caller's predicate the naming one, which is the split
-  `section_of`'s own doc asked for; `Section` carries the sentinel line as written, because a derived name is
-  lossy where a ` - DATE` suffix is dropped. `CHANGELOG.md` left the latency corpus when the last reader
-  judging it took a region — a protection kept past the instance it protected turns its next firing into a
-  false alarm, and an ordinary changelog entry carrying a code block would have tripped it. What remains is
-  `capability_subjects`'s two, whose predicate differs from the changelog's (one exact heading, closing on any
-  `## `) and whose cost is rippling into their callers.
-
 - **The `**BREAKING**` marking rule is paired per section, so an unmarked breaking entry beside a marked
   one is invisible.** *Class:* READY-PATCH. *Observed pressure:* `require_section_shape` collects
   `shape.breaking` as a set of **section names**, and requires each such section to carry a `### Migration`
@@ -1908,6 +1866,69 @@ consumer for an undemonstrated deduplication.
   - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
 ### Closed — reproduction records (0.4.0 onward)
+
+- ~~**Markdown readers in `capability_subjects` still take a bare `&str` where `region` exists.**~~ **CLOSED** in the open window across four changes: `Prose` gained a numbered form and
+  `restatement::document_offences` took a region; `sections::cut` was built and `section_shape` /
+  `adopter_cited_machinery` moved onto it; `require_changelog_state` / `unreleased_has_item` followed and
+  `Section` gained the sentinel line as written; and `subject_globs` / `proposal_capabilities` were the last.
+
+  **The entry said four signatures and there were five.** It named
+  `release_coherence_gate::{require_changelog_state, require_section_shape, unreleased_has_item}` and
+  `restatement::document_offences`, and missed `adopter_cited_machinery` — a fifth walk over the same
+  document, on the same predicate, byte-level twin of `section_shape`'s. It was found by reading the
+  callers of `section_of` rather than by re-reading this entry, which is the correction worth keeping: a
+  set enumerated once in prose is a set nothing re-counts.
+
+  **The latency direction is retired rather than narrowed, and was held to its own WHEN before going.** A
+  fence planted in a tracked spec was refused by it while the migrated readers read that same file
+  correctly; then it went, because what it protected no longer exists and a protection kept past its
+  instance turns its next firing into a false alarm — an ordinary document carrying a code block would
+  have been next. `CHANGELOG.md` had already left its corpus one change earlier, for the same reason.
+  The shapes it stood in for are decided by
+  `a_fenced_subject_heading_opens_no_section` and the `sections` failure matrix now.
+
+  The entry is kept verbatim below.
+
+  *Class:* READY-PATCH — **the promotion trigger below has fired**, the prerequisite it named is built, and
+  every reader over `CHANGELOG.md` has moved. No count in the title: the set shrinks as the migration
+  proceeds, and nothing produces the figure.
+  *Observed pressure:* `region`'s own header made this an absolute — *a corpus is never handed to a
+  recognizer as `&str`* — and the readers in the same crate that contradict it are now
+  `capability_subjects::{subject_globs, proposal_capabilities}`. A fenced `## Subject` or `## Capabilities`
+  would be read as the section it resembles. *Observation source:* a review read the sentence against the crate, and the
+  sentence is now narrowed to executed text with the residue stated where it was claimed away.
+  *Current reaction or bound:* the misread itself is unheld; its **latency** is held —
+  `the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span` produces the figures this
+  entry used to type, over `CHANGELOG.md` and every `openspec/specs/*/spec.md`, with a vacuity guard on each
+  half. Not covered there: `document_offences`'s wider corpus, whose residue is conditional rather than a
+  count — a fenced block naming a crate together with *every* member of its allowlist — since holding that
+  means running the restatement rule inside a fence, which is the reader this entry exists to replace.
+  *Risk:* a release gate reading a fenced heading as a section, or a restatement check skipping a document it
+  should judge — both toward a false pass, which is the direction the Core Contract forbids.
+  *Promotion trigger:* **fired.** It was *the first fenced block in `CHANGELOG.md` or in a spec* — and one
+  arrived, in a changelog entry recording a negative run, which the direction refused. The trigger was filed
+  as one only a person re-reading the tree could notice; what noticed it was the direction, on an ordinary
+  run, which is the whole reason it produces its figures instead of typing them.
+  *Version class:* patch; every site is in a crate that ships in no package.
+  *Authority:* `release-coherence` and `self-law-projection`. *Shape:* give `Prose` a numbered form —
+  `numbered_lines`, as `Executed` already has — then take `Prose` in the signatures.
+  **The prerequisite is built and one signature has moved.** `Prose::numbered_lines` enumerates before it
+  filters, so a fenced block consumes its positions rather than renumbering what follows;
+  `restatement::document_offences` takes a region and reads a block's start off the first line it actually
+  holds, rather than deriving it from the blank line above — arithmetic that pointed into the fence prose had
+  just dropped. That also closed this entry's one *conditional* residue: the restatement rule never sees a
+  fence now, so it no longer has to be run inside one. Measured before moving it, over every tracked file the
+  check reads: the bare corpus and the prose corpus reported the identical offence set, so what changed is
+  which documents it *could* misread rather than which it did.
+
+  **Four of the five signatures have moved, and the corpus the latency is held over narrowed with them.**
+  `sections::cut` owns the boundary question and each caller's predicate the naming one, which is the split
+  `section_of`'s own doc asked for; `Section` carries the sentinel line as written, because a derived name is
+  lossy where a ` - DATE` suffix is dropped. `CHANGELOG.md` left the latency corpus when the last reader
+  judging it took a region — a protection kept past the instance it protected turns its next firing into a
+  false alarm, and an ordinary changelog entry carrying a code block would have tripped it. What remains is
+  `capability_subjects`'s two, whose predicate differs from the changelog's (one exact heading, closing on any
+  `## `) and whose cost is rippling into their callers.
 
 These are **not** open work. Each was a live item in this index and is now closed;
 the original entry is kept verbatim beneath its closing note because the reproduction record —

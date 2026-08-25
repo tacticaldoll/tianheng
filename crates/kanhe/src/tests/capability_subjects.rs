@@ -7,6 +7,21 @@ use crate::capability_subjects::{
 };
 use crate::refusal::Kind;
 
+/// The reader over a document, given as text here because a fixture is a literal.
+///
+/// The cut needs a [`Source`](crate::region::Source) to borrow from, so the region is built per call rather
+/// than threaded through every fixture — the same reason `declaration_offences` builds one per spec.
+fn globs_of(spec: &str) -> Declared {
+    let source = crate::region::Source::of(spec);
+    subject_globs(source.prose())
+}
+
+/// Sibling of [`globs_of`], for the proposal side.
+fn capabilities_of(proposal: &str) -> Named {
+    let source = crate::region::Source::of(proposal);
+    proposal_capabilities(source.prose())
+}
+
 fn specs(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
     pairs
         .iter()
@@ -197,10 +212,10 @@ fn a_proposal_naming_nothing_says_so_rather_than_naming_an_empty_list() {
 #[test]
 fn a_subject_block_ends_at_the_next_section() {
     assert_eq!(
-        subject_globs(WITH_SUBJECT),
+        globs_of(WITH_SUBJECT),
         Declared::Globs(vec!["crates/a/src/*.rs".to_string()])
     );
-    assert_eq!(subject_globs("# c\n\n## Purpose\n\np\n"), Declared::Absent);
+    assert_eq!(globs_of("# c\n\n## Purpose\n\np\n"), Declared::Absent);
 }
 
 /// A bullet the reader cannot parse is refused, not quietly left out of the claim.
@@ -218,7 +233,7 @@ fn a_subject_bullet_that_does_not_parse_is_refused_rather_than_dropped() {
     ] {
         let spec = format!("# c\n\n## Subject\n\n{bullet}\n");
         assert_eq!(
-            subject_globs(&spec),
+            globs_of(&spec),
             Declared::Unreadable(bullet.to_string()),
             "this bullet was read past instead of refused, which narrows the claim silently"
         );
@@ -262,10 +277,10 @@ fn an_unreadable_subject_bullet_is_a_cannot_judge() {
 fn two_subject_sections_are_refused_rather_than_read_as_the_first() {
     let spec = "# c\n\n## Subject\n\n- `crates/a/src/*.rs`\n\n## Purpose\n\np\n\n## Subject\n\n\
                 - `crates/b/src/*.rs`\n\n## Requirements\n";
-    let Declared::SeveralSections(count) = subject_globs(spec) else {
+    let Declared::SeveralSections(count) = globs_of(spec) else {
         panic!(
             "a second `## Subject` section was read past: {:?}",
-            subject_globs(spec)
+            globs_of(spec)
         );
     };
     assert_eq!(count, 2);
@@ -300,24 +315,18 @@ fn two_capabilities_sections_are_refused_rather_than_read_as_the_first() {
     let proposal =
         "# p\n\n## Capabilities\n\n- `first`\n\n## Why\n\nw\n\n## Capabilities\n\n- `second`\n";
     assert_eq!(
-        proposal_capabilities(proposal),
+        capabilities_of(proposal),
         Named::SeveralSections(2),
         "the second section's capabilities were dropped, so a change could name one and be filed as complete"
     );
     let single = "## Why\n\nw\n\n## Capabilities\n\n- `only`\n";
-    assert_eq!(
-        proposal_capabilities(single),
-        Named::Names(listed(&["only"]))
-    );
+    assert_eq!(capabilities_of(single), Named::Names(listed(&["only"])));
 }
 
 #[test]
 fn a_capability_named_outside_the_capabilities_section_is_not_read_as_named() {
     let proposal = "## Why\n\nTouching `elsewhere`.\n\n## Capabilities\n\n- `here`: a reason\n\n## Impact\n\n`later`\n";
-    assert_eq!(
-        proposal_capabilities(proposal),
-        Named::Names(listed(&["here"]))
-    );
+    assert_eq!(capabilities_of(proposal), Named::Names(listed(&["here"])));
 }
 
 /// A marker that closes nothing is refused, where it used to shift every pair after it.
@@ -329,7 +338,7 @@ fn a_capability_named_outside_the_capabilities_section_is_not_read_as_named() {
 #[test]
 fn a_backtick_that_closes_nothing_is_refused_rather_than_shifting_every_pair() {
     let proposal = "# p\n\n## Capabilities\n\n- `alpha`\n- a stray ` here\n- `beta`\n";
-    match proposal_capabilities(proposal) {
+    match capabilities_of(proposal) {
         Named::Unreadable(message) => assert!(
             message.contains("closes nothing"),
             "the refusal must say what is wrong with the section, got {message:?}"
@@ -341,7 +350,55 @@ fn a_backtick_that_closes_nothing_is_refused_rather_than_shifting_every_pair() {
     // Paired again, the same section reads both names — so the refusal is about the marker, not the prose.
     let paired = "# p\n\n## Capabilities\n\n- `alpha`\n- a stray `x` here\n- `beta`\n";
     assert_eq!(
-        proposal_capabilities(paired),
+        capabilities_of(paired),
         Named::Names(listed(&["alpha", "beta", "x"]))
+    );
+}
+
+/// A fenced `## Subject` opens no section, so the misread these readers were filed for is gone.
+///
+/// **This is the WHEN of a retired protection, re-run rather than deleted.**
+/// `the_corpora_of_the_bare_str_markdown_readers_carry_no_fence_or_comment_span` held that no tracked spec
+/// carried a fenced block, because these two readers walked a document's lines and a fenced `## Subject`
+/// opened a section for them. They read a prose region now, so that shape is decided here instead of being
+/// kept out of the corpus — which is what lets the protection go rather than outlive its instance.
+///
+/// Three shapes in one fixture, because each fails in its own direction: a **fenced** heading must open
+/// nothing, a **real** one after it must still be found, and the fenced heading's own bullet must not reach
+/// the real section's globs. A fixture carrying only the first passes for an implementation that finds no
+/// section at all.
+#[test]
+fn a_fenced_subject_heading_opens_no_section() {
+    let fenced = "\
+# capability
+
+An example of what a subject section looks like:
+
+```
+## Subject
+
+- `crates/example/**/*.rs`
+```
+
+## Subject
+
+- `crates/real/**/*.rs`
+";
+    assert_eq!(
+        globs_of(fenced),
+        Declared::Globs(vec!["crates/real/**/*.rs".to_string()]),
+        "the fenced heading opened no section, so this is one `## Subject` rather than two — and the glob \
+         inside the fence is not among the claimed set"
+    );
+
+    // The same document read as a bare line walk answered `SeveralSections(2)`, refusing a conforming spec.
+    // Given here as the *other* direction of the same fixture: over-exclusion would have been a false
+    // refusal, and under-exclusion a claimed set naming a file no capability governs.
+    let comment_span = "# capability\n\n<!--\n## Subject\n\n- `crates/hidden/**/*.rs`\n-->\n\n## Subject\n\n- `crates/real/**/*.rs`\n";
+    assert_eq!(
+        globs_of(comment_span),
+        Declared::Globs(vec!["crates/real/**/*.rs".to_string()]),
+        "an HTML comment span is invisible to a reader, so the heading and bullet inside it are not the \
+         capability's declaration"
     );
 }

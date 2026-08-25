@@ -7,6 +7,33 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::refusal::{Refusal, cannot_judge_at, violation_at};
+use crate::region::Prose;
+use crate::sections::Section;
+
+/// Any `## ` heading, named by the whole line.
+///
+/// **Any, not the one each caller wants** — because terminating a section is what a sentinel does, and the
+/// section this module reads ends at whichever `## ` comes next. Matching only `## Subject` would make every
+/// other heading part of the subject's body, which is the `split_once("\n## ")` this replaces, one level up.
+/// The exact heading is the caller's filter, exactly as `release_coherence_gate` filters `## [Unreleased]` out
+/// of every `## [` section.
+///
+/// `### ` does not match: the prefix carries its space, so a deeper heading is body rather than a boundary.
+fn heading_section(line: &str) -> Option<String> {
+    line.starts_with("## ").then(|| line.trim_end().to_string())
+}
+
+/// The sections one document declares under a named `## ` heading, in document order.
+///
+/// Each reader cuts its **own** document — a spec and a proposal are two files — which is why the cut happens
+/// here rather than being handed in as `release_coherence_gate` hands it down. Four readers there share one
+/// document and must share one cut; these two share a predicate and nothing else.
+fn named_sections<'a>(document: &'a [Section], heading: &str) -> Vec<&'a Section> {
+    document
+        .iter()
+        .filter(|section| section.name == heading)
+        .collect()
+}
 
 /// The globs one capability declares, in the order it declares them.
 pub type Subjects = BTreeMap<String, Vec<String>>;
@@ -67,16 +94,16 @@ pub enum Named {
 /// [`crate::selection::the_only`] is deliberately not used, for the reason `package_name` records: it
 /// reports none and several as one refusal, and here they are different facts — no section means the
 /// capability declared nothing, several means it declared twice and this reader may not pick.
-pub fn subject_globs(spec: &str) -> Declared {
-    let sections = crate::selection::all_of(spec.split("\n## Subject\n").skip(1));
+pub fn subject_globs(spec: Prose<'_>) -> Declared {
+    let document = crate::sections::cut(spec, heading_section);
+    let sections = named_sections(&document, "## Subject");
     let block = match sections.len() {
         0 => return Declared::Absent,
         1 => sections[0],
         several => return Declared::SeveralSections(several),
     };
-    let block = block.split_once("\n## ").map_or(block, |(head, _)| head);
     let mut globs = Vec::new();
-    for line in block.lines() {
+    for (_, line) in &block.body {
         let Some(rest) = line.trim().strip_prefix("- ") else {
             continue;
         };
@@ -105,14 +132,23 @@ pub fn subject_globs(spec: &str) -> Declared {
 /// document over: reading past a second section drops exactly the capabilities it names, and [`join_offences`]
 /// then reports a change as having accounted for a capability it never listed. An empty set is the honest
 /// answer for a proposal carrying **no** such section — it names nothing — and that stays `Ok`.
-pub fn proposal_capabilities(proposal: &str) -> Named {
-    let sections = crate::selection::all_of(proposal.split("\n## Capabilities\n").skip(1));
+pub fn proposal_capabilities(proposal: Prose<'_>) -> Named {
+    let document = crate::sections::cut(proposal, heading_section);
+    let sections = named_sections(&document, "## Capabilities");
     let block = match sections.len() {
         0 => return Named::Names(BTreeSet::new()),
         1 => sections[0],
         several => return Named::SeveralSections(several),
     };
-    let block = block.split_once("\n## ").map_or(block, |(head, _)| head);
+    // Rejoined for the one reader that takes the section whole. The blank lines survive as empty strings, so
+    // the paragraph structure `reading::backticked` pairs within is the document's own.
+    let block: String = block
+        .body
+        .iter()
+        .map(|(_, line)| line.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let block = block.as_str();
     // **The error channel used to be a bare `usize`, so there was nowhere to put *unreadable*.** The loop
     // this replaced paired markers as it found them and `break`d on an opener with no closer, which drops
     // everything after it and shifts every pair before that: measured on a section listing `` `alpha` ``, a
@@ -143,7 +179,8 @@ pub fn declaration_offences(
 ) -> Vec<Refusal> {
     let mut offences = Vec::new();
     for (capability, spec) in specs {
-        let globs = match subject_globs(spec) {
+        let source = crate::region::Source::of(spec.as_str());
+        let globs = match subject_globs(source.prose()) {
             Declared::Absent => {
                 offences.push(violation_at(
                     "repository-checks#capability-declares-no-subject",
