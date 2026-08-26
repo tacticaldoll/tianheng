@@ -353,6 +353,29 @@ being one. A floor this reader invents is a floor it misses every shorter citati
   window or move the citation into a record
 - **PINNED-BY** `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach`
 
+#### Scenario: A code span shaped like an object is refused though it names none — a stated bound
+
+- **WHEN** live prose writes a code span of 4 to 40 lowercase hex characters carrying both a letter and a
+  digit, which names something other than a commit
+- **THEN** the reaction fails anyway. It decides by **shape**, and nothing in the tree distinguishes a value
+  of that shape from a citation without resolving it against an object database
+- **AND** resolving was measured and declined: CI checks out one commit, so the objects a citation names are
+  absent there — the reader would answer clean over every citation, or refuse to judge the whole gate,
+  depending on which way its floor was written. A shape test that over-reacts on a value nobody writes is the
+  better trade, and measured over the live corpus no span of this shape names anything but a commit
+- **UNPINNED** `BACKLOG.md` — *a code span shaped like an object that names none*
+
+#### Scenario: A serial with no citation word on its line is not observed — a stated bound
+
+- **WHEN** Markdown writes a `#` followed by digits on a line that names neither a pull request nor an issue
+- **THEN** nothing reacts. Reading every `#` followed by a digit as a serial refuses a colour and any other
+  numeric value spelled that way, which is the false refusal this repository's Core Contract forbids more
+  strictly than a miss; telling the two apart needs what the sentence means
+- **AND** the reader asks the **line** to name the thing rather than testing what precedes each `#`, because a
+  real citation lists several under one word — and a prefix test would catch the first and let the rest
+  through
+- **UNPINNED** `BACKLOG.md` — *a hosting serial with no citation word on its line*
+
 #### Scenario: A hosting serial outside Markdown is not observed — a stated bound
 
 - **WHEN** a source in a line-comment format writes a bare hosting serial in a comment

@@ -2067,30 +2067,56 @@ fn live_prose(kind: Prose, text: &str, sectioned: bool) -> String {
         // The doc-comment extension goes with the marker, for the reason the sibling sweep records: `FORMATS`
         // declares what a line comment *opens* with, so stripping only that leaves `/` or `!` at the front of
         // the contribution.
-        Prose::LineComment(marker) => text
-            .lines()
-            .map(|line| match line.trim_start().strip_prefix(marker) {
-                Some(rest) => rest.trim_start_matches(['/', '!']),
-                None => "",
-            })
-            .collect::<Vec<_>>()
-            .join("\n"),
+        //
+        // **And the result goes through the same prose reader Markdown does.** A doc comment is rendered as
+        // Markdown, so a fenced block in one is a command and an HTML comment span in one is hidden from the
+        // reader the requirement is about — the requirement excludes both without saying *in Markdown*.
+        // Stripping the marker alone left them in: measured, a hash inside `<!-- … -->` in a Rust doc comment
+        // was reported. Two passes, each by the reader that owns its question, and line numbers survive both
+        // because each rebuilds the dropped lines as empty ones.
+        Prose::LineComment(marker) => {
+            let stripped: String = text
+                .lines()
+                .map(|line| match line.trim_start().strip_prefix(marker) {
+                    Some(rest) => rest.trim_start_matches(['/', '!']),
+                    None => "",
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            let source = kanhe::region::Source::of(stripped.as_str());
+            let visible: std::collections::BTreeMap<usize, String> =
+                source.prose().numbered_lines().collect();
+            (1..=total)
+                .map(|line| visible.get(&line).map(String::as_str).unwrap_or(""))
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
     }
 }
 
 /// The lines of a dated section of `text`, which is a record and therefore not this sweep's subject.
 ///
 /// Cut by [`kanhe::sections`], which owns cutting a flat sentinel-delimited document, rather than by a fourth
-/// hand-rolled walk. A heading is dated when its own line carries a ` - ` suffix after the version — which is
-/// the same fact `release_coherence_gate`'s predicate drops when it derives a name, read here for the
-/// opposite purpose.
+/// hand-rolled walk. Whether the heading is *dated* is decided by [`kanhe::release_coherence_gate::is_iso_date`],
+/// which owns that fact and was hardened twice for it — its own doc records that `## [0.5.0] - notadate!!` once
+/// satisfied *CHANGELOG carries dated release notes*, because **a length test is a parse without its
+/// guarantee**.
+///
+/// A separator test was the first draft here and errs toward **exempting**: any `## [` heading carrying a `-`
+/// became a record, so a citation under a section being prepared — a placeholder in the date position — went
+/// unobserved, which is exactly where a citation gets written. The release gate does not cover it either: its
+/// date validation is scoped to the current workspace version's own heading, so no other suffix is parsed
+/// anywhere.
 fn dated_section_lines(text: &str) -> BTreeSet<usize> {
     let source = kanhe::region::Source::of(text);
     let mut dated = BTreeSet::new();
     for section in kanhe::sections::cut(source.prose().numbered_lines(), |line| {
         line.trim_start().starts_with("## [").then_some(())
     }) {
-        if !section.line.contains("] - ") {
+        let Some((_, suffix)) = section.line.split_once("] - ") else {
+            continue;
+        };
+        if !kanhe::release_coherence_gate::is_iso_date(suffix.trim()) {
             continue;
         }
         dated.insert(section.start);
@@ -2113,8 +2139,39 @@ fn is_abbreviated_object(span: &str) -> bool {
         && span.chars().any(|c| c.is_ascii_alphabetic())
 }
 
-/// Every `#` immediately followed by a digit, which is how this hosting platform spells a serial.
+/// Every hosting serial named on `line`, which is a `#` followed by digits on a line that says what it is.
+///
+/// **A bare `#N` is not a serial and is no longer read as one.** The first draft took every `#` followed by a
+/// digit, which refuses a colour written `#123` and any other numeric value spelled that way — a false
+/// refusal, the direction the Core Contract forbids more strictly. The line has to name the thing: `PR`,
+/// `pull request` or `issue`, matched whole-word and case-insensitively.
+///
+/// **Scoped to the line rather than to what precedes each `#`,** because a real citation lists several under
+/// one word — `PRs #603, #604 and #605` — and a prefix test would catch the first and let the rest through.
+/// The cost is the other direction, and it is declared: a serial written with no such word on its line is
+/// not observed.
 fn hosting_serials(line: &str) -> Vec<String> {
+    let lowered = line.to_ascii_lowercase();
+    let names_one = [
+        "pr",
+        "prs",
+        "pull request",
+        "pull requests",
+        "issue",
+        "issues",
+    ]
+    .iter()
+    .any(|word| {
+        lowered.match_indices(word).any(|(at, _)| {
+            let before = lowered[..at].chars().next_back();
+            let after = lowered[at + word.len()..].chars().next();
+            before.is_none_or(|c| !c.is_ascii_alphanumeric())
+                && after.is_none_or(|c| !c.is_ascii_alphanumeric())
+        })
+    });
+    if !names_one {
+        return Vec::new();
+    }
     let bytes: Vec<char> = line.chars().collect();
     let mut found = Vec::new();
     for (at, ch) in bytes.iter().enumerate() {

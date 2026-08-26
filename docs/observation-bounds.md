@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 98 declared bounds have no pinning test.** That figure is the register's
+**29 of 100 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -258,6 +258,18 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing reacts. Extending the sweep to whole-document prose was measured against the tree it would judge, and most of what it would report is not an offence: some occurrences are `AGENTS.md`'s own row **declaring** the phrases, some are duration rather than pointer — *admitted it for a window*, which narrates how long something lasted — some are a generated projection's copy of either, and some are already anchored, by a commit or by naming the release. A reader over text separates none of those groups: telling a phrase that points at a moving window from one that measures a span is a judgement about the sentence, which is the prose instrument `AGENTS.md` records as designed, measured three times and rejected
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a relative phrase in non-record Markdown*
+
+### `reference-integrity/a-code-span-shaped-like-an-object-is-refused-though-it-names-none-a-stated-bound`
+
+> the reaction fails anyway. It decides by **shape**, and nothing in the tree distinguishes a value of that shape from a citation without resolving it against an object database
+
+- **unpinned**, tracked by: `BACKLOG.md` — *a code span shaped like an object that names none*
+
+### `reference-integrity/a-serial-with-no-citation-word-on-its-line-is-not-observed-a-stated-bound`
+
+> nothing reacts. Reading every `#` followed by a digit as a serial refuses a colour and any other numeric value spelled that way, which is the false refusal this repository's Core Contract forbids more strictly than a miss; telling the two apart needs what the sentence means
+
+- **unpinned**, tracked by: `BACKLOG.md` — *a hosting serial with no citation word on its line*
 
 ### `reference-integrity/a-hosting-serial-outside-markdown-is-not-observed-a-stated-bound`
 

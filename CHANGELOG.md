@@ -7529,6 +7529,54 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class or manifest moves.
 
 
+- **The citation reader decides by shape, and now says what shape costs in both directions.** Two reviews
+  found the same class from opposite ends: it refused things that are not citations, and it read things that
+  are not prose.
+
+  **A separator is not a date.** Whether a changelog section is a record was decided by the heading carrying
+  `] - `, which makes any `## [` heading with a hyphen a record — so a section being *prepared*, with a
+  placeholder where the date goes, exempted every citation under it. That is exactly where a citation gets
+  written. The question already has an owner: `is_iso_date` was hardened twice for it and its own doc records
+  that `## [0.5.0] - notadate!!` once satisfied *CHANGELOG carries dated release notes*, because **a length
+  test is a parse without its guarantee**. It was `pub(crate)`, which is what forced a second owner; it is now
+  `pub`, like every other shared reader in this crate. Seen to fail: a citation under a placeholder-dated
+  heading is reported where the separator test exempted it.
+
+  **A doc comment is rendered as Markdown, so its hidden prose is hidden.** The line-comment path stripped
+  markers and stopped, while the Markdown path went through the prose reader — so a fence and an HTML comment
+  span were excluded from one half of the corpus and not the other, though the requirement excludes both
+  without saying *in Markdown*. Measured: a hash inside `<!-- … -->` in a Rust doc comment was reported. The
+  reconstructed comment prose now goes through the same reader, two passes each owned by the reader whose
+  question it is, and line numbers survive both because each rebuilds dropped lines as empty ones. Verified in
+  both directions in one run: the hidden span is silent while a visible one two lines below it is named.
+
+  **A bare `#` and a digit is not a serial.** Taking every one of them refuses a colour written that way and
+  any other numeric value — a false refusal, the direction the Core Contract forbids more strictly than a
+  miss. The line has to name the thing now: `PR`, `pull request` or `issue`, whole-word and case-insensitive.
+  Scoped to the **line** rather than to what precedes each `#`, because a real citation lists several under
+  one word — a prefix test would catch the first and let the rest through. Measured after the sweep that
+  removed them: no serial of any form remains in live text, so the restriction has no live cost. The miss is
+  declared as a bound.
+
+  **And the over-reaction that remains is written down rather than argued away.** A code span with the shape
+  of an abbreviated object is refused whether or not it names one. Resolving each token against the object
+  database was measured and declined: CI checks out one commit, so the objects a citation names are absent
+  there — the reader would answer clean over every citation, or refuse to judge the whole gate, depending on
+  which way its floor was written. A shape test that over-reacts on a value nobody writes is the better trade,
+  and it is declared as an **over-reaction**, which is the extent this repository already has a word for.
+
+- **A floor is not a minimum, and the requirement already had the word.** The prose direction prints the
+  bound-declaring lines it counted, and both the field and the message called that *the register's mandatory
+  minimum*. The same requirement's own residuals put the true minimum above it — the scan is line-oriented,
+  so a wrapped statement is one line, and a resolvable reference clears whatever prose it sits with regardless
+  of how many bounds that prose states. The requirement says elsewhere that the direction *SHALL be described
+  as a floor and not a proof*; it now says which word the print site takes, and the print site takes it. The
+  whole purpose of printing the figure is that nobody estimates it, and a floor labelled as an exact minimum
+  invites the comparison the printing exists to prevent.
+
+  No published API moves; `is_iso_date` gains the visibility its siblings already have.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

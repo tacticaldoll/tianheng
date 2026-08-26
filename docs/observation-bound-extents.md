@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**52 of 98 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**53 of 100 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -28,6 +28,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound` — owner: engine
 - `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound` — owner: engine
 - `reference-integrity/a-rust-identifier-named-in-prose-is-not-resolved-a-stated-bound` — owner: engine
+- `reference-integrity/a-serial-with-no-citation-word-on-its-line-is-not-observed-a-stated-bound` — owner: engine
 - `reference-integrity/an-abbreviation-carrying-no-letter-or-no-digit-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound` — owner: engine
 - `release-coherence/a-dependency-declared-under-a-quoted-cfg-target-is-not-observed-a-stated-bound` — owner: engine
@@ -345,7 +346,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (12)
+## over-reacts (13)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -370,6 +371,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the predicate is never evaluated, so a dead arm is observed as live — cfg-blindness inherited from the module scanner, which reacts wider than the build
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms`
+
+### `reference-integrity/a-code-span-shaped-like-an-object-is-refused-though-it-names-none-a-stated-bound`
+
+> a code span in live prose carrying 4 to 40 lowercase hex characters with both a letter and a digit, which names something other than a commit
+
+- **because**: the reader decides by shape and nothing in the tree distinguishes a value with that shape from a citation without resolving it against an object database. Resolving was declined by measurement: CI checks out one commit, so the objects a citation names are absent there and the reader would either answer clean over all of them or refuse to judge at all. Measured over the live corpus: no span of this shape names anything but a commit, so the over-reaction is unrealised rather than tolerated
+- **its defence must show**: reacts on a harmless shape
+- **unpinned**, tracked by: `BACKLOG.md` — *a code span shaped like an object that names none*
 
 ### `release-coherence/a-basename-an-entry-writes-for-another-reason-a-stated-bound`
 
@@ -443,7 +452,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (52)
+## under-reacts (53)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -628,6 +637,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: no reader of text can tell a name that should resolve from one that should not: such tokens routinely match no declaration in the tree, and the most frequent of those are Rust keywords, attribute names and std method names. Separating them needs type information about a receiver, which `inline-symbol-path-confinement` already declares unobserved
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a Rust identifier named in prose is resolved by no reaction*
+
+### `reference-integrity/a-serial-with-no-citation-word-on-its-line-is-not-observed-a-stated-bound`
+
+> a `#` followed by digits, in Markdown, on a line that does not name a pull request or an issue
+
+- **because**: reading every `#` followed by a digit as a serial refuses a colour and any other numeric value spelled that way, which is the false refusal the Core Contract forbids more strictly than a miss. Telling the two apart needs what the sentence means, so the reader asks the line to name the thing instead. Measured after the sweep that removed them: no serial of any form remains in live text, so the restriction has no live cost
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *a hosting serial with no citation word on its line*
 
 ### `reference-integrity/an-abbreviation-carrying-no-letter-or-no-digit-is-not-observed-a-stated-bound`
 

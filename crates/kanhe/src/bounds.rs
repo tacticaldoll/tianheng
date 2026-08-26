@@ -637,6 +637,51 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *a hosting serial outside Markdown*",
         ),
+        // The reader decides by shape, so a code span that merely HAS the shape is refused. Resolving each
+        // token against the object database was measured and declined: `actions/checkout` fetches one commit
+        // by default, so in CI the objects a citation names are absent -- the reader would answer clean over
+        // every one of them, or refuse to judge the whole gate, depending on which way the floor was written.
+        // A shape test that over-reacts on a value nobody writes is the better trade, and this is the
+        // over-reaction written down.
+        BoundDecl::unpinned(
+            BoundId::new(
+                "reference-integrity/a-code-span-shaped-like-an-object-is-refused-though-it-names-none-a-stated-bound",
+            ),
+            "a code span in live prose carrying 4 to 40 lowercase hex characters with both a letter and a \
+             digit, which names something other than a commit",
+            Extent::Reached(Reached::OverReacts {
+                because: "the reader decides by shape and nothing in the tree distinguishes a value with \
+                          that shape from a citation without resolving it against an object database. \
+                          Resolving was declined by measurement: CI checks out one commit, so the objects a \
+                          citation names are absent there and the reader would either answer clean over all \
+                          of them or refuse to judge at all. Measured over the live corpus: no span of this \
+                          shape names anything but a commit, so the over-reaction is unrealised rather than \
+                          tolerated"
+                    .into(),
+            }),
+            "`BACKLOG.md` — *a code span shaped like an object that names none*",
+        ),
+        // The other half of the same trade, in the other direction: taking every `#` followed by a digit
+        // refuses a colour and any other numeric value spelled that way, so the line has to name the thing.
+        // Scoped to the line rather than to what precedes each `#`, because a real citation lists several
+        // under one word and a prefix test would catch only the first.
+        BoundDecl::unpinned(
+            BoundId::new(
+                "reference-integrity/a-serial-with-no-citation-word-on-its-line-is-not-observed-a-stated-bound",
+            ),
+            "a `#` followed by digits, in Markdown, on a line that does not name a pull request or an issue",
+            Extent::Reached(Reached::UnderReacts {
+                because: "reading every `#` followed by a digit as a serial refuses a colour and any other \
+                          numeric value spelled that way, which is the false refusal the Core Contract \
+                          forbids more strictly than a miss. Telling the two apart needs what the sentence \
+                          means, so the reader asks the line to name the thing instead. Measured after the \
+                          sweep that removed them: no serial of any form remains in live text, so the \
+                          restriction has no live cost"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *a hosting serial with no citation word on its line*",
+        ),
         // The reader requires a letter AND a digit, and both directions it would otherwise refuse are live
         // here: a specification writes a long run of digits as the figure a fabricating reader produced, and
         // English carries words spelled entirely from the hex alphabet at this length. Admitting either
