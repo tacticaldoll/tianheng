@@ -331,16 +331,47 @@ read as one.
 
 **This is a reaction where the sibling relative-anchor rule is not, and the difference is that nothing here
 is a judgement about a sentence.** A token is shaped like an abbreviated object or it is not; a `#` is
-followed by a digit or it is not. Fenced blocks and HTML comment spans are outside it, read through the same
-prose reader the rest of this capability uses, because a fence is where a command lives and a command may
-carry an object name legitimately.
+followed by a digit or it is not. Fenced blocks, HTML comment spans and lines that are not prose are outside
+it, read through the same prose reader the rest of this capability uses, because a fence is where a command
+lives and a command may carry an object name legitimately.
+
+**The corpus is split by predicate, not by sweep.** An abbreviated object SHALL be recognised in every format
+this capability classifies as carrying prose — a comment carries a citation as readily as a document does, and
+nothing in the tree writes that shape in a comment except a citation. A hosting serial SHALL be recognised in
+Markdown alone, for the reason `AGENTS.md` already records: the bare serial shape is the **fixture** for the
+squash-serial check, so a reader over Rust would refuse the very check that forbids serials. That half is a
+declared bound below rather than a line in a scenario.
+
+The abbreviation floor SHALL be git's own: `--short=4` is accepted, so four is where an abbreviation starts
+being one. A floor this reader invents is a floor it misses every shorter citation under.
 
 #### Scenario: A live governance document cites a commit object or a hosting serial
 
-- **WHEN** tracked Markdown outside the record set names an abbreviated commit object in a code span, or a
-  `#` immediately followed by a digit
+- **WHEN** a tracked document outside the record set names an abbreviated commit object in a code span in its
+  prose, or — in Markdown — a `#` immediately followed by a digit
 - **THEN** the reaction fails, naming the file, the line and the citation, and says to name the release
   window or move the citation into a record
+- **PINNED-BY** `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach`
+
+#### Scenario: A hosting serial outside Markdown is not observed — a stated bound
+
+- **WHEN** a source in a line-comment format writes a bare hosting serial in a comment
+- **THEN** nothing reacts, and the reason is the one `AGENTS.md` records for why no reaction was possible at
+  all: the bare serial shape *is* the fixture for the squash-serial check, so a reader over that format would
+  refuse the check that forbids the thing. The collision is with the shape rather than with a spelling, so
+  narrowing the pattern does not reach it
+- **AND** the abbreviated-object half has no such collision and is therefore **not** restricted: measured over
+  every classified line-comment format, every code span of that shape in a comment was a real citation and
+  none was anything else, so the reader covers both halves of the prose corpus and only this one is bounded
+- **UNPINNED** `BACKLOG.md` — *a hosting serial outside Markdown*
+
+#### Scenario: A dated changelog section is a record, and an undated one is not
+
+- **WHEN** `CHANGELOG.md` carries a citation under a heading with no date
+- **THEN** the reaction fails as it would in any live document. The exemption is by **section**, cut by the
+  reader that owns cutting, rather than by file: exempting the document was wider than this requirement says,
+  and it made `## [Unreleased]` — which is live text by construction — exempt for standing in the same file as
+  the releases below it
 - **PINNED-BY** `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach`
 
 #### Scenario: An abbreviation carrying no letter, or no digit, is not observed — a stated bound

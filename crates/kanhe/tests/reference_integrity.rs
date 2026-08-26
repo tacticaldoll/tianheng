@@ -1287,7 +1287,7 @@ const POSITIONAL_DIRECTIONS: [&str; 2] = ["above", "below"];
 /// noun.
 ///
 /// **Split from [`POSITIONAL_DIRECTIONS`] by measurement, not by taste.** Widening the one list to include
-/// these and keeping *any noun* was written first and run — measured at `afe51fd`, with these added to the
+/// these and keeping *any noun* was written first and run — measured in the 0.5.0 window, with these added to the
 /// then-inline direction list and no unit restriction, by
 /// `--exact no_tracked_source_names_a_position_instead_of_a_thing`: 20 offences on a tree that was green.
 /// Both halves are needed to re-run it, and the commit that recorded the measurement also repaired comments
@@ -1453,7 +1453,7 @@ fn positional_reference(line: &str) -> Option<String> {
 /// owner; a reader wanting the members reads them.
 ///
 /// **`the same window` is deliberately absent.** It can be anchored by what precedes it — *the same window as
-/// `64ed18c`* names a moment — so deciding it means reading what the sentence points back to, and that is the
+/// the shell-to-Rust migration* names a moment — so deciding it means reading what the sentence points back to, and that is the
 /// prose instrument this repository refuses. Seven passages carry it; each is a reviewer's call.
 const RELATIVE_ANCHORS: [&str; 4] = [
     "this window",
@@ -1942,45 +1942,53 @@ fn no_reference_names_a_line_number() {
     );
 }
 
-/// The documents that are **records** rather than live text, by path.
+/// The **record** locations, by path and by section, rather than by document.
 ///
 /// `AGENTS.md` names them: a commit message, a dated changelog section, `docs/history/`. A record is a
 /// measurement of its moment, so a citation inside one is provenance of a decision that was made and stays
-/// readable as what it was. Live text is read later against a tree it must be able to address, and that is
-/// the difference this list draws.
+/// readable as what it was. Live text is read later against a tree it must be able to address.
 ///
-/// A commit message is not a tracked file and needs no row. The two that are files are here, and nothing
-/// else: adding a document to escape a refusal is the move this list exists to make visible.
-const RECORD_DOCUMENTS: [&str; 2] = ["CHANGELOG.md", "docs/history/"];
+/// **`CHANGELOG.md` is not a record; its dated sections are.** Exempting the file was wider than the
+/// requirement, which says *a dated changelog section* — so a citation added under `## [Unreleased]`, which is
+/// live text by construction, was exempt for standing in the same file as the releases below it. The section
+/// is the unit, cut by the reader that owns cutting.
+const RECORD_PATHS: [&str; 1] = ["docs/history/"];
+
+/// The document whose dated sections are records and whose undated ones are not.
+const SECTIONED_RECORD: &str = "CHANGELOG.md";
 
 /// Every citation the live prose of `corpus` carries that names a moment no reader can reach, in
 /// `corpus_root`.
 ///
-/// **What makes this decidable where the sibling prose sweeps were not.** A relative anchor needs a reader to
-/// tell a pointer from a span, which is a judgement about the sentence. This one asks nothing about meaning:
-/// a token is shaped like an abbreviated commit object or it is not, and a `#` is followed by a digit or it
-/// is not. That is why it is a reaction where the neighbouring rule stays a rule.
+/// **The corpus is split by predicate, not by sweep.** An abbreviated commit object is recognised in every
+/// format this repository classifies as carrying prose, because nothing in the tree writes that shape in a
+/// comment except a citation — measured, and the measurement found five in Rust doc comments that a
+/// Markdown-only reader could not see, one of them in this very file and one of them verbatim the *measured
+/// at <object>, before …* shape the reaction exists to stop. A hosting serial is recognised in Markdown
+/// alone, and that restriction is declared as a bound rather than left inside a scenario's `WHEN`.
 ///
-/// **Both a letter and a digit are required, and the residue is declared rather than closed.** A run of hex
-/// characters alone over-reaches in both directions this tree actually holds: `repository-checks` writes a
-/// nineteen-digit run as the figure a fabricating reader produced, and English carries all-hex words at this
-/// length. Requiring one of each admits neither. It also misses an abbreviation that happens to be all
-/// digits or all letters — measured at 3.8% of uniformly random seven-character abbreviations — and that
-/// miss is taken deliberately, because this repository's Core Contract forbids a false refusal more strictly
-/// than it forbids a miss, and the bound is declared where a reader meets it.
+/// **The floor is git's, not this reader's.** `git rev-parse --short=4` is accepted, so 4 is where an
+/// abbreviation starts being one; a seven-character floor was this reader's own invention and missed every
+/// shorter citation. Measured over the live corpus at floors 4, 5 and 6: no additional token of this shape
+/// exists, so lowering it costs nothing and closes the gap without a bound.
 ///
-/// Fenced blocks and HTML comment spans are excluded by reading through [`kanhe::region`]'s prose reader
-/// rather than raw lines: a fence is where a command lives, and a command may legitimately carry a hash.
+/// **Both a letter and a digit are required, and that residue is declared.** A run of hex characters alone
+/// over-reaches in both directions this tree holds: `repository-checks` writes a long run of digits as the
+/// figure a fabricating reader produced, and English carries all-hex words at this length. Requiring one of
+/// each admits neither, and gives up the abbreviations carrying only one kind.
+///
+/// Fenced blocks, HTML comment spans and non-comment lines are excluded by reducing each document to its
+/// **visible prose, line-preserving** — every line that carries prose keeps its content at its own line
+/// number and every other line is empty — so the shared pairing reader answers with the document's own line
+/// numbers and a run of prose is one paragraph.
 fn unanchored_citation_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSet<String> {
     let mut offences = BTreeSet::new();
+    let mut read = 0usize;
     for path in corpus.iter() {
-        if !matches!(prose_of(path), Some(Prose::Whole)) {
+        let Some(kind) = prose_of(path) else {
             continue;
-        }
-        if RECORD_DOCUMENTS
-            .iter()
-            .any(|record| path == record || path.starts_with(record))
-        {
+        };
+        if matches!(kind, Prose::None) || RECORD_PATHS.iter().any(|r| path.starts_with(r)) {
             continue;
         }
         let text = std::fs::read_to_string(corpus_root.join(path)).unwrap_or_else(|error| {
@@ -1989,24 +1997,15 @@ fn unanchored_citation_offences_in(corpus_root: &Path, corpus: &[String]) -> BTr
                  been read: {error}"
             )
         });
+        read += 1;
+        let live = live_prose(kind, &text, path == SECTIONED_RECORD);
+
         // **Two sanctioned readers, and neither is re-implemented here.** `region`'s prose reader decides
-        // what is prose — fenced blocks and HTML comment spans are not — and `reading`'s pairing reader
-        // decides where a code span opens and closes. Pairing backticks here would be the shape
+        // what is prose in Markdown, and `reading`'s pairing reader decides where a code span opens and
+        // closes. Pairing backticks here would be the shape
         // `no_source_outside_the_shared_reader_pairs_backticks_by_hand` refuses, and it refused this file
         // when the first draft did exactly that.
-        //
-        // A dropped line is rebuilt as an empty one rather than removed, so line numbers stay the
-        // document's own and a fence becomes a paragraph break — which it already is, since a code span
-        // cannot cross a blank line.
-        let source = kanhe::region::Source::of(text.as_str());
-        let visible: std::collections::BTreeMap<usize, String> =
-            source.prose().numbered_lines().collect();
-        let prose: String = (1..=text.lines().count())
-            .map(|line| visible.get(&line).map(String::as_str).unwrap_or(""))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        for (line, span) in kanhe::reading::backticked_by_paragraph(&prose) {
+        for (line, span) in kanhe::reading::backticked_by_paragraph(&live) {
             if !is_abbreviated_object(&span) {
                 continue;
             }
@@ -2017,22 +2016,95 @@ fn unanchored_citation_offences_in(corpus_root: &Path, corpus: &[String]) -> BTr
                  version. Name the release window, or move the citation into a record"
             ));
         }
-        for (line, text) in &visible {
-            for serial in hosting_serials(text) {
+        if !matches!(kind, Prose::Whole) {
+            continue;
+        }
+        for (index, line) in live.lines().enumerate() {
+            for serial in hosting_serials(line) {
                 offences.insert(format!(
-                    "  {path}:{line} cites `{serial}`, a serial belonging to the hosting platform rather \
-                     than to this repository. Name what the change was, or the release window it landed in"
+                    "  {path}:{} cites `{serial}`, a serial belonging to the hosting platform rather than \
+                     to this repository. Name what the change was, or the release window it landed in",
+                    index + 1
                 ));
             }
         }
     }
+    assert!(
+        read > 0,
+        "no document was read, so this sweep would report clean over a corpus it never opened"
+    );
     offences
 }
 
-/// Whether a code span's content is an abbreviated commit object: 7 to 40 lowercase hex characters
+/// `text` reduced to the prose a reader follows, one line per original line and every other line empty.
+///
+/// A dropped line is rebuilt as an empty one rather than removed, so line numbers stay the document's own
+/// and a boundary — a fence, a run of code, a dated section — becomes the paragraph break it already is.
+fn live_prose(kind: Prose, text: &str, sectioned: bool) -> String {
+    let total = text.lines().count();
+    match kind {
+        Prose::None => String::new(),
+        Prose::Whole => {
+            let source = kanhe::region::Source::of(text);
+            let visible: std::collections::BTreeMap<usize, String> =
+                source.prose().numbered_lines().collect();
+            let dated = if sectioned {
+                dated_section_lines(text)
+            } else {
+                BTreeSet::new()
+            };
+            (1..=total)
+                .map(|line| {
+                    if dated.contains(&line) {
+                        ""
+                    } else {
+                        visible.get(&line).map(String::as_str).unwrap_or("")
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
+        // The doc-comment extension goes with the marker, for the reason the sibling sweep records: `FORMATS`
+        // declares what a line comment *opens* with, so stripping only that leaves `/` or `!` at the front of
+        // the contribution.
+        Prose::LineComment(marker) => text
+            .lines()
+            .map(|line| match line.trim_start().strip_prefix(marker) {
+                Some(rest) => rest.trim_start_matches(['/', '!']),
+                None => "",
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+    }
+}
+
+/// The lines of a dated section of `text`, which is a record and therefore not this sweep's subject.
+///
+/// Cut by [`kanhe::sections`], which owns cutting a flat sentinel-delimited document, rather than by a fourth
+/// hand-rolled walk. A heading is dated when its own line carries a ` - ` suffix after the version — which is
+/// the same fact `release_coherence_gate`'s predicate drops when it derives a name, read here for the
+/// opposite purpose.
+fn dated_section_lines(text: &str) -> BTreeSet<usize> {
+    let source = kanhe::region::Source::of(text);
+    let mut dated = BTreeSet::new();
+    for section in kanhe::sections::cut(source.prose().numbered_lines(), |line| {
+        line.trim_start().starts_with("## [").then_some(())
+    }) {
+        if !section.line.contains("] - ") {
+            continue;
+        }
+        dated.insert(section.start);
+        for (line, _) in &section.body {
+            dated.insert(*line);
+        }
+    }
+    dated
+}
+
+/// Whether a code span's content is an abbreviated commit object: 4 to 40 lowercase hex characters
 /// carrying **both** a letter and a digit.
 fn is_abbreviated_object(span: &str) -> bool {
-    span.len() >= 7
+    span.len() >= 4
         && span.len() <= 40
         && span
             .chars()
@@ -2050,11 +2122,15 @@ fn hosting_serials(line: &str) -> Vec<String> {
             continue;
         }
         // A bound identifier spells `capability#slug`, so a `#` glued to a word is not this shape; only a
-        // digit immediately after it is.
+        // digit immediately after it is. An HTML entity spells `&#NNN;`, which is a lexical fact rather than
+        // a judgement, so the `&` is excluded here — a false refusal over a numeric character reference is
+        // the direction the Core Contract forbids more strictly, and none is in the tree yet.
         let before_is_word = at
             .checked_sub(1)
             .and_then(|prev| bytes.get(prev))
-            .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_' || *c == '/');
+            .is_some_and(|c| {
+                c.is_ascii_alphanumeric() || *c == '-' || *c == '_' || *c == '/' || *c == '&'
+            });
         if before_is_word {
             continue;
         }

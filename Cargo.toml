@@ -71,7 +71,7 @@ serde_json = "1"
 # Rust rather than hand-lexing it. Nothing packages 勘合 (`publish = false`), so no adopter resolves that
 # edge.
 #
-# This comment said `quarantined to 渾儀 (hunyi) alone` until 2026-08-21, unchanged since `2f903fb`, and
+# This comment said `quarantined to 渾儀 (hunyi) alone` until 2026-08-21, unchanged since `0.1.0`, and
 # `alone` had been false since the dev-table edge landed in the same window. A claim one word wider than
 # what reacts to it is the shape a reason is forbidden from taking; the same holds where the claim sits
 # beside the dependency instead of inside a `because`.

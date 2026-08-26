@@ -619,6 +619,24 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *a relative phrase in non-record Markdown*",
         ),
+        // The serial half of that reaction cannot reach line-comment formats, and the reason is already law:
+        // `AGENTS.md` records that the bare serial shape IS the fixture for the squash-serial check, so a
+        // reader over Rust would refuse the very check that forbids serials. The object half has no such
+        // collision -- measured over every classified line-comment format, every code span of that shape in
+        // a comment was a real citation -- so only this half is bounded.
+        BoundDecl::unpinned(
+            BoundId::new("reference-integrity/a-hosting-serial-outside-markdown-is-not-observed-a-stated-bound"),
+            "a bare hosting serial written in a comment, in any line-comment format",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the bare serial shape is the FIXTURE for the squash-serial check, so a reader over \
+                          that format would refuse the check that forbids the thing -- the collision is with \
+                          the shape rather than with a spelling, so narrowing the pattern does not reach it. \
+                          The abbreviated-object half has no such collision and is therefore not restricted"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *a hosting serial outside Markdown*",
+        ),
         // The reader requires a letter AND a digit, and both directions it would otherwise refuse are live
         // here: a specification writes a long run of digits as the figure a fabricating reader produced, and
         // English carries words spelled entirely from the hex alphabet at this length. Admitting either
