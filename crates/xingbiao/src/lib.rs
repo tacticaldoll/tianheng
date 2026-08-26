@@ -365,8 +365,8 @@ pub fn audit_corpus_and_anchor(manifest_path: &Path) -> Result<(Vec<PathBuf>, Pa
 
 /// Claim `path` as a directory this process created, refusing to adopt one that already exists.
 ///
-/// **Fixture infrastructure, deliberately withheld from the API contract.** It is `pub` because callers in
-/// six crates' test targets need it across crate boundaries, and `#[doc(hidden)]` because 星表's domain is
+/// **Fixture infrastructure, deliberately withheld from the API contract.** It is `pub` because test targets
+/// in other crates need it across crate boundaries, and `#[doc(hidden)]` because 星表's domain is
 /// declared workspace data — a scratch-directory claim is not in it. It lives here for a dependency-graph
 /// reason (the lightest crate already reachable from every dimension), and a dependency-graph reason is not
 /// a domain fit.

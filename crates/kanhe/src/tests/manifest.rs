@@ -366,8 +366,8 @@ fn every_publish_shape_cargo_honours_is_read_as_cargo_reads_it() {
         "a trailing comment is not part of the value"
     );
 
-    // The tree's own six publishable crates and two unpublishable ones, so the rows above are not the only
-    // subject this reader is held over.
+    // The tree's own members, publishable and not, so the rows above are not the only subject this reader
+    // is held over.
     assert_eq!(
         publishable("[package]\nname = \"kanhe\"\npublish = false\n"),
         Publishable::No

@@ -21,8 +21,9 @@ about how the reaction treated it. This is the difference between a model and a 
 "never observed it, and it over-reacts", which is the exact contradiction that let a backlog entry predict a
 false negative where the real behaviour was a fail-loud constitution error.
 
-The value set SHALL be the one the declared bounds exhibit, not a designed hierarchy. Seven stops were read out
-of the family's own declarations:
+The value set SHALL be the one the declared bounds exhibit, not a designed hierarchy. These stops were read
+out of the family's own declarations, and the list below is their enumerator — a count of them written beside
+it would be a second copy of a fact this document already carries in full:
 
 1. **out of reach** — the observation source never sees the shape (`external-crate-confinement`: comments,
    string literals and macro bodies are stripped before scanning; `runtime-origin-assertion`: source outside a
@@ -39,8 +40,10 @@ of the family's own declarations:
    a consumer can reach", and the body-nested module and plain item, "unreachable as `crate::…`". Nothing is
    bounded at all: the reaction is right, and the declaration exists only so a reader does not misread the
    silence as an escape. This value was **absent from the first draft** and was forced by classifying the
-   declared set — three bounds are exactly it, and the granularity value below could not hold them because it
-   requires a bounded part.
+   declared set: declarations turned out to be exactly it, and the granularity value below could not hold them
+   because it requires a bounded part. How many is not written here — the requirement below forbids restating
+   membership in prose for the reason that every attempt has gone stale, and the sibling variant that said
+   *one* while the projection rendered six is what that rule was written from.
 7. **reached, reacting exactly, bounded in what the fact carries** — `semantic-dyn-trait-boundary`'s
    unrenderable sub-node: "each still *reacts* on first occurrence; only baseline-dedup granularity is
    bounded". The reaction is not bounded at all here, so an extent that implied otherwise would misreport it.
@@ -58,9 +61,14 @@ behaviour was a fail-loud refusal, and the entry's own lesson is that the risk c
 direction that cannot be *named* cannot be predicted with, which is what earns the value its place — not how
 many bounds happen to hold it.
 
-Granularity SHALL be carried **only** by the sixth, not as an independent field on every extent. No declared
-bound is both out of reach and granularity-limited, so a model offering both on every value would invite a
-combination nothing exhibits.
+Granularity SHALL be carried **only** by *reached, reacting exactly, bounded in what the fact carries*, not
+as an independent field on every extent. No declared bound is both out of reach and granularity-limited, so a
+model offering both on every value would invite a combination nothing exhibits.
+
+This sentence said *the sixth* until the value above it was inserted, which moved the one it means to seventh
+and left it naming a neighbour instead. A value SHALL therefore be referred to by what distinguishes it and
+not by its position in this list: an ordinal into a list that grows is a reference that a later insertion
+invalidates in silence, and nothing here can check one.
 
 #### Scenario: A never-reached shape cannot claim a reaction direction
 

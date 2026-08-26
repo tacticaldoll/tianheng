@@ -19,8 +19,8 @@ pub(crate) type CompilationUnit = (PathBuf, PathBuf, String);
 ///
 /// The shared preamble every `check_*_boundary` opens with, and one home for the constitution errors
 /// resolution can raise — crate-not-found, missing-src (a target with no crate-root file, or a root
-/// file with no parent dir), and a root outside the package's own directory — so the eight
-/// capabilities cannot drift apart on any of them. Each `src_dir` is owned (it would otherwise borrow
+/// file with no parent dir), and a root outside the package's own directory — so no capability can
+/// drift from another on any of them. Each `src_dir` is owned (it would otherwise borrow
 /// its root file), so callers hold both.
 ///
 /// A package builds more than one crate root — a library beside a `bin` — and each is its own module

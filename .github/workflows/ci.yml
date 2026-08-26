@@ -176,8 +176,8 @@ jobs:
       - name: build and test on the declared minimum supported Rust version
         run: |
           # **One `rust-version`, or this step says which members disagree.** A greedy `sed` over the
-          # single-line JSON followed by `head -n1` answered with one of the eight members' values and
-          # named neither the count nor which one — `kanhe::selection::the_only`'s subject, in shell. `jq`
+          # single-line JSON followed by `head -n1` answered with one arbitrary member's value and
+          # named neither how many there were nor which one — `kanhe::selection::the_only`'s subject, in shell. `jq`
           # collects them, `unique` decides, and a disagreement is a refusal rather than a coin toss.
           # `pipefail` cannot see inside a process substitution, so the derivation stands where its status
           # is visible. Written the other way, a failed `cargo metadata` or an absent `jq` gave zero lines

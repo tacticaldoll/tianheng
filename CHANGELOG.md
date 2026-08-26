@@ -7261,6 +7261,52 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No behaviour moves and no published API, outcome, report, exit class or manifest changes.
 
 
+- **A membership typed beside its enumerator, and a position typed beside a list that grew.** This window
+  already repaired this class once on `xuanji`'s `Reached` variants — the record reads *`AsIntended` said one
+  declared bound holds it while the extent projection rendered six; its sibling `NotAViolation` said three and
+  was right only by luck of nothing having been added since* — and the rule moved up to the enum, where every
+  variant now documents the distinction that earns it a place. That repair swept the source and not the
+  specification, so the same sentence survived in `observation-bound-model`, which is where the rule is
+  written down.
+
+  `three bounds are exactly it` is that sentence, and the requirement two paragraphs below it says membership
+  **SHALL NOT** be restated in prose, for the recorded reason that every attempt has gone stale within the
+  window that wrote it. It is accurate today, by the same luck. `Seven stops were read out` is the same shape
+  once removed: a count standing beside the numbered list that is its own enumerator, in the one document
+  where the list can be read in full.
+
+  **An ordinal into a list that grows is a reference nothing can check, and it had already broken.**
+  *Granularity SHALL be carried only by the sixth* named the sixth value; granularity is the seventh. The
+  cause is written in the list itself — the value now at six records that it was **absent from the first
+  draft** and was forced by classifying the declared set, so inserting it moved granularity down one and left
+  the sentence pointing at its neighbour. The requirement now refers to a value by what distinguishes it, and
+  says why: a later insertion invalidates a position in silence. Referring to it by its Rust variant name was
+  considered and declined — this specification names no code variants anywhere, and importing one to fix a
+  sentence would make the document depend on an identifier it otherwise never mentions.
+
+  **Nine more sites of the same class, five of them one number copied.** `hunyi`'s capability count stood at
+  five comment sites where the point is the *oneness* — one composition, one dyn-safe list, one enumeration
+  point, one error path — which is exactly what the earlier repair concluded for its two siblings, and they
+  now say that instead. `PROJECT.md` stated *zero packages*, *zero occurrences*, *six publishable crates* and
+  *one comment*: all four measure correctly today, and all four are counts of live sets nothing produces, so
+  they become the properties they were standing in for. Three more came out of a sweep of this class rather
+  than from a finding — a workspace-member count in a CI comment, an *eight crates* illustration in a vacuity
+  guard's reason, and a *six crates* claim on `xingbiao`'s fixture helper.
+
+  **One of them was mine and had already drifted.** `sections`'s module doc said `release_coherence_gate`'s
+  **three** readers *open on `## [`-prefixed lines and take the name from the part before `" - "`*. There are
+  four, and only one of them does that: the other three open on a bracketed TOML table, which is not a heading
+  in a document that has headings. The count and the description both stopped being true when this window
+  converged those TOML walks onto the same cutter — the sentence describes the tree as it stood before the
+  change that made the sentence's own subject worth writing about.
+
+  What stays: `hermetic_git`'s *zero occurrences, repository-wide* is quoted as the ground a row **stood on
+  and was wrong about**, which is a rejected alternative with what measuring it showed; and
+  `repository-checks`'s *shipping in zero packages* names a property rather than counting a set.
+
+  No behaviour moves and no published API, outcome, report, exit class or manifest changes.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
