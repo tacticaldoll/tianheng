@@ -231,33 +231,48 @@ jobs:
           # neither `set -e` nor `pipefail` sees inside `<(…)`. Measured: exit 0, array length 0. The
           # derivation below stands where its status is visible, so the tool's absence is now the tool's
           # own error.
-          # **The manifest path, not the package name, because only one of the two is a location.** This
-          # derived unpublishable package NAMES and then tested them against `basename "$dir"` from a glob —
-          # joining cargo's identity to the filesystem by assuming the two are equal, which nothing holds. A
-          # publishable crate sharing a name with an unpublishable package's directory would be skipped and
-          # ship without its license texts. The same repository already refuses this coupling in Rust:
-          # `machinery_names` takes `manifest_path` "because `manifest_path` is canonical". One rule, one
-          # answer. Latent today — all eight directories match their package names — and latent is where a
-          # coupling is cheapest to remove.
-          unpublishable=$(cargo metadata --no-deps --format-version 1 \
-            | jq -r '.packages[] | select(.publish == []) | .manifest_path' | tr '\n' ' ')
+          # **One enumerator, because a comparison between two derivations of a path has to be right on
+          # every axis and was right on only one.** This job used to derive the UNPUBLISHABLE packages from
+          # cargo and test each against a `crates/*/Cargo.toml` glob — first by `basename`, joining cargo's
+          # identity to the filesystem; then, once that was fixed, by comparing paths. The comparison closed
+          # the relative-versus-absolute axis and left the logical-versus-physical one open: `cargo metadata`
+          # emits a canonical path, while `cd "$dir" && pwd` prints `$PWD` unless given `-P`. Measured, in a
+          # workspace reached through a symlink: cargo answers `…/real/crates/kanhe/Cargo.toml`, the
+          # comparison computed `…/link/crates/kanhe/Cargo.toml`, no case arm matched, and ALL EIGHT crates
+          # were checked — including the two cargo refuses to publish, which would then be failed for license
+          # texts they need not ship. That is verbatim the outcome the previous comment named as the failure
+          # it was avoiding on the axis it did fix.
+          #
+          # `pwd -P` would close that axis too, and the next axis after it is someone else's to find. So the
+          # comparison is deleted instead: iterate the PUBLISHABLE packages cargo reports, and take each
+          # directory from the `manifest_path` cargo gave for it. There is no second spelling to normalise
+          # and no glob to disagree with — the set this job checks is the set cargo would publish, by
+          # construction. `merge-pr.sh` made the same call for the same reason, putting both sides in one
+          # form because "two spellings of the same tree would refuse".
+          #
+          # A derived set can be empty where a glob cannot, so the floor is stated, exactly as
+          # `packaged-selftest` states its own: with nothing derived the loop body never runs and the job
+          # would report success over zero crates.
+          derived="$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.publish != []) | .manifest_path')"
+          if [[ -z $derived ]]; then
+            echo "::error::cargo metadata and jq derived no publishable crate at all — the enumerator, not the set"
+            exit 1
+          fi
           missing=0
-          for manifest in crates/*/Cargo.toml; do
-            dir="${manifest%/Cargo.toml}"
-            # Resolved on both sides: cargo emits an absolute path and the glob yields a relative one, so
-            # comparing the two as written would never match and every crate would be checked — the safe
-            # direction, and still a comparison that decides nothing.
-            resolved="$(cd "$dir" && pwd)/Cargo.toml"
-            case " $unpublishable " in
-            *" $resolved "*) continue ;;  # cargo refuses to publish it — its directory need not carry license texts
-            esac
+          checked=0
+          while IFS= read -r manifest; do
+            [[ -z $manifest ]] && continue
+            dir="$(dirname "$manifest")"
+            checked=$((checked + 1))
             for f in LICENSE-MIT LICENSE-APACHE; do
               if [ ! -s "$dir/$f" ]; then
                 echo "::error file=$dir/$f::$dir is missing $f — cargo publish ships only crate-local files, so the crate would publish without its license text (the SPDX license field is not enough)"
                 missing=1
               fi
             done
-          done
+          done <<< "$derived"
+          echo "checked $checked publishable crate(s) for bundled license texts"
           exit "$missing"
 
   packaged-selftest:
@@ -280,8 +295,10 @@ jobs:
           # packaging RESOLVE and the from-tarball test resolve them from local source via `--config
           # patch` (NOT baked into the tarball — it stays the real publishable form; the patch only
           # satisfies resolution). This is what lets the gate run at the exact pre-publish version
-          # it must guard, rather than only when the deps happen to already be published.
-          ws="$PWD"
+          # it must guard, rather than only when the deps happen to already be published. The patch paths
+          # come from the `manifest_path` cargo reports for each member, so this step holds no workspace-root
+          # variable of its own — a `ws="$PWD"` left here after the patch stopped being built from it was
+          # dead, and a logical path besides.
           # **The set is derived, and it used to be written twice.** This job's name claims *every
           # publishable crate*, and the claim was two hand-written lists that nothing held. The
           # `license-files` job above derives the same set from the same two facts, and
