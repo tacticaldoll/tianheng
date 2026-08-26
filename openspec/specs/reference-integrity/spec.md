@@ -315,6 +315,48 @@ declared as a bound below rather than closed, and the reason is measured rather 
 - **WHEN** a phrase's words fall on either side of a line break in a wrapped comment
 - **THEN** the reaction still names it, because the run is joined with its markers stripped before matching
 
+### Requirement: A live document SHALL anchor a citation to something a fresh clone can reach
+
+A live governance document SHALL NOT cite a commit object or a hosting serial. The anchor SHALL be the
+release window, which survives because `main` is made of releases, or the change's own name, which is text.
+
+`main` carries one commit per release: a whole development window squashes into a single `release: X.Y.Z`
+commit, so no development commit is reachable from it — not eventually, but by construction. A citation to
+such a commit in a document that is read *later, against the tree* is therefore dead the moment its window
+closes, and a hosting platform's serial was never in the tree at all. `AGENTS.md` already dispositions both
+as **provenance** — they name *when*, not *what*, and nothing downstream reads them.
+Where a citation is load-bearing as the provenance of a decision it belongs in a **record** — a commit
+message, a dated `CHANGELOG.md` section, or `docs/history/` — which is a measurement of its moment and is
+read as one.
+
+**This is a reaction where the sibling relative-anchor rule is not, and the difference is that nothing here
+is a judgement about a sentence.** A token is shaped like an abbreviated object or it is not; a `#` is
+followed by a digit or it is not. Fenced blocks and HTML comment spans are outside it, read through the same
+prose reader the rest of this capability uses, because a fence is where a command lives and a command may
+carry an object name legitimately.
+
+#### Scenario: A live governance document cites a commit object or a hosting serial
+
+- **WHEN** tracked Markdown outside the record set names an abbreviated commit object in a code span, or a
+  `#` immediately followed by a digit
+- **THEN** the reaction fails, naming the file, the line and the citation, and says to name the release
+  window or move the citation into a record
+- **PINNED-BY** `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach`
+
+#### Scenario: An abbreviation carrying no letter, or no digit, is not observed — a stated bound
+
+- **WHEN** a live document cites an abbreviated commit object whose characters are all digits, or all
+  letters
+- **THEN** nothing reacts. The reader requires **both** a letter and a digit, and the two directions it
+  refuses without that requirement are both live in this tree: a specification writes a long run of digits as
+  the figure a fabricating reader produced, and English carries words spelled entirely from the hex alphabet
+  at this length. Admitting either would refuse a passage that cites nothing
+- **AND** the residue is computed rather than estimated: over uniformly random seven-character
+  abbreviations it is 3.8%, and the direction is chosen deliberately — this repository's Core Contract
+  forbids a false refusal more strictly than it forbids a miss, so the reader gives up that fraction rather
+  than refuse prose that names no commit
+- **UNPINNED** `BACKLOG.md` — *an abbreviation carrying no letter or no digit*
+
 ### Requirement: Deliberate absence does not become a stale-reference finding
 
 The gate SHALL skip a recognized target when Git reports that target ignored, because prose may

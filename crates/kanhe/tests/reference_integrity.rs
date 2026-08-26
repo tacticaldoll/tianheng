@@ -1941,3 +1941,154 @@ fn no_reference_names_a_line_number() {
         coordinates.join("\n")
     );
 }
+
+/// The documents that are **records** rather than live text, by path.
+///
+/// `AGENTS.md` names them: a commit message, a dated changelog section, `docs/history/`. A record is a
+/// measurement of its moment, so a citation inside one is provenance of a decision that was made and stays
+/// readable as what it was. Live text is read later against a tree it must be able to address, and that is
+/// the difference this list draws.
+///
+/// A commit message is not a tracked file and needs no row. The two that are files are here, and nothing
+/// else: adding a document to escape a refusal is the move this list exists to make visible.
+const RECORD_DOCUMENTS: [&str; 2] = ["CHANGELOG.md", "docs/history/"];
+
+/// Every citation the live prose of `corpus` carries that names a moment no reader can reach, in
+/// `corpus_root`.
+///
+/// **What makes this decidable where the sibling prose sweeps were not.** A relative anchor needs a reader to
+/// tell a pointer from a span, which is a judgement about the sentence. This one asks nothing about meaning:
+/// a token is shaped like an abbreviated commit object or it is not, and a `#` is followed by a digit or it
+/// is not. That is why it is a reaction where the neighbouring rule stays a rule.
+///
+/// **Both a letter and a digit are required, and the residue is declared rather than closed.** A run of hex
+/// characters alone over-reaches in both directions this tree actually holds: `repository-checks` writes a
+/// nineteen-digit run as the figure a fabricating reader produced, and English carries all-hex words at this
+/// length. Requiring one of each admits neither. It also misses an abbreviation that happens to be all
+/// digits or all letters — measured at 3.8% of uniformly random seven-character abbreviations — and that
+/// miss is taken deliberately, because this repository's Core Contract forbids a false refusal more strictly
+/// than it forbids a miss, and the bound is declared where a reader meets it.
+///
+/// Fenced blocks and HTML comment spans are excluded by reading through [`kanhe::region`]'s prose reader
+/// rather than raw lines: a fence is where a command lives, and a command may legitimately carry a hash.
+fn unanchored_citation_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSet<String> {
+    let mut offences = BTreeSet::new();
+    for path in corpus.iter() {
+        if !matches!(prose_of(path), Some(Prose::Whole)) {
+            continue;
+        }
+        if RECORD_DOCUMENTS
+            .iter()
+            .any(|record| path == record || path.starts_with(record))
+        {
+            continue;
+        }
+        let text = std::fs::read_to_string(corpus_root.join(path)).unwrap_or_else(|error| {
+            panic!(
+                "cannot read tracked file '{path}' — a file this check claims to have inspected must have \
+                 been read: {error}"
+            )
+        });
+        // **Two sanctioned readers, and neither is re-implemented here.** `region`'s prose reader decides
+        // what is prose — fenced blocks and HTML comment spans are not — and `reading`'s pairing reader
+        // decides where a code span opens and closes. Pairing backticks here would be the shape
+        // `no_source_outside_the_shared_reader_pairs_backticks_by_hand` refuses, and it refused this file
+        // when the first draft did exactly that.
+        //
+        // A dropped line is rebuilt as an empty one rather than removed, so line numbers stay the
+        // document's own and a fence becomes a paragraph break — which it already is, since a code span
+        // cannot cross a blank line.
+        let source = kanhe::region::Source::of(text.as_str());
+        let visible: std::collections::BTreeMap<usize, String> =
+            source.prose().numbered_lines().collect();
+        let prose: String = (1..=text.lines().count())
+            .map(|line| visible.get(&line).map(String::as_str).unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        for (line, span) in kanhe::reading::backticked_by_paragraph(&prose) {
+            if !is_abbreviated_object(&span) {
+                continue;
+            }
+            offences.insert(format!(
+                "  {path}:{line} cites the commit object `{span}`, and live text anchors to a release. \
+                 `main` carries one commit per release, so a development commit is unreachable from a fresh \
+                 clone by construction; a release commit is reachable and is still named better by its \
+                 version. Name the release window, or move the citation into a record"
+            ));
+        }
+        for (line, text) in &visible {
+            for serial in hosting_serials(text) {
+                offences.insert(format!(
+                    "  {path}:{line} cites `{serial}`, a serial belonging to the hosting platform rather \
+                     than to this repository. Name what the change was, or the release window it landed in"
+                ));
+            }
+        }
+    }
+    offences
+}
+
+/// Whether a code span's content is an abbreviated commit object: 7 to 40 lowercase hex characters
+/// carrying **both** a letter and a digit.
+fn is_abbreviated_object(span: &str) -> bool {
+    span.len() >= 7
+        && span.len() <= 40
+        && span
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+        && span.chars().any(|c| c.is_ascii_digit())
+        && span.chars().any(|c| c.is_ascii_alphabetic())
+}
+
+/// Every `#` immediately followed by a digit, which is how this hosting platform spells a serial.
+fn hosting_serials(line: &str) -> Vec<String> {
+    let bytes: Vec<char> = line.chars().collect();
+    let mut found = Vec::new();
+    for (at, ch) in bytes.iter().enumerate() {
+        if *ch != '#' {
+            continue;
+        }
+        // A bound identifier spells `capability#slug`, so a `#` glued to a word is not this shape; only a
+        // digit immediately after it is.
+        let before_is_word = at
+            .checked_sub(1)
+            .and_then(|prev| bytes.get(prev))
+            .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_' || *c == '/');
+        if before_is_word {
+            continue;
+        }
+        let digits: String = bytes[at + 1..]
+            .iter()
+            .take_while(|c| c.is_ascii_digit())
+            .collect();
+        if !digits.is_empty() {
+            found.push(format!("#{digits}"));
+        }
+    }
+    found
+}
+
+/// No live governance document cites a moment a reader of a fresh clone cannot reach.
+///
+/// **The class five review rounds swept past.** Those rounds looked for typed counts, live line counts,
+/// relative anchors and word-form figures — every drift class except the one where the *citation itself* is
+/// the moving part. A commit hash looks like the most precise anchor available, which is exactly why nobody
+/// examined it. Measured when this landed: of the commit objects cited by live governance text, all but one
+/// were already unreachable from `origin/main`, because `main` carries one commit per release and a whole
+/// development window squashes into it.
+///
+/// So this is not a repair waiting on the next squash; the citations were dead when they were written.
+#[test]
+fn no_live_document_cites_a_moment_a_fresh_clone_cannot_reach() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let offences = unanchored_citation_offences_in(&root, &tracked(&root));
+    assert!(
+        offences.is_empty(),
+        "{} unreachable citation(s) in live governance text:\n{}",
+        offences.len(),
+        offences.iter().cloned().collect::<Vec<_>>().join("\n")
+    );
+}

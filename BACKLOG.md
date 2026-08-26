@@ -55,7 +55,7 @@ hand-written line counts of live functions, unheld by anything, written by the s
 removing that class elsewhere.
 
 The `v0.4.0..release/0.5.0` merged-review campaign is the first to land under this rule, and it is now fully
-closed: its repairs are `CHANGELOG.md`'s `### Self-governance` section and PRs #603, #604 and #605, and its
+closed: its repairs are `CHANGELOG.md`'s `### Self-governance` section and three pull requests in the 0.5.0 window, and its
 three orphaned spec requirements closed with the last of those. Its reproduction record is under *Closed —
 reproduction records*; what it left standing is filed by class in the index below — the deferred structural
 findings and the lifecycle-prose finding, both `WATCH`. **No live queue.**
@@ -375,15 +375,15 @@ consumer for an undemonstrated deduplication.
   pressure is measured and the correction preserves every published API. It declared no class at all until
   the classification reaction was built, because it reads as too large for a heading that sounds like "next".
   *Observed pressure:* **ten** found
-  and closed through re-review #3 of the 0.5.0 window. The first seven were the family's declarations staying
+  and closed through the third re-review of the 0.5.0 window. The first seven were the family's declarations staying
   literal, the equality fixture reacting in every dimension, an observer declaring exactly its dimension's bounds
   (a comparison that was `f() == f()`), the protocol's required `bounds` method having no consumer at all, *an
   audit finding carries no repair polarity*, *an observer's bounds method cannot be found where the reaction
-  looks*, and *joining a run would require no new export*. Re-review #3 added three more: a requirement prescribed
+  looks*, and *joining a run would require no new export*. The third re-review added three more: a requirement prescribed
   wording for the projected shell reason that no reaction observed, a reason-only correction claimed verdict
   stability through an impossible-to-fail scenario, and the shell's semantic delegation scenario could not detect a
   duplicated local guard. Every one was found by hand. *Observation source:* the window's closing review, rounds
-  1–7 and re-review #3; the first seven are recorded in `CHANGELOG.md`'s `[Unreleased]` with the perturbation that
+  1–7 and the third re-review; the first seven are recorded in `CHANGELOG.md`'s `[Unreleased]` with the perturbation that
   proved them.
 
   **Promoted from WATCH because its own trigger fired, six times.** That trigger was *a normative SHALL found
@@ -391,7 +391,7 @@ consumer for an undemonstrated deduplication.
   stand as evidence for themselves. Rounds 6 and 7 then found three more, and **all three were requirements this
   window had just written**: a SHALL added in one change and left unreacted, in the window whose whole subject was
   closing that class. That is stronger evidence than the original four, because it shows the class reproducing under
-  authors actively watching for it. Re-review #3 then found the fourth through sixth post-sweep recurrences, again
+  authors actively watching for it. The third re-review then found the fourth through sixth post-sweep recurrences, again
   in requirements or scenarios written in the same window; two were removed as inert, and semantic delegation
   gained a source-shape reaction.
 
@@ -399,15 +399,15 @@ consumer for an undemonstrated deduplication.
   nothing, so no gate can tell a SHALL with a reaction from one without. *Risk:* the class recurring and being found
   by hand or not at all — a normative rule nothing enforces is indistinguishable from one that is enforced, which is
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated —
-  at `ee15665`, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
+  in the 0.5.0 window, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
   **1048** lines carrying `SHALL`, across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **96 bounds across 25 capabilities** — a live figure rather than part of the measurement
+  currently holds **97 bounds across 25 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
   the drift class this family already refuses.
 
-  *The binding is written in 62 places, and this entry said it was written nowhere.* Measured at `36152c0`, by
+  *The binding is written in 62 places, and this entry said it was written nowhere.* Measured in the 0.5.0 window, by
   `grep -c '^- \*\*PINNED-BY\*\*'` over `openspec/specs/*/spec.md` and a per-name resolution against every
   `fn` definition under `crates/` and `examples/`: **161** `PINNED-BY` citations, covering **62 of 364**
   requirements, and every one of the 161 names a test that exists. They are not unheld either —
@@ -531,7 +531,7 @@ consumer for an undemonstrated deduplication.
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
 - **Twenty-seven inner comments in published crates index their provenance by review round, and the reaction
-  over doc comments does not reach them.** *Class:* WATCH. *Observed pressure:* measured at `11674bc`, by
+  over doc comments does not reach them.** *Class:* WATCH. *Observed pressure:* measured in the 0.5.0 window, by
   `grep -rnE 'round[- ][0-9]+'` over every published crate's `src`: 28 doc-comment
   lines and **27** inner-comment (`//`) lines carried a round number. The 28 are repaired and
   `crates/kanhe/tests/doc_provenance.rs` now refuses them; the 27 are outside its corpus by construction, and
@@ -568,7 +568,7 @@ consumer for an undemonstrated deduplication.
   this a class rather than one stub, and the repair is then the same for both: the fixture states what it
   needs and stops before the subject when it is absent.
 
-  *Trigger measured, not waited for — at `36152c0`, and it has not fired.* The decidable half of it is
+  *Trigger measured, not waited for — in the 0.5.0 window, and it has not fired.* The decidable half of it is
   enumerable: a stub is executed only where a test puts its directory on `PATH`, and exactly **two** test
   targets do — `publish_workflow` and `merge_workflow`. `merge_workflow`'s `gh` stub pipes through `jq`, which
   is this entry. `publish_workflow`'s `cargo` stub uses `printf` and `[[` and reaches no host tool at all. Every
@@ -714,7 +714,7 @@ consumer for an undemonstrated deduplication.
   **Two review rounds later the copies still have not diverged, which reads as the trigger not-yet-fired
   rather than as safe.** Four changes have touched `scripts/merge-pr.sh` since — the exit class, the
   no-evidence class, a relative anchor, a reflowed comment — and every one landed outside the shared region or
-  was applied to both wrappers in the same commit. Measured at `8604a05`: of `scripts/publish.sh`'s 109
+  was applied to both wrappers in the same commit. Measured in the 0.5.0 window: of `scripts/publish.sh`'s 109
   executed lines, 66 appear verbatim in its sibling. So the identities agree and the bodies agree, and nothing
   made either of those happen — a reviewer did. An adversarial review named the consequence precisely: the
   copies not having diverged is what makes the extraction **cheap now and expensive later**. That is an
@@ -730,7 +730,7 @@ consumer for an undemonstrated deduplication.
   `docs-agents-bind-a-claim-to-its-measurement` among them), against 180 `fix/`, 69 `docs/`, 17 `test/`,
   10 `feat/`, 9 `refactor/`, 2 `ci/` and 1 `build/`. Those are history and cannot be repaired; what they
   measure is that the convention drifts unobserved, which is the condition under which `AGENTS.md` says a
-  governance rule *is read as license rather than law*. *Observation source:* measured at `94a42fb` by
+  governance rule *is read as license rather than law*. *Observation source:* measured in the 0.5.0 window by
   `gh pr list --state merged --base release/0.5.0 --json headRefName`. *Current reaction or bound:* none. The
   sentence that declined one has been repaired in the same change for a different fault — it gave the
   constitution's reason for a repository check's conclusion, and compared itself to a rule that has since
@@ -767,7 +767,7 @@ consumer for an undemonstrated deduplication.
 - **WATCH: A commit reaching a `release/*` branch without a pull request meets no CI.** *Class:* WATCH.
   *Observed pressure:* `.github/workflows/ci.yml` triggers on `push` to `main` and on `pull_request`, so a
   commit pushed straight onto a release branch runs no job at all — the branch that every development change
-  squashes into, and the one a release snapshot is cut from. *Observation source:* measured at `4c3b512` by
+  squashes into, and the one a release snapshot is cut from. *Observation source:* measured in the 0.5.0 window by
   comparing every commit in `v0.4.0..HEAD` against the squash commit of every merged pull request
   (`gh pr list --state merged --limit 800 --json mergeCommit`): **428 of 428 commits resolve to a pull
   request**, so the pressure is structural rather than observed. The fifty that name no `release/0.5.0` pull
@@ -817,7 +817,7 @@ consumer for an undemonstrated deduplication.
   `one_spelling`'s own module documentation puts them outside its subject, and that is right about the
   repair — they are not sites anyone declined to converge. It does not follow that they are unobservable:
   **`kanhe` sees both the constant and their text**, so a comparison is available where a convergence is not.
-  *Observation source:* measured at `4c3b512` — one `pub const`, seven literals, nothing comparing them.
+  *Observation source:* measured in the 0.5.0 window — one `pub const`, seven literals, nothing comparing them.
   *Current reaction or bound:* none; `one_spelling` states the exclusion and gives its reason.
   *Risk:* a mistyped literal makes its guard's skip condition permanently true, so the test silently stops
   running — a false negative, which is the one bug this project's Core Contract forbids, in the direction
@@ -835,7 +835,7 @@ consumer for an undemonstrated deduplication.
   instructed an implementer to mirror `the_projection_discloses_every_declared_bound`, a test retired with
   `gate-shape-contract` in this same window; and a live WATCH entry named the self-law generator
   `tianheng_constitution()`, which has never existed, two files from the projection header that spells it
-  correctly. Both are repaired. *Observation source:* measured at `965f804` on 2026-08-19 over
+  correctly. Both are repaired. *Observation source:* measured on 2026-08-19 over
   `AGENTS.md`, `PROJECT.md`, `BACKLOG.md`, `COOKBOOK.md`, `README.md` and `docs/`, extracting every backticked
   `snake_case` token and resolving it against every tracked path and every tracked file outside that set:
   **369 tokens, six unresolved, and all six legitimate** — four are explicitly past-tense (*since removed*,
@@ -869,7 +869,7 @@ consumer for an undemonstrated deduplication.
   shape*, and the third pass explicitly withdrew an exemption the second had written. *Observation source:*
   the one decidable subset a review proposed — *a reason naming a family crate that is neither its own target
   nor in its own allowlist* — was implemented against the current projection before being adopted, and
-  measured at `1fa86d1` on 2026-08-19, over the thirteen boundaries the projection then rendered, by extracting
+  measured on 2026-08-19, over the thirteen boundaries the projection then rendered, by extracting
   each section's heading, reason and allowlist and reporting every family crate named in a reason that is
   neither its target nor in its allowlist: **eight boundaries fired, every one a false positive, none a true
   one.** The figures are anchored to that run rather than kept current — the prototype was not retained, and a
@@ -928,7 +928,7 @@ consumer for an undemonstrated deduplication.
   machinery, shipping in no crate. *Authority:* `repository-checks`.
 
 - **WATCH: A command a document hands a reader is only checked in one shape.** *Class:* WATCH. *Observed pressure:*
-  `5be5678` closed the class *a command a document hands a reader names a target that exists* by
+  The 0.5.0 window closed the class *a command a document hands a reader names a target that exists* by
   resolving `-p <package> --test <target>` pairs against `cargo metadata`, and a fifth instance survived it in
   a **second shape**: `BLESS=1 bash crates/kanhe/tests/bound_register.rs`, a path handed to `bash` whose target
   is a Rust integration test. Run as written it printed shell errors and **exited 0**, so a reader following it
@@ -948,14 +948,14 @@ consumer for an undemonstrated deduplication.
 - **WATCH: A private item's doc comment can be stolen by an item inserted above it, and nothing reacts.** *Class:*
   WATCH. *Observed pressure:* two in-window instances of one class, where a function was inserted between
   another's doc run and the function itself, so Rust attached the whole run to the newcomer and left the
-  original undocumented. `604a4e1` did it to `bare_references` (public); `52bf5db` did it to
+  original undocumented. One change did it to `bare_references` (public); another did it to
   `adopter_cited_machinery` (private), where the merged run reads as one doc opening with a paragraph about a
   different function, and it survived nine days and a crate rename. *Observation source:* a review of the
   window, then `#![deny(missing_docs)]` added to `kanhe` and `shengmo` — the last two crates without it —
   which produced 45 and 2 undocumented public items respectively, all now documented. *Current reaction or
   bound:* `deny(missing_docs)`, in every crate, catches the **public** half: any item inserted between a doc
   and its item leaves the original with zero docs, whichever of the two carries a doc of its own — measured by
-  reproducing `604a4e1`'s exact shape, which the lint refuses naming the victim. It does not reach private
+  reproducing that exact shape, which the lint refuses naming the victim. It does not reach private
   items. *Risk:* a doc describes the wrong function while reading as though it describes the right one, which
   is worse than an absent doc; a reader is actively misled. *Version class:* patch; both crates ship in no
   package. *Authority:* none — this is a lint policy, not a Tianheng boundary or a repository check.
@@ -1133,7 +1133,7 @@ consumer for an undemonstrated deduplication.
   archive-pruning guardrail are written in the present indicative ("A capability change **moves through**
   OpenSpec") about something that has never happened here. *Observation source:* zero
   `docs(openspec): propose`/`sync` commits in the full history; `openspec/changes/**` untouched since
-  `2f903fb`; 151 direct spec edits in the last window. The path evidence is independent of commit subjects,
+  `0.1.0`; 151 direct spec edits in the last window. The path evidence is independent of commit subjects,
   so the 2026-07-17 history rewrite does not weaken it. *Current reaction or bound:* none — this is prose
   stating a fact about the tree that the tree contradicts, the same class as the three orphans above and
   larger. *Risk:* an agent reading `AGENTS.md` first, as that file instructs, plans work through a lifecycle
@@ -1503,6 +1503,20 @@ consumer for an undemonstrated deduplication.
   available move and it is already taken. *Authority:* engine. *Compatibility:* patch; the wrapper ships in
   no crate.
 
+- **WATCH: an abbreviation carrying no letter or no digit.** *Class:* WATCH. *Observed pressure:*
+  `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach` recognises an abbreviated commit object by
+  shape, and requires both a letter and a digit so that it refuses neither a long run of digits written as a
+  figure nor an English word spelled from the hex alphabet — both live in this tree, and both would be false
+  refusals. *Observation source:* every commit object cited by live governance text when the reaction landed
+  carried both kinds of character, so the reader caught all of them; the residue is what a future citation
+  might look like, not what one does. Over uniformly random seven-character abbreviations the fraction
+  carrying only one kind is 3.8%, computed from the alphabet rather than sampled. *Current reaction or
+  bound:* `reference-integrity/an-abbreviation-carrying-no-letter-or-no-digit-is-not-observed-a-stated-bound`.
+  *Risk:* one citation of that shape survives in live text and reads as anchored — bounded by the reaction
+  catching every other shape, so the class cannot accumulate silently the way it did before the reaction
+  existed. *Next trigger:* an instance, which the sweep this entry names would find. *Authority:* engine.
+  *Compatibility:* patch; the reaction is repository machinery and ships in no package.
+
 - **WATCH: a relative phrase in non-record Markdown.** *Observed pressure:* `AGENTS.md` states the rule for
   prose generally — a relative anchor "names a moving reference, so it is stale the moment the window closes"
   — while `no_tracked_source_names_a_relative_anchor` reads line-comment formats only. The exclusion for
@@ -1512,12 +1526,12 @@ consumer for an undemonstrated deduplication.
   named two unanchored phrases in this file; sweeping the four declared phrases across tracked non-record
   Markdown found that most of what a widened reaction would report is not an offence — `AGENTS.md`'s own row
   declaring the phrases, duration uses (*for a window* narrating how long something lasted), generated
-  projections' copies of either, and phrases already anchored by a commit or by naming the release.
-  **Measured at `b475b46`, before this entry existed: nine occurrences, of which two were unanchored
-  pointers and both were closed by that same commit.** The figure is written here and nowhere else because
-  the sweep's corpus contains every passage that explains it — this entry, the scenario, and the scenario's
-  two projections each quote the phrase to name it, so a breakdown stated in the bound would move as it was
-  written. Re-measuring is a `git grep` over tracked Markdown outside `CHANGELOG.md` and `docs/history/`.
+  projections' copies of either, and phrases already anchored by naming the release. Both unanchored
+  pointers were closed in the `0.5.0` window. **No count is written, here or in the bound.** The corpus and
+  the command stay — a `git grep` for the declared phrases over tracked Markdown outside `CHANGELOG.md` and
+  `docs/history/` — and a figure does not, because this entry, the scenario and the scenario's two
+  projections each quote the phrase to name it, so any breakdown moves as it is written. Three attempts
+  proved that rather than argued it: stated in the spec, moved here, and wrong in both.
   *Current reaction or bound:*
   `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound`; the two
   unanchored phrases are anchored to `0.5.0`. *Risk:* a phrase written here goes stale when its window
@@ -1647,7 +1661,7 @@ consumer for an undemonstrated deduplication.
     published surface. *Authority:* `release-coherence`, which owns what `CHANGELOG.md` must be true of, and this
     window's group-merge change, whose verification is the measured gap.
   - **Whether a gate's chosen exit code is the semantically right one.** *Observed pressure:* the class occurred
-    once, in `86e8592`, and produced **both** directions of `gate-shape-contract`'s `1-versus-2` bound in one
+    once, in the 0.5.0 window, and produced **both** directions of `gate-shape-contract`'s `1-versus-2` bound in one
     gate — every refusal was `1`, so a shallow clone reported *"the release surfaces disagree"* (a
     misconfiguration as a violation), while the exit-contract backstop converted every genuine incoherence into
     `2` (a violation as cannot-judge). *Observation source:* that commit's own reproduction, and the re-reading
@@ -1882,7 +1896,7 @@ consumer for an undemonstrated deduplication.
 
   *The sibling it was to copy no longer exists.* The Shape reads *lift the derived-disclosure requirement
   into `observation-bound-model`* — that requirement belonged to `gate-shape-contract`, whose spec was
-  retired in this window (`5abda1f`); its holder `the_projection_discloses_every_declared_bound` is gone with
+  retired in the 0.5.0 window; its holder `the_projection_discloses_every_declared_bound` is gone with
   it. There is nothing left to lift, and the entry's Authority named it as the shape to copy.
 
   *And the problem it describes is not the tree's state.* `docs/observation-bound-extents.md` is rendered
@@ -1984,7 +1998,7 @@ that stops the same defect being re-found from scratch. The present-tense `Class
 `Promotion trigger:` lines inside each retained entry describe the state **at the time it was written**.
 
 They live here rather than under their own class heading because an index that carries a question and its
-answer at once is a reader trap — the same reason a stale WATCH line was retired in `68e183b`, applied to
+answer at once is a reader trap — the same reason a stale WATCH line was retired in the 0.5.0 window, applied to
 the larger entries it left in place. **Saying it twice held it nowhere**: the governance section states the
 same rule from the other side, and entries closed after this section was written kept accumulating under
 `### READY-PATCH` and `### WATCH / ACCEPTED / DECLINED / BUILT` regardless — struck through, complete with
@@ -2007,12 +2021,12 @@ that also holds a closed READY-PATCH record.
 
 - **Three spec requirements the shell-to-Rust migration orphaned.** *Class:* READY-PATCH. *Observed
   pressure:* a contributed adversarial review found two; a sweep run to decide their shape found the third.
-  *Observation source:* each of the twelve shell files `64ed18c` deleted, mapped to the spec requirement it
+  *Observation source:* each of the twelve shell files the shell-to-Rust migration deleted, mapped to the spec requirement it
   implemented — nine were correctly swept when they were deleted, three were not. *Current reaction or
   bound:* none; each states a live `SHALL` that nothing runs, which is the failure this whole family exists
   to end, committed inside its own governance.
   - `governance-dogfood`'s focused-matrix ordering requirement and its three scenarios — **REMOVE**. The
-    decision was made and recorded in `dd6e1f8`, in `dod_coherence.rs`'s doc comment and in the retired
+    decision was made and recorded in the 0.5.0 window, in `dod_coherence.rs`'s doc comment and in the retired
     remediation queue; it never reached the spec.
   - `reference-integrity`'s fixture-policy requirement and its three scenarios — **REVISE**. The capability
     changed shape rather than vanishing: the port parameterises `offences_in` directly instead of accepting
@@ -2046,7 +2060,7 @@ that also holds a closed READY-PATCH record.
   **This entry said "one OpenSpec lifecycle" and that was wrong about this repository.** Measured: the
   `explore → propose → apply → sync` lifecycle `AGENTS.md` then described has **never run here** — zero
   `docs(openspec): propose`/`sync` commits in the whole history, and `openspec/changes/` untouched since
-  `2f903fb` (`release: 0.1.0`), which is when its `.gitkeep` was added. The `v0.4.0..0.5.0` window edited
+  `0.1.0`, which is when its `.gitkeep` was added. The `v0.4.0..0.5.0` window edited
   `openspec/specs/*/spec.md` in 151 commits, every one an ordinary `fix:`/`feat:`/`docs:`. `READY-PATCH` is a
   **compatibility class** in this file's own definition above, not a process exemption, and conflating the
   two is what produced the wrong claim. *Version class:* patch; repository-internal, shipping in no crate.
@@ -2079,7 +2093,7 @@ that also holds a closed READY-PATCH record.
   `crates/kanhe/tests/reference_integrity.rs` gained a throwaway git-repository fixture proving every
   refusal (exit 1 and exit 2) and pass direction. **That closure named the wrong subject and does not hold
   at `HEAD`.** The fixture described was the shell era's throwaway test companion to its
-  `reference_integrity` gate script, added by `f41b3b9` — both deleted by `64ed18c` when `scripts/`
+  `reference_integrity` gate script, added in the shell era — both deleted by the shell-to-Rust migration when `scripts/`
   migrated to Rust. *Observed pressure:* the current `crates/kanhe/tests/reference_integrity.rs` (1,300+ lines) has
   no `git init` fixture, no exit-code matrix, and never uses `kanhe::refusal::Kind`; its `scratch()` helper
   builds plain temp directories for unit-testing isolated parsing subroutines, not a fixture repository
@@ -2105,7 +2119,7 @@ that also holds a closed READY-PATCH record.
 
 - **Owner-label identity collapses across a cfg-collided self-type alias.** Class:
   DESIGN-BREAKING. Observed pressure: reproduced by the maintainer during round-3
-  adversarial review of `change/hunyi-cfg-branch-use-reexport-merging` (PR #149) —
+  adversarial review of `change/hunyi-cfg-branch-use-reexport-merging` —
   two genuinely independent violations sharing one cfg-collided self-type alias
   (`#[cfg(unix)] use crate::a::Foo as X; #[cfg(not(unix))] use crate::b::Bar as X;`,
   each arm implementing the same governed trait) render the identical single-candidate
@@ -2123,10 +2137,10 @@ that also holds a closed READY-PATCH record.
   probing. Promotion trigger: either a redesigned owner identity that stays injective
   across cfg-ambiguous candidates, or a different anti-collapse key not fed by a
   single-candidate renderer — real design work, not a mechanical multi-candidate swap
-  (explicitly scoped out of PR #149 as its own follow-up). Version class:
+  (explicitly scoped out of that change as its own follow-up). Version class:
   DESIGN-BREAKING (an injective owner identity almost certainly changes baseline
   `finding_key` shape for every affected capability). Authority: `PROJECT.md`'s
-  violation-identity decisions, PR #149's commit body (which names this exact gap and
+  violation-identity decisions, that change's commit body (which names this exact gap and
   scopes it out as a follow-up).
 
 - ~~**An absolute `#[path]` literal's identity still disagrees across checkouts when its target
@@ -2147,7 +2161,7 @@ that also holds a closed READY-PATCH record.
 - **An absolute `#[path]` literal's identity still disagrees across checkouts when its
   target coincidentally lies under one checkout's own anchor.** Class: DESIGN-BREAKING.
   Observed pressure: found during round-2 adversarial review of
-  `change/louke-unauditable-probe-relative-identity` (PR #157), which closed the
+  `change/louke-unauditable-probe-relative-identity`, which closed the
   general relative-path case but left this one already-non-portable construct
   unresolved. Observation source: pinned regression test
   `a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap`, which failed
@@ -2159,12 +2173,12 @@ that also holds a closed READY-PATCH record.
   back to the raw absolute path in another — the two checkouts' `unauditable-probe`
   identities differ. Risk: narrow — an absolute `#[path]` literal is already
   non-portable and machine-specific by construction; this only affects that one already
-  fragile idiom, not the realistic relative sibling-share case PR #157 fixed. Promotion
+  fragile idiom, not the realistic relative sibling-share case that change fixed. Promotion
   trigger: threading "was this file reached via an absolute `#[path]` literal" through
   the whole `resolve_path_module`/`external_module_files`/`collect_scope_modules`/
   `collect_reachable_probes` pipeline so such a file's label is never relativized at
   all — a separate, scoped refactor. Version class: DESIGN-BREAKING (changes
-  un-auditable-probe identity shape for this construct). Authority: PR #157's commit
+  un-auditable-probe identity shape for this construct). Authority: that change's commit
   body. The bound was also stated in `crates/louke/src/finding.rs`/`audit.rs`'s own doc comments and in
   `openspec/specs/runtime-origin-assertion/spec.md`; all three now state the CLOSED rule instead (an
   absolute literal is never relativized), so this record's description of the old behaviour is history,
@@ -2604,7 +2618,7 @@ that also holds a closed READY-PATCH record.
   second instance. This is the first.
 
   **Retired two commits later, in the same window.** `gate-shape-contract` itself — the capability this entry
-  closed with — was retired by `5abda1f`, once `scripts/` held nothing but `merge-pr.sh` and `publish.sh` and
+  closed with — was retired in the 0.5.0 window, once `scripts/` held nothing but `merge-pr.sh` and `publish.sh` and
   the capability's own projection read `0 gates, 11 properties each`: nothing left to pair, nothing left to
   enumerate. The pairing this entry describes, and every property and bound declared under it, no longer
   exists at `HEAD`. Recorded here rather than deleted, since the shape this entry closed — a gate's own
@@ -2641,7 +2655,7 @@ that also holds a closed READY-PATCH record.
   needs enough data to fill a pipe buffer; migrated with the class and recorded as migrated without a demonstrated
   negative run. Trigger for revisiting: a swallowed status found in a shape the property does not reach.
 
-  **Retired with the rest of `gate-shape-contract`, by `5abda1f`.** The eleventh property, the shared capture
+  **Retired with the rest of `gate-shape-contract`, in the 0.5.0 window.** The eleventh property, the shared capture
   library, and the `--ordinary-empty` per-call-site contract this entry describes were all part of the same
   capability, deleted whole once it reached the vacuity its own bounds warned about. Nothing at `HEAD` still
   asserts either failure direction measured above; a future instance of a swallowed subshell status would
@@ -2779,7 +2793,7 @@ that also holds a closed READY-PATCH record.
   *Note, 2026-08-21: the mode this closure recorded was itself wrong, and the correction is in `PROJECT.md`'s
   Decisions. `has never used the second` was measured over the release spine and stated over the repository:
   `git log --all` reaches dozens of change directories, and this entry's own observation source — `openspec/changes/**`
-  untouched since `2f903fb` — reads only what a release-spine checkout tracks. The closure's diagnosis
+  untouched since `0.1.0` — reads only what a release-spine checkout tracks. The closure's diagnosis
   survives it: the adoption decision was written down nowhere, and writing it down was right. Which mode got
   written is what the correction moves.*
 
@@ -2876,7 +2890,7 @@ it before assigning a horizon here; the entries below are horizons, not a second
   branch name, and the only prose naming it was this paragraph.
 
   What was deliberately not done **when this entry was written**: the version bump, the dated CHANGELOG
-  section, the internal pins and `Cargo.lock`, which move together at release preparation. `a9b3f42` has
+  section, the internal pins and `Cargo.lock`, which move together at release preparation. the 0.5.0 preparation has
   since done all four, so the gate reports `release-ready: 0.5.0` rather than the `development: 0.4.0` this
   paragraph described. Corrected rather than deleted, because the point it was making survives and is the
   one that matters here: the gate reads versions, never a branch name, so the rename changed nothing it

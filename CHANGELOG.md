@@ -7378,6 +7378,58 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No behaviour moves and no published API, outcome, report, exit class or manifest changes.
 
 
+- **A citation in live text anchors to a release, because `main` is made of releases.** Six review rounds
+  swept this repository for typed counts, live line counts, relative anchors and word-form figures — every
+  drift class except the one where the *citation itself* is the moving part. A commit hash looks like the most
+  precise anchor available, which is exactly why nobody examined it.
+
+  `main` carries one commit per release: a whole development window squashes into a single `release: X.Y.Z`
+  commit, so a development commit is unreachable from it **by construction** — not eventually, and not
+  pending the next squash. Measured over the live governance documents: of the commit objects they cited, all
+  but one were already unreachable from `origin/main`, and that one is a release commit which its version
+  names better anyway. They resolve in a working clone only because it still holds the branches; on a fresh
+  clone of `main` they are gone. Hosting serials were never in the tree at all. `AGENTS.md` already
+  dispositions both as **provenance** — *it names when, not what, and nothing downstream reads it* — and the
+  file that states the row was breaking it.
+
+  **This one is a reaction where the neighbouring rule stays a rule, and the difference is that nothing in it
+  is a judgement about a sentence.** A token is shaped like an abbreviated object or it is not; a `#` is
+  followed by a digit or it is not. So the completeness of the sweep is proved by something that refuses,
+  rather than asserted by whoever ran the grep — which is the half that kept failing: the count in the
+  sibling bound moved three times and was wrong at every site, each move being a fresh act of typing.
+
+  **The predicate is measured in both directions rather than assumed.** Requiring hex characters alone
+  over-reaches on shapes this tree actually holds — a specification writes a long run of digits as the figure
+  a fabricating reader produced, and English carries words spelled entirely from the hex alphabet at this
+  length. Requiring **both** a letter and a digit admits neither, catches every citation that was live, and
+  gives up the abbreviations carrying only one kind of character: 3.8% of uniformly random seven-character
+  abbreviations, computed from the alphabet. That direction is deliberate — the Core Contract forbids a false
+  refusal more strictly than a miss — and the residue is declared as a bound rather than left implicit.
+
+  Records are excluded by path and the exclusion is verified in the direction that matters: the same two
+  shapes planted in `CHANGELOG.md` are not reported, and planted inside a fenced block they are not reported
+  either, because a fence is where a command lives and a command may name an object legitimately.
+
+  Forty-seven citations were rewritten, and the anchor for each was **computed rather than chosen**: every
+  cited object was resolved against the release tags to find the window it belongs to. Where a change had a
+  name it keeps it — a change name is text and survives a squash — and where a serial stood in for a change,
+  the change's own name was already beside it.
+
+  **Two existing gates refused this change's own new code before any review did.** The shared-reader gate
+  caught the first draft pairing backticks by hand — the exact shape `reading::backticked` exists to own, and
+  the exact class three commits in this window were about — so the reader now takes its spans from
+  `reading::backticked_by_paragraph` over `region`'s prose, with dropped lines rebuilt as empty ones so line
+  numbers stay the document's own. And `bound_register` refused the declared census the moment the new bound
+  moved it. Neither was found by reading.
+
+- **The measurement that moved three times is gone rather than moved a fourth.** The relative-phrase bound's
+  tracker recorded *nine occurrences measured at* a commit. Three things were wrong at once: nine was a
+  **line** count where the sentence said occurrences, it was the **parent's** value attached to the child, and
+  the anchor was a commit no reader of `main` can reach. The entry now keeps what it can defend — the corpus
+  and the command, which is the disposition table's *stays* — and states that no count is written, with the
+  three failed attempts as the reason rather than an argument for a fourth.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

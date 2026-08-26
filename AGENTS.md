@@ -512,7 +512,7 @@ grep looks for; a retirement removes the subject a `CHANGELOG.md`/`BACKLOG.md` e
 an entry that still describes the retired mechanism in the present tense is exactly as stale as one
 naming a retired term — the sweep above did not name this case because nothing had measured it yet.
 Measured in the 0.4.0..0.5.0 window: two capability retirements inside the same review window
-(`64ed18c`'s shell-to-Rust migration, `5abda1f`'s `gate-shape-contract` retirement) each landed cleanly
+(the shell-to-Rust migration, the `gate-shape-contract` retirement) each landed cleanly
 against the code they touched, but left `CHANGELOG.md`/`BACKLOG.md` entries elsewhere in the *same*
 window narrating the since-deleted mechanism as current — nine such entries, found only by an
 adversarial contract review reading every entry against `HEAD` rather than against the commit that
@@ -706,8 +706,9 @@ directions: a **new** file that has not been added is invisible and its offences
 **tracked** file modified and left unstaged is read as it stands on disk and is judged normally. Staging is
 enough; committing is not required.
 
-The failure mode is a full pass that means less than it looks. `#556`'s Definition of Done ran green over a
-file it had never opened, and the next round's suite failed on that same file, unchanged in between — the
+The failure mode is a full pass that means less than it looks. Measured in the 0.4.0 window: one change's
+Definition of Done ran green over a file it had never opened, and the next round's suite failed on that same
+file, unchanged in between — the
 per-crate steps compile the worktree and do see new files, so most of the suite is green for real and only
 the repository-wide gates are blind. A partial blindness is far more convincing than a total one.
 

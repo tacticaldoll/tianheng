@@ -207,8 +207,8 @@ govern-by-reaction, never a thing the tool wields.
 
 Record significant decisions here (the *why*; specs and code carry the *what*).
 
-- **Accepted: 繩墨 and 勘合 are formations of the law, not a relocation of it.** `09c29d0` added two crate
-  boundaries to `shengmo::law::constitution()` under a commit body reading *the law itself did not change:
+- **Accepted: 繩墨 and 勘合 are formations of the law, not a relocation of it.** The 0.5.0 window added two
+  crate boundaries to `shengmo::law::constitution()` under a commit body reading *the law itself did not change:
   the regenerated projection differs by exactly three lines, all of them the preamble's own self-reference*.
   The projection gained nineteen lines, fourteen of them these two entries, with their own targets, rules and
   severities. What was recorded as a relocation was a formation, and a formation carries its own acceptance.
@@ -341,7 +341,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   mechanically checked declared as bounds. It supplied the cycle's sharpest evidence that a
   hand-written table is not an enumeration — the backlog entry proposing it described the surface as uniform, and
   applying it found two properties that were not, one of which no twin held at all once the assertion was
-  actually observed rather than counted. **It was retired by `5abda1f` in the same window**, once the shell
+  actually observed rather than counted. **It was retired in the same window**, once the shell
   gates it enumerated were deleted and its subject no longer existed; `repository-checks` holds what replaced
   them. The lesson is what the cycle keeps — the capability was the instrument, not the finding.
   `projection-register` is the fourth and turns the cycle on the
@@ -387,8 +387,8 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
 
   *(Recorded 2026-08 as `specs` mode only, and corrected 2026-08-21 after the record was measured against the
   tree rather than against itself. The retired claim was that **zero change directories have ever existed** —
-  false in the plainest sense: `git log --all` reaches dozens of them, `c52cd1d` and `9fa3ee5` committed one
-  each on 2026-08-21, and the two commits on that day's tip say in their own bodies that the work was proposed
+  false in the plainest sense: `git log --all` reaches dozens of them, two commits on 2026-08-21 added one
+  each, and both say in their own bodies that the work was proposed
   and synced through one. Four repository checks handle the directory's live content, and one of those
   exclusions is stated as a requirement with a scenario in `openspec/specs/reference-integrity/spec.md` — so a
   capability spec and this decision had been contradicting each other for the whole window. The claim was true

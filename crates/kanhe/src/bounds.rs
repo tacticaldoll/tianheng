@@ -619,6 +619,30 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *a relative phrase in non-record Markdown*",
         ),
+        // The reader requires a letter AND a digit, and both directions it would otherwise refuse are live
+        // here: a specification writes a long run of digits as the figure a fabricating reader produced, and
+        // English carries words spelled entirely from the hex alphabet at this length. Admitting either
+        // would refuse a passage that cites nothing. The residue is the fraction of abbreviations carrying
+        // no letter or no digit, which is computed rather than estimated.
+        BoundDecl::unpinned(
+            BoundId::new(
+                "reference-integrity/an-abbreviation-carrying-no-letter-or-no-digit-is-not-observed-a-stated-bound",
+            ),
+            "a live document citing an abbreviated commit object whose characters are all digits, or all \
+             letters",
+            Extent::Reached(Reached::UnderReacts {
+                because: "requiring both a letter and a digit is what keeps the reader off two shapes this \
+                          tree actually holds -- a long run of digits written as a figure, and an English \
+                          word spelled from the hex alphabet -- and the price is the abbreviations that \
+                          carry only one kind of character. Over uniformly random seven-character \
+                          abbreviations that is 3.8%. The direction is deliberate: the Core Contract forbids \
+                          a false refusal more strictly than a miss, so the reader gives up that fraction \
+                          rather than refuse prose that cites nothing"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *an abbreviation carrying no letter or no digit*",
+        ),
         // The second one, and it is `Unpinned` because the natural pin was measured and is the wrong
         // instrument. `rustdoc -D warnings` DOES refuse an unresolvable `[`name`]` — so rewriting a prose
         // backtick as a link would make an existing reaction the pin. Measured over 8 candidates selected as
