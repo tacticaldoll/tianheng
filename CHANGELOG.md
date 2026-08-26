@@ -22,7 +22,7 @@ them.
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-08-26
+## [0.5.0] - 2026-08-22
 
 ### Documentation
 
@@ -7448,6 +7448,49 @@ no adopter runs. They are here rather than under the adopter headings above beca
   on how a change is assembled rather than a property of the tree, so no reaction here could hold it: what
   holds it is checking out the base branch before cutting a new one, and reading the diff against that base
   rather than the file list.
+
+
+- **The citation reaction's corpus is now what its requirement says, on all three edges where it was not.**
+  The requirement says *a live governance document*; the reader filtered on Markdown. It says *a dated
+  changelog section* is the record; the reader exempted the whole file. It sets no floor on an abbreviation;
+  the reader invented seven characters. Each gap was stated in prose on one side and encoded in a filter on
+  the other, with nothing comparing them — the shape seven review rounds have now found in seven places, and
+  the first time the uncovered half held **live** instances.
+
+  **The corpus is split by predicate rather than by sweep.** An abbreviated object is recognised in every
+  format this capability classifies as carrying prose, because nothing in the tree writes that shape in a
+  comment except a citation — measured over every classified line-comment format, every code span of that
+  shape was a real citation and none was anything else. That closed **seven** live citations a Markdown-only
+  reader could not see: two more than the finding named, and two of them inside the file that implements the
+  reaction. One was verbatim the defect the reaction exists to stop — *measured at `<object>`, before …* —
+  written in Rust instead of Markdown; one was a citation removed from `BACKLOG.md` in the previous commit
+  and left standing in a doc comment, the same anchor deleted on one side of a corpus boundary and kept on
+  the other; and one was the illustration of what *anchoring* looks like, which anchored to an object.
+
+  A hosting serial stays Markdown-only, and that half is now a **declared bound** instead of a line inside a
+  scenario's `WHEN`. The reason was already law: `AGENTS.md` records that the bare serial shape *is* the
+  fixture for the squash-serial check, and `merge_message`'s directions plant it as text for that check to
+  judge — so a reader over Rust would refuse the very check that forbids serials. The collision is with the
+  shape rather than with a spelling, so narrowing the pattern does not reach it.
+
+  **`CHANGELOG.md` is not a record; its dated sections are.** Exempting the file made `## [Unreleased]` —
+  live text by construction — exempt for standing in the same file as the releases below it. The exemption is
+  now by section, cut by `sections`, which owns cutting. Verified in both directions at once: with a citation
+  planted under `[Unreleased]` the reaction names it, while the 24 objects cited in the dated sections above
+  it stay silent in the same run.
+
+  **The floor is git's, not this reader's.** `git rev-parse --short=4` is accepted, so four is where an
+  abbreviation starts being one; seven was invented here and missed everything shorter. Measured at floors 4,
+  5 and 6 over the live corpus: no additional token of this shape exists, so the gap closes without a bound
+  and without a false refusal. Seen to fail: a six-character citation planted in a Rust doc comment is now
+  named, where the previous floor passed it.
+
+  A numeric character reference is excluded from the serial reader, because `&#NNN;` is a lexical fact rather
+  than a judgement and a false refusal over one is the direction the Core Contract forbids more strictly.
+  None is in the tree; the exclusion is measured by planting one and watching the reaction stay silent.
+
+  One residue of the previous commit's mechanical sweep is repaired with it: a sentence left starting in
+  lower case where a citation had been removed from its front.
 
 
 ## [0.4.0] - 2026-08-04

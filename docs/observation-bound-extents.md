@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**51 of 97 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**52 of 98 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -24,6 +24,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound` — owner: engine
 - `publish-source-integrity/the-tree-changing-after-the-gate-passed-is-not-observed-a-stated-bound` — owner: engine
 - `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound` — owner: inherited from the verification environment
+- `reference-integrity/a-hosting-serial-outside-markdown-is-not-observed-a-stated-bound` — owner: engine
 - `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound` — owner: engine
 - `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound` — owner: engine
 - `reference-integrity/a-rust-identifier-named-in-prose-is-not-resolved-a-stated-bound` — owner: engine
@@ -442,7 +443,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (51)
+## under-reacts (52)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -595,6 +596,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: validity is verifiable with no configuration and attribution is not — it needs an allowed-signers file that exists on a maintainer's machine and not in CI, so requiring it would make the same tag judged differently by where the gate ran
 - **its defence must show**: does not react
 - **pinned by**: `a_valid_signature_from_an_unauthorized_key_is_accepted`
+
+### `reference-integrity/a-hosting-serial-outside-markdown-is-not-observed-a-stated-bound`
+
+> a bare hosting serial written in a comment, in any line-comment format
+
+- **because**: the bare serial shape is the FIXTURE for the squash-serial check, so a reader over that format would refuse the check that forbids the thing -- the collision is with the shape rather than with a spelling, so narrowing the pattern does not reach it. The abbreviated-object half has no such collision and is therefore not restricted
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *a hosting serial outside Markdown*
 
 ### `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound`
 

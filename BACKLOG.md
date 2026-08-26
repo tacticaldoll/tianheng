@@ -401,7 +401,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated —
   in the 0.5.0 window, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
   **1048** lines carrying `SHALL`, across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **97 bounds across 25 capabilities** — a live figure rather than part of the measurement
+  currently holds **98 bounds across 25 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -1502,6 +1502,22 @@ consumer for an undemonstrated deduplication.
   package, which is what closes the equivalent window on the merge path; until then narrowing is the only
   available move and it is already taken. *Authority:* engine. *Compatibility:* patch; the wrapper ships in
   no crate.
+
+- **WATCH: a hosting serial outside Markdown.** *Class:* WATCH. *Observed pressure:*
+  `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach` recognises an abbreviated commit object in
+  every classified prose format, but a bare hosting serial only in Markdown. *Observation source:*
+  `AGENTS.md` already records why no reaction over the serial shape was possible — the bare shape *is* the
+  fixture for the squash-serial check, and `merge_message`'s directions plant it as text for that check to
+  judge, so a reader over Rust would refuse the check that forbids the thing. Measured when this bound was
+  written: the abbreviated-object half has no such collision, every code span of that shape in a comment
+  being a real citation, which is why the corpus is split by predicate rather than by sweep. *Current
+  reaction or bound:*
+  `reference-integrity/a-hosting-serial-outside-markdown-is-not-observed-a-stated-bound`. *Risk:* a comment
+  cites a serial and reads as anchored — bounded by the object half covering the same corpus, so a citation
+  that names a commit is caught wherever it is written. *Next trigger:* a way to tell a fixture's planted
+  text from a comment's own claim that does not read the sentence — the check's own corpus declaring what it
+  plants, say. *Authority:* engine. *Compatibility:* patch; the reaction is repository machinery and ships in
+  no package.
 
 - **WATCH: an abbreviation carrying no letter or no digit.** *Class:* WATCH. *Observed pressure:*
   `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach` recognises an abbreviated commit object by
@@ -2890,7 +2906,7 @@ it before assigning a horizon here; the entries below are horizons, not a second
   branch name, and the only prose naming it was this paragraph.
 
   What was deliberately not done **when this entry was written**: the version bump, the dated CHANGELOG
-  section, the internal pins and `Cargo.lock`, which move together at release preparation. the 0.5.0 preparation has
+  section, the internal pins and `Cargo.lock`, which move together at release preparation. The 0.5.0 preparation has
   since done all four, so the gate reports `release-ready: 0.5.0` rather than the `development: 0.4.0` this
   paragraph described. Corrected rather than deleted, because the point it was making survives and is the
   one that matters here: the gate reads versions, never a branch name, so the rename changed nothing it

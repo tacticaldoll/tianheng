@@ -5,7 +5,7 @@
 //! violated* keeps the invariant and drops the debrief. Twenty-eight doc lines across five published crates
 //! carried the round number anyway, eleven of them as the index to `see PROJECT.md's Decisions` — and
 //! `PROJECT.md` holds **no** entry organised by round, so those eleven pointed at a structure that does not
-//! exist. Measured at `11674bc`, before the cleanup this check now holds.
+//! exist. Measured in the 0.5.0 window, before the cleanup this check now holds.
 //!
 //! **Not an adopter-facing defect, and saying so is the honest scope.** None of the twenty-eight attached to
 //! a `pub` item — ten private, eight `pub(crate)`, one private-module `//!` — so `cargo doc --no-deps`
