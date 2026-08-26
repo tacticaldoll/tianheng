@@ -453,3 +453,54 @@ fn two_workspace_version_keys_refuse_rather_than_the_first_answering() {
         "the cut keeps each table's keys to itself; counting across tables would refuse a legal manifest"
     );
 }
+
+/// A quoted key carries its dots, and an array of tables is not the same table.
+///
+/// **Three claims about one reader, two of them refuted by running it.** A review read the shared heading
+/// reader as folding `["workspace.package"]` — one literal key in TOML, not the path `workspace` → `package` —
+/// into the path, and `["workspace.dependencies"]` into a real dependency table. Neither happens: splitting on
+/// every dot before unquoting leaves each half with an unmatched quote, so the name keeps them and matches
+/// nothing. The flattening is correct rather than merely safe, and this direction is what says so out loud.
+///
+/// The third claim held: a flattened name folded `[[package]]` into `[package]`, and an array of tables is a
+/// different shape — the lock file's entries are exactly that, which is why the reader cutting them was still
+/// comparing literal text and stayed a fifth implementation of this question.
+#[test]
+fn a_quoted_key_carries_its_dots_and_an_array_is_not_a_table() {
+    use crate::manifest::table_heading;
+
+    // The spellings cargo folds together, folded.
+    for same in ["[package]", "[ package ]", "[\"package\"]", "['package']"] {
+        assert!(
+            table_heading(same).is_some_and(|h| h.is_table("package")),
+            "{same} names the package table"
+        );
+    }
+    assert!(
+        table_heading("[\"workspace\".\"package\"]")
+            .is_some_and(|h| h.is_table("workspace.package")),
+        "a quoted path is the path, because each segment's quotes close"
+    );
+
+    // The spellings TOML keeps apart, kept apart.
+    for literal in [
+        "[\"workspace.package\"]",
+        "['workspace.package']",
+        "[\"workspace.dependencies\"]",
+    ] {
+        let heading = table_heading(literal).expect("a heading");
+        assert!(
+            !heading.is_table("workspace.package") && !heading.is_table("workspace.dependencies"),
+            "{literal} is one literal key and not a dotted path, got {heading:?}"
+        );
+    }
+
+    // An array of tables answers only to `is_array`, and the table form only to `is_table`.
+    let array = table_heading("[[package]]").expect("a heading");
+    assert!(array.is_array("package") && !array.is_table("package"));
+    let table = table_heading("[package]").expect("a heading");
+    assert!(table.is_table("package") && !table.is_array("package"));
+
+    // Not a heading at all.
+    assert_eq!(table_heading("name = \"x\""), None);
+}

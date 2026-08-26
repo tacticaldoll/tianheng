@@ -2074,12 +2074,16 @@ fn a_family_pin_under_a_target_triple_is_read() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// A family pin under a **quoted cfg** target table is still not read, which is the declared bound.
+/// A family pin under a **quoted cfg** target table is read, which is where the bound moved to.
 ///
-/// The control for the direction above: it holds against a reader that stopped where the bound says, and
-/// fails against one that admitted every `[target.…]` heading alike. It is not a negative run — it passed
-/// before the change too — and it is here because the change it guards is a change to where the reader
-/// stops, which only a pair of cases can locate.
+/// **This direction's prose used to say the opposite of its own assertion.** It asserted the pin was *not*
+/// read, as the declared bound then said. Converging the four heading readers onto one that unquotes each
+/// segment closed that: quoting alone hides nothing now, and this direction went red — which was the bound's
+/// own WHEN, re-run, and the measurement that narrowed it.
+///
+/// The bound that remains is a cfg expression carrying a **dot**, where stepping past the target context
+/// splits inside the expression. The pair with the direction above still locates where the reader stops; what
+/// moved is which side of it this case sits on.
 #[test]
 fn a_family_pin_under_a_quoted_cfg_target_is_observed() {
     let root = scratch("target-cfg");

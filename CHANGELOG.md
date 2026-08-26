@@ -7812,6 +7812,38 @@ no adopter runs. They are here rather than under the adopter headings above beca
   shape elsewhere.
 
 
+- **The heading reader carries the table's kind, and the fifth implementation of its question is gone.** A
+  flattened name folded `[[package]]` into `[package]` — an array of tables is a different shape, and a lock
+  file's entries are exactly that, which is why the reader cutting them was still comparing literal text and
+  had stayed a fifth place deciding *which table is this*. `manifest::table_heading` answers both halves now,
+  a caller says which it means, and the lock reader asks like the rest. Seen to fail: with the kind collapsed
+  back, an array-of-tables heading answers to the table form.
+
+  **Two findings against that reader are refuted by running it, and the refutation is pinned rather than
+  asserted.** `["workspace.package"]` is one literal key in TOML and not the path `workspace` → `package`; a
+  review read the reader as folding the two together, and as folding `["workspace.dependencies"]` into a real
+  dependency table. Measured: the first answers `Absent` and the second `Other`. Splitting on every dot before
+  unquoting leaves each half with an unmatched quote, so the name keeps them and matches nothing — the
+  flattening is **correct** rather than merely safe, since TOML keeps those tables apart too. A direction now
+  holds both the spellings cargo folds and the ones it does not, so the next reader of this does not have to
+  take the last one's word.
+
+  **And the discriminator inside the target-context reader is described as what it now is.** Its doc said
+  quoting was the discriminator and the quoted case was the bound. Since the heading arrives already unquoted,
+  a *surviving* quote means something narrower and more useful: the expression carried a dot, so the split
+  cut its quoting open. `[target."cfg(any(a.b))".dependencies]` arrives as `"a.b".dependencies` after the
+  context, and the opening quote is what says so. That check is the remaining bound's mechanism, not a guess
+  about grammar.
+
+- **Three passages still said every quoted cfg target was unobserved, one of them a test whose prose
+  contradicted its own assertion.** The convergence that closed the quoted case narrowed the bound, its
+  scenario and its tracker — and left the reader's doc, the direction's doc, and the backlog entry saying the
+  old rule. The direction was the sharpest: it asserted the refusal and explained that the pin *is not read*.
+  All three now name the boundary that exists — quoting alone is read; a dot inside the expression is not —
+  and the direction's doc records that its own prose used to say the opposite of its assertion, because a
+  reader who finds that once should be told it was found rather than left to wonder.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

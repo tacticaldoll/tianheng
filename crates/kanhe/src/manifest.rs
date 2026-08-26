@@ -146,7 +146,9 @@ pub fn workspace_version(text: &str) -> WorkspaceVersion {
     // stopped the comment from causing that; taking the cut removes the second test entirely, so the shape
     // cannot recur for a spelling nobody thought of.
     let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
-        is_table(line).then(|| table_name(line).is_some_and(|name| name == "workspace.package"))
+        is_table(line).then(|| {
+            table_heading(line).is_some_and(|heading| heading.is_table("workspace.package"))
+        })
     });
     // `version` then `=`, so `version.workspace` and any other `version…` key is not this key.
     let values: Vec<&str> = tables
@@ -333,46 +335,70 @@ pub fn publishable(text: &str) -> Publishable {
 /// it — while `trimmed == "[package]"` skipped both, and a reader that skips the table answers *publishable*
 /// for a crate cargo refuses to publish. `[package.metadata]` is a different table and stays one.
 fn names_the_package_table(header: &str) -> bool {
-    table_name(header).is_some_and(|name| name == "package")
+    table_heading(header).is_some_and(|heading| heading.is_table("package"))
 }
 
-/// What table a TOML heading names, in the spellings cargo treats as one.
+/// A TOML table heading: which table it names, and whether it opens an **array** of tables.
 ///
-/// **One rule, one implementation, because it had four and only one of them was right.** `[ package ]`,
+/// **One rule, one implementation, because it had five and only one of them was right.** `[ package ]`,
 /// `["package"]` and `[package]` are the same table to cargo — measured, each reports `publish=[]` for a
 /// `publish = false` beneath it — and a reader comparing raw text saw only the third. That equality was
-/// measured once, repaired at `names_the_package_table`, and left standing at three sibling predicates: the
-/// `[workspace.package]` cut, `package_name`'s `[package]` cut, and `dependency_table`, which strips the
-/// brackets and then compares without trimming or unquoting. A review found all three in one pass. After this
-/// there is one place to be wrong, and the compiler reaches every caller.
+/// measured once, repaired at one predicate, and left standing at the `[workspace.package]` cut,
+/// `package_name`'s cut, `dependency_table`, and the lock reader's `== "[[package]]"`. A review found them.
 ///
-/// Segments are unquoted and trimmed individually, so `[ "workspace" . package ]` reads as
-/// `workspace.package` — cargo's own equality, and the reason this returns the joined dotted name rather than
-/// a boolean: three callers ask about different tables and a boolean would be a fourth implementation of the
-/// question.
+/// **The kind is carried because a flattened name collapsed `[[x]]` into `[x]`.** An array-of-tables heading
+/// is a different shape, and the lock file's entries are exactly that — so the reader that cuts them asked for
+/// the literal text rather than for this, which is how it stayed a fifth implementation. Both questions are
+/// answered here now, and a caller says which it means.
 ///
-/// `None` when the line is not a heading at all. A heading whose segments cannot be read is not
-/// distinguishable from one naming another table by any means this reader has, so it answers with what it
-/// read; callers that need *cannot judge* compare against the name they want and treat absence as unreadable
-/// rather than as undeclared.
-pub fn table_name(line: &str) -> Option<String> {
+/// **A quoted key keeps its quotes, and that is what makes it a different table rather than the same one.**
+/// `["workspace.package"]` is one literal key in TOML, not the path `workspace` → `package`; splitting on
+/// every dot and unquoting each piece leaves the unmatched quotes in place, so the name reads
+/// `"workspace.package"` and matches neither the path nor anything else. Measured across the spellings that
+/// reach this: `["workspace"."package"]` folds to the path, as cargo folds it, while `["workspace.package"]`,
+/// `['workspace.package']` and `["a.b".package]` stay distinct. The flattening is therefore correct rather
+/// than merely safe, and the segments a caller would need to express `a.b` as one key are not needed by any
+/// caller that exists.
+pub fn table_heading(line: &str) -> Option<TableHeading> {
     let trimmed = line.trim();
     let inner = trimmed.strip_prefix('[')?.strip_suffix(']')?;
-    // A doubled bracket is an array-of-tables heading, `[[package]]`, and names the same table.
-    let inner = inner
-        .strip_prefix('[')
-        .and_then(|rest| rest.strip_suffix(']'))
-        .unwrap_or(inner);
-    Some(
-        inner
+    let (array, inner) = match inner.strip_prefix('[').and_then(|r| r.strip_suffix(']')) {
+        Some(inner) => (true, inner),
+        None => (false, inner),
+    };
+    Some(TableHeading {
+        array,
+        name: inner
             .split('.')
             .map(|segment| unquoted(segment.trim()))
             .collect::<Vec<_>>()
             .join("."),
-    )
+    })
 }
 
-/// A TOML key or header segment with its quotes removed, in both quoted forms cargo accepts.
+/// What a TOML table heading names, and whether it opens an array of tables.
+#[derive(Debug, PartialEq, Eq)]
+pub struct TableHeading {
+    /// `true` for `[[name]]`, which is a different shape from `[name]` and not the same table.
+    pub array: bool,
+    /// The dotted path, each segment unquoted; a segment whose quotes do not close keeps them, which is what
+    /// keeps a literal dotted key from folding into a dotted path.
+    pub name: String,
+}
+
+impl TableHeading {
+    /// Whether this heading opens the ordinary table `name` — not an array of tables of the same name.
+    pub fn is_table(&self, name: &str) -> bool {
+        !self.array && self.name == name
+    }
+
+    /// Whether this heading opens an array of tables called `name`.
+    pub fn is_array(&self, name: &str) -> bool {
+        self.array && self.name == name
+    }
+}
+
+/// A TOML key or header segment with its quotes removed, in both quoted forms cargo accepts./// A TOML key or header segment with its quotes removed, in both quoted forms cargo accepts.
 ///
 /// `"publish" = false` and `'publish' = false` are the `publish` key to cargo — measured, each reports
 /// `publish=[]` — and a reader comparing the raw text saw neither, which is the direction that answers
