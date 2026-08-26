@@ -589,6 +589,34 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not",
         ),
+        // The exclusion this declares was stated with two grounds, and only the first reached all of what
+        // it excluded. Markdown is whole-document prose rather than a line-comment format -- true of every
+        // Markdown file. "In a record a relative phrase narrates a past state" is true of `CHANGELOG.md`'s
+        // dated sections and `docs/history/`, and false of `BACKLOG.md`, `AGENTS.md` and the specifications,
+        // which carry no dated sections and are read later by design. So the rule reached further than the
+        // reaction and the uncovered half rested on a reason that did not carry it.
+        BoundDecl::unpinned(
+            BoundId::new(
+                "reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound",
+            ),
+            "one of the declared relative phrases, unanchored, in a tracked Markdown document outside the \
+             record set",
+            Extent::Reached(Reached::UnderReacts {
+                because: "extending the sweep to whole-document prose was measured against the tree it \
+                          would judge, and most of what it would report is not an offence: one occurrence \
+                          is `AGENTS.md`'s own row DECLARING the phrases, three are duration rather than \
+                          pointer -- `admitted it for a window` narrates how long something lasted -- one \
+                          of those three is a generated projection's copy of another, and two more are \
+                          already anchored, one by a commit and one by naming the release. A reader over \
+                          text separates none of those groups: telling a phrase that points at a moving \
+                          window from one measuring a span is a judgement about the sentence, which is the \
+                          prose instrument `AGENTS.md` records as designed, measured three times and \
+                          rejected"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *a relative phrase in non-record Markdown*",
+        ),
         // The second one, and it is `Unpinned` because the natural pin was measured and is the wrong
         // instrument. `rustdoc -D warnings` DOES refuse an unresolvable `[`name`]` — so rewriting a prose
         // backtick as a link would make an existing reaction the pin. Measured over 8 candidates selected as

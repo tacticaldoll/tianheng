@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**24 of 95 declared bounds have no pinning test.** That figure is the register's
+**25 of 96 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -252,6 +252,12 @@ fallback used where no manifest exists, which the register spec describes.
 - **pinned by**: `a_valid_signature_from_an_unauthorized_key_is_accepted`
 
 ## reference-integrity
+
+### `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound`
+
+> nothing reacts. Extending the sweep to whole-document prose was measured against the tree it would judge: of the tracked non-record Markdown occurrences, one is `AGENTS.md`'s own row **declaring** the phrases, three are duration rather than pointer — *admitted it for a window*, which narrates how long something lasted — one of those three is a generated projection's copy of another, and two more are already anchored, one by a commit and one by naming the release. Two are genuine. A reader over text separates none of those groups: telling a phrase that points at a moving window from one that measures a span is a judgement about the sentence, which is the prose instrument `AGENTS.md` records as designed, measured three times and rejected
+
+- **unpinned**, tracked by: `BACKLOG.md` — *a relative phrase in non-record Markdown*
 
 ### `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound`
 

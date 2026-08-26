@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**49 of 95 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**50 of 96 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -25,6 +25,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `publish-source-integrity/the-tree-changing-after-the-gate-passed-is-not-observed-a-stated-bound` — owner: engine
 - `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound` — owner: inherited from the verification environment
 - `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound` — owner: engine
+- `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound` — owner: engine
 - `reference-integrity/a-rust-identifier-named-in-prose-is-not-resolved-a-stated-bound` — owner: engine
 - `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound` — owner: engine
 - `release-coherence/a-dependency-declared-under-a-quoted-cfg-target-is-not-observed-a-stated-bound` — owner: engine
@@ -440,7 +441,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (49)
+## under-reacts (50)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -601,6 +602,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the exemption is by section rather than by whether the path was once right, and separating the two needs the tree as it stood at that date — a per-section historical checkout, whose cost is not proportionate to a mistyped path in a record no one may rewrite
 - **its defence must show**: does not react
 - **pinned by**: `a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not`
+
+### `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound`
+
+> one of the declared relative phrases, unanchored, in a tracked Markdown document outside the record set
+
+- **because**: extending the sweep to whole-document prose was measured against the tree it would judge, and most of what it would report is not an offence: one occurrence is `AGENTS.md`'s own row DECLARING the phrases, three are duration rather than pointer -- `admitted it for a window` narrates how long something lasted -- one of those three is a generated projection's copy of another, and two more are already anchored, one by a commit and one by naming the release. A reader over text separates none of those groups: telling a phrase that points at a moving window from one measuring a span is a judgement about the sentence, which is the prose instrument `AGENTS.md` records as designed, measured three times and rejected
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *a relative phrase in non-record Markdown*
 
 ### `reference-integrity/a-rust-identifier-named-in-prose-is-not-resolved-a-stated-bound`
 
