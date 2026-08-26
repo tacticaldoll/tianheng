@@ -7577,6 +7577,44 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API moves; `is_iso_date` gains the visibility its siblings already have.
 
 
+- **A count of a live set is not written down, and the safe way to write one is closed with the rest.**
+  `AGENTS.md` offered two halves: a count this repository *produces* may be written as a **declared census**,
+  held by a reaction that compares it to the produced value; a count it does not produce may not be written at
+  all. The declared half was the escape hatch, and it was used exactly once — and re-typed by hand three times
+  in this one release window, once with the wrong figure.
+
+  Safe was never the same as worth having. A declared census still has to be re-typed every time its set
+  moves, and the reaction can only say the typed figure is stale — never save anyone from typing the next one.
+  So the rule is now one half: **no count of a live set, produced or not.** Where a figure matters, the
+  reaction prints it on every clean run — `bound_register` and `pin_bites` both do — and the reader takes it
+  from the run rather than from prose that can disagree with the run.
+
+  **The mechanism stays armed and the tree states nothing.** `census` still enumerates its sets, names the one
+  sentence a figure may be written in, and sweeps every tracked document for it: a reaction shown to refuse is
+  worth keeping for a class that must not recur, and the requirement it serves is already conditional — *where
+  such a figure is stated*, the reaction reacts. What changed is that nothing states one.
+
+  **That removal broke the census's own proof of life, which is the coupling worth recording.** The control
+  that shows the sweep's agreement is a verdict rather than silence swept the *real tree* with deliberately
+  wrong figures — so it needed a live document to carry the phrase, and its own comment records a previous
+  round where editing that document's figure disabled the control. The last hand-written count in the
+  repository was therefore load-bearing for the direction proving the count-checker works. The control now
+  writes its own subject, like every other direction in that file, which is what makes it independent of
+  whether any document states a census.
+
+  **Everything else of the class went with it, and the line between a count and a record is drawn where
+  `AGENTS.md` already drew it.** Removed: the register's own census; the SHALL, requirement and scenario totals
+  a promotion argument rested on; the citation totals in a bound's reason and in the requirement it serves; a
+  clippy item count; a hand-resolution of a section that has grown since; two round-number sweeps; a spike's
+  test tally; a packaged-file count. Kept: exit codes and a process status, which are values and not counts;
+  fixture literals, which carry their own input; and a figure whose set is **gone** — the deleted shell
+  library's line count, which `AGENTS.md` names as the record form precisely because nothing can drift out
+  from under it.
+
+  Every argument survived the removal, which is the test the rule states: where a count mattered the command
+  that produces it is written instead, and where it did not the sentence says what it always said.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

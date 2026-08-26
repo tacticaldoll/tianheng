@@ -398,33 +398,34 @@ consumer for an undemonstrated deduplication.
   *Current reaction or bound:* none. Only a **bound** carries a `PINNED-BY`; an ordinary requirement is bound to
   nothing, so no gate can tell a SHALL with a reaction from one without. *Risk:* the class recurring and being found
   by hand or not at all — a normative rule nothing enforces is indistinguishable from one that is enforced, which is
-  the failure the bound register was built to end one level down. *Measured before promotion, not estimated —
-  in the 0.5.0 window, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
-  **1048** lines carrying `SHALL`, across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **100 bounds across 25 capabilities** — a live figure rather than part of the measurement
-  above, written in that exact form because it is the one phrasing
-  `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
-  not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
-  the drift class this family already refuses.
+  the failure the bound register was built to end one level down. *Measured before promotion, not estimated,
+  and the commands rather than the figures are what is written down here:* `git grep` for `SHALL` over
+  `openspec/specs/*/spec.md` answers with an order of magnitude more normative lines than the register holds
+  bounds, and the register's own size is **printed by `bound_register` on every clean run** rather than
+  restated in prose — the reaction is the place a reader gets it, and a figure copied here would be a second
+  copy that can disagree. That gap is the argument: a citation per SHALL would add hand-maintained pointers on
+  the order of the SHALL count itself, which is the drift class this family already refuses.
 
-  *The binding is written in 62 places, and this entry said it was written nowhere.* Measured in the 0.5.0 window, by
-  `grep -c '^- \*\*PINNED-BY\*\*'` over `openspec/specs/*/spec.md` and a per-name resolution against every
-  `fn` definition under `crates/` and `examples/`: **161** `PINNED-BY` citations, covering **62 of 364**
-  requirements, and every one of the 161 names a test that exists. They are not unheld either —
-  `crates/kanhe/tests/bound_register.rs` resolves each through `cargo test -p <member> -- --list`, per package,
-  and refuses an empty member enumeration as the vacuity direction; `pin_bites` runs **13** of them against a
-  perturbed tree and requires each to fail. The one ambiguous name carries a crate prefix
+  *The binding is written in many places, and this entry said it was written nowhere.* Re-measurable in one
+  step: `grep -c '^- \*\*PINNED-BY\*\*'` over `openspec/specs/*/spec.md`, resolved per name against every `fn`
+  definition under `crates/` and `examples/`. What the measurement established is not a magnitude but two
+  properties — the citations exist across a substantial minority of requirements, and **every one names a test
+  that exists**. They are not unheld either: `crates/kanhe/tests/bound_register.rs` resolves each through
+  `cargo test -p <member> -- --list`, per package, and refuses an empty member enumeration as the vacuity
+  direction; `pin_bites` runs a declared subset against a perturbed tree, requires each to fail, and prints
+  the size of that subset itself. The one ambiguous name carries a crate prefix
   (`hunyi::a_cfg_gated_module_with_no_file_is_skipped_not_errored`) because it is defined in two crates, so the
   convention already handles the case a bare citation could not.
 
   *First step, in two parts, and the order is what the measurement changes.* **One:** extend the existing
   citation to the requirements whose reaction already exists and is uncited. Sampled in `repository-checks`,
-  where 18 of 32 requirements carry citations and 14 do not, every one of five sampled uncited requirements has
-  a reaction — `gate_exit_classes`, `projection_register`, `dod_coherence`, `one_spelling`,
-  `backlog_classification`. That half needs no capability, and it is what makes *no reaction* distinguishable
-  from *a reaction nobody cited*, which is the state this entry is actually filed for. **Two:** for what a
-  citation cannot reach — 302 requirements, and a citation per SHALL would be the thousand hand-maintained
-  pointers this entry already refuses — find a derivation. That half is a capability to design, and designing
+  where some requirements carry citations and some do not, **every** uncited requirement in the sample has a
+  reaction — `gate_exit_classes`, `projection_register`, `dod_coherence`, `one_spelling`,
+  `backlog_classification`, which is the sample itself rather than a count of it. That half needs no
+  capability, and it is what makes *no reaction* distinguishable from *a reaction nobody cited*, which is the
+  state this entry is actually filed for. **Two:** for the requirements a citation cannot reach — the majority
+  of them, where a citation per SHALL would be the hand-maintained pointers this entry already refuses — find
+  a derivation. That half is a capability to design, and designing
   it inside the closing review of a window would be the same haste this entry documents. What the earlier
   draft got wrong was not the second part; it was reaching it by asserting that the first part did not exist. *Version class:* not release-affecting; a new
   capability with its own gate, preserving every published API. *Authority:* `observation-bound-register`, which
@@ -532,9 +533,10 @@ consumer for an undemonstrated deduplication.
 
 - **Twenty-seven inner comments in published crates index their provenance by review round, and the reaction
   over doc comments does not reach them.** *Class:* WATCH. *Observed pressure:* measured in the 0.5.0 window, by
-  `grep -rnE 'round[- ][0-9]+'` over every published crate's `src`: 28 doc-comment
-  lines and **27** inner-comment (`//`) lines carried a round number. The 28 are repaired and
-  `crates/kanhe/tests/doc_provenance.rs` now refuses them; the 27 are outside its corpus by construction, and
+  `grep -rnE 'round[- ][0-9]+'` over every published crate's `src`: both doc-comment lines and inner-comment
+  (`//`) lines carried a round number. The doc-comment ones are repaired and
+  `crates/kanhe/tests/doc_provenance.rs` now refuses them; the inner-comment ones are outside its corpus by
+  construction, and
   that boundary is asserted by a direction rather than claimed. *Observation source:* the `v0.4.0..HEAD`
   comment-hygiene review, and the enumeration its triage produced. *Current reaction or bound:* none over the
   inner form. *Risk, bounded rather than assumed:* a `//` note is not part of any item's contract and reaches
@@ -968,8 +970,9 @@ consumer for an undemonstrated deduplication.
   re-decision rather than a restatement.
 
   Re-decided: **still not adopted**, and now for a measured reason instead of a claimed one.
-  `clippy::missing_docs_in_private_items` over `kanhe` alone reports **785** undocumented private items
-  across its library and test binaries — measured the day this was re-taken. The lint is the only mechanism
+  `clippy::missing_docs_in_private_items` over `kanhe` alone reports undocumented private items across its
+  library and test binaries in the thousands-of-items order — the command is written here rather than its
+  answer, because the answer moves with every private item added. The lint is the only mechanism
   that closes the private half, and it closes it by demanding a doc on every private item; that cost is not
   proportionate to a class whose instances are individually cheap to repair and whose damage is a misleading
   doc rather than a wrong verdict. *Promotion trigger,* restated so it does not rest on a count nothing
@@ -984,8 +987,9 @@ consumer for an undemonstrated deduplication.
 
 - **WATCH: A reader's corpus can be narrower than the requirement it serves, and this repository's own dimensions
   cannot see the shape.** *Class:* WATCH. *Observed pressure:* the dominant class of the 0.5.0 window. Live
-  instances repaired here: `marks_a_bound` gated pinning-citation resolution so 5 of 75 citations were never
-  validated; `machinery_names` enumerated 0 of 8 workspace members against its own subject; the root
+  instances repaired here: `marks_a_bound` gated pinning-citation resolution so the citations under ordinary
+  scenario headings were never validated; `machinery_names` enumerated none of the workspace members against
+  its own subject; the root
   manifest's `exclude` named one fixture root of two while `.gitignore` named both. *Observation source:* a
   sweep of the window's findings, then the classification in `AGENTS.md`'s *A reader reads its whole subject*,
   which separates four shapes and closes three of them by construction. **This entry counts only the fourth**
@@ -1220,8 +1224,9 @@ consumer for an undemonstrated deduplication.
   `release-coherence` **requires** `[Unreleased]` to be empty in the release-ready state. So from the prepare
   commit until the release, every new CHANGELOG entry is written into a dated section
   `crates/kanhe/tests/reference_integrity.rs` skips, and that section is the largest and newest in the file.
-  *Observation source:* the `[0.5.0]` section measured at 2026-08-16 — 2,572 lines carrying 41 distinct
-  in-repository references (22 prefixed paths, 19 bare basenames), resolved by hand, **all resolving**. So
+  *Observation source:* the `[0.5.0]` section, read through by hand on 2026-08-16 — every in-repository
+  reference it carried, in both the prefixed-path and bare-basename forms, **resolved**. The section has grown
+  since and the figures would have moved with it, so what is written down is the property and the date. So
   the exposure is real and has cost nothing yet. *Current reaction or bound:* none for that window; the
   reasoning is recorded beside the `in_dated_section` skip rather than left for a reader to rediscover.
   *Risk:* bounded and self-limiting — a stale path written into the current version's section survives only
@@ -2352,7 +2357,7 @@ that also holds a closed READY-PATCH record.
   (`member_root_files`, in production), so this was two dimensions diverging from a third rather than a
   family-wide bound — correcting this entry's own earlier claim that the scope question was shared because
   渾儀 uses the same single-root function, which was true of 渾儀 and never checked against 漏刻; a spike over
-  the existing machinery passed 316 of 圭表's 317 tests, so the corpus model tolerated N roots and the
+  the existing machinery passed all but one of 圭表's tests, so the corpus model tolerated N roots and the
   remaining work was identity, not a rewrite; and a target's NAME turned out not to be unique within a
   package (this repository builds a `lib` and a `bin` both named `tianheng`), so the role is the root's
   path relative to the package directory.

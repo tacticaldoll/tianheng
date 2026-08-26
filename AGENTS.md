@@ -318,16 +318,24 @@ string, and on six expected-output literals in its failure matrix; widening the 
 on the fixture censuses the register's own failure matrix writes deliberately; and the one instance that occurred in a **code
 doc** was spelled in words, which no digit-based matcher reads. Most numbers in this repository describe a *shape*
 ("two files of one module yield one violation"), not a census, so a matcher over numbers is mostly false positives.
-The census direction in `crates/kanhe/tests/bound_register.rs` stays what it is — a backstop for the one set whose phrasing is
-stable — and the rule above is what keeps a figure honest.
+The census direction in `crates/kanhe/tests/bound_register.rs` stays what it is — armed for the one set whose
+phrasing is stable, with nothing in the tree stating it — and the rule below is what keeps a figure honest.
 
 
-A census this repository can produce is **declared**: the repository check that enumerates the set names the one
-sentence its figures are written in, and one sweep holds every tracked document to it — `crates/kanhe/tests/census.rs`.
-Adding a census means declaring it, which is what makes it enumerable.
+**A count of a live set is not written down, produced or not.** The declared-census mechanism is retained and
+armed — `crates/kanhe/src/census.rs` enumerates a set, names the one sentence its figures may be written in,
+and one sweep holds every tracked document to it — but the tree carries no such sentence, and the rule is that
+it should not. A declared census is the *safe* way to write a count, and safe was never the same as worth
+having: it still has to be re-typed every time the set moves, and this repository re-typed the one it had three
+times in a single release window, each time by hand and once with the wrong figure. Where a figure matters,
+**the reaction prints it on every clean run** — `bound_register` and `pin_bites` both do — and the reader gets
+it from the run rather than from prose that can disagree with the run. The mechanism stays because a reaction
+that has been shown to refuse is worth keeping armed for a class that must not recur; its directions are held
+against written fixtures rather than against a count in a live document, which is what makes them independent
+of the rule above.
 
-**A count of something this repository does not produce is not written.** That is the other half, and nothing
-observes it. Eight figures were found wrong in one change and three of them counted sets no repository check
+**A count of something this repository does not produce is not written either.** That is the other half, and
+nothing observes it. Eight figures were found wrong in one change and three of them counted sets no repository check
 enumerates — how many spans of a shape a document carries, how many commits a window holds. Each was
 decoration: the sentence it sat in said the same thing without it, right up until the number stopped being
 true. Where the count matters, produce it and let the producing document carry it; where it does not, write

@@ -6,7 +6,7 @@
 //!
 //! It ships in **no package**. That is not incidental — it is the criterion the governance
 //! capability gives for machinery being governance rather than product, and until this crate
-//! existed the apparatus failed it: `cargo package --list -p tianheng` carried all 50 files under
+//! existed the apparatus failed it: `cargo package --list -p tianheng` carried every file under
 //! `tests/`, so every repository check judging this repository's changelog, specs and scripts reached every
 //! adopter, where it could only detect no workspace and return.
 //!
