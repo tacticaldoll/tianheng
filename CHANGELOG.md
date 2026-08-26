@@ -7844,6 +7844,56 @@ no adopter runs. They are here rather than under the adopter headings above beca
   reader who finds that once should be told it was found rather than left to wonder.
 
 
+- **A table heading spelling its name in escapes is decoded, because cargo decodes it — and the reader that
+  refused instead had a whole dependency table's pins going unread.** Put to `cargo metadata` rather than
+  reasoned about: it reads `serde` under `[target.x86_64-unknown-linux-gnu."\u0064ependencies"]`, under
+  `["dep\u0065ndencies"]`, and under the `\xHH` and `\UHHHHHHHH` spellings, so an escape is not a prefix
+  trick and can sit anywhere in a name. A reader answering *undecidable* for a backslash classified such a
+  table as some other table and passed every entry inside it over, while the ordinary pin beside it held the
+  aggregate guard above zero — a **stale pin reaching a clean release**, now reproduced end to end and seen to
+  fail: with the decoder replaced by that refusal, the gate returns *ok release coherence* over a manifest
+  requiring `xuanji = "0.0.1"` against workspace `0.2.0`.
+
+  **Two reviews prescribed the opposite repair, and measurement inverted it.** Both read the undecidable state
+  as a flag consumers could ignore and asked for it to become a required branch at every consumer. That is a
+  true reading of the flag and the wrong fix: for the table above, *undecidable* is not the answer — the answer
+  is that it is the dependencies table and the pin inside it is stale. Decoding removes the state instead of
+  spreading it, which is why this closes the finding by deleting a test rather than by adding arms.
+
+  **The first repair had also traded a false answer for a false refusal.** Any backslash anywhere in a heading
+  refused the whole document — including `[target."cfg(feature = \\"x\\")".dependencies]`, a spelling cargo
+  reads and a spelling a declared bound already claimed was read, and `['other\table']`, where TOML decodes
+  nothing at all. Both are pinned now. The bound's claim about the escaped-quote shape turned out to be true
+  for a reason nobody chose — an undecodable segment left an empty one in the joined name, and the split past
+  the target context landed after it — so a review was right that nothing held it; it is now held through the
+  whole gate, and measured to pass with or without this change, which is what *unpinned* meant there.
+
+- **Two refusals kept their behaviour and lost the reason they gave for it, inside the same unreleased window.**
+  A quoted **value** carrying an escape (`manifest::quoted_value`) and a non-bare **dependency key**
+  (`Package::KeyUnreadable`) both said, in as many words, that decoding was declined because no decoder existed
+  and hand-rolling a TOML grammar is a filed backlog entry. This window wrote that decoder. Neither behaviour
+  changed and both reasons did: a refusal on a *value* or a *key* stops the judgement in front of an operator
+  and skips nothing, where the heading case was silent — and `is_bare_key` answers *is this one bare key*, which
+  `unquoted` does not, so substituting one for the other would read `xuanji.version` as a package of that name.
+  The backlog entry that owns the hand-parsing class records the surface growing by a decoder and why that beat
+  waiting for the parser it is blocked on.
+
+- **The heading behaviour had no scenario in any spec, which is why a review could only cite doc comments.** The
+  reader is production machinery both git-reading gates call, and what it does with an escape was written down
+  only in Rust prose. `release-coherence` now carries it as a scenario with its own direction: what is decoded,
+  what is left undecidable — an escape cargo itself rejects, `["\q"]` and `["\uD800"]`, measured — and why the
+  consumers that pass such a heading over are bounded rather than forgotten, since a manifest carrying one
+  fails `cargo metadata` and reaches no build.
+
+  Recorded because the sweep of this change's own diff found what the reviews had been finding instead: a count
+  of a live set in new prose (*five consumers*, in the sentence explaining that consumers no longer count), and
+  a *measured against cargo* claim standing over rows that had not been put to it. The rows were measured rather
+  than the sentence softened — and measuring them caught a probe that answered a different question than it was
+  asked: a `\t` escape put to cargo inside a package **name** is refused for the name a tab makes, not for the
+  escape, so it had to be re-asked of a heading, where cargo accepts it. Cargo's own refusal message does not
+  list `\t` among the escapes it names, and it takes it.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

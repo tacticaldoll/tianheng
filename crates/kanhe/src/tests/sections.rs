@@ -151,7 +151,7 @@ fn a_foreign_table_heading_still_closes_the_block() {
          source = \"registry+https://example.invalid/index\"\n",
     );
     let blocks = cut(lock.toml().numbered_lines(), |line| {
-        crate::manifest::is_table(line).then(|| line.trim() == "[[package]]")
+        crate::manifest::table_heading(line).map(|h| h.names_array("package"))
     });
 
     let mine: Vec<&Section<bool>> = blocks.iter().filter(|block| block.name).collect();

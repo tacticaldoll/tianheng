@@ -466,6 +466,19 @@ consumer for an undemonstrated deduplication.
   *Authority:* this entry, `AGENTS.self-law.md`, `crates/kanhe/tests/release_coherence.rs`'s documented bug
   history.
 
+  **The surface grew by an escape decoder, and that was the cheaper of two wrong answers rather than a
+  reversal of this entry.** `manifest::decoded` resolves the escapes cargo resolves in a table heading or a
+  key. It was added because the alternative was measured and was worse: `cargo metadata` reads `serde` under
+  `[target.x86_64-unknown-linux-gnu."\u0064ependencies"]` and under `["dep\u0065ndencies"]`, so a reader that
+  answered *undecidable* for a backslash left every pin in such a table unread while an ordinary pin beside it
+  kept the aggregate guard satisfied — a silent false negative in the production gate, reproduced as a clean
+  release in `an_escaped_dependency_table_heading_is_read_as_the_table_cargo_reads`. The promotion trigger
+  above is a steward amendment ritual, which is not a thing to wait behind with a false negative open. The
+  refusals that gave that reason kept their behaviour and changed the reason: a **value** carrying an escape
+  (`manifest::quoted_value`) and a **non-bare dependency key** (`Package::KeyUnreadable`) both said *no
+  decoder exists*, and both now say what actually separates them from a heading — a refusal there is visible
+  to an operator, and `is_bare_key` answers *is this one bare key*, which `unquoted` does not.
+
   **A third reader of the same class arrived, and it is on the cheap side of this entry's own dividing line.**
   `crates/kanhe/tests/merge_workflow.rs`'s `workflow_shape` reads `.github/workflows/ci.yml` line by line to
   hold the premise `require_ci_green` states to an operator. Seven consecutive adversarial review rounds each

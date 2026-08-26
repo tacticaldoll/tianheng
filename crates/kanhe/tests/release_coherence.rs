@@ -366,6 +366,66 @@ fn a_detailed_dependency_table_is_read_renamed_or_not() {
     }
 }
 
+/// A dependency table whose heading spells its name in escapes is the table cargo reads.
+///
+/// **Cargo decodes, so this reads.** Put to `cargo metadata` rather than reasoned about: a manifest whose only
+/// declaration of `serde` sits under `[target.x86_64-unknown-linux-gnu."\u0064ependencies"]` reports that
+/// dependency with that target, and `["dep\u0065ndencies"]` reports it too -- an escape is not a prefix trick
+/// and can sit anywhere in the name. A reader answering *undecidable* for a backslash left every pin in such a
+/// table unread, and the ordinary pin beside it kept the aggregate non-vacuity guard satisfied, so the run
+/// came back clean.
+///
+/// The stale pin here is therefore the whole point: it is reachable only through the escaped heading, while the
+/// fixture's own correct pin holds the counter above zero.
+///
+/// The `an escaped-quote cfg target` row is the claim `bounds.rs` was already making with nothing holding it
+/// to account -- that the
+/// cfg shapes this reader meets, *a bare predicate, one carrying spaces, one carrying escaped quotes*, are all
+/// classified. A review found the escaped-quote one unpinned, and reaching it through the whole gate is what
+/// pins it: cargo reads `serde` under that target, measured, so a pin there is a pin.
+///
+/// Negative run, per row rather than for the test: with `unquoted` reporting undecodability instead of
+/// decoding, `an escaped name` returns `Ok` -- a clean release over a manifest requiring `xuanji = "0.0.1"`
+/// against workspace `0.2.0`. `an escaped-quote cfg target` passes either way, measured by running it first
+/// under the same perturbation: an undecodable segment left an empty one in the joined name, and the split past the
+/// target context happened to land after it. So that row guards a claim that was true for a reason nobody
+/// chose, which is what *unpinned* meant here -- and it now holds the reason the prose gives instead.
+#[test]
+fn an_escaped_dependency_table_heading_is_read_as_the_table_cargo_reads() {
+    for (label, table) in [
+        (
+            "an escaped name",
+            "[target.x86_64-unknown-linux-gnu.\"\\u0064ependencies\"]\nxuanji = \"0.0.1\"\n",
+        ),
+        (
+            "an escaped-quote cfg target",
+            "[target.\"cfg(feature = \\\"x\\\")\".dependencies]\nxuanji = \"0.0.1\"\n",
+        ),
+    ] {
+        let root = scratch(&format!("escaped-heading-{}", label.replace(' ', "-")));
+        let fixture = build_fixture(&root, "escaped-heading", "0.2.0");
+        let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+        let text = std::fs::read_to_string(&manifest).expect("read");
+        std::fs::write(&manifest, format!("{text}\n{table}")).expect("write");
+        development_changelog(&fixture.repo, "0.2.0", true);
+        commit(&fixture.repo, "chore: an escaped dependency table heading");
+        let verdict = judge(&fixture.repo);
+        let _ = std::fs::remove_dir_all(&root);
+        let refusal = verdict.expect_err(&format!("{label}: a stale pin under it must be refused"));
+        assert_eq!(
+            refusal.kind,
+            Kind::Violation,
+            "{label}: {}",
+            refusal.message
+        );
+        assert!(
+            refusal.message.contains("xuanji"),
+            "{label}: the refusal must name the crate it is about: {}",
+            refusal.message
+        );
+    }
+}
+
 /// A key spelled after a family crate outside a dependency table is not a version requirement.
 ///
 /// The other direction of the same cause: the reader looked at no heading, so `[features]` — whose values are
