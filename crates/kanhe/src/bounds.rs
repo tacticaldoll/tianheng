@@ -101,9 +101,12 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 because: "the reader decides which tables hold dependencies from the heading, and this \
                           heading's second key is a cfg expression carrying a dot, so splitting the heading \
                           at its first dot lands inside the expression rather than past it. Quoting alone no \
-                          longer hides a table: `manifest::table_name` unquotes each segment, measured over \
-                          every cfg shape this reader meets -- a bare predicate, one with spaces, one with \
-                          escaped quotes -- and all are classified. What is left is the dot, and reading \
+                          longer hides a table: `manifest::table_heading` unquotes each segment and decodes \
+                          the escapes cargo decodes, measured over every cfg shape this reader meets -- a \
+                          bare predicate, one with spaces, one with escaped quotes -- and all are \
+                          classified, the last of them now through the whole gate in \
+                          `an_escaped_dependency_table_heading_is_read_as_the_table_cargo_reads` rather \
+                          than by a reading of this sentence. What is left is the dot, and reading \
                           which configurations \
                           it selects is a grammar of its own rather than a context in front of a \
                           dependency table. The bare-triple sibling is read, because two bare TOML keys \

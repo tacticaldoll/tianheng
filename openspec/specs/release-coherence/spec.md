@@ -184,6 +184,25 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   otherwise — is where the key's own spelling has to be judged
 - **PINNED-BY** `a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped`
 
+#### Scenario: A dependency table whose heading cargo decodes
+
+- **WHEN** an example declares a family crate inside a table whose heading spells its name with a TOML escape —
+  `[target.<triple>."\u0064ependencies"]` or `["dep\u0065ndencies"]`, which cargo decodes and reads as a
+  dependencies table — at a version the workspace version does not satisfy, beside an ordinary family
+  dependency keeping the aggregate requirement counter non-zero
+- **THEN** the check reads that table's entries as pins and fails naming the crate, rather than classifying the
+  heading as some other table and passing every entry inside it over
+- **AND** the escapes are **decoded** rather than answered as undecidable. Measured against cargo: it reads
+  `serde` under both spellings above, so a reader refusing on a backslash left those pins unread while the
+  ordinary pin beside them kept the guard satisfied — a silent false negative, where decoding is both what
+  cargo does and the answer that needs no third state carried to a heading's consumers. The readers of the
+  `[package]` and `[workspace.package]` tables decode by the same rule, which is what stops an escaped
+  `publish` key from answering *publishable* for a crate cargo refuses to publish
+- **AND** an escape cargo itself **rejects** — `["\q"]`, `["\uD800"]` — leaves which table the heading names
+  undecided, and the readers whose answer turns on a table being absent refuse rather than reporting nothing
+  declared. That is a file `cargo metadata` fails on, so the refusal stands for a manifest nothing builds from
+- **PINNED-BY** `an_escaped_dependency_table_heading_is_read_as_the_table_cargo_reads`
+
 #### Scenario: A dependency is read in either form cargo writes it
 
 - **WHEN** an example declares a family crate as a detailed table — `[dependencies.alias]` with its own
@@ -231,10 +250,16 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   contains a **dot**
 - **THEN** nothing reacts. The heading is split at its first dot to step past the target context, and a dot
   inside the expression puts that split inside it rather than past it
-- **AND** quoting alone no longer hides a table, which is what this bound used to say. `manifest::table_name`
-  unquotes each segment, and the reader was measured over every cfg shape it meets — a bare predicate, one
-  carrying spaces, one carrying escaped quotes — all of which are now classified. The pin under a quoted cfg
-  target is **observed**, and the direction that once asserted this bound over it asserts the refusal instead
+- **AND** quoting alone no longer hides a table, which is what this bound used to say. `manifest::table_heading`
+  unquotes each segment and decodes the escapes cargo decodes, and the reader was measured over every cfg shape
+  it meets — a bare predicate, one carrying spaces, one carrying escaped quotes — all of which are now
+  classified. The pin under a quoted cfg target is **observed**, and the direction that once asserted this bound
+  over it asserts the refusal instead
+- **AND** the escaped-quote spelling is held to that by
+  `an_escaped_dependency_table_heading_is_read_as_the_table_cargo_reads`, which reaches it through the whole
+  gate. It was classified before that direction existed, but by an undecodable segment leaving an empty one in
+  the joined name and the split past the target context landing after it — true for a reason nobody chose,
+  which a review found and which is why *all of which are now classified* has something holding it
 - **UNPINNED** `BACKLOG.md` — *a dependency declared under a cfg target carrying a dot is not observed*
 
 #### Scenario: A renamed family dependency is resolved by the package it names
@@ -569,6 +594,12 @@ read, and the undecoded source then decided a comparison.
   TOML, which cargo decodes — and an ordinary sibling entry keeps the vacuity counters non-zero
 - **THEN** the judgement refuses as a cannot-judge, rather than comparing the undecoded source, failing to
   match a `crates/` prefix or a family crate, and passing the entry over with its stale pin unchecked
+- **AND** refusing is a choice between two answers this reader can now give, not the only one it has. A table
+  **heading** carrying the same escape is decoded, because `manifest::decoded` exists — the reason first
+  written for refusing values was *no decoder, and hand-rolling a TOML grammar is a filed backlog entry*, and
+  half of that expired the moment a heading needed one. What separates them: a key decides *which table or
+  which key this is*, so misreading one drops a whole table's contents with nothing said, while a value is the
+  thing being judged and refusing it stops the judgement in front of an operator with nothing skipped
 - **PINNED-BY** `an_escaped_path_is_refused_and_an_ordinary_sibling_does_not_cover_for_it`
 
 #### Scenario: An escaped renamed package

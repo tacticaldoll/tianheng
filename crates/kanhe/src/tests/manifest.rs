@@ -1,6 +1,6 @@
 use crate::manifest::{
-    Publishable, Quoted, WorkspaceVersion, is_semver, is_table, publishable, quoted_value, semver,
-    workspace_version,
+    Publishable, Quoted, WorkspaceVersion, is_semver, publishable, quoted_value, semver,
+    table_heading, workspace_version,
 };
 
 /// The two gates asked the same question about a version and answered differently.
@@ -122,6 +122,11 @@ fn a_value_that_is_not_a_string_does_not_borrow_the_next_one() {
 ///
 /// Every escape form TOML admits is given, not one representative: a reader that refused `\u` and admitted
 /// `\n` would read as covering the class while leaving it open.
+///
+/// **A key carrying the same escape is decoded, and that asymmetry is the point rather than a leftover.** A
+/// key decides *which table or which key this is*, so misreading one drops a whole table's contents in
+/// silence; a value is the thing being judged, so refusing it stops the judgement where someone sees it.
+/// `a_name_spelled_in_escapes_is_decoded_as_cargo_decodes_it` holds the other side.
 #[test]
 fn a_toml_escape_is_refused_rather_than_returned_undecoded() {
     for written in [
@@ -383,6 +388,9 @@ fn every_publish_shape_cargo_honours_is_read_as_cargo_reads_it() {
 ///
 /// Given both ends of the boundary rather than one: the arrays that must **not** open a table, and the
 /// headings that must. A fixture holding only the first passes for a predicate that answers `false` always.
+///
+/// **Asked of the production reader.** This tested a second predicate that answered the same question, so the
+/// boundary it pinned and the boundary the gates used were two things that happened to agree.
 #[test]
 fn a_table_heading_needs_both_brackets() {
     for heading in [
@@ -393,7 +401,7 @@ fn a_table_heading_needs_both_brackets() {
         "[package] ",
     ] {
         assert!(
-            is_table(heading),
+            table_heading(heading).is_some(),
             "`{heading}` opens a table and must be read as one"
         );
     }
@@ -406,7 +414,7 @@ fn a_table_heading_needs_both_brackets() {
         "",
     ] {
         assert!(
-            !is_table(value),
+            table_heading(value).is_none(),
             "`{value}` is value text, not a heading; reading it as one closes the open table and drops \
              every key after it"
         );
@@ -472,13 +480,12 @@ fn a_quoted_key_carries_its_dots_and_an_array_is_not_a_table() {
     // The spellings cargo folds together, folded.
     for same in ["[package]", "[ package ]", "[\"package\"]", "['package']"] {
         assert!(
-            table_heading(same).is_some_and(|h| h.is_table("package")),
+            table_heading(same).is_some_and(|h| h.names("package")),
             "{same} names the package table"
         );
     }
     assert!(
-        table_heading("[\"workspace\".\"package\"]")
-            .is_some_and(|h| h.is_table("workspace.package")),
+        table_heading("[\"workspace\".\"package\"]").is_some_and(|h| h.names("workspace.package")),
         "a quoted path is the path, because each segment's quotes close"
     );
 
@@ -490,17 +497,103 @@ fn a_quoted_key_carries_its_dots_and_an_array_is_not_a_table() {
     ] {
         let heading = table_heading(literal).expect("a heading");
         assert!(
-            !heading.is_table("workspace.package") && !heading.is_table("workspace.dependencies"),
+            !heading.names("workspace.package") && !heading.names("workspace.dependencies"),
             "{literal} is one literal key and not a dotted path, got {heading:?}"
         );
     }
 
     // An array of tables answers only to `is_array`, and the table form only to `is_table`.
     let array = table_heading("[[package]]").expect("a heading");
-    assert!(array.is_array("package") && !array.is_table("package"));
+    assert!(array.names_array("package") && !array.names("package"));
     let table = table_heading("[package]").expect("a heading");
-    assert!(table.is_table("package") && !table.is_array("package"));
+    assert!(table.names("package") && !table.names_array("package"));
 
     // Not a heading at all.
     assert_eq!(table_heading("name = \"x\""), None);
+}
+
+/// A name spelled in escapes is decoded, exactly as cargo decodes it.
+///
+/// **Every row below was put to `cargo metadata` first.** `"\u0070ublish" = false` reports `publish=[]`, and a
+/// package table headed `["\u0070ackage"]` reports the package with `publish=[]` too, so cargo decodes escapes
+/// in keys and in table names alike. Stripping the delimiters and stopping there left `\u0070ublish`, which
+/// matched nothing: the key went unread and the crate answered *publishable* while cargo refuses to publish it.
+///
+/// **The first repair reported undecidability instead of decoding, and that traded a false answer for a false
+/// refusal.** Any backslash anywhere in a heading refused the whole document -- including
+/// `[target."cfg(feature = \"x\")".dependencies]`, which is a manifest cargo reads (measured: `serde` arrives
+/// with that target), and `['other\table']`, a literal heading cargo reads without complaint. Decoding answers
+/// both directions and leaves no third state for its consumers to carry.
+///
+/// A **literal** string decodes nothing, measured on both sides: `'\u0070ublish'` reports `publish=None` and
+/// `['\u0070ackage']` is a different table to cargo, which reported the package beside it instead.
+///
+/// What is left undecodable is a file cargo will not read: `["\q"]` makes `cargo metadata` fail, naming the
+/// escapes it accepts, and `["\uD800"]` fails as *invalid value, expected unicode hexadecimal value*. So the
+/// refusals below stand for manifests nothing builds from, both of them measured rather than assumed.
+#[test]
+fn a_name_spelled_in_escapes_is_decoded_as_cargo_decodes_it() {
+    // Escaped in the key, escaped in the heading, and escaped mid-name: each is `publish = false` to cargo.
+    for manifest in [
+        "[package]\nname = \"x\"\n\"\\u0070ublish\" = false\n",
+        "[\"\\u0070ackage\"]\nname = \"x\"\npublish = false\n",
+        "[\"pack\\u0061ge\"]\nname = \"x\"\npublish = false\n",
+        "[\"\\x70ackage\"]\nname = \"x\"\npublish = false\n",
+        "[\"\\U00000070ackage\"]\nname = \"x\"\npublish = false\n",
+    ] {
+        assert_eq!(
+            publishable(manifest),
+            Publishable::No,
+            "cargo decodes this name, so this reads it: {manifest:?}"
+        );
+    }
+
+    // The false refusal the first repair opened. Both are manifests cargo reads.
+    assert_eq!(
+        publishable("['other\\table']\nvalue = 1\n[package]\nname = \"x\"\npublish = false\n"),
+        Publishable::No,
+        "a literal heading carrying a backslash carries no escape, and refusing it refuses a legal manifest"
+    );
+    assert_eq!(
+        publishable(
+            "[package]\nname = \"x\"\npublish = false\n\n[target.\"cfg(feature = \\\"x\\\")\".dependencies]\nserde = \"1\"\n"
+        ),
+        Publishable::No,
+        "an escaped-quote cfg target is the ordinary spelling of one, and it decides nothing about `publish`"
+    );
+
+    // A literal string is a different name to cargo, so the escape stays part of the name here too.
+    assert_eq!(
+        publishable("[package]\nname = \"x\"\n'\\u0070ublish' = false\n"),
+        Publishable::Yes,
+        "a literal key spells a different name, which cargo also reads as a different key"
+    );
+    assert_eq!(
+        publishable("['\\u0070ackage']\npublish = false\n\n[package]\nname = \"x\"\n"),
+        Publishable::Yes,
+        "a literal heading is a different table, and cargo reported the package beside it"
+    );
+
+    // A dotted path whose segment is escaped folds to the path; one key carrying a dot stays one key.
+    assert_eq!(
+        workspace_version("[\"\\u0077orkspace\".package]\nversion = \"1\"\n"),
+        WorkspaceVersion::Declared("1".to_string()),
+        "each segment's quotes close, so the segment decodes and the path is the path"
+    );
+    assert_eq!(
+        workspace_version("[\"\\u0077orkspace.package\"]\nversion = \"1\"\n"),
+        WorkspaceVersion::Absent,
+        "one key carrying a dot is not the dotted path, to cargo or here"
+    );
+
+    // An escape cargo itself rejects: the file does not parse for cargo, and the verdict is refused here.
+    for manifest in [
+        "[\"\\q\"]\nname = \"x\"\npublish = false\n",
+        "[\"\\uD800\"]\nname = \"x\"\npublish = false\n",
+    ] {
+        assert!(
+            matches!(publishable(manifest), Publishable::Unreadable(_)),
+            "an escape cargo rejects leaves which table this is undecided: {manifest:?}"
+        );
+    }
 }

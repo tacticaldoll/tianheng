@@ -18,9 +18,7 @@ use crate::sections::Section;
 
 use crate::hermetic_git::fixture as run;
 pub use crate::hermetic_git::hermetic;
-use crate::manifest::{
-    Quoted, WorkspaceVersion, is_table, quoted_value, semver, workspace_version,
-};
+use crate::manifest::{Quoted, WorkspaceVersion, quoted_value, semver, workspace_version};
 
 fn git(repo: &Path, args: &[&str]) -> Result<String, crate::hermetic_git::Failure> {
     crate::hermetic_git::run(repo, &[], args)
@@ -101,7 +99,9 @@ enum Table {
 /// context, and the opening quote is what says so.
 ///
 /// So the quote check below is not a guess about grammar; it is the one shape the split cannot put back
-/// together, and it is exactly the declared bound. Measured across the cfg spellings this reader meets — a
+/// together, and it is exactly the declared bound. A segment that *decodes* to text beginning with a quote --
+/// `[target."\"weird\"".dependencies]` -- lands here the same way and is not read; that is no cfg
+/// expression cargo parses, so the shape is unbuildable rather than unobserved. Measured across the cfg spellings this reader meets — a
 /// bare predicate, one carrying spaces, one carrying escaped quotes — all come through bare and are read.
 /// An earlier version of this reasoning took *quoted* to mean *cfg* and skipped every quoted target, which
 /// was a reason written from the hard case and applied to the whole corpus.
@@ -131,6 +131,16 @@ fn dependency_table(heading: &str) -> Table {
     if heading.array {
         return Table::Other;
     }
+    // **`undecodable` is deliberately not consulted here, and that is a bounded residue rather than an
+    // oversight.** Two reviews named it: the field is read by `manifest::workspace_version` and
+    // `manifest::publishable`, whose answers turn on a table being *absent*, and not here -- so a heading this
+    // reader cannot name classifies as `Table::Other` and its entries go unread, with an ordinary dependency
+    // table beside it holding the aggregate guard above zero. What bounds it is what is left undecodable once
+    // escapes are decoded: an escape cargo itself rejects, measured -- `["\q"]` and `["\uD800"]` both make
+    // `cargo metadata` fail. A manifest carrying one reaches no build, no packaging step and no publish, and
+    // the examples it would sit in are compiled by the *Examples dogfood* check in the same run. Making the
+    // answer three-state would put a refusal arm at each consumer for a file that cannot reach any of them.
+
     let inner = heading.name;
     let Some(inner) = past_the_context(&inner) else {
         return Table::Other;
@@ -214,11 +224,16 @@ enum Package {
     /// spelling matches no family member, and the entry was skipped by the same `continue` the sibling
     /// `Named` arm's own comment already describes for `alias = { package = "xuanji", … }`.
     ///
-    /// Refused rather than decoded. Decoding is TOML string parsing — escapes, the literal form, a dotted
-    /// key — which is the hand-parsing `BACKLOG.md` already files as its own entry; and a reader that
-    /// refuses what it cannot decode cannot narrow the set it judges, which is the direction that matters
-    /// here. Measured before writing: no tracked manifest carries a non-bare dependency key, so this refuses
-    /// nothing the tree has.
+    /// Refused rather than decoded, and **the reason written here first has since expired**: it was *decoding
+    /// is TOML string parsing, which `BACKLOG.md` files as its own entry*, and `manifest::decoded` landed in
+    /// the same window for table headings. What holds instead is that this is not the same question.
+    /// [`is_bare_key`] asks *is this one bare key*; `manifest::unquoted` asks *what does this key spell*, and
+    /// substituting the second for the first would take `xuanji.version` -- a dotted key, two keys to TOML --
+    /// as a package named `xuanji.version`, matching no family crate and skipped in silence. Composing them
+    /// so that only a single quoted segment decodes is more code than this arm, for a refusal that is
+    /// *visible*: a cannot-judge stops the gate in front of an operator, where the heading case that
+    /// justified the decoder was a silent false negative. Measured before writing and still true: no tracked
+    /// manifest carries a non-bare dependency key, so this refuses nothing the tree has.
     KeyUnreadable(String),
 }
 
@@ -292,7 +307,8 @@ fn declared_dependencies(text: &str) -> Vec<Dependency> {
     // there is no half-built record to hold and no boundary to remember to flush at.
     let tables = crate::sections::cut(
         crate::region::Source::of(text).toml().numbered_lines(),
-        |line| is_table(line).then(|| dependency_table(line.trim())),
+        // The heading reader answers *is this a heading* itself; asking first made its `None` arm dead.
+        |line| crate::manifest::table_heading(line).map(|_| dependency_table(line.trim())),
     );
     for table in &tables {
         match &table.name {
@@ -512,9 +528,7 @@ fn package_name(manifest: &str) -> PackageName {
     // which lines are headings and this predicate says which heading matters; `[package.metadata.docs.rs]` is
     // a different table and names no package.
     let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
-        is_table(line).then(|| {
-            crate::manifest::table_heading(line).is_some_and(|heading| heading.is_table("package"))
-        })
+        crate::manifest::table_heading(line).map(|heading| heading.names("package"))
     });
     let names: Vec<&str> = tables
         .iter()
@@ -1426,12 +1440,7 @@ fn require_lock_versions(
         // Through the shared reader, which is what makes the array-of-tables shape a question rather than a
         // literal: this was the fifth place deciding which table a heading names, and the only one whose
         // subject was an array.
-        |line| {
-            is_table(line).then(|| {
-                crate::manifest::table_heading(line)
-                    .is_some_and(|heading| heading.is_array("package"))
-            })
-        },
+        |line| crate::manifest::table_heading(line).map(|heading| heading.names_array("package")),
     );
     for block in blocks.iter().filter(|block| block.name) {
         let mut name = String::new();
@@ -1447,7 +1456,16 @@ fn require_lock_versions(
             let Some((key, value)) = trimmed.split_once('=') else {
                 continue;
             };
-            match crate::manifest::unquoted(key.trim()) {
+            // A key carrying an escape cargo itself rejects is in a file cargo could not have written, and
+            // a lock file is written by cargo alone — so this arm is the shape's, not an instance's. A
+            // reviewer read the former wording, *not `continue`-able either*, as contradicting the
+            // `continue` beneath it; what it meant is that skipping is not free, and the clause after the
+            // dash was already the narrowing. Said plainly now, and narrower still: decoding removed every
+            // other spelling that used to arrive here.
+            let Some(key) = crate::manifest::unquoted(key.trim()) else {
+                continue;
+            };
+            match &*key {
                 "source" => sourced = true,
                 "name" => {
                     // An unreadable name defaulted to the empty string, which the `!name.is_empty()` guard

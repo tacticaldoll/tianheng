@@ -24,6 +24,8 @@
 //! cannot-judge. That is the right direction for a wrapper whose publish is `--workspace`: a root with no
 //! workspace table is not the shape either gate was written to judge, and saying so beats guessing.
 
+use std::borrow::Cow;
+
 /// A double-quoted value this reader found, or a statement that it could not read one.
 ///
 /// **Not an `Option`, because every consumer of the one this replaces read `None` as *the key is absent* and
@@ -92,8 +94,16 @@ pub(crate) fn quoted_value(value: &str) -> Quoted {
     // non-zero.
     //
     // `Unreadable` is what this type exists for, and each consumer already answers it by refusing to judge.
-    // Decoding the escapes here is deliberately NOT done: that is a TOML grammar, and writing a second
-    // hand-rolled one is the defect class `BACKLOG.md` already carries for these readers.
+    //
+    // **A decoder now exists in this module, and a value is still refused rather than decoded -- for a
+    // different reason than the one written here before.** That reason was *no decoder, and hand-rolling a
+    // TOML grammar is the class `BACKLOG.md` carries*; [`decoded`] closed the first half in the same window,
+    // so leaving the old sentence standing would have been a reason that had expired. The reason that holds:
+    // a **key** decides which table or which key this is, so misreading one drops a whole table's contents
+    // with nothing said, while a **value** is the thing being judged -- refusing it stops the judgement in
+    // front of an operator and skips nothing. The refusal here is also measured to be unreached: no tracked
+    // manifest carries a backslash in a quoted value. Decoding values would additionally mean finding the
+    // closing quote past an escaped one, which is parsing the string rather than decoding a known body.
     //
     // It also closes the narrower shape the same check missed: `"a\\"b"` split at the ESCAPED quote and
     // answered `a\\`, an identity no manifest declares.
@@ -145,11 +155,23 @@ pub fn workspace_version(text: &str) -> WorkspaceVersion {
     // failing the first matched the second and closed a table that had never opened. Reading a `toml()` region
     // stopped the comment from causing that; taking the cut removes the second test entirely, so the shape
     // cannot recur for a spelling nobody thought of.
+    // **One reader answers the whole question.** `is_table(line).then(…)` asked *is this a heading* twice —
+    // once here and once inside `table_heading`, whose `None` arm then became a branch nothing reached. It
+    // also put two referents on one name — one predicate meaning *is this a heading* and one method meaning
+    // *is this heading that table* — standing a few lines apart at every call site.
     let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
-        is_table(line).then(|| {
-            table_heading(line).is_some_and(|heading| heading.is_table("workspace.package"))
-        })
+        table_heading(line).map(|heading| heading.names("workspace.package"))
     });
+    // **An undecodable heading is refused rather than skipped.** Its name matches nothing, so the table would
+    // be passed over and the version would read `Absent` — the answer that says *nothing declared this* about
+    // a manifest whose declaration is simply unreadable here.
+    if let Some(line) = source
+        .toml()
+        .numbered_lines()
+        .find_map(|(_, line)| table_heading(line).filter(|h| h.undecodable).map(|_| line))
+    {
+        return WorkspaceVersion::Unreadable(line.trim().to_string());
+    }
     // `version` then `=`, so `version.workspace` and any other `version…` key is not this key.
     let values: Vec<&str> = tables
         .iter()
@@ -283,8 +305,17 @@ pub fn publishable(text: &str) -> Publishable {
     let source = crate::region::Source::of(text);
     // The cut owns the table boundary; `names_the_package_table` says which heading is this reader's, which
     // is the only part that was ever specific to it.
+    // An undecodable heading could be the package table, so the verdict is refused rather than reached by
+    // passing over it — measured against cargo, `["\u0070ackage"]` is the package table to it.
+    if let Some(line) = source
+        .toml()
+        .numbered_lines()
+        .find_map(|(_, line)| table_heading(line).filter(|h| h.undecodable).map(|_| line))
+    {
+        return Publishable::Unreadable(line.trim().to_string());
+    }
     let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
-        is_table(line).then(|| names_the_package_table(line.trim()))
+        table_heading(line).map(|heading| heading.names("package"))
     });
     for (_, line) in tables
         .iter()
@@ -307,7 +338,13 @@ pub fn publishable(text: &str) -> Publishable {
             Some((head, _)) => (head, true),
             None => (key.trim(), false),
         };
-        if unquoted(head.trim()) != "publish" {
+        // **An undecodable key inside this table might be `publish`, so it is not skipped.** Measured
+        // against cargo: `"\u0070ublish" = false` reports `publish=[]`, so passing over the key answers
+        // *publishable* for a crate it refuses. Absent and unreadable are two facts here as everywhere.
+        let Some(head) = unquoted(head.trim()) else {
+            return Publishable::Unreadable(trimmed.to_string());
+        };
+        if head != "publish" {
             continue;
         }
         let verdict = if dotted {
@@ -328,37 +365,49 @@ pub fn publishable(text: &str) -> Publishable {
     declared.map_or(Publishable::Yes, |(_, verdict)| verdict)
 }
 
-/// Whether a table header opens `[package]`, in every spelling cargo honours.
-///
-/// **Measured on cargo 1.96.0, because the equality this replaced was one spelling of three.** `[ package ]`
-/// and `["package"]` are the same table to cargo — each reports `publish=[]` for a `publish = false` beneath
-/// it — while `trimmed == "[package]"` skipped both, and a reader that skips the table answers *publishable*
-/// for a crate cargo refuses to publish. `[package.metadata]` is a different table and stays one.
-fn names_the_package_table(header: &str) -> bool {
-    table_heading(header).is_some_and(|heading| heading.is_table("package"))
-}
-
 /// A TOML table heading: which table it names, and whether it opens an **array** of tables.
 ///
 /// **One rule, one implementation, because it had five and only one of them was right.** `[ package ]`,
 /// `["package"]` and `[package]` are the same table to cargo — measured, each reports `publish=[]` for a
 /// `publish = false` beneath it — and a reader comparing raw text saw only the third. That equality was
-/// measured once, repaired at one predicate, and left standing at the `[workspace.package]` cut,
-/// `package_name`'s cut, `dependency_table`, and the lock reader's `== "[[package]]"`. A review found them.
+/// measured once, repaired at one predicate, and left standing at every other cut — the `[workspace.package]`
+/// one, `package_name`'s, `dependency_table`, and the lock reader's literal comparison. A review found them.
 ///
 /// **The kind is carried because a flattened name collapsed `[[x]]` into `[x]`.** An array-of-tables heading
 /// is a different shape, and the lock file's entries are exactly that — so the reader that cuts them asked for
 /// the literal text rather than for this, which is how it stayed a fifth implementation. Both questions are
 /// answered here now, and a caller says which it means.
 ///
+/// **Escapes are decoded, because cargo decodes them and a reader that would not was blind to a whole
+/// table.** A basic string may spell any part of a name in escapes, and each spelling below was put to
+/// cargo rather than reasoned about: `["\u0064ependencies"]` and `[target.x86_64-unknown-linux-gnu."\u0064ependencies"]`
+/// both have their `serde` read as a dependency, `["dep\u0065ndencies"]` too, so an escape is not a
+/// prefix trick — it can sit anywhere in the name. A reader that answered *undecidable* for a backslash
+/// left the pins in that table unread while the manifest beside it kept the aggregate guard satisfied.
+/// Decoding is therefore what agrees with cargo, and it is also the smaller answer: the table is
+/// classified, so nothing downstream needs a third state to carry.
+///
+/// **What stays undecodable is a manifest cargo will not read at all.** `["\q"]` is not a table this
+/// reader refuses to name — `cargo metadata` rejects the file, naming the escapes it accepts (`b`, `e`,
+/// `f`, `n`, `r`, `\\`, `"`, `x`, `u`, `U`). So [`TableHeading::undecodable`] marks a heading no build,
+/// no packaging step and no publish could get past, and the readers whose answer turns on a table being
+/// *absent* refuse on it rather than reporting nothing declared.
+///
 /// **A quoted key keeps its quotes, and that is what makes it a different table rather than the same one.**
-/// `["workspace.package"]` is one literal key in TOML, not the path `workspace` → `package`; splitting on
+/// `["workspace.package"]` is one literal key in TOML, not the path `workspace` -> `package`; splitting on
 /// every dot and unquoting each piece leaves the unmatched quotes in place, so the name reads
-/// `"workspace.package"` and matches neither the path nor anything else. Measured across the spellings that
-/// reach this: `["workspace"."package"]` folds to the path, as cargo folds it, while `["workspace.package"]`,
-/// `['workspace.package']` and `["a.b".package]` stay distinct. The flattening is therefore correct rather
-/// than merely safe, and the segments a caller would need to express `a.b` as one key are not needed by any
-/// caller that exists.
+/// `"workspace.package"` and matches neither the path nor anything else. Measured: `["workspace"."package"]`
+/// folds to the path, as cargo folds it, and `["\u0077orkspace".package]` folds to it too now that the
+/// segment decodes -- while `["workspace.package"]`, `['workspace.package']` and `["\u0077orkspace.package"]`
+/// are each one key carrying a dot, which cargo keeps apart from the path and so does this. A dot inside
+/// quotes is the one shape the split cannot put back together, and it is also the shape that never names a
+/// path, so the flattening is correct rather than merely safe.
+///
+/// **Declared residue, carried over from the predicate this replaced.** A line that is only an array
+/// element -- `[1, 2]` alone, no trailing comma, inside a multi-line array -- reads as a heading named
+/// `1, 2`. It names no table any caller asks for, so the effect is that it closes the open table early, and
+/// a `[package]` scan holding such a line would drop the keys after it. The statement moved here with the
+/// behaviour when its former home was deleted; nothing else in the tree said it.
 pub fn table_heading(line: &str) -> Option<TableHeading> {
     let trimmed = line.trim();
     let inner = trimmed.strip_prefix('[')?.strip_suffix(']')?;
@@ -366,11 +415,15 @@ pub fn table_heading(line: &str) -> Option<TableHeading> {
         Some(inner) => (true, inner),
         None => (false, inner),
     };
+    let segments: Vec<Option<Cow<'_, str>>> =
+        inner.split('.').map(|s| unquoted(s.trim())).collect();
     Some(TableHeading {
         array,
-        name: inner
-            .split('.')
-            .map(|segment| unquoted(segment.trim()))
+        // A segment carrying an escape cargo itself rejects leaves which table this is undecided.
+        undecodable: segments.iter().any(Option::is_none),
+        name: segments
+            .iter()
+            .map(|segment| segment.as_deref().unwrap_or_default())
             .collect::<Vec<_>>()
             .join("."),
     })
@@ -381,35 +434,116 @@ pub fn table_heading(line: &str) -> Option<TableHeading> {
 pub struct TableHeading {
     /// `true` for `[[name]]`, which is a different shape from `[name]` and not the same table.
     pub array: bool,
+    /// `true` when a segment carries an escape cargo itself rejects, so which table this heading names is
+    /// undecided -- and, cargo having refused the file, a table in no manifest anything builds from.
+    ///
+    /// [`Self::name`] then carries the decodable segments only and matches nothing, which is silence -- and a
+    /// caller whose answer turns on the table being absent has to refuse instead.
+    pub undecodable: bool,
     /// The dotted path, each segment unquoted; a segment whose quotes do not close keeps them, which is what
     /// keeps a literal dotted key from folding into a dotted path.
     pub name: String,
 }
 
 impl TableHeading {
-    /// Whether this heading opens the ordinary table `name` — not an array of tables of the same name.
-    pub fn is_table(&self, name: &str) -> bool {
+    /// Whether this heading names the ordinary table `name` — not an array of tables of the same name.
+    ///
+    /// **Named for what it answers.** A predicate asking *is this line a heading* once carried this method's
+    /// former name, so one word meant two things standing a few lines apart at every call site — the shape
+    /// this repository removes on sight. That predicate is gone: this reader answers both halves, and the
+    /// direction that pinned the heading boundary now asks it rather than a second implementation.
+    pub fn names(&self, name: &str) -> bool {
         !self.array && self.name == name
     }
 
-    /// Whether this heading opens an array of tables called `name`.
-    pub fn is_array(&self, name: &str) -> bool {
+    /// Whether this heading names an array of tables called `name`.
+    pub fn names_array(&self, name: &str) -> bool {
         self.array && self.name == name
     }
 }
 
-/// A TOML key or header segment with its quotes removed, in both quoted forms cargo accepts./// A TOML key or header segment with its quotes removed, in both quoted forms cargo accepts.
+/// A TOML key or header segment with its quotes removed and its escapes decoded, or `None` for an escape
+/// cargo itself rejects.
 ///
-/// `"publish" = false` and `'publish' = false` are the `publish` key to cargo — measured, each reports
-/// `publish=[]` — and a reader comparing the raw text saw neither, which is the direction that answers
+/// `"publish" = false` and `'publish' = false` are the `publish` key to cargo -- measured, each reports
+/// `publish=[]` -- and a reader comparing the raw text saw neither, which is the direction that answers
 /// *publishable* for a crate that publishes nowhere.
-pub(crate) fn unquoted(text: &str) -> &str {
-    for quote in ['"', '\''] {
-        if let Some(inner) = text.strip_prefix(quote).and_then(|r| r.strip_suffix(quote)) {
-            return inner;
-        }
+///
+/// **A basic string can spell its own name in escapes, and cargo decodes them, so this decodes them.**
+/// Measured against cargo itself: a manifest writing `"\u0070ublish" = false` reports `publish=[]`, and one
+/// whose package table is headed `["\u0070ackage"]` reports the package with `publish=[]` too. Stripping the
+/// delimiters and stopping there left `\u0070ublish`, which matches nothing -- so the key went unread and the
+/// crate answered *publishable* while cargo refuses to publish it.
+///
+/// An earlier repair reported that as undecodable rather than decoding it, which closed the false answer and
+/// opened a false refusal: the escaped-quote cfg spelling `[target."cfg(feature = \"x\")".dependencies]` is
+/// a manifest cargo reads -- measured, `serde` arrives with that target -- and any backslash anywhere in the
+/// heading refused the whole document. Decoding answers both, and leaves nothing for a caller to propagate.
+///
+/// **A literal string carries no escapes, measured**: `'\u0070ublish'` reports `publish=None`, a different
+/// key to cargo as well as to this reader, and `['other \table']` is a heading cargo reads without complaint.
+///
+/// A **value** carrying an escape is refused rather than decoded, and that asymmetry is deliberate: a key
+/// decides *which table or which key this is*, so misreading one drops a whole table's contents silently,
+/// while a value is the thing being judged and refusing it is the fail-closed answer with nothing skipped.
+/// `release-coherence` pins that side in its own scenarios.
+pub(crate) fn unquoted(text: &str) -> Option<Cow<'_, str>> {
+    if let Some(inner) = text.strip_prefix('"').and_then(|r| r.strip_suffix('"')) {
+        return decoded(inner).map(Cow::Owned);
     }
-    text
+    if let Some(inner) = text.strip_prefix('\'').and_then(|r| r.strip_suffix('\'')) {
+        return Some(Cow::Borrowed(inner));
+    }
+    Some(Cow::Borrowed(text))
+}
+
+/// A basic string's body with its escapes resolved as cargo resolves them, or `None` for one it rejects.
+///
+/// The accepted set is cargo's own, read off its refusal of an unknown escape rather than off a TOML
+/// revision: `b`, `e`, `f`, `n`, `r`, `\\`, `"`, `xHH`, `uHHHH`, `UHHHHHHHH`. `\e` and `\xHH` are not in
+/// TOML 1.0, so choosing the specification over the tool would have refused both, which cargo compiles.
+/// `\t` is decoded here too and is *not* in that message: asked of a heading rather than of a package name --
+/// where a tab is refused for the name it makes, not for the escape -- cargo accepts it.
+///
+/// A scalar the digits do not spell is `None` here and rejected by cargo as well: `["\uD800"]` fails with
+/// *invalid value, expected unicode hexadecimal value*, so the undecodable answer and the unbuildable
+/// manifest are the same set rather than two sets that happen to overlap.
+fn decoded(body: &str) -> Option<String> {
+    let mut decoded = String::with_capacity(body.len());
+    let mut rest = body.chars();
+    while let Some(ch) = rest.next() {
+        if ch != '\\' {
+            decoded.push(ch);
+            continue;
+        }
+        decoded.push(match rest.next()? {
+            'b' => '\u{8}',
+            'e' => '\u{1b}',
+            'f' => '\u{c}',
+            'n' => '\n',
+            'r' => '\r',
+            't' => '\t',
+            '"' => '"',
+            '\\' => '\\',
+            'x' => scalar(&mut rest, 2)?,
+            'u' => scalar(&mut rest, 4)?,
+            'U' => scalar(&mut rest, 8)?,
+            // Every other escape is one cargo names in its refusal, so the manifest does not parse at all.
+            _ => return None,
+        });
+    }
+    Some(decoded)
+}
+
+/// The character `digits` hexadecimal digits spell, or `None` where they do not spell one.
+///
+/// A scalar outside Unicode -- `\uD800`, a lone surrogate -- is `None`; [`decoded`] records the measurement.
+fn scalar(rest: &mut std::str::Chars<'_>, digits: usize) -> Option<char> {
+    let mut value = 0u32;
+    for _ in 0..digits {
+        value = value * 16 + rest.next()?.to_digit(16)?;
+    }
+    char::from_u32(value)
 }
 
 /// What a `publish` value says, once the key is known to be exactly `publish`.
@@ -431,24 +565,4 @@ fn classify(value: &str, line: &str) -> Publishable {
         }
         _ => Publishable::Unreadable(line.to_string()),
     }
-}
-
-/// Whether a line of executed TOML opens a table.
-///
-/// **Both ends, not just the opening bracket.** A bare `starts_with('[')` — which each reader this replaces
-/// wrote for itself — also matches a multi-line array's continuation, since `  [1, 2],` trims to something
-/// starting with `[`. Requiring the closing `]` refuses that and costs a real heading nothing: the comment a
-/// heading may carry (`[package] # …`) is already gone, because this reads a
-/// [`toml`](crate::region::Source::toml) region rather than raw text.
-///
-/// `[table]` and `[[array-of-tables]]` are both headings and both answer `true`; **which** heading matters is
-/// the caller's predicate, not this function's.
-///
-/// **Residue, declared:** a nested array whose last element sits alone on a line — `  [1, 2]` with no
-/// trailing comma — still answers `true`. Neither `Cargo.toml` nor `Cargo.lock` writes that shape: cargo
-/// generates the lock, and the manifests here carry flat arrays only. Closing it needs value-level structure
-/// this reader does not have and no caller has asked for.
-pub fn is_table(line: &str) -> bool {
-    let trimmed = line.trim();
-    trimmed.starts_with('[') && trimmed.ends_with(']')
 }
