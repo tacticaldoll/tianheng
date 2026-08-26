@@ -250,6 +250,19 @@ enum Toml {
 fn toml_head(line: &str, entry: Toml) -> (&str, Toml) {
     let mut state = entry;
     let mut at = 0;
+    // **A line inside an open `"""` carries no executed text, and that is this reader's own job.** It used
+    // to answer with the whole line, so a bare `[dependencies]` written inside a `description` string was
+    // handed to a caller cutting table boundaries as a table heading — `publish = false` beneath it landed in
+    // a section named `dependencies`, was filtered out as another table's business, and the manifest read as
+    // publishable for a crate `cargo publish` refuses. Measured, and it answered `Yes`.
+    //
+    // The state machine already knows where the string closes, so the executed text is what follows that
+    // delimiter and nothing before it: `line.len()` while the string is open, and the close offset once it
+    // shuts. A caller looking for a key inside a string should not find one.
+    let mut executed_from = match entry {
+        Toml::MultiBasic | Toml::MultiLiteral => line.len(),
+        _ => 0,
+    };
     while at < line.len() {
         let rest = &line[at..];
         let ch = rest
@@ -260,7 +273,7 @@ fn toml_head(line: &str, entry: Toml) -> (&str, Toml) {
         match state {
             Toml::Code => {
                 if ch == '#' {
-                    return (&line[..at], Toml::Code);
+                    return (&line[executed_from..at], Toml::Code);
                 }
                 if rest.starts_with("\"\"\"") {
                     state = Toml::MultiBasic;
@@ -299,6 +312,7 @@ fn toml_head(line: &str, entry: Toml) -> (&str, Toml) {
                 if rest.starts_with("\"\"\"") {
                     state = Toml::Code;
                     at += 3;
+                    executed_from = executed_from.min(at);
                     continue;
                 }
                 at += width;
@@ -307,6 +321,7 @@ fn toml_head(line: &str, entry: Toml) -> (&str, Toml) {
                 if rest.starts_with("'''") {
                     state = Toml::Code;
                     at += 3;
+                    executed_from = executed_from.min(at);
                     continue;
                 }
                 at += width;
@@ -317,7 +332,7 @@ fn toml_head(line: &str, entry: Toml) -> (&str, Toml) {
         Toml::Basic | Toml::Literal => Toml::Code,
         carried => carried,
     };
-    (line, exit)
+    (&line[executed_from..], exit)
 }
 
 impl<'a> Executed<'a> {
@@ -392,8 +407,8 @@ impl<'a> Executed<'a> {
                         let (head, exit) = toml_head(line, entry);
                         toml = exit;
                         // A whole-line comment is dropped rather than yielded blank, as under `TokenStart`.
-                        // Only from `Code`: the identical text inside an open `"""` is string content, and
-                        // dropping it there would delete executed text.
+                        // Only from `Code`: inside an open `"""` the head is already empty, because string
+                        // content is not executed text, so a line there yields blank and keeps its position.
                         if entry == Toml::Code && head.len() != line.len() && head.trim().is_empty()
                         {
                             return None;

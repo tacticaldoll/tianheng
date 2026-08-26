@@ -376,11 +376,22 @@ fn a_shell_marker_inside_quotes_is_cut_from_the_region() {
     }
 }
 
-/// A multi-line TOML string carries its `#` across the line boundary, whole-line ones included.
+/// A multi-line TOML string carries across the line boundary, and its content is not executed text.
 ///
 /// The reason the scan is not per-line. `"""` and `'''` span lines, so a `#`-led line inside one is string
-/// content; dropping it as a whole-line comment deletes executed text, which is the direction the Core
-/// Contract forbids — and the drop is the one branch a tail-cut alone would not have covered.
+/// content rather than a whole-line comment, and the line keeps its **position** — dropping it would delete a
+/// coordinate every caller counts on.
+///
+/// **This direction used to assert that the content was in the executed region, and that is now the opposite
+/// way round.** The reason it gave was about not *dropping* the line, which still holds; the assertion went
+/// further and put string data in a region whose name is `Executed`. What forced the correction was measured:
+/// a bare `[dependencies]` written inside a `description = """…"""` was handed to a boundary-cutting caller
+/// as a table heading, so a `publish = false` beneath it landed in a section named `dependencies`, was
+/// filtered away as another table's business, and `manifest::publishable` answered **Yes** for a crate
+/// `cargo publish` refuses. A false negative in front of the publish gate.
+///
+/// The properties the accessor's own doc names are unaffected and are asserted below: a `#` inside a
+/// single-line string stays whole, because that line enters in code state and only its string is tracked.
 ///
 /// The single-line forms deliberately do **not** carry: TOML forbids a raw newline inside them, so an
 /// unterminated `"` is malformed and its damage stays on its own line instead of swallowing the file.
@@ -390,12 +401,32 @@ fn a_multi_line_toml_string_carries_across_lines_and_a_broken_one_does_not() {
         "description = \"\"\"\n# not a comment\nstill inside\n\"\"\"\nversion = \"1\"\n",
     );
     assert!(
-        spanning.toml().contains("# not a comment"),
-        "a `#`-led line inside `\"\"\"` is string content, not a whole-line comment"
+        !spanning.toml().contains("# not a comment"),
+        "a `#`-led line inside `\"\"\"` is string content, so it is not executed text"
     );
     assert!(
-        spanning.toml().contains("still inside"),
-        "and the string continues to its own delimiter"
+        !spanning.toml().contains("still inside"),
+        "and neither is the rest of the string's body"
+    );
+    // The line is not DROPPED, which is what the reason above is about: its coordinate survives, empty.
+    assert_eq!(
+        Source::of(
+            "description = \"\"\"\n# not a comment\nstill inside\n\"\"\"\nversion = \"1\"\n"
+        )
+        .toml()
+        .numbered_lines()
+        .map(|(line, _)| line)
+        .collect::<Vec<_>>(),
+        vec![1, 2, 3, 4, 5],
+        "every line keeps its position; only the string's body is emptied"
+    );
+    // And a `#` inside a single-line string stays whole — the property the accessor's doc names, and the one
+    // this change must not touch, because that line enters in code state.
+    assert!(
+        Source::of("repository = \"https://example.invalid/x#frag\"\n")
+            .toml()
+            .contains("#frag"),
+        "a fragment inside a single-line string is part of an executed key-value line"
     );
     assert!(
         spanning.toml().contains("version = \"1\""),

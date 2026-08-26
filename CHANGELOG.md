@@ -7747,6 +7747,71 @@ no adopter runs. They are here rather than under the adopter headings above beca
   covers.
 
 
+- **One rule had four implementations and only one had been repaired.** `[ package ]`, `["package"]` and
+  `[package]` are the same table to cargo — measured once, fixed at `names_the_package_table`, and left
+  standing at the `[workspace.package]` cut, at `package_name`'s `[package]` cut, and at `dependency_table`,
+  which stripped the brackets and then compared without trimming or unquoting. A review found all three in one
+  pass. `manifest::table_name` is now the one place that answers *which table is this*, and the four callers
+  ask it. Measured after: `[ workspace.package ]` and `["workspace".package]` are read where they were not,
+  and every cfg-target spelling this reader meets is classified.
+
+- **A false negative in front of `cargo publish`, and the refutation that missed it was mine.** A bare
+  `[dependencies]` written inside a `description = """…"""` was handed to a boundary-cutting caller as a table
+  heading, so a `publish = false` beneath it landed in a section named `dependencies`, was filtered away as
+  another table's business, and `manifest::publishable` answered **Yes** for a crate `cargo publish` refuses.
+
+  A previous entry called this finding *refuted*. It was not. The probe behind that word injected a line
+  reading *a description mentioning `[something]` on its own line* — which does not begin with a bracket, so
+  `is_table` never saw it and the shape under test was never planted. The reason given alongside was false too:
+  `region::toml`'s string tracking exists so a `#` inside a string opens no comment, not to remove the line's
+  content. The rule against a probe that moves something other than the thing under test was already written
+  here; what was missing was applying it when refuting a finding rather than when making one.
+
+  **A line whose whole body is inside an open `"""` now carries no executed text**, which is what the
+  accessor's own name says: it is `Executed` manifest text, and string data is not that. The line keeps its
+  position — emptied, not dropped — so every coordinate a caller counts on survives, and a `#` inside a
+  single-line string stays whole because that line enters in code state.
+
+  **That overturns a pinned assertion, and it is worth saying plainly.** A direction asserted the opposite,
+  with a reason about not *dropping* the line. The reason still holds and is now pinned separately; the
+  assertion went past it and put string data in the executed region. What forced the correction was the
+  measurement above, not a preference.
+
+- **The convergence closed a declared bound, so the bound was narrowed rather than left standing.** The
+  direction asserting *a family pin under a quoted cfg target is not observed* went red — and that direction
+  is the bound's own WHEN, re-run. Measured what remains: every quoted cfg shape this reader meets is now
+  classified, including one carrying spaces and one carrying escaped quotes; what survives is a cfg expression
+  containing a **dot**, where splitting the heading at its first dot lands inside the expression. The bound,
+  its scenario and its tracker now name that, and the direction asserts the refusal it used to deny.
+
+- **A record boundary this reader cannot decide is a cannot-judge.** `record_lines` answered with two states,
+  so a version heading whose date it could not read fell to *live* — and a released section read as live puts a
+  whole historical record in front of today's tree, with the diagnostic naming an entry inside it rather than
+  the heading. It answers with three now, and both callers refuse instead of guessing. `[Unreleased]` is the
+  one heading that legitimately carries no date and is named rather than inferred.
+
+- **Two findings are answered where they were raised rather than repaired.** `require_internal_pins`'s
+  `pins == 0` was read as an aggregate over every crate, to be moved per-manifest the way its sibling was — but
+  it reads the workspace **root** manifest alone, so its loop is already over one document and nothing else's
+  success can keep the count non-zero. And `AGENTS.md`'s rule said a live-set count is not written *produced or
+  not*, which forbade the very thing its next sentence recommends and contradicted the generated projection two
+  paragraphs down: the rule is about the **typing**, so it now says *hand-written*. A computed figure a renderer
+  recomputes over a freshness-checked projection is the produced form the rule points at.
+
+  The census diagnostic's conclusion goes with it: *a rise here is a hand-written count arriving* is not
+  supportable by a figure that counts documents and knows nothing of their provenance — a second generated
+  projection would raise it exactly as a typed sentence would. It prints what it counted and stops.
+
+  Executed lines are **not** net zero here, and the reason is worth stating rather than dressing up: the
+  convergence is a reduction, but a type cannot have three answers and two states, and a registered refusal
+  cannot go unheld. The third state, its two consumers' refusals and the direction that plants both arms are
+  what the additions are.
+
+  And the reaction for unreachable branches caught one this change had just written — a
+  `.split(']').next().unwrap_or_default()` in the new module, while the same commit was repairing four of that
+  shape elsewhere.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

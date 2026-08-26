@@ -29,7 +29,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `reference-integrity/a-rust-identifier-named-in-prose-is-not-resolved-a-stated-bound` — owner: engine
 - `reference-integrity/an-abbreviation-carrying-no-letter-or-no-digit-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound` — owner: engine
-- `release-coherence/a-dependency-declared-under-a-quoted-cfg-target-is-not-observed-a-stated-bound` — owner: engine
+- `release-coherence/a-dependency-declared-under-a-cfg-target-carrying-a-dot-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound` — owner: engine
 - `release-coherence/a-name-reached-only-through-a-url-a-stated-bound` — owner: engine
 - `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound` — owner: engine
@@ -644,13 +644,13 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
 
-### `release-coherence/a-dependency-declared-under-a-quoted-cfg-target-is-not-observed-a-stated-bound`
+### `release-coherence/a-dependency-declared-under-a-cfg-target-carrying-a-dot-is-not-observed-a-stated-bound`
 
 > a family dependency declared under `[target.'cfg(…)'.dependencies]` or its `.NAME` form
 
-- **because**: the reader decides which tables hold dependencies from the heading, and this heading's second key is a quoted cfg expression -- reading which configurations it selects is a grammar of its own rather than a context in front of a dependency table. The bare-triple sibling is read, because two bare TOML keys need nothing guessed
+- **because**: the reader decides which tables hold dependencies from the heading, and this heading's second key is a cfg expression carrying a dot, so splitting the heading at its first dot lands inside the expression rather than past it. Quoting alone no longer hides a table: `manifest::table_name` unquotes each segment, measured over every cfg shape this reader meets -- a bare predicate, one with spaces, one with escaped quotes -- and all are classified. What is left is the dot, and reading which configurations it selects is a grammar of its own rather than a context in front of a dependency table. The bare-triple sibling is read, because two bare TOML keys need nothing guessed
 - **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *a dependency declared under a quoted cfg target is not observed*
+- **unpinned**, tracked by: `BACKLOG.md` — *a dependency declared under a cfg target carrying a dot is not observed*
 
 ### `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound`
 

@@ -114,10 +114,14 @@ fn past_the_context(inner: &str) -> Option<&str> {
 }
 
 fn dependency_table(heading: &str) -> Table {
-    let Some(inner) = heading.strip_prefix('[').and_then(|h| h.strip_suffix(']')) else {
+    // **Through the shared reader, because this compared raw text and the equality it needed was measured
+    // elsewhere.** `[ dependencies ]` and `["dependencies"]` are the dependency table to cargo, and stripping
+    // the brackets without trimming or unquoting left both as `Table::Other` — a whole dependency table
+    // silently unclassified, which the aggregate guard downstream could not see.
+    let Some(inner) = crate::manifest::table_name(heading) else {
         return Table::Other;
     };
-    let Some(inner) = past_the_context(inner) else {
+    let Some(inner) = past_the_context(&inner) else {
         return Table::Other;
     };
     for kind in ["dependencies", "dev-dependencies", "build-dependencies"] {
@@ -497,7 +501,8 @@ fn package_name(manifest: &str) -> PackageName {
     // which lines are headings and this predicate says which heading matters; `[package.metadata.docs.rs]` is
     // a different table and names no package.
     let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
-        is_table(line).then(|| line.trim() == "[package]")
+        is_table(line)
+            .then(|| crate::manifest::table_name(line).is_some_and(|name| name == "package"))
     });
     let names: Vec<&str> = tables
         .iter()
@@ -1137,6 +1142,11 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
             }
         }
     }
+    // **Already per document, which is why this counter stays where it is.** A review read it as an aggregate
+    // over every crate and asked for the treatment `require_example_pins` got — but that function walks a
+    // directory of examples and this one reads the workspace ROOT manifest alone, so its loop is over one
+    // document's `[workspace.dependencies]` entries. The granularity a partial read would need is already the
+    // granularity it has: nothing else's success can keep this count non-zero.
     if pins == 0 {
         return Err(cannot_judge_at(
             "release-coherence#no-internal-path-dependency-found",

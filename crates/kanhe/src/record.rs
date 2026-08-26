@@ -37,28 +37,78 @@ pub fn is_record_document(path: &str) -> bool {
 /// Empty for live text, every line for a record document, and the dated sections alone for the sectioned one.
 /// Cut by [`crate::sections`], which owns cutting a flat sentinel-delimited document; the date is read by
 /// [`crate::reading::date`], which owns the calendar. Neither question is answered again here.
-pub fn record_lines(path: &str, text: &str) -> BTreeSet<usize> {
+pub fn record_lines(path: &str, text: &str) -> Records {
     if is_record_document(path) {
-        return (1..=text.lines().count()).collect();
+        return Records::Lines((1..=text.lines().count()).collect());
     }
     if path != SECTIONED_RECORD {
-        return BTreeSet::new();
+        return Records::Live;
     }
     let source = Source::of(text);
     let mut dated = BTreeSet::new();
     for section in crate::sections::cut(source.prose().numbered_lines(), |line| {
         line.trim_start().starts_with("## [").then_some(())
     }) {
+        // **A version heading that carries no readable date is neither answer, and silence chose the wrong
+        // one.** Both arms below used to `continue`, so a released section whose date was mistyped or missing
+        // read as LIVE — the whole historical record then judged against today's tree, with the diagnostic
+        // pointing at an entry inside it rather than at the heading. `[Unreleased]` is the one heading that
+        // legitimately carries no date, and it is named rather than inferred.
+        let name = section
+            .line
+            .trim_start()
+            .trim_start_matches("## [")
+            .split(']')
+            .next()
+            .expect("`str::split` yields at least one item");
         let Some((_, suffix)) = section.line.split_once("] - ") else {
-            continue;
+            if name == "Unreleased" {
+                continue;
+            }
+            return Records::Unreadable(format!(
+                "{path}:{} heads a section `{}` with no ` - DATE`, so whether it is a record or live text \
+                 cannot be decided — and reading it as live judges a released record against today's tree",
+                section.start,
+                section.line.trim()
+            ));
         };
-        if crate::reading::date("changelog section date", suffix.trim()).is_err() {
-            continue;
+        if let Err(refusal) = crate::reading::date("changelog section date", suffix.trim()) {
+            return Records::Unreadable(format!(
+                "{path}:{} heads a section whose date this reader cannot read ({}), so whether it is a \
+                 record or live text cannot be decided",
+                section.start, refusal.message
+            ));
         }
         dated.insert(section.start);
         for (line, _) in &section.body {
             dated.insert(*line);
         }
     }
-    dated
+    Records::Lines(dated)
+}
+
+/// Which lines of a document are a record, or that the question could not be decided.
+///
+/// **The third state is the finding.** With two, a heading this reader could not read fell to *live* — and a
+/// released section read as live is a whole historical record judged against today's tree. Absent and
+/// unreadable are two facts here as everywhere else in this crate; `capability_subjects::Declared` is the
+/// precedent.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Records {
+    /// Every line is live text.
+    Live,
+    /// These one-based lines are a record; the rest are live.
+    Lines(BTreeSet<usize>),
+    /// A heading whose kind could not be decided, said in full so a caller refuses rather than guesses.
+    Unreadable(String),
+}
+
+impl Records {
+    /// Whether `line` is a record, treating an undecided document as carrying none.
+    ///
+    /// For a caller that has already turned [`Records::Unreadable`] into its own refusal and needs the lines
+    /// only to finish the pass it was in.
+    pub fn contains(&self, line: usize) -> bool {
+        matches!(self, Records::Lines(lines) if lines.contains(&line))
+    }
 }

@@ -225,16 +225,17 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   same repair that admits the detailed form closes the direction where a non-dependency was read as one
 - **PINNED-BY** `a_feature_named_after_a_family_crate_is_not_a_pin`
 
-#### Scenario: A dependency declared under a quoted cfg target is not observed — a stated bound
+#### Scenario: A dependency declared under a cfg target carrying a dot is not observed — a stated bound
 
-- **WHEN** a family dependency is declared under `[target.'cfg(…)'.dependencies]` or its `.NAME` form
-- **THEN** nothing reacts. That heading's second key is a **quoted** cfg expression, and reading which
-  configurations it selects is a grammar of its own rather than a context in front of a dependency table.
-  The sibling form is read: a bare target triple is two bare TOML keys, and a bare key carries no dot, so
-  the triple runs to the next dot with nothing guessed. This bound named both forms until that was
-  measured — the reason it gives is about the quoted grammar, and it had been used to skip the whole target
-  corpus
-- **UNPINNED** `BACKLOG.md` — *a dependency declared under a quoted cfg target is not observed*
+- **WHEN** a family dependency is declared under `[target.'cfg(…)'.dependencies]` whose cfg expression
+  contains a **dot**
+- **THEN** nothing reacts. The heading is split at its first dot to step past the target context, and a dot
+  inside the expression puts that split inside it rather than past it
+- **AND** quoting alone no longer hides a table, which is what this bound used to say. `manifest::table_name`
+  unquotes each segment, and the reader was measured over every cfg shape it meets — a bare predicate, one
+  carrying spaces, one carrying escaped quotes — all of which are now classified. The pin under a quoted cfg
+  target is **observed**, and the direction that once asserted this bound over it asserts the refusal instead
+- **UNPINNED** `BACKLOG.md` — *a dependency declared under a cfg target carrying a dot is not observed*
 
 #### Scenario: A renamed family dependency is resolved by the package it names
 

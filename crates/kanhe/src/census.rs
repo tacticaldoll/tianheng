@@ -266,10 +266,19 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Sweep {
         };
         // A record's dated sections, so a figure inside one is skipped by line while the live sections of the
         // same document are read normally. `record` cuts them; this only asks.
+        // An undecided record boundary is a cannot-judge, not a document read as live: a released section
+        // taken for live text puts a whole historical record in front of today's enumeration.
         let records = crate::record::record_lines(path, &text);
+        if let crate::record::Records::Unreadable(what) = &records {
+            offences.push(cannot_judge_at(
+                "repository-checks#census-record-boundary-undecided",
+                format!("  {what}"),
+            ));
+            continue;
+        }
         let mut stated_here = false;
         for (index, line) in text.lines().enumerate() {
-            if records.contains(&(index + 1)) {
+            if records.contains(index + 1) {
                 continue;
             }
             for census in declared {
