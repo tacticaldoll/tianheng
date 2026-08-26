@@ -1409,9 +1409,11 @@ consumer for an undemonstrated deduplication.
 - **WATCH: a dependency declared under a cfg target carrying a dot is not observed.** *Observed pressure:* the
   example-pin reader decides which tables hold dependencies from the heading, and admits
   `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, their `.NAME` detailed forms, and any of
-  those under a bare target triple. `[target.'cfg(…)'.dependencies]` is not admitted. *Observation
-  source:* the round that read the bare-triple form, which found the wider entry this replaces had taken a
-  reason about the quoted grammar and applied it to the whole target corpus. *Risk:* a stale family pin
+  those under a bare target triple **or a quoted cfg expression**. What is not admitted is a cfg expression
+  carrying a **dot**, where stepping past the target context splits inside the expression. *Observation
+  source:* the round that read the bare-triple form found a wider entry that had taken a reason about the
+  quoted grammar and applied it to the whole target corpus; the round that converged the heading readers onto
+  one that unquotes each segment then closed the quoted case too, and measured that a dot is what remains. *Risk:* a stale family pin
   under a cfg-guarded target table reaches a release unobserved. Bounded by there being no target table in
   any manifest in this repository, ever. *Next trigger:* an example acquiring one — at which point the
   shape has an instance to be written against rather than a guess. *Authority:* engine.

@@ -75,9 +75,11 @@ pub(crate) fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
 /// dependencies.
 ///
 /// A context cargo writes in front of a dependency table is stripped before the heading is classified, so
-/// `[target.<triple>.dependencies]` and its `.NAME` form are read like any other. `[target.'cfg(…)'.…]` is
-/// **not**, and that is a declared bound rather than an oversight: its second key is a quoted cfg
-/// expression, and which configurations it selects is a grammar of its own. See [`past_the_context`].
+/// `[target.<triple>.dependencies]`, its `.NAME` form, and `[target.'cfg(…)'.…]` are all read like any other:
+/// the shared heading reader unquotes each segment, so quoting alone hides nothing. What is **not** read is a
+/// cfg expression carrying a **dot** — stepping past the target context splits the heading at its first dot,
+/// and a dot inside the expression puts that split inside it. That is a declared bound rather than an
+/// oversight, and it is what remains of a wider one this reader used to have. See [`past_the_context`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Table {
     /// `[dependencies]` and its dev/build siblings: each line names one dependency.
@@ -91,14 +93,18 @@ enum Table {
 /// `inner` past the context cargo may write in front of a dependency table, or `None` where the heading
 /// names a context this reader is declared not to read.
 ///
-/// **Quoting is the discriminator, and TOML guarantees it rather than this reader guessing it.** A cfg
-/// expression has to be a *quoted* key — parentheses, spaces and `=` are not bare-key bytes — and a bare key
-/// cannot carry a dot, because a dot is what separates one key from the next. So a target segment that does
-/// not open with a quote runs to the next dot and is a triple, which is a context like any other; one that
-/// does open with a quote is the grammar the declared bound is about. The reason that bound gives —
-/// *the heading carries a quoted cfg expression, the grammar a line-oriented reader is likeliest to be wrong
-/// about* — was written from the hard case and then used to skip the whole corpus, and the easy case needed
-/// no guess at all.
+/// **A surviving quote is the discriminator, and it means the expression carried a dot.** The heading arrives
+/// already unquoted by `manifest::table_heading`, which strips a matched pair from each segment — so a cfg
+/// expression with no dot in it comes through bare, runs to the next dot like a triple, and is a context like
+/// any other. One that *does* carry a dot was split across that dot before unquoting, leaving each half with
+/// an unmatched quote: `[target."cfg(any(a.b))".dependencies]` reaches here as `"a.b".dependencies` after the
+/// context, and the opening quote is what says so.
+///
+/// So the quote check below is not a guess about grammar; it is the one shape the split cannot put back
+/// together, and it is exactly the declared bound. Measured across the cfg spellings this reader meets — a
+/// bare predicate, one carrying spaces, one carrying escaped quotes — all come through bare and are read.
+/// An earlier version of this reasoning took *quoted* to mean *cfg* and skipped every quoted target, which
+/// was a reason written from the hard case and applied to the whole corpus.
 fn past_the_context(inner: &str) -> Option<&str> {
     // The root manifest declares the family under `[workspace.dependencies]`, which is a dependency table
     // with a context in front of it exactly as a target table is.
@@ -118,9 +124,14 @@ fn dependency_table(heading: &str) -> Table {
     // elsewhere.** `[ dependencies ]` and `["dependencies"]` are the dependency table to cargo, and stripping
     // the brackets without trimming or unquoting left both as `Table::Other` — a whole dependency table
     // silently unclassified, which the aggregate guard downstream could not see.
-    let Some(inner) = crate::manifest::table_name(heading) else {
+    let Some(heading) = crate::manifest::table_heading(heading) else {
         return Table::Other;
     };
+    // An array of tables is not a dependency table, whatever it is called.
+    if heading.array {
+        return Table::Other;
+    }
+    let inner = heading.name;
     let Some(inner) = past_the_context(&inner) else {
         return Table::Other;
     };
@@ -501,8 +512,9 @@ fn package_name(manifest: &str) -> PackageName {
     // which lines are headings and this predicate says which heading matters; `[package.metadata.docs.rs]` is
     // a different table and names no package.
     let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
-        is_table(line)
-            .then(|| crate::manifest::table_name(line).is_some_and(|name| name == "package"))
+        is_table(line).then(|| {
+            crate::manifest::table_heading(line).is_some_and(|heading| heading.is_table("package"))
+        })
     });
     let names: Vec<&str> = tables
         .iter()
@@ -1411,7 +1423,15 @@ fn require_lock_versions(
         crate::region::Source::of(lock.as_str())
             .toml()
             .numbered_lines(),
-        |line| is_table(line).then(|| line.trim() == "[[package]]"),
+        // Through the shared reader, which is what makes the array-of-tables shape a question rather than a
+        // literal: this was the fifth place deciding which table a heading names, and the only one whose
+        // subject was an array.
+        |line| {
+            is_table(line).then(|| {
+                crate::manifest::table_heading(line)
+                    .is_some_and(|heading| heading.is_array("package"))
+            })
+        },
     );
     for block in blocks.iter().filter(|block| block.name) {
         let mut name = String::new();
