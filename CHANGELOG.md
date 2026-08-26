@@ -7202,6 +7202,35 @@ no adopter runs. They are here rather than under the adopter headings above beca
   negative run. No behaviour moves and no published API, outcome, report, exit class or manifest changes.
 
 
+- **A comparison between two derivations of a path has to be right on every axis, so the comparison is
+  deleted rather than fixed again.** `license-files` derived the unpublishable packages from `cargo metadata`
+  and tested each against a `crates/*/Cargo.toml` glob. The first repair in this window closed the
+  identity-versus-location axis — package name against directory basename — and the second closed
+  relative-versus-absolute. It left logical-versus-physical open: `cargo metadata` emits a canonical path,
+  while `cd "$dir" && pwd` prints `$PWD` unless given `-P`.
+
+  Measured in a workspace reached through a symlink: cargo answers `…/real/crates/kanhe/Cargo.toml`, the
+  comparison computes `…/link/crates/kanhe/Cargo.toml`, no `case` arm matches, and **all eight** crates are
+  checked — including the two cargo refuses to publish, which are then failed for license texts they need not
+  ship. That is verbatim the outcome the previous repair's own comment named as what it was avoiding on the
+  axis it did fix, so the repair reintroduced its own defect class one axis over.
+
+  `pwd -P` closes that axis, and the axis after it belongs to whoever finds it next. The job now iterates the
+  **publishable** packages cargo reports and takes each directory from the `manifest_path` cargo gave for it:
+  one enumerator, no second spelling to normalise, and the set checked is the set cargo would publish by
+  construction. `merge-pr.sh` had already made this call for this reason — it puts both sides in one form
+  because *two spellings of the same tree would refuse*. The space-joined `case` membership test goes with it,
+  and with it the question of what a path containing a space would have done.
+
+  A derived set can be empty where a glob cannot, so the floor is stated as `packaged-selftest` states its
+  own, and the job prints the number it checked. Both forms were run against the real workspace and through
+  the symlink: six publishable crates, identical either way, and no crate cargo refuses to publish is
+  demanded to carry the texts. A `ws="$PWD"` left behind when the patch stopped being built from it is
+  removed too — dead, and a logical path besides.
+
+  No published API, outcome, report, exit class or manifest moves; the change is confined to CI.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
