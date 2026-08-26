@@ -2002,18 +2002,6 @@ fn unanchored_citation_offences_in(corpus_root: &Path, corpus: &[String]) -> BTr
                  version. Name the release window, or move the citation into a record"
             ));
         }
-        if !matches!(kind, Prose::Whole) {
-            continue;
-        }
-        for (index, line) in live.lines().enumerate() {
-            for serial in hosting_serials(line) {
-                offences.insert(format!(
-                    "  {path}:{} cites `{serial}`, a serial belonging to the hosting platform rather than \
-                     to this repository. Name what the change was, or the release window it landed in",
-                    index + 1
-                ));
-            }
-        }
     }
     assert!(
         read > 0,
@@ -2085,89 +2073,6 @@ fn is_abbreviated_object(span: &str) -> bool {
             .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
         && span.chars().any(|c| c.is_ascii_digit())
         && span.chars().any(|c| c.is_ascii_alphabetic())
-}
-
-/// Every hosting serial named on `line`, which is a `#` followed by digits on a line that says what it is.
-///
-/// **A bare `#N` is not a serial and is no longer read as one.** The first draft took every `#` followed by a
-/// digit, which refuses a colour written `#123` and any other numeric value spelled that way — a false
-/// refusal, the direction the Core Contract forbids more strictly. The line has to name the thing: `PR`,
-/// `pull request` or `issue`, matched whole-word and case-insensitively.
-///
-/// **Scoped to the line rather than to what precedes each `#`,** because a real citation lists several under
-/// one word — `PRs #603, #604 and #605` — and a prefix test would catch the first and let the rest through.
-/// The cost is the other direction, and it is declared: a serial written with no such word on its line is
-/// not observed.
-fn hosting_serials(line: &str) -> Vec<String> {
-    // **The cue binds to the serials that follow it, not to the whole line.** Asking only whether the line
-    // carries a cue word made `This issue uses colour #123` a citation — the cue and the number were in one
-    // sentence about different things. The cue now opens a run: every serial from the cue to the end of its
-    // clause is a citation, and one before it, or after the clause closes, is not. A clause ends at `.`, `;`
-    // or `:`, which is where a sentence stops being about the same thing.
-    //
-    // Still a run rather than the next token, because a real citation lists several under one cue —
-    // `PRs #603, #604 and #605` — and binding only the nearest would catch the first and let the rest
-    // through. That shape was live in this file's own text before the sweep removed it.
-    //
-    // **What the clause does not separate is declared rather than guessed at.** `This issue uses colour #123`
-    // puts the cue and a number that is not a serial in one clause, and only what the sentence MEANS tells
-    // them apart. Measured: the clause binding closes the cross-clause case — `Colour #789 first; then PR
-    // #111` reports only the second — and leaves this one, which is an over-reaction with a bound of its own.
-    let lowered = line.to_ascii_lowercase();
-    let cue_at = [
-        "pull requests",
-        "pull request",
-        "prs",
-        "pr",
-        "issues",
-        "issue",
-    ]
-    .iter()
-    .filter_map(|word| {
-        lowered.match_indices(word).find_map(|(at, _)| {
-            let before = lowered[..at].chars().next_back();
-            let after = lowered[at + word.len()..].chars().next();
-            (before.is_none_or(|c| !c.is_ascii_alphanumeric())
-                && after.is_none_or(|c| !c.is_ascii_alphanumeric()))
-            .then_some(at)
-        })
-    })
-    .min();
-    let Some(cue_at) = cue_at else {
-        return Vec::new();
-    };
-    let clause_end = line[cue_at..]
-        .find(['.', ';', ':'])
-        .map_or(line.len(), |at| cue_at + at);
-    let line = &line[cue_at..clause_end];
-    let bytes: Vec<char> = line.chars().collect();
-    let mut found = Vec::new();
-    for (at, ch) in bytes.iter().enumerate() {
-        if *ch != '#' {
-            continue;
-        }
-        // A bound identifier spells `capability#slug`, so a `#` glued to a word is not this shape; only a
-        // digit immediately after it is. An HTML entity spells `&#NNN;`, which is a lexical fact rather than
-        // a judgement, so the `&` is excluded here — a false refusal over a numeric character reference is
-        // the direction the Core Contract forbids more strictly, and none is in the tree yet.
-        let before_is_word = at
-            .checked_sub(1)
-            .and_then(|prev| bytes.get(prev))
-            .is_some_and(|c| {
-                c.is_ascii_alphanumeric() || *c == '-' || *c == '_' || *c == '/' || *c == '&'
-            });
-        if before_is_word {
-            continue;
-        }
-        let digits: String = bytes[at + 1..]
-            .iter()
-            .take_while(|c| c.is_ascii_digit())
-            .collect();
-        if !digits.is_empty() {
-            found.push(format!("#{digits}"));
-        }
-    }
-    found
 }
 
 /// No live governance document cites a moment a reader of a fresh clone cannot reach.

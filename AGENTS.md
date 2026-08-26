@@ -94,6 +94,8 @@ Applied to the shapes a review is likely to file:
 | a review round number, a pull request number | provenance |
 | a rejected alternative with no measurement | provenance |
 | **a relative anchor — `this window`, `the previous round`** | neither: it names a moving reference, so it is stale the moment the window closes. Anchor it to the moment, or drop it |
+| **a commit object in live text** | neither, and this one **has a reaction**: `main` carries one commit per release, so a development commit is unreachable from a fresh clone by construction. Anchor to the release window |
+| **a hosting serial in live text** | neither, and this one deliberately has **no** reaction. A reader over text cannot decide it: the bare shape *is* the fixture for the squash-serial check, and inside one clause a cue and a numeric value are told apart only by meaning. One was built, needed three declared bounds to say what it could not decide, caught nothing, and was withdrawn — a narrow instrument defending a wide rule is worse than the rule alone |
 
 **Invariant first, observation second, in separate sentences.** The disposition above decides what stays; this
 decides how it is written, and it is what makes the table applicable without a re-read. A passage that fuses

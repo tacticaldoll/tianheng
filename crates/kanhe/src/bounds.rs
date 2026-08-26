@@ -619,24 +619,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *a relative phrase in non-record Markdown*",
         ),
-        // The serial half of that reaction cannot reach line-comment formats, and the reason is already law:
-        // `AGENTS.md` records that the bare serial shape IS the fixture for the squash-serial check, so a
-        // reader over Rust would refuse the very check that forbids serials. The object half has no such
-        // collision -- measured over every classified line-comment format, every code span of that shape in
-        // a comment was a real citation -- so only this half is bounded.
-        BoundDecl::unpinned(
-            BoundId::new("reference-integrity/a-hosting-serial-outside-markdown-is-not-observed-a-stated-bound"),
-            "a bare hosting serial written in a comment, in any line-comment format",
-            Extent::Reached(Reached::UnderReacts {
-                because: "the bare serial shape is the FIXTURE for the squash-serial check, so a reader over \
-                          that format would refuse the check that forbids the thing -- the collision is with \
-                          the shape rather than with a spelling, so narrowing the pattern does not reach it. \
-                          The abbreviated-object half has no such collision and is therefore not restricted"
-                    .into(),
-                owner: Owner::Engine,
-            }),
-            "`BACKLOG.md` — *a hosting serial outside Markdown*",
-        ),
         // The reader decides by shape, so a code span that merely HAS the shape is refused. Resolving each
         // token against the object database was measured and declined: `actions/checkout` fetches one commit
         // by default, so in CI the objects a citation names are absent -- the reader would answer clean over
@@ -660,46 +642,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                     .into(),
             }),
             "`BACKLOG.md` — *a code span shaped like an object that names none*",
-        ),
-        // And what a clause cannot separate. Binding the cue to its clause closes the cross-clause case;
-        // inside one clause a cue and a number that is not a serial are told apart only by what the sentence
-        // means, which is the prose instrument this repository refuses.
-        BoundDecl::unpinned(
-            BoundId::new(
-                "reference-integrity/a-number-sharing-a-clause-with-a-citation-cue-is-refused-a-stated-bound",
-            ),
-            "a `#` followed by digits in the same clause as `PR`, `pull request` or `issue`, naming something \
-             other than a serial",
-            Extent::Reached(Reached::OverReacts {
-                because: "the cue is bound to its clause, which closes the case where the two sit in \
-                          different clauses -- measured, a colour before a semicolon and a citation after it \
-                          report only the citation. Inside one clause nothing lexical separates them, and \
-                          what does is the sentence's meaning: the prose instrument `AGENTS.md` records as \
-                          designed, measured three times and rejected"
-                    .into(),
-            }),
-            "`BACKLOG.md` — *a number sharing a clause with a citation cue*",
-        ),
-        // The other half of the same trade, in the other direction: taking every `#` followed by a digit
-        // refuses a colour and any other numeric value spelled that way, so the line has to name the thing.
-        // Scoped to the line rather than to what precedes each `#`, because a real citation lists several
-        // under one word and a prefix test would catch only the first.
-        BoundDecl::unpinned(
-            BoundId::new(
-                "reference-integrity/a-serial-with-no-citation-word-on-its-line-is-not-observed-a-stated-bound",
-            ),
-            "a `#` followed by digits, in Markdown, on a line that does not name a pull request or an issue",
-            Extent::Reached(Reached::UnderReacts {
-                because: "reading every `#` followed by a digit as a serial refuses a colour and any other \
-                          numeric value spelled that way, which is the false refusal the Core Contract \
-                          forbids more strictly than a miss. Telling the two apart needs what the sentence \
-                          means, so the reader asks the line to name the thing instead. Measured after the \
-                          sweep that removed them: no serial of any form remains in live text, so the \
-                          restriction has no live cost"
-                    .into(),
-                owner: Owner::Engine,
-            }),
-            "`BACKLOG.md` — *a hosting serial with no citation word on its line*",
         ),
         // The reader requires a letter AND a digit, and both directions it would otherwise refuse are live
         // here: a specification writes a long run of digits as the figure a fabricating reader produced, and

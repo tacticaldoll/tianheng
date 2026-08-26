@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**53 of 101 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**51 of 98 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -24,11 +24,9 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound` — owner: engine
 - `publish-source-integrity/the-tree-changing-after-the-gate-passed-is-not-observed-a-stated-bound` — owner: engine
 - `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound` — owner: inherited from the verification environment
-- `reference-integrity/a-hosting-serial-outside-markdown-is-not-observed-a-stated-bound` — owner: engine
 - `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound` — owner: engine
 - `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound` — owner: engine
 - `reference-integrity/a-rust-identifier-named-in-prose-is-not-resolved-a-stated-bound` — owner: engine
-- `reference-integrity/a-serial-with-no-citation-word-on-its-line-is-not-observed-a-stated-bound` — owner: engine
 - `reference-integrity/an-abbreviation-carrying-no-letter-or-no-digit-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound` — owner: engine
 - `release-coherence/a-dependency-declared-under-a-quoted-cfg-target-is-not-observed-a-stated-bound` — owner: engine
@@ -346,7 +344,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (14)
+## over-reacts (13)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -379,14 +377,6 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the reader decides by shape and nothing in the tree distinguishes a value with that shape from a citation without resolving it against an object database. Resolving was declined by measurement: CI checks out one commit, so the objects a citation names are absent there and the reader would either answer clean over all of them or refuse to judge at all. Measured over the live corpus: no span of this shape names anything but a commit, so the over-reaction is unrealised rather than tolerated
 - **its defence must show**: reacts on a harmless shape
 - **unpinned**, tracked by: `BACKLOG.md` — *a code span shaped like an object that names none*
-
-### `reference-integrity/a-number-sharing-a-clause-with-a-citation-cue-is-refused-a-stated-bound`
-
-> a `#` followed by digits in the same clause as `PR`, `pull request` or `issue`, naming something other than a serial
-
-- **because**: the cue is bound to its clause, which closes the case where the two sit in different clauses -- measured, a colour before a semicolon and a citation after it report only the citation. Inside one clause nothing lexical separates them, and what does is the sentence's meaning: the prose instrument `AGENTS.md` records as designed, measured three times and rejected
-- **its defence must show**: reacts on a harmless shape
-- **unpinned**, tracked by: `BACKLOG.md` — *a number sharing a clause with a citation cue*
 
 ### `release-coherence/a-basename-an-entry-writes-for-another-reason-a-stated-bound`
 
@@ -460,7 +450,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (53)
+## under-reacts (51)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -614,14 +604,6 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_valid_signature_from_an_unauthorized_key_is_accepted`
 
-### `reference-integrity/a-hosting-serial-outside-markdown-is-not-observed-a-stated-bound`
-
-> a bare hosting serial written in a comment, in any line-comment format
-
-- **because**: the bare serial shape is the FIXTURE for the squash-serial check, so a reader over that format would refuse the check that forbids the thing -- the collision is with the shape rather than with a spelling, so narrowing the pattern does not reach it. The abbreviated-object half has no such collision and is therefore not restricted
-- **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *a hosting serial outside Markdown*
-
 ### `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound`
 
 > a path inside a dated CHANGELOG section that resolved to nothing at the moment it was written
@@ -645,14 +627,6 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: no reader of text can tell a name that should resolve from one that should not: such tokens routinely match no declaration in the tree, and the most frequent of those are Rust keywords, attribute names and std method names. Separating them needs type information about a receiver, which `inline-symbol-path-confinement` already declares unobserved
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a Rust identifier named in prose is resolved by no reaction*
-
-### `reference-integrity/a-serial-with-no-citation-word-on-its-line-is-not-observed-a-stated-bound`
-
-> a `#` followed by digits, in Markdown, on a line that does not name a pull request or an issue
-
-- **because**: reading every `#` followed by a digit as a serial refuses a colour and any other numeric value spelled that way, which is the false refusal the Core Contract forbids more strictly than a miss. Telling the two apart needs what the sentence means, so the reader asks the line to name the thing instead. Measured after the sweep that removed them: no serial of any form remains in live text, so the restriction has no live cost
-- **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *a hosting serial with no citation word on its line*
 
 ### `reference-integrity/an-abbreviation-carrying-no-letter-or-no-digit-is-not-observed-a-stated-bound`
 

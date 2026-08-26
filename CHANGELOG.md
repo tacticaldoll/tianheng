@@ -7668,6 +7668,32 @@ no adopter runs. They are here rather than under the adopter headings above beca
   `RELATIVE_ANCHORS` records for its own members, arriving here through a different door.
 
 
+- **A narrow instrument defending a wide rule is worse than the rule alone, so the serial reader is
+  withdrawn.** It was built two changes ago and then needed **three** declared bounds to say what it could not
+  decide: that it cannot reach line-comment formats, because the bare serial shape *is* the fixture for the
+  squash-serial check; that a serial on a line naming no pull request is invisible to it; and that a numeric
+  value sharing a clause with a citation cue is refused anyway. Three bounds, three trackers, six projection
+  entries and a cue-and-clause scanner — describing, in the end, one fact: **a reader over text cannot tell a
+  serial from a number, and what tells them apart is what the sentence means.**
+
+  And after the sweep that removed the citations, it caught nothing. Its subject was empty, its residues
+  outnumbered its catches, and each residue was a separate document to keep true. That is the shape nine
+  review rounds have been finding under another name — a rule stated in one place and a mechanism that cannot
+  reach it — arriving this time as a mechanism I had built myself.
+
+  The **rule** stays and moves to where the rules with no reaction live: `AGENTS.md`'s disposition table now
+  carries a row for a hosting serial in live text, saying plainly that it has no reaction and why, beside the
+  row for a commit object that does. A row a reviewer applies is not a weaker answer than a reaction that
+  needs three bounds to be honest; it is the same answer with less to maintain.
+
+  The commit-object half is untouched and stays: it caught dead citations across every prose format, including
+  two inside the file that implements it, and carries one bound — the over-reaction on a code span that has an
+  object's shape and names none, which is a real property of a reader that is really catching things.
+
+  Verified in one run after the withdrawal: a planted commit object is still named, and a planted serial is
+  not.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

@@ -317,8 +317,16 @@ declared as a bound below rather than closed, and the reason is measured rather 
 
 ### Requirement: A live document SHALL anchor a citation to something a fresh clone can reach
 
-A live governance document SHALL NOT cite a commit object or a hosting serial. The anchor SHALL be the
-release window, which survives because `main` is made of releases, or the change's own name, which is text.
+A live governance document SHALL NOT cite a commit object. The anchor SHALL be the release window, which
+survives because `main` is made of releases, or the change's own name, which is text.
+
+**A hosting serial is the same rule and deliberately has no reaction here.** `AGENTS.md` dispositions it as
+provenance and enforces that by review, alongside its other rows, and a reader over text cannot do better:
+the bare serial shape *is* the fixture for the squash-serial check, so a reader over Rust would refuse the
+check that forbids the thing; and inside one clause a citation cue and a numeric value are told apart only by
+what the sentence means. A reaction was built for the Markdown half, needed **three** declared bounds to
+describe what it could not decide, and caught nothing once the citations were swept — a narrow instrument
+defending a wide rule, which is the shape this repository removes rather than declares. It was withdrawn.
 
 `main` carries one commit per release: a whole development window squashes into a single `release: X.Y.Z`
 commit, so no development commit is reachable from it — not eventually, but by construction. A citation to
@@ -335,20 +343,17 @@ followed by a digit or it is not. Fenced blocks, HTML comment spans and lines th
 it, read through the same prose reader the rest of this capability uses, because a fence is where a command
 lives and a command may carry an object name legitimately.
 
-**The corpus is split by predicate, not by sweep.** An abbreviated object SHALL be recognised in every format
-this capability classifies as carrying prose — a comment carries a citation as readily as a document does, and
-nothing in the tree writes that shape in a comment except a citation. A hosting serial SHALL be recognised in
-Markdown alone, for the reason `AGENTS.md` already records: the bare serial shape is the **fixture** for the
-squash-serial check, so a reader over Rust would refuse the very check that forbids serials. That half is a
-declared bound below rather than a line in a scenario.
+**The corpus is every format this capability classifies as carrying prose.** A comment carries a citation as
+readily as a document does, and nothing in the tree writes an abbreviated object's shape in a comment except a
+citation.
 
 The abbreviation floor SHALL be git's own: `--short=4` is accepted, so four is where an abbreviation starts
 being one. A floor this reader invents is a floor it misses every shorter citation under.
 
-#### Scenario: A live governance document cites a commit object or a hosting serial
+#### Scenario: A live governance document cites a commit object
 
 - **WHEN** a tracked document outside the record set names an abbreviated commit object in a code span in its
-  prose, or — in Markdown — a `#` immediately followed by a digit
+  prose
 - **THEN** the reaction fails, naming the file, the line and the citation, and says to name the release
   window or move the citation into a record
 - **PINNED-BY** `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach`
@@ -364,40 +369,6 @@ being one. A floor this reader invents is a floor it misses every shorter citati
   depending on which way its floor was written. A shape test that over-reacts on a value nobody writes is the
   better trade, and measured over the live corpus no span of this shape names anything but a commit
 - **UNPINNED** `BACKLOG.md` — *a code span shaped like an object that names none*
-
-#### Scenario: A number sharing a clause with a citation cue is refused — a stated bound
-
-- **WHEN** Markdown writes a `#` followed by digits in the same clause as `PR`, `pull request` or `issue`,
-  naming something other than a serial
-- **THEN** the reaction fails anyway. The cue is bound to its **clause**, which closes the case where the two
-  sit in different clauses — measured, a colour before a semicolon and a citation after it report only the
-  citation — and inside one clause nothing lexical separates them
-- **AND** what separates them is what the sentence means, which is the prose instrument `AGENTS.md` records as
-  designed, measured three times and rejected
-- **UNPINNED** `BACKLOG.md` — *a number sharing a clause with a citation cue*
-
-#### Scenario: A serial with no citation word on its line is not observed — a stated bound
-
-- **WHEN** Markdown writes a `#` followed by digits on a line that names neither a pull request nor an issue
-- **THEN** nothing reacts. Reading every `#` followed by a digit as a serial refuses a colour and any other
-  numeric value spelled that way, which is the false refusal this repository's Core Contract forbids more
-  strictly than a miss; telling the two apart needs what the sentence means
-- **AND** the reader asks the **line** to name the thing rather than testing what precedes each `#`, because a
-  real citation lists several under one word — and a prefix test would catch the first and let the rest
-  through
-- **UNPINNED** `BACKLOG.md` — *a hosting serial with no citation word on its line*
-
-#### Scenario: A hosting serial outside Markdown is not observed — a stated bound
-
-- **WHEN** a source in a line-comment format writes a bare hosting serial in a comment
-- **THEN** nothing reacts, and the reason is the one `AGENTS.md` records for why no reaction was possible at
-  all: the bare serial shape *is* the fixture for the squash-serial check, so a reader over that format would
-  refuse the check that forbids the thing. The collision is with the shape rather than with a spelling, so
-  narrowing the pattern does not reach it
-- **AND** the abbreviated-object half has no such collision and is therefore **not** restricted: measured over
-  every classified line-comment format, every code span of that shape in a comment was a real citation and
-  none was anything else, so the reader covers both halves of the prose corpus and only this one is bounded
-- **UNPINNED** `BACKLOG.md` — *a hosting serial outside Markdown*
 
 #### Scenario: A dated changelog section is a record, and an undated one is not
 

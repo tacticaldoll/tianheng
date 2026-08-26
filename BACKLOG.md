@@ -1522,51 +1522,6 @@ consumer for an undemonstrated deduplication.
   arriving in live prose, or a CI checkout that carries history, which would make resolution decidable.
   *Authority:* engine. *Compatibility:* patch; the reaction is repository machinery and ships in no package.
 
-- **WATCH: a number sharing a clause with a citation cue.** *Class:* WATCH. *Observed pressure:* a review
-  wrote one sentence naming a reported defect and a colour value in the same clause, and the reaction reported
-  the colour — the cue and a number that is not a serial in one clause, told apart only by what the sentence
-  means. **The instance is not spelled here, and that is the bound demonstrating itself:** writing it put a
-  live one in the corpus, and the reaction refused this entry until the words came out — the same lesson
-  `RELATIVE_ANCHORS` records for its own members. *Observation source:* binding the cue to
-  its clause was measured and closes the cross-clause case, where a colour before a semicolon and a citation
-  after it report only the citation; inside one clause nothing lexical separates them. *Current reaction or
-  bound:*
-  `reference-integrity/a-number-sharing-a-clause-with-a-citation-cue-is-refused-a-stated-bound`. *Risk:* prose
-  that names a pull request and a numeric value in one clause is refused and has to be reworded or split —
-  visible and fixable, which is why this direction was taken over reading the sentence. *Next trigger:* a
-  clause-internal separator that is lexical rather than semantic, or an instance where rewording is not
-  available. *Authority:* engine. *Compatibility:* patch; the reaction is repository machinery and ships in no
-  package.
-
-- **WATCH: a hosting serial with no citation word on its line.** *Class:* WATCH. *Observed pressure:* a bare
-  `#` followed by digits is not read as a serial, because taking every one of them refuses a colour and any
-  other numeric value spelled that way. The line has to name the thing — `PR`, `pull request` or `issue`,
-  whole-word and case-insensitive — which is scoped to the line rather than to what precedes each `#` because
-  a real citation lists several under one word and a prefix test would catch only the first. *Observation
-  source:* measured after the sweep that removed them: no serial of any form remains in live text, so the
-  restriction has no live cost today. *Current reaction or bound:* this entry; the Markdown-only half is
-  `reference-integrity/a-hosting-serial-outside-markdown-is-not-observed-a-stated-bound`. *Risk:* a serial
-  written with no citation word on its line reads as anchored — bounded by the object half covering the same
-  corpus, so a citation naming a commit is caught wherever it is written. *Next trigger:* an instance, which
-  a `git grep` for the shape would find. *Authority:* engine. *Compatibility:* patch; the reaction is
-  repository machinery and ships in no package.
-
-- **WATCH: a hosting serial outside Markdown.** *Class:* WATCH. *Observed pressure:*
-  `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach` recognises an abbreviated commit object in
-  every classified prose format, but a bare hosting serial only in Markdown. *Observation source:*
-  `AGENTS.md` already records why no reaction over the serial shape was possible — the bare shape *is* the
-  fixture for the squash-serial check, and `merge_message`'s directions plant it as text for that check to
-  judge, so a reader over Rust would refuse the check that forbids the thing. Measured when this bound was
-  written: the abbreviated-object half has no such collision, every code span of that shape in a comment
-  being a real citation, which is why the corpus is split by predicate rather than by sweep. *Current
-  reaction or bound:*
-  `reference-integrity/a-hosting-serial-outside-markdown-is-not-observed-a-stated-bound`. *Risk:* a comment
-  cites a serial and reads as anchored — bounded by the object half covering the same corpus, so a citation
-  that names a commit is caught wherever it is written. *Next trigger:* a way to tell a fixture's planted
-  text from a comment's own claim that does not read the sentence — the check's own corpus declaring what it
-  plants, say. *Authority:* engine. *Compatibility:* patch; the reaction is repository machinery and ships in
-  no package.
-
 - **WATCH: an abbreviation carrying no letter or no digit.** *Class:* WATCH. *Observed pressure:*
   `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach` recognises an abbreviated commit object by
   shape, and requires both a letter and a digit so that it refuses neither a long run of digits written as a
