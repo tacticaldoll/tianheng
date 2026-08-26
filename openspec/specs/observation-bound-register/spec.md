@@ -553,8 +553,11 @@ and every residual known to the reaction SHALL appear there. Three are known and
    undetectable.
 2. The scan is **line-oriented**, so a statement whose bound names continue onto the next line is examined
    only on the line carrying the trigger words.
-3. A `(bound: …)` reference clears the prose it sits with **regardless of how many bounds that prose
-   states**, and regardless of whether the referenced bound is one of them.
+3. A resolvable bound reference clears the prose it sits with **regardless of how many bounds that prose
+   states**, and regardless of whether the referenced bound is one of them. The clearing form is any
+   reference the reaction resolves — the parenthesised `(bound: …)` and a bare capability-qualified id
+   alike, since the id is no less a reference than the wrapper around it — so naming only the
+   parenthesised form here understated the residual by the wider half of what actually clears.
 
 Residual 3 is the mechanism that let a retired `#[path]` bound survive in a capability's overview paragraph
 through two sweeps, so it SHALL be recorded as the reason rather than as a curiosity. Closing it would

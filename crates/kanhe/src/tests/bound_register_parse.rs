@@ -47,7 +47,7 @@ fn the_scenario_readers_agree_where_a_scenario_ends() {
          about which scenario it sits in"
     );
 
-    let offences = undeclared_prose_offences("cap/spec.md", text, &capability_set());
+    let offences = undeclared_prose_offences("cap/spec.md", text, &capability_set()).offences;
     assert!(
         offences.is_empty(),
         "the prose sits inside the scenario `bounds_in` registered, so reporting it undeclared is these two \
@@ -279,7 +279,8 @@ fn prose_stating_a_bound_with_no_scenario_and_no_reference_fails_naming_the_occu
         "openspec/specs/some-capability/spec.md",
         text,
         &capability_set(),
-    );
+    )
+    .offences;
     assert_eq!(offences.len(), 1, "{offences:?}");
     assert!(
         offences[0].contains("spec.md:3") && offences[0].contains("stated bound"),
@@ -295,7 +296,8 @@ fn the_same_statement_inside_a_declared_bound_scenario_does_not_fail() {
         "openspec/specs/some-capability/spec.md",
         text,
         &capability_set(),
-    );
+    )
+    .offences;
     assert!(
         offences.is_empty(),
         "prose inside a declared bound scenario must not fail: {offences:?}"
@@ -312,6 +314,7 @@ fn prose_under_a_bounds_named_requirement_is_exempt_but_the_requirement_then_owe
             declares,
             &capability_set()
         )
+        .offences
         .is_empty(),
         "the requirement declares a bound scenario, so its own prose list is exempt with nothing further owed"
     );
@@ -322,7 +325,8 @@ fn prose_under_a_bounds_named_requirement_is_exempt_but_the_requirement_then_owe
         "openspec/specs/some-capability/spec.md",
         does_not_declare,
         &capability_set(),
-    );
+    )
+    .offences;
     assert_eq!(offences.len(), 1, "{offences:?}");
     assert!(
         offences[0].contains("names bounds") && offences[0].contains("declares no bound scenario"),
@@ -340,7 +344,8 @@ fn a_resolvable_bare_reference_clears_bound_declaring_prose_with_no_scenario() {
         "openspec/specs/some-capability/spec.md",
         text,
         &capability_set(),
-    );
+    )
+    .offences;
     assert!(
         offences.is_empty(),
         "a line carrying a resolvable bare reference must be cleared: {offences:?}"
@@ -356,7 +361,8 @@ fn a_negated_bound_in_prose_is_not_an_offence() {
         "openspec/specs/some-capability/spec.md",
         text,
         &capability_set(),
-    );
+    )
+    .offences;
     assert!(
         offences.is_empty(),
         "a negation directly on the bound noun denies the bound rather than declaring one: {offences:?}"
@@ -371,4 +377,38 @@ fn two_references_on_one_line_are_both_reported() {
         "probe-capability/first-one and probe-capability/second-one\n",
     );
     assert_eq!(found.len(), 2, "{found:?}");
+}
+
+/// A reference ending a sentence is a reference, full stop included.
+///
+/// **A false refusal that turned on punctuation.** `is_word_char` admits `.` so that `spec.md` reads as one
+/// run, which fused an id with the full stop after it and failed `is_kebab` — so prose naming a bound cleared
+/// when a space followed the id and was refused when a period did. Nothing said so, and the residual naming
+/// what clears named only the parenthesised form.
+///
+/// Negative run, with the trailing trim removed: the period-terminated line is reported as a bound stated
+/// outside any declared scenario while the space-terminated one is cleared, from the same id.
+#[test]
+fn a_reference_ending_a_sentence_still_clears_the_prose_it_sits_with() {
+    let id = "repository-checks/files-no-capability-claims-a-stated-bound";
+    for terminator in ["", ".", "..", " and more."] {
+        let text =
+            format!("### Requirement: Something\n\nThis is a stated bound; see {id}{terminator}\n");
+        let scan = undeclared_prose_offences("cap/spec.md", &text, &capability_set());
+        assert_eq!(
+            (scan.stated, scan.cleared),
+            (1, 1),
+            "the reference clears regardless of what ends the sentence, and {terminator:?} did not: {:?}",
+            scan.offences
+        );
+    }
+    // A path is still a path: three slashes is not a `<capability>/<slug>` pair, trimmed or not.
+    assert!(
+        bare_references(
+            &capability_set(),
+            "// see openspec/specs/repository-checks/spec.md.\n"
+        )
+        .is_empty(),
+        "a path containing a capability name is not a reference, and the trailing trim must not make it one"
+    );
 }
