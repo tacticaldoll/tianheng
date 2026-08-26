@@ -255,7 +255,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound`
 
-> nothing reacts. Extending the sweep to whole-document prose was measured against the tree it would judge: of the tracked non-record Markdown occurrences, one is `AGENTS.md`'s own row **declaring** the phrases, three are duration rather than pointer — *admitted it for a window*, which narrates how long something lasted — one of those three is a generated projection's copy of another, and two more are already anchored, one by a commit and one by naming the release. Two are genuine. A reader over text separates none of those groups: telling a phrase that points at a moving window from one that measures a span is a judgement about the sentence, which is the prose instrument `AGENTS.md` records as designed, measured three times and rejected
+> nothing reacts. Extending the sweep to whole-document prose was measured against the tree it would judge, and most of what it would report is not an offence: some occurrences are `AGENTS.md`'s own row **declaring** the phrases, some are duration rather than pointer — *admitted it for a window*, which narrates how long something lasted — some are a generated projection's copy of either, and some are already anchored, by a commit or by naming the release. A reader over text separates none of those groups: telling a phrase that points at a moving window from one that measures a span is a judgement about the sentence, which is the prose instrument `AGENTS.md` records as designed, measured three times and rejected
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a relative phrase in non-record Markdown*
 
@@ -337,7 +337,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `repository-checks/a-marker-is-reached-through-some-other-primitive-a-stated-bound`
 
-> the reaction reports nothing. Those five are in live use for reading a *single* delimited value rather than pairing a sequence, and none of their live uses is a pairing — so refusing them would refuse the honest use, and telling the two apart needs the expression's shape rather than the primitive's name
+> the reaction reports nothing. Those are in live use for reading a *single* delimited value rather than pairing a sequence, and none of their live uses is a pairing — so refusing them would refuse the honest use, and telling the two apart needs the expression's shape rather than the primitive's name
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the backtick primitives the pairing reader names*
 

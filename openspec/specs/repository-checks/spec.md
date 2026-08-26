@@ -446,7 +446,7 @@ gave one rule two answers, and the correct half could tell the other nothing.
 
 - **WHEN** a source pairs markers using `split_once`, `strip_prefix`, `strip_suffix`, `trim_matches` or
   `matches` with a backtick literal
-- **THEN** the reaction reports nothing. Those five are in live use for reading a *single* delimited value
+- **THEN** the reaction reports nothing. Those are in live use for reading a *single* delimited value
   rather than pairing a sequence, and none of their live uses is a pairing — so refusing them would refuse
   the honest use, and telling the two apart needs the expression's shape rather than the primitive's name
 - **UNPINNED** `BACKLOG.md` — *the backtick primitives the pairing reader names*
