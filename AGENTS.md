@@ -331,10 +331,23 @@ it should not. A declared census is the *safe* way to write a count, and safe wa
 having: it still has to be re-typed every time the set moves, and this repository re-typed the one it had three
 times in a single release window, each time by hand and once with the wrong figure. Where a figure matters,
 **the reaction prints it on every clean run** — `bound_register` and `pin_bites` both do — and the reader gets
-it from the run rather than from prose that can disagree with the run. The mechanism stays because a reaction
-that has been shown to refuse is worth keeping armed for a class that must not recur; its directions are held
-against written fixtures rather than against a count in a live document, which is what makes them independent
-of the rule above.
+it from the run rather than from prose that can disagree with the run. **The mechanism stays for a reason a grep can check, not because an armed reaction is nice to have.** That
+was the first answer given here and it was the weaker one: an armed reaction with no subject is exactly the
+narrow-instrument shape this repository withdraws. What earns `census` its place is that it has become the
+crate's **cited exemplar** — `refusal`, `whitespace_hygiene` in two places and `repository-checks` all point
+at `census::sweep` as the reference implementation of a vacuity guard, *an unread document is not a document
+without one* — and it is an entry in `gate_exit_classes`'s declared set of targets that spawn a process.
+Deleting it would leave four sites naming a deleted thing, or four abstract descriptions where a reader could
+previously go and read working code. Its directions are held against written fixtures rather than against a
+count in a live document, which is what makes them independent of the rule above.
+
+**And it is not subjectless, which printing the state is how anyone found out.** The claim that the tree
+states no census was made twice in this window and was wrong both times, because the sweep that produced it
+looked for one of the two declared phrasings and skipped the record locations. The sweep now says on every
+clean run how many documents state one, and the answer is a **generated projection** whose figure the renderer
+computes. That is the one place a figure belongs — produced, not typed — and this reaction is what makes
+*produced* checkable rather than asserted. A reaction that reacts to nothing is silent for the same reason a
+broken one is; saying the number out loud is what tells the two apart.
 
 **A count of something this repository does not produce is not written either.** That is the other half, and
 nothing observes it. Eight figures were found wrong in one change and three of them counted sets no repository check

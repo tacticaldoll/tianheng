@@ -64,6 +64,35 @@ fn every_declared_census_agrees_with_what_produces_it() {
     ];
 
     let offences = sweep(&root, &files, &declared);
+    // **Printed because the alternative is assuming it, and the assumption was wrong twice.** The rule this
+    // serves says a count of a live set is not written, and it was twice concluded from that — by a grep for
+    // one of the two declared phrasings, over a corpus that skipped the records — that nothing states a
+    // census at all. One document does: a generated projection whose figure the renderer computes, which is
+    // the one place a figure belongs. So this sweep is not armed-and-idle; it is what makes *produced*
+    // checkable. A reaction that reacts to nothing is silent for the same reason a broken one is, and saying
+    // the number out loud is what tells them apart.
+    let stating = files
+        .iter()
+        .filter(|path| path.ends_with(".md"))
+        .filter(|path| !crate_record(path))
+        .filter(|path| {
+            std::fs::read_to_string(root.join(path)).is_ok_and(|text| {
+                declared.iter().any(|census| {
+                    text.lines().any(|line| {
+                        !kanhe::census::figures_in(line, census.phrase)
+                            .unwrap_or_default()
+                            .is_empty()
+                    })
+                })
+            })
+        })
+        .count();
+    eprintln!(
+        "census ok ({stating} tracked document(s) state a declared census, over {} declared) — a figure \
+         belongs only where it is produced, so the documents this finds should be the generated projections \
+         and nothing else; a rise here is a hand-written count arriving",
+        declared.len()
+    );
     assert!(
         offences.is_empty(),
         "a hand-written census disagrees with the check that enumerates its set, or a tracked document could \
@@ -374,4 +403,9 @@ fn a_census_outside_markdown_is_a_stated_bound() {
         "the corpus is tracked Markdown, so a census outside it is a stated bound rather than a finding, got \
          {unheld:?}"
     );
+}
+
+/// Whether `path` is a record, asked of the module that owns the distinction.
+fn crate_record(path: &str) -> bool {
+    kanhe::record::is_record_document(path)
 }

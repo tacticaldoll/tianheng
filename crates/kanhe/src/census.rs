@@ -60,7 +60,7 @@ pub struct Census {
 /// digits, `53`, were still available to start a fresh match. Skipping to the end of the **whole** matched
 /// span rather than only its first number's token closes both at once, because every figure the match
 /// consumed — first, middle, or last — sits inside that span.
-fn figures_in(line: &str, phrase: &str) -> Result<Vec<Vec<usize>>, String> {
+pub fn figures_in(line: &str, phrase: &str) -> Result<Vec<Vec<usize>>, String> {
     let parts: Vec<&str> = phrase.split("{}").collect();
     if parts.len() < 2 {
         return Ok(Vec::new());
