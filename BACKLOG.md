@@ -1511,9 +1511,14 @@ consumer for an undemonstrated deduplication.
   specifications, which carry no dated sections and are read later by design. *Observation source:* a review
   named two unanchored phrases in this file; sweeping the four declared phrases across tracked non-record
   Markdown found that most of what a widened reaction would report is not an offence — `AGENTS.md`'s own row
-  declaring the phrases, three duration uses (*for a window* narrating how long something lasted, one of them
-  a generated projection's copy of another), and two already anchored, one by a commit and one by naming the
-  release. *Current reaction or bound:*
+  declaring the phrases, duration uses (*for a window* narrating how long something lasted), generated
+  projections' copies of either, and phrases already anchored by a commit or by naming the release.
+  **Measured at `b475b46`, before this entry existed: nine occurrences, of which two were unanchored
+  pointers and both were closed by that same commit.** The figure is written here and nowhere else because
+  the sweep's corpus contains every passage that explains it — this entry, the scenario, and the scenario's
+  two projections each quote the phrase to name it, so a breakdown stated in the bound would move as it was
+  written. Re-measuring is a `git grep` over tracked Markdown outside `CHANGELOG.md` and `docs/history/`.
+  *Current reaction or bound:*
   `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound`; the two
   unanchored phrases are anchored to `0.5.0`. *Risk:* a phrase written here goes stale when its window
   closes and nothing says so, which is what the rule exists to prevent — bounded by this file being read by

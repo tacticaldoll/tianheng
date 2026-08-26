@@ -308,8 +308,10 @@ jobs:
           # Cargo's own verdict, for the reason the `license-files` job above records: a grep for `false`
           # calls `publish = []` published, and cargo refuses it.
           # `pipefail` cannot see inside `<(…)`, so the derivation stands alone as a command substitution
-          # where it can fail — and an empty value is caught before `mapfile`, because a here-string over
-          # one yields a single empty element and would satisfy the floor below.
+          # where it can fail — and an empty value is caught before the loop, because a here-string over one
+          # yields a single empty element that the `[[ -z $cname ]]` guard would then admit as a crate. This
+          # sentence said `mapfile` until the loop below became a `while read` pair-reader and the `mapfile`
+          # went with it; the guard it describes never moved.
           # **Name and path from the one enumerator, as a pair.** The patch below was built as
           # `crates/$s` from the name alone, which points nowhere for a crate whose directory differs — the
           # same name-is-a-location assumption the `license-files` job above just stopped making.

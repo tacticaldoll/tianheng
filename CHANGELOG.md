@@ -7339,6 +7339,45 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No behaviour moves and no published API, outcome, report, exit class or manifest changes.
 
 
+- **A bound about a phrase is inside the corpus it describes, so its justification counted a set its own
+  writing was moving.** The stated bound declared two commits earlier justified itself with a breakdown of
+  the tracked non-record Markdown occurrences — *one is `AGENTS.md`'s own row, three are duration, two are
+  already anchored, two are genuine*. Both halves of that were wrong before anyone read it.
+
+  *Two are genuine* was false on arrival: the same commit that wrote the sentence anchored both, and its own
+  tracker says so. A reader was told the tree holds two unanchored pointers where it holds none.
+
+  And the enumeration stopped being exhaustive of what it claims to enumerate, because a bound about a phrase
+  has to quote the phrase. The scenario, its two generated projections and its `BACKLOG` tracker each write
+  *for a window* to explain the bound, so the repair added four occurrences to the set its own sentence
+  counted. Measured now: twelve occurrences across eleven lines, against a breakdown that adds to eight — and
+  the four additions fall in the scenario's own *declaring* category, correctly classified by a sentence that
+  could not see them. Nothing produces the figure, so nothing could notice.
+
+  The figures go and the argument stays whole: **some** occurrences are the rule's own row declaring the
+  phrases, **some** are duration rather than pointer, **some** are a projection's copy of either, **some** are
+  already anchored. The bound stands on a reader over text being unable to separate those groups, which is not
+  a claim about how many of each there are. The requirement now says outright that the breakdown SHALL NOT be
+  written there and why — the passage is in the corpus — and the measurement moves to the tracker's
+  *Observation source*, anchored at the commit that took it, with the re-measuring command named. That is the
+  record form this repository already defines for exactly this.
+
+  **The class sweep two commits ago missed it because of its instrument.** It read numerals; these counts are
+  spelled in words — the forms `census`'s own `UNITS` table already carries. Re-run over every declared
+  bound's stated reason in every crate, thirty-seven carry a word-number and all but one are structural
+  statements rather than censuses: *the two share one subject*, *one line at a time*. The one is a sibling of
+  this same bound, where *the other five are in live use* counts the primitives its own WHEN enumerates, and
+  it now says *the others*.
+
+- **A comment named machinery its step no longer has.** `packaged-selftest` said an empty derivation is
+  *caught before `mapfile`* — but that step's `mapfile` became a `while read` pair-reader when the name and
+  path started travelling together. The guard it describes never moved and still works; only its stated
+  mechanism was gone. It now names the guard that is there, and says what it used to say. The surviving
+  `mapfile` in the file is the MSRV job's, whose own comment was already correct.
+
+  No behaviour moves and no published API, outcome, report, exit class or manifest changes.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

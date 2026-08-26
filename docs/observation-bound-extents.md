@@ -607,7 +607,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > one of the declared relative phrases, unanchored, in a tracked Markdown document outside the record set
 
-- **because**: extending the sweep to whole-document prose was measured against the tree it would judge, and most of what it would report is not an offence: one occurrence is `AGENTS.md`'s own row DECLARING the phrases, three are duration rather than pointer -- `admitted it for a window` narrates how long something lasted -- one of those three is a generated projection's copy of another, and two more are already anchored, one by a commit and one by naming the release. A reader over text separates none of those groups: telling a phrase that points at a moving window from one measuring a span is a judgement about the sentence, which is the prose instrument `AGENTS.md` records as designed, measured three times and rejected
+- **because**: extending the sweep to whole-document prose was measured against the tree it would judge, and most of what it would report is not an offence: some occurrences are `AGENTS.md`'s own row DECLARING the phrases, some are duration rather than pointer -- `admitted it for a window` narrates how long something lasted -- some are a generated projection's copy of either, and some are already anchored, by a commit or by naming the release. A reader over text separates none of those groups: telling a phrase that points at a moving window from one measuring a span is a judgement about the sentence, which is the prose instrument `AGENTS.md` records as designed, measured three times and rejected. How many fall in each group is not written here: this reason is itself in the corpus it describes, since a bound about a phrase has to quote the phrase, and its projection moves the figure again
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a relative phrase in non-record Markdown*
 
@@ -719,7 +719,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > a sequence of backtick-delimited names paired by hand through `split_once`, `strip_prefix`, `strip_suffix`, `trim_matches` or `matches`
 
-- **because**: the reaction names two primitives, `split` and `find`, which are the two shapes `reading`'s own doc records replacing. The other five are in live use for reading a SINGLE delimited value, where they are correct, and none of their live uses is a pairing -- so refusing them by name would refuse the honest use, and telling the two apart needs the expression's shape rather than the primitive's name
+- **because**: the reaction names two primitives, `split` and `find`, which are the two shapes `reading`'s own doc records replacing. The others are in live use for reading a SINGLE delimited value, where they are correct, and none of their live uses is a pairing -- so refusing them by name would refuse the honest use, and telling the two apart needs the expression's shape rather than the primitive's name
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *the backtick primitives the pairing reader names*
 

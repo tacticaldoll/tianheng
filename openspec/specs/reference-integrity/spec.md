@@ -289,13 +289,16 @@ declared as a bound below rather than closed, and the reason is measured rather 
 - **WHEN** a tracked Markdown document outside the record set writes one of the declared phrases without
   anchoring it
 - **THEN** nothing reacts. Extending the sweep to whole-document prose was measured against the tree it would
-  judge: of the tracked non-record Markdown occurrences, one is `AGENTS.md`'s own row **declaring** the
-  phrases, three are duration rather than pointer — *admitted it for a window*, which narrates how long
-  something lasted — one of those three is a generated projection's copy of another, and two more are already
-  anchored, one by a commit and one by naming the release. Two are genuine. A reader over text separates
-  none of those groups: telling a phrase that points at a moving window from one that measures a span is a
-  judgement about the sentence, which is the prose instrument `AGENTS.md` records as designed, measured three
-  times and rejected
+  judge, and most of what it would report is not an offence: some occurrences are `AGENTS.md`'s own row
+  **declaring** the phrases, some are duration rather than pointer — *admitted it for a window*, which
+  narrates how long something lasted — some are a generated projection's copy of either, and some are already
+  anchored, by a commit or by naming the release. A reader over text separates none of those groups: telling
+  a phrase that points at a moving window from one that measures a span is a judgement about the sentence,
+  which is the prose instrument `AGENTS.md` records as designed, measured three times and rejected
+- **AND** how many fall in each group SHALL NOT be written here, because **this passage is itself in the
+  corpus it describes**: a bound about a phrase has to quote the phrase, so stating the breakdown moves it,
+  and its two generated projections move it again. The measurement belongs in the tracker's *Observation
+  source*, where it is dated by the entry that carries it
 - **AND** the rule is wider than its reaction and SHALL stay so rather than being narrowed to fit: a comment
   format is where the reaction can decide, and prose is where a reviewer must
 - **UNPINNED** `BACKLOG.md` — *a relative phrase in non-record Markdown*
