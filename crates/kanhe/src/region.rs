@@ -462,11 +462,9 @@ fn cut_tail_comment<'a>(line: &'a str, comment: &str) -> &'a str {
     let mut from = 0;
     while let Some(offset) = line[from..].find(comment) {
         let at = from + offset;
-        let begins_a_token = at == 0
-            || line[..at]
-                .chars()
-                .next_back()
-                .is_some_and(char::is_whitespace);
+        // `ends_with` rather than `next_back().is_some_and(…)`: the left arm has already established
+        // `at > 0`, so the slice is non-empty and the `Option` was answered before it was asked.
+        let begins_a_token = at == 0 || line[..at].ends_with(char::is_whitespace);
         if begins_a_token {
             return &line[..at];
         }

@@ -13,6 +13,19 @@
 //! measurement that repairs one site and leaves its class open is the shape this repository removes on sight;
 //! a reaction is what closes it.
 //!
+//! **What it closes is the DECIDABLE part of the class, and saying otherwise was an over-claim.** The
+//! consumer side here is general — chosen by what each does to the `Option` rather than by the spellings one
+//! round met — but the producer side is two, and deliberately: `str::split` and `str::rsplit` always yield an
+//! item *unconditionally*, which is what a reader over text can know. `xs.max()`, `slice.chars().next_back()`
+//! and `entry.file_name()` are always-`Some` only on a producer that is non-empty, and whether it is takes
+//! the surrounding code rather than the line — measured, the tree carries such calls where a lexical reader
+//! cannot tell which. Widening the list would refuse them, and a false refusal is the direction the Core
+//! Contract forbids more strictly than a miss.
+//!
+//! So the wider class — *any* branch a guard has already made unreachable — is a row in `AGENTS.md`'s
+//! disposition table, applied by a reviewer, beside the other rows no reaction can reach. A review found four
+//! live sites of it in one pass, which is the row working.
+//!
 //! `splitn` and `rsplitn` are outside the corpus: `"".splitn(0, ' ').next()` is `None`, so their fallbacks are
 //! reachable. `.expect(…)` is admitted — it documents the impossibility instead of branching on it — and so
 //! is `.filter(…)`, which can genuinely produce `None`.

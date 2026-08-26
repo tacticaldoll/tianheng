@@ -7,7 +7,7 @@
 use kanhe::bound_register_parse as register;
 use kanhe::census;
 
-use census::{Census, sweep};
+use census::{Census, Sweep, sweep};
 use kanhe::refusal;
 use refusal::Kind;
 use register::{Citation, parse_bounds, workspace_root};
@@ -45,7 +45,7 @@ fn every_declared_census_agrees_with_what_produces_it() {
     // **A figure about a past state is a record, and it is now CLOSED rather than declared.** This comment
     // used to name `[Unreleased]`'s prose as the instance and say the residual was declared as a bound. Both
     // halves had stopped being true: that section is empty, so the instance is gone, and no bound of this
-    // family ever declared the record case — the three that exist are about words at a hundred and above, a
+    // family ever declared the record case — the ones that exist are about words at a hundred and above, a
     // census outside Markdown, and a count in a phrasing no census declares. Meanwhile the residual was
     // live: a figure inside a dated `CHANGELOG.md` section was refused for disagreeing with today's
     // enumeration, escaping only because its two numbers straddled a line break. `record` now cuts records
@@ -63,30 +63,17 @@ fn every_declared_census_agrees_with_what_produces_it() {
         },
     ];
 
-    let offences = sweep(&root, &files, &declared);
+    let Sweep { offences, stating } = sweep(&root, &files, &declared);
     // **Printed because the alternative is assuming it, and the assumption was wrong twice.** The rule this
-    // serves says a count of a live set is not written, and it was twice concluded from that — by a grep for
-    // one of the two declared phrasings, over a corpus that skipped the records — that nothing states a
-    // census at all. One document does: a generated projection whose figure the renderer computes, which is
-    // the one place a figure belongs. So this sweep is not armed-and-idle; it is what makes *produced*
-    // checkable. A reaction that reacts to nothing is silent for the same reason a broken one is, and saying
-    // the number out loud is what tells them apart.
-    let stating = files
-        .iter()
-        .filter(|path| path.ends_with(".md"))
-        .filter(|path| !crate_record(path))
-        .filter(|path| {
-            std::fs::read_to_string(root.join(path)).is_ok_and(|text| {
-                declared.iter().any(|census| {
-                    text.lines().any(|line| {
-                        !kanhe::census::figures_in(line, census.phrase)
-                            .unwrap_or_default()
-                            .is_empty()
-                    })
-                })
-            })
-        })
-        .count();
+    // serves says a count of a live set is not written, and it was twice concluded from that that nothing
+    // states a census at all — by a grep for one of the declared phrasings, over a corpus that skipped the
+    // records. One document does: a generated projection whose figure the renderer computes, which is the one
+    // place a figure belongs. So this sweep is not armed-and-idle; it is what makes *produced* checkable.
+    //
+    // The figure comes from the sweep's own pass. A first version walked the corpus again with its own
+    // filter, which excluded whole record documents but not a record's dated sections — so a correct
+    // historical sentence could raise it, and the message below would have read that as a hand-written count
+    // arriving. One enumerator, one record cut.
     eprintln!(
         "census ok ({stating} tracked document(s) state a declared census, over {} declared) — a figure \
          belongs only where it is produced, so the documents this finds should be the generated projections \
@@ -125,7 +112,8 @@ fn a_tracked_document_the_sweep_cannot_read_is_a_cannot_judge() {
         &root,
         &["zzz_absent_census_probe.md".to_string()],
         &declared,
-    );
+    )
+    .offences;
     assert_eq!(
         offences.len(),
         1,
@@ -167,7 +155,7 @@ fn a_figure_the_sweep_cannot_represent_is_a_cannot_judge() {
 ",
     )
     .expect("write");
-    let offences = sweep(&scratch, &["wide.md".to_string()], &declared);
+    let offences = sweep(&scratch, &["wide.md".to_string()], &declared).offences;
     // The control, in the same directory: the phrase and the sweep are both alive, so the refusal above is
     // about the width of the figure and not about either of them.
     std::fs::write(
@@ -176,7 +164,7 @@ fn a_figure_the_sweep_cannot_represent_is_a_cannot_judge() {
 ",
     )
     .expect("write");
-    let control = sweep(&scratch, &["narrow.md".to_string()], &declared);
+    let control = sweep(&scratch, &["narrow.md".to_string()], &declared).offences;
     let _ = std::fs::remove_dir_all(&scratch);
 
     assert_eq!(
@@ -239,8 +227,8 @@ fn the_sweep_names_a_disagreement_it_is_shown() {
         "  a line writing 2 bounds across 1 capabilities\n",
     )
     .expect("write");
-    let offences = sweep(&scratch, &["disagrees.md".to_string()], &declared);
-    let control = sweep(&scratch, &["agrees.md".to_string()], &declared);
+    let offences = sweep(&scratch, &["disagrees.md".to_string()], &declared).offences;
+    let control = sweep(&scratch, &["agrees.md".to_string()], &declared).offences;
     let _ = std::fs::remove_dir_all(&scratch);
     assert!(
         control.is_empty(),
@@ -284,7 +272,9 @@ fn a_count_in_an_undeclared_phrasing_is_a_stated_bound() {
     xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
     std::fs::write(scratch.join("control.md"), &control).expect("write");
     assert!(
-        !sweep(&scratch, &["control.md".to_string()], &declared).is_empty(),
+        !sweep(&scratch, &["control.md".to_string()], &declared)
+            .offences
+            .is_empty(),
         "the sweep must see a disagreement it is shown, or the silence below says nothing"
     );
 
@@ -298,7 +288,7 @@ fn a_count_in_an_undeclared_phrasing_is_a_stated_bound() {
         ),
     )
     .expect("write");
-    let offences = sweep(&scratch, &["undeclared.md".to_string()], &declared);
+    let offences = sweep(&scratch, &["undeclared.md".to_string()], &declared).offences;
     let _ = std::fs::remove_dir_all(&scratch);
     assert!(
         offences.is_empty(),
@@ -335,7 +325,9 @@ fn a_word_form_at_one_hundred_or_above_is_a_stated_bound() {
     )
     .expect("write");
     assert!(
-        !sweep(&scratch, &["below.md".to_string()], &declared).is_empty(),
+        !sweep(&scratch, &["below.md".to_string()], &declared)
+            .offences
+            .is_empty(),
         "the sweep must see a disagreement spelled in words below one hundred, or the silence below says \
          nothing about the ceiling"
     );
@@ -346,7 +338,7 @@ fn a_word_form_at_one_hundred_or_above_is_a_stated_bound() {
         "  a line writing one hundred bounds across 24 capabilities\n",
     )
     .expect("write");
-    let offences = sweep(&scratch, &["above.md".to_string()], &declared);
+    let offences = sweep(&scratch, &["above.md".to_string()], &declared).offences;
     let _ = std::fs::remove_dir_all(&scratch);
     assert!(
         offences.is_empty(),
@@ -392,20 +384,17 @@ fn a_census_outside_markdown_is_a_stated_bound() {
     // The control: the same figures, in Markdown, are reported. Without it the silence below is satisfiable by
     // a sweep that reads nothing at all.
     assert!(
-        !sweep(&scratch, &["held.md".to_string()], &declared).is_empty(),
+        !sweep(&scratch, &["held.md".to_string()], &declared)
+            .offences
+            .is_empty(),
         "the sweep must report a disagreement it is shown in Markdown, or the bound below proves nothing"
     );
     // The bound: the same figures, in a Rust source, are not.
-    let unheld = sweep(&scratch, &["unheld.rs".to_string()], &declared);
+    let unheld = sweep(&scratch, &["unheld.rs".to_string()], &declared).offences;
     let _ = std::fs::remove_dir_all(&scratch);
     assert!(
         unheld.is_empty(),
         "the corpus is tracked Markdown, so a census outside it is a stated bound rather than a finding, got \
          {unheld:?}"
     );
-}
-
-/// Whether `path` is a record, asked of the module that owns the distinction.
-fn crate_record(path: &str) -> bool {
-    kanhe::record::is_record_document(path)
 }
