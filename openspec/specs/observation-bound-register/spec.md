@@ -533,9 +533,11 @@ is coverage, which grows one authored record at a time.
 The reaction SHALL scan `openspec/specs/*` for bound-declaring prose and SHALL fail on any occurrence
 outside a declared bound scenario, **subject to the exemptions and residuals stated below, which SHALL be
 enumerated rather than implied**. This makes the prose already present the register's mandatory minimum, so
-the register cannot be completed by declaring only the convenient bounds. Its size is measured rather than
+the register cannot be completed by declaring only the convenient bounds. A **floor** on its size is measured rather than
 estimated by whoever wrote it: the reaction prints what it counted on every clean run, and a figure typed
-here would be a census in prose — the class `AGENTS.md` forbids, and one this sentence has already demonstrated,
+here would be a census in prose. It is a floor and not the size, for the two reasons the residuals below
+give — the scan is line-oriented, and a resolvable reference clears whatever prose it sits with — and the
+print site SHALL use that word, so nobody reads the figure as a count of the bounds themselves — the class `AGENTS.md` forbids, and one this sentence has already demonstrated,
 having had its denominator re-swept while its numerator was left behind.
 
 One **exemption** is deliberate and SHALL be declared here rather than only in the reaction's own comments.

@@ -953,8 +953,9 @@ fn every_bound_stated_in_prose_is_declared_as_a_scenario() {
     eprintln!(
         "bound register ok ({stated} bound-declaring prose line(s) across {specs} spec(s), {cleared} \
          accounted for by a declared scenario, a resolvable reference or a bounds-named requirement) — the \
-         first figure is this register's mandatory minimum, measured on this run rather than typed into the \
-         requirement that forbids typing it"
+         first figure is a FLOOR on this register's mandatory minimum, measured on this run rather than typed \
+         into the requirement that forbids typing it. It is a floor and not the minimum because the scan is \
+         line-oriented and a resolvable reference clears whatever prose it sits with"
     );
     assert!(
         specs > 0 && stated > 0,

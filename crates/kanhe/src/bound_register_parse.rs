@@ -540,7 +540,13 @@ pub fn undeclared_prose_offences(
 pub struct ProseScan {
     /// Every offence, line-level and requirement-level.
     pub offences: Vec<String>,
-    /// Bound-declaring prose lines seen, cleared or not. This is the register's mandatory minimum.
+    /// Bound-declaring prose lines seen, cleared or not: **a floor on the register's mandatory minimum, not
+    /// the minimum itself.** The scan is line-oriented, so a statement wrapped across two lines is one line
+    /// here; and a resolvable reference clears the prose it sits with regardless of how many bounds that prose
+    /// states. Both residuals are declared by the requirement this serves, and each puts the true minimum
+    /// above this count. The requirement already has the word — the direction *SHALL be described as a floor
+    /// and not a proof* — and a floor labelled as an exact minimum invites the comparison the printing exists
+    /// to prevent.
     pub stated: usize,
     /// Of [`Self::stated`], those a declared scenario, a resolvable reference, or a bounds-named requirement
     /// accounted for. `stated - cleared` is the line-level offence count; a requirement-level offence has no

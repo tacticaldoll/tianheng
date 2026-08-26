@@ -425,7 +425,7 @@ fn declared_dependencies(text: &str) -> Vec<Dependency> {
 /// day `1..=31`. Whether that day exists in that month needs a calendar, which is a dependency this crate's
 /// declared surface does not carry, and the residue — `2026-02-31` — is a date a human wrote wrong rather
 /// than a shape that reads as one.
-pub(crate) fn is_iso_date(suffix: &str) -> bool {
+pub fn is_iso_date(suffix: &str) -> bool {
     let parts: Vec<&str> = suffix.split('-').collect();
     let [year, month, day] = parts.as_slice() else {
         return false;

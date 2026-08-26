@@ -401,7 +401,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated —
   in the 0.5.0 window, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
   **1048** lines carrying `SHALL`, across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **98 bounds across 25 capabilities** — a live figure rather than part of the measurement
+  currently holds **100 bounds across 25 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -1502,6 +1502,33 @@ consumer for an undemonstrated deduplication.
   package, which is what closes the equivalent window on the merge path; until then narrowing is the only
   available move and it is already taken. *Authority:* engine. *Compatibility:* patch; the wrapper ships in
   no crate.
+
+- **WATCH: a code span shaped like an object that names none.** *Class:* WATCH. *Observed pressure:* the
+  citation reader decides by shape, so a code span carrying 4 to 40 lowercase hex characters with both a
+  letter and a digit is refused whether or not it names a commit — a review planted an unrelated hex value
+  and watched it refused. *Observation source:* resolving each token against the object database was measured
+  and declined; CI checks out one commit, so the objects a citation names are absent there and the reader
+  would either answer clean over all of them or refuse to judge the whole gate. Measured over the live
+  corpus: no span of this shape names anything but a commit, and no span of 4 to 6 characters carries both
+  kinds of character at all, so the over-reaction is unrealised. *Current reaction or bound:*
+  `reference-integrity/a-code-span-shaped-like-an-object-is-refused-though-it-names-none-a-stated-bound`.
+  *Risk:* prose that means to write a hex value in a code span is refused and has to reword — visible and
+  fixable, which is why this direction was chosen over the miss. *Next trigger:* a real value of that shape
+  arriving in live prose, or a CI checkout that carries history, which would make resolution decidable.
+  *Authority:* engine. *Compatibility:* patch; the reaction is repository machinery and ships in no package.
+
+- **WATCH: a hosting serial with no citation word on its line.** *Class:* WATCH. *Observed pressure:* a bare
+  `#` followed by digits is not read as a serial, because taking every one of them refuses a colour and any
+  other numeric value spelled that way. The line has to name the thing — `PR`, `pull request` or `issue`,
+  whole-word and case-insensitive — which is scoped to the line rather than to what precedes each `#` because
+  a real citation lists several under one word and a prefix test would catch only the first. *Observation
+  source:* measured after the sweep that removed them: no serial of any form remains in live text, so the
+  restriction has no live cost today. *Current reaction or bound:* this entry; the Markdown-only half is
+  `reference-integrity/a-hosting-serial-outside-markdown-is-not-observed-a-stated-bound`. *Risk:* a serial
+  written with no citation word on its line reads as anchored — bounded by the object half covering the same
+  corpus, so a citation naming a commit is caught wherever it is written. *Next trigger:* an instance, which
+  a `git grep` for the shape would find. *Authority:* engine. *Compatibility:* patch; the reaction is
+  repository machinery and ships in no package.
 
 - **WATCH: a hosting serial outside Markdown.** *Class:* WATCH. *Observed pressure:*
   `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach` recognises an abbreviated commit object in
