@@ -7231,6 +7231,36 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No published API, outcome, report, exit class or manifest moves; the change is confined to CI.
 
 
+- **An exclusion's stated reason reached only part of what it excluded, so the uncovered half is now a
+  declared bound.** `reference-integrity` puts Markdown outside the relative-anchor requirement on two
+  grounds: it is whole-document prose rather than a line-comment format, and *in a record a relative phrase
+  narrates a past state*. The first is true of every Markdown file. The second is true of `CHANGELOG.md`'s
+  dated sections and `docs/history/` — and false of `BACKLOG.md`, `AGENTS.md` and the specifications, which
+  carry no dated sections and are read later by design. `AGENTS.md` states the rule for prose generally, so
+  the rule was wider than its reaction with the uncovered half resting on a reason that did not carry it.
+
+  **The reaction is not widened, and the measurement is why.** Sweeping the four declared phrases across
+  tracked non-record Markdown: one occurrence is `AGENTS.md`'s own row *declaring* the phrases; three are
+  duration rather than pointer — *admitted it for a window* narrates how long something lasted — and one of
+  those three is a generated projection's copy of another; two more are already anchored, one by a commit and
+  one by naming the release. Two are genuine. A reader over text separates none of those groups: telling a
+  phrase that points at a moving window from one measuring a span is a judgement about the sentence, which is
+  the prose instrument `AGENTS.md` records as designed, measured three times and rejected. Widening here
+  would report six non-offences to catch two.
+
+  So the requirement's reason is narrowed to the record set it holds for, the residue is declared as
+  `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound` with
+  `BACKLOG.md` as its tracker, and the rule is left wider than its reaction on purpose — a comment format is
+  where the reaction can decide, and prose is where a reviewer must. The two genuine instances are anchored
+  to `0.5.0`, the form the two correct neighbours in the same file already use.
+
+  The declared bound census moved with it, 95 to 96, and that is the difference between the two kinds of
+  count this repository keeps: `bound_register` enumerates the set and refused the stale figure by name
+  before anything else did.
+
+  No behaviour moves and no published API, outcome, report, exit class or manifest changes.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

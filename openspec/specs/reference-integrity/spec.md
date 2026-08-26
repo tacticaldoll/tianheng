@@ -278,7 +278,27 @@ began on — a wrapped file header otherwise reports line 1, and a shell script'
 offence in one would have named the shebang.
 
 Markdown SHALL be outside this requirement by the same construction the sibling names: it is whole-document
-prose rather than a line-comment format, and in a record a relative phrase narrates a past state.
+prose rather than a line-comment format. The second ground — that a relative phrase narrates a past state —
+holds for the **record** set, `CHANGELOG.md`'s dated sections and `docs/history/`, and SHALL NOT be read as
+covering the rest. `BACKLOG.md`, `AGENTS.md` and the specifications carry no dated sections and are read
+later by design, so the rule stated for prose generally reaches them and no reaction does. That residue is
+declared as a bound below rather than closed, and the reason is measured rather than asserted.
+
+#### Scenario: A relative phrase in non-record Markdown is not observed — a stated bound
+
+- **WHEN** a tracked Markdown document outside the record set writes one of the declared phrases without
+  anchoring it
+- **THEN** nothing reacts. Extending the sweep to whole-document prose was measured against the tree it would
+  judge: of the tracked non-record Markdown occurrences, one is `AGENTS.md`'s own row **declaring** the
+  phrases, three are duration rather than pointer — *admitted it for a window*, which narrates how long
+  something lasted — one of those three is a generated projection's copy of another, and two more are already
+  anchored, one by a commit and one by naming the release. Two are genuine. A reader over text separates
+  none of those groups: telling a phrase that points at a moving window from one that measures a span is a
+  judgement about the sentence, which is the prose instrument `AGENTS.md` records as designed, measured three
+  times and rejected
+- **AND** the rule is wider than its reaction and SHALL stay so rather than being narrowed to fit: a comment
+  format is where the reaction can decide, and prose is where a reviewer must
+- **UNPINNED** `BACKLOG.md` — *a relative phrase in non-record Markdown*
 
 #### Scenario: A comment anchors to a moving reference
 

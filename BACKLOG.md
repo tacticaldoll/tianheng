@@ -401,7 +401,7 @@ consumer for an undemonstrated deduplication.
   the failure the bound register was built to end one level down. *Measured before promotion, not estimated —
   at `ee15665`, by `git grep` over `openspec/specs/*/spec.md`:* the specs held
   **1048** lines carrying `SHALL`, across **310** requirements and **1177** scenarios. The register, by contrast,
-  currently holds **95 bounds across 25 capabilities** — a live figure rather than part of the measurement
+  currently holds **96 bounds across 25 capabilities** — a live figure rather than part of the measurement
   above, written in that exact form because it is the one phrasing
   `crates/kanhe/tests/bound_register.rs` reacts to, and a census in any other wording is what that gate's own policy says must
   not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
@@ -557,7 +557,7 @@ consumer for an undemonstrated deduplication.
   not:** `scripts/merge-pr.sh` could not read a verdict, so it declined to judge and said so — exactly its
   contract. What is wrong is that the fixture's `gh` stub pipes through a host tool it never declares, so a
   missing interpreter presents as a failing subject, and the operator reads fifteen findings about CI when
-  the state met was one absent binary. Same shape this window closed twice elsewhere: a diagnosis SHALL state
+  the state met was one absent binary. Same shape the `0.5.0` window closed twice elsewhere: a diagnosis SHALL state
   what to do about the state it met, not assert what is true of the world. *Observation source:* the
   `v0.4.0..release/0.5.0` campaign's verification runs, where the suite passed earlier the same day and the
   binary disappeared beneath it. *Current reaction or bound:* none — no capability spec states the host tools
@@ -660,7 +660,7 @@ consumer for an undemonstrated deduplication.
 
 - **WATCH: The Definition of Done and CI mirror each other in one direction only.** *Class:* WATCH.
   *Observed pressure:* `dod_coherence` asserts that every command in `AGENTS.md`'s list appears in CI, and
-  nothing asserts the converse. *Observation source:* a review measured it, and a record in this window had
+  nothing asserts the converse. *Observation source:* a review measured it, and a record in the `0.5.0` window had
   already asserted the converse existed — three named CI steps run suites the local list does not name
   (`release_coherence`/`publish_source`, `dod_coherence`, `bound_register`), all covered today by the listed
   `cargo test --workspace --all-features`, and `cargo test -p louke` is the one named step that run does not
@@ -1502,6 +1502,25 @@ consumer for an undemonstrated deduplication.
   package, which is what closes the equivalent window on the merge path; until then narrowing is the only
   available move and it is already taken. *Authority:* engine. *Compatibility:* patch; the wrapper ships in
   no crate.
+
+- **WATCH: a relative phrase in non-record Markdown.** *Observed pressure:* `AGENTS.md` states the rule for
+  prose generally — a relative anchor "names a moving reference, so it is stale the moment the window closes"
+  — while `no_tracked_source_names_a_relative_anchor` reads line-comment formats only. The exclusion for
+  Markdown gave two grounds and the second, *in a record a relative phrase narrates a past state*, reaches
+  `CHANGELOG.md`'s dated sections and `docs/history/` but not `BACKLOG.md`, `AGENTS.md` or the
+  specifications, which carry no dated sections and are read later by design. *Observation source:* a review
+  named two unanchored phrases in this file; sweeping the four declared phrases across tracked non-record
+  Markdown found that most of what a widened reaction would report is not an offence — `AGENTS.md`'s own row
+  declaring the phrases, three duration uses (*for a window* narrating how long something lasted, one of them
+  a generated projection's copy of another), and two already anchored, one by a commit and one by naming the
+  release. *Current reaction or bound:*
+  `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound`; the two
+  unanchored phrases are anchored to `0.5.0`. *Risk:* a phrase written here goes stale when its window
+  closes and nothing says so, which is what the rule exists to prevent — bounded by this file being read by
+  a person against the tree rather than executed. *Next trigger:* a way to tell a pointer from a span that
+  does not read the sentence — a declared syntax for anchoring, say, so the reaction judges a form rather
+  than a meaning. *Authority:* engine. *Compatibility:* patch; the reaction is repository machinery and
+  ships in no package.
 
 - **WATCH: the backtick primitives the pairing reader names.** *Observed pressure:* pairing markers as they
   arrive lets one unpaired marker shift every pair after it, which reads as prose named and a name dropped
