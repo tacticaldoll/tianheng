@@ -12,7 +12,7 @@
 //! Govern by reaction, not instruction.
 //!
 //! **Layout.** Each semantic capability is a self-contained reaction module
-//! (`check_<cap>` → `check_<cap>_boundary` → `<cap>_findings`); [`check_all`] composes the eight
+//! (`check_<cap>` → `check_<cap>_boundary` → `<cap>_findings`); [`check_all`] composes them all
 //! with a single `cargo metadata` read. The shared reaction spine lives in the `driver` module
 //! and the canonical rule labels in `rules`, below every capability so none depends on another.
 
@@ -63,7 +63,7 @@ mod scan;
 mod shape_scan;
 mod syn_util;
 
-// The eight semantic capabilities, each a self-contained reaction (check → check_boundary →
+// The semantic capabilities, each a self-contained reaction (check → check_boundary →
 // findings). Their public `check_*` entries and crate-internal `*_findings` hearts are
 // re-exported at the crate root so both the shell and the tests keep their existing paths.
 mod async_exposure;
@@ -186,7 +186,7 @@ impl<'a, B> CapabilitySet<'a> for Capability<'a, B> {
 }
 
 impl SemanticBoundaries {
-    /// The eight declared capabilities as one dyn-safe list, in the fixed evaluation order
+    /// Every declared capability as one dyn-safe list, in the fixed evaluation order
     /// [`eval_all`] shares. The single enumeration point [`is_empty`](Self::is_empty),
     /// [`crate_packages`](Self::crate_packages), and [`eval_all`] each loop over.
     fn capability_sets(&self) -> Vec<Box<dyn CapabilitySet<'_> + '_>> {
@@ -266,7 +266,7 @@ impl SemanticBoundaries {
 /// Evaluate every declared semantic capability against `metadata` into the one accumulator, in a
 /// fixed order (shared with [`SemanticBoundaries::capability_sets`]); the first constitution error
 /// short-circuits. Split out so [`check_all`] keeps the single-read + exit-2-supersedes contract
-/// with plain `?`, not eight repeated error blocks.
+/// with plain `?`, not one repeated error block per capability.
 fn eval_all(
     metadata: &Value,
     boundaries: &SemanticBoundaries,

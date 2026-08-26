@@ -171,7 +171,7 @@ says a surface with no boundary earns no crate.
 
 **Two names are crates and are neither 儀 nor 司.** 繩墨 (the inked line) holds the law this repository
 declares over itself and the dogfood gates that run the delivered product's reactions against this workspace;
-勘合 (the split tally) holds the repository checks that fit its record against itself. Both ship in **zero** packages, which is what
+勘合 (the split tally) holds the repository checks that fit its record against itself. Both ship in **no** package, which is what
 separates governance from product here, and both are deliberately outside the observatory vocabulary: they
 measure nothing and administer nothing. 勘合 was first drafted as 校讎 — a word already spent above, on the
 amendment flow — and taking a name that already has a referent is the misnaming these crates exist to end.
@@ -179,8 +179,8 @@ amendment flow — and taking a name that already has a referent is the misnamin
 This paragraph replaced one reading *crate-or-convention as their nature dictates*, which
 answered nothing and was consulted three times. The three answers written for it were all
 withdrawn, each restating a law that was then only half reacted to. None of the three is a
-crate name, and none reaches any published crate's public surface: measured, zero occurrences
-across the six publishable crates' `///` and `//!` documentation, and one `//` comment inside
+crate name, and none reaches any published crate's public surface: none appears in the publishable
+crates' `///` and `//!` documentation at all, and the only executed mention is a `//` comment inside
 `tianheng`'s private `render` module. Where they do appear — that comment, `kanhe`'s manifest
 comments, `shengmo`'s source, and this repository's own governance documents and changelog — it
 is commentary about this repository's vocabulary rather than a name an adopter uses. So the

@@ -9,9 +9,11 @@
 //! **The predicate is a parameter and the level is not, which is a correction rather than a generalisation.**
 //! An earlier design for this module admitted only a heading *level* (`##` / `###`), on the reasoning that
 //! anything wider becomes a Markdown parser. Read against the callers, that interface serves none of them:
-//! `release_coherence_gate`'s three readers open on `## [`-prefixed lines and take the name from the part
-//! before `" - "`, while `capability_subjects`'s two open on one exact heading and close on any `## `. Those
-//! are different *predicates* at the same level, so a level cannot tell them apart. What the parameter buys is
+//! `release_coherence_gate`'s changelog reader opens on `## [`-prefixed lines and takes the name from the
+//! part before `" - "`; its manifest and lock readers open on a bracketed TOML table, which is not a heading
+//! at all; and `capability_subjects`'s readers open on one exact heading and close on any `## `. Those are
+//! different *predicates*, and two of them are not even in the same document format, so a heading level
+//! cannot tell them apart. What the parameter buys is
 //! the skeleton; what it does not buy is block structure.
 //!
 //! **Flat, and that is the contract rather than a limitation to widen later.** A section runs to the next

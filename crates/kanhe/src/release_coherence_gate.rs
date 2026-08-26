@@ -1151,9 +1151,9 @@ pub(crate) fn require_example_pins(
 ) -> Result<Vec<(String, String)>, Refusal> {
     // A manifest whose package this reader cannot name is not a crate the examples may quietly skip: it would
     // drop out of `family`, and every example pinning it would then pass the `!family.iter().any(…)` filter
-    // below without being examined. The two vacuity guards in this function are aggregate, so seven of eight
-    // crates parsing keeps them silent while the eighth goes unchecked — which is the partial case a vacuity
-    // guard is exactly unable to see.
+    // below without being examined. The two vacuity guards in this function are aggregate, so every crate but
+    // one parsing keeps them silent while that one goes unchecked — which is the partial case a vacuity guard
+    // is exactly unable to see.
     let mut members: Vec<(String, String)> = Vec::new();
     for (path, text) in manifests {
         match package_name(text) {
