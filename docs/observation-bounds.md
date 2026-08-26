@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**30 of 101 declared bounds have no pinning test.** That figure is the register's
+**27 of 98 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -264,24 +264,6 @@ fallback used where no manifest exists, which the register spec describes.
 > the reaction fails anyway. It decides by **shape**, and nothing in the tree distinguishes a value of that shape from a citation without resolving it against an object database
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a code span shaped like an object that names none*
-
-### `reference-integrity/a-number-sharing-a-clause-with-a-citation-cue-is-refused-a-stated-bound`
-
-> the reaction fails anyway. The cue is bound to its **clause**, which closes the case where the two sit in different clauses — measured, a colour before a semicolon and a citation after it report only the citation — and inside one clause nothing lexical separates them
-
-- **unpinned**, tracked by: `BACKLOG.md` — *a number sharing a clause with a citation cue*
-
-### `reference-integrity/a-serial-with-no-citation-word-on-its-line-is-not-observed-a-stated-bound`
-
-> nothing reacts. Reading every `#` followed by a digit as a serial refuses a colour and any other numeric value spelled that way, which is the false refusal this repository's Core Contract forbids more strictly than a miss; telling the two apart needs what the sentence means
-
-- **unpinned**, tracked by: `BACKLOG.md` — *a hosting serial with no citation word on its line*
-
-### `reference-integrity/a-hosting-serial-outside-markdown-is-not-observed-a-stated-bound`
-
-> nothing reacts, and the reason is the one `AGENTS.md` records for why no reaction was possible at all: the bare serial shape *is* the fixture for the squash-serial check, so a reader over that format would refuse the check that forbids the thing. The collision is with the shape rather than with a spelling, so narrowing the pattern does not reach it
-
-- **unpinned**, tracked by: `BACKLOG.md` — *a hosting serial outside Markdown*
 
 ### `reference-integrity/an-abbreviation-carrying-no-letter-or-no-digit-is-not-observed-a-stated-bound`
 
