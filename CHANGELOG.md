@@ -7493,6 +7493,42 @@ no adopter runs. They are here rather than under the adopter headings above beca
   lower case where a citation had been removed from its front.
 
 
+- **A requirement asked its reaction to print what it counted, and the reaction printed nothing.**
+  `observation-bound-register` says the register's mandatory minimum *is measured rather than estimated by
+  whoever wrote it: the reaction prints what it counted on every clean run, and a figure typed here would be
+  a census in prose*. The prose direction returned offences alone, so a clean run said nothing at all — the
+  requirement was unmet by the reaction it governs, while the sibling `pin_bites` prints its own two figures
+  on its clean path, which made the prose direction the outlier rather than the norm.
+
+  The scan now returns what it saw beside what it refused, from the same pass rather than a second reader:
+  the bound-declaring prose lines it found, and how many a declared scenario, a resolvable reference or a
+  bounds-named requirement accounted for. The direction prints both on every clean run, and asserts a floor
+  on each — a clean report over zero specs, or over a predicate matching nothing, is the vacuity this
+  repository has been caught by before. The predicate is decided before the scenario skip, so the figure is
+  what the specs **state** rather than what reached an offence; counting only the uncleared ones would report
+  the offences again under a second name.
+
+- **The residual naming what clears prose named the narrower half of it.** It said a `(bound: …)` reference
+  clears the prose it sits with. The reaction clears on any reference it resolves — the parenthesised form
+  and a bare capability-qualified id alike, since the id is no less a reference than the wrapper around it.
+  The residual now says so.
+
+  **Probing that turned up a false refusal nobody had stated, and it turned on punctuation.** `is_word_char`
+  admits `.` so that `spec.md` reads as one run — which fused an id with the full stop ending its sentence
+  and failed the kebab test, so the *same reference* cleared prose when a space followed it and was refused
+  when a period did. A trailing full stop is now trimmed before the pair is split. A path keeps its own dot,
+  because a slug does not end in one and three slashes is not a pair either way, and both directions are
+  pinned. Seen to fail with the trim removed: the period-terminated line is reported as a bound stated
+  outside any declared scenario while the space-terminated one, from the same id, is cleared.
+
+  The first probe of this was itself wrong and is worth recording: it terminated the bare id with a period,
+  found that it did not clear, and would have refuted a correct finding. Checking the probe against the
+  direction that already covered the space-terminated form is what separated the reader's real behaviour from
+  the probe's mistake — the finding was right, and the instrument that appeared to refute it was not.
+
+  No published API, outcome, report, exit class or manifest moves.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

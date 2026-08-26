@@ -422,8 +422,10 @@ pub fn undeclared_prose_offences(
     spec: &str,
     text: &str,
     capabilities: &BTreeSet<String>,
-) -> Vec<String> {
+) -> ProseScan {
     let mut offences = Vec::new();
+    let mut stated = 0usize;
+    let mut cleared = 0usize;
 
     let mut in_bound_scenario = false;
     let mut req_heading = String::new();
@@ -491,17 +493,26 @@ pub fn undeclared_prose_offences(
             continue;
         }
 
-        if in_bound_scenario {
+        // **The predicate is decided before the scenario skip, so the count is of what this spec STATES
+        // rather than of what reached the offence.** The requirement forbids typing the register's minimum
+        // and requires the reaction to print what it counted, which is this number: a line inside a declared
+        // scenario is still a bound stated in prose, and counting only the uncleared ones would report the
+        // offences again under a second name.
+        if !states_a_bound_in_prose(trimmed) || negates_bound_in_prose(trimmed) {
             continue;
         }
-        if !states_a_bound_in_prose(trimmed) || negates_bound_in_prose(trimmed) {
+        stated += 1;
+        if in_bound_scenario {
+            cleared += 1;
             continue;
         }
         if req_is_bounds {
             req_stated_undeclared = true;
+            cleared += 1;
             continue;
         }
         if !bare_references(capabilities, trimmed).is_empty() {
+            cleared += 1;
             continue;
         }
         offences.push(format!(
@@ -511,7 +522,30 @@ pub fn undeclared_prose_offences(
         ));
     }
     flush_requirement!();
-    offences
+    ProseScan {
+        offences,
+        stated,
+        cleared,
+    }
+}
+
+/// What one pass over a spec's prose found: the offences, and the size of the minimum it measured.
+///
+/// **The size is returned rather than typed anywhere, because the requirement forbids typing it.** *Its size
+/// is measured rather than estimated by whoever wrote it: the reaction prints what it counted on every clean
+/// run, and a figure typed here would be a census in prose.* The reaction had no way to print it — the scan
+/// returned offences alone, so on a clean run it printed nothing and the requirement was unmet by the
+/// reaction it governs, while `pin_bites` prints its own two figures on its clean path.
+#[derive(Debug, Default)]
+pub struct ProseScan {
+    /// Every offence, line-level and requirement-level.
+    pub offences: Vec<String>,
+    /// Bound-declaring prose lines seen, cleared or not. This is the register's mandatory minimum.
+    pub stated: usize,
+    /// Of [`Self::stated`], those a declared scenario, a resolvable reference, or a bounds-named requirement
+    /// accounted for. `stated - cleared` is the line-level offence count; a requirement-level offence has no
+    /// line of its own and is in [`Self::offences`] without being either.
+    pub cleared: usize,
 }
 
 /// One `PINNED-BY` citation, wherever in the tracked specs it was written.
@@ -670,6 +704,12 @@ pub fn bare_references(capabilities: &BTreeSet<String>, text: &str) -> Vec<(usiz
             let end = tail.find(|c| !is_word_char(c)).unwrap_or(tail.len());
             let (word, remainder) = tail.split_at(end);
             rest = remainder;
+            // **A sentence may end on a reference, and `.` is a word character here.** `is_word_char`
+            // admits `.` so a path like `spec.md` is one run, which means an id ending a sentence fuses with
+            // its full stop and fails `is_kebab` — so the same reference cleared prose when a space followed
+            // it and was refused when a period did. Measured both ways before this trim existed. Trailing
+            // dots only: `spec.md` keeps its own, and a slug does not end in one.
+            let word = word.trim_end_matches('.');
             let Some((capability, slug)) = word.split_once('/') else {
                 continue;
             };

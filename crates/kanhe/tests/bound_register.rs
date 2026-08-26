@@ -833,7 +833,7 @@ fn an_indented_scenario_heading_is_not_a_declared_bound_to_either_reader() {
         0,
         "an indented heading must not be recognized as a declared bound scenario"
     );
-    let offences = parse::undeclared_prose_offences(spec, text, &capabilities);
+    let offences = parse::undeclared_prose_offences(spec, text, &capabilities).offences;
     assert_eq!(
         offences.len(),
         1,
@@ -924,6 +924,9 @@ fn every_bound_stated_in_prose_is_declared_as_a_scenario() {
         .collect();
 
     let mut offences = Vec::new();
+    let mut specs = 0usize;
+    let mut stated = 0usize;
+    let mut cleared = 0usize;
     for (_, spec) in parse::tracked_specs(&root) {
         let text = std::fs::read_to_string(root.join(&spec)).unwrap_or_else(|error| {
             panic!(
@@ -931,17 +934,32 @@ fn every_bound_stated_in_prose_is_declared_as_a_scenario() {
                  leaves the register undecided rather than clean"
             )
         });
-        offences.extend(parse::undeclared_prose_offences(
-            &spec,
-            &text,
-            &capabilities,
-        ));
+        let scan = parse::undeclared_prose_offences(&spec, &text, &capabilities);
+        specs += 1;
+        stated += scan.stated;
+        cleared += scan.cleared;
+        offences.extend(scan.offences);
     }
     assert!(
         offences.is_empty(),
         "a bound stated in prose but not declared as a scenario, or a bounds-named requirement declaring \
          none:\n{}",
         offences.join("\n")
+    );
+    // **The size is printed rather than written down anywhere, which the requirement asks for by name.** A
+    // figure typed into the specification would be a census in prose, and this reaction had no way to say
+    // what it measured: it returned offences alone, so a clean run printed nothing at all. The sibling
+    // `pin_bites` prints its two figures on its own clean path, which made the prose direction the outlier.
+    eprintln!(
+        "bound register ok ({stated} bound-declaring prose line(s) across {specs} spec(s), {cleared} \
+         accounted for by a declared scenario, a resolvable reference or a bounds-named requirement) — the \
+         first figure is this register's mandatory minimum, measured on this run rather than typed into the \
+         requirement that forbids typing it"
+    );
+    assert!(
+        specs > 0 && stated > 0,
+        "the prose direction read {specs} spec(s) and found {stated} bound-declaring line(s), so a clean \
+         report here would be over a corpus it never opened or a predicate that matches nothing"
     );
 }
 
