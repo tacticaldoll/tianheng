@@ -28,9 +28,10 @@ fn workspace_root() -> Option<PathBuf> {
 /// **The count is returned rather than folded into the verdict**, because `offences.is_empty()` is satisfied
 /// by a corpus that collapsed to nothing exactly as it is by a clean one, and those are opposite facts. Three
 /// paths below leave a file uninspected. One of them depends on `git ls-files --eol` writing exactly one tab
-/// before the path — measured today, 389 lines, every one with exactly two tab-separated fields — so a change
-/// in that format sends every line down it, and without the caller's guard this check would assert nothing
-/// over nothing and report clean.
+/// before the path — measured over the whole tracked set, where **every** line carried exactly two
+/// tab-separated fields — so a change in that format sends every line down it, and without the caller's guard
+/// this check would assert nothing over nothing and report clean. The property is the two fields; how many
+/// lines carried them is a figure that moves with every tracked file.
 fn offences(root: &Path, listing: &str) -> (Vec<Refusal>, usize) {
     let mut offences = Vec::new();
     let mut inspected = 0usize;

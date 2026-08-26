@@ -42,12 +42,14 @@ fn every_declared_census_agrees_with_what_produces_it() {
         .iter()
         .filter(|b| !matches!(b.citation, Citation::PinnedBy(_)))
         .count();
-    // What is NOT declared here, and why. `[Unreleased]`'s prose states how many entries named this
-    // repository's machinery BEFORE the section was collapsed — a historical observation, not a live count,
-    // and the check that enumerates the set today produces a different and equally correct figure. A
-    // census holds a figure about the CURRENT tree; a figure about a past state is a record, and holding it
-    // to today's enumeration would demand that the record change every time the tree does. That residual is
-    // declared as a bound rather than approximated.
+    // **A figure about a past state is a record, and it is now CLOSED rather than declared.** This comment
+    // used to name `[Unreleased]`'s prose as the instance and say the residual was declared as a bound. Both
+    // halves had stopped being true: that section is empty, so the instance is gone, and no bound of this
+    // family ever declared the record case — the three that exist are about words at a hundred and above, a
+    // census outside Markdown, and a count in a phrasing no census declares. Meanwhile the residual was
+    // live: a figure inside a dated `CHANGELOG.md` section was refused for disagreeing with today's
+    // enumeration, escaping only because its two numbers straddled a line break. `record` now cuts records
+    // out of this sweep's corpus, which is what the comment claimed a bound was doing.
     let declared = vec![
         Census {
             subject: "declared observation bounds and the capabilities declaring them",

@@ -542,8 +542,8 @@ having had its denominator re-swept while its numerator was left behind.
 
 One **exemption** is deliberate and SHALL be declared here rather than only in the reaction's own comments.
 Prose under a requirement whose heading names bounds is not reported, because several such requirements
-state their bounds as a numbered list — `Observation bounds are stated, not silent` enumerates seven — and
-requiring each item to become its own scenario would restructure three requirements and read worse. The
+state their bounds as a numbered list — `Observation bounds are stated, not silent` is one such list — and
+requiring each item to become its own scenario would restructure those requirements and read worse. The
 exemption is not free, and its price SHALL be charged: such a requirement SHALL declare at least one bound
 scenario, or its list would have no reaction anywhere. What the exemption costs is that the *other* items of
 such a list are unregistered, and that cost SHALL be stated in the projection's header.

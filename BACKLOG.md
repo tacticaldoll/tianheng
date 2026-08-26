@@ -1522,6 +1522,22 @@ consumer for an undemonstrated deduplication.
   arriving in live prose, or a CI checkout that carries history, which would make resolution decidable.
   *Authority:* engine. *Compatibility:* patch; the reaction is repository machinery and ships in no package.
 
+- **WATCH: a number sharing a clause with a citation cue.** *Class:* WATCH. *Observed pressure:* a review
+  wrote one sentence naming a reported defect and a colour value in the same clause, and the reaction reported
+  the colour — the cue and a number that is not a serial in one clause, told apart only by what the sentence
+  means. **The instance is not spelled here, and that is the bound demonstrating itself:** writing it put a
+  live one in the corpus, and the reaction refused this entry until the words came out — the same lesson
+  `RELATIVE_ANCHORS` records for its own members. *Observation source:* binding the cue to
+  its clause was measured and closes the cross-clause case, where a colour before a semicolon and a citation
+  after it report only the citation; inside one clause nothing lexical separates them. *Current reaction or
+  bound:*
+  `reference-integrity/a-number-sharing-a-clause-with-a-citation-cue-is-refused-a-stated-bound`. *Risk:* prose
+  that names a pull request and a numeric value in one clause is refused and has to be reworded or split —
+  visible and fixable, which is why this direction was taken over reading the sentence. *Next trigger:* a
+  clause-internal separator that is lexical rather than semantic, or an instance where rewording is not
+  available. *Authority:* engine. *Compatibility:* patch; the reaction is repository machinery and ships in no
+  package.
+
 - **WATCH: a hosting serial with no citation word on its line.** *Class:* WATCH. *Observed pressure:* a bare
   `#` followed by digits is not read as a serial, because taking every one of them refuses a colour and any
   other numeric value spelled that way. The line has to name the thing — `PR`, `pull request` or `issue`,

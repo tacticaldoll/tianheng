@@ -63,12 +63,25 @@ fn a_dated_suffix_is_a_date_and_not_only_three_digit_runs() {
     for real in ["2026-07-20", "1999-01-01", "2026-12-31"] {
         assert!(is_iso_date(real), "{real} is a date");
     }
-    for shaped in ["2026-99-99", "2026-00-10", "0000-00-00", "2026-13-01"] {
+    // The last two are the residue the field-range version admitted and this one does not: a day the
+    // calendar does not have, and the leap rule in the direction that catches a century.
+    for shaped in [
+        "2026-99-99",
+        "2026-00-10",
+        "0000-00-00",
+        "2026-13-01",
+        "2026-02-31",
+        "2026-04-31",
+        "1900-02-29",
+    ] {
         assert!(
             !is_iso_date(shaped),
             "{shaped} has a date's shape and names none"
         );
     }
+    // And the day the leap rule does admit, so the refusals above are the calendar rather than a narrower
+    // month.
+    assert!(is_iso_date("2024-02-29"), "2024-02-29 is a date");
     for wrong_shape in ["notadate!!", "2026-7-20", "20260720", "2026-07-20-01"] {
         assert!(
             !is_iso_date(wrong_shape),

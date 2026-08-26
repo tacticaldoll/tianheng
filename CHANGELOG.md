@@ -7602,7 +7602,13 @@ no adopter runs. They are here rather than under the adopter headings above beca
   writes its own subject, like every other direction in that file, which is what makes it independent of
   whether any document states a census.
 
-  **Everything else of the class went with it, and the line between a count and a record is drawn where
+  **The sweep that found these was not exhaustive, and a review refuted the claim that it was.** *Everything
+  else of the class went with it* was written here and was false: a numbered list's membership in a
+  specification, a line count in a whitespace direction, and a section's reference tally in a Rust comment all
+  survived it, and are removed in the commit beside this one. The instrument was a numerals-and-nouns grep
+  over live documents, which is the shape `AGENTS.md` warns is mostly false positives — so it was triaged by
+  hand, and hand-triage is what missed three. What replaces the claim is the disposition: the line between a
+  count and a record is drawn where
   `AGENTS.md` already drew it.** Removed: the register's own census; the SHALL, requirement and scenario totals
   a promotion argument rested on; the citation totals in a bound's reason and in the requirement it serves; a
   clippy item count; a hand-resolution of a section that has grown since; two round-number sweeps; a spike's
@@ -7613,6 +7619,53 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
   Every argument survived the removal, which is the test the rule states: where a count mattered the command
   that produces it is written instead, and where it did not the sentence says what it always said.
+
+
+- **The record/live distinction had two owners one round apart, and they disagreed about the same document.**
+  The citation reader learned to cut records by dated section; the census sweep — which needed the same cut and
+  predates it — read every tracked Markdown file with no exemption at all. So one reader treated a dated
+  `CHANGELOG.md` section as a record and the other refused a figure inside one.
+
+  **That was live, not latent, and on the false-refusal side.** A figure in a dated section stated the
+  register's size as it stood then — correct as written, and disagreeing with today's enumeration by design. It
+  escaped only because its two numbers straddled a line break: probed, the split form yields nothing and the
+  joined form a refusal. Any reflow of that paragraph, or an editor rewrap, turned a green tree red over
+  correct text. Everything earlier in this window was a miss or one edit from being wrong; this was one edit
+  from refusing something true.
+
+  `kanhe::record` now owns the distinction and both readers ask it. It answers with the record **lines** of a
+  document, which is what lets the sectioned case work: `docs/history/` is a record in whole, `CHANGELOG.md`'s
+  dated sections are records line by line, and its undated ones are live. It composes the two readers that
+  already own the parts — `sections` cuts, `reading::date` reads the calendar — rather than deciding either
+  again. Verified in both directions in one run: the joined figure inside a dated section is silent, and the
+  same figure in live text is refused.
+
+  **And the date is the calendar's, by the reader in this crate that has one.** `is_iso_date` ranged its fields
+  to `1..=12` and `1..=31` and recorded the residue — a day its month does not have — on the ground that a
+  calendar was a dependency this crate's surface did not carry. It does: `reading::date` reads `YYYY-MM-DD`
+  through `days_in_month`, leap years included. Two date readers in one crate with the weaker one used where
+  the stronger existed is the shape this crate converges rather than documents, so `is_iso_date` delegates and
+  the residue is closed. Seen to fail: a day its month lacks, a February the leap rule excludes, and a century
+  that is not a leap year are all refused where the ranged version admitted them.
+
+  **A comment claimed a bound that did not exist, and its own instance had gone.** The census direction said a
+  figure about a past state held to today's enumeration was *declared as a bound rather than approximated*.
+  No bound of that family ever declared it — the three that exist are about words at a hundred and above, a
+  census outside Markdown, and a count in a phrasing no census declares. Meanwhile the residual was live and
+  is the finding above. The comment now says what is true: the case is **closed** by the record cut, not
+  declared.
+
+- **A citation cue binds to its clause, and what a clause cannot separate is declared.** Asking only whether a
+  line carried `PR`, `pull request` or `issue` made any numeric value on that line a serial. The cue now opens
+  a run that ends where its clause does, so a value in one clause and a citation in another are told apart —
+  measured, a colour before a semicolon and a citation after it report only the citation. Still a run rather
+  than the nearest token, because a real citation lists several under one cue and binding the nearest would
+  catch the first and let the rest through.
+
+  Inside one clause nothing lexical separates them, and that half is an over-reaction with a bound of its own.
+  **The bound's own tracker cannot spell its instance, and the reaction proved it:** writing the example put a
+  live one in the corpus and the entry was refused until the words came out — the same lesson
+  `RELATIVE_ANCHORS` records for its own members, arriving here through a different door.
 
 
 ## [0.4.0] - 2026-08-04

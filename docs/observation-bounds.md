@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**29 of 100 declared bounds have no pinning test.** That figure is the register's
+**30 of 101 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -264,6 +264,12 @@ fallback used where no manifest exists, which the register spec describes.
 > the reaction fails anyway. It decides by **shape**, and nothing in the tree distinguishes a value of that shape from a citation without resolving it against an object database
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a code span shaped like an object that names none*
+
+### `reference-integrity/a-number-sharing-a-clause-with-a-citation-cue-is-refused-a-stated-bound`
+
+> the reaction fails anyway. The cue is bound to its **clause**, which closes the case where the two sit in different clauses — measured, a colour before a semicolon and a citation after it report only the citation — and inside one clause nothing lexical separates them
+
+- **unpinned**, tracked by: `BACKLOG.md` — *a number sharing a clause with a citation cue*
 
 ### `reference-integrity/a-serial-with-no-citation-word-on-its-line-is-not-observed-a-stated-bound`
 

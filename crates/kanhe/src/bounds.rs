@@ -661,6 +661,25 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *a code span shaped like an object that names none*",
         ),
+        // And what a clause cannot separate. Binding the cue to its clause closes the cross-clause case;
+        // inside one clause a cue and a number that is not a serial are told apart only by what the sentence
+        // means, which is the prose instrument this repository refuses.
+        BoundDecl::unpinned(
+            BoundId::new(
+                "reference-integrity/a-number-sharing-a-clause-with-a-citation-cue-is-refused-a-stated-bound",
+            ),
+            "a `#` followed by digits in the same clause as `PR`, `pull request` or `issue`, naming something \
+             other than a serial",
+            Extent::Reached(Reached::OverReacts {
+                because: "the cue is bound to its clause, which closes the case where the two sit in \
+                          different clauses -- measured, a colour before a semicolon and a citation after it \
+                          report only the citation. Inside one clause nothing lexical separates them, and \
+                          what does is the sentence's meaning: the prose instrument `AGENTS.md` records as \
+                          designed, measured three times and rejected"
+                    .into(),
+            }),
+            "`BACKLOG.md` — *a number sharing a clause with a citation cue*",
+        ),
         // The other half of the same trade, in the other direction: taking every `#` followed by a digit
         // refuses a colour and any other numeric value spelled that way, so the line has to name the thing.
         // Scoped to the line rather than to what precedes each `#`, because a real citation lists several
