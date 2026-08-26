@@ -1,6 +1,6 @@
 //! Which text is a record: the cut two readers now share.
 
-use crate::record::{is_record_document, record_lines};
+use crate::record::{Records, is_record_document, record_lines};
 
 /// A record document is a record in whole, and a live one carries none.
 #[test]
@@ -14,11 +14,12 @@ fn a_record_document_is_a_record_in_whole() {
     let text = "one\ntwo\nthree\n";
     assert_eq!(
         record_lines("docs/history/anything.md", text),
-        (1..=3).collect(),
+        Records::Lines((1..=3).collect()),
         "every line of a record document is a record"
     );
-    assert!(
-        record_lines("BACKLOG.md", text).is_empty(),
+    assert_eq!(
+        record_lines("BACKLOG.md", text),
+        Records::Live,
         "a live document carries no record lines"
     );
 }
@@ -41,15 +42,29 @@ impossible one
 ## [0.4.0] - 2026-08-04
 recorded one
 ";
-    let records = record_lines("CHANGELOG.md", text);
-    // Only the last section's heading and body.
-    assert_eq!(
-        records,
-        [7usize, 8].into_iter().collect(),
-        "the dated section is the record and nothing else is: {records:?}"
-    );
+    // The placeholder and the impossible date are now UNDECIDED rather than silently live: a version
+    // heading carrying no readable date is neither a record nor live text, and reading it as live puts a
+    // released record in front of today's tree.
+    let undecided = record_lines("CHANGELOG.md", text);
     assert!(
-        record_lines("BACKLOG.md", text).is_empty(),
+        matches!(undecided, Records::Unreadable(_)),
+        "a version heading with no readable date is undecided, got {undecided:?}"
+    );
+    // With only real dates and `[Unreleased]`, the cut is the dated section and nothing else.
+    let clean = "\
+## [Unreleased]
+live one
+## [0.4.0] - 2026-08-04
+recorded one
+";
+    assert_eq!(
+        record_lines("CHANGELOG.md", clean),
+        Records::Lines([3usize, 4].into_iter().collect()),
+        "the dated section is the record and nothing else is"
+    );
+    assert_eq!(
+        record_lines("BACKLOG.md", text),
+        Records::Live,
         "the same headings in a document that is not the sectioned record carry no records"
     );
 }

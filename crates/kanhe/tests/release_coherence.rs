@@ -2081,7 +2081,7 @@ fn a_family_pin_under_a_target_triple_is_read() {
 /// before the change too — and it is here because the change it guards is a change to where the reader
 /// stops, which only a pair of cases can locate.
 #[test]
-fn a_family_pin_under_a_quoted_cfg_target_is_the_declared_bound() {
+fn a_family_pin_under_a_quoted_cfg_target_is_observed() {
     let root = scratch("target-cfg");
     let fixture = build_fixture(&root, "target-cfg", "0.2.0");
     let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
@@ -2093,7 +2093,10 @@ fn a_family_pin_under_a_quoted_cfg_target_is_the_declared_bound() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: depend on a family crate under a cfg");
-    judge(&fixture.repo).expect("a cfg-guarded family pin is a declared bound, not a violation");
+    refusal::expect(
+        "release-coherence#example-pin-disagrees",
+        &refuse(&fixture.repo, Kind::Violation, "requires xuanji"),
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 

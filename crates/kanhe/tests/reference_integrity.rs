@@ -1984,7 +1984,15 @@ fn unanchored_citation_offences_in(corpus_root: &Path, corpus: &[String]) -> BTr
             )
         });
         read += 1;
-        let live = live_prose(kind, &text, &kanhe::record::record_lines(path, &text));
+        // An undecided record boundary is a cannot-judge: a released section read as live text puts a whole
+        // historical record in front of today's tree, and the diagnostic would point at an entry inside it
+        // rather than at the heading that could not be read.
+        let records = kanhe::record::record_lines(path, &text);
+        if let kanhe::record::Records::Unreadable(what) = &records {
+            offences.insert(format!("  {what}"));
+            continue;
+        }
+        let live = live_prose(kind, &text, &records);
 
         // **Two sanctioned readers, and neither is re-implemented here.** `region`'s prose reader decides
         // what is prose in Markdown, and `reading`'s pairing reader decides where a code span opens and
@@ -2014,7 +2022,7 @@ fn unanchored_citation_offences_in(corpus_root: &Path, corpus: &[String]) -> BTr
 ///
 /// A dropped line is rebuilt as an empty one rather than removed, so line numbers stay the document's own
 /// and a boundary — a fence, a run of code, a dated section — becomes the paragraph break it already is.
-fn live_prose(kind: Prose, text: &str, records: &BTreeSet<usize>) -> String {
+fn live_prose(kind: Prose, text: &str, records: &kanhe::record::Records) -> String {
     let total = text.lines().count();
     match kind {
         Prose::None => String::new(),
@@ -2024,7 +2032,7 @@ fn live_prose(kind: Prose, text: &str, records: &BTreeSet<usize>) -> String {
                 source.prose().numbered_lines().collect();
             (1..=total)
                 .map(|line| {
-                    if records.contains(&line) {
+                    if records.contains(line) {
                         ""
                     } else {
                         visible.get(&line).map(String::as_str).unwrap_or("")

@@ -72,12 +72,16 @@ fn every_declared_census_agrees_with_what_produces_it() {
     //
     // The figure comes from the sweep's own pass. A first version walked the corpus again with its own
     // filter, which excluded whole record documents but not a record's dated sections — so a correct
-    // historical sentence could raise it, and the message below would have read that as a hand-written count
-    // arriving. One enumerator, one record cut.
+    // historical sentence could raise it. One enumerator, one record cut.
+    //
+    // **And the message states the measurement, not a conclusion about who wrote it.** It read a rise as *a
+    // hand-written count arriving*, which this figure cannot support: it counts documents that state a census
+    // and knows nothing of their provenance — a second generated projection would raise it exactly as a typed
+    // sentence would. Classifying them needs identity this pass does not carry, so the print says what was
+    // counted and stops there.
     eprintln!(
-        "census ok ({stating} tracked document(s) state a declared census, over {} declared) — a figure \
-         belongs only where it is produced, so the documents this finds should be the generated projections \
-         and nothing else; a rise here is a hand-written count arriving",
+        "census ok ({stating} of the tracked documents state one of the {} declared censuses, and each \
+         agreed with what produces it)",
         declared.len()
     );
     assert!(
@@ -396,5 +400,62 @@ fn a_census_outside_markdown_is_a_stated_bound() {
         unheld.is_empty(),
         "the corpus is tracked Markdown, so a census outside it is a stated bound rather than a finding, got \
          {unheld:?}"
+    );
+}
+
+/// A record boundary this reader cannot decide is a cannot-judge, not a document read as live.
+///
+/// **The third state, shown.** `record_lines` used to answer with two: a version heading whose date it could
+/// not read fell to *live*, so a released section — a whole historical record — went in front of today's
+/// enumeration, and the refusal named an entry inside it rather than the heading that could not be read.
+///
+/// Both arms are planted: a version heading with no ` - DATE` at all, and one whose date the calendar refuses.
+/// `[Unreleased]` is the one heading that legitimately carries none, and the control below keeps it silent.
+#[test]
+fn an_undecidable_record_boundary_is_a_cannot_judge() {
+    let declared = vec![Census {
+        subject: "a control",
+        phrase: "{} bounds across {} capabilities",
+        figures: vec![2, 1],
+    }];
+    let scratch =
+        std::env::temp_dir().join(format!("tianheng-census-boundary-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    for (name, heading) in [
+        ("CHANGELOG.md", "## [0.6.0]"),
+        ("CHANGELOG.md", "## [0.6.0] - 2026-02-31"),
+    ] {
+        std::fs::write(
+            scratch.join(name),
+            format!(
+                "## [Unreleased]\n\n{heading}\n\n  a line writing 2 bounds across 1 capabilities\n"
+            ),
+        )
+        .expect("write");
+        let Sweep { offences, .. } = sweep(&scratch, &[String::from(name)], &declared);
+        assert_eq!(
+            offences.len(),
+            1,
+            "an undecidable boundary is one refusal about the heading, got {offences:?}"
+        );
+        refusal::expect(
+            "repository-checks#census-record-boundary-undecided",
+            &offences[0],
+        );
+    }
+    // The control: `[Unreleased]` alone carries no date and is live, so a figure under it is compared and
+    // agrees. Without this, the refusals above could be about any heading rather than an undecidable one.
+    std::fs::write(
+        scratch.join("CHANGELOG.md"),
+        "## [Unreleased]\n\n  a line writing 2 bounds across 1 capabilities\n",
+    )
+    .expect("write");
+    let control = sweep(&scratch, &[String::from("CHANGELOG.md")], &declared);
+    let _ = std::fs::remove_dir_all(&scratch);
+    assert!(
+        control.offences.is_empty(),
+        "`[Unreleased]` carries no date legitimately and its figure agrees: {:?}",
+        control.offences
     );
 }

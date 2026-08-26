@@ -1406,7 +1406,7 @@ consumer for an undemonstrated deduplication.
   crate. *Authority:* `observation-bound-register`, and `observation-bound-model`'s sibling bound that a
   rationale contradicting its extent is accepted — the prose beside an extent was already free to disagree with
   it, and so, until this was found, was the test beneath it.
-- **WATCH: a dependency declared under a quoted cfg target is not observed.** *Observed pressure:* the
+- **WATCH: a dependency declared under a cfg target carrying a dot is not observed.** *Observed pressure:* the
   example-pin reader decides which tables hold dependencies from the heading, and admits
   `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, their `.NAME` detailed forms, and any of
   those under a bare target triple. `[target.'cfg(…)'.dependencies]` is not admitted. *Observation

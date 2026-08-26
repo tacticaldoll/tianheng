@@ -325,10 +325,13 @@ The census direction in `crates/kanhe/tests/bound_register.rs` stays what it is 
 phrasing is stable, with nothing in the tree stating it — and the rule below is what keeps a figure honest.
 
 
-**A count of a live set is not written down, produced or not.** The declared-census mechanism is retained and
+**A hand-written count of a live set is not written down.** The declared-census mechanism is retained and
 armed — `crates/kanhe/src/census.rs` enumerates a set, names the one sentence its figures may be written in,
-and one sweep holds every tracked document to it — but the tree carries no such sentence, and the rule is that
-it should not. A declared census is the *safe* way to write a count, and safe was never the same as worth
+and one sweep holds every tracked document to it. The one sentence the tree carries is in a **generated
+projection**, whose figure a renderer computes over a freshness-checked document — the produced form this rule
+points at rather than an exception to it. What the rule is about is the **typing**: a figure a person
+maintains drifts, and one a renderer recomputes cannot. An earlier wording here said *produced or not*, which
+forbade the very thing the next sentence recommends and contradicted that projection two paragraphs down. A declared census is the *safe* way to write a count, and safe was never the same as worth
 having: it still has to be re-typed every time the set moves, and this repository re-typed the one it had three
 times in a single release window, each time by hand and once with the wrong figure. Where a figure matters,
 **the reaction prints it on every clean run** — `bound_register` and `pin_bites` both do — and the reader gets

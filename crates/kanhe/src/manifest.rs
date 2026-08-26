@@ -146,7 +146,7 @@ pub fn workspace_version(text: &str) -> WorkspaceVersion {
     // stopped the comment from causing that; taking the cut removes the second test entirely, so the shape
     // cannot recur for a spelling nobody thought of.
     let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
-        is_table(line).then(|| line.trim() == "[workspace.package]")
+        is_table(line).then(|| table_name(line).is_some_and(|name| name == "workspace.package"))
     });
     // `version` then `=`, so `version.workspace` and any other `version…` key is not this key.
     let values: Vec<&str> = tables
@@ -333,8 +333,43 @@ pub fn publishable(text: &str) -> Publishable {
 /// it — while `trimmed == "[package]"` skipped both, and a reader that skips the table answers *publishable*
 /// for a crate cargo refuses to publish. `[package.metadata]` is a different table and stays one.
 fn names_the_package_table(header: &str) -> bool {
-    let inner = header.trim_start_matches('[').trim_end_matches(']').trim();
-    unquoted(inner) == "package"
+    table_name(header).is_some_and(|name| name == "package")
+}
+
+/// What table a TOML heading names, in the spellings cargo treats as one.
+///
+/// **One rule, one implementation, because it had four and only one of them was right.** `[ package ]`,
+/// `["package"]` and `[package]` are the same table to cargo — measured, each reports `publish=[]` for a
+/// `publish = false` beneath it — and a reader comparing raw text saw only the third. That equality was
+/// measured once, repaired at `names_the_package_table`, and left standing at three sibling predicates: the
+/// `[workspace.package]` cut, `package_name`'s `[package]` cut, and `dependency_table`, which strips the
+/// brackets and then compares without trimming or unquoting. A review found all three in one pass. After this
+/// there is one place to be wrong, and the compiler reaches every caller.
+///
+/// Segments are unquoted and trimmed individually, so `[ "workspace" . package ]` reads as
+/// `workspace.package` — cargo's own equality, and the reason this returns the joined dotted name rather than
+/// a boolean: three callers ask about different tables and a boolean would be a fourth implementation of the
+/// question.
+///
+/// `None` when the line is not a heading at all. A heading whose segments cannot be read is not
+/// distinguishable from one naming another table by any means this reader has, so it answers with what it
+/// read; callers that need *cannot judge* compare against the name they want and treat absence as unreadable
+/// rather than as undeclared.
+pub fn table_name(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    let inner = trimmed.strip_prefix('[')?.strip_suffix(']')?;
+    // A doubled bracket is an array-of-tables heading, `[[package]]`, and names the same table.
+    let inner = inner
+        .strip_prefix('[')
+        .and_then(|rest| rest.strip_suffix(']'))
+        .unwrap_or(inner);
+    Some(
+        inner
+            .split('.')
+            .map(|segment| unquoted(segment.trim()))
+            .collect::<Vec<_>>()
+            .join("."),
+    )
 }
 
 /// A TOML key or header segment with its quotes removed, in both quoted forms cargo accepts.
