@@ -7706,6 +7706,47 @@ no adopter runs. They are here rather than under the adopter headings above beca
   not.
 
 
+- **Four dead branches, an over-claim narrowed, and a duplicate walk deleted — no new machinery.** A
+  code-side review found four fallbacks a guard had already made unreachable: a `max()` over `str::split`,
+  a `read_dir` entry's file name, a `next_back()` on a slice the left arm of its own `||` had proved
+  non-empty, and an `ls-remote` line's first token. Each is now an `expect` naming why the case cannot
+  arrive; the `next_back()` one collapses to `ends_with(char::is_whitespace)`, one expression instead of
+  three. The `ls-remote` one mattered most: folding its `None` into the default made *read a line and found
+  no token* and *the remote has no main* the same answer — the pair the comment two lines below insists on
+  keeping apart.
+
+  **The reaction that exists for this class claimed to close it, and closes the decidable part.** Its
+  consumer side is general — chosen by what each does to the `Option` — but its producer side is `str::split`
+  and `str::rsplit`, and that is not an oversight: those yield an item *unconditionally*, which is what a
+  reader over text can know. `xs.max()`, `chars().next_back()` and `entry.file_name()` are always-`Some` only
+  on a non-empty producer, and whether it is takes the surrounding code rather than the line — measured, the
+  tree carries such calls where a lexical reader cannot tell which. Widening the list would refuse them.
+
+  So the claim is narrowed to what the reader decides and the wider class becomes a row in `AGENTS.md`'s
+  disposition table, beside the other rows no reaction can reach. The review found four live sites in one
+  pass, which is that row working rather than an argument for building more reader.
+
+- **The diagnostic added last commit counted a different corpus from the sweep it reported on.** It excluded
+  whole record documents and not a record's dated sections, while the sweep excludes those lines — so a
+  correct historical sentence could raise the figure, and the message read a rise as *a hand-written count
+  arriving*. The figure now comes from the sweep's own pass, which deletes the second walk: one enumerator,
+  one record cut, and a returned record instead of a re-derivation.
+
+- **And the prose written for the new count rule broke it.** Cardinalities of live sets — how many sites cite
+  an exemplar, how many phrasings are declared, how many readers ask a module, how many bounds a family has —
+  went into the sentences explaining the rule against exactly that, in the same two commits that wrote the
+  rule. They are removed and the properties named instead. The instance is worth keeping in view: the rule's
+  own explanation is the least-swept text in any change.
+
+  One finding from the same review is **refuted rather than adopted**: a multi-line `description` string
+  carrying a line shaped like a table header was said to make `publishable` answer *publishable* for a crate
+  that publishes nowhere. Probed directly — the reader answers *No*, identically to the control, because
+  `region::toml` already tracks multi-line basic strings. No repair was made for it.
+
+  Executed lines: net zero. Every repair here is a deletion, a collapse or a claim brought down to what it
+  covers.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

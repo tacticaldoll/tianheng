@@ -201,7 +201,7 @@ fn number_at(rest: &str) -> Result<Option<(usize, usize)>, String> {
 /// document with no census in it: skipping it silently would report clean over a corpus the sweep never
 /// examined, which is the direction its sibling reference gate already refuses outright — *a file this check
 /// claims to have inspected must have been read*.
-pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusal> {
+pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Sweep {
     assert!(
         !declared.is_empty(),
         "no census was declared, so this sweep would report clean without comparing anything — the vacuity \
@@ -225,7 +225,7 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusa
             .split("{}")
             .map(str::len)
             .max()
-            .unwrap_or_default();
+            .expect("`str::split` yields at least one item, so the longest literal exists");
         assert!(
             longest >= 12,
             "the census for {} declares a phrase whose longest literal is {longest} characters, which is not \
@@ -241,6 +241,7 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusa
         );
     }
     let mut offences = Vec::new();
+    let mut stating = 0usize;
     for path in tracked.iter().filter(|p| p.ends_with(".md")) {
         // **A record's figure is outside this sweep, the way it is outside the citation reader.** This read
         // every tracked `.md` with no exemption, so a figure inside a dated `CHANGELOG.md` section — a
@@ -266,6 +267,7 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusa
         // A record's dated sections, so a figure inside one is skipped by line while the live sections of the
         // same document are read normally. `record` cuts them; this only asks.
         let records = crate::record::record_lines(path, &text);
+        let mut stated_here = false;
         for (index, line) in text.lines().enumerate() {
             if records.contains(&(index + 1)) {
                 continue;
@@ -288,6 +290,9 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusa
                         continue;
                     }
                 };
+                if !written_here.is_empty() {
+                    stated_here = true;
+                }
                 for written in written_here {
                     if written != census.figures {
                         offences.push(violation_at(
@@ -303,8 +308,25 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusa
                 }
             }
         }
+        if stated_here {
+            stating += 1;
+        }
     }
-    offences
+    Sweep { offences, stating }
+}
+
+/// What one pass over the tracked documents found: the offences, and how many documents stated a census.
+///
+/// **The second figure comes from this pass and not a second one.** A direction printed it by walking the
+/// corpus again with its own filter, which excluded whole record documents but not a record's dated sections
+/// — so a correct historical sentence could raise the number the message then read as *a hand-written count
+/// arriving*. One enumerator answers both, and the record cut is applied once.
+pub struct Sweep {
+    /// Every refusal, in the order the documents were read.
+    pub offences: Vec<Refusal>,
+    /// Documents stating at least one declared census. A figure belongs only where it is produced, so these
+    /// should be the generated projections and nothing else.
+    pub stating: usize,
 }
 
 #[cfg(test)]

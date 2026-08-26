@@ -610,10 +610,17 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
             format!("could not read refs/heads/main from remote \"{remote}\": {err}"),
         )
     })?;
+    // **One cause for one diagnostic.** A matched `ls-remote` line is `<sha>\t<ref>`, so splitting it always
+    // yields a token — folding that `None` into the default made *read a line and found no token* and *the
+    // remote has no main* the same answer, which is the pair the comment below insists on keeping apart.
     let remote_main = listing
         .lines()
         .next()
-        .and_then(|line| line.split_whitespace().next())
+        .map(|line| {
+            line.split_whitespace()
+                .next()
+                .expect("a matched `ls-remote` line carries the object id before its ref")
+        })
         .unwrap_or_default()
         .to_string();
     if remote_main.is_empty() {

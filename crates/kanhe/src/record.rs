@@ -1,4 +1,4 @@
-//! Which tracked text is a **record** and which is live, in one place because two readers ask it.
+//! Which tracked text is a **record** and which is live, in one place because more than one reader asks it.
 //!
 //! `AGENTS.md` names the records: a commit message, a dated `CHANGELOG.md` section, `docs/history/`. A record
 //! is a measurement of its moment, so a figure or a citation inside one is provenance of a decision that was

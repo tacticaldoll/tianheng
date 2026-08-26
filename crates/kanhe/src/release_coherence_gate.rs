@@ -1216,7 +1216,7 @@ pub(crate) fn require_example_pins(
         let mut requirements_here = 0usize;
         let name = dir
             .file_name()
-            .unwrap_or_default()
+            .expect("a `read_dir` entry always has a file name")
             .to_string_lossy()
             .into_owned();
         // Executed text, for the reason `require_internal_pins` records: a commented-out family pin
