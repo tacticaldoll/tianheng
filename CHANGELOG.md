@@ -22,7 +22,7 @@ them.
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-08-26
+## [0.5.0] - 2026-08-22
 
 ### Documentation
 
@@ -7428,6 +7428,26 @@ no adopter runs. They are here rather than under the adopter headings above beca
   the anchor was a commit no reader of `main` can reach. The entry now keeps what it can defend — the corpus
   and the command, which is the disposition table's *stays* — and states that no count is written, with the
   three failed attempts as the reason rather than an argument for a fourth.
+
+
+- **A change rode into an unrelated pull request because its branch was cut from the wrong base.** The
+  dated release heading is the *last* edit before the cut and is deliberately held back for a human to
+  review; it lives on its own branch, carrying a commit message that records the ritual, the days it has been
+  rewritten, and that it is correct only on the day the cut happens. It reached `release/0.5.0` anyway, inside
+  a change about citation anchors, under a message that says nothing about it. This entry restores the
+  heading to the value the branch is still holding and records why.
+
+  The cause is one command: the repair branch was created without returning to `release/0.5.0` first, so it
+  was cut from the dating branch and inherited its single line, which `git add -A` then folded in.
+
+  **Nothing was in a position to notice, and that is the part worth writing down.** The pull request's
+  changed-file count was right, because the change legitimately edits `CHANGELOG.md`. Every gate was green,
+  because a correctly dated heading is *legal* in the release-ready state — the date comparison is inert
+  until `HEAD` is the release snapshot, which is the whole design. The only visible trace was a single `-`
+  in a diff stat otherwise full of `+`, on the file the change was expected to touch. This is a constraint
+  on how a change is assembled rather than a property of the tree, so no reaction here could hold it: what
+  holds it is checking out the base branch before cutting a new one, and reading the diff against that base
+  rather than the file list.
 
 
 ## [0.4.0] - 2026-08-04
