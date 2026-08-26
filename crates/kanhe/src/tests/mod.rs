@@ -10,6 +10,7 @@ mod hermetic_git;
 mod manifest;
 mod publish_source_gate;
 mod reading;
+mod record;
 mod release_coherence_gate;
 mod restatement;
 mod sections;

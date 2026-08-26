@@ -79,7 +79,7 @@ are counted in a produced projection that falls to zero.
 
 Shipping in zero packages is what this capability already gives as the criterion separating governance from
 product — the reason `scripts/` and `docs/` count as governance. Measured before this change, the checks
-themselves failed it: `cargo package --list -p tianheng` carried all 50 files under `tests/`, so every
+themselves failed it: `cargo package --list -p tianheng` carried every file under `tests/`, so every
 check judging this repository's changelog, specs, scripts and documents reached every adopter, where it
 could only detect no workspace and return.
 

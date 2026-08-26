@@ -153,9 +153,9 @@ then undecided rather than decided weakly.
 
 **Every `PINNED-BY` citation SHALL be resolved wherever it appears, independent of whether its scenario
 heading also marks a bound.** The marker means one thing in both places — *this test is the evidence* — and a
-renamed test leaves an ordinary scenario citing nothing exactly as silently as it would a bound. Measured: the
-tracked specs held 75 citations, of which 70 sat under bound headings and were resolved while 5 under ordinary
-scenario headings were parsed by nothing; renaming one of the five left the whole gate suite green with a spec
+renamed test leaves an ordinary scenario citing nothing exactly as silently as it would a bound. Measured: of the
+citations the tracked specs held, most sat under bound headings and were resolved while those under ordinary
+scenario headings were parsed by nothing; renaming one of them left the whole gate suite green with a spec
 citing a function that no longer existed. The register's own corpus stays bound-gated, because a citation
 under an ordinary scenario declares no bound and admitting it would invent one — it is resolution, not
 declaration, that follows the marker rather than the heading. This is the same rule the reference direction
@@ -542,8 +542,8 @@ having had its denominator re-swept while its numerator was left behind.
 
 One **exemption** is deliberate and SHALL be declared here rather than only in the reaction's own comments.
 Prose under a requirement whose heading names bounds is not reported, because several such requirements
-state their bounds as a numbered list — `Observation bounds are stated, not silent` enumerates seven — and
-requiring each item to become its own scenario would restructure three requirements and read worse. The
+state their bounds as a numbered list — `Observation bounds are stated, not silent` is one such list — and
+requiring each item to become its own scenario would restructure those requirements and read worse. The
 exemption is not free, and its price SHALL be charged: such a requirement SHALL declare at least one bound
 scenario, or its list would have no reaction anywhere. What the exemption costs is that the *other* items of
 such a list are unregistered, and that cost SHALL be stated in the projection's header.

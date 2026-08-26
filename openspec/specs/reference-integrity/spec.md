@@ -365,6 +365,17 @@ being one. A floor this reader invents is a floor it misses every shorter citati
   better trade, and measured over the live corpus no span of this shape names anything but a commit
 - **UNPINNED** `BACKLOG.md` — *a code span shaped like an object that names none*
 
+#### Scenario: A number sharing a clause with a citation cue is refused — a stated bound
+
+- **WHEN** Markdown writes a `#` followed by digits in the same clause as `PR`, `pull request` or `issue`,
+  naming something other than a serial
+- **THEN** the reaction fails anyway. The cue is bound to its **clause**, which closes the case where the two
+  sit in different clauses — measured, a colour before a semicolon and a citation after it report only the
+  citation — and inside one clause nothing lexical separates them
+- **AND** what separates them is what the sentence means, which is the prose instrument `AGENTS.md` records as
+  designed, measured three times and rejected
+- **UNPINNED** `BACKLOG.md` — *a number sharing a clause with a citation cue*
+
 #### Scenario: A serial with no citation word on its line is not observed — a stated bound
 
 - **WHEN** Markdown writes a `#` followed by digits on a line that names neither a pull request nor an issue

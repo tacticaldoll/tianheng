@@ -805,9 +805,10 @@ fn offences_in(
             // Kept as written, because the alternative reads worse: making the current version an exception
             // means this scan asking `release-coherence` which version is unreleased, so a reference verdict
             // would start depending on the release spine and a shallow checkout would move it. Measured on
-            // the `0.5.0` section at the moment this was written — 2,572 lines, 41 distinct references
-            // (22 prefixed paths, 19 bare basenames), **all resolving** — so the exposure is real and the
-            // cost of it is not. Filed as WATCH in `BACKLOG.md` with the trigger that would change the answer:
+            // the `0.5.0` section, read through by hand when this was written: every in-repository reference
+            // it carried, in both the prefixed-path and bare-basename forms, **resolved** — so the exposure is
+            // real and the cost of it is not. The section has grown since and any figure would have moved
+            // with it, which is why the property is written and not the count. Filed as WATCH in `BACKLOG.md` with the trigger that would change the answer:
             // a stale reference found inside the section of a version not yet released.
             if in_dated_section {
                 continue;
@@ -1942,21 +1943,6 @@ fn no_reference_names_a_line_number() {
     );
 }
 
-/// The **record** locations, by path and by section, rather than by document.
-///
-/// `AGENTS.md` names them: a commit message, a dated changelog section, `docs/history/`. A record is a
-/// measurement of its moment, so a citation inside one is provenance of a decision that was made and stays
-/// readable as what it was. Live text is read later against a tree it must be able to address.
-///
-/// **`CHANGELOG.md` is not a record; its dated sections are.** Exempting the file was wider than the
-/// requirement, which says *a dated changelog section* — so a citation added under `## [Unreleased]`, which is
-/// live text by construction, was exempt for standing in the same file as the releases below it. The section
-/// is the unit, cut by the reader that owns cutting.
-const RECORD_PATHS: [&str; 1] = ["docs/history/"];
-
-/// The document whose dated sections are records and whose undated ones are not.
-const SECTIONED_RECORD: &str = "CHANGELOG.md";
-
 /// Every citation the live prose of `corpus` carries that names a moment no reader can reach, in
 /// `corpus_root`.
 ///
@@ -1988,7 +1974,7 @@ fn unanchored_citation_offences_in(corpus_root: &Path, corpus: &[String]) -> BTr
         let Some(kind) = prose_of(path) else {
             continue;
         };
-        if matches!(kind, Prose::None) || RECORD_PATHS.iter().any(|r| path.starts_with(r)) {
+        if matches!(kind, Prose::None) || kanhe::record::is_record_document(path) {
             continue;
         }
         let text = std::fs::read_to_string(corpus_root.join(path)).unwrap_or_else(|error| {
@@ -1998,7 +1984,7 @@ fn unanchored_citation_offences_in(corpus_root: &Path, corpus: &[String]) -> BTr
             )
         });
         read += 1;
-        let live = live_prose(kind, &text, path == SECTIONED_RECORD);
+        let live = live_prose(kind, &text, &kanhe::record::record_lines(path, &text));
 
         // **Two sanctioned readers, and neither is re-implemented here.** `region`'s prose reader decides
         // what is prose in Markdown, and `reading`'s pairing reader decides where a code span opens and
@@ -2040,7 +2026,7 @@ fn unanchored_citation_offences_in(corpus_root: &Path, corpus: &[String]) -> BTr
 ///
 /// A dropped line is rebuilt as an empty one rather than removed, so line numbers stay the document's own
 /// and a boundary — a fence, a run of code, a dated section — becomes the paragraph break it already is.
-fn live_prose(kind: Prose, text: &str, sectioned: bool) -> String {
+fn live_prose(kind: Prose, text: &str, records: &BTreeSet<usize>) -> String {
     let total = text.lines().count();
     match kind {
         Prose::None => String::new(),
@@ -2048,14 +2034,9 @@ fn live_prose(kind: Prose, text: &str, sectioned: bool) -> String {
             let source = kanhe::region::Source::of(text);
             let visible: std::collections::BTreeMap<usize, String> =
                 source.prose().numbered_lines().collect();
-            let dated = if sectioned {
-                dated_section_lines(text)
-            } else {
-                BTreeSet::new()
-            };
             (1..=total)
                 .map(|line| {
-                    if dated.contains(&line) {
+                    if records.contains(&line) {
                         ""
                     } else {
                         visible.get(&line).map(String::as_str).unwrap_or("")
@@ -2094,39 +2075,6 @@ fn live_prose(kind: Prose, text: &str, sectioned: bool) -> String {
     }
 }
 
-/// The lines of a dated section of `text`, which is a record and therefore not this sweep's subject.
-///
-/// Cut by [`kanhe::sections`], which owns cutting a flat sentinel-delimited document, rather than by a fourth
-/// hand-rolled walk. Whether the heading is *dated* is decided by [`kanhe::release_coherence_gate::is_iso_date`],
-/// which owns that fact and was hardened twice for it — its own doc records that `## [0.5.0] - notadate!!` once
-/// satisfied *CHANGELOG carries dated release notes*, because **a length test is a parse without its
-/// guarantee**.
-///
-/// A separator test was the first draft here and errs toward **exempting**: any `## [` heading carrying a `-`
-/// became a record, so a citation under a section being prepared — a placeholder in the date position — went
-/// unobserved, which is exactly where a citation gets written. The release gate does not cover it either: its
-/// date validation is scoped to the current workspace version's own heading, so no other suffix is parsed
-/// anywhere.
-fn dated_section_lines(text: &str) -> BTreeSet<usize> {
-    let source = kanhe::region::Source::of(text);
-    let mut dated = BTreeSet::new();
-    for section in kanhe::sections::cut(source.prose().numbered_lines(), |line| {
-        line.trim_start().starts_with("## [").then_some(())
-    }) {
-        let Some((_, suffix)) = section.line.split_once("] - ") else {
-            continue;
-        };
-        if !kanhe::release_coherence_gate::is_iso_date(suffix.trim()) {
-            continue;
-        }
-        dated.insert(section.start);
-        for (line, _) in &section.body {
-            dated.insert(*line);
-        }
-    }
-    dated
-}
-
 /// Whether a code span's content is an abbreviated commit object: 4 to 40 lowercase hex characters
 /// carrying **both** a letter and a digit.
 fn is_abbreviated_object(span: &str) -> bool {
@@ -2151,27 +2099,47 @@ fn is_abbreviated_object(span: &str) -> bool {
 /// The cost is the other direction, and it is declared: a serial written with no such word on its line is
 /// not observed.
 fn hosting_serials(line: &str) -> Vec<String> {
+    // **The cue binds to the serials that follow it, not to the whole line.** Asking only whether the line
+    // carries a cue word made `This issue uses colour #123` a citation — the cue and the number were in one
+    // sentence about different things. The cue now opens a run: every serial from the cue to the end of its
+    // clause is a citation, and one before it, or after the clause closes, is not. A clause ends at `.`, `;`
+    // or `:`, which is where a sentence stops being about the same thing.
+    //
+    // Still a run rather than the next token, because a real citation lists several under one cue —
+    // `PRs #603, #604 and #605` — and binding only the nearest would catch the first and let the rest
+    // through. That shape was live in this file's own text before the sweep removed it.
+    //
+    // **What the clause does not separate is declared rather than guessed at.** `This issue uses colour #123`
+    // puts the cue and a number that is not a serial in one clause, and only what the sentence MEANS tells
+    // them apart. Measured: the clause binding closes the cross-clause case — `Colour #789 first; then PR
+    // #111` reports only the second — and leaves this one, which is an over-reaction with a bound of its own.
     let lowered = line.to_ascii_lowercase();
-    let names_one = [
-        "pr",
-        "prs",
-        "pull request",
+    let cue_at = [
         "pull requests",
-        "issue",
+        "pull request",
+        "prs",
+        "pr",
         "issues",
+        "issue",
     ]
     .iter()
-    .any(|word| {
-        lowered.match_indices(word).any(|(at, _)| {
+    .filter_map(|word| {
+        lowered.match_indices(word).find_map(|(at, _)| {
             let before = lowered[..at].chars().next_back();
             let after = lowered[at + word.len()..].chars().next();
-            before.is_none_or(|c| !c.is_ascii_alphanumeric())
-                && after.is_none_or(|c| !c.is_ascii_alphanumeric())
+            (before.is_none_or(|c| !c.is_ascii_alphanumeric())
+                && after.is_none_or(|c| !c.is_ascii_alphanumeric()))
+            .then_some(at)
         })
-    });
-    if !names_one {
+    })
+    .min();
+    let Some(cue_at) = cue_at else {
         return Vec::new();
-    }
+    };
+    let clause_end = line[cue_at..]
+        .find(['.', ';', ':'])
+        .map_or(line.len(), |at| cue_at + at);
+    let line = &line[cue_at..clause_end];
     let bytes: Vec<char> = line.chars().collect();
     let mut found = Vec::new();
     for (at, ch) in bytes.iter().enumerate() {

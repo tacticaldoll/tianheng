@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**53 of 100 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**53 of 101 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -346,7 +346,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (13)
+## over-reacts (14)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -379,6 +379,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the reader decides by shape and nothing in the tree distinguishes a value with that shape from a citation without resolving it against an object database. Resolving was declined by measurement: CI checks out one commit, so the objects a citation names are absent there and the reader would either answer clean over all of them or refuse to judge at all. Measured over the live corpus: no span of this shape names anything but a commit, so the over-reaction is unrealised rather than tolerated
 - **its defence must show**: reacts on a harmless shape
 - **unpinned**, tracked by: `BACKLOG.md` — *a code span shaped like an object that names none*
+
+### `reference-integrity/a-number-sharing-a-clause-with-a-citation-cue-is-refused-a-stated-bound`
+
+> a `#` followed by digits in the same clause as `PR`, `pull request` or `issue`, naming something other than a serial
+
+- **because**: the cue is bound to its clause, which closes the case where the two sit in different clauses -- measured, a colour before a semicolon and a citation after it report only the citation. Inside one clause nothing lexical separates them, and what does is the sentence's meaning: the prose instrument `AGENTS.md` records as designed, measured three times and rejected
+- **its defence must show**: reacts on a harmless shape
+- **unpinned**, tracked by: `BACKLOG.md` — *a number sharing a clause with a citation cue*
 
 ### `release-coherence/a-basename-an-entry-writes-for-another-reason-a-stated-bound`
 

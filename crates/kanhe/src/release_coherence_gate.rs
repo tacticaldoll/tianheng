@@ -419,26 +419,16 @@ fn declared_dependencies(text: &str) -> Vec<Dependency> {
 /// own prefix and never read them, so `## [0.5.0] - notadate!!` satisfied *CHANGELOG carries dated release
 /// notes*. A length test is a parse without its guarantee.
 ///
-/// **And the fields are ranged, because a digit test is that same shortfall one level in.** Reading only
-/// three all-digit fields of the right widths admitted `2026-99-99` and `0000-00-00` — shapes that pass for
-/// a date while naming none. The ranges are the calendar's outer bounds and no more: a month is `1..=12`, a
-/// day `1..=31`. Whether that day exists in that month needs a calendar, which is a dependency this crate's
-/// declared surface does not carry, and the residue — `2026-02-31` — is a date a human wrote wrong rather
+/// **And the day is answered against the calendar, by the reader that owns one.** Reading three all-digit
+/// fields of the right widths admitted `2026-99-99` and `0000-00-00`; ranging them to the calendar's outer
+/// bounds — a month `1..=12`, a day `1..=31` — still admitted `2026-02-31`, and that residue was recorded
+/// here on the ground that a calendar was a dependency this crate's surface did not carry. It does:
+/// `reading::date` reads `YYYY-MM-DD` through `days_in_month`, leap years included, and this now delegates to
+/// it. Two date readers in one crate, the weaker one used where the stronger existed, is the shape this crate
+/// converges rather than documents. What is left of the old residue — `2026-02-31` — is a date a human wrote wrong rather
 /// than a shape that reads as one.
 pub fn is_iso_date(suffix: &str) -> bool {
-    let parts: Vec<&str> = suffix.split('-').collect();
-    let [year, month, day] = parts.as_slice() else {
-        return false;
-    };
-    let field = |part: &str, width: usize| {
-        (part.len() == width && part.chars().all(|c| c.is_ascii_digit()))
-            .then(|| part.parse::<u32>().ok())
-            .flatten()
-    };
-    let (Some(_), Some(month), Some(day)) = (field(year, 4), field(month, 2), field(day, 2)) else {
-        return false;
-    };
-    (1..=12).contains(&month) && (1..=31).contains(&day)
+    crate::reading::date("changelog section date", suffix).is_ok()
 }
 
 /// A TOML line with its whitespace removed, for a predicate that compares a whole line against one spelling.

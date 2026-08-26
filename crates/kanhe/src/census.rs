@@ -242,6 +242,15 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusa
     }
     let mut offences = Vec::new();
     for path in tracked.iter().filter(|p| p.ends_with(".md")) {
+        // **A record's figure is outside this sweep, the way it is outside the citation reader.** This read
+        // every tracked `.md` with no exemption, so a figure inside a dated `CHANGELOG.md` section — a
+        // measurement of its own moment, correct as written — was refused for disagreeing with today's
+        // enumeration. One live instance escaped only because its two figures straddled a line break, which
+        // means a reflow of that paragraph turned a green tree red over correct text: a false refusal, and one
+        // edit away rather than latent. `record` owns the distinction; both readers ask it.
+        if crate::record::is_record_document(path) {
+            continue;
+        }
         let text = match std::fs::read_to_string(root.join(path)) {
             Ok(text) => text,
             Err(err) => {
@@ -254,7 +263,13 @@ pub fn sweep(root: &Path, tracked: &[String], declared: &[Census]) -> Vec<Refusa
                 continue;
             }
         };
+        // A record's dated sections, so a figure inside one is skipped by line while the live sections of the
+        // same document are read normally. `record` cuts them; this only asks.
+        let records = crate::record::record_lines(path, &text);
         for (index, line) in text.lines().enumerate() {
+            if records.contains(&(index + 1)) {
+                continue;
+            }
             for census in declared {
                 let written_here = match figures_in(line, census.phrase) {
                     Ok(written) => written,

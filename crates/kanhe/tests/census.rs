@@ -42,12 +42,14 @@ fn every_declared_census_agrees_with_what_produces_it() {
         .iter()
         .filter(|b| !matches!(b.citation, Citation::PinnedBy(_)))
         .count();
-    // What is NOT declared here, and why. `[Unreleased]`'s prose states how many entries named this
-    // repository's machinery BEFORE the section was collapsed — a historical observation, not a live count,
-    // and the check that enumerates the set today produces a different and equally correct figure. A
-    // census holds a figure about the CURRENT tree; a figure about a past state is a record, and holding it
-    // to today's enumeration would demand that the record change every time the tree does. That residual is
-    // declared as a bound rather than approximated.
+    // **A figure about a past state is a record, and it is now CLOSED rather than declared.** This comment
+    // used to name `[Unreleased]`'s prose as the instance and say the residual was declared as a bound. Both
+    // halves had stopped being true: that section is empty, so the instance is gone, and no bound of this
+    // family ever declared the record case — the three that exist are about words at a hundred and above, a
+    // census outside Markdown, and a count in a phrasing no census declares. Meanwhile the residual was
+    // live: a figure inside a dated `CHANGELOG.md` section was refused for disagreeing with today's
+    // enumeration, escaping only because its two numbers straddled a line break. `record` now cuts records
+    // out of this sweep's corpus, which is what the comment claimed a bound was doing.
     let declared = vec![
         Census {
             subject: "declared observation bounds and the capabilities declaring them",
@@ -177,27 +179,49 @@ fn a_figure_the_sweep_cannot_represent_is_a_cannot_judge() {
 /// Every census here asserts agreement, and agreement has more than one cause: a phrase nothing matches is
 /// silent for a reason that has nothing to do with the figures. This runs one census whose figures are
 /// deliberately wrong and requires the sweep to name it.
+///
+/// **Shown against a written document rather than against the tree, because the tree states no census.** This
+/// control used to sweep the real workspace with figures far from any real one, which worked only while a
+/// governance document carried the phrase. That document's figure was the last hand-written count in the
+/// repository and it is gone: the rule is now that a count of a live set is not written at all, so a control
+/// that needs one would be asking the tree to keep the very thing the rule removed. The subject is written
+/// here instead — which is what every other direction in this file already does, and what makes this one
+/// independent of whether any document happens to state a census.
 #[test]
 fn the_sweep_names_a_disagreement_it_is_shown() {
-    let Some(root) = workspace_root() else {
-        return;
-    };
-    let files = tracked(&root);
-    let bounds = parse_bounds(&root);
-    let capabilities: BTreeSet<&str> = bounds.iter().map(|b| b.capability.as_str()).collect();
-
-    let wrong = vec![Census {
+    let declared = vec![Census {
         subject: "a control",
         phrase: "{} bounds across {} capabilities",
-        // Far enough from any real figure that no document can accidentally agree with it. `len() + 1` was
-        // the first draft, and editing `BACKLOG.md` to that very number disabled this control.
-        figures: vec![bounds.len() + 10_000, capabilities.len()],
+        figures: vec![2, 1],
     }];
-    let offences = sweep(&root, &files, &wrong);
+    let scratch =
+        std::env::temp_dir().join(format!("tianheng-census-control-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    // A document stating the phrase with figures that disagree, and beside it one that agrees. Without the
+    // second, the refusal could be the phrase matching nothing rather than the figures differing.
+    std::fs::write(
+        scratch.join("disagrees.md"),
+        "  a line writing 7 bounds across 1 capabilities\n",
+    )
+    .expect("write");
+    std::fs::write(
+        scratch.join("agrees.md"),
+        "  a line writing 2 bounds across 1 capabilities\n",
+    )
+    .expect("write");
+    let offences = sweep(&scratch, &["disagrees.md".to_string()], &declared);
+    let control = sweep(&scratch, &["agrees.md".to_string()], &declared);
+    let _ = std::fs::remove_dir_all(&scratch);
+    assert!(
+        control.is_empty(),
+        "the agreeing document must be silent, or the refusal below is about the phrase rather than the \
+         figures: {control:?}"
+    );
     assert!(
         !offences.is_empty(),
-        "the sweep found no disagreement against figures that are deliberately wrong, so its agreement above \
-         is silence rather than a verdict"
+        "the sweep found no disagreement against figures that are deliberately wrong, so its agreement \
+         elsewhere is silence rather than a verdict"
     );
     refusal::expect("repository-checks#census-figure-disagrees", &offences[0]);
 }

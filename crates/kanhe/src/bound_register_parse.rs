@@ -576,9 +576,10 @@ pub struct PinningCitation {
 /// evidence*. A renamed or deleted test leaves an ordinary scenario citing nothing exactly as silently as it
 /// would a bound, and the reader has no way to tell which sense a given line was written in.
 ///
-/// Measured: 70 of the 75 citations in the tracked specs sat under bound headings and were resolved, while 5
-/// under ordinary scenario headings were parsed by nothing — renaming one of the five left the entire gate
-/// suite green with the spec citing a function that no longer existed.
+/// Measured: most citations in the tracked specs sat under bound headings and were resolved, while those
+/// under ordinary scenario headings were parsed by nothing — renaming one of them left the entire gate suite
+/// green with the spec citing a function that no longer existed. The perturbation is the evidence; how many
+/// there were on the day is not written down, because that set moves with every citation added.
 ///
 /// `observation-bound-register` already states this rule for the sibling marker: a reference is resolved
 /// wherever it appears, independent of whether its line also states a bound. This is that rule, for this one.
