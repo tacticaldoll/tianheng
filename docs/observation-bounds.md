@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**25 of 96 declared bounds have no pinning test.** That figure is the register's
+**26 of 97 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -258,6 +258,12 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing reacts. Extending the sweep to whole-document prose was measured against the tree it would judge, and most of what it would report is not an offence: some occurrences are `AGENTS.md`'s own row **declaring** the phrases, some are duration rather than pointer — *admitted it for a window*, which narrates how long something lasted — some are a generated projection's copy of either, and some are already anchored, by a commit or by naming the release. A reader over text separates none of those groups: telling a phrase that points at a moving window from one that measures a span is a judgement about the sentence, which is the prose instrument `AGENTS.md` records as designed, measured three times and rejected
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a relative phrase in non-record Markdown*
+
+### `reference-integrity/an-abbreviation-carrying-no-letter-or-no-digit-is-not-observed-a-stated-bound`
+
+> nothing reacts. The reader requires **both** a letter and a digit, and the two directions it refuses without that requirement are both live in this tree: a specification writes a long run of digits as the figure a fabricating reader produced, and English carries words spelled entirely from the hex alphabet at this length. Admitting either would refuse a passage that cites nothing
+
+- **unpinned**, tracked by: `BACKLOG.md` — *an abbreviation carrying no letter or no digit*
 
 ### `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound`
 

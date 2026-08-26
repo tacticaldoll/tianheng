@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**50 of 96 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**51 of 97 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -27,6 +27,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `reference-integrity/a-path-already-wrong-when-a-dated-record-was-written-is-not-observed-a-stated-bound` — owner: engine
 - `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound` — owner: engine
 - `reference-integrity/a-rust-identifier-named-in-prose-is-not-resolved-a-stated-bound` — owner: engine
+- `reference-integrity/an-abbreviation-carrying-no-letter-or-no-digit-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound` — owner: engine
 - `release-coherence/a-dependency-declared-under-a-quoted-cfg-target-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound` — owner: engine
@@ -441,7 +442,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (50)
+## under-reacts (51)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -618,6 +619,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: no reader of text can tell a name that should resolve from one that should not: such tokens routinely match no declaration in the tree, and the most frequent of those are Rust keywords, attribute names and std method names. Separating them needs type information about a receiver, which `inline-symbol-path-confinement` already declares unobserved
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a Rust identifier named in prose is resolved by no reaction*
+
+### `reference-integrity/an-abbreviation-carrying-no-letter-or-no-digit-is-not-observed-a-stated-bound`
+
+> a live document citing an abbreviated commit object whose characters are all digits, or all letters
+
+- **because**: requiring both a letter and a digit is what keeps the reader off two shapes this tree actually holds -- a long run of digits written as a figure, and an English word spelled from the hex alphabet -- and the price is the abbreviations that carry only one kind of character. Over uniformly random seven-character abbreviations that is 3.8%. The direction is deliberate: the Core Contract forbids a false refusal more strictly than a miss, so the reader gives up that fraction rather than refuse prose that cites nothing
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *an abbreviation carrying no letter or no digit*
 
 ### `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound`
 
