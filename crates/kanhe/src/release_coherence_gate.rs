@@ -311,6 +311,22 @@ fn declared_dependencies(text: &str) -> Vec<Dependency> {
                     if !inline {
                         if let Some((head, tail)) = key.split_once('.') {
                             let head = head.trim();
+                            // **The entry is created before the tail is judged, and that ordering is the
+                            // point rather than an oversight.** A review read it as manufacturing a
+                            // dependency the manifest does not declare, since `xuanji.features = [...]`
+                            // with no other line reaches this and inserts a record carrying nothing. Moving
+                            // the insert after the `match` was measured against the sibling spelling and is
+                            // wrong: `xuanji = { features = [...] }` yields exactly the same record, because
+                            // the inline reader takes its key before it reads any field. Skipping here would
+                            // make one spelling of one manifest answer `1` and the other `0` — two readers
+                            // of one fact reaching different verdicts, which is the class this whole file
+                            // exists to close. What declares a dependency is the KEY; the fields say what
+                            // kind it is, and this reader judges three of them. The equivalence is held by
+                            // `an_unjudged_dotted_tail_declares_as_its_inline_spelling_does` rather than left to
+                            // this comment, which is an integration direction because the difference is
+                            // only visible through a consumer: with the insert deferred, an example
+                            // requiring a family crate through such a tail reports `ok release coherence`
+                            // where it must refuse.
                             let entry =
                                 dotted.entry(head.to_string()).or_insert_with(|| Detailed {
                                     key: head.to_string(),

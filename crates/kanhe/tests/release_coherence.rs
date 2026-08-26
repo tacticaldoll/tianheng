@@ -2678,3 +2678,53 @@ fn a_workspace_whose_members_are_untracked_reports_over_nothing() {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A dotted key whose tail this reader does not judge is still a declared dependency.
+///
+/// **A review read the ordering as a hygiene defect and it is the opposite.** `declared_dependencies` creates
+/// a dotted key's record BEFORE matching the tail, so `tianheng.git = "…"` — legal cargo, and a tail this
+/// reader does not judge — yields a record carrying no pin. Read alone that looks like a dependency the
+/// manifest never declared. Read beside `tianheng = { git = "…" }` it is the only answer that keeps the two
+/// spellings equal, because the inline reader takes its key before reading any field.
+///
+/// What the proposed repair would cost is not tidiness. Deferring the insert until the tail is recognised
+/// makes the dotted form declare NOTHING, the entry drops out before `example-pin-absent` is reached, and an
+/// example requiring a family crate with no version passes — the false-negative shape this same function
+/// already closed twice, once for a renamed key and once for a quoted one.
+///
+/// Negative run, with the insert moved below the `match`: the dotted half reports `no refusal` where it must
+/// refuse, and the inline half still refuses — the two spellings disagreeing, which is what this direction
+/// exists to make impossible.
+#[test]
+fn an_unjudged_dotted_tail_declares_as_its_inline_spelling_does() {
+    for (label, line) in [
+        (
+            "dotted",
+            "tianheng.git = \"https://example.invalid/tianheng\"\n",
+        ),
+        (
+            "inline",
+            "tianheng = { git = \"https://example.invalid/tianheng\" }\n",
+        ),
+    ] {
+        let root = scratch(&format!("unjudged-tail-{label}"));
+        let fixture = build_fixture(&root, &format!("unjudged-tail-{label}"), "0.2.0");
+        let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+        let text = std::fs::read_to_string(&manifest).expect("read");
+        std::fs::write(&manifest, format!("{text}{line}")).expect("write");
+        development_changelog(&fixture.repo, "0.2.0", true);
+        commit(
+            &fixture.repo,
+            "chore: require a family crate through a tail this reader does not judge",
+        );
+        refusal::expect(
+            "release-coherence#example-pin-absent",
+            &refuse(
+                &fixture.repo,
+                Kind::Violation,
+                "requires tianheng with no version",
+            ),
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}

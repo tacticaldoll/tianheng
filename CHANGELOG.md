@@ -7307,6 +7307,38 @@ no adopter runs. They are here rather than under the adopter headings above beca
   No behaviour moves and no published API, outcome, report, exit class or manifest changes.
 
 
+- **A reported hygiene defect measured as the opposite, and the property is now held rather than argued.** A
+  review read `declared_dependencies`' dotted branch as manufacturing a dependency the manifest does not
+  declare: the record is created before the tail is matched, so `dep.features = [...]` alone inserts one
+  carrying nothing, and the function's stated job is that *every dependency text declares*. It filed the
+  finding as hygiene rather than correctness, having probed that no legal manifest reaches a wrong verdict.
+
+  Probed here against the sibling spelling, which is the comparison the finding did not make:
+  `dep = { features = [...] }` produces exactly the same record, because the inline reader takes its key
+  before it reads any field. The ordering is what makes the two spellings of one manifest agree. What
+  declares a dependency is the **key**; the fields say what kind it is, and this reader judges three of them.
+
+  **The proposed repair opens a false negative, and the cost is not tidiness.** With the insert deferred
+  until the tail is recognised, a dotted key whose only tail is unjudged declares nothing at all, the entry
+  drops out before `example-pin-absent` is reached, and an example requiring a family crate with no version
+  passes. That is the shape this same function has already closed twice — once for a renamed key, once for a
+  quoted one — where *the raw spelling matched no member and `continue` dropped the entry*.
+
+  So the finding is refuted rather than adopted, and the argument is written at the site. The property it
+  noticed becomes a direction instead of a comment: `an_unjudged_dotted_tail_declares_as_its_inline_spelling_does`
+  puts a family crate behind `tianheng.git = "…"` and `tianheng = { git = "…" }` — legal cargo, and a tail
+  this reader does not judge — and requires one verdict from both.
+
+  The first attempt at that direction was **inert** and was discarded rather than shipped: comparing the two
+  spellings through `require_internal_pins` passed under the perturbation, because a dependency with neither
+  pin nor path is skipped there either way. The difference is visible only through a consumer that judges an
+  absent pin, so the direction is an integration one. Negative run, insert moved below the `match`: the
+  dotted half answers `ok release coherence (development: 0.2.0)` where it must refuse, while the inline half
+  still refuses — the two spellings disagreeing, which is what the direction exists to make impossible.
+
+  No behaviour moves and no published API, outcome, report, exit class or manifest changes.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
