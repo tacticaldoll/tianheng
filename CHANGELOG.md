@@ -7936,6 +7936,40 @@ no adopter runs. They are here rather than under the adopter headings above beca
   A guard whose falsifier does not falsify is not a guard, and it had been written down as one.
 
 
+- **The context in front of a dependency table is a grammar, and reading it as strippable prefixes composed
+  two contexts cargo never composes.** The reader removed a leading `workspace`, then independently removed a
+  leading `target` — so `[workspace.dev-dependencies]` and `[workspace.target.<triple>.dependencies]` arrived
+  at the kind match looking like ordinary dependency tables. Cargo admits neither: measured, a member writing
+  `serde = { workspace = true }` against either **fails to load**, because inheritance reads
+  `[workspace.dependencies]` and nothing else. A stale-looking pin in one of them would have stopped a release
+  over a table cargo ignores — the false-refusal direction, which this repository forbids more strictly than a
+  miss. The shape came from before the heading was held as segments; the segments made it visible.
+
+  Every admitted form is now written out as a key sequence, and every one of them was put to `cargo metadata`
+  first: each dependency kind alone and with a name after it, each of those again behind a `target.<selector>`,
+  and `[workspace.dependencies]` alone and with a name. Seen to fail: with the prefix walk restored, both
+  unadmitted forms become violations naming `xuanji`, measured a row at a time.
+
+- **A retired bound left prose behind in the file its own retirement had edited.** Two doc comments a few lines
+  above a direction asserting the opposite still described the dotted-cfg bound as live — one of them saying
+  *the bound that remains is a cfg expression carrying a dot*. The retirement had swept the declaration, the
+  scenario, the backlog entry and both projections, and a bijection holds bound ids to scenarios, so a stale
+  **id** could not have survived. What survived was prose that *describes* a bound without naming its id,
+  which nothing can resolve and nothing did.
+
+  `AGENTS.md`'s retirement rule now names the seed that would have caught it: sweep for the bound's id **and**
+  for the name of the direction that pinned it, over the whole tree including `tests/` — prose describing a
+  bound tends to sit next to the test that held it. Run against this change, that sweep returns only
+  past-tense narration, and it also caught a third site the reviews had not reported: the classifier's own doc
+  opening, still describing the *step past the context* shape that this change had just replaced.
+
+- **A claim about the reader became a case instead of a sentence.** `dotted`'s doc said an unterminated quote
+  yields a segment that *fails to unquote*, which is not what happens — nothing fails; the reader finds no
+  closing delimiter and hands the text back with its quote, and what makes it name nothing is that no caller
+  asks for a path carrying a quote. The conclusion was right and the mechanism was invented. It is asserted
+  now, beside the spellings it sits among.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

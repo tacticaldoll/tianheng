@@ -446,8 +446,12 @@ pub fn table_heading(line: &str) -> Option<TableHeading> {
 /// backslash while inside a **basic** string; a literal string has no escapes, so a backslash there is
 /// content like any other byte.
 ///
-/// An unterminated quote yields the rest of the text as one segment, which then fails to unquote and names
-/// nothing -- and is a heading cargo does not parse either.
+/// An unterminated quote yields the rest of the text as one segment. That segment does not *fail* to unquote
+/// -- [`unquoted`] finds no closing delimiter to strip and hands back the text as it stands, quote included --
+/// so what makes it name nothing is that no caller asks for a path with a quote in it. The distinction is
+/// worth the sentence because the first version of it named a failure that does not happen; the case is
+/// asserted in `a_quoted_key_carries_its_dots_and_an_array_is_not_a_table` rather than left as this claim.
+/// Cargo does not parse such a heading either.
 fn dotted(inner: &str) -> Vec<&str> {
     let mut segments = Vec::new();
     let mut start = 0;

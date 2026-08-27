@@ -520,6 +520,21 @@ fn a_quoted_key_carries_its_dots_and_an_array_is_not_a_table() {
     let table = table_heading("[package]").expect("a heading");
     assert!(table.names("package") && !table.names_array("package"));
 
+    // An unterminated quote is content, not a delimiter. The rest of the text becomes one segment that keeps
+    // its quote -- `unquoted` finds no closing delimiter to strip, so it hands the text back as it stands --
+    // and it names nothing because no caller asks for a path carrying a quote. Asserted rather than described:
+    // the reader's own prose first said the segment *failed* to unquote, which is not what happens.
+    let unterminated = table_heading("[\"a.b]").expect("a heading");
+    assert_eq!(
+        unterminated.segments(),
+        ["\"a.b"],
+        "the dot inside an open quote is not a separator"
+    );
+    assert!(
+        !unterminated.names("a.b") && !unterminated.names("\"a.b"),
+        "an unterminated quote names no table, including the text it carries"
+    );
+
     // Not a heading at all.
     assert_eq!(table_heading("name = \"x\""), None);
 }

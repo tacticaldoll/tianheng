@@ -93,16 +93,20 @@ const DEPENDENCY_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-
 
 /// Which dependency table `heading` opens, if any.
 ///
-/// **Read as keys, because the context in front of a dependency table is keys.** `[workspace.dependencies]`
-/// and `[target.<triple>.dependencies]` are a dependency table with a context before it, and both contexts
-/// are one key each -- so stepping past them is dropping segments, not finding the right dot in a string.
+/// **The admitted forms are written out, because they are a small grammar and not a set of prefixes.** A
+/// heading arrives as its keys, so which of them open a dependency table is a question about key sequences:
+/// each kind alone or with a name after it, each of those again behind a `target.<selector>`, and
+/// `[workspace.dependencies]` alone or with a name — every one of them put to `cargo metadata`, which
+/// reads a dependency of the expected kind and target from every one.
 ///
-/// That deleted a reader of its own. The context was stepped past by `strip_prefix("target.")` and
+/// Two readers died on the way here. The context was first stepped past by `strip_prefix("target.")` and
 /// `split_once('.')` over the joined name, which put the cut inside any cfg expression carrying a dot; the
 /// repair for *that* was to notice a quote surviving the join and refuse, and the bound it left behind said a
-/// pin under such a target went unobserved. With the heading arriving as segments there is no dot to land
-/// inside: the expression is one segment whatever it contains, quoted or not, dotted or not. The bound is
-/// retired rather than reworded, and `a_pin_under_a_cfg_target_carrying_a_dot_is_read` is what retired it.
+/// pin under such a target went unobserved. Holding the heading as segments left no dot to land inside — the
+/// selector is one key whatever it contains — and the bound was retired,
+/// `a_pin_under_a_cfg_target_carrying_a_dot_is_read` being what retired it. What replaced the split was a
+/// walk that dropped a leading `workspace` and then, independently, a leading `target`, and that composed two
+/// contexts cargo never composes; the grammar below is what replaced *that*.
 ///
 /// **`undecodable` is deliberately not consulted here, and that is a bounded residue rather than an
 /// oversight.** Two reviews named it: the field is read by `manifest::workspace_version` and
@@ -124,23 +128,37 @@ fn dependency_table(heading: &str) -> Table {
     if heading.array {
         return Table::Other;
     }
-    let mut keys = heading.segments();
-    // The root manifest declares the family under `[workspace.dependencies]`, a dependency table with a
-    // context in front of it exactly as a target table is.
-    if keys.first().is_some_and(|key| key == "workspace") {
-        keys = &keys[1..];
-    }
-    if keys.first().is_some_and(|key| key == "target") {
-        // `[target.some-triple]` on its own declares nothing, and neither does a bare `[target]`.
-        if keys.len() < 2 {
-            return Table::Other;
+    // **The context is a grammar, not a set of prefixes that may be stripped one after another.** Stripping
+    // `workspace` and then `target` independently accepted `[workspace.dev-dependencies]` and
+    // `[workspace.target.<triple>.dependencies]`, which cargo gives no dependency meaning at all: measured, a
+    // member writing `serde = { workspace = true }` against either fails to load, because inheritance reads
+    // `[workspace.dependencies]` and nothing else. Reading a pin out of one of those and refusing the release
+    // over it is the false-refusal direction, and this reader carried it from before the segments were
+    // segments -- the old prefix walk had the same shape. Each admitted form is now written out, and the
+    // forms cargo does not admit fall to the last arm because nothing spells them.
+    //
+    // The forms cargo does not admit were measured too, as the shape they take rather than as an argument: a
+    // member writing `serde = { workspace = true }` against `[workspace.dev-dependencies]` or
+    // `[workspace.target.<triple>.dependencies]` fails to load, because inheritance reads
+    // `[workspace.dependencies]` and nothing else.
+    let keys: Vec<&str> = heading.segments().iter().map(String::as_str).collect();
+    match keys.as_slice() {
+        [kind] if DEPENDENCY_KINDS.contains(kind) => Table::Entries,
+        [kind, named] if DEPENDENCY_KINDS.contains(kind) && !named.is_empty() => {
+            Table::One((*named).to_string())
         }
-        keys = &keys[2..];
-    }
-    match keys {
-        [kind] if DEPENDENCY_KINDS.contains(&kind.as_str()) => Table::Entries,
-        [kind, named] if DEPENDENCY_KINDS.contains(&kind.as_str()) && !named.is_empty() => {
-            Table::One(named.clone())
+        // Only `dependencies` is inheritable; `[workspace.dev-dependencies]` is an unused key to cargo.
+        ["workspace", "dependencies"] => Table::Entries,
+        ["workspace", "dependencies", named] if !named.is_empty() => {
+            Table::One((*named).to_string())
+        }
+        // `[target.<selector>.…]`, where the selector is one key -- a triple or a cfg expression, whatever it
+        // contains, because a heading held as segments has no dot for this step to land inside.
+        ["target", _selector, kind] if DEPENDENCY_KINDS.contains(kind) => Table::Entries,
+        ["target", _selector, kind, named]
+            if DEPENDENCY_KINDS.contains(kind) && !named.is_empty() =>
+        {
+            Table::One((*named).to_string())
         }
         _ => Table::Other,
     }
