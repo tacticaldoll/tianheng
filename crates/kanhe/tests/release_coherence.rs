@@ -2463,7 +2463,15 @@ fn an_example_inheriting_what_no_catalog_offers_is_not_judged() {
 /// Contract's one forbidden bug is a real violation that silently passes. The dotted spelling already reported
 /// the fields the line could have carried as unreadable, so this is one treatment for both spellings.
 ///
-/// Negative run: with the undecodable field ignored, this returns `Ok`.
+/// **The outer key is deliberately *not* a family crate, which is the shape the first version of this
+/// direction could not see.** That version used `xuanji` as the key, so identity classification succeeded and
+/// the unreadable pin was reached — masking the path where it is not reached at all: the first repair left
+/// `package` falling back to the key, so a non-family alias was skipped as *not a family dependency* **before**
+/// the pin was read, and the fixture's own correct pin satisfied the per-example counter. A review found both
+/// the defect and the masking.
+///
+/// Negative run: with the undecodable field ignored, this returns `Ok`; with only the version and path made
+/// unreadable and identity left to fall back, it returns `Ok` too, which is the row this one adds.
 #[test]
 fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
     let root = scratch("undecodable-field");
@@ -2472,7 +2480,7 @@ fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
     let text = std::fs::read_to_string(&manifest).expect("read");
     std::fs::write(
         &manifest,
-        format!("{text}xuanji = {{ version = \"0.2\", \"\\q\" = true }}\n"),
+        format!("{text}alias = {{ version = \"0.2\", \"\\q\" = \"xuanji\" }}\n"),
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
