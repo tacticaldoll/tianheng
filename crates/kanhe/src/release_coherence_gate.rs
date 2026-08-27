@@ -59,13 +59,20 @@ pub(crate) fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
 /// answers *unreadable* for the one spelling that is correct. Two scanners for one grammar is the shape this
 /// file exists to close, so the scan stayed here and only the interpretation moved out.
 fn assignments<'a>(value: &'a str, key: &str) -> Vec<&'a str> {
+    // **A delimiter before the key is not enough, because a quoted value supplies one.** `{ path = "deps,
+    // workspace = true", version = "0.2.0" }` is a manifest cargo reads at `0.2.0` — measured — and this found
+    // an *offer* inside the path, then reported a version it could not read: a false refusal whose sentence
+    // points at a version that is perfectly readable. The key boundary test below is still needed and still
+    // this reader's own; the lexical state is `manifest`'s, where the heading cut already had it.
+    let outside = crate::manifest::outside_strings(value);
     let mut found = Vec::new();
     let bytes = value.as_bytes();
     let mut at = 0;
     while let Some(offset) = value[at..].find(key) {
         let start = at + offset;
         let after = start + key.len();
-        let opens = start == 0 || matches!(bytes[start - 1], b'{' | b',' | b' ' | b'\t');
+        let opens = (start == 0 || matches!(bytes[start - 1], b'{' | b',' | b' ' | b'\t'))
+            && outside.binary_search(&start).is_ok();
         let rest = value[after..].trim_start();
         if opens {
             if let Some(assignment) = rest.strip_prefix('=') {
