@@ -7489,8 +7489,9 @@ no adopter runs. They are here rather than under the adopter headings above beca
   named, where the previous floor passed it.
 
   A numeric character reference is excluded from the serial reader, because `&#NNN;` is a lexical fact rather
-  than a judgement and a false refusal over one is the direction the Core Contract forbids more strictly.
-  None is in the tree; the exclusion is measured by planting one and watching the reaction stay silent.
+  than a judgement, and refusing one would be a false refusal — a defect, though not the direction the Core
+  Contract names as its one forbidden bug, which is the silent miss. None is in the tree; the exclusion is
+  measured by planting one and watching the reaction stay silent.
 
   One residue of the previous commit's mechanical sweep is repaired with it: a sentence left starting in
   lower case where a citation had been removed from its front.
@@ -8244,12 +8245,16 @@ no adopter runs. They are here rather than under the adopter headings above beca
   miss*. `PROJECT.md` says the opposite: **"The one forbidden bug is a false negative (a real violation that
   silently passes)."** The wording predates this window in one site and was repeated into the rest.
 
-  Each of the seven that sweep reached now says what holds: a false refusal is a defect and the findings
-  resting on that reading stand, while the contract's forbidden direction is the silent miss. **That sweep was
-  not complete, and the sentence claiming it was is corrected here rather than quietly**: six instances
-  survived it — one in code, wrapped across two lines so a line-oriented grep could not see the phrase, and
-  five in this document, which the sweep had excluded from its own corpus. A later round found them by joining
-  lines and searching tracked content instead of the sites the author remembered writing. The bound whose reason cited the inversion is the
+  Every site that sweep reached now says what holds: a false refusal is a defect and the findings resting on
+  that reading stand, while the contract's forbidden direction is the silent miss. **That sweep was not
+  complete, and the sentence claiming it was is corrected here rather than quietly.** What it missed, by kind:
+  an instance in code wrapped across two lines, which a line-oriented grep cannot see at all; instances in this
+  document, which the sweep had excluded from its own corpus; and — a round later — a third *phrasing* of the
+  same claim, `forbids a false refusal more strictly than it forbids a miss`, in an accepted spec and here.
+
+  The instrument that finds all of them is recorded beside the correction rather than left to be re-derived: a
+  line-joined search for the **claim**, `forbid\w*.{0,40}more strictly`, over tracked content. Two sweeps each
+  searched for the phrasing they had last seen, which is how a detector ratchets narrower than its subject. The bound whose reason cited the inversion is the
   interesting one — its *decision* survives for a different reason: a declared under-reaction with an owner and
   a tracker is not a **silent** false negative, and that is what makes it admissible rather than a preference
   for misses.
@@ -8268,23 +8273,24 @@ no adopter runs. They are here rather than under the adopter headings above beca
 
 
 - **One undecodable field left identity readable, and identity is what the consumer reads first.** The repair
-  one commit ago reported a bad inline field's *version* and *path* unreadable and let `package` fall back to
-  the entry's key — so `alias = { version = "0.2", "\q" = "xuanji" }` was a dependency named `alias`, which the
+  in `undecodable_field`'s first form reported a bad inline field's *version* and *path* unreadable and let
+  `package` fall back to the entry's key — so `alias = { version = "0.2", "\q" = "xuanji" }` was a dependency named `alias`, which the
   per-example check skips as *not a family crate* **before** it reads the pin, and the fixture's own correct pin
-  satisfied the counter. A clean release over a manifest `cargo metadata` refuses to parse: the second false
-  negative of this shape in two commits. The state is computed once now and consulted by all three views.
+  satisfied the counter. A clean release over a manifest `cargo metadata` refuses to parse — the same
+  *unreadable answered as absent* shape this window has been closing reader by reader. The state is computed
+  once now and consulted by all three views.
 
   **The direction written for that repair used a family crate as the outer key, which is the one shape that
   masks this path** — with `xuanji` as the key, identity resolves and the unreadable pin is reached. It uses a
   non-family alias now. Seen to fail: with identity falling back, *ok release coherence (development: 0.2.0)*.
 
-- **The fix for that false negative reintroduced the duplication this file has spent five rounds closing.**
+- **The fix for that false negative reintroduced the duplication this file exists to close.**
   `undecodable_field` and `assignments` opened with the same five lines byte-for-byte, both answering *what are
   this inline table's fields*, so a change to one — a nested table, a trailing comma, an array value — would
   have left the other reading a different grammar. Extracted to `inline_fields`, which both call.
 
-- **The sweep for the inverted Core Contract statement left six instances, and the entry announcing it claimed
-  otherwise.** That claim is corrected in place rather than quietly. One survivor was in code, wrapped across
+- **The sweep for the inverted Core Contract statement left instances behind, and the entry announcing it
+  claimed otherwise.** That claim is corrected in place rather than quietly. One survivor was in code, wrapped across
   two lines so a line-oriented grep could not see the phrase; five were in this document, which the sweep had
   excluded from its own corpus. All five are in the unreleased section — checked, so no dated record was
   rewritten — and the sixth is a quotation of the wrong wording inside the entry reporting it, which stays.
@@ -8292,6 +8298,41 @@ no adopter runs. They are here rather than under the adopter headings above beca
   Found by joining lines and searching tracked content, rather than the sites the author remembered writing.
   That is the same instrument lesson as the whitespace-run measurement earlier in this window: a sweep that
   cannot see into its own corpus reports clean over it.
+
+
+- **A diagnostic named a cause that was not the cause, and the direction guarding it asserted only the exit
+  class.** Folding *a field whose key cannot be decoded* into `Package::Unreadable` made the gate say
+  *declares `alias` with a `package` value this check cannot read* about
+  `alias = { version = "0.2", "\q" = "xuanji" }` — a dependency with no `package` key at all, sending an
+  operator to look for a key that is not there. That is the misdirection this crate's three-state readers exist
+  to prevent, and every other pair of facts here is typed apart rather than folded.
+
+  `Package::FieldUnreadable` carries the second fact with its own registered site and a message naming the
+  field. The direction asserts the site and the wording now, not just `Kind::CannotJudge` — asserting the class
+  alone is what let the wrong sentence pass, and a review found it by reading the emitted diagnostic instead of
+  the exit code.
+
+- **The inverted statement of the Core Contract survived a second sweep, in a third spelling.** An accepted spec
+  justified a deliberate under-reaction with *the Core Contract forbids a false refusal more strictly than it
+  forbids a miss* — and the same bound's `because` in `bounds.rs` had been corrected to the sound reasoning, so
+  one bound's two prose carriers contradicted each other while the id bijection between them saw nothing. Both
+  now say what holds: a declared bound with an owner and a tracker is not a *silent* false negative, which is
+  what makes the under-reaction admissible.
+
+  **The instrument is the subject, and it is recorded rather than re-derived.** The first sweep was
+  line-oriented and could not see a wrapped instance; the second joined lines but kept the phrase, and a review
+  proposing the fix named a pattern narrower than its own finding. `AGENTS.md` now carries the rule and the
+  pattern: search for the **claim** — `forbid\w*.{0,40}more strictly` — line-joined, over tracked content, with
+  the document doing the reporting inside its own corpus.
+
+  Nothing holds a bound's two prose carriers to each other; that is filed with its trigger, and both forms of
+  the fix are prose-comparing, which this repository has measured and rejected in the general case.
+
+- **Hand-maintained counts in this window's own entries are gone.** *Seven*, *six*, *five*, *one commit ago*,
+  *second in two commits*, *five rounds* — figures over a live set and anchors that move, in a document whose
+  governing rules forbid both, and the counts were wrong besides: the sweep they described was still
+  incomplete. They are replaced by what was missed, by kind. `this window` stays: in a dated record the window
+  is the section heading, and the released `[0.4.0]` history uses the same idiom.
 
 
 ## [0.4.0] - 2026-08-04

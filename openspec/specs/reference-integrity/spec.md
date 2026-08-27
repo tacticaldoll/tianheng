@@ -388,9 +388,13 @@ being one. A floor this reader invents is a floor it misses every shorter citati
   the figure a fabricating reader produced, and English carries words spelled entirely from the hex alphabet
   at this length. Admitting either would refuse a passage that cites nothing
 - **AND** the residue is computed rather than estimated: over uniformly random seven-character
-  abbreviations it is 3.8%, and the direction is chosen deliberately — this repository's Core Contract
-  forbids a false refusal more strictly than it forbids a miss, so the reader gives up that fraction rather
-  than refuse prose that names no commit
+  abbreviations it is 3.8%, and the direction is chosen deliberately. Its reason is **not** that a false
+  refusal outranks a miss — the Core Contract names a *silent* false negative as the one forbidden bug, so a
+  miss is never the cheaper direction by default. What makes this one admissible is that it is not silent: it
+  is this declaration, with an owner and a tracker, and the alternative is refusing prose that cites nothing,
+  which no declaration would cover. The same reasoning is the `because` this bound carries in
+  `crates/kanhe/src/bounds.rs`; a round corrected that carrier and left this one, so the two halves of one
+  reason contradicted each other while the id bijection between them saw nothing
 - **UNPINNED** `BACKLOG.md` — *an abbreviation carrying no letter or no digit*
 
 ### Requirement: Deliberate absence does not become a stale-reference finding

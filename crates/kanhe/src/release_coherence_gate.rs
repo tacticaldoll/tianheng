@@ -372,6 +372,15 @@ enum Package {
     Unreadable,
     /// More than one `package` key in one dependency. Malformed, and not this reader's to choose from.
     Several(usize),
+    /// A **field** of this dependency has a key this reader cannot decode, so which crate it names is
+    /// undecided — whatever its own `package` key or its own spelling says.
+    ///
+    /// **A separate state because the diagnostic is the point.** Reusing `Unreadable` made the gate say *a
+    /// `package` value this check cannot read* about `alias = { version = "0.2", "\q" = "xuanji" }`, which
+    /// declares no `package` key at all — sending an operator to look for a key that is not there. That is the
+    /// misdirection this crate's own three-state readers exist to prevent, and every other pair of facts in
+    /// this crate is typed apart rather than folded.
+    FieldUnreadable,
     /// The dependency's own key is not a bare TOML key, so its spelling is not the package name — quoted as
     /// written.
     ///
@@ -588,7 +597,7 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                     // the table for itself.
                     let undecodable = inline && undecodable_field(rest);
                     let package = if undecodable {
-                        Package::Unreadable
+                        Package::FieldUnreadable
                     } else {
                         Package::of(inline_assignments(rest, "package"), key)
                     };
@@ -707,7 +716,10 @@ fn offered(text: &str, wanted: &str) -> Offered {
             Package::Named(_) => {}
             // An entry whose identity cannot be read might be the one being inherited. *Might be* is not an
             // answer, and skipping it is how a stale pin would reach a release through the catalog.
-            Package::Unreadable | Package::Several(_) | Package::KeyUnreadable(_) => {
+            Package::Unreadable
+            | Package::Several(_)
+            | Package::KeyUnreadable(_)
+            | Package::FieldUnreadable => {
                 return Offered::Unresolvable(key);
             }
         }
@@ -1609,6 +1621,15 @@ pub(crate) fn require_example_pins(
                         format!(
                             "example {name} declares `{key}` with a `package` value this check cannot read, so \
                          which crate it requires cannot be decided"
+                        ),
+                    ));
+                }
+                Package::FieldUnreadable => {
+                    return Err(cannot_judge_at(
+                        "release-coherence#example-dependency-field-unreadable",
+                        format!(
+                            "example {name} declares `{key}` with a field whose key this check cannot decode, \
+                         so what it requires cannot be decided"
                         ),
                     ));
                 }
