@@ -402,9 +402,9 @@ version = \"0.5.0\"
 ///
 /// **Both directions, because the repair has two ways to be wrong.** Reading nothing leaves the miss; reading
 /// per line produces a *false refusal* — measured, the naive form reports `xuanji.path is pinned to
-/// crates/xuanji; expected 0.5.0`, the path read as the requirement, over a manifest cargo accepts. False
-/// refusal is the direction the Core Contract forbids more strictly than a miss, so the correct case is
-/// asserted first.
+/// crates/xuanji; expected 0.5.0`, the path read as the requirement, over a manifest cargo accepts. That is a
+/// defect in its own right — though the Core Contract's *one forbidden bug* is the opposite direction, a real
+/// violation that silently passes — so the correct case is asserted first and the stale one after it.
 #[test]
 fn a_dotted_internal_pin_is_read_and_a_stale_one_refused() {
     let sibling = "xingbiao = { path = \"crates/xingbiao\", version = \"0.5.0\" }\n";

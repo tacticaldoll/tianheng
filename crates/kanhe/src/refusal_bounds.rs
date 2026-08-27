@@ -52,6 +52,21 @@ pub fn unheld() -> Vec<Unheld> {
             "measured, not assumed: every ref-store perturbation a fixture can build answers `1`, which is this read's ANSWER — an unreadable `refs/tags` and a `refs/tags` replaced by a file both exit `1`, and in that state `rev-parse HEAD` fails first at `128`, so the judgement never reaches this arm. The classifier itself IS observed, against a directory that is no repository; what no fixture can build is a repository whose earlier reads succeed and whose tag read declines",
         ),
         tool(
+            "publish-source-integrity#remote-tag-unreadable",
+            "the sibling read of the same remote runs first: `ls-remote refs/heads/main` and \
+             `ls-remote refs/tags/<tag>` reach one transport by one command, so a remote a fixture can make \
+             unreadable answers the first read that way and returns before this one. Reaching this needs the \
+             remote to fail between two invocations, which a fixture would have to hold open — measured \
+             against the unreachable-remote direction, which lands on `remote-main-unreadable`",
+        ),
+        tool(
+            "publish-source-integrity#tag-object-unresolvable",
+            "`rev-parse refs/tags/<tag>` runs after the tag's presence, its object and its signature have \
+             all been read from the same store, so a ref-store state that answers those and not this is one \
+             no fixture can build — the sibling `release-tag-unreadable` records the same measurement for \
+             the reads above it",
+        ),
+        tool(
             "release-coherence#directory-entry-unreadable",
             "a directory entry that errors while the directory itself enumerates is produced by the \
              filesystem between two syscalls, and a fixture would have to hold that window open",

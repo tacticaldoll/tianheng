@@ -642,6 +642,68 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
         ));
     }
 
+    // **The tag is read from the remote too, because every other read of it was local.** The requirement is
+    // *a publish runs only from the tagged release commit on the remote's main*, and this function checked the
+    // two halves in two places: `main` against a live `ls-remote`, and the tag against the local object store
+    // alone — its presence, its object, its target, its signature. A tag created here and never pushed
+    // satisfied every one, and the success line said *tagged vX.Y.Z* about a tag nobody else had, while six
+    // crates would upload permanently and a version is yankable but never replaceable. Nothing declared the
+    // stop: no requirement, no scenario, no observation bound, no backlog entry.
+    //
+    // What made it invisible rather than accidental is that the fixture corpus shared it: `push` appeared
+    // three times in the matrix and once in the builder, always `origin main`, so *the tag is on the remote*
+    // was a claim no direction made — and the accepted-shape direction, the one every refusal is measured
+    // against, was itself the unpushed-tag case.
+    //
+    // The same three-way split the `main` read uses, for the same reason: a failed read is not an absent ref,
+    // and an absent ref is not a ref pointing elsewhere.
+    let tags = git(repo, &["ls-remote", remote, &format!("refs/tags/{tag}")]).map_err(|err| {
+        cannot_judge_at(
+            "publish-source-integrity#remote-tag-unreadable",
+            format!("could not read refs/tags/{tag} from remote \"{remote}\": {err}"),
+        )
+    })?;
+    let remote_tag = tags
+        .lines()
+        .next()
+        .map(|line| {
+            line.split_whitespace()
+                .next()
+                .expect("a matched `ls-remote` line carries the object id before its ref")
+        })
+        .unwrap_or_default()
+        .to_string();
+    if remote_tag.is_empty() {
+        return Err(violation_at(
+            "publish-source-integrity#release-tag-not-on-remote",
+            format!(
+                "{tag} exists here but not on remote \"{remote}\"; push the tag before publishing, or the \
+             uploaded crates name a commit nobody else can find"
+            ),
+        ));
+    }
+    // **The comparison is against the local *tag object*, not the commit it names.** `ls-remote` answers a
+    // `refs/tags/` query with the id the ref points at, and for an annotated tag that is the tag object — so
+    // comparing it to `tag_commit` refused the accepted fixture, which is how this reader learned the
+    // difference. Object identity is the stronger claim anyway: the same tag object carries the same
+    // signature, so a remote ref equal to this one is the tag this gate verified rather than another of that
+    // name.
+    let tag_object_id = git(repo, &["rev-parse", &format!("refs/tags/{tag}")]).map_err(|err| {
+        cannot_judge_at(
+            "publish-source-integrity#tag-object-unresolvable",
+            format!("could not resolve refs/tags/{tag} to an object: {err}"),
+        )
+    })?;
+    if remote_tag != tag_object_id {
+        return Err(violation_at(
+            "publish-source-integrity#remote-tag-names-another-object",
+            format!(
+                "{tag} on remote \"{remote}\" is {remote_tag}, but here it is {tag_object_id} naming \
+             {tag_commit}; the tag was moved or replaced after it was pushed"
+            ),
+        ));
+    }
+
     Ok(format!(
         "ok publish source ({remote}/main at {head_commit}, tagged {tag})"
     ))
@@ -1024,6 +1086,15 @@ pub fn build_fixture(root: &Path, name: &str, version: &str) -> Fixture {
         &["remote", "add", "origin", &remote.display().to_string()],
     );
     run(&repo, "git", &["push", "-q", "origin", "main"]);
+    // **The tag is pushed too, because the accepted shape is *the tagged commit on the remote's main*.** This
+    // pushed `main` alone, so the direction every refusal is measured against was itself the unpushed-tag
+    // case, and every tag read in the gate was local. A fixture that cannot express the shape cannot hold the
+    // claim; `a_tag_that_is_not_on_the_remote_is_a_violation` is the shape it could not express.
+    run(
+        &repo,
+        "git",
+        &["push", "-q", "origin", &format!("refs/tags/v{version}")],
+    );
 
     Fixture { repo, remote, key }
 }

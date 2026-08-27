@@ -631,7 +631,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > a live document citing an abbreviated commit object whose characters are all digits, or all letters
 
-- **because**: requiring both a letter and a digit is what keeps the reader off two shapes this tree actually holds -- a long run of digits written as a figure, and an English word spelled from the hex alphabet -- and the price is the abbreviations that carry only one kind of character. Over uniformly random seven-character abbreviations that is 3.8%. The direction is deliberate: the Core Contract forbids a false refusal more strictly than a miss, so the reader gives up that fraction rather than refuse prose that cites nothing
+- **because**: requiring both a letter and a digit is what keeps the reader off two shapes this tree actually holds -- a long run of digits written as a figure, and an English word spelled from the hex alphabet -- and the price is the abbreviations that carry only one kind of character. Over uniformly random seven-character abbreviations that is 3.8%. The direction is deliberate, and its reason is not the one first written here: the Core Contract names a **silent** false negative as the one forbidden bug, so a miss is not the cheaper direction by default. What makes this one admissible is that it is not silent -- it is this declaration, with an owner and a tracker -- and the alternative is refusing prose that cites nothing, which no declaration would cover
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *an abbreviation carrying no letter or no digit*
 

@@ -155,6 +155,72 @@ fn the_dirty_worktree_diagnostic_names_each_path_unescaped_and_one_per_line() {
     );
 }
 
+/// A tag that exists here and not on the remote is a violation.
+///
+/// **The one shape this corpus could not express, and the gate it stands in front of is the only irreversible
+/// act in the repository.** The requirement is *a publish runs only from the tagged release commit on the
+/// remote's main*, and the gate checked the two halves in two places: `main` against a live `ls-remote`, and
+/// the tag against the local object store alone — its presence, its object, its target, its signature. A tag
+/// created here and never pushed satisfied every one, and the success line said *tagged v9.9.9* about a tag
+/// nobody else had, while six crates would have uploaded permanently.
+///
+/// What made it invisible is that the corpus shared it: `push` appeared three times in this file and once in
+/// the fixture builder, always `origin main`, so *the tag is on the remote* was a claim no direction made —
+/// and `a_signed_tagged_snapshot_at_the_tip_of_main_is_accepted`, the shape every refusal here is measured
+/// against, **was itself the unpushed-tag case**. The builder pushes the tag now, which is what lets this
+/// direction withhold it.
+///
+/// Negative run: without the remote tag read, this returns `Ok` — the whole gate green over a snapshot whose
+/// tag exists only in the publishing clone.
+#[test]
+fn a_tag_that_is_not_on_the_remote_is_a_violation() {
+    let root = scratch("tag-not-pushed");
+    let fixture = build_fixture(&root, "tag-not-pushed", "9.9.9");
+    // The builder pushed it; this is the maintainer who has not.
+    git(
+        &fixture.repo,
+        &["push", "-q", "--delete", "origin", "v9.9.9"],
+    );
+    let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("an unpushed tag must be refused");
+    refusal::expect(
+        "publish-source-integrity#release-tag-not-on-remote",
+        &refusal,
+    );
+    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("push the tag before publishing"),
+        "the refusal must say what to do: {}",
+        refusal.message
+    );
+}
+
+/// A tag moved after it was pushed is a violation, and it is named by object rather than by commit.
+///
+/// `ls-remote` answers a `refs/tags/` query with the id the ref points at, which for an annotated tag is the
+/// **tag object** — so the first version of the remote read compared it against the commit and refused the
+/// accepted fixture. Object identity is also the stronger claim: the same tag object carries the same
+/// signature, so a remote ref equal to the local one is the tag this gate verified and not another of that name.
+#[test]
+fn a_tag_replaced_after_it_was_pushed_is_a_violation() {
+    let root = scratch("tag-moved");
+    let fixture = build_fixture(&root, "tag-moved", "9.9.9");
+    // Same name, same commit, a different tag object: re-signing is enough to make the remote's ref stale.
+    git(
+        &fixture.repo,
+        &["tag", "-f", "-s", "v9.9.9", "-m", "v9.9.9 again"],
+    );
+    let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a tag replaced after pushing must be refused");
+    refusal::expect(
+        "publish-source-integrity#remote-tag-names-another-object",
+        &refusal,
+    );
+    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
+}
+
 #[test]
 fn a_head_that_is_not_the_release_snapshot_is_a_violation() {
     let root = scratch("subject");
