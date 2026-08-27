@@ -441,10 +441,8 @@ pub fn table_heading(line: &str) -> Option<TableHeading> {
 
 /// `inner` cut at the dots that separate one key from the next -- the dots outside a quoted segment.
 ///
-/// A quoted key may contain a dot, and a basic one may spell either the dot or its own closing quote as an
-/// escape. Both are content, so the scan tracks which quote it is inside and steps over the character after a
-/// backslash while inside a **basic** string; a literal string has no escapes, so a backslash there is
-/// content like any other byte.
+/// A quoted key may contain a dot, and that dot is content. The cut asks [`outside_strings`] which positions
+/// are table syntax, so the two cannot be confused.
 ///
 /// An unterminated quote yields the rest of the text as one segment. That segment does not *fail* to unquote
 /// -- [`unquoted`] finds no closing delimiter to strip and hands back the text as it stands, quote included --
@@ -455,17 +453,38 @@ pub fn table_heading(line: &str) -> Option<TableHeading> {
 fn dotted(inner: &str) -> Vec<&str> {
     let mut segments = Vec::new();
     let mut start = 0;
+    for at in outside_strings(inner) {
+        if inner[at..].starts_with('.') {
+            segments.push(&inner[start..at]);
+            start = at + 1;
+        }
+    }
+    segments.push(&inner[start..]);
+    segments
+}
+
+/// The byte offset of every character of `text` that sits **outside** a TOML string.
+///
+/// **Two readers needed this fact and only one of them had it.** [`dotted`] tracked which quote it was inside,
+/// so a dot in a quoted key is content rather than a separator. The assignment scanner in
+/// `release_coherence_gate` asked something weaker -- that the byte before a key be a delimiter -- and a
+/// quoted value supplies one: `{ path = "deps, workspace = true", version = "0.2.0" }` is a manifest cargo
+/// reads at `0.2.0`, measured, and the scanner found an *offer* inside the path and reported a version it
+/// could not read. Its own key boundary test is still needed and is still its own; what it lacked was the
+/// lexical state, and there is now one walker for that rather than one reader guessing it.
+///
+/// A backslash inside a **basic** string escapes the character after it, so a `\"` does not close the
+/// string; a literal string has no escapes, so a backslash there is content like any other byte. A delimiter
+/// itself is not reported as outside -- nothing asks about the quotes, and a key never begins with one.
+pub(crate) fn outside_strings(text: &str) -> Vec<usize> {
+    let mut outside = Vec::new();
     let mut quote: Option<char> = None;
-    let mut characters = inner.char_indices();
+    let mut characters = text.char_indices();
     while let Some((at, character)) = characters.next() {
         match quote {
             None => match character {
                 '"' | '\'' => quote = Some(character),
-                '.' => {
-                    segments.push(&inner[start..at]);
-                    start = at + 1;
-                }
-                _ => {}
+                _ => outside.push(at),
             },
             Some('"') if character == '\\' => {
                 characters.next();
@@ -474,8 +493,7 @@ fn dotted(inner: &str) -> Vec<&str> {
             Some(_) => {}
         }
     }
-    segments.push(&inner[start..]);
-    segments
+    outside
 }
 
 /// What a TOML table heading names, and whether it opens an array of tables.

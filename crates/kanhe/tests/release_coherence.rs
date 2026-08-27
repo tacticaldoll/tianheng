@@ -2450,6 +2450,55 @@ fn an_example_inheriting_what_no_catalog_offers_is_not_judged() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// Assignment-shaped text inside a quoted value is string data, not a table key.
+///
+/// **The scanner read key boundaries and not lexical state.** It required the byte before the key to be a
+/// delimiter — `{`, `,`, space, tab — which a string containing `, workspace = true` supplies exactly as an
+/// inline table does. Measured: cargo reads such a manifest without complaint, resolving the dependency at
+/// its declared version with a path whose directory name happens to carry that text. The gate answered *a
+/// version this check cannot read*: a false refusal, and one whose sentence points an operator at a version
+/// that is perfectly readable.
+///
+/// The blindness was in the shared scanner, so every key it reads had it — `version` and `path` since long
+/// before `workspace` joined them. Both rows are here for that reason: one plants the shape in a path and
+/// looks for the offer, the other plants a second `version` and looks for *several*.
+///
+/// Negative run: with the scanner matching a key anywhere its neighbouring byte allows, the first row is a
+/// cannot-judge — *requires xuanji with a version this check cannot read* — and the second is *declares 2
+/// `version` keys*. Measured a row at a time.
+#[test]
+fn assignment_shaped_text_inside_a_value_is_not_a_key() {
+    for (label, entry) in [
+        (
+            "an offer inside a path",
+            "xuanji = { path = \"deps, workspace = true\", version = \"0.2.0\" }",
+        ),
+        (
+            "a version inside a path",
+            "xuanji = { path = \"deps, version = 9\", version = \"0.2.0\" }",
+        ),
+    ] {
+        let root = scratch(&format!("value-not-a-key-{}", label.replace(' ', "-")));
+        let fixture = build_fixture(&root, "value-not-a-key", "0.2.0");
+        let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+        let text = std::fs::read_to_string(&manifest).expect("read");
+        std::fs::write(&manifest, format!("{text}{entry}\n")).expect("write");
+        development_changelog(&fixture.repo, "0.2.0", true);
+        commit(
+            &fixture.repo,
+            "chore: assignment-shaped text inside a value",
+        );
+        let verdict = judge(&fixture.repo);
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(
+            verdict.is_ok(),
+            "{label}: cargo reads this dependency at `0.2.0`; the text inside the quotes is a directory \
+             name, not a table key: {:?}",
+            verdict.err()
+        );
+    }
+}
+
 /// Two `workspace` keys in one dependency are malformed, not emphatic.
 ///
 /// The predicate read the values and not how many there were, so `{ workspace = true, workspace = true }`

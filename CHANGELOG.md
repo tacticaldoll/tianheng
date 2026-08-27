@@ -8061,6 +8061,33 @@ no adopter runs. They are here rather than under the adopter headings above beca
   search itself, `spec.md: 2 fence line(s)`, where the colon precedes a count.
 
 
+- **A quoted value containing `, workspace = true` was read as a table key, and the refusal pointed at a version
+  that was perfectly readable.** The assignment scanner asked only that the byte before a key be a delimiter —
+  `{`, `,`, space, tab — which a string supplies exactly as an inline table does. Measured: cargo reads
+  `xuanji = { path = "deps, workspace = true", version = "0.2.0" }` at `0.2.0`, resolving a path whose directory
+  name carries that text, and the gate answered *a version this check cannot read*. A false refusal, and one
+  whose sentence sends a maintainer to look at a version that is correct.
+
+  The blindness was in the shared scanner, so every key it reads had it — `version` and `path` since long before
+  the offer joined them. Seen to fail, a row at a time: with the lexical state ignored, a second `version`
+  planted inside a path makes the same reader report *declares 2 `version` keys*.
+
+  **The walker it needed already existed in the same crate**, in the heading cut that had to tell a dot inside a
+  quoted key from a separator. It is one walker now, asked by both, rather than one reader having the fact and
+  the other guessing at it from a neighbouring byte. The key-boundary test stays where it was: it is that
+  reader's own question, and only the lexical state was missing.
+
+- **A figure was written into a live governance document, in the clause about measurement discipline.** The
+  whitespace-run row in `AGENTS.md` carried the size of the corpus it had measured — a count of a live set in
+  the one document that forbids them. A review found it. The corpus is now named without being counted, and the
+  figures stay here, in a dated record, which is where a measurement belongs.
+
+  Nothing caught it, and that is the standing disposition rather than a gap to close: the census reaction holds
+  a **declared** set of censuses and the sentence each may be written in, so a figure of a new kind is outside
+  it by construction, and a general detector over numbers in prose was measured and rejected three times — every
+  version, range and field width would trip it.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
