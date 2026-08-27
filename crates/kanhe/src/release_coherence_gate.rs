@@ -46,6 +46,19 @@ fn read(repo: &Path, rel: &str) -> Result<String, Refusal> {
 /// optional space. Both halves are required — the first alone still admits `/version`, the second alone still
 /// admits a key ending in `version`.
 pub(crate) fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
+    assignments(value, key)
+        .into_iter()
+        .map(quoted_value)
+        .collect()
+}
+
+/// The raw text assigned to `key` wherever it stands alone in `value`, in order.
+///
+/// [`inline_assignments`] is this with [`quoted_value`] over it. The split exists because one assignment this
+/// reader needs is **not** a string: `workspace = true` carries a boolean, and reading it as a quoted value
+/// answers *unreadable* for the one spelling that is correct. Two scanners for one grammar is the shape this
+/// file exists to close, so the scan stayed here and only the interpretation moved out.
+fn assignments<'a>(value: &'a str, key: &str) -> Vec<&'a str> {
     let mut found = Vec::new();
     let bytes = value.as_bytes();
     let mut at = 0;
@@ -56,12 +69,70 @@ pub(crate) fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
         let rest = value[after..].trim_start();
         if opens {
             if let Some(assignment) = rest.strip_prefix('=') {
-                found.push(quoted_value(assignment));
+                found.push(assignment);
             }
         }
         at = after;
     }
     found
+}
+
+/// Whether this dependency takes its requirement from the workspace catalog.
+///
+/// **`workspace = true` is the only spelling cargo accepts, and it wins over a local `version`.** Measured:
+/// `{ workspace = true, version = "2" }` beside a catalog offering `1.0` reports `^1.0` — the catalog answers,
+/// not the local key — and `workspace = false` is refused outright with *`workspace` cannot be false*. So a
+/// `workspace` assignment that is not `true` is in a manifest nothing builds, and the pin it carries is
+/// reported unreadable rather than read past.
+fn inheritance<'a>(offers: impl IntoIterator<Item = &'a str>) -> Inheritance {
+    let mut offers = offers.into_iter().peekable();
+    if offers.peek().is_none() {
+        return Inheritance::Declared;
+    }
+    if offers.all(|offer| offer_value(offer) == "true") {
+        Inheritance::FromCatalog
+    } else {
+        Inheritance::Unreadable
+    }
+}
+
+/// One assignment's value, ended where the value ends.
+///
+/// The scan hands back everything after the `=`, which inside an inline table runs on to the next field or to
+/// the closing brace: `{ workspace = true }` yields ` true }`. A quoted value is delimited by its own quotes,
+/// so [`quoted_value`] never needed this; a boolean is delimited by the table around it.
+fn offer_value(text: &str) -> &str {
+    text.split(['}', ','])
+        .next()
+        .expect("`str::split` yields at least one field")
+        .trim()
+}
+
+/// One dependency's requirement: the catalog's where it takes the offer, and its own otherwise.
+///
+/// Every spelling of a dependency -- bare or inline, dotted, and a detailed table -- reaches this
+/// with whatever `workspace` assignments they carry, so the offer cannot be recognised in one spelling and
+/// missed in another. That divergence is what this file's history is made of.
+fn requirement<'a>(
+    offers: impl IntoIterator<Item = &'a str>,
+    versions: Vec<Quoted>,
+    written: &str,
+) -> Declared {
+    match inheritance(offers) {
+        Inheritance::Declared => Declared::of(versions, written),
+        Inheritance::FromCatalog => Declared::Inherited,
+        Inheritance::Unreadable => Declared::Unreadable(written.trim().to_string()),
+    }
+}
+
+/// Where a dependency's requirement comes from.
+enum Inheritance {
+    /// This dependency declares its own requirement.
+    Declared,
+    /// It takes the one the workspace catalog offers.
+    FromCatalog,
+    /// It carries a `workspace` value cargo does not accept.
+    Unreadable,
 }
 
 /// Which dependency table a heading opens, if any.
@@ -109,12 +180,14 @@ enum Subject {
     ///
     /// A catalog is excluded, because a table offering a version to members is not this package requiring it.
     Requires,
-    /// Every version this manifest pins, whether the crate is required here or offered to members.
+    /// What a workspace root offers its members to inherit: `[workspace.dependencies]` and nothing else.
     ///
-    /// The root's internal path pins live in whichever table their author reached for, so this admits the
-    /// catalog **as well as** the tables `Requires` admits -- the subjects are a subset relation rather than
-    /// a partition, and a fixture pinning `[dependencies.xuanji]` in a root manifest is what said so.
-    Pins,
+    /// Two callers ask for this. The root's internal-pin check wants it *together with* `Requires`, because a
+    /// path pin lives in whichever table its author reached for -- a fixture pinning `[dependencies.xuanji]`
+    /// in a root manifest is what said so, and that caller asks for both rather than this being a third
+    /// subject that silently means the union. And [`offered`] wants it alone, to resolve what a dependency
+    /// taking `workspace = true` is actually held to.
+    Offers,
 }
 
 const DEPENDENCY_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
@@ -172,21 +245,25 @@ fn dependency_table(heading: &str, subject: Subject) -> Table {
     // `[workspace.dependencies]` and nothing else.
     let keys: Vec<&str> = heading.segments().iter().map(String::as_str).collect();
     match (subject, keys.as_slice()) {
-        (_, [kind]) if DEPENDENCY_KINDS.contains(kind) => Table::Entries,
-        (_, [kind, named]) if DEPENDENCY_KINDS.contains(kind) && !named.is_empty() => {
+        (Subject::Requires, [kind]) if DEPENDENCY_KINDS.contains(kind) => Table::Entries,
+        (Subject::Requires, [kind, named])
+            if DEPENDENCY_KINDS.contains(kind) && !named.is_empty() =>
+        {
             Table::One((*named).to_string())
         }
         // Only `dependencies` is inheritable; `[workspace.dev-dependencies]` is an unused key to cargo. And
         // only a caller asking what this manifest *pins* wants it: it is no dependency of the package it
         // sits in.
-        (Subject::Pins, ["workspace", "dependencies"]) => Table::Entries,
-        (Subject::Pins, ["workspace", "dependencies", named]) if !named.is_empty() => {
+        (Subject::Offers, ["workspace", "dependencies"]) => Table::Entries,
+        (Subject::Offers, ["workspace", "dependencies", named]) if !named.is_empty() => {
             Table::One((*named).to_string())
         }
         // `[target.<selector>.…]`, where the selector is one key -- a triple or a cfg expression, whatever it
         // contains, because a heading held as segments has no dot for this step to land inside.
-        (_, ["target", _selector, kind]) if DEPENDENCY_KINDS.contains(kind) => Table::Entries,
-        (_, ["target", _selector, kind, named])
+        (Subject::Requires, ["target", _selector, kind]) if DEPENDENCY_KINDS.contains(kind) => {
+            Table::Entries
+        }
+        (Subject::Requires, ["target", _selector, kind, named])
             if DEPENDENCY_KINDS.contains(kind) && !named.is_empty() =>
         {
             Table::One((*named).to_string())
@@ -217,6 +294,12 @@ enum Declared {
     Unreadable(String),
     /// More than one such key in one dependency. Malformed, and not this reader's to choose from.
     Several(usize),
+    /// The requirement is the one the workspace catalog offers, taken with `workspace = true`.
+    ///
+    /// Only a *pin* is ever this: a `path` is not inheritable in the spelling this reader meets. Resolved
+    /// against the catalog in the same manifest by [`offered`], because every example in this repository is
+    /// its own workspace root -- the root manifest says so, and `exclude` keeps them out of this workspace.
+    Inherited,
 }
 
 impl Declared {
@@ -325,6 +408,8 @@ struct Detailed {
     packages: Vec<Quoted>,
     versions: Vec<Quoted>,
     paths: Vec<Quoted>,
+    /// The raw text of every `workspace` assignment, which is a boolean rather than a string.
+    offers: Vec<String>,
     written: String,
 }
 
@@ -401,12 +486,15 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                                     packages: Vec::new(),
                                     versions: Vec::new(),
                                     paths: Vec::new(),
+                                    offers: Vec::new(),
                                     written: String::new(),
                                 });
                             match tail.trim() {
                                 "path" => entry.paths.push(quoted_value(rest)),
                                 "version" => entry.versions.push(quoted_value(rest)),
                                 "package" => entry.packages.push(quoted_value(rest)),
+                                // `xuanji.workspace = true` is the dotted spelling of taking the offer.
+                                "workspace" => entry.offers.push(rest.to_string()),
                                 _ => continue,
                             }
                             entry.written.push_str(trimmed);
@@ -433,14 +521,18 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                     found.push(Dependency {
                         key: key.to_string(),
                         package,
-                        pin: Declared::of(versions, rest),
+                        pin: requirement(assignments(rest, "workspace"), versions, rest),
                         path: Declared::of(paths, rest),
                     });
                 }
                 for (_, detailed) in dotted {
                     found.push(Dependency {
                         package: Package::of(detailed.packages, &detailed.key),
-                        pin: Declared::of(detailed.versions, &detailed.written),
+                        pin: requirement(
+                            detailed.offers.iter().map(String::as_str),
+                            detailed.versions,
+                            &detailed.written,
+                        ),
                         path: Declared::of(detailed.paths, &detailed.written),
                         key: detailed.key,
                     });
@@ -452,6 +544,7 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                     packages: Vec::new(),
                     versions: Vec::new(),
                     paths: Vec::new(),
+                    offers: Vec::new(),
                     written: String::new(),
                 };
                 for (_, line) in &table.body {
@@ -463,6 +556,11 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                         .versions
                         .extend(inline_assignments(trimmed, "version"));
                     detailed.paths.extend(inline_assignments(trimmed, "path"));
+                    detailed.offers.extend(
+                        assignments(trimmed, "workspace")
+                            .into_iter()
+                            .map(str::to_string),
+                    );
                     if !trimmed.is_empty() {
                         detailed.written.push_str(trimmed);
                         detailed.written.push(' ');
@@ -470,7 +568,11 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                 }
                 found.push(Dependency {
                     package: Package::of(detailed.packages, &detailed.key),
-                    pin: Declared::of(detailed.versions, &detailed.written),
+                    pin: requirement(
+                        detailed.offers.iter().map(String::as_str),
+                        detailed.versions,
+                        &detailed.written,
+                    ),
                     path: Declared::of(detailed.paths, &detailed.written),
                     key: detailed.key,
                 });
@@ -479,6 +581,47 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
         }
     }
     found
+}
+
+/// What the catalog in `text` offers for `wanted`, for a dependency that took the offer.
+///
+/// **The catalog is in the same manifest, because every example in this repository is its own workspace
+/// root.** The root manifest's own comment says so and `exclude` enforces it, so a dependency spelling
+/// `workspace = true` resolves against `[workspace.dependencies]` beside it. Measured: cargo resolves the
+/// inline, dotted and detailed spellings of the offer to the catalog's requirement, and it resolves it even
+/// when a local `version` sits in the same inline table -- so the catalog is *the* answer rather than one of
+/// two. Cargo also refuses a manifest that inherits what its catalog does not declare, which is why
+/// [`Offered::Missing`] is a refusal rather than a fallback.
+fn offered(text: &str, wanted: &str) -> Offered {
+    for Dependency {
+        key,
+        package,
+        pin,
+        path: _,
+    } in declared_dependencies(text, Subject::Offers)
+    {
+        match package {
+            Package::Named(named) if named == wanted => return Offered::Pin(pin),
+            Package::Named(_) => {}
+            // An entry whose identity cannot be read might be the one being inherited. *Might be* is not an
+            // answer, and skipping it is how a stale pin would reach a release through the catalog.
+            Package::Unreadable | Package::Several(_) | Package::KeyUnreadable(_) => {
+                return Offered::Unresolvable(key);
+            }
+        }
+    }
+    Offered::Missing
+}
+
+/// What a catalog offers for one crate.
+enum Offered {
+    /// The catalog declares it, with this requirement -- which may itself be absent, unreadable or several,
+    /// and is then answered by the same arms a locally declared one is.
+    Pin(Declared),
+    /// No catalog entry names it. A manifest cargo refuses to parse.
+    Missing,
+    /// The catalog carries an entry whose identity this reader cannot resolve, quoted by its key.
+    Unresolvable(String),
 }
 
 /// Whether `suffix` is an ISO date: three `-`-separated all-digit fields of widths 4, 2 and 2.
@@ -1126,7 +1269,9 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
         package: _,
         pin,
         path,
-    } in declared_dependencies(root_manifest, Subject::Pins)
+    } in declared_dependencies(root_manifest, Subject::Requires)
+        .into_iter()
+        .chain(declared_dependencies(root_manifest, Subject::Offers))
     {
         // A dependency with no path is not an internal one; one whose path this reader cannot name might be,
         // and *might be* is not an answer. The old selection asked whether the **line** carried `path` and
@@ -1147,7 +1292,9 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
         // three arms no input can reach — the dead-branch shape this file refuses one read earlier.
         let path = match path {
             Declared::Value(path) => path,
-            Declared::Absent => continue,
+            // An inherited dependency declares no `path` of its own: whatever the catalog offers, this line
+            // carries none, which is the same answer as the key being absent rather than a state of its own.
+            Declared::Absent | Declared::Inherited => continue,
             Declared::Unreadable(written) => {
                 return Err(cannot_judge_at(
                     "release-coherence#dependency-path-unreadable",
@@ -1183,6 +1330,18 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
                 return Err(violation_at(
                     "release-coherence#internal-pin-absent",
                     format!("internal dependency {key} has no version pin"),
+                ));
+            }
+            // The root manifest **is** the workspace, so a dependency here taking `workspace = true` would be
+            // inheriting from itself — measured, `cargo metadata` refuses a manifest whose catalog does not
+            // declare what it inherits, and a catalog inheriting from itself declares nothing. Refused as
+            // undecidable rather than guessed at, in the direction that stops in front of an operator.
+            Declared::Inherited => {
+                return Err(cannot_judge_at(
+                    "release-coherence#internal-pin-inherited",
+                    format!(
+                        "internal dependency {key} takes its version from the workspace catalog, and this is                      the manifest that declares the catalog, so what holds it cannot be decided"
+                    ),
                 ));
             }
             Declared::Unreadable(written) => {
@@ -1351,6 +1510,37 @@ pub(crate) fn require_example_pins(
             // The entry is already known to name a family crate, so every way of failing to read its pin is
             // answered on its own terms. Collapsing them was the defect: an ABSENT `version` — legal, since
             // a path-only dependency declares none — was reported as one this reader could not read.
+            // **The offer is resolved before the arms below, so every way of failing to read a pin keeps one
+            // home.** A dependency taking `workspace = true` declares no `version` of its own, and the reader
+            // filed that as `Absent` -- the state meaning *nothing holds this to a version* -- so an example
+            // whose pin is held exactly was refused for having none. Cargo holds it to the catalog's
+            // requirement, measured; the catalog is read here and its pin is judged as if written inline.
+            let pin = match pin {
+                Declared::Inherited => match offered(&text, &package) {
+                    Offered::Pin(offered) => offered,
+                    Offered::Missing => {
+                        return Err(cannot_judge_at(
+                            "release-coherence#example-inherits-what-no-catalog-offers",
+                            format!(
+                                "example {name} requires {package} from the workspace catalog, and no \
+                             `[workspace.dependencies]` entry beside it names that crate, so what holds it \
+                             cannot be decided"
+                            ),
+                        ));
+                    }
+                    Offered::Unresolvable(entry) => {
+                        return Err(cannot_judge_at(
+                            "release-coherence#example-catalog-entry-unresolvable",
+                            format!(
+                                "example {name} requires {package} from the workspace catalog, whose entry \
+                             {entry} names a crate this check cannot resolve, so what holds it cannot be \
+                             decided"
+                            ),
+                        ));
+                    }
+                },
+                declared => declared,
+            };
             let pin = match pin {
                 Declared::Value(pin) => pin,
                 Declared::Absent => {
@@ -1377,6 +1567,18 @@ pub(crate) fn require_example_pins(
                         format!(
                             "example {name} declares {several} `version` keys for {package}, so which one it \
                          requires is not this reader's to choose"
+                        ),
+                    ));
+                }
+                // Reached when the catalog entry resolved above **itself** takes the offer: a catalog
+                // inheriting from itself, which cargo refuses to parse. Named rather than followed, because
+                // following it is a loop with no end that a manifest could not have built anyway.
+                Declared::Inherited => {
+                    return Err(cannot_judge_at(
+                        "release-coherence#example-catalog-entry-inherits",
+                        format!(
+                            "example {name} requires {package} from the workspace catalog, whose own entry \
+                         takes its version from the catalog, so what holds it cannot be decided"
                         ),
                     ));
                 }
