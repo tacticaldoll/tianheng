@@ -244,23 +244,21 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   same repair that admits the detailed form closes the direction where a non-dependency was read as one
 - **PINNED-BY** `a_feature_named_after_a_family_crate_is_not_a_pin`
 
-#### Scenario: A dependency declared under a cfg target carrying a dot is not observed — a stated bound
+#### Scenario: A dependency under a cfg target is read, whatever the expression contains
 
-- **WHEN** a family dependency is declared under `[target.'cfg(…)'.dependencies]` whose cfg expression
-  contains a **dot**
-- **THEN** nothing reacts. The heading is split at its first dot to step past the target context, and a dot
-  inside the expression puts that split inside it rather than past it
-- **AND** quoting alone no longer hides a table, which is what this bound used to say. `manifest::table_heading`
-  unquotes each segment and decodes the escapes cargo decodes, and the reader was measured over every cfg shape
-  it meets — a bare predicate, one carrying spaces, one carrying escaped quotes — all of which are now
-  classified. The pin under a quoted cfg target is **observed**, and the direction that once asserted this bound
-  over it asserts the refusal instead
-- **AND** the escaped-quote spelling is held to that by
-  `an_escaped_dependency_table_heading_is_read_as_the_table_cargo_reads`, which reaches it through the whole
-  gate. It was classified before that direction existed, but by an undecodable segment leaving an empty one in
-  the joined name and the split past the target context landing after it — true for a reason nobody chose,
-  which a review found and which is why *all of which are now classified* has something holding it
-- **UNPINNED** `BACKLOG.md` — *a dependency declared under a cfg target carrying a dot is not observed*
+- **WHEN** a family dependency is declared under `[target.'cfg(…)'.dependencies]` or its `.NAME` form, at a
+  version the workspace version does not satisfy — including a cfg expression carrying a **dot**, in either
+  spelling cargo accepts
+- **THEN** the check reads the pin and fails naming the crate. Measured: cargo reads the dependency under
+  `[target.'cfg(target_os = "l.x")'.dependencies]` and under the basic-quoted spelling of the same expression,
+  reporting it with that target
+- **AND** this was a declared bound and is retired rather than reworded. It said such a pin went unobserved
+  because stepping past the target context split the heading at its first dot, landing inside the expression —
+  true of a reader holding the heading as one dotted string, and not of one holding the keys as segments, where
+  the expression is a single key whatever it contains. The bound's own WHEN was written into the tree after the
+  change: it reacts, and with the quote-aware cut removed it returns *ok release coherence* exactly as the
+  bound described
+- **PINNED-BY** `a_pin_under_a_cfg_target_carrying_a_dot_is_read`
 
 #### Scenario: A renamed family dependency is resolved by the package it names
 

@@ -452,6 +452,44 @@ fn a_feature_named_after_a_family_crate_is_not_a_pin() {
     );
 }
 
+/// A table whose dot is spelled as an escape is one key, and one key is not a dependency table.
+///
+/// The other direction of the same defect: `["dependencies\u002Exuanji"]` decodes to the text
+/// `dependencies.xuanji`, and a reader that joined its segments back with dots read it as the detailed table
+/// `[dependencies.xuanji]` and applied the pin rule to it. Measured, cargo reads it as one unknown top-level
+/// key and no dependency at all -- put to it as this fixture's own heading, not as a shape resembling it --
+/// so refusing here would stop a release over a manifest cargo builds, which
+/// is the direction this repository forbids more strictly than a miss.
+///
+/// Negative run: replacing the segment match with the joined-name classifier it replaced makes this a
+/// violation -- *example adopter requires xuanji = "0.0.1"; this check admits only "0.2.0" or "0.2"*.
+/// Perturbing the **cut** instead leaves it green, which is worth saying: the defect lived in the join,
+/// and a negative run aimed at the wrong half of the repair reports a guard that is not one.
+#[test]
+fn a_table_whose_dot_is_escaped_is_one_key_and_not_a_dependency_table() {
+    let root = scratch("escaped-separator");
+    let fixture = build_fixture(&root, "escaped-separator", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        format!(
+            "{text}\n{}",
+            "[\"dependencies\\u002Exuanji\"]\nversion = \"0.0.1\"\n"
+        ),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: a table whose dot is escaped");
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "one literal key is no dependency table to cargo, and must not be read as one: {:?}",
+        verdict.err()
+    );
+}
+
 /// A dated heading's fields are ranged, not merely digits.
 ///
 /// Negative run: reading only three all-digit fields of widths 4/2/2, `2026-99-99` satisfied *CHANGELOG
@@ -2162,6 +2200,57 @@ fn a_family_pin_under_a_quoted_cfg_target_is_observed() {
         &refuse(&fixture.repo, Kind::Violation, "requires xuanji"),
     );
     let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A family pin under a cfg target whose expression carries a **dot** is read, which retires a declared bound.
+///
+/// **This is the bound's own WHEN, written into the tree after the change rather than reasoned about.** The
+/// bound said such a pin went unobserved because stepping past the target context split the heading at its
+/// first dot, landing inside the expression. That was true of a reader holding the heading as one dotted
+/// string; it is not true of one holding segments, where the expression is a single key whatever it contains.
+/// Both spellings cargo accepts are here, and cargo reads `serde` under each -- measured, the dependency
+/// arrives with target `cfg(target_os = "l.x")`.
+///
+/// Negative run: with the quote-aware cut replaced by `split('.')`, each row returns `Ok` -- measured one at a
+/// time, since the loop stops at its first failure -- so the pin goes unread exactly as the bound described,
+/// over a manifest requiring `xuanji = "0.0.1"` against workspace `0.2.0`.
+#[test]
+fn a_pin_under_a_cfg_target_carrying_a_dot_is_read() {
+    for (label, table) in [
+        (
+            "literal-quoted",
+            "[target.'cfg(target_os = \"l.x\")'.dependencies]\nxuanji = \"0.0.1\"\n",
+        ),
+        (
+            "basic-quoted",
+            "[target.\"cfg(target_os = \\\"l.x\\\")\".dependencies]\nxuanji = \"0.0.1\"\n",
+        ),
+    ] {
+        let root = scratch(&format!("cfg-dot-{label}"));
+        let fixture = build_fixture(&root, "cfg-dot", "0.2.0");
+        let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+        let text = std::fs::read_to_string(&manifest).expect("read");
+        std::fs::write(&manifest, format!("{text}\n{table}")).expect("write");
+        development_changelog(&fixture.repo, "0.2.0", true);
+        commit(
+            &fixture.repo,
+            "chore: a pin under a cfg target carrying a dot",
+        );
+        let verdict = judge(&fixture.repo);
+        let _ = std::fs::remove_dir_all(&root);
+        let refusal = verdict.expect_err(&format!("{label}: the pin under it must be read"));
+        assert_eq!(
+            refusal.kind,
+            Kind::Violation,
+            "{label}: {}",
+            refusal.message
+        );
+        assert!(
+            refusal.message.contains("xuanji"),
+            "{label}: the refusal must name the crate: {}",
+            refusal.message
+        );
+    }
 }
 
 /// A `package` value this reader cannot read stops the check, and says so as itself.
