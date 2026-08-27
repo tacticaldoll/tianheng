@@ -99,8 +99,25 @@ fn a_verdict_fails_the_run_only_where_it_refuses() {
 }
 
 /// The clean rendering is not one of the refusal classes, so a wrapper cannot read agreement as disagreement.
+///
+/// **The classes are enumerated by an exhaustive match rather than by hand, so a third one cannot be added
+/// silently.** This was two `assert_ne!` lines naming `Kind`'s variants; `Kind` carries no `ALL` and no
+/// exhaustive match anywhere else in this direction, so a new variant compiled and was never compared. The
+/// consequence was bounded — a wrapper reads a class it does not recognise as unjudged and exits `2`, the safe
+/// direction — but a variant that happened to render as `CLEAN` would have made `require_a_verdict` read a
+/// refusal as agreement. The `match` below is the enumerator: adding a variant stops the build here.
 #[test]
 fn the_clean_rendering_is_no_refusal_class() {
-    assert_ne!(CLEAN, rendered(Kind::Violation));
-    assert_ne!(CLEAN, rendered(Kind::CannotJudge));
+    let classes = [Kind::Violation, Kind::CannotJudge];
+    // The set above is held to `Kind` itself: a variant added there and not here fails to compile.
+    for class in classes {
+        match class {
+            Kind::Violation | Kind::CannotJudge => {}
+        }
+        assert_ne!(
+            CLEAN,
+            rendered(class),
+            "the clean rendering must differ from every refusal class, or a wrapper reads agreement as one"
+        );
+    }
 }

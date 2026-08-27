@@ -57,7 +57,7 @@ fn members_reaching(root: &Path, crate_name: &str) -> BTreeSet<String> {
     for member in &members {
         let text = std::fs::read_to_string(root.join(member).join("Cargo.toml"))
             .unwrap_or_else(|err| panic!("cannot read {member}/Cargo.toml ({err})"));
-        let name = package_name(&text)
+        let name = declared_name(&text)
             .unwrap_or_else(|| panic!("{member}/Cargo.toml declares no package name"));
         for dep in declared_dependencies(&text) {
             if dep != name
@@ -85,30 +85,21 @@ fn members_reaching(root: &Path, crate_name: &str) -> BTreeSet<String> {
     reaching
 }
 
-/// The `[package]` name a manifest declares, read from executed TOML.
-fn package_name(text: &str) -> Option<String> {
-    let source = Source::of(text);
-    let mut inside = false;
-    for line in source.toml().lines() {
-        let trimmed = line.trim();
-        if trimmed == "[package]" {
-            inside = true;
-            continue;
-        }
-        if trimmed.starts_with('[') {
-            inside = false;
-            continue;
-        }
-        if !inside {
-            continue;
-        }
-        if let Some(rest) = trimmed.strip_prefix("name") {
-            if let Some(value) = rest.trim_start().strip_prefix('=') {
-                return Some(value.trim().trim_matches('"').to_string());
-            }
-        }
+/// The `[package]` name a manifest declares, through the production reader rather than a fourth walker.
+///
+/// **This file carried its own, and it held the defects the production one had already been repaired for.**
+/// It opened the table on `trimmed == "[package]"`, so a trailing comment on the heading meant the table never
+/// opened; it matched the key by raw text, so `"name" = "…"` — which cargo accepts, measured — read as no name
+/// at all; and it took the value with `trim_matches('"')` rather than the reader that refuses a shape it cannot
+/// take. `release_coherence_gate::package_name` answers all three, in three states, and is what this asks now.
+/// Its `Unreadable` is `None` here for the same reason `Absent` is: this gate's subject is which crate a
+/// manifest names, and a manifest that names none it can read contributes nothing to that set.
+fn declared_name(text: &str) -> Option<String> {
+    match kanhe::release_coherence_gate::package_name(text) {
+        kanhe::release_coherence_gate::PackageName::Named(name) => Some(name),
+        kanhe::release_coherence_gate::PackageName::Absent
+        | kanhe::release_coherence_gate::PackageName::Unreadable(_) => None,
     }
-    None
 }
 
 /// Every crate a manifest declares a dependency on, across the table forms cargo admits.

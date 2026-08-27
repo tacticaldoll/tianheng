@@ -8088,6 +8088,41 @@ no adopter runs. They are here rather than under the adopter headings above beca
   version, range and field width would trip it.
 
 
+- **The heading side of the manifest reader decoded its keys and the key side compared raw text, so spellings
+  cargo accepts read as *the key is absent*.** Measured under cargo 1.96.0, each through a member inheriting
+  `version.workspace = true`: `[workspace.package]` with `"version" = "0.5.0"` and with `'version' = "0.5.0"`
+  each resolve the member at `0.5.0`, and `[package]` with `"name" = "m"` names `m`. Each answered `Absent`
+  here — the state both readers' docs reserve for a key that is not there — so the gates said *workspace
+  version is missing or malformed* and *declares no `[package]` name* about manifests that declare both. The
+  second had a quieter consequence as well: that state also falls back to the **directory** the manifest sits
+  in, so a member was compared under an identity its manifest never gave.
+
+  One reader owns the question for every table body now, asked by both. A dotted head naming the sought key
+  assigns a *field* of it — `version.workspace = true`, the line every member writes — so it is refused rather
+  than taken as a value, while a dotted head naming any other key stays another key's business, since refusing
+  on those would refuse every member manifest in the tree. Seen to fail: with the raw-text match restored, the
+  quoted spelling answers `Absent` where cargo answers `0.5.0`, and the quoted `name` makes the gate
+  cannot-judge over a manifest that names its package.
+
+  **A table cargo writes as a value in its parent is refused rather than called absent.** `[workspace]` with
+  `package.version = "0.5.0"`, and with `package = { version = "0.5.0" }`, both resolve a member at `0.5.0` —
+  measured — and composing a table out of a dotted key path or an inline table is structure this reader does
+  not build. It names the line it met instead of reporting a declaration nobody made.
+
+- **A fourth reader of *which package does this manifest declare* was deleted, and it held the defects the
+  production one had already been repaired for.** `one_spelling`'s own walker opened the table on
+  `trimmed == "[package]"`, so a trailing comment on the heading meant the table never opened; matched the key
+  by raw text; and took the value with `trim_matches('"')` rather than the reader that refuses a shape it
+  cannot take. It asks the production reader now. Found by this change's own sweep for the pattern it had just
+  replaced, not by the review, which had scoped its sweep to `crates/kanhe/src`.
+
+- **A guard against the clean rendering colliding with a refusal class enumerated the classes by hand.** `Kind`
+  carries no `ALL` and had no exhaustive match in that direction, so a third variant would have compiled and
+  never been compared — bounded, because a wrapper reads an unrecognised class as unjudged and exits `2`, but a
+  variant rendering as clean would have made the wrapper read a refusal as agreement. The match is the
+  enumerator now; planting a third variant fails the build at that line, which is how it was checked.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

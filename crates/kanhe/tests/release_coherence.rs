@@ -2450,6 +2450,41 @@ fn an_example_inheriting_what_no_catalog_offers_is_not_judged() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// A member whose `[package]` name is spelled in quotes is read under that name, not the directory's.
+///
+/// **Measured: `[package]` with `\"name\" = \"xuanji\"` names `xuanji` to `cargo metadata`.** The reader matched
+/// the key's raw text, so it answered `Absent`, and that state has two consumers. One says *declares no
+/// `[package]` name*, about a manifest that declares one — the loud one, and what this direction observes. The
+/// other falls back to the **directory** the manifest sits in, so a member is compared under an identity its
+/// manifest never gave; that one is silent, which is why the reader was repaired rather than the message.
+///
+/// Reached through the whole gate rather than by widening the reader's visibility, which is the rule this
+/// file's sibling states for `require_internal_pins`.
+///
+/// Negative run: with the raw-text key match restored, this is a cannot-judge — *crates/xuanji/Cargo.toml
+/// declares no `[package]` name, so whether an example pins it cannot be decided*.
+#[test]
+fn a_member_whose_package_name_is_quoted_is_read_under_that_name() {
+    let root = scratch("quoted-package-name");
+    let fixture = build_fixture(&root, "quoted-package-name", "0.2.0");
+    let manifest = fixture.repo.join("crates/xuanji/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        text.replace("name = \"xuanji\"", "\"name\" = \"xuanji\""),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: spell a package name in quotes");
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "cargo names this package `xuanji`; a quoted key is not an absent one: {:?}",
+        verdict.err()
+    );
+}
+
 /// Assignment-shaped text inside a quoted value is string data, not a table key.
 ///
 /// **The scanner read key boundaries and not lexical state.** It required the byte before the key to be a
