@@ -8,13 +8,25 @@ A site that no direction holds is **declared unheld**, with why, an owner and a 
 
 Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.rs`. **Do not edit by hand** — regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_register`. A stale projection fails that gate.
 
-**14 of 130 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
+**16 of 134 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
 
 ## Declared unheld
 
 ### `publish-source-integrity#release-tag-unreadable`
 
 - because measured, not assumed: every ref-store perturbation a fixture can build answers `1`, which is this read's ANSWER — an unreadable `refs/tags` and a `refs/tags` replaced by a file both exit `1`, and in that state `rev-parse HEAD` fails first at `128`, so the judgement never reaches this arm. The classifier itself IS observed, against a directory that is no repository; what no fixture can build is a repository whose earlier reads succeed and whose tag read declines
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `publish-source-integrity#remote-tag-unreadable`
+
+- because the sibling read of the same remote runs first: `ls-remote refs/heads/main` and `ls-remote refs/tags/<tag>` reach one transport by one command, so a remote a fixture can make unreadable answers the first read that way and returns before this one. Reaching this needs the remote to fail between two invocations, which a fixture would have to hold open — measured against the unreachable-remote direction, which lands on `remote-main-unreadable`
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `publish-source-integrity#tag-object-unresolvable`
+
+- because `rev-parse refs/tags/<tag>` runs after the tag's presence, its object and its signature have all been read from the same store, so a ref-store state that answers those and not this is one no fixture can build — the sibling `release-tag-unreadable` records the same measurement for the reads above it
 - owner: Engine
 - tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
 
@@ -138,12 +150,22 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - produced in `crates/kanhe/src/publish_source_gate.rs`
 - observed by `crates/kanhe/tests/publish_source.rs`
 
+### `publish-source-integrity#release-tag-not-on-remote`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
 ### `publish-source-integrity#remote-has-no-main`
 
 - produced in `crates/kanhe/src/publish_source_gate.rs`
 - observed by `crates/kanhe/tests/publish_source.rs`
 
 ### `publish-source-integrity#remote-main-unreadable`
+
+- produced in `crates/kanhe/src/publish_source_gate.rs`
+- observed by `crates/kanhe/tests/publish_source.rs`
+
+### `publish-source-integrity#remote-tag-names-another-object`
 
 - produced in `crates/kanhe/src/publish_source_gate.rs`
 - observed by `crates/kanhe/tests/publish_source.rs`

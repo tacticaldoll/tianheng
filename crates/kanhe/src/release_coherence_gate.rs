@@ -58,6 +58,26 @@ pub(crate) fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
 /// reader needs is **not** a string: `workspace = true` carries a boolean, and reading it as a quoted value
 /// answers *unreadable* for the one spelling that is correct. Two scanners for one grammar is the shape this
 /// file exists to close, so the scan stayed here and only the interpretation moved out.
+/// Whether an inline table carries a field whose key this reader cannot decode.
+///
+/// The cut and the decode are `manifest`'s; what is local is the question — a caller reading one named key
+/// cannot see the fields it did not ask about, and one of those may be the reason the manifest does not parse.
+fn undecodable_field(value: &str) -> bool {
+    let inner = value.trim();
+    let inner = inner
+        .strip_prefix('{')
+        .and_then(|inner| inner.strip_suffix('}'))
+        .unwrap_or(inner);
+    crate::manifest::split_outside(inner, ',')
+        .into_iter()
+        .any(|field| {
+            matches!(
+                crate::manifest::assignment(field),
+                crate::manifest::Assignment::Unreadable
+            )
+        })
+}
+
 fn assignments<'a>(value: &'a str, key: &str) -> Vec<&'a str> {
     // **The inner keys are cut and decoded, where this used to position a raw substring search.** It looked
     // for the key's letters with a delimiter in front and the position outside a string — which is not a
@@ -565,6 +585,21 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                     } else {
                         Vec::new()
                     };
+                    // **An inner key this reader cannot decode is not an absent one.** `assignments` answers
+                    // with the values it could attribute, so a `filter_map` over it erases the undecodable
+                    // state that `manifest::assignment` had already computed: measured,
+                    // `serde = { version = "1.0", "\q" = true }` kept the readable version and dropped the
+                    // rest, reporting a clean pin over a manifest `cargo metadata` refuses to parse. The
+                    // examples check builds every example and would fail on such a file in the same run — but
+                    // a compensating control in another gate is not this gate answering, and the Core
+                    // Contract's one forbidden bug is a real violation that silently passes. The dotted branch
+                    // above already reports the fields the line could have carried as unreadable; this is that
+                    // treatment for the inline spelling.
+                    let (versions, paths) = if inline && undecodable_field(rest) {
+                        (vec![Quoted::Unreadable], vec![Quoted::Unreadable])
+                    } else {
+                        (versions, paths)
+                    };
                     found.push(Dependency {
                         key: key.to_string(),
                         package,
@@ -948,8 +983,9 @@ fn require_version_surfaces(
         // `version = { workspace = true }`, `"version".workspace = true` and `'version'.workspace = true`. The
         // whitespace-stripped equality took only the first, and the other three reached
         // `member-does-not-inherit-workspace-version` — a `violation_at`, exit 1, over a manifest cargo reads.
-        // A false refusal is the direction this file's comments call forbidden more strictly than a miss, and
-        // the window's own repair two hundred lines up is what made the asymmetry worth naming: the key side
+        // A false refusal is a defect and this is one; what the Core Contract names as *the one forbidden
+        // bug* is the other direction — a real violation that silently passes. The window's own repair two
+        // hundred lines up is what made the asymmetry worth naming: the key side
         // decodes now, so a recogniser comparing raw text is the odd one out.
         //
         // Two shapes inherit, and `manifest::assigned` tells them apart: a **dotted** head naming `version`

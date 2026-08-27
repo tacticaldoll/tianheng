@@ -458,8 +458,8 @@ fn a_feature_named_after_a_family_crate_is_not_a_pin() {
 /// `dependencies.xuanji`, and a reader that joined its segments back with dots read it as the detailed table
 /// `[dependencies.xuanji]` and applied the pin rule to it. Measured, cargo reads it as one unknown top-level
 /// key and no dependency at all -- put to it as this fixture's own heading, not as a shape resembling it --
-/// so refusing here would stop a release over a manifest cargo builds, which
-/// is the direction this repository forbids more strictly than a miss.
+/// so refusing here would stop a release over a manifest cargo builds. That is a defect; the Core Contract's
+/// *one forbidden bug* is the other direction, a real violation that silently passes.
 ///
 /// Negative run: replacing the segment match with the joined-name classifier it replaced makes this a
 /// violation -- *example adopter requires xuanji = "0.0.1"; this check admits only "0.2.0" or "0.2"*.
@@ -2450,6 +2450,47 @@ fn an_example_inheriting_what_no_catalog_offers_is_not_judged() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// An inline field whose key cannot be decoded is not an absent one, and does not read as a clean pin.
+///
+/// **The undecodable state existed and a `filter_map` erased it.** The inline-table reader answers with the
+/// values it could attribute to the key it was asked about, so a field it could not decode simply vanished:
+/// measured, `xuanji = { version = "0.2", "\q" = true }` kept the readable `0.2`, matched the workspace
+/// minor series, and reported a clean release over a manifest `cargo metadata` refuses to parse — *missing
+/// escaped value*, measured under cargo 1.96.0.
+///
+/// The examples check runs `cargo metadata` per example and would fail on that file in the same run, which
+/// bounds the damage; a compensating control in another gate is not this gate answering, and the Core
+/// Contract's one forbidden bug is a real violation that silently passes. The dotted spelling already reported
+/// the fields the line could have carried as unreadable, so this is one treatment for both spellings.
+///
+/// Negative run: with the undecodable field ignored, this returns `Ok`.
+#[test]
+fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
+    let root = scratch("undecodable-field");
+    let fixture = build_fixture(&root, "undecodable-field", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        format!("{text}xuanji = {{ version = \"0.2\", \"\\q\" = true }}\n"),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "chore: an inline field this reader cannot decode",
+    );
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a field this reader cannot decode is not a clean pin");
+    assert_eq!(
+        refusal.kind,
+        Kind::CannotJudge,
+        "an undecodable key is not a disagreement, it is an unread one: {}",
+        refusal.message
+    );
+}
+
 /// A stale internal pin behind a quoted tail is refused, where it used to pass the gate.
 ///
 /// **The first false negative found in three rounds of review, and the one that mattered most.** The
@@ -2505,8 +2546,8 @@ fn a_stale_internal_pin_behind_a_quoted_tail_is_refused() {
 /// **Measured under cargo 1.96.0, each resolving the member at `0.5.0`:** `version.workspace = true`,
 /// `version = { workspace = true }`, `\"version\".workspace = true` and `'version'.workspace = true`. The
 /// recogniser was whitespace-stripped string equality against the first, so the other three answered *does not
-/// inherit* — a `violation_at`, exit 1, over manifests cargo reads. A false refusal is the direction this
-/// repository forbids more strictly than a miss, and nothing declared the narrowness: not the spec, not
+/// inherit* — a `violation_at`, exit 1, over manifests cargo reads. A false refusal is a defect, and the
+/// narrowness was declared nowhere: not the spec, not
 /// `docs/observation-bounds.md`, not the doc above the call.
 ///
 /// It asks the shared key reader. A dotted head naming `version` reports its **tail**, so this asks whether

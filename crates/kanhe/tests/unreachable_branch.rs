@@ -19,8 +19,9 @@
 //! item *unconditionally*, which is what a reader over text can know. `xs.max()`, `slice.chars().next_back()`
 //! and `entry.file_name()` are always-`Some` only on a producer that is non-empty, and whether it is takes
 //! the surrounding code rather than the line — measured, the tree carries such calls where a lexical reader
-//! cannot tell which. Widening the list would refuse them, and a false refusal is the direction the Core
-//! Contract forbids more strictly than a miss.
+//! cannot tell which. Widening the list would refuse them, and refusing a live site is a defect of its own —
+//! while the Core Contract's *one forbidden bug* is the other direction, a real violation that silently
+//! passes, which is why the list closes the decidable part rather than guessing at the rest.
 //!
 //! So the wider class — *any* branch a guard has already made unreachable — is a row in `AGENTS.md`'s
 //! disposition table, applied by a reviewer, beside the other rows no reaction can reach. A review found four

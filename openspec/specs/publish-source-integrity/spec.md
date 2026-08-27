@@ -33,6 +33,26 @@ having happened, not of the command having been issued.
 - **THEN** the publish is refused before `cargo publish` is reached, and the refusal says the gate did not run
   rather than reporting the source clean
 
+#### Scenario: The tag exists here and not on the remote
+
+- **WHEN** HEAD is the signed, tagged release snapshot at the tip of the remote's `main`, and the tag itself has
+  not been pushed
+- **THEN** the publish is refused as a violation naming the tag and the remote, and saying to push it. The
+  requirement above says *on the remote's main*, and the gate checked its two halves in two places: `main`
+  against a live `ls-remote`, and the tag against the local object store alone — its presence, its object, its
+  target, its signature. A tag created in the publishing clone and never pushed satisfied all of them, and the
+  gate's success line said *tagged vX.Y.Z* about a tag nobody else had, while the crates uploaded permanently
+- **AND** the remote's tag ref SHALL be compared against the local **tag object**, not the commit it names.
+  `ls-remote` answers a `refs/tags/` query with the id the ref points at, which for an annotated tag is the tag
+  object; object identity also carries the signature this gate verified, so a matching ref is that tag rather
+  than another of the same name. A ref naming a different object is a violation saying the tag was moved or
+  replaced after it was pushed
+- **AND** the fixture corpus SHALL be able to express the withheld tag. It could not: `push` appeared only as
+  `origin main`, in the matrix and in the builder, so *the tag is on the remote* was a claim no direction made —
+  and the accepted-shape direction, the one every refusal is measured against, was itself the unpushed-tag case
+- **PINNED-BY** `a_tag_that_is_not_on_the_remote_is_a_violation`
+- **PINNED-BY** `a_tag_replaced_after_it_was_pushed_is_a_violation`
+
 ### Requirement: A live remote read SHALL preserve whether it failed
 
 The publish-source gate SHALL distinguish failure to execute the live `refs/heads/main` read from a successful

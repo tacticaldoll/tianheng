@@ -8217,6 +8217,49 @@ no adopter runs. They are here rather than under the adopter headings above beca
   release-eve edit. Filed with its trigger.
 
 
+- **The gate in front of the only irreversible act read the tag locally and `main` from the remote.** The
+  requirement says *a publish runs only from the tagged release commit on the remote's main*, and the gate
+  checked its two halves in two places: `main` against a live `ls-remote`, the tag against the local object
+  store alone — its presence, its object, its target, its signature. A tag created in the publishing clone and
+  never pushed satisfied every one, and the success line said *tagged vX.Y.Z* about a tag nobody else had while
+  six crates uploaded permanently. A version is yankable and never replaceable.
+
+  Nothing declared the stop: no requirement, no scenario, no observation bound, no backlog entry. What made it
+  invisible is that the fixture corpus shared it — `push` appeared three times in the matrix and once in the
+  builder, always `origin main`, so *the tag is on the remote* was a claim no direction made, and
+  **the accepted-shape direction, the one every refusal here is measured against, was itself the unpushed-tag
+  case**. The builder pushes the tag now, which is what lets a direction withhold it.
+
+  The remote tag ref is compared against the local **tag object**, not the commit it names: `ls-remote` answers
+  a `refs/tags/` query with the id the ref points at, so the first version of this read compared it to the
+  commit and refused the accepted fixture. Object identity is the stronger claim anyway — the same tag object
+  carries the signature this gate verified. Seen to fail: without the remote read, an unpushed tag gives
+  *ok publish source (…, tagged v9.9.9)*; with it comparing the wrong id, the clean fixture is refused.
+
+- **A statement of the Core Contract was inverted in six live places, including a declared bound's reason that
+  a projection was carrying.** They said a false refusal is what the contract forbids *more strictly than a
+  miss*. `PROJECT.md` says the opposite: **"The one forbidden bug is a false negative (a real violation that
+  silently passes)."** The wording predates this window in one site and was repeated into the rest.
+
+  Each now says what holds: a false refusal is a defect and the findings resting on that reading stand, while
+  the contract's forbidden direction is the silent miss. The bound whose reason cited the inversion is the
+  interesting one — its *decision* survives for a different reason: a declared under-reaction with an owner and
+  a tracker is not a **silent** false negative, and that is what makes it admissible rather than a preference
+  for misses.
+
+- **An inline field whose key cannot be decoded was erased by a `filter_map`.** The inline-table reader answers
+  with the values it could attribute to the key asked about, so a field it could not decode vanished: measured,
+  `xuanji = { version = "0.2", "\q" = true }` kept the readable `0.2` and reported a clean release over a
+  manifest `cargo metadata` refuses to parse. The examples check runs `cargo metadata` per example and would
+  fail on that file in the same run — a real compensating control, and not this gate answering. The dotted
+  spelling already reported such fields unreadable; both spellings now do. Seen to fail: with the field ignored,
+  *ok release coherence (development: 0.2.0)*.
+
+  Recorded because a `git checkout` on the file holding the uncommitted gate fix wiped it mid-round. It was
+  staged and so recoverable in principle, and it was not: the redo was ten minutes. The repository's own note on
+  this says to revert a temporary edit with an editor, never with a checkout.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
