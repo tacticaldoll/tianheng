@@ -1184,7 +1184,8 @@ them.
   **Grouped by head key, because repairing it per line refuses a manifest cargo reads correctly.** That was
   tried and measured: filing each dotted line as its own record reports `xuanji.path is pinned to
   crates/xuanji; expected 0.5.0` — the path read as the requirement — for a **correct** pin as readily as a
-  stale one. False refusal is the direction the Core Contract forbids more strictly than a miss. So a dotted
+  stale one — a false refusal, which is a defect in its own right, though the Core Contract's *one forbidden
+  bug* is the other direction. So a dotted
   key is what it already is elsewhere in this reader: one dependency spread over its own lines, which is the
   `Detailed` record the detailed-table arm builds. Only `path`, `version` and `package` are read from a tail;
   `features` and its neighbours are ignored dotted exactly as they are inline.
@@ -7403,8 +7404,10 @@ no adopter runs. They are here rather than under the adopter headings above beca
   a fabricating reader produced, and English carries words spelled entirely from the hex alphabet at this
   length. Requiring **both** a letter and a digit admits neither, catches every citation that was live, and
   gives up the abbreviations carrying only one kind of character: 3.8% of uniformly random seven-character
-  abbreviations, computed from the alphabet. That direction is deliberate — the Core Contract forbids a false
-  refusal more strictly than a miss — and the residue is declared as a bound rather than left implicit.
+  abbreviations, computed from the alphabet. That direction is deliberate, and its reason is that the residue is
+  **declared** as a bound rather than left implicit: the Core Contract's one forbidden bug is a *silent* false
+  negative, and a declaration with an owner and a tracker is not silent. Refusing prose that cites nothing is
+  what no declaration would cover.
 
   Records are excluded by path and the exclusion is verified in the direction that matters: the same two
   shapes planted in `CHANGELOG.md` are not reported, and planted inside a fenced block they are not reported
@@ -7551,8 +7554,8 @@ no adopter runs. They are here rather than under the adopter headings above beca
   both directions in one run: the hidden span is silent while a visible one two lines below it is named.
 
   **A bare `#` and a digit is not a serial.** Taking every one of them refuses a colour written that way and
-  any other numeric value — a false refusal, the direction the Core Contract forbids more strictly than a
-  miss. The line has to name the thing now: `PR`, `pull request` or `issue`, whole-word and case-insensitive.
+  any other numeric value — a false refusal, a defect in its own right, though not the direction the Core
+  Contract names as its one forbidden bug. The line has to name the thing now: `PR`, `pull request` or `issue`, whole-word and case-insensitive.
   Scoped to the **line** rather than to what precedes each `#`, because a real citation lists several under
   one word — a prefix test would catch the first and let the rest through. Measured after the sweep that
   removed them: no serial of any form remains in live text, so the restriction has no live cost. The miss is
@@ -7942,8 +7945,8 @@ no adopter runs. They are here rather than under the adopter headings above beca
   at the kind match looking like ordinary dependency tables. Cargo admits neither: measured, a member writing
   `serde = { workspace = true }` against either **fails to load**, because inheritance reads
   `[workspace.dependencies]` and nothing else. A stale-looking pin in one of them would have stopped a release
-  over a table cargo ignores — the false-refusal direction, which this repository forbids more strictly than a
-  miss. The shape came from before the heading was held as segments; the segments made it visible.
+  over a table cargo ignores — a false refusal, and a defect, though the Core Contract's one forbidden bug is
+  the silent miss. The shape came from before the heading was held as segments; the segments made it visible.
 
   Every admitted form is now written out as a key sequence, and every one of them was put to `cargo metadata`
   first: each dependency kind alone and with a name after it, each of those again behind a `target.<selector>`,
@@ -8241,8 +8244,12 @@ no adopter runs. They are here rather than under the adopter headings above beca
   miss*. `PROJECT.md` says the opposite: **"The one forbidden bug is a false negative (a real violation that
   silently passes)."** The wording predates this window in one site and was repeated into the rest.
 
-  Each now says what holds: a false refusal is a defect and the findings resting on that reading stand, while
-  the contract's forbidden direction is the silent miss. The bound whose reason cited the inversion is the
+  Each of the seven that sweep reached now says what holds: a false refusal is a defect and the findings
+  resting on that reading stand, while the contract's forbidden direction is the silent miss. **That sweep was
+  not complete, and the sentence claiming it was is corrected here rather than quietly**: six instances
+  survived it — one in code, wrapped across two lines so a line-oriented grep could not see the phrase, and
+  five in this document, which the sweep had excluded from its own corpus. A later round found them by joining
+  lines and searching tracked content instead of the sites the author remembered writing. The bound whose reason cited the inversion is the
   interesting one — its *decision* survives for a different reason: a declared under-reaction with an owner and
   a tracker is not a **silent** false negative, and that is what makes it admissible rather than a preference
   for misses.
@@ -8258,6 +8265,33 @@ no adopter runs. They are here rather than under the adopter headings above beca
   Recorded because a `git checkout` on the file holding the uncommitted gate fix wiped it mid-round. It was
   staged and so recoverable in principle, and it was not: the redo was ten minutes. The repository's own note on
   this says to revert a temporary edit with an editor, never with a checkout.
+
+
+- **One undecodable field left identity readable, and identity is what the consumer reads first.** The repair
+  one commit ago reported a bad inline field's *version* and *path* unreadable and let `package` fall back to
+  the entry's key — so `alias = { version = "0.2", "\q" = "xuanji" }` was a dependency named `alias`, which the
+  per-example check skips as *not a family crate* **before** it reads the pin, and the fixture's own correct pin
+  satisfied the counter. A clean release over a manifest `cargo metadata` refuses to parse: the second false
+  negative of this shape in two commits. The state is computed once now and consulted by all three views.
+
+  **The direction written for that repair used a family crate as the outer key, which is the one shape that
+  masks this path** — with `xuanji` as the key, identity resolves and the unreadable pin is reached. It uses a
+  non-family alias now. Seen to fail: with identity falling back, *ok release coherence (development: 0.2.0)*.
+
+- **The fix for that false negative reintroduced the duplication this file has spent five rounds closing.**
+  `undecodable_field` and `assignments` opened with the same five lines byte-for-byte, both answering *what are
+  this inline table's fields*, so a change to one — a nested table, a trailing comma, an array value — would
+  have left the other reading a different grammar. Extracted to `inline_fields`, which both call.
+
+- **The sweep for the inverted Core Contract statement left six instances, and the entry announcing it claimed
+  otherwise.** That claim is corrected in place rather than quietly. One survivor was in code, wrapped across
+  two lines so a line-oriented grep could not see the phrase; five were in this document, which the sweep had
+  excluded from its own corpus. All five are in the unreleased section — checked, so no dated record was
+  rewritten — and the sixth is a quotation of the wrong wording inside the entry reporting it, which stays.
+
+  Found by joining lines and searching tracked content, rather than the sites the author remembered writing.
+  That is the same instrument lesson as the whitespace-run measurement earlier in this window: a sweep that
+  cannot see into its own corpus reports clean over it.
 
 
 ## [0.4.0] - 2026-08-04

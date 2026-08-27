@@ -63,19 +63,29 @@ pub(crate) fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
 /// The cut and the decode are `manifest`'s; what is local is the question — a caller reading one named key
 /// cannot see the fields it did not ask about, and one of those may be the reason the manifest does not parse.
 fn undecodable_field(value: &str) -> bool {
+    inline_fields(value).into_iter().any(|field| {
+        matches!(
+            crate::manifest::assignment(field),
+            crate::manifest::Assignment::Unreadable
+        )
+    })
+}
+
+/// The fields an inline table assigns, cut at the commas outside strings.
+///
+/// **Two adjacent functions opened with these five lines byte-for-byte**, both answering *what are this
+/// table's fields* — and a change to one (a nested table, a trailing comma, a value that is an array rather
+/// than a table) would have left the other reading a different grammar. That is the two-implementations
+/// shape this file has spent five review rounds closing, and it was reintroduced by the fix for a false
+/// negative. A caller that is handed something other than an inline table gets the text back as one field,
+/// which is what the bare-value spellings need.
+fn inline_fields(value: &str) -> Vec<&str> {
     let inner = value.trim();
     let inner = inner
         .strip_prefix('{')
         .and_then(|inner| inner.strip_suffix('}'))
         .unwrap_or(inner);
     crate::manifest::split_outside(inner, ',')
-        .into_iter()
-        .any(|field| {
-            matches!(
-                crate::manifest::assignment(field),
-                crate::manifest::Assignment::Unreadable
-            )
-        })
 }
 
 fn assignments<'a>(value: &'a str, key: &str) -> Vec<&'a str> {
@@ -91,12 +101,7 @@ fn assignments<'a>(value: &'a str, key: &str) -> Vec<&'a str> {
     // An array value carrying commas — `features = ["a", "b"]` — is cut across them, and each piece then
     // fails to be an assignment to `key`. That is why the split is safe without understanding arrays: a
     // fragment answers `None` or another key, never this one.
-    let inner = value.trim();
-    let inner = inner
-        .strip_prefix('{')
-        .and_then(|inner| inner.strip_suffix('}'))
-        .unwrap_or(inner);
-    crate::manifest::split_outside(inner, ',')
+    inline_fields(value)
         .into_iter()
         .filter_map(|field| match crate::manifest::assigned(field, key) {
             crate::manifest::Assigned::Value(value) => Some(value),
@@ -480,8 +485,9 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                 // **Grouped by head key, not repaired per line.** Filing each dotted line as its own record
                 // was tried and refused itself: it reports `xuanji.path is pinned to crates/xuanji; expected
                 // 0.5.0` — a false refusal of a manifest cargo reads correctly, with the path read as the
-                // requirement. False refusal is the direction the Core Contract forbids more strictly than a
-                // miss, so the head key is the record and the tail names the field.
+                // requirement. That is a defect in its own right, though the Core Contract's *one forbidden
+                // bug* is the other direction — a real violation that silently passes — so the head key is
+                // the record and the tail names the field.
                 //
                 // Only `path`, `version` and `package` are read from a tail. Every other dotted key —
                 // `features`, `default-features`, `optional` — is ignored exactly as its inline counterpart
@@ -569,7 +575,23 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                             continue;
                         }
                     }
-                    let package = Package::of(inline_assignments(rest, "package"), key);
+                    // **One undecodable field makes the whole entry unread, identity included.** The first
+                    // repair reported the *version* and the *path* unreadable and left `package` to fall back
+                    // to the key — so `alias = { version = "0.2", "\q" = "xuanji" }` was a dependency named
+                    // `alias`, which the consumer skips as non-family **before** it reads the pin, and another
+                    // valid family dependency satisfied the per-example counter: a clean release over a
+                    // manifest `cargo metadata` refuses to parse. A review found it, and found that the
+                    // direction written for the first repair used a family crate as the outer key, which is
+                    // exactly the shape that masks this path.
+                    //
+                    // The state is computed once and consulted by all three views, rather than each scanning
+                    // the table for itself.
+                    let undecodable = inline && undecodable_field(rest);
+                    let package = if undecodable {
+                        Package::Unreadable
+                    } else {
+                        Package::of(inline_assignments(rest, "package"), key)
+                    };
                     // A bare `xuanji = "0.5"` carries its requirement as the value itself; an inline table
                     // carries it under a `version` key.
                     let versions = if inline {
@@ -586,16 +608,14 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                         Vec::new()
                     };
                     // **An inner key this reader cannot decode is not an absent one.** `assignments` answers
-                    // with the values it could attribute, so a `filter_map` over it erases the undecodable
-                    // state that `manifest::assignment` had already computed: measured,
+                    // with the values it could attribute, so a `filter_map` over it erased the undecodable
+                    // state `manifest::assignment` had already computed: measured,
                     // `serde = { version = "1.0", "\q" = true }` kept the readable version and dropped the
                     // rest, reporting a clean pin over a manifest `cargo metadata` refuses to parse. The
                     // examples check builds every example and would fail on such a file in the same run — but
                     // a compensating control in another gate is not this gate answering, and the Core
-                    // Contract's one forbidden bug is a real violation that silently passes. The dotted branch
-                    // above already reports the fields the line could have carried as unreadable; this is that
-                    // treatment for the inline spelling.
-                    let (versions, paths) = if inline && undecodable_field(rest) {
+                    // Contract's one forbidden bug is a real violation that silently passes.
+                    let (versions, paths) = if undecodable {
                         (vec![Quoted::Unreadable], vec![Quoted::Unreadable])
                     } else {
                         (versions, paths)
