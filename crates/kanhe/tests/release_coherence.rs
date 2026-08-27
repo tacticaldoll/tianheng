@@ -2450,6 +2450,37 @@ fn an_example_inheriting_what_no_catalog_offers_is_not_judged() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// Two `workspace` keys in one dependency are malformed, not emphatic.
+///
+/// The predicate read the values and not how many there were, so `{ workspace = true, workspace = true }`
+/// answered *inherits* — duplicate keys, which TOML itself rejects and cargo refuses to parse, resolving to a
+/// clean release through a catalog entry that happened to match. A review found it. `version` and `path` each
+/// have a state for several declarations; this one had none, and now the cardinality is read before the value.
+///
+/// Negative run: with the count discarded — `all` over the values, as it was — this returns `Ok`, the pin
+/// resolved from the catalog as though one key had been written.
+#[test]
+fn two_workspace_keys_in_one_dependency_are_not_one_inheritance() {
+    let root = scratch("two-offers");
+    let fixture = build_fixture(&root, "two-offers", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("examples/adopter/Cargo.toml"),
+        "[workspace]\n[package]\nname = \"adopter\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
+         [workspace.dependencies]\nxuanji = \"0.2\"\n\n\
+         [dependencies]\nxuanji = { workspace = true, workspace = true }\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: two workspace keys in one dependency");
+    let refusal = refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "with a version this check cannot read",
+    );
+    refusal::expect("release-coherence#example-pin-unreadable", &refusal);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A catalog entry whose identity this reader cannot resolve stops the inheriting example.
 ///
 /// The entry might be the one being inherited, and *might be* is not an answer — skipping it is how a stale

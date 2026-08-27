@@ -85,14 +85,17 @@ fn assignments<'a>(value: &'a str, key: &str) -> Vec<&'a str> {
 /// `workspace` assignment that is not `true` is in a manifest nothing builds, and the pin it carries is
 /// reported unreadable rather than read past.
 fn inheritance<'a>(offers: impl IntoIterator<Item = &'a str>) -> Inheritance {
-    let mut offers = offers.into_iter().peekable();
-    if offers.peek().is_none() {
-        return Inheritance::Declared;
-    }
-    if offers.all(|offer| offer_value(offer) == "true") {
-        Inheritance::FromCatalog
-    } else {
-        Inheritance::Unreadable
+    let offers: Vec<&str> = offers.into_iter().collect();
+    // **One `workspace` key, whose value is `true`, and the cardinality is half of that.** `all` over the
+    // values answered *inherits* for `{ workspace = true, workspace = true }` too -- duplicate keys, which
+    // TOML itself rejects and cargo refuses to parse, read as one valid declaration. A review found it: the
+    // predicate preserved the values and discarded how many there were, which is the same shape as a
+    // `Several` state existing for `version` and `path` and not for this. Two of them is malformed rather
+    // than emphatic, and malformed is not this reader's to choose from.
+    match offers.as_slice() {
+        [] => Inheritance::Declared,
+        [offer] if offer_value(offer) == "true" => Inheritance::FromCatalog,
+        _ => Inheritance::Unreadable,
     }
 }
 
@@ -1340,7 +1343,8 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
                 return Err(cannot_judge_at(
                     "release-coherence#internal-pin-inherited",
                     format!(
-                        "internal dependency {key} takes its version from the workspace catalog, and this is                      the manifest that declares the catalog, so what holds it cannot be decided"
+                        "internal dependency {key} takes its version from the workspace catalog, and this is \
+                     the manifest that declares the catalog, so what holds it cannot be decided"
                     ),
                 ));
             }
