@@ -470,6 +470,14 @@ fn two_workspace_version_keys_refuse_rather_than_the_first_answering() {
 /// every dot before unquoting leaves each half with an unmatched quote, so the name keeps them and matches
 /// nothing. The flattening is correct rather than merely safe, and this direction is what says so out loud.
 ///
+/// **The fourth spelling arrived a round later: the separator itself, escaped.** `["workspace\u002Epackage"]`
+/// carries no literal dot, so it survived a split-on-dots as one piece and decoded into text the join could
+/// not tell from the path. Cargo reads it as one key -- measured, a `version` under it leaves the package
+/// version alone. Negative run for that row and for its sibling in
+/// `a_name_spelled_in_escapes_is_decoded_as_cargo_decodes_it`: with the segment comparison replaced by the
+/// joined-name compare it replaced, both fail, the second reporting `Declared("1")` where cargo declares
+/// nothing.
+///
 /// The third claim held: a flattened name folded `[[package]]` into `[package]`, and an array of tables is a
 /// different shape — the lock file's entries are exactly that, which is why the reader cutting them was still
 /// comparing literal text and stayed a fifth implementation of this question.
@@ -494,6 +502,10 @@ fn a_quoted_key_carries_its_dots_and_an_array_is_not_a_table() {
         "[\"workspace.package\"]",
         "['workspace.package']",
         "[\"workspace.dependencies\"]",
+        // The dot itself spelled as an escape. Two reviews found this one: it carries no literal dot, so a
+        // reader that split before decoding saw one segment, decoded it to `workspace.package`, and joined
+        // it back into something indistinguishable from the path.
+        "[\"workspace\\u002Epackage\"]",
     ] {
         let heading = table_heading(literal).expect("a heading");
         assert!(
@@ -584,6 +596,11 @@ fn a_name_spelled_in_escapes_is_decoded_as_cargo_decodes_it() {
         workspace_version("[\"\\u0077orkspace.package\"]\nversion = \"1\"\n"),
         WorkspaceVersion::Absent,
         "one key carrying a dot is not the dotted path, to cargo or here"
+    );
+    assert_eq!(
+        workspace_version("[\"workspace\\u002Epackage\"]\nversion = \"1\"\n"),
+        WorkspaceVersion::Absent,
+        "the separator spelled as an escape is content, not a separator: cargo left the version alone"
     );
 
     // An escape cargo itself rejects: the file does not parse for cargo, and the verdict is refused here.

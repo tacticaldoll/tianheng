@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**51 of 98 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**50 of 97 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -29,7 +29,6 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `reference-integrity/a-rust-identifier-named-in-prose-is-not-resolved-a-stated-bound` — owner: engine
 - `reference-integrity/an-abbreviation-carrying-no-letter-or-no-digit-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-dated-release-section-names-a-gate-a-stated-bound` — owner: engine
-- `release-coherence/a-dependency-declared-under-a-cfg-target-carrying-a-dot-is-not-observed-a-stated-bound` — owner: engine
 - `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound` — owner: engine
 - `release-coherence/a-name-reached-only-through-a-url-a-stated-bound` — owner: engine
 - `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound` — owner: engine
@@ -450,7 +449,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (51)
+## under-reacts (50)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -643,14 +642,6 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: a dated section records what was true at that release, so rewriting it to satisfy a rule written afterwards would falsify the record rather than repair it — the reason `docs/history/` is left alone. The leak is real and stays: an adopter reading `[0.4.0]` meets nine entries naming files they can never run, and closing it needs a form of repair that adds to the record instead of editing it
 - **its defence must show**: does not react
 - **pinned by**: `a_dated_section_naming_a_gate_is_a_stated_bound`
-
-### `release-coherence/a-dependency-declared-under-a-cfg-target-carrying-a-dot-is-not-observed-a-stated-bound`
-
-> a family dependency declared under `[target.'cfg(…)'.dependencies]` or its `.NAME` form
-
-- **because**: the reader decides which tables hold dependencies from the heading, and this heading's second key is a cfg expression carrying a dot, so splitting the heading at its first dot lands inside the expression rather than past it. Quoting alone no longer hides a table: `manifest::table_heading` unquotes each segment and decodes the escapes cargo decodes, measured over every cfg shape this reader meets -- a bare predicate, one with spaces, one with escaped quotes -- and all are classified, the last of them now through the whole gate in `an_escaped_dependency_table_heading_is_read_as_the_table_cargo_reads` rather than by a reading of this sentence. What is left is the dot, and reading which configurations it selects is a grammar of its own rather than a context in front of a dependency table. The bare-triple sibling is read, because two bare TOML keys need nothing guessed
-- **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *a dependency declared under a cfg target carrying a dot is not observed*
 
 ### `release-coherence/a-directory-named-without-its-trailing-slash-a-stated-bound`
 

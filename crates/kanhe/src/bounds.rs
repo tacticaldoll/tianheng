@@ -94,30 +94,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::unpinned(
             BoundId::new(
-                "release-coherence/a-dependency-declared-under-a-cfg-target-carrying-a-dot-is-not-observed-a-stated-bound",
-            ),
-            "a family dependency declared under `[target.'cfg(…)'.dependencies]` or its `.NAME` form",
-            Extent::Reached(Reached::UnderReacts {
-                because: "the reader decides which tables hold dependencies from the heading, and this \
-                          heading's second key is a cfg expression carrying a dot, so splitting the heading \
-                          at its first dot lands inside the expression rather than past it. Quoting alone no \
-                          longer hides a table: `manifest::table_heading` unquotes each segment and decodes \
-                          the escapes cargo decodes, measured over every cfg shape this reader meets -- a \
-                          bare predicate, one with spaces, one with escaped quotes -- and all are \
-                          classified, the last of them now through the whole gate in \
-                          `an_escaped_dependency_table_heading_is_read_as_the_table_cargo_reads` rather \
-                          than by a reading of this sentence. What is left is the dot, and reading \
-                          which configurations \
-                          it selects is a grammar of its own rather than a context in front of a \
-                          dependency table. The bare-triple sibling is read, because two bare TOML keys \
-                          need nothing guessed"
-                    .into(),
-                owner: Owner::Engine,
-            }),
-            "`BACKLOG.md` — *a dependency declared under a cfg target carrying a dot is not observed*",
-        ),
-        BoundDecl::unpinned(
-            BoundId::new(
                 "publish-source-integrity/the-tree-changing-after-the-gate-passed-is-not-observed-a-stated-bound",
             ),
             "the repository altered between the source gate's single pass and `cargo publish` reading the \

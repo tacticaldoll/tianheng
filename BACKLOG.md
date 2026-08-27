@@ -1419,19 +1419,6 @@ consumer for an undemonstrated deduplication.
   crate. *Authority:* `observation-bound-register`, and `observation-bound-model`'s sibling bound that a
   rationale contradicting its extent is accepted — the prose beside an extent was already free to disagree with
   it, and so, until this was found, was the test beneath it.
-- **WATCH: a dependency declared under a cfg target carrying a dot is not observed.** *Observed pressure:* the
-  example-pin reader decides which tables hold dependencies from the heading, and admits
-  `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, their `.NAME` detailed forms, and any of
-  those under a bare target triple **or a quoted cfg expression**. What is not admitted is a cfg expression
-  carrying a **dot**, where stepping past the target context splits inside the expression. *Observation
-  source:* the round that read the bare-triple form found a wider entry that had taken a reason about the
-  quoted grammar and applied it to the whole target corpus; the round that converged the heading readers onto
-  one that unquotes each segment then closed the quoted case too, and measured that a dot is what remains. *Risk:* a stale family pin
-  under a cfg-guarded target table reaches a release unobserved. Bounded by there being no target table in
-  any manifest in this repository, ever. *Next trigger:* an example acquiring one — at which point the
-  shape has an instance to be written against rather than a guess. *Authority:* engine.
-  *Compatibility:* patch; the check ships in no crate.
-
 - **WATCH: a bare reference to a registered constructor's name cannot be told from a local variable sharing
   its spelling without name resolution.** *Observed pressure:* `refusal_register.rs`'s reader moved from a
   character-by-character scan to `syn`, which closed the *lexical* half of the wider bound this entry used
@@ -1925,6 +1912,26 @@ consumer for an undemonstrated deduplication.
   - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
 ### Closed — reproduction records (0.4.0 onward)
+
+- ~~**WATCH: a dependency declared under a cfg target carrying a dot is not observed.**~~ **RETIRED** — the
+  reader it described was replaced, and the shape it warned about cannot arise in the one that replaced it.
+
+  *What it said.* The example-pin reader decided which tables hold dependencies from the heading, and stepped
+  past a `[target.…]` context by finding the first dot in the joined name. A cfg expression carrying a dot put
+  that step inside the expression, so a stale family pin under `[target.'cfg(target_os = "l.x")'.dependencies]`
+  reached a release unobserved.
+
+  *Why it is gone rather than reworded.* The heading now arrives as its keys — cut at the dots outside quotes,
+  each unquoted and decoded — so the expression is one key whatever it contains and there is no dot for the
+  context step to land inside. The change was made for a different defect (the escaped spelling of a dot
+  collapsing a literal key into a path) and took this with it.
+
+  *Measured, not argued.* Cargo reads the dependency under both spellings it accepts, reporting it with that
+  target. The bound's own WHEN is in the tree as `a_pin_under_a_cfg_target_carrying_a_dot_is_read`, and with
+  the quote-aware cut removed each row returns *ok release coherence* over a stale pin — the bound's own
+  description, reproduced. Its scenario in `openspec/specs/release-coherence/spec.md` is an ordinary pinned one
+  now, and the declaration is gone from `crates/kanhe/src/bounds.rs`. *Authority:* engine.
+  *Compatibility:* patch; the check ships in no crate.
 
 - ~~**`observation-bound-model`'s projection discloses its own bounds by a typed list; its sibling requires a**~~ **DISSOLVED** — both of its premises are gone, and so is the problem.
 

@@ -7894,6 +7894,48 @@ no adopter runs. They are here rather than under the adopter headings above beca
   list `\t` among the escapes it names, and it takes it.
 
 
+- **A key's boundaries are the dots between keys, and the escaped spelling of a dot is not one of them.** The
+  reader that decoded escapes split the heading on every dot, decoded each piece, and joined them back with
+  dots — so `["workspace\u002Epackage"]`, which carries no literal dot at all, survived as one piece, decoded
+  to `workspace.package`, and became indistinguishable from the path. Cargo keeps them apart: measured, a
+  `version` under that heading leaves the package version untouched, and `["dependencies\u002Exuanji"]` is one
+  unknown top-level key with no dependency in it. Both directions were live — `workspace_version` **reported** a
+  version cargo does not declare, and `dependency_table` would have **refused** a release over a table cargo
+  reads as nothing to do with dependencies.
+
+  The heading now arrives as its keys: cut at the dots outside quotes, each unquoted and decoded, compared to a
+  caller's dotted path piece by piece. Two reviews found the defect in the same round and both named the
+  representation as its cause, which it was — a joined string cannot hold the difference between a dot that
+  separates and a dot that is content, and a decoder is exactly the thing that turns the second into the first.
+  Seen to fail: with the segment comparison replaced by the joined-name compare, the escaped spelling answers
+  `Declared("1")` where cargo declares nothing.
+
+- **A declared bound retired, because the same change removed what it described.** *A dependency declared under
+  a cfg target carrying a dot is not observed* said a pin under `[target.'cfg(target_os = "l.x")'.dependencies]`
+  went unread, since stepping past the target context split the heading at its first dot and landed inside the
+  expression. With the heading held as segments the expression is one key whatever it contains and there is no
+  dot to land inside. Measured rather than argued: cargo reads the dependency under both spellings it accepts,
+  the bound's own WHEN is now in the tree as a direction that reacts, and with the quote-aware cut removed each
+  row returns *ok release coherence* over a stale pin — which is what the bound described. Retired in the
+  declaration, in its spec scenario, and in the backlog entry that tracked it.
+
+  The reader it retired went with it: the context step no longer looks for the right dot in a string, so the
+  discriminator that read a *surviving quote* as evidence the expression carried a dot — a repair for the
+  splitting, once the splitting was the problem — is deleted rather than reworded.
+
+- **A review's finding was refused with its reason recorded: keys decode, values do not.** The asymmetry is
+  deliberate and the line it was raised against already carries the corrected reason. A key decides *which
+  table or which key this is*, so misreading one drops a whole table's contents in silence; a value is the
+  thing being judged, and refusing it stops the judgement in front of an operator with nothing skipped.
+  Decoding values would additionally mean finding a closing quote past an escaped one — parsing the string
+  rather than decoding a known body — and no tracked manifest carries a backslash in a quoted value.
+
+  Recorded because the sweep of this change's own diff caught two dangling rustdoc links to things it had just
+  deleted, both of which `cargo doc -D warnings` would have failed on, and one negative run aimed at the wrong
+  half of the repair: perturbing the *cut* left the new guard green, because the defect lived in the *join*.
+  A guard whose falsifier does not falsify is not a guard, and it had been written down as one.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

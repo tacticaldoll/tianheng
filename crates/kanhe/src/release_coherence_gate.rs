@@ -72,12 +72,12 @@ pub(crate) fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
 /// key spelled after a family crate was read as a version requirement, because nothing said which tables hold
 /// dependencies.
 ///
-/// A context cargo writes in front of a dependency table is stripped before the heading is classified, so
-/// `[target.<triple>.dependencies]`, its `.NAME` form, and `[target.'cfg(…)'.…]` are all read like any other:
-/// the shared heading reader unquotes each segment, so quoting alone hides nothing. What is **not** read is a
-/// cfg expression carrying a **dot** — stepping past the target context splits the heading at its first dot,
-/// and a dot inside the expression puts that split inside it. That is a declared bound rather than an
-/// oversight, and it is what remains of a wider one this reader used to have. See [`past_the_context`].
+/// A context cargo writes in front of a dependency table is dropped before the heading is classified, so
+/// `[target.<triple>.dependencies]`, its `.NAME` form, and `[target.'cfg(…)'.…]` are all read like any other.
+/// A cfg expression carrying a **dot** is read too, and used not to be: the heading arrives as segments, so
+/// the expression is one key whatever it contains and there is no dot for the context step to land inside.
+/// That was the last of a wider declared bound this reader carried; [`dependency_table`] records how it was
+/// retired.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Table {
     /// `[dependencies]` and its dev/build siblings: each line names one dependency.
@@ -88,37 +88,30 @@ enum Table {
     Other,
 }
 
-/// `inner` past the context cargo may write in front of a dependency table, or `None` where the heading
-/// names a context this reader is declared not to read.
-///
-/// **A surviving quote is the discriminator, and it means the expression carried a dot.** The heading arrives
-/// already unquoted by `manifest::table_heading`, which strips a matched pair from each segment — so a cfg
-/// expression with no dot in it comes through bare, runs to the next dot like a triple, and is a context like
-/// any other. One that *does* carry a dot was split across that dot before unquoting, leaving each half with
-/// an unmatched quote: `[target."cfg(any(a.b))".dependencies]` reaches here as `"a.b".dependencies` after the
-/// context, and the opening quote is what says so.
-///
-/// So the quote check below is not a guess about grammar; it is the one shape the split cannot put back
-/// together, and it is exactly the declared bound. A segment that *decodes* to text beginning with a quote --
-/// `[target."\"weird\"".dependencies]` -- lands here the same way and is not read; that is no cfg
-/// expression cargo parses, so the shape is unbuildable rather than unobserved. Measured across the cfg spellings this reader meets — a
-/// bare predicate, one carrying spaces, one carrying escaped quotes — all come through bare and are read.
-/// An earlier version of this reasoning took *quoted* to mean *cfg* and skipped every quoted target, which
-/// was a reason written from the hard case and applied to the whole corpus.
-fn past_the_context(inner: &str) -> Option<&str> {
-    // The root manifest declares the family under `[workspace.dependencies]`, which is a dependency table
-    // with a context in front of it exactly as a target table is.
-    let inner = inner.strip_prefix("workspace.").unwrap_or(inner);
-    let Some(rest) = inner.strip_prefix("target.") else {
-        return Some(inner);
-    };
-    if rest.starts_with('\'') || rest.starts_with('"') {
-        return None;
-    }
-    // No further dot is no dependency table — `[target.some-triple]` declares nothing on its own.
-    rest.split_once('.').map(|(_triple, past)| past)
-}
+/// The kinds of table whose entries are dependency declarations.
+const DEPENDENCY_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
 
+/// Which dependency table `heading` opens, if any.
+///
+/// **Read as keys, because the context in front of a dependency table is keys.** `[workspace.dependencies]`
+/// and `[target.<triple>.dependencies]` are a dependency table with a context before it, and both contexts
+/// are one key each -- so stepping past them is dropping segments, not finding the right dot in a string.
+///
+/// That deleted a reader of its own. The context was stepped past by `strip_prefix("target.")` and
+/// `split_once('.')` over the joined name, which put the cut inside any cfg expression carrying a dot; the
+/// repair for *that* was to notice a quote surviving the join and refuse, and the bound it left behind said a
+/// pin under such a target went unobserved. With the heading arriving as segments there is no dot to land
+/// inside: the expression is one segment whatever it contains, quoted or not, dotted or not. The bound is
+/// retired rather than reworded, and `a_pin_under_a_cfg_target_carrying_a_dot_is_read` is what retired it.
+///
+/// **`undecodable` is deliberately not consulted here, and that is a bounded residue rather than an
+/// oversight.** Two reviews named it: the field is read by `manifest::workspace_version` and
+/// `manifest::publishable`, whose answers turn on a table being *absent*, and not here -- so a heading this
+/// reader cannot name classifies as `Table::Other` and its entries go unread, with an ordinary dependency
+/// table beside it holding the aggregate guard above zero. What bounds it is what is left undecodable once
+/// escapes are decoded: an escape cargo itself rejects, measured -- `["\q"]` and `["\uD800"]` both make
+/// `cargo metadata` fail. A manifest carrying one reaches no build, no packaging step and no publish, and the
+/// examples it would sit in are compiled by the *Examples dogfood* check in the same run.
 fn dependency_table(heading: &str) -> Table {
     // **Through the shared reader, because this compared raw text and the equality it needed was measured
     // elsewhere.** `[ dependencies ]` and `["dependencies"]` are the dependency table to cargo, and stripping
@@ -131,31 +124,26 @@ fn dependency_table(heading: &str) -> Table {
     if heading.array {
         return Table::Other;
     }
-    // **`undecodable` is deliberately not consulted here, and that is a bounded residue rather than an
-    // oversight.** Two reviews named it: the field is read by `manifest::workspace_version` and
-    // `manifest::publishable`, whose answers turn on a table being *absent*, and not here -- so a heading this
-    // reader cannot name classifies as `Table::Other` and its entries go unread, with an ordinary dependency
-    // table beside it holding the aggregate guard above zero. What bounds it is what is left undecodable once
-    // escapes are decoded: an escape cargo itself rejects, measured -- `["\q"]` and `["\uD800"]` both make
-    // `cargo metadata` fail. A manifest carrying one reaches no build, no packaging step and no publish, and
-    // the examples it would sit in are compiled by the *Examples dogfood* check in the same run. Making the
-    // answer three-state would put a refusal arm at each consumer for a file that cannot reach any of them.
-
-    let inner = heading.name;
-    let Some(inner) = past_the_context(&inner) else {
-        return Table::Other;
-    };
-    for kind in ["dependencies", "dev-dependencies", "build-dependencies"] {
-        if inner == kind {
-            return Table::Entries;
-        }
-        if let Some(named) = inner.strip_prefix(kind).and_then(|r| r.strip_prefix('.')) {
-            if !named.is_empty() {
-                return Table::One(named.to_string());
-            }
-        }
+    let mut keys = heading.segments();
+    // The root manifest declares the family under `[workspace.dependencies]`, a dependency table with a
+    // context in front of it exactly as a target table is.
+    if keys.first().is_some_and(|key| key == "workspace") {
+        keys = &keys[1..];
     }
-    Table::Other
+    if keys.first().is_some_and(|key| key == "target") {
+        // `[target.some-triple]` on its own declares nothing, and neither does a bare `[target]`.
+        if keys.len() < 2 {
+            return Table::Other;
+        }
+        keys = &keys[2..];
+    }
+    match keys {
+        [kind] if DEPENDENCY_KINDS.contains(&kind.as_str()) => Table::Entries,
+        [kind, named] if DEPENDENCY_KINDS.contains(&kind.as_str()) && !named.is_empty() => {
+            Table::One(named.clone())
+        }
+        _ => Table::Other,
+    }
 }
 
 /// What a dependency declares as its version requirement, or why this reader could not tell.

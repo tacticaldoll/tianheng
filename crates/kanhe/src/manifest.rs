@@ -393,15 +393,20 @@ pub fn publishable(text: &str) -> Publishable {
 /// no packaging step and no publish could get past, and the readers whose answer turns on a table being
 /// *absent* refuse on it rather than reporting nothing declared.
 ///
-/// **A quoted key keeps its quotes, and that is what makes it a different table rather than the same one.**
-/// `["workspace.package"]` is one literal key in TOML, not the path `workspace` -> `package`; splitting on
-/// every dot and unquoting each piece leaves the unmatched quotes in place, so the name reads
-/// `"workspace.package"` and matches neither the path nor anything else. Measured: `["workspace"."package"]`
-/// folds to the path, as cargo folds it, and `["\u0077orkspace".package]` folds to it too now that the
-/// segment decodes -- while `["workspace.package"]`, `['workspace.package']` and `["\u0077orkspace.package"]`
-/// are each one key carrying a dot, which cargo keeps apart from the path and so does this. A dot inside
-/// quotes is the one shape the split cannot put back together, and it is also the shape that never names a
-/// path, so the flattening is correct rather than merely safe.
+/// **A key's boundaries are the dots between keys, and a dot inside a key is not one of them.** TOML reads
+/// `["workspace.package"]` as one key named `workspace.package` -- a top-level table -- and `[workspace.package]`
+/// as the path `workspace` -> `package`. Measured, cargo agrees: a `version` under the first leaves the package
+/// version untouched. So the heading is split at the dots **outside** quotes, each segment is unquoted and
+/// decoded, and the segments are kept as segments. A caller asks with a dotted path and it is compared piece by
+/// piece.
+///
+/// The reader before this one split on every dot, decoded, and joined the pieces back with dots -- and the
+/// escaped spelling of the separator walked straight through that. `["workspace\u002Epackage"]` carries no
+/// literal dot, so it survived the split as one piece, decoded to `workspace.package`, and the join could no
+/// longer tell it from the path. Two reviews found it in the same round; cargo reads it as one key, and both
+/// `workspace_version` and `dependency_table` answered as though it were the path. The `.` a caller means and
+/// the `.` a key contains have to be different things in the representation, or a decoder puts them back
+/// together.
 ///
 /// **Declared residue, carried over from the predicate this replaced.** A line that is only an array
 /// element -- `[1, 2]` alone, no trailing comma, inside a multi-line array -- reads as a heading named
@@ -415,18 +420,58 @@ pub fn table_heading(line: &str) -> Option<TableHeading> {
         Some(inner) => (true, inner),
         None => (false, inner),
     };
-    let segments: Vec<Option<Cow<'_, str>>> =
-        inner.split('.').map(|s| unquoted(s.trim())).collect();
+    let mut undecodable = false;
+    let segments = dotted(inner)
+        .into_iter()
+        .map(|segment| match unquoted(segment.trim()) {
+            Some(name) => name.into_owned(),
+            // A segment carrying an escape cargo itself rejects leaves which table this is undecided.
+            None => {
+                undecodable = true;
+                String::new()
+            }
+        })
+        .collect();
     Some(TableHeading {
         array,
-        // A segment carrying an escape cargo itself rejects leaves which table this is undecided.
-        undecodable: segments.iter().any(Option::is_none),
-        name: segments
-            .iter()
-            .map(|segment| segment.as_deref().unwrap_or_default())
-            .collect::<Vec<_>>()
-            .join("."),
+        undecodable,
+        segments,
     })
+}
+
+/// `inner` cut at the dots that separate one key from the next -- the dots outside a quoted segment.
+///
+/// A quoted key may contain a dot, and a basic one may spell either the dot or its own closing quote as an
+/// escape. Both are content, so the scan tracks which quote it is inside and steps over the character after a
+/// backslash while inside a **basic** string; a literal string has no escapes, so a backslash there is
+/// content like any other byte.
+///
+/// An unterminated quote yields the rest of the text as one segment, which then fails to unquote and names
+/// nothing -- and is a heading cargo does not parse either.
+fn dotted(inner: &str) -> Vec<&str> {
+    let mut segments = Vec::new();
+    let mut start = 0;
+    let mut quote: Option<char> = None;
+    let mut characters = inner.char_indices();
+    while let Some((at, character)) = characters.next() {
+        match quote {
+            None => match character {
+                '"' | '\'' => quote = Some(character),
+                '.' => {
+                    segments.push(&inner[start..at]);
+                    start = at + 1;
+                }
+                _ => {}
+            },
+            Some('"') if character == '\\' => {
+                characters.next();
+            }
+            Some(open) if character == open => quote = None,
+            Some(_) => {}
+        }
+    }
+    segments.push(&inner[start..]);
+    segments
 }
 
 /// What a TOML table heading names, and whether it opens an array of tables.
@@ -437,12 +482,16 @@ pub struct TableHeading {
     /// `true` when a segment carries an escape cargo itself rejects, so which table this heading names is
     /// undecided -- and, cargo having refused the file, a table in no manifest anything builds from.
     ///
-    /// [`Self::name`] then carries the decodable segments only and matches nothing, which is silence -- and a
+    /// The undecodable segment is then empty, so [`Self::names`] matches nothing, which is silence -- and a
     /// caller whose answer turns on the table being absent has to refuse instead.
     pub undecodable: bool,
-    /// The dotted path, each segment unquoted; a segment whose quotes do not close keeps them, which is what
-    /// keeps a literal dotted key from folding into a dotted path.
-    pub name: String,
+    /// The keys this heading names, in order, each unquoted and decoded.
+    ///
+    /// **Segments rather than one dotted string, because a dotted string cannot hold the difference.**
+    /// `["workspace.package"]`, `["workspace\u002Epackage"]` and `["workspace"."package"]` join to the same
+    /// text and are two different tables to cargo: the first two are one key carrying a dot, the third is the
+    /// path. Kept apart here by how many segments there are, which is a fact the join destroyed.
+    segments: Vec<String>,
 }
 
 impl TableHeading {
@@ -452,13 +501,28 @@ impl TableHeading {
     /// former name, so one word meant two things standing a few lines apart at every call site — the shape
     /// this repository removes on sight. That predicate is gone: this reader answers both halves, and the
     /// direction that pinned the heading boundary now asks it rather than a second implementation.
-    pub fn names(&self, name: &str) -> bool {
-        !self.array && self.name == name
+    pub fn names(&self, path: &str) -> bool {
+        !self.array && self.is(path)
     }
 
-    /// Whether this heading names an array of tables called `name`.
-    pub fn names_array(&self, name: &str) -> bool {
-        self.array && self.name == name
+    /// Whether this heading names an array of tables called `path`.
+    pub fn names_array(&self, path: &str) -> bool {
+        self.array && self.is(path)
+    }
+
+    /// The keys this heading names, in order.
+    pub(crate) fn segments(&self) -> &[String] {
+        &self.segments
+    }
+
+    /// Whether the segments are exactly the keys `path` spells.
+    ///
+    /// `path` comes from this repository's own source and is always bare, so splitting it on every dot is
+    /// the whole of its grammar -- where the *heading* needs the quote-aware cut, because it is the side that
+    /// may carry a dot inside a key. An undecodable heading names nothing rather than matching a caller who
+    /// asked about a shorter path.
+    fn is(&self, path: &str) -> bool {
+        !self.undecodable && self.segments.iter().map(String::as_str).eq(path.split('.'))
     }
 }
 

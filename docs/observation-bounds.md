@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 98 declared bounds have no pinning test.** That figure is the register's
+**26 of 97 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -284,12 +284,6 @@ fallback used where no manifest exists, which the register spec describes.
 - **unpinned**, tracked by: `BACKLOG.md` — *a Rust identifier named in prose is resolved by no reaction*
 
 ## release-coherence
-
-### `release-coherence/a-dependency-declared-under-a-cfg-target-carrying-a-dot-is-not-observed-a-stated-bound`
-
-> nothing reacts. The heading is split at its first dot to step past the target context, and a dot inside the expression puts that split inside it rather than past it
-
-- **unpinned**, tracked by: `BACKLOG.md` — *a dependency declared under a cfg target carrying a dot is not observed*
 
 ### `release-coherence/prose-about-the-marker-is-read-as-a-marker-a-stated-bound`
 
