@@ -589,6 +589,12 @@ fn a_key_spelling_cargo_accepts_is_read_and_a_table_written_as_a_value_is_refuse
             "inline table in the parent",
             "[workspace]\npackage = { version = \"0.5.0\" }\n",
         ),
+        // The tail decoded: this row answered `Absent` while the tail was compared raw, so the gates said
+        // *missing or malformed* about a manifest cargo resolves at `0.5.0`.
+        (
+            "quoted tail in the parent",
+            "[workspace]\npackage.\"version\" = \"0.5.0\"\n",
+        ),
     ] {
         assert!(
             matches!(workspace_version(manifest), WorkspaceVersion::Unreadable(_)),

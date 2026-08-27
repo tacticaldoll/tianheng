@@ -59,29 +59,32 @@ pub(crate) fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
 /// answers *unreadable* for the one spelling that is correct. Two scanners for one grammar is the shape this
 /// file exists to close, so the scan stayed here and only the interpretation moved out.
 fn assignments<'a>(value: &'a str, key: &str) -> Vec<&'a str> {
-    // **A delimiter before the key is not enough, because a quoted value supplies one.** `{ path = "deps,
-    // workspace = true", version = "0.2.0" }` is a manifest cargo reads at `0.2.0` — measured — and this found
-    // an *offer* inside the path, then reported a version it could not read: a false refusal whose sentence
-    // points at a version that is perfectly readable. The key boundary test below is still needed and still
-    // this reader's own; the lexical state is `manifest`'s, where the heading cut already had it.
-    let outside = crate::manifest::outside_strings(value);
-    let mut found = Vec::new();
-    let bytes = value.as_bytes();
-    let mut at = 0;
-    while let Some(offset) = value[at..].find(key) {
-        let start = at + offset;
-        let after = start + key.len();
-        let opens = (start == 0 || matches!(bytes[start - 1], b'{' | b',' | b' ' | b'\t'))
-            && outside.binary_search(&start).is_ok();
-        let rest = value[after..].trim_start();
-        if opens {
-            if let Some(assignment) = rest.strip_prefix('=') {
-                found.push(assignment);
-            }
-        }
-        at = after;
-    }
-    found
+    // **The inner keys are cut and decoded, where this used to position a raw substring search.** It looked
+    // for the key's letters with a delimiter in front and the position outside a string — which is not a
+    // narrow match but an *exclusion*: a quoted inner key can never be found, because its letters sit inside
+    // the quotes. Measured under cargo 1.96.0, `version = { "workspace" = true }` inherits, and this reader
+    // could not see that key at all, so the member was refused for not inheriting. The fields are split at
+    // the commas outside strings and each is asked of `manifest::assignment`, so an inner key is decoded
+    // exactly as a table-body key is — one reader for both, which is what closed the same asymmetry twice
+    // before.
+    //
+    // An array value carrying commas — `features = ["a", "b"]` — is cut across them, and each piece then
+    // fails to be an assignment to `key`. That is why the split is safe without understanding arrays: a
+    // fragment answers `None` or another key, never this one.
+    let inner = value.trim();
+    let inner = inner
+        .strip_prefix('{')
+        .and_then(|inner| inner.strip_suffix('}'))
+        .unwrap_or(inner);
+    crate::manifest::split_outside(inner, ',')
+        .into_iter()
+        .filter_map(|field| match crate::manifest::assigned(field, key) {
+            crate::manifest::Assigned::Value(value) => Some(value),
+            crate::manifest::Assigned::Field { .. }
+            | crate::manifest::Assigned::Other
+            | crate::manifest::Assigned::Unreadable => None,
+        })
+        .collect()
 }
 
 /// Whether this dependency takes its requirement from the workspace catalog.
@@ -472,8 +475,21 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                     let key = key.trim();
                     let inline = rest.trim_start().starts_with('{');
                     if !inline {
-                        if let Some((head, tail)) = key.split_once('.') {
-                            let head = head.trim();
+                        // **Through the shared reader, because this split the key on the first raw dot.** A
+                        // quoted tail then read with its quotes: measured under cargo 1.96.0,
+                        // `xuanji."path" = "xuanji"` beside `xuanji.version = "0.5"` is a **path** dependency
+                        // with requirement `^0.5`, and this answered *no path* — so `require_internal_pins`
+                        // read it as external and skipped it, and a non-exact internal pin passed the release
+                        // gate. That is a false negative in front of `cargo publish`, where a version is
+                        // yankable and never replaceable, and it is the direction this repository orders above
+                        // every other. A review found it in the third round of one asymmetry: the heading
+                        // decoded, then the key, then the head — and the tail was still raw.
+                        let assignment = crate::manifest::assignment(trimmed);
+                        if let crate::manifest::Assignment::Field { name, tail, value } =
+                            &assignment
+                        {
+                            let head = name.as_str();
+                            let (tail, rest) = (tail.as_str(), *value);
                             // **The entry is created before the tail is judged, and that ordering is the
                             // point rather than an oversight.** A review read it as manufacturing a
                             // dependency the manifest does not declare, since `xuanji.features = [...]`
@@ -499,7 +515,7 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                                     offers: Vec::new(),
                                     written: String::new(),
                                 });
-                            match tail.trim() {
+                            match tail {
                                 "path" => entry.paths.push(quoted_value(rest)),
                                 "version" => entry.versions.push(quoted_value(rest)),
                                 "package" => entry.packages.push(quoted_value(rest)),
@@ -509,6 +525,27 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                             }
                             entry.written.push_str(trimmed);
                             entry.written.push(' ');
+                            continue;
+                        }
+                        if matches!(assignment, crate::manifest::Assignment::Unreadable) {
+                            // A key or tail this reader cannot decode belongs to some dependency and names
+                            // some field of it. Both are unknown, so the fields it could have carried are
+                            // reported unreadable rather than left absent: a dependency whose path is
+                            // *absent* is external and skipped, which is how the shape above reached a
+                            // release, and *unreadable* stops in front of an operator instead.
+                            let entry =
+                                dotted
+                                    .entry(trimmed.to_string())
+                                    .or_insert_with(|| Detailed {
+                                        key: trimmed.to_string(),
+                                        packages: Vec::new(),
+                                        versions: Vec::new(),
+                                        paths: Vec::new(),
+                                        offers: Vec::new(),
+                                        written: trimmed.to_string(),
+                                    });
+                            entry.paths.push(Quoted::Unreadable);
+                            entry.versions.push(Quoted::Unreadable);
                             continue;
                         }
                     }
@@ -624,6 +661,7 @@ fn offered(text: &str, wanted: &str) -> Offered {
 }
 
 /// What a catalog offers for one crate.
+#[derive(Debug)]
 enum Offered {
     /// The catalog declares it, with this requirement -- which may itself be absent, unreadable or several,
     /// and is then answered by the same arms a locally declared one is.
@@ -914,9 +952,12 @@ fn require_version_surfaces(
         // the window's own repair two hundred lines up is what made the asymmetry worth naming: the key side
         // decodes now, so a recogniser comparing raw text is the odd one out.
         //
-        // Two shapes inherit, and `manifest::assigned` tells them apart. A **dotted** head naming `version`
-        // assigns a field of it, which is `Unreadable` there and is exactly this line; and a `version` whose
-        // value is an inline table carries `workspace = true` inside it.
+        // Two shapes inherit, and `manifest::assigned` tells them apart: a **dotted** head naming `version`
+        // assigns a field of it, and this asks whether that field is `workspace`; or a `version` whose value
+        // is an inline table carries the offer inside it. Both comparisons are of **decoded names** — the
+        // tail's segments and the inline table's inner keys — which they were not when this comment was first
+        // written, and a review refused four more spellings on that account. `manifest::assignment` is where
+        // *decoded* became a property of the whole answer rather than of its first segment.
         let inherits = crate::region::Source::of(text.as_str())
             .toml()
             .lines()

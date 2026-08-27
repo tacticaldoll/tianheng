@@ -478,19 +478,26 @@ consumer for an undemonstrated deduplication.
   compile and the Gate 4 rename becomes free. *Promotion trigger:* the next edit to this sequence, or a third
   consumer of either list. *Compatibility class:* patch; the gate ships in no crate. *Authority:* this entry.
 
-  **A second question about a table-body line is still answered in two places, and the general form is named
-  here rather than built.** `manifest::assigned` answers *does this line assign the key I want* for the
-  workspace version, the package name and publishability. The dependency reader and the lock reader ask *which*
-  key a line assigns, with the key unknown, and each decides it themselves — the dependency reader over raw
-  text, so `"xuanji"`, `'xuanji'` and `"\u0078uanji"` reach it with their quotes and route to `KeyUnreadable`,
-  a cannot-judge an operator cannot act on rather than the answer cargo gives. *Observation source:* a
-  whole-window review that enumerated the walkers instead of grepping for the shape the previous repair had
-  replaced — the grep found the walker that looked like `package_name` and missed these. *Risk, bounded:* both
-  reach fail-closed answers today; the dependency reader refuses where it cannot decode, and the lock reader
-  reads a file cargo writes. *The shape:* one `assignment(line) -> Assignment` naming the key it found, decoded,
-  with `assigned` as a thin wrapper over it — which deletes both local chains rather than adding a third.
-  *Promotion trigger:* a manifest in the subject corpus spelling a dependency key non-bare, or a third caller
-  needing the same question. *Compatibility class:* patch; the readers ship in no crate. *Authority:* this entry.
+  ~~**A second question about a table-body line is still answered in two places, and the general form is named
+  here rather than built.**~~ **BUILT AND RETIRED THE SAME DAY IT WAS FILED.** The deferral rested on *both
+  reach fail-closed answers today; the dependency reader refuses where it cannot decode* — true of a quoted
+  **head**, and false of a quoted **tail**, which was dropped silently. A review measured it:
+  `xuanji."path" = "xuanji"` beside `xuanji.version = "0.5"` is a path dependency at `^0.5` to cargo, and the
+  reader answered *no path*, so the stale pin left the internal check's subject while one correct pin elsewhere
+  satisfied its floor and the release reported clean. A **false negative** is not deferrable on a fail-closed
+  premise, so `manifest::assignment` was built and the two sites the false negative ran through were converted:
+  the dependency reader's **dotted** branch and the inline-table reader now decode every segment, and an
+  undecodable key reports unreadable rather than absent. `a_stale_internal_pin_behind_a_quoted_tail_is_refused`
+  holds it. *Authority:* this entry.
+
+  **What is left of it, stated rather than implied.** Two key reads still decide their own: the bare-and-inline
+  entry key in `declared_dependencies` (which hands its raw key to `Package::of`, so a quoted dependency key
+  becomes `KeyUnreadable` — fail-closed, and **pinned** by
+  `a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped` with its own spec scenario), and
+  the lock reader, which applies `unquoted` to its key but not `assignment`. Converting the first would turn a
+  visible cannot-judge into the answer cargo gives, which is better — and it inverts a pinned scenario, so it
+  is not a release-eve edit. *Promotion trigger:* the next change to either reader, or an adopter manifest in
+  the subject corpus spelling a dependency key non-bare. *Compatibility class:* patch.
 
   **The surface grew by an escape decoder, and that was the cheaper of two wrong answers rather than a
   reversal of this entry.** `manifest::decoded` resolves the escapes cargo resolves in a table heading or a

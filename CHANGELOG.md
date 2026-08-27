@@ -8133,8 +8133,10 @@ no adopter runs. They are here rather than under the adopter headings above beca
   narrowness: not the spec, not the observation bounds, not the doc above the call.
 
   It asks the shared key reader now, which reports a dotted head's **tail** — so the question is *is the field
-  `workspace`* rather than a list of spellings to keep in step, and the inline form is a `version` whose value
-  carries the offer. Seen to fail: with the equality restored, the inline-table row is that violation again.
+  `workspace`* rather than a list of whole lines to keep in step, and the inline form is a `version` whose
+  value carries the offer. A later review refuted the wider reading of that sentence: the tail was still
+  compared as raw text, so four more spellings cargo honours were refused, and the round after this one made
+  *decoded* a property of the whole answer. Seen to fail: with the equality restored, the inline-table row is that violation again.
 
   `without_wschar` went with it. That predicate existed for this one comparison, and the reason its doc gave —
   that TOML's `wschar` is space and tab and nothing wider — is carried by `region::toml()`, which tracks strings
@@ -8169,6 +8171,50 @@ no adopter runs. They are here rather than under the adopter headings above beca
   failure matrix refused it: the caller's list became the `(path, text)` one, and the lock check reported
   *Cargo.lock is missing workspace package* with a whole manifest where a name belongs. Two lists of one type
   with different meanings is what made the move look safe; that is filed with its trigger, and the flow stays.
+
+
+- **Three rounds of one asymmetry end here, and the third round found the first false negative.** Each repair
+  moved the boundary of *decoded* one segment to the right and left the next segment raw: the heading decoded
+  while the key compared raw text; then the key decoded while one recogniser compared whole lines; then the head
+  decoded while the tail was joined raw. *Decoded* is now a property of the whole answer — every segment of the
+  head, every segment of the tail, and the inner keys of an inline table, all through one reader.
+
+  **The false negative.** Measured under cargo 1.96.0: `xuanji."path" = "xuanji"` beside
+  `xuanji.version = "0.5"` is a **path** dependency at `^0.5`, and the reader answered *no path*. A dependency
+  with no path is external and skipped, so a stale internal pin left the internal check's subject in silence
+  while one correct pin elsewhere satisfied its non-vacuity floor — the aggregate-counter shape the per-example
+  sibling records having fixed. Seen to fail: with the tail joined raw, the gate answers *ok release coherence
+  (development: 0.2.0)* over a root pinning an internal dependency at `0.5` against a workspace at `0.2.0`. It
+  stands in front of `cargo publish`, where a version is yankable and never replaceable.
+
+  A dependency whose classification cannot be read is refused now rather than treated as external: *might be
+  internal* is not an answer.
+
+  **And four more inherit spellings, all of which cargo honours:** `version."workspace" = true`, its literal
+  and `\u0077`-escaped siblings, and `version = { "workspace" = true }`. The last of those was unreachable by
+  construction — the inline-key scanner positioned a raw substring and required it outside strings, which
+  cannot find a key whose letters sit inside quotes. That was an exclusion wearing the shape of a narrow match.
+
+- **A repair of mine had never run against the table it was written for.** `offered`, the catalog resolver added
+  two rounds ago, read `Subject::Requires` — the requiring table — instead of `Subject::Offers`. Its three
+  directions all passed, because a fixture of mine wrote `xuanji = {{ workspace = true }}` where a `format!`
+  **argument** does not unescape braces, and the old inline-key scanner matched the key inside the doubled brace
+  anyway. A fixture that did not plant its own shape, passing because the reader was loose, guarding a reader
+  pointed at the wrong table. All three now falsify when the subject is put back.
+
+- **The claim that the reader "no longer compares spellings" was refuted in four carriers**, and all four now
+  say what holds with the measurement behind it. The spec bullet that said a dotted head is *refused as
+  unattributable, never taken as a value* had gone stale in the same commit that made it report the field
+  instead — two bullets above it were rewritten and it was not.
+
+  The backlog entry deferring the general reader is retired the day after it was filed: its premise was *both
+  reach fail-closed answers today*, which was true of a quoted head and false of a quoted tail. A false negative
+  is not deferrable on a fail-closed premise.
+
+  What that entry still carries is stated rather than implied: two key reads decide their own, and one of them
+  is **pinned** to the fail-closed answer by a scenario of its own. Converting it would give the answer cargo
+  gives instead of a visible cannot-judge — better, and an inversion of a pinned scenario, which is not a
+  release-eve edit. Filed with its trigger.
 
 
 ## [0.4.0] - 2026-08-04
