@@ -652,25 +652,6 @@ pub fn is_iso_date(suffix: &str) -> bool {
     crate::reading::date("changelog section date", suffix).is_ok()
 }
 
-/// A TOML line with its whitespace removed, for a predicate that compares a whole line against one spelling.
-///
-/// **TOML's `wschar` is `%x20` and `%x09`, and this removes exactly those.** The predicate it serves used to
-/// be `line.trim()` then `replace(' ', "")`, and routing the reader through `region::toml()` dropped the
-/// `trim()` — leaving a rule that removed spaces and not tabs. `\tversion.workspace = true` stopped matching
-/// and its member was refused: a false refusal in front of the release gate over a legal manifest, of the
-/// same class and direction as the defect that repair had just closed.
-///
-/// Restoring the `trim()` would have fixed the indent and left the tab *before a comment*, which the region
-/// correctly leaves in the head. Asking the question the predicate means — this line with its whitespace
-/// gone — cannot come apart that way again.
-///
-/// `split_whitespace()` would also do it and is not used: it removes every Unicode whitespace character,
-/// which is wider than the grammar and would accept a line TOML rejects. Reading the language's own rule
-/// instead of a wider borrowed one is the whole subject of the repair this regressed out of.
-fn without_wschar(line: &str) -> String {
-    line.chars().filter(|c| !matches!(c, ' ' | '\t')).collect()
-}
-
 /// What a member manifest says its package is called, or why this reader could not tell.
 ///
 /// Three states rather than an `Option`, because every consumer here treated `None` as *not a package* and
@@ -731,7 +712,9 @@ pub fn package_name(manifest: &str) -> PackageName {
         .filter_map(|(_, line)| match crate::manifest::assigned(line, "name") {
             crate::manifest::Assigned::Value(value) => Some(Ok(value.trim())),
             crate::manifest::Assigned::Other => None,
-            crate::manifest::Assigned::Unreadable => Some(Err(line.trim().to_string())),
+            crate::manifest::Assigned::Field { .. } | crate::manifest::Assigned::Unreadable => {
+                Some(Err(line.trim().to_string()))
+            }
         })
         .collect();
     let names: Vec<&str> = match names.into_iter().collect::<Result<Vec<&str>, String>>() {
@@ -882,7 +865,20 @@ fn release_spine(
     })
 }
 
-/// Every version-bearing surface outside the changelog, and the member manifests the later phases read.
+/// Every version-bearing surface outside the changelog, and the member **names** the later phases read.
+///
+/// **The `and then` in that sentence is real and the obvious repair for it is not.** A review opened Gate 4
+/// on it: this runs the per-member inherit loop and then calls the two pin checks, so its job needs two
+/// clauses to state, and its name says *surfaces*. The suggested repair was to have the caller sequence the
+/// three, since the `Vec<(String, String)>` return already exists for it — and that return is **not** the
+/// manifests those checks consume. It is the `(path, name)` pairs `require_example_pins` produces, which
+/// `require_changelog_state` and the lock reader read. The move was made and the failure matrix refused it:
+/// `manifests` at the caller became the `(path, text)` list, and the lock check reported *Cargo.lock is
+/// missing workspace package* with a whole manifest where a name belongs.
+///
+/// So the flow stays, and what is worth changing is the thing that made the move look safe: two lists of the
+/// same type with different meanings in one function. `BACKLOG.md` carries that with its trigger, rather than
+/// a rename of this function that would leave the swap compiling.
 fn require_version_surfaces(
     repo: &Path,
     root_manifest: &str,
@@ -909,10 +905,32 @@ fn require_version_surfaces(
         //
         // Both directions run through `judge`: `an_inherit_line_with_a_glued_comment_still_inherits` and
         // `a_member_whose_only_inherit_line_is_commented_out_is_refused`.
+        // **Through the shared key reader, because string equality recognised one spelling of four.** Measured
+        // under cargo 1.96.0, each inherits `0.5.0`: `version.workspace = true`,
+        // `version = { workspace = true }`, `"version".workspace = true` and `'version'.workspace = true`. The
+        // whitespace-stripped equality took only the first, and the other three reached
+        // `member-does-not-inherit-workspace-version` — a `violation_at`, exit 1, over a manifest cargo reads.
+        // A false refusal is the direction this file's comments call forbidden more strictly than a miss, and
+        // the window's own repair two hundred lines up is what made the asymmetry worth naming: the key side
+        // decodes now, so a recogniser comparing raw text is the odd one out.
+        //
+        // Two shapes inherit, and `manifest::assigned` tells them apart. A **dotted** head naming `version`
+        // assigns a field of it, which is `Unreadable` there and is exactly this line; and a `version` whose
+        // value is an inline table carries `workspace = true` inside it.
         let inherits = crate::region::Source::of(text.as_str())
             .toml()
             .lines()
-            .any(|line| without_wschar(line) == "version.workspace=true");
+            .any(|line| match crate::manifest::assigned(line, "version") {
+                // `version.workspace = true`, in any spelling of the two keys.
+                crate::manifest::Assigned::Field { tail, value } => {
+                    tail == "workspace" && value.trim() == "true"
+                }
+                // `version = { workspace = true }`: the offer sits inside the value.
+                crate::manifest::Assigned::Value(value) => assignments(value, "workspace")
+                    .into_iter()
+                    .any(|offer| offer_value(offer) == "true"),
+                crate::manifest::Assigned::Other | crate::manifest::Assigned::Unreadable => false,
+            });
         if !inherits {
             return Err(violation_at(
                 "release-coherence#member-does-not-inherit-workspace-version",

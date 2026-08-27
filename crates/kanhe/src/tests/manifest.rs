@@ -596,6 +596,14 @@ fn a_key_spelling_cargo_accepts_is_read_and_a_table_written_as_a_value_is_refuse
         );
     }
 
+    // A `package`-headed key in `[workspace]` that cannot carry the version leaves the version absent, which
+    // is the fact. A review found this over-refusal in the first version of the block above.
+    assert_eq!(
+        workspace_version("[workspace]\npackage.authors = [\"a\"]\n"),
+        WorkspaceVersion::Absent,
+        "a workspace declaring authors and no version anywhere declares no version, and says so"
+    );
+
     // A dotted head naming this key assigns a field of it, not it. Every member writes this line.
     assert!(
         matches!(
