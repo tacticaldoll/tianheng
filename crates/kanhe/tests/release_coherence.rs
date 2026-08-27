@@ -2139,9 +2139,11 @@ fn an_inherit_line_spelled_with_tabs_still_inherits() {
 /// A family pin under a **bare-triple** target table is read like any other dependency.
 ///
 /// `[target.x86_64-unknown-linux-gnu.dependencies]` is a dependency table with a context in front of it, and
-/// the context is two bare TOML keys. The reason the sibling cfg form is left alone — that a quoted cfg
-/// expression is the grammar a line-oriented reader is likeliest to be wrong about — says nothing about this
-/// one, and reading it needs no guess: TOML bare keys carry no dot, so the triple runs to the next dot.
+/// the context is two bare TOML keys. This was the first of the target forms to be read, back when the cfg
+/// siblings were left alone on the reasoning that a quoted cfg expression is the grammar a line-oriented
+/// reader is likeliest to be wrong about. None of them are left alone now — the heading arrives as keys, and
+/// a selector is one key whatever it spells — so what this row holds is the plainest form of the context,
+/// beside the cfg forms its two siblings hold.
 ///
 /// Negative run: before the reader learned the context, this returned `Ok` — the stale pin sat in a table the
 /// heading test classified as `Other` and no dependency was read from it at all.
@@ -2179,9 +2181,16 @@ fn a_family_pin_under_a_target_triple_is_read() {
 /// segment closed that: quoting alone hides nothing now, and this direction went red — which was the bound's
 /// own WHEN, re-run, and the measurement that narrowed it.
 ///
-/// The bound that remains is a cfg expression carrying a **dot**, where stepping past the target context
-/// splits inside the expression. The pair with the direction above still locates where the reader stops; what
-/// moved is which side of it this case sits on.
+/// A bound then remained for a cfg expression carrying a **dot**, and it is retired too: holding the heading
+/// as keys leaves the expression one key whatever it contains, so there is no dot for the context step to
+/// land inside. `a_pin_under_a_cfg_target_carrying_a_dot_is_read` is what retired it. These three target rows
+/// no longer locate where the reader stops; they hold that it does not stop.
+///
+/// **This prose was itself the leftover, twice.** It said the opposite of its own assertion once, and then
+/// described a retired bound as live — in a file the retiring commit had edited, a few lines above a
+/// direction asserting the opposite. A review found it. What would have caught it is in `AGENTS.md` now: a
+/// retirement's sweep takes the pinning test's own name as a grep seed, because prose that *describes* a
+/// bound never mentions its id and no bijection can see it.
 #[test]
 fn a_family_pin_under_a_quoted_cfg_target_is_observed() {
     let root = scratch("target-cfg");
@@ -2251,6 +2260,73 @@ fn a_pin_under_a_cfg_target_carrying_a_dot_is_read() {
             refusal.message
         );
     }
+}
+
+/// A workspace key cargo gives no dependency meaning is not read as a dependency table.
+///
+/// **The context in front of a dependency table is a grammar, and this reader used to strip it as prefixes.**
+/// It removed a leading `workspace` and then, independently, a leading `target` -- so
+/// `[workspace.dev-dependencies]` and `[workspace.target.<triple>.dependencies]` arrived at the kind match
+/// looking like ordinary dependency tables. Cargo admits neither: measured, a member writing
+/// `serde = { workspace = true }` against either fails to load, because inheritance reads
+/// `[workspace.dependencies]` and nothing else. A stale-looking pin in one of them would therefore have
+/// stopped a release over a table cargo ignores, which is the false-refusal direction this repository forbids
+/// more strictly than a miss.
+///
+/// The third row is the control that keeps the other two from passing for the wrong reason: the one workspace
+/// table cargo *does* give dependency meaning is still read, and a stale pin in it is still refused.
+///
+/// Negative run: with the grammar replaced by the prefix walk it replaced, both `is_ok` rows become
+/// violations naming `xuanji`.
+#[test]
+fn a_workspace_key_that_is_not_a_dependency_table_is_not_read_as_one() {
+    for (label, table) in [
+        (
+            "workspace.dev-dependencies",
+            "[workspace.dev-dependencies]\nxuanji = \"0.0.1\"\n",
+        ),
+        (
+            "workspace.target.<triple>.dependencies",
+            "[workspace.target.x86_64-unknown-linux-gnu.dependencies]\nxuanji = \"0.0.1\"\n",
+        ),
+    ] {
+        let root = scratch(&format!(
+            "unused-workspace-key-{}",
+            label.replace(['.', '<', '>'], "-")
+        ));
+        let fixture = build_fixture(&root, "unused-workspace-key", "0.2.0");
+        let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+        let text = std::fs::read_to_string(&manifest).expect("read");
+        std::fs::write(&manifest, format!("{text}\n{table}")).expect("write");
+        development_changelog(&fixture.repo, "0.2.0", true);
+        commit(&fixture.repo, "chore: a workspace key cargo does not read");
+        let verdict = judge(&fixture.repo);
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(
+            verdict.is_ok(),
+            "{label}: cargo gives this table no dependency meaning, so a pin in it is not a pin: {:?}",
+            verdict.err()
+        );
+    }
+
+    // The control: the one workspace table that does inherit is still read.
+    let root = scratch("workspace-dependencies-read");
+    let fixture = build_fixture(&root, "workspace-dependencies-read", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        format!("{text}\n[workspace.dependencies]\nxuanji = \"0.0.1\"\n"),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: a workspace dependency table");
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal =
+        verdict.expect_err("`[workspace.dependencies]` is a dependency table and is read");
+    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
+    assert!(refusal.message.contains("xuanji"), "{}", refusal.message);
 }
 
 /// A `package` value this reader cannot read stops the check, and says so as itself.

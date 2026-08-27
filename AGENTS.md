@@ -553,6 +553,17 @@ above), in `BACKLOG.md`'s (a trailing note on the entry, not a rewrite of it). T
 check: these are prose, so per *Bind a claim to its measurement*, a reaction is not the available
 option — the sweep is stated here as the discipline in its place.
 
+**A retired *observation bound* needs one more seed than its own name: the test that pinned it.** A bound is
+retired wherever it is written down — its `BoundDecl`, its spec scenario, the `BACKLOG.md` entry tracking
+it, the projections rendered from those — and `observation_bound_model.rs` holds the first two in a bijection, so a stale *id* cannot
+survive. What survives is prose that **describes** the bound without naming its id: a sibling test's doc
+comment saying *the bound that remains is …*, or a paragraph explaining why some neighbouring case is left
+alone. No bijection can see those, because there is nothing in them to resolve. Measured in the 0.5.0 window:
+a retirement swept the declaration, the scenario, the backlog and both projections, and left two doc comments
+in the very file the retiring commit had edited — one of them directly above a direction asserting the
+opposite. So the sweep seeds are the bound's id **and** the name of the direction that pinned it, run over the
+whole tree including `tests/`: prose that describes a bound tends to sit next to the test that held it.
+
 **The corpus is every live document, and naming two of them was this rule's own instance of the class it
 closes.** It said `CHANGELOG.md` and `BACKLOG.md`, which are where a *narration* usually sits — and
 `PROJECT.md`'s Decisions section carried `gate-shape-contract` in the present indicative for the whole window,
