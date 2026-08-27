@@ -2338,6 +2338,177 @@ fn a_workspace_table_is_not_a_dependency_of_the_package_carrying_it() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// An example accepting the offer in its own catalog is held to the catalog's version, not called versionless.
+///
+/// **Every example in this repository is its own workspace root** — the root manifest's own comment says so,
+/// and `exclude` keeps them out of the main workspace — so `workspace = true` beside
+/// `[workspace.dependencies] xuanji = "…"` in one example manifest is a shape cargo resolves. Measured: it
+/// resolves the inline, dotted and detailed spellings alike, and resolves to the catalog's requirement even
+/// when a local `version` sits in the same inline table, so the catalog is *the* answer rather than one of two.
+///
+/// The reader read the inline table, found no `version` key in it, and filed `Declared::Absent` — the state
+/// meaning *a path-only or git-only dependency that nothing holds to a version*. So an example whose pin is
+/// held exactly was refused for having no pin: the false-refusal direction, and outside the spec's absent-pin
+/// scenario, which is written for a dependency nothing holds.
+///
+/// **Every spelling is here because recognising one and missing another is what this file's history is
+/// made of.** The same equivalence is what `an_unjudged_dotted_tail_declares_as_its_inline_spelling_does`
+/// holds for the keys this reader already judged.
+///
+/// Negative run: with the offer unrecognised — the pin read from the local `version` key alone — this reports
+/// the absent-pin violation *example adopter requires xuanji with no version, so nothing holds it to the
+/// workspace version 0.2.0*, which is the arm every held row reaches. Observed on the first case the run
+/// reached; a loop stops at its first failure, so the rows after it were not separately measured.
+#[test]
+fn an_example_inheriting_from_its_own_catalog_is_held_to_the_catalog_version() {
+    for (spelling, accepts) in [
+        (
+            "inline",
+            "[dependencies]\nxuanji = {{ workspace = true }}\n",
+        ),
+        ("dotted", "[dependencies]\nxuanji.workspace = true\n"),
+        ("detailed", "[dependencies.xuanji]\nworkspace = true\n"),
+    ] {
+        for (label, catalog, stale) in [
+            ("the workspace version", "0.2.0", false),
+            ("the minor series", "0.2", false),
+            ("a stale catalog", "0.0.1", true),
+        ] {
+            let root = scratch(&format!("inherits-{spelling}-{}", label.replace(' ', "-")));
+            let fixture = build_fixture(&root, "inherits", "0.2.0");
+            std::fs::write(
+                fixture.repo.join("examples/adopter/Cargo.toml"),
+                format!(
+                    "[workspace]\n[package]\nname = \"adopter\"\nversion = \"0.0.0\"\n\
+                     edition = \"2024\"\n\n[workspace.dependencies]\nxuanji = \"{catalog}\"\n\n{accepts}"
+                ),
+            )
+            .expect("write");
+            development_changelog(&fixture.repo, "0.2.0", true);
+            commit(
+                &fixture.repo,
+                "chore: inherit a family pin from the example's own catalog",
+            );
+            let verdict = judge(&fixture.repo);
+            let _ = std::fs::remove_dir_all(&root);
+            if stale {
+                let refusal = verdict.expect_err(&format!(
+                    "{spelling}/{label}: a stale catalog is still a stale pin"
+                ));
+                assert_eq!(
+                    refusal.kind,
+                    Kind::Violation,
+                    "{spelling}/{label}: {}",
+                    refusal.message
+                );
+                assert!(
+                    refusal.message.contains("xuanji"),
+                    "{spelling}/{label}: the refusal must name the crate: {}",
+                    refusal.message
+                );
+            } else {
+                assert!(
+                    verdict.is_ok(),
+                    "{spelling}/{label}: cargo holds this dependency to `{catalog}`, so the pin is neither \
+                     absent nor unreadable: {:?}",
+                    verdict.err()
+                );
+            }
+        }
+    }
+}
+
+/// An example inheriting what no catalog beside it offers is not judged.
+///
+/// Measured: `cargo metadata` refuses a manifest whose dependency takes `workspace = true` while its catalog
+/// declares no such crate — *failed to parse manifest* — so this is a file nothing builds, and the reader says
+/// which of the two it met rather than reporting a pin it never found.
+#[test]
+fn an_example_inheriting_what_no_catalog_offers_is_not_judged() {
+    let root = scratch("inherits-nothing");
+    let fixture = build_fixture(&root, "inherits-nothing", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("examples/adopter/Cargo.toml"),
+        "[workspace]\n[package]\nname = \"adopter\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
+         [workspace.dependencies]\nserde_json = \"1\"\n\n[dependencies]\nxuanji = {{ workspace = true }}\n"
+            .replace("{{", "{")
+            .replace("}}", "}")
+            .as_str(),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: inherit what nothing offers");
+    let refusal = refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "requires xuanji from the workspace catalog",
+    );
+    refusal::expect(
+        "release-coherence#example-inherits-what-no-catalog-offers",
+        &refusal,
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A catalog entry whose identity this reader cannot resolve stops the inheriting example.
+///
+/// The entry might be the one being inherited, and *might be* is not an answer — skipping it is how a stale
+/// pin would reach a release through the catalog rather than through the dependency. A quoted key is the
+/// cheapest spelling of an unresolvable identity, and it is the same one the sibling
+/// `a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped` refuses one level out.
+#[test]
+fn a_catalog_entry_whose_identity_is_unresolvable_stops_the_inheriting_example() {
+    let root = scratch("catalog-unresolvable");
+    let fixture = build_fixture(&root, "catalog-unresolvable", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("examples/adopter/Cargo.toml"),
+        "[workspace]\n[package]\nname = \"adopter\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
+         [workspace.dependencies]\n\"xuanji\" = \"0.2\"\n\n[dependencies]\nxuanji = { workspace = true }\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: a catalog entry under a quoted key");
+    let refusal = refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "names a crate this check cannot resolve",
+    );
+    refusal::expect(
+        "release-coherence#example-catalog-entry-unresolvable",
+        &refusal,
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A catalog entry that itself takes the offer is named rather than followed.
+///
+/// A catalog inheriting from itself is a manifest cargo refuses to parse, and following it is a loop with no
+/// end. The arm exists because the resolved entry's own pin is a `Declared` like any other and this is one of
+/// its states — reachable from text, so it is answered rather than left to a branch nothing reaches.
+#[test]
+fn a_catalog_entry_that_itself_inherits_is_named_rather_than_followed() {
+    let root = scratch("catalog-self-inherits");
+    let fixture = build_fixture(&root, "catalog-self-inherits", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("examples/adopter/Cargo.toml"),
+        "[workspace]\n[package]\nname = \"adopter\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
+         [workspace.dependencies]\nxuanji = { workspace = true }\n\n[dependencies]\nxuanji = { workspace = true }\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "chore: a catalog entry that inherits from itself",
+    );
+    let refusal = refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "whose own entry takes its version from the catalog",
+    );
+    refusal::expect("release-coherence#example-catalog-entry-inherits", &refusal);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A `package` value this reader cannot read stops the check, and says so as itself.
 ///
 /// Negative run: against the reader that carried a package identity as a `String` with the empty string for

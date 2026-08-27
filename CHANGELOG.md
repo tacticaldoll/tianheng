@@ -7996,6 +7996,34 @@ no adopter runs. They are here rather than under the adopter headings above beca
   same commit that introduced the grammar it was checking.
 
 
+- **A dependency that accepts the workspace offer was called versionless, and it is the one kind that is held
+  exactly.** `xuanji = { workspace = true }` declares no `version` of its own, so the reader filed
+  `Declared::Absent` — the state meaning *a path-only or git-only dependency that nothing holds* — and an
+  example whose pin is held by its catalog was refused for having no pin. Measured: cargo resolves the offer to
+  the catalog's requirement, in the inline, dotted and detailed spellings alike, and resolves to it even when a
+  local `version` sits in the same inline table, so the catalog is *the* answer rather than one of two. Every
+  example in this repository is its own workspace root — the root manifest says so and `exclude` enforces it —
+  so the catalog being resolved against is the one in the same file.
+
+  The requirement now has a state for it, and the state is resolved against the catalog before the arms that
+  judge a pin, so every way of failing to read one keeps a single home. A variant rather than a flag: the
+  compiler walked all three consumers and each answered — a `path` an inherited dependency does not declare, a
+  root catalog that cannot inherit from itself, and a catalog entry that itself takes the offer. Seen to fail:
+  with the offer unrecognised, a held example reports *requires xuanji with no version, so nothing holds it to
+  the workspace version 0.2.0*.
+
+  **The three refusals this opened are each a manifest cargo will not parse, and each is held by a direction
+  rather than declared.** Inheriting what no catalog offers, a catalog entry whose identity cannot be resolved,
+  and a catalog entry that itself inherits: `cargo metadata` refuses all three, and a cannot-judge that stops in
+  front of an operator is the answer for a file nothing builds.
+
+  The assignment scanner was shared rather than copied for this. `workspace = true` is a **boolean**, and
+  reading it through the quoted-value reader answers *unreadable* for the one spelling that is correct — so the
+  scan stayed in one function and only the interpretation moved out. Two scanners for one grammar is the shape
+  this file exists to close, and the value's extent had to be read as well: inside an inline table the scan runs
+  on to the closing brace, so `{ workspace = true }` handed back ` true }`.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

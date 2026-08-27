@@ -334,6 +334,25 @@ fn an_escaped_renamed_package_is_refused_and_an_ordinary_sibling_does_not_cover_
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// An internal pin taking the workspace offer is refused, because this manifest **is** the workspace.
+///
+/// A dependency in the root's own catalog spelling `workspace = true` would inherit from the catalog it sits
+/// in. Cargo refuses a manifest that inherits what its catalog does not declare, and a catalog inheriting
+/// from itself declares nothing — so this is undecidable rather than absent, and it stops in front of an
+/// operator instead of being reported as a missing pin.
+#[test]
+fn an_internal_pin_taking_the_workspace_offer_is_refused() {
+    let manifest = "\
+[workspace.dependencies]
+xuanji = { path = \"crates/xuanji\", workspace = true }
+";
+    let refusal = require_internal_pins(manifest, "0.5.0").expect_err(
+        "a pin inheriting from the catalog it sits in is not a pin this reader can read",
+    );
+    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    crate::refusal::expect("release-coherence#internal-pin-inherited", &refusal);
+}
+
 /// A detailed dependency table is filed from its own body, not from wherever the next heading falls.
 ///
 /// **The `Option` that held a half-built record is what this closes.** `declared_dependencies` carried a

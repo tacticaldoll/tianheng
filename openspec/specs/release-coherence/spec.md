@@ -326,8 +326,31 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   or with more than one
 - **THEN** the check refuses: a violation for the absent pin, because nothing holds it to the workspace
   version, and a cannot-judge for several, because which one is required is not this reader's to choose
+- **AND** a dependency declaring `workspace = true` is **not** this case: it declares no `version` of its own
+  and is held to the one the catalog offers, which the scenario below reads
 - **PINNED-BY** `an_example_requiring_a_family_crate_with_no_version_is_refused`
 - **PINNED-BY** `an_example_declaring_several_version_keys_is_not_judged`
+
+#### Scenario: An example taking the offer in its own catalog is held to what the catalog offers
+
+- **WHEN** an example declares a family crate with `workspace = true` — inline, as a dotted key, or as a
+  `workspace = true` line in a detailed table — beside a `[workspace.dependencies]` entry naming that crate
+- **THEN** the requirement judged is the **catalog's**, not absent. Every example in this repository is its own
+  workspace root, so the catalog is in the same manifest; measured, cargo resolves all three spellings to the
+  catalog's requirement, and resolves to it even when a local `version` sits in the same inline table — so the
+  catalog is the answer rather than one of two. A stale catalog is therefore a stale pin, and a catalog at the
+  workspace version or its minor series passes
+- **AND** where the catalog beside it names no such crate, or names it through an identity this reader cannot
+  resolve, or offers a requirement that itself takes the offer, the check refuses as a cannot-judge saying
+  which of the three it met. Each is a manifest `cargo metadata` refuses to parse, and a refusal that stops in
+  front of an operator is the answer for a file nothing builds — never a pin read past
+- **AND** the root's own catalog is a different subject: the manifest that *declares* the catalog cannot
+  inherit from it, so a pin there taking the offer is refused as undecidable rather than reported absent
+- **PINNED-BY** `an_example_inheriting_from_its_own_catalog_is_held_to_the_catalog_version`
+- **PINNED-BY** `an_example_inheriting_what_no_catalog_offers_is_not_judged`
+- **PINNED-BY** `a_catalog_entry_whose_identity_is_unresolvable_stops_the_inheriting_example`
+- **PINNED-BY** `a_catalog_entry_that_itself_inherits_is_named_rather_than_followed`
+- **PINNED-BY** `an_internal_pin_taking_the_workspace_offer_is_refused`
 
 #### Scenario: A dated heading whose suffix is not a date
 
