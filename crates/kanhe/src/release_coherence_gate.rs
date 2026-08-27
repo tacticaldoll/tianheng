@@ -89,15 +89,44 @@ enum Table {
 }
 
 /// The kinds of table whose entries are dependency declarations.
+/// Which tables a caller means by *a dependency*, because this reader's consumers do not all mean the same
+/// thing by it.
+///
+/// **`[workspace.dependencies]` is a catalog, not a dependency.** Measured: a package whose manifest carries
+/// `[workspace.dependencies] xuanji = "0.5"` beside `[dependencies] serde_json = "1"` reports exactly one
+/// dependency to `cargo metadata`, and it is not `xuanji`. The catalog is what *members* may inherit, and
+/// inheriting is something a member does with `xuanji = { workspace = true }` -- not something the table does
+/// on its own. One reader answered every consumer with one unqualified list, so an example manifest carrying
+/// a catalog entry counted as an example requiring that crate: the per-example guard that exists to refuse an
+/// example declaring **no** family dependency could be satisfied by a table cargo does not read as one.
+///
+/// The subject is a parameter rather than a field on the result, because a field is a thing a consumer may
+/// forget to read -- the shape two reviews found in this same reader one round earlier, in an `escaped` flag
+/// that only two of its consumers consulted.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Subject {
+    /// What this package itself depends on: its own dependency tables and their target-specific variants.
+    ///
+    /// A catalog is excluded, because a table offering a version to members is not this package requiring it.
+    Requires,
+    /// Every version this manifest pins, whether the crate is required here or offered to members.
+    ///
+    /// The root's internal path pins live in whichever table their author reached for, so this admits the
+    /// catalog **as well as** the tables `Requires` admits -- the subjects are a subset relation rather than
+    /// a partition, and a fixture pinning `[dependencies.xuanji]` in a root manifest is what said so.
+    Pins,
+}
+
 const DEPENDENCY_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
 
 /// Which dependency table `heading` opens, if any.
 ///
 /// **The admitted forms are written out, because they are a small grammar and not a set of prefixes.** A
 /// heading arrives as its keys, so which of them open a dependency table is a question about key sequences:
-/// each kind alone or with a name after it, each of those again behind a `target.<selector>`, and
-/// `[workspace.dependencies]` alone or with a name — every one of them put to `cargo metadata`, which
-/// reads a dependency of the expected kind and target from every one.
+/// each kind alone or with a name after it, and each of those again behind a `target.<selector>` — every one
+/// put to `cargo metadata`, which reads a dependency of the expected kind and target from each.
+/// `[workspace.dependencies]`, alone or with a name, is admitted to one [`Subject`] only: it is a catalog,
+/// and a catalog is no dependency of the package whose manifest carries it.
 ///
 /// Two readers died on the way here. The context was first stepped past by `strip_prefix("target.")` and
 /// `split_once('.')` over the joined name, which put the cut inside any cfg expression carrying a dot; the
@@ -116,7 +145,7 @@ const DEPENDENCY_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-
 /// escapes are decoded: an escape cargo itself rejects, measured -- `["\q"]` and `["\uD800"]` both make
 /// `cargo metadata` fail. A manifest carrying one reaches no build, no packaging step and no publish, and the
 /// examples it would sit in are compiled by the *Examples dogfood* check in the same run.
-fn dependency_table(heading: &str) -> Table {
+fn dependency_table(heading: &str, subject: Subject) -> Table {
     // **Through the shared reader, because this compared raw text and the equality it needed was measured
     // elsewhere.** `[ dependencies ]` and `["dependencies"]` are the dependency table to cargo, and stripping
     // the brackets without trimming or unquoting left both as `Table::Other` — a whole dependency table
@@ -142,20 +171,22 @@ fn dependency_table(heading: &str) -> Table {
     // `[workspace.target.<triple>.dependencies]` fails to load, because inheritance reads
     // `[workspace.dependencies]` and nothing else.
     let keys: Vec<&str> = heading.segments().iter().map(String::as_str).collect();
-    match keys.as_slice() {
-        [kind] if DEPENDENCY_KINDS.contains(kind) => Table::Entries,
-        [kind, named] if DEPENDENCY_KINDS.contains(kind) && !named.is_empty() => {
+    match (subject, keys.as_slice()) {
+        (_, [kind]) if DEPENDENCY_KINDS.contains(kind) => Table::Entries,
+        (_, [kind, named]) if DEPENDENCY_KINDS.contains(kind) && !named.is_empty() => {
             Table::One((*named).to_string())
         }
-        // Only `dependencies` is inheritable; `[workspace.dev-dependencies]` is an unused key to cargo.
-        ["workspace", "dependencies"] => Table::Entries,
-        ["workspace", "dependencies", named] if !named.is_empty() => {
+        // Only `dependencies` is inheritable; `[workspace.dev-dependencies]` is an unused key to cargo. And
+        // only a caller asking what this manifest *pins* wants it: it is no dependency of the package it
+        // sits in.
+        (Subject::Pins, ["workspace", "dependencies"]) => Table::Entries,
+        (Subject::Pins, ["workspace", "dependencies", named]) if !named.is_empty() => {
             Table::One((*named).to_string())
         }
         // `[target.<selector>.…]`, where the selector is one key -- a triple or a cfg expression, whatever it
         // contains, because a heading held as segments has no dot for this step to land inside.
-        ["target", _selector, kind] if DEPENDENCY_KINDS.contains(kind) => Table::Entries,
-        ["target", _selector, kind, named]
+        (_, ["target", _selector, kind]) if DEPENDENCY_KINDS.contains(kind) => Table::Entries,
+        (_, ["target", _selector, kind, named])
             if DEPENDENCY_KINDS.contains(kind) && !named.is_empty() =>
         {
             Table::One((*named).to_string())
@@ -303,7 +334,7 @@ struct Detailed {
 /// detailed table (`[dependencies.alias]` with its own `package` and `version` lines) are one grammar to a
 /// reader that tracks the heading, and [`inline_assignments`] recognises a key the same way in both: at a
 /// line's start, or after a table delimiter inside a value.
-fn declared_dependencies(text: &str) -> Vec<Dependency> {
+fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
     let mut found = Vec::new();
     // **A detailed table is one dependency spread over its own lines, and that is now what it is.** This
     // walked the manifest with a `Table` cursor and a `pending: Option<Detailed>` flushed at the next
@@ -314,7 +345,7 @@ fn declared_dependencies(text: &str) -> Vec<Dependency> {
     let tables = crate::sections::cut(
         crate::region::Source::of(text).toml().numbered_lines(),
         // The heading reader answers *is this a heading* itself; asking first made its `None` arm dead.
-        |line| crate::manifest::table_heading(line).map(|_| dependency_table(line.trim())),
+        |line| crate::manifest::table_heading(line).map(|_| dependency_table(line.trim(), subject)),
     );
     for table in &tables {
         match &table.name {
@@ -1095,7 +1126,7 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
         package: _,
         pin,
         path,
-    } in declared_dependencies(root_manifest)
+    } in declared_dependencies(root_manifest, Subject::Pins)
     {
         // A dependency with no path is not an internal one; one whose path this reader cannot name might be,
         // and *might be* is not an answer. The old selection asked whether the **line** carried `path` and
@@ -1268,7 +1299,7 @@ pub(crate) fn require_example_pins(
             package,
             pin,
             path: _,
-        } in declared_dependencies(&text)
+        } in declared_dependencies(&text, Subject::Requires)
         {
             // **Which crate a dependency names is its `package` field where it has one, and its key only
             // otherwise.** Keying on the name alone was a false negative of the class the Core Contract

@@ -7970,6 +7970,32 @@ no adopter runs. They are here rather than under the adopter headings above beca
   now, beside the spellings it sits among.
 
 
+- **A workspace catalog was counted as a dependency of the package whose manifest carries it, and the guard
+  that exists to catch an example declaring nothing could be satisfied by one.** `[workspace.dependencies]` is
+  an offer to members, not a requirement: measured, a package declaring `[workspace.dependencies] xuanji =
+  "0.5"` beside `[dependencies] serde_json = "1"` reports exactly one dependency to `cargo metadata`, and it
+  is not `xuanji`. One reader answered every consumer with one unqualified list, so an example carrying a
+  catalog entry counted toward its own family-requirement count — and the per-example guard, written precisely
+  to refuse an example that declares **no** family dependency, could be satisfied by a table cargo does not
+  read as one. The same list refused pins out of it, which is the other direction of the same error.
+
+  The reader takes its subject now: *what this package requires* excludes the catalog, *what this manifest
+  pins* includes it, and the root's internal-pin check asks the second. A parameter rather than a field on the
+  result, because a field is a thing a consumer may forget to read — which is the shape two reviews found in
+  this same reader a round earlier. Seen to fail, per case because a loop stops at its first failure: with the
+  catalog admitted to what an example requires, a stale catalog entry beside a correct pin becomes a violation,
+  and an example whose only family mention is a catalog returns *ok release coherence*.
+
+  The first attempt at the split was wrong in the other direction and a fixture said so: making the root's
+  subject *the catalog only* dropped the plain `[dependencies.NAME]` path pins it also reads, and
+  `a_detailed_table_is_filed_from_its_own_body` went red. The subjects are a subset relation, not a partition.
+
+  Recorded because the positive control in the round before **enshrined the defect**: it appended
+  `[workspace.dependencies]` to an example and asserted the pin was refused. A test written from the same
+  understanding as the code cannot be the thing that catches the code, and this one had been written in the
+  same commit that introduced the grammar it was checking.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

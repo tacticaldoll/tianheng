@@ -2262,71 +2262,80 @@ fn a_pin_under_a_cfg_target_carrying_a_dot_is_read() {
     }
 }
 
-/// A workspace key cargo gives no dependency meaning is not read as a dependency table.
+/// A workspace table is not a dependency of the package whose manifest carries it.
 ///
-/// **The context in front of a dependency table is a grammar, and this reader used to strip it as prefixes.**
-/// It removed a leading `workspace` and then, independently, a leading `target` -- so
-/// `[workspace.dev-dependencies]` and `[workspace.target.<triple>.dependencies]` arrived at the kind match
-/// looking like ordinary dependency tables. Cargo admits neither: measured, a member writing
-/// `serde = { workspace = true }` against either fails to load, because inheritance reads
-/// `[workspace.dependencies]` and nothing else. A stale-looking pin in one of them would therefore have
-/// stopped a release over a table cargo ignores, which is the false-refusal direction this repository forbids
-/// more strictly than a miss.
+/// **`[workspace.dependencies]` is a catalog, and a catalog is an offer rather than a requirement.** Measured:
+/// a package declaring `[workspace.dependencies] xuanji = "0.5"` beside `[dependencies] serde_json = "1"`
+/// reports exactly one dependency to `cargo metadata`, and it is not `xuanji`. A member takes the offer up by
+/// writing `xuanji = { workspace = true }`; the table alone makes nobody depend on anything.
 ///
-/// The third row is the control that keeps the other two from passing for the wrong reason: the one workspace
-/// table cargo *does* give dependency meaning is still read, and a stale pin in it is still refused.
+/// The consumers read one unqualified list from the same reader, and only the root's wanted the catalog. The
+/// per-example guard exists to refuse an example that declares **no** family dependency at all -- and a
+/// catalog entry counted toward it, so an example could satisfy the guard with a table cargo does not read as
+/// a dependency. That is the false negative the guard was written against, arriving through the reader
+/// beneath it. The sibling `[workspace.dev-dependencies]` and `[workspace.target.<triple>.dependencies]`
+/// carry no meaning at all: measured, a member inheriting from either fails to load.
 ///
-/// Negative run: with the grammar replaced by the prefix walk it replaced, both `is_ok` rows become
-/// violations naming `xuanji`.
+/// The first rows are the false-refusal direction and the last is the false-negative one. The root's own use
+/// of the catalog needs no row here: the fixture root pins the family through `[workspace.dependencies]`, so
+/// every direction in this file that reaches `judge` is already reading it.
+///
+/// Negative run, measured per case because a loop stops at its first failure: with the catalog admitted to
+/// what an example *requires*, the first row becomes a violation naming `xuanji`, and the last case -- run on
+/// its own with the rows emptied -- returns `ok release coherence`, the example counting a requirement it
+/// never declared.
 #[test]
-fn a_workspace_key_that_is_not_a_dependency_table_is_not_read_as_one() {
+fn a_workspace_table_is_not_a_dependency_of_the_package_carrying_it() {
     for (label, table) in [
+        ("dependencies", "[workspace.dependencies]"),
+        ("dev-dependencies", "[workspace.dev-dependencies]"),
         (
-            "workspace.dev-dependencies",
-            "[workspace.dev-dependencies]\nxuanji = \"0.0.1\"\n",
-        ),
-        (
-            "workspace.target.<triple>.dependencies",
-            "[workspace.target.x86_64-unknown-linux-gnu.dependencies]\nxuanji = \"0.0.1\"\n",
+            "target",
+            "[workspace.target.x86_64-unknown-linux-gnu.dependencies]",
         ),
     ] {
-        let root = scratch(&format!(
-            "unused-workspace-key-{}",
-            label.replace(['.', '<', '>'], "-")
-        ));
-        let fixture = build_fixture(&root, "unused-workspace-key", "0.2.0");
+        let root = scratch(&format!("workspace-table-{label}"));
+        let fixture = build_fixture(&root, "workspace-table", "0.2.0");
         let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
         let text = std::fs::read_to_string(&manifest).expect("read");
-        std::fs::write(&manifest, format!("{text}\n{table}")).expect("write");
+        std::fs::write(&manifest, format!("{text}\n{table}\nxuanji = \"0.0.1\"\n")).expect("write");
         development_changelog(&fixture.repo, "0.2.0", true);
-        commit(&fixture.repo, "chore: a workspace key cargo does not read");
+        commit(&fixture.repo, "chore: a workspace table in an example");
         let verdict = judge(&fixture.repo);
         let _ = std::fs::remove_dir_all(&root);
         assert!(
             verdict.is_ok(),
-            "{label}: cargo gives this table no dependency meaning, so a pin in it is not a pin: {:?}",
+            "{label}: cargo reads no dependency of `adopter` from this table, so a version in it is not a \
+             pin of `adopter`: {:?}",
             verdict.err()
         );
     }
 
-    // The control: the one workspace table that does inherit is still read.
-    let root = scratch("workspace-dependencies-read");
-    let fixture = build_fixture(&root, "workspace-dependencies-read", "0.2.0");
-    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
-    let text = std::fs::read_to_string(&manifest).expect("read");
+    // The other direction: an example whose only family mention is a catalog declares no family dependency.
+    let root = scratch("catalog-is-not-a-requirement");
+    let fixture = build_fixture(&root, "catalog-is-not-a-requirement", "0.2.0");
+    std::fs::create_dir_all(fixture.repo.join("examples/catalogue")).expect("create");
     std::fs::write(
-        &manifest,
-        format!("{text}\n[workspace.dependencies]\nxuanji = \"0.0.1\"\n"),
+        fixture.repo.join("examples/catalogue/Cargo.toml"),
+        "[package]\nname = \"catalogue\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
+         [dependencies]\nserde_json = \"1\"\n\n[workspace.dependencies]\nxuanji = \"0.2\"\n",
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
-    commit(&fixture.repo, "chore: a workspace dependency table");
-    let verdict = judge(&fixture.repo);
+    commit(
+        &fixture.repo,
+        "chore: an example offering what it does not require",
+    );
+    let refusal = refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "example catalogue declares no",
+    );
+    refusal::expect(
+        "release-coherence#example-requires-no-family-crate",
+        &refusal,
+    );
     let _ = std::fs::remove_dir_all(&root);
-    let refusal =
-        verdict.expect_err("`[workspace.dependencies]` is a dependency table and is read");
-    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
-    assert!(refusal.message.contains("xuanji"), "{}", refusal.message);
 }
 
 /// A `package` value this reader cannot read stops the check, and says so as itself.

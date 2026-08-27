@@ -293,6 +293,24 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 - **PINNED-BY** `an_example_requiring_no_family_crate_reports_over_nothing`
 - **PINNED-BY** `an_example_declaring_nothing_is_refused_though_its_sibling_is_fine`
 
+#### Scenario: A workspace table is not a dependency of the package whose manifest carries it
+
+- **WHEN** a manifest under `examples/` carries `[workspace.dependencies]`, `[workspace.dev-dependencies]` or
+  `[workspace.target.<selector>.dependencies]` naming a family crate, at a version the workspace version does
+  not satisfy
+- **THEN** nothing in that table is read as a dependency of that example: no pin is refused over it, and it
+  counts toward no example's family-requirement. Measured against cargo: a package declaring
+  `[workspace.dependencies] xuanji = "0.5"` beside `[dependencies] serde_json = "1"` reports exactly one
+  dependency and it is not `xuanji`; a member inheriting from either of the other two fails to load, because
+  inheritance reads `[workspace.dependencies]` alone
+- **AND** an example whose *only* family mention is such a table therefore declares no family requirement, and
+  is refused by the scenario above rather than counted as satisfying it. One reader answered both this check
+  and the root's internal-pin check with one unqualified list, and the catalog belongs only to the second: a
+  table offering a version to members is not the package requiring it
+- **AND** the root's own use of the catalog is unaffected — a version this manifest **pins**, required here or
+  offered to members, is still read where the subject is the repository's own pins
+- **PINNED-BY** `a_workspace_table_is_not_a_dependency_of_the_package_carrying_it`
+
 #### Scenario: A value that is not a string does not borrow the next one
 
 - **WHEN** a dependency's `package` or `version` value is not a double-quoted string while a later key on
