@@ -96,15 +96,32 @@ different things.
   wider than the code by those two; the general form that would unify them is filed with its trigger rather
   than asserted here
 - **AND** a **dotted** head naming the sought key assigns a field of it rather than the key —
-  `version.workspace = true`, the line every member of this workspace writes — so it is refused as
-  unattributable, never taken as a value. A dotted head naming any other key is another key's business, since
-  refusing on those would refuse every member manifest in the tree
+  `version.workspace = true`, the line every member of this workspace writes — so the reader reports **which
+  field**, with every segment of the tail decoded. A reader wanting the key's own value refuses on it, because
+  taking `true` as a version would not be visible; a reader asking about that named field compares the field's
+  name. A dotted head naming any other key is another key's business, since refusing on those would refuse
+  every member manifest in the tree
+- **AND** *decoded* is a property of the whole answer, not of its first segment. Three review rounds each moved
+  that boundary one segment right and left the next raw: the heading decoded while the key did not, then the
+  key while one recogniser compared whole lines, then the head while the tail was joined raw. Measured under
+  cargo 1.96.0, the last of those refused `version."workspace" = true`, `version.'workspace' = true`,
+  `version."\u0077orkspace" = true` and `version = { "workspace" = true }` — all four inherit — and read
+  `xuanji."path" = "xuanji"` as a dependency with no path, which is the **false negative** recorded below
 - **AND** where the table is written as a **value** inside its parent — `[workspace]` with
   `package.version = "0.5.0"`, or with `package = { version = "0.5.0" }`, both of which cargo resolves — the
   check refuses naming the line. Composing a table out of a dotted key path or an inline table is structure
   this reader does not build; refusing names what it met, where reporting absence names a declaration nobody
   made
+- **AND** a dependency whose classification the reader could not read is **refused, not treated as external**.
+  A dependency with no `path` is external and skipped; one whose path could not be read might be internal, and
+  *might be* is not an answer. Measured: `xuanji."path" = "xuanji"` beside `xuanji.version = "0.5"` is a path
+  dependency at `^0.5` to cargo, and reading the tail raw answered *no path* — so the stale pin left the
+  internal check's subject in silence while one correct pin elsewhere satisfied its non-vacuity floor, and the
+  release reported clean. That is the aggregate-counter shape the per-example check records having fixed, in its
+  sibling
 - **PINNED-BY** `a_key_spelling_cargo_accepts_is_read_and_a_table_written_as_a_value_is_refused`
+- **PINNED-BY** `a_stale_internal_pin_behind_a_quoted_tail_is_refused`
+- **PINNED-BY** `every_inherit_spelling_cargo_honours_is_read_as_inheriting`
 - **PINNED-BY** `a_member_whose_package_name_is_quoted_is_read_under_that_name`
 
 ### Requirement: Development carries adopter-facing release narrative

@@ -478,15 +478,24 @@ pub fn table_heading(line: &str) -> Option<TableHeading> {
 /// asserted in `a_quoted_key_carries_its_dots_and_an_array_is_not_a_table` rather than left as this claim.
 /// Cargo does not parse such a heading either.
 fn dotted(inner: &str) -> Vec<&str> {
+    split_outside(inner, '.')
+}
+
+/// `text` cut at every `delimiter` that sits outside a TOML string.
+///
+/// The dots between keys and the commas between an inline table's fields are the same question asked of two
+/// characters, and both callers were asking it their own way: the heading cut walked the quote state itself,
+/// and the inline-table reader positioned a raw substring search instead of cutting at all.
+pub(crate) fn split_outside(text: &str, delimiter: char) -> Vec<&str> {
     let mut segments = Vec::new();
     let mut start = 0;
-    for at in outside_strings(inner) {
-        if inner[at..].starts_with('.') {
-            segments.push(&inner[start..at]);
-            start = at + 1;
+    for at in outside_strings(text) {
+        if text[at..].starts_with(delimiter) {
+            segments.push(&text[start..at]);
+            start = at + delimiter.len_utf8();
         }
     }
-    segments.push(&inner[start..]);
+    segments.push(&text[start..]);
     segments
 }
 
@@ -565,29 +574,72 @@ pub(crate) enum Assigned<'a> {
 /// the inherit recogniser in `release_coherence_gate` does. A dotted head naming anything else is `Other`,
 /// because a member's `[package]` body is full of them and refusing on those would refuse every manifest.
 pub(crate) fn assigned<'a>(line: &'a str, key: &str) -> Assigned<'a> {
+    match assignment(line) {
+        Assignment::Key { name, value } if name == key => Assigned::Value(value),
+        Assignment::Field { name, tail, value } if name == key => Assigned::Field { tail, value },
+        Assignment::Unreadable => Assigned::Unreadable,
+        Assignment::Key { .. } | Assignment::Field { .. } | Assignment::None => Assigned::Other,
+    }
+}
+
+/// What a table-body line assigns, with **every** segment of the key decoded.
+///
+/// **Three rounds of one defect end here, and each was the boundary of *decoded* moved one segment right.**
+/// The heading side decoded and the key side compared raw text; then the key decoded and one recogniser still
+/// compared whole lines; then the head decoded and the tail was joined raw, so `version."workspace" = true`
+/// — which cargo honours, measured — was a member that does not inherit, and `xuanji."path" = "xuanji"` was a
+/// dependency with no path, dropped from the subject of the internal-pin check while its stale version passed.
+/// That last one is a **false negative** in front of `cargo publish`, which is the direction this repository
+/// orders above every other. Decoded is a property of this whole answer now: the head, every tail segment,
+/// and — through [`split_outside`] — the inner keys of an inline table.
+pub(crate) fn assignment(line: &str) -> Assignment<'_> {
     let line = line.trim();
     let Some(at) = outside_strings(line)
         .into_iter()
         .find(|at| line[*at..].starts_with('='))
     else {
-        return Assigned::Other;
+        return Assignment::None;
     };
     let (head, value) = line.split_at(at);
-    let segments = dotted(head.trim());
-    let Some(first) = segments.first().and_then(|first| unquoted(first.trim())) else {
-        return Assigned::Unreadable;
+    let value = &value[1..];
+    let mut segments = dotted(head.trim()).into_iter();
+    let Some(name) = segments.next().and_then(|first| unquoted(first.trim())) else {
+        return Assignment::Unreadable;
     };
-    if first != key {
-        return Assigned::Other;
+    let mut tail = Vec::new();
+    for segment in segments {
+        match unquoted(segment.trim()) {
+            Some(segment) => tail.push(segment.into_owned()),
+            None => return Assignment::Unreadable,
+        }
     }
-    if segments.len() == 1 {
-        return Assigned::Value(&value[1..]);
+    let name = name.into_owned();
+    if tail.is_empty() {
+        Assignment::Key { name, value }
+    } else {
+        Assignment::Field {
+            name,
+            tail: tail.join("."),
+            value,
+        }
     }
-    let tail: Vec<&str> = segments[1..].iter().map(|segment| segment.trim()).collect();
-    Assigned::Field {
-        tail: tail.join("."),
-        value: &value[1..],
-    }
+}
+
+/// What a table-body line assigns, keyed by the name it decodes to.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Assignment<'a> {
+    /// `key = value`, the key decoded.
+    Key { name: String, value: &'a str },
+    /// `key.tail = value`, both decoded.
+    Field {
+        name: String,
+        tail: String,
+        value: &'a str,
+    },
+    /// A key or tail segment this reader cannot decode.
+    Unreadable,
+    /// Not an assignment.
+    None,
 }
 
 /// What a TOML table heading names, and whether it opens an array of tables.

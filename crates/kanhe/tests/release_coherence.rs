@@ -2364,7 +2364,10 @@ fn an_example_inheriting_from_its_own_catalog_is_held_to_the_catalog_version() {
     for (spelling, accepts) in [
         (
             "inline",
-            "[dependencies]\nxuanji = {{ workspace = true }}\n",
+            // Single braces: this is a `format!` **argument**, not the format string, so `{{` would reach the
+            // manifest doubled. It did, and the row passed anyway while the inline-key scanner matched a raw
+            // substring — a fixture that did not plant its own shape, passing because the reader was loose.
+            "[dependencies]\nxuanji = { workspace = true }\n",
         ),
         ("dotted", "[dependencies]\nxuanji.workspace = true\n"),
         ("detailed", "[dependencies.xuanji]\nworkspace = true\n"),
@@ -2430,10 +2433,7 @@ fn an_example_inheriting_what_no_catalog_offers_is_not_judged() {
     std::fs::write(
         fixture.repo.join("examples/adopter/Cargo.toml"),
         "[workspace]\n[package]\nname = \"adopter\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
-         [workspace.dependencies]\nserde_json = \"1\"\n\n[dependencies]\nxuanji = {{ workspace = true }}\n"
-            .replace("{{", "{")
-            .replace("}}", "}")
-            .as_str(),
+         [workspace.dependencies]\nserde_json = \"1\"\n\n[dependencies]\nxuanji = { workspace = true }\n",
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
@@ -2450,6 +2450,56 @@ fn an_example_inheriting_what_no_catalog_offers_is_not_judged() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// A stale internal pin behind a quoted tail is refused, where it used to pass the gate.
+///
+/// **The first false negative found in three rounds of review, and the one that mattered most.** The
+/// dependency reader split its key on the first *raw* dot, so `xuanji."path" = "xuanji"` read as a dependency
+/// with **no path** — and `require_internal_pins` treats a dependency with no path as external and skips it.
+/// Measured under cargo 1.96.0: that manifest is a path dependency with requirement `^0.5`, so a non-exact
+/// internal pin reached the release gate and passed. The aggregate `pins == 0` floor cannot catch it — one
+/// bare pin elsewhere satisfies the count, which is the aggregate-counter defect the sibling example check
+/// records having fixed.
+///
+/// It stands in front of `cargo publish`, where a version is yankable and never replaceable, which is why the
+/// review that found it said to act on this row before any other.
+///
+/// Negative run: with the raw dot split restored, this returns `Ok` — a clean release over a root pinning an
+/// internal dependency at `0.5` while the workspace is at `0.2.0`.
+#[test]
+fn a_stale_internal_pin_behind_a_quoted_tail_is_refused() {
+    let root = scratch("quoted-tail-pin");
+    let fixture = build_fixture(&root, "quoted-tail-pin", "0.2.0");
+    let manifest = fixture.repo.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        // **The correct pin stays, which is what makes this the false negative rather than the vacuity
+        // floor.** `require_internal_pins` refuses when it finds no internal path dependency at all; one
+        // correct pin satisfies that count, and the stale one behind the quoted tail is then dropped from its
+        // subject in silence. That is the aggregate-counter shape the sibling example check records fixing.
+        text.replace(
+            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }",
+            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }\n\
+             tianheng.\"path\" = \"crates/tianheng\"\ntianheng.version = \"0.5\"",
+        ),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "chore: pin an internal dependency behind a quoted tail",
+    );
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal =
+        verdict.expect_err("a path dependency pinned at 0.5 against a workspace at 0.2.0 is stale");
+    assert!(
+        refusal.message.contains("tianheng"),
+        "the refusal must name the dependency: {}",
+        refusal.message
+    );
+}
+
 /// Every spelling of the inherit line that cargo honours is read as inheriting.
 ///
 /// **Measured under cargo 1.96.0, each resolving the member at `0.5.0`:** `version.workspace = true`,
@@ -2459,12 +2509,16 @@ fn an_example_inheriting_what_no_catalog_offers_is_not_judged() {
 /// repository forbids more strictly than a miss, and nothing declared the narrowness: not the spec, not
 /// `docs/observation-bounds.md`, not the doc above the call.
 ///
-/// It asks the shared key reader now. A dotted head naming `version` reports its **tail**, so this asks whether
-/// the field is `workspace` rather than comparing spellings of the whole line; the inline form is a `version`
-/// whose value carries the offer. Neither is a spelling this direction has to enumerate again.
+/// It asks the shared key reader. A dotted head naming `version` reports its **tail**, so this asks whether
+/// the field is `workspace`; the inline form is a `version` whose value carries the offer. Both comparisons are
+/// of **decoded names**, which they were not when this direction was first written: the tail was joined raw, so
+/// `version."workspace" = true` and its literal and escaped siblings were still refused, and a review measured
+/// all four. The rows below are what that costs — every spelling cargo honours, enumerated once, against a
+/// reader that no longer compares spellings at all.
 ///
-/// Negative run: with the string equality restored, the three rows after the first are each
-/// *workspace package xuanji must inherit version.workspace = true*.
+/// Negative run, measured a row at a time: with the string equality restored the inline-table row is
+/// *workspace package xuanji must inherit version.workspace = true*, and with the tail joined raw the
+/// `quoted tail` row is the same refusal.
 #[test]
 fn every_inherit_spelling_cargo_honours_is_read_as_inheriting() {
     for (label, line) in [
@@ -2472,6 +2526,11 @@ fn every_inherit_spelling_cargo_honours_is_read_as_inheriting() {
         ("inline table", "version = { workspace = true }"),
         ("quoted key", "\"version\".workspace = true"),
         ("literal key", "'version'.workspace = true"),
+        // The tail, which the head-only decode left raw for a round.
+        ("quoted tail", "version.\"workspace\" = true"),
+        ("literal tail", "version.'workspace' = true"),
+        ("escaped tail", "version.\"\\u0077orkspace\" = true"),
+        ("quoted inner key", "version = { \"workspace\" = true }"),
     ] {
         let root = scratch(&format!("inherit-{}", label.replace(' ', "-")));
         let fixture = build_fixture(&root, "inherit", "0.2.0");
