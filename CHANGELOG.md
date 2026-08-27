@@ -8024,6 +8024,30 @@ no adopter runs. They are here rather than under the adopter headings above beca
   on to the closing brace, so `{ workspace = true }` handed back ` true }`.
 
 
+- **Two `workspace` keys in one dependency read as one inheritance, because the predicate kept the values and
+  dropped how many there were.** `{ workspace = true, workspace = true }` is duplicate keys — TOML rejects them
+  and cargo refuses to parse the file — and it resolved to a clean release through whatever catalog entry
+  happened to match. `version` and `path` each have a state for several declarations; the offer had none. The
+  cardinality is read before the value now: one key whose value is `true` inherits, and anything else is a
+  requirement this reader cannot read, which stops in front of an operator. Seen to fail: with the count
+  discarded, the same fixture returns *ok release coherence*.
+
+- **A refusal message carried a twenty-two-space run into the sentence an operator reads**, from a source
+  literal wrapped without its continuation. A second instance of the same class was already in the tree, in a
+  declared bound's reason — and `docs/observation-bound-extents.md` was carrying it into a projection. Both are
+  repaired.
+
+  No reaction is added over the class, and the measurement is recorded rather than the intent: across every
+  `violation_at` and `cannot_judge_at` message in the tree, 825 literals, the only run left after those two
+  repairs is column alignment a reader wants — `subject:` above `title:   ` in one multi-line refusal. A
+  universal rule refuses that, and a rule with it allowlisted is two lists that must agree. The instrument
+  itself took five revisions before it could see the known instance: a naive scan reported 151 hits (fixture
+  indentation), then 4546 (source line-continuations), then 0 twice (once because Rust's own unescaping was not
+  emulated, once because the scan stopped at the site identity and never reached the message). A predicate
+  returning zero over a corpus it cannot see into is indistinguishable from a clean corpus, which is why the
+  count is here beside the rule.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

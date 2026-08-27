@@ -49,7 +49,7 @@ pub fn unheld() -> Vec<Unheld> {
     vec![
         tool(
             "publish-source-integrity#release-tag-unreadable",
-            "measured, not assumed: every ref-store perturbation a fixture can build answers `1`, which is              this read's ANSWER — an unreadable `refs/tags` and a `refs/tags` replaced by a file both exit              `1`, and in that state `rev-parse HEAD` fails first at `128`, so the judgement never reaches              this arm. The classifier itself IS observed, against a directory that is no repository; what no              fixture can build is a repository whose earlier reads succeed and whose tag read declines",
+            "measured, not assumed: every ref-store perturbation a fixture can build answers `1`, which is this read's ANSWER — an unreadable `refs/tags` and a `refs/tags` replaced by a file both exit `1`, and in that state `rev-parse HEAD` fails first at `128`, so the judgement never reaches this arm. The classifier itself IS observed, against a directory that is no repository; what no fixture can build is a repository whose earlier reads succeed and whose tag read declines",
         ),
         tool(
             "release-coherence#directory-entry-unreadable",
