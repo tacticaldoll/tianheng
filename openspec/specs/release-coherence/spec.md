@@ -59,8 +59,10 @@ one an author reaches for while bumping, which is exactly when this classificati
 therefore the shared TOML region `repository-checks` requires of a check deciding a property over executed
 text, and the same reader serves `publish-source-integrity`, so both refusals moved together.
 
-A value the reader cannot read — a single-quoted or literal string, which cargo accepts and this reader does
-not take — names a different operator action from a missing key: one is a key to add, the other a spelling
+The same holds of the **key**, and it did not: the heading side of that reader decoded while the key side
+compared raw text, so spellings cargo accepts answered *absent*. The scenario below records what was
+measured. A value the reader cannot read — a single-quoted or literal string, which cargo accepts and this
+reader does not take — names a different operator action from a missing key: one is a key to add, the other a spelling
 this check has never met. Each refusal SHALL name the value as written, and SHALL say which judgement it
 blocked rather than only which fact was unreadable, because the two gates sharing the reader cannot decide
 different things.
@@ -76,6 +78,28 @@ different things.
 - **WHEN** `[workspace.package]` declares a version in a form this reader does not take
 - **THEN** the check refuses as a cannot-judge, quoting the value as written and naming what it could not
   decide — never as a version that is absent
+
+#### Scenario: A key spelling cargo accepts, and a table cargo writes as a value
+
+- **WHEN** the key is written in a spelling cargo accepts and this reader's heading side already decoded —
+  `"version" = "0.5.0"`, `'version' = "0.5.0"`, or the same spellings of `[package]`'s `name`
+- **THEN** the key is read and the value judged. Measured under cargo 1.96.0, through a member inheriting
+  `version.workspace = true`: each resolves the member at `0.5.0`, and `[package]` with `"name" = "m"` names
+  `m`. The heading side decoded and the key side matched raw text, so each answered *the key is absent* — the
+  state reserved for a key that is not there — and the gates then said *workspace version is missing or
+  malformed*, and *declares no `[package]` name*, about manifests that declare both. **One reader owns the
+  question for every table body**, rather than one decoding walker beside walkers comparing raw text
+- **AND** a **dotted** head naming the sought key assigns a field of it rather than the key —
+  `version.workspace = true`, the line every member of this workspace writes — so it is refused as
+  unattributable, never taken as a value. A dotted head naming any other key is another key's business, since
+  refusing on those would refuse every member manifest in the tree
+- **AND** where the table is written as a **value** inside its parent — `[workspace]` with
+  `package.version = "0.5.0"`, or with `package = { version = "0.5.0" }`, both of which cargo resolves — the
+  check refuses naming the line. Composing a table out of a dotted key path or an inline table is structure
+  this reader does not build; refusing names what it met, where reporting absence names a declaration nobody
+  made
+- **PINNED-BY** `a_key_spelling_cargo_accepts_is_read_and_a_table_written_as_a_value_is_refused`
+- **PINNED-BY** `a_member_whose_package_name_is_quoted_is_read_under_that_name`
 
 ### Requirement: Development carries adopter-facing release narrative
 

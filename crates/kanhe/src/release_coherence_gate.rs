@@ -677,7 +677,7 @@ fn without_wschar(line: &str) -> String {
 /// skipped it — so a manifest this reader could not parse left its package's lock version unchecked and its
 /// examples' pins unexamined, with the function still returning `Ok`. The template is
 /// `capability_subjects::Declared`, applied to a second reader.
-enum PackageName {
+pub enum PackageName {
     /// The `[package]` table's `name`.
     Named(String),
     /// No `[package]` table, or no `name` key inside it.
@@ -699,9 +699,9 @@ enum PackageName {
 /// refusal, and here they are different facts — no `[package]` table means this is not a package manifest,
 /// while two `name` keys in one means it is malformed. The consumer needs to tell them apart, so the
 /// three-state return carries the distinction instead.
-fn package_name(manifest: &str) -> PackageName {
+pub fn package_name(manifest: &str) -> PackageName {
     // Executed manifest text. Raw lines were safe against a commented-out `name` only by accident — a
-    // `#`-led line fails `strip_prefix("name")` — and not safe at all against a comment on the **table
+    // `#`-led line matched no key — and not safe at all against a comment on the **table
     // heading**: `[package] # the repository checks` fails `trimmed == "[package]"`, so the table never
     // opens, no `name` is found, and `require_example_pins` answers `cannot_judge` over a legal manifest.
     // Held by `a_package_heading_with_a_trailing_comment_still_opens_the_table`, run against raw lines.
@@ -720,16 +720,24 @@ fn package_name(manifest: &str) -> PackageName {
     let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
         crate::manifest::table_heading(line).map(|heading| heading.names("package"))
     });
-    let names: Vec<&str> = tables
+    let names: Vec<Result<&str, String>> = tables
         .iter()
         .filter(|table| table.name)
         .flat_map(|table| table.body.iter())
-        // `name` then `=`, so `name_of` and any other `name…` key is not this key.
-        .filter_map(|(_, line)| {
-            let rest = line.trim().strip_prefix("name")?;
-            Some(rest.trim_start().strip_prefix('=')?.trim())
+        // **Through the shared key reader, because this matched the key's raw text.** `[package]` with
+        // `"name" = "kanhe"` is the package's name to cargo — measured — and answering `Absent` for it made
+        // this say *declares no `[package]` name* about a manifest that declares one, and made the sibling
+        // caller fall back to the directory, comparing a member under the wrong identity.
+        .filter_map(|(_, line)| match crate::manifest::assigned(line, "name") {
+            crate::manifest::Assigned::Value(value) => Some(Ok(value.trim())),
+            crate::manifest::Assigned::Other => None,
+            crate::manifest::Assigned::Unreadable => Some(Err(line.trim().to_string())),
         })
         .collect();
+    let names: Vec<&str> = match names.into_iter().collect::<Result<Vec<&str>, String>>() {
+        Ok(names) => names,
+        Err(written) => return PackageName::Unreadable(written),
+    };
     match names.len() {
         0 => PackageName::Absent,
         1 => match quoted_value(names[0]) {

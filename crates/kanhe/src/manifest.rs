@@ -173,21 +173,47 @@ pub fn workspace_version(text: &str) -> WorkspaceVersion {
         return WorkspaceVersion::Unreadable(line.trim().to_string());
     }
     // `version` then `=`, so `version.workspace` and any other `version…` key is not this key.
-    let values: Vec<&str> = tables
+    let values: Vec<Result<&str, String>> = tables
         .iter()
         .filter(|table| table.name)
         .flat_map(|table| table.body.iter())
-        .filter_map(|(_, line)| {
-            line.trim()
-                .strip_prefix("version")
-                .and_then(|rest| rest.trim_start().strip_prefix('='))
+        .filter_map(|(_, line)| match assigned(line, "version") {
+            Assigned::Value(value) => Some(Ok(value)),
+            Assigned::Other => None,
+            // A spelling this reader does not decode is not an absent key, and saying so is the whole of
+            // `WorkspaceVersion`'s third state.
+            Assigned::Unreadable => Some(Err(line.trim().to_string())),
         })
         .collect();
+    let values: Vec<&str> = match values.into_iter().collect::<Result<Vec<&str>, String>>() {
+        Ok(values) => values,
+        Err(written) => return WorkspaceVersion::Unreadable(written),
+    };
     // **Two keys refuse rather than the first one answering, which its two siblings already did.** This
     // returned on the first `version` it met. `publishable` states the reason in its own words — *cargo
     // refuses a manifest that declares one key twice, so a reader answering from the first of two would speak
     // for a file cargo will not read at all* — and `package_name` answers the same way. One of three reading
     // the same root manifest disagreed, and taking a value first is what made the count askable.
+    if values.is_empty() {
+        // **The table can be written as a value inside `[workspace]`, and that is not the same as absent.**
+        // Measured under cargo 1.96.0, each resolves a member at `0.5.0`: `[workspace]` with
+        // `package.version = "0.5.0"`, and with `package = { version = "0.5.0" }`. Composing a table out of a
+        // dotted key path or an inline table is structure this reader does not build — it cuts headings — so
+        // the shape is refused where it is met instead of being reported as a declaration nobody made. The
+        // message an operator gets then names the line rather than saying *missing or malformed*.
+        let workspace = crate::sections::cut(source.toml().numbered_lines(), |line| {
+            table_heading(line).map(|heading| heading.names("workspace"))
+        });
+        if let Some(line) = workspace
+            .iter()
+            .filter(|table| table.name)
+            .flat_map(|table| table.body.iter())
+            .find(|(_, line)| !matches!(assigned(line, "package"), Assigned::Other))
+            .map(|(_, line)| line)
+        {
+            return WorkspaceVersion::Unreadable(line.trim().to_string());
+        }
+    }
     match values.len() {
         0 => WorkspaceVersion::Absent,
         1 => match quoted_value(values[0]) {
@@ -494,6 +520,54 @@ pub(crate) fn outside_strings(text: &str) -> Vec<usize> {
         }
     }
     outside
+}
+
+/// What a table-body line assigns to `key`.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Assigned<'a> {
+    /// This line assigns `key`; the text after the `=`, uninterpreted.
+    Value(&'a str),
+    /// This line assigns some other key, or is not an assignment.
+    Other,
+    /// This line assigns something this reader cannot attribute: a key spelling it does not decode, or a
+    /// dotted head naming `key` as a **table** rather than as this key.
+    Unreadable,
+}
+
+/// The text `line` assigns to `key`, decided by decoding the key rather than by matching its raw text.
+///
+/// **The heading side of this module decoded and the key side did not, so spellings cargo accepts read
+/// as *the key is absent*.** Measured under cargo 1.96.0: `[workspace.package]` with `"version" = "0.5.0"`
+/// and with `'version' = "0.5.0"` each resolve a member at `0.5.0`, and `[package]` with `"name" = "m"` names
+/// `m` — and each answered `Absent` here, the state both readers' docs reserve for a key that is not there.
+/// The message an operator then read was *workspace version is missing or malformed*, about a manifest that
+/// declares it plainly. One owner for the question, asked by both readers, is what a review's structural row
+/// asked for and what this is.
+///
+/// A **dotted** head naming `key` — `version.workspace = true`, the spelling every member writes — assigns a
+/// field of that key rather than the key, so it is `Unreadable` rather than a value: refusing is visible,
+/// where taking `true` as a version would not be. A dotted head naming anything else is `Other`, because a
+/// member's `[package]` body is full of them and refusing on those would refuse every manifest in the tree.
+pub(crate) fn assigned<'a>(line: &'a str, key: &str) -> Assigned<'a> {
+    let line = line.trim();
+    let Some(at) = outside_strings(line)
+        .into_iter()
+        .find(|at| line[*at..].starts_with('='))
+    else {
+        return Assigned::Other;
+    };
+    let (head, value) = line.split_at(at);
+    let segments = dotted(head.trim());
+    let Some(first) = segments.first().and_then(|first| unquoted(first.trim())) else {
+        return Assigned::Unreadable;
+    };
+    if first != key {
+        return Assigned::Other;
+    }
+    match segments.len() {
+        1 => Assigned::Value(&value[1..]),
+        _ => Assigned::Unreadable,
+    }
 }
 
 /// What a TOML table heading names, and whether it opens an array of tables.

@@ -539,6 +539,79 @@ fn a_quoted_key_carries_its_dots_and_an_array_is_not_a_table() {
     assert_eq!(table_heading("name = \"x\""), None);
 }
 
+/// A key cargo accepts is read, and one it writes as a table value is refused rather than called absent.
+///
+/// **Every row was put to `cargo metadata` first, through a member inheriting `version.workspace = true`.**
+/// Each of `"version" = "0.5.0"`, `'version' = "0.5.0"` and `["workspace".package]` resolves the member at
+/// `0.5.0`; so do `[workspace]` with `package.version = "0.5.0"` and with `package = { version = "0.5.0" }`.
+///
+/// The heading side of this module decoded and the key side matched raw text, so the first two answered
+/// `Absent` — the state this type reserves for a key that is not there — and both git-reading gates then said
+/// *workspace version is missing or malformed* about a manifest that declares it plainly. A review found it in
+/// the last pass before the cut.
+///
+/// The last two are refused rather than read: composing a table out of a dotted key path or an inline table is
+/// structure this reader does not build. Refusing names the line; reporting absence names nothing, and that
+/// difference is the whole of this type's third state.
+#[test]
+fn a_key_spelling_cargo_accepts_is_read_and_a_table_written_as_a_value_is_refused() {
+    for (label, manifest) in [
+        (
+            "quoted key",
+            "[workspace.package]\n\"version\" = \"0.5.0\"\n",
+        ),
+        (
+            "literal key",
+            "[workspace.package]\n'version' = \"0.5.0\"\n",
+        ),
+        (
+            "quoted heading segment",
+            "[\"workspace\".package]\nversion = \"0.5.0\"\n",
+        ),
+        (
+            "spaces around the key",
+            "[workspace.package]\n  version   = \"0.5.0\"\n",
+        ),
+    ] {
+        assert_eq!(
+            workspace_version(manifest),
+            WorkspaceVersion::Declared("0.5.0".to_string()),
+            "{label}: cargo resolves a member at 0.5.0 through this spelling"
+        );
+    }
+
+    for (label, manifest) in [
+        (
+            "dotted key in the parent table",
+            "[workspace]\npackage.version = \"0.5.0\"\n",
+        ),
+        (
+            "inline table in the parent",
+            "[workspace]\npackage = { version = \"0.5.0\" }\n",
+        ),
+    ] {
+        assert!(
+            matches!(workspace_version(manifest), WorkspaceVersion::Unreadable(_)),
+            "{label}: this declares the table as a value, which is not the same fact as declaring nothing"
+        );
+    }
+
+    // A dotted head naming this key assigns a field of it, not it. Every member writes this line.
+    assert!(
+        matches!(
+            workspace_version("[workspace.package]\nversion.workspace = true\n"),
+            WorkspaceVersion::Unreadable(_)
+        ),
+        "`version.workspace = true` is not a version, and it is not an absent key either"
+    );
+    // And a dotted head naming something else is another key's business, not a refusal.
+    assert_eq!(
+        workspace_version("[workspace.package]\nedition.workspace = true\nversion = \"0.5.0\"\n"),
+        WorkspaceVersion::Declared("0.5.0".to_string()),
+        "a member's `[package]` body is full of dotted keys; refusing on those would refuse every manifest"
+    );
+}
+
 /// A name spelled in escapes is decoded, exactly as cargo decodes it.
 ///
 /// **Every row below was put to `cargo metadata` first.** `"\u0070ublish" = false` reports `publish=[]`, and a
