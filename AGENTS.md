@@ -535,6 +535,21 @@ and doc for the retired term across its *whole* file, not only the new diff: syn
 correctly-worded requirement while the same file's older prose still names the retired shape is
 itself an undetected drift, invisible to a diff-only read (the 0.3.0 `finding_key` lesson).
 
+**A sweep is keyed to the claim, not to the phrasing it last saw.** Measured across one window: the same
+inverted statement of the Core Contract was corrected three times and survived twice, because each sweep
+searched for the wording in front of it. The first was line-oriented and could not see an instance wrapped
+across two comment lines; the second joined lines but kept the phrase, and missed a third spelling of the
+claim; a review proposing the fix named a pattern narrower than its own finding. What finds all of them is a
+line-joined search for the **claim** — here `forbid\w*.{0,40}more strictly` — over tracked content, with the
+document doing the reporting inside its own corpus. **Record the pattern beside the correction**, or the next
+round re-derives a narrower one: when a second run finds new instances of a phrasing variant, the pattern is
+the subject rather than the sites.
+
+Once a claim like that is corrected, its pattern does not return zero and should not: what it finds afterwards
+is **the pattern's own occurrences and the marked quotations** — a dated entry recording what the wrong wording
+said, in italics or backticks, beside the right one. The finding is an *assertion*, never a quotation, so a
+sweep whose hits are all quoted is the finished state rather than an unfinished one.
+
 **Retiring a capability requires the same sweep, not only renaming one.** A rename changes the word a
 grep looks for; a retirement removes the subject a `CHANGELOG.md`/`BACKLOG.md` entry was narrating, and
 an entry that still describes the retired mechanism in the present tense is exactly as stale as one

@@ -2497,6 +2497,21 @@ fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
         "an undecodable key is not a disagreement, it is an unread one: {}",
         refusal.message
     );
+    // **The site, not only the class.** Asserting the class alone let the first version of this pass while the
+    // gate said *a `package` value this check cannot read* — about a dependency declaring no `package` key at
+    // all, sending an operator to look for a key that is not there. A review read the emitted diagnostic rather
+    // than the exit class and found it; every sibling direction in this file asserts the site.
+    refusal::expect(
+        "release-coherence#example-dependency-field-unreadable",
+        &refusal,
+    );
+    assert!(
+        refusal
+            .message
+            .contains("a field whose key this check cannot decode"),
+        "the refusal names what it could not read: {}",
+        refusal.message
+    );
 }
 
 /// A stale internal pin behind a quoted tail is refused, where it used to pass the gate.
