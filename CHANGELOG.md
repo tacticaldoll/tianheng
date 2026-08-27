@@ -8048,6 +8048,19 @@ no adopter runs. They are here rather than under the adopter headings above beca
   count is here beside the rule.
 
 
+- **A `path.rs:120` into this tree is a moving reference, and the governance row for moving references now
+  names it.** A relative anchor — *this window*, *the previous round* — was already refused on the ground that
+  it goes stale when the window closes; a line number goes stale when a line is inserted above it, and unlike a
+  retired term **nothing goes red**. Name the item instead of its position.
+
+  No reaction, and the measurement is why rather than the intent: the tree holds no such reference, and the only
+  `path:line` in it is a **reaction's own output** — `bound_register`, `restatement` and the bound parser each
+  report where they found an offence, and their directions assert that they do. That is the one place the shape
+  is right, and a detector cannot tell it from the offence, so a rule with it allowlisted would be two lists
+  that must agree. Eleven occurrences were read to establish that; the eleventh was a false positive of the
+  search itself, `spec.md: 2 fence line(s)`, where the colon precedes a count.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
