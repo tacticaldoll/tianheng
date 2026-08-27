@@ -181,8 +181,9 @@ pub fn workspace_version(text: &str) -> WorkspaceVersion {
             Assigned::Value(value) => Some(Ok(value)),
             Assigned::Other => None,
             // A spelling this reader does not decode is not an absent key, and saying so is the whole of
-            // `WorkspaceVersion`'s third state.
-            Assigned::Unreadable => Some(Err(line.trim().to_string())),
+            // `WorkspaceVersion`'s third state. A dotted head naming `version` assigns a field of it —
+            // `version.workspace = true` — which is not a version and is not an absent key either.
+            Assigned::Field { .. } | Assigned::Unreadable => Some(Err(line.trim().to_string())),
         })
         .collect();
     let values: Vec<&str> = match values.into_iter().collect::<Result<Vec<&str>, String>>() {
@@ -204,11 +205,22 @@ pub fn workspace_version(text: &str) -> WorkspaceVersion {
         let workspace = crate::sections::cut(source.toml().numbered_lines(), |line| {
             table_heading(line).map(|heading| heading.names("workspace"))
         });
+        //
+        // **Only where that key could carry the version.** A review noted the over-refusal: `[workspace]` with
+        // `package.authors = […]` and no version anywhere is a manifest whose workspace version genuinely IS
+        // absent, and naming that line unreadable would answer the wrong fact. A dotted head is therefore
+        // asked for its tail. The inline form is refused whatever it holds, because this reader does not parse
+        // an inline table and so cannot tell `package = { version = "0.5.0" }` from
+        // `package = { authors = […] }` — refusing there names the line it could not read, which is the fact.
         if let Some(line) = workspace
             .iter()
             .filter(|table| table.name)
             .flat_map(|table| table.body.iter())
-            .find(|(_, line)| !matches!(assigned(line, "package"), Assigned::Other))
+            .find(|(_, line)| match assigned(line, "package") {
+                Assigned::Field { tail, .. } => tail == "version",
+                Assigned::Value(_) => true,
+                Assigned::Other | Assigned::Unreadable => false,
+            })
             .map(|(_, line)| line)
         {
             return WorkspaceVersion::Unreadable(line.trim().to_string());
@@ -349,34 +361,23 @@ pub fn publishable(text: &str) -> Publishable {
         .flat_map(|table| table.body.iter())
     {
         let trimmed = line.trim();
-        // **The key is identified exactly, and it used to be identified by its prefix.** A
-        // `strip_prefix("publish")` sent every `[package]` key beginning with those seven letters down this
-        // path: `publish-lockfile = true`, which cargo itself once accepted, read as *unreadable manifest*
-        // and refused the whole member — and cargo treats a key it does not know as unused and carries on.
-        // A prefix is not a key.
-        let Some((key, value)) = trimmed.split_once('=') else {
-            continue;
-        };
-        // `publish.workspace = true` and `publish = { workspace = true }` both defer to the workspace
-        // manifest, so neither is a verdict this text carries; the dotted spelling is recognised here and
-        // the inline table falls to the value arms below.
-        let (head, dotted) = match key.trim().split_once('.') {
-            Some((head, _)) => (head, true),
-            None => (key.trim(), false),
-        };
-        // **An undecodable key inside this table might be `publish`, so it is not skipped.** Measured
-        // against cargo: `"\u0070ublish" = false` reports `publish=[]`, so passing over the key answers
-        // *publishable* for a crate it refuses. Absent and unreadable are two facts here as everywhere.
-        let Some(head) = unquoted(head.trim()) else {
-            return Publishable::Unreadable(trimmed.to_string());
-        };
-        if head != "publish" {
-            continue;
-        }
-        let verdict = if dotted {
-            Publishable::Unreadable(trimmed.to_string())
-        } else {
-            classify(value.trim(), trimmed)
+        // **Through the shared key reader, which exists in this file to answer exactly this.** This held its
+        // own chain — `split_once('=')`, then `split_once('.')`, then `unquoted` — reaching the right answer
+        // for `publish` while splitting on the first *raw* `=` and the first raw `.`, where the shared reader
+        // cuts outside strings. A second implementation of one predicate, in the same module as the first, is
+        // the shape this file spends its history closing; a review found it one round after the reader landed.
+        //
+        // What each answer means here has not changed. A key spelling this reader cannot decode **might** be
+        // `publish` — measured against cargo, `"\u0070ublish" = false` reports `publish=[]`, so passing over
+        // it answers *publishable* for a crate cargo refuses. And `publish.workspace = true` assigns a field
+        // of the key rather than the key, deferring to the workspace manifest, which is not a verdict this
+        // text carries.
+        let verdict = match assigned(trimmed, "publish") {
+            Assigned::Value(value) => classify(value.trim(), trimmed),
+            Assigned::Field { .. } | Assigned::Unreadable => {
+                Publishable::Unreadable(trimmed.to_string())
+            }
+            Assigned::Other => continue,
         };
         // Cargo refuses a manifest that declares one key twice, so a reader answering from the first of two
         // would speak for a file cargo will not read at all.
@@ -527,10 +528,16 @@ pub(crate) fn outside_strings(text: &str) -> Vec<usize> {
 pub(crate) enum Assigned<'a> {
     /// This line assigns `key`; the text after the `=`, uninterpreted.
     Value(&'a str),
+    /// This line assigns a **field** of `key` through a dotted head: the segments after it, joined, and the
+    /// text after the `=`.
+    ///
+    /// `version.workspace = true` is this, with `workspace` as the tail. It is not a value of `key`, and the
+    /// readers that want the key's own value refuse on it — but the tail is what lets a reader asking about a
+    /// *specific* field ask for it rather than compare spellings of the whole line.
+    Field { tail: String, value: &'a str },
     /// This line assigns some other key, or is not an assignment.
     Other,
-    /// This line assigns something this reader cannot attribute: a key spelling it does not decode, or a
-    /// dotted head naming `key` as a **table** rather than as this key.
+    /// This line assigns something this reader cannot attribute: a key spelling it does not decode.
     Unreadable,
 }
 
@@ -541,13 +548,22 @@ pub(crate) enum Assigned<'a> {
 /// and with `'version' = "0.5.0"` each resolve a member at `0.5.0`, and `[package]` with `"name" = "m"` names
 /// `m` — and each answered `Absent` here, the state both readers' docs reserve for a key that is not there.
 /// The message an operator then read was *workspace version is missing or malformed*, about a manifest that
-/// declares it plainly. One owner for the question, asked by both readers, is what a review's structural row
-/// asked for and what this is.
+/// declares it plainly.
+///
+/// **What this owns, exactly.** Every reader asking *does this line assign the key I want* asks here:
+/// [`workspace_version`], [`publishable`], and `release_coherence_gate::package_name`. The dependency reader
+/// and the lock reader do **not**: they ask *which* key a line assigns, with the key unknown, which is a
+/// different question. A first version of this sentence said *one reader owns the question for every table
+/// body* — wider than the code, and found by a review that enumerated the walkers instead of grepping for the
+/// shape the previous repair had replaced. `BACKLOG.md` carries the general form that would unify them, with
+/// the trigger that would earn it.
 ///
 /// A **dotted** head naming `key` — `version.workspace = true`, the spelling every member writes — assigns a
-/// field of that key rather than the key, so it is `Unreadable` rather than a value: refusing is visible,
-/// where taking `true` as a version would not be. A dotted head naming anything else is `Other`, because a
-/// member's `[package]` body is full of them and refusing on those would refuse every manifest in the tree.
+/// field of that key rather than the key, so it is [`Assigned::Field`] carrying the tail. A reader wanting the
+/// key's own value refuses on it, because taking `true` as a version would not be visible; a reader asking
+/// about that named field asks for the tail instead of comparing spellings of the whole line, which is what
+/// the inherit recogniser in `release_coherence_gate` does. A dotted head naming anything else is `Other`,
+/// because a member's `[package]` body is full of them and refusing on those would refuse every manifest.
 pub(crate) fn assigned<'a>(line: &'a str, key: &str) -> Assigned<'a> {
     let line = line.trim();
     let Some(at) = outside_strings(line)
@@ -564,9 +580,13 @@ pub(crate) fn assigned<'a>(line: &'a str, key: &str) -> Assigned<'a> {
     if first != key {
         return Assigned::Other;
     }
-    match segments.len() {
-        1 => Assigned::Value(&value[1..]),
-        _ => Assigned::Unreadable,
+    if segments.len() == 1 {
+        return Assigned::Value(&value[1..]);
+    }
+    let tail: Vec<&str> = segments[1..].iter().map(|segment| segment.trim()).collect();
+    Assigned::Field {
+        tail: tail.join("."),
+        value: &value[1..],
     }
 }
 

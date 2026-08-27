@@ -466,6 +466,32 @@ consumer for an undemonstrated deduplication.
   *Authority:* this entry, `AGENTS.self-law.md`, `crates/kanhe/tests/release_coherence.rs`'s documented bug
   history.
 
+  **Two lists of `(String, String)` with different meanings flow through one function, and only the failure
+  matrix can tell them apart.** `require_version_surfaces` takes the `(path, text)` manifests and returns the
+  `(path, name)` pairs `require_example_pins` produced; `require_changelog_state` and the lock reader read the
+  second. *Observation source:* a review opened Gate 4 on that function needing an *and then* to state its job,
+  and proposed moving the two pin calls to the caller "since the `Vec<(String, String)>` return already exists
+  for that". The move was made and reverted: the caller's `manifests` became the text list, and the lock check
+  reported *Cargo.lock is missing workspace package* with a whole manifest where a name belongs. Nothing but
+  the message assertions caught it. *Risk, bounded:* latent — today's flow is correct, and the swap is only
+  reachable by editing this sequence. *The shape:* give the two lists distinct types, so the swap cannot
+  compile and the Gate 4 rename becomes free. *Promotion trigger:* the next edit to this sequence, or a third
+  consumer of either list. *Compatibility class:* patch; the gate ships in no crate. *Authority:* this entry.
+
+  **A second question about a table-body line is still answered in two places, and the general form is named
+  here rather than built.** `manifest::assigned` answers *does this line assign the key I want* for the
+  workspace version, the package name and publishability. The dependency reader and the lock reader ask *which*
+  key a line assigns, with the key unknown, and each decides it themselves — the dependency reader over raw
+  text, so `"xuanji"`, `'xuanji'` and `"\u0078uanji"` reach it with their quotes and route to `KeyUnreadable`,
+  a cannot-judge an operator cannot act on rather than the answer cargo gives. *Observation source:* a
+  whole-window review that enumerated the walkers instead of grepping for the shape the previous repair had
+  replaced — the grep found the walker that looked like `package_name` and missed these. *Risk, bounded:* both
+  reach fail-closed answers today; the dependency reader refuses where it cannot decode, and the lock reader
+  reads a file cargo writes. *The shape:* one `assignment(line) -> Assignment` naming the key it found, decoded,
+  with `assigned` as a thin wrapper over it — which deletes both local chains rather than adding a third.
+  *Promotion trigger:* a manifest in the subject corpus spelling a dependency key non-bare, or a third caller
+  needing the same question. *Compatibility class:* patch; the readers ship in no crate. *Authority:* this entry.
+
   **The surface grew by an escape decoder, and that was the cheaper of two wrong answers rather than a
   reversal of this entry.** `manifest::decoded` resolves the escapes cargo resolves in a table heading or a
   key. It was added because the alternative was measured and was worse: `cargo metadata` reads `serde` under

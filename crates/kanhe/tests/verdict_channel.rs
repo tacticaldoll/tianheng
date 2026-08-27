@@ -109,7 +109,12 @@ fn a_verdict_fails_the_run_only_where_it_refuses() {
 #[test]
 fn the_clean_rendering_is_no_refusal_class() {
     let classes = [Kind::Violation, Kind::CannotJudge];
-    // The set above is held to `Kind` itself: a variant added there and not here fails to compile.
+    // **What the match buys is that a new variant cannot be added without editing this function**, not that
+    // the list above is complete — a review made that distinction, and the first wording of this comment
+    // claimed the stronger thing. Adding the arm and forgetting the array element still compiles, leaving the
+    // new class unasserted. An `ALL` const beside `Kind` would move the hand-kept list rather than remove it,
+    // which is the same defect one level over; what removes it is a derive this crate's dependency allowlist
+    // does not carry. So the compiler stops here and a reader is standing three lines from the array.
     for class in classes {
         match class {
             Kind::Violation | Kind::CannotJudge => {}

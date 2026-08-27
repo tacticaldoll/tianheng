@@ -8097,7 +8097,9 @@ no adopter runs. They are here rather than under the adopter headings above beca
   second had a quieter consequence as well: that state also falls back to the **directory** the manifest sits
   in, so a member was compared under an identity its manifest never gave.
 
-  One reader owns the question for every table body now, asked by both. A dotted head naming the sought key
+  One reader owns the question wherever a reader asks *does this line assign the key I want* — and a later
+  review narrowed that sentence, which was written wider than the code: two walkers ask *which* key a line
+  assigns, with the key unknown, and are not this reader's. A dotted head naming the sought key
   assigns a *field* of it — `version.workspace = true`, the line every member writes — so it is refused rather
   than taken as a value, while a dotted head naming any other key stays another key's business, since refusing
   on those would refuse every member manifest in the tree. Seen to fail: with the raw-text match restored, the
@@ -8121,6 +8123,52 @@ no adopter runs. They are here rather than under the adopter headings above beca
   never been compared — bounded, because a wrapper reads an unrecognised class as unjudged and exits `2`, but a
   variant rendering as clean would have made the wrapper read a refusal as agreement. The match is the
   enumerator now; planting a third variant fails the build at that line, which is how it was checked.
+
+
+- **The inherit recogniser took one spelling of four, and the other three were a false refusal at exit 1.** It
+  was whitespace-stripped string equality against `version.workspace=true`. Measured under cargo 1.96.0, each
+  resolving the member at `0.5.0`: `version.workspace = true`, `version = { workspace = true }`,
+  `"version".workspace = true` and `'version'.workspace = true` — and the last three reached
+  *member-does-not-inherit-workspace-version*, a violation over manifests cargo reads. Nothing declared the
+  narrowness: not the spec, not the observation bounds, not the doc above the call.
+
+  It asks the shared key reader now, which reports a dotted head's **tail** — so the question is *is the field
+  `workspace`* rather than a list of spellings to keep in step, and the inline form is a `version` whose value
+  carries the offer. Seen to fail: with the equality restored, the inline-table row is that violation again.
+
+  `without_wschar` went with it. That predicate existed for this one comparison, and the reason its doc gave —
+  that TOML's `wschar` is space and tab and nothing wider — is carried by `region::toml()`, which tracks strings
+  and cuts where TOML cuts. The Definition of Done is what found it: `-D dead-code` on the next run.
+
+- **`publishable` was a second implementation of the question the shared reader had just been written for**, in
+  the same file. Its own chain split on the first *raw* `=` and the first raw `.`, where the reader cuts outside
+  strings; it reached the right answer for `publish` and was one predicate written twice. Converted.
+
+  And the sentence claiming that reader owns the question **for every table body** was wider than the code by
+  two walkers, in three carriers — the spec acceptance clause, the reader's doc, and the changelog entry that
+  announced it. All three now say what holds: every reader asking *does this line assign the key I want* asks
+  one reader, while the dependency reader and the lock reader ask *which* key a line assigns, with the key
+  unknown. That is a different question, and the general form that would unify it is filed with its trigger
+  rather than asserted.
+
+- **A guard's comment claimed more than its guard.** The `CLEAN`-versus-refusal-class direction says a variant
+  added to `Kind` and not to its list fails to compile; what the exhaustive match actually buys is that adding a
+  variant forces an edit to *that function*, not to that array. Reworded to the truth. An `ALL` const beside
+  `Kind` would move the hand-kept list rather than remove it, and what removes it is a derive this crate's
+  dependency allowlist does not carry.
+
+- **An over-refusal this window introduced, found by a review's appendix rather than filed as a finding:**
+  `[workspace]` carrying `package.authors = […]` and no version anywhere is a manifest whose workspace version
+  genuinely is absent, and the new *declared as a value in its parent* refusal named that line instead. It asks
+  the dotted head for its tail now, so only a `package`-headed key that could carry the version refuses.
+
+- **A review's proposed repair was measured and refused, and the measurement is the finding.** Gate 4 asked for
+  `require_version_surfaces` to stop sequencing two pin checks, "since the `Vec<(String, String)>` return
+  already exists for that". That return is not the manifests those checks consume — it is the `(path, name)`
+  pairs `require_example_pins` produces, which the changelog and lock phases read. The move was made and the
+  failure matrix refused it: the caller's list became the `(path, text)` one, and the lock check reported
+  *Cargo.lock is missing workspace package* with a whole manifest where a name belongs. Two lists of one type
+  with different meanings is what made the move look safe; that is filed with its trigger, and the flow stays.
 
 
 ## [0.4.0] - 2026-08-04

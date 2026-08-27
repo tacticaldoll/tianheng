@@ -87,8 +87,14 @@ different things.
   `version.workspace = true`: each resolves the member at `0.5.0`, and `[package]` with `"name" = "m"` names
   `m`. The heading side decoded and the key side matched raw text, so each answered *the key is absent* — the
   state reserved for a key that is not there — and the gates then said *workspace version is missing or
-  malformed*, and *declares no `[package]` name*, about manifests that declare both. **One reader owns the
-  question for every table body**, rather than one decoding walker beside walkers comparing raw text
+  malformed*, and *declares no `[package]` name*, about manifests that declare both. **Every reader asking
+  whether a line assigns a named key asks one reader** — the workspace version, the package name, and
+  publishability — rather than each deciding it over raw text
+- **AND** the dependency reader and the lock reader ask a different question and are not that reader's: they
+  ask *which* key a line assigns, with the key unknown, where this one is asked about a key it is given.
+  A first statement of this requirement said *one reader owns the question for every table body*, which was
+  wider than the code by those two; the general form that would unify them is filed with its trigger rather
+  than asserted here
 - **AND** a **dotted** head naming the sought key assigns a field of it rather than the key —
   `version.workspace = true`, the line every member of this workspace writes — so it is refused as
   unattributable, never taken as a value. A dotted head naming any other key is another key's business, since

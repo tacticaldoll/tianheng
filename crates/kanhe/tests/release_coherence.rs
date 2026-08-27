@@ -2450,6 +2450,46 @@ fn an_example_inheriting_what_no_catalog_offers_is_not_judged() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// Every spelling of the inherit line that cargo honours is read as inheriting.
+///
+/// **Measured under cargo 1.96.0, each resolving the member at `0.5.0`:** `version.workspace = true`,
+/// `version = { workspace = true }`, `\"version\".workspace = true` and `'version'.workspace = true`. The
+/// recogniser was whitespace-stripped string equality against the first, so the other three answered *does not
+/// inherit* — a `violation_at`, exit 1, over manifests cargo reads. A false refusal is the direction this
+/// repository forbids more strictly than a miss, and nothing declared the narrowness: not the spec, not
+/// `docs/observation-bounds.md`, not the doc above the call.
+///
+/// It asks the shared key reader now. A dotted head naming `version` reports its **tail**, so this asks whether
+/// the field is `workspace` rather than comparing spellings of the whole line; the inline form is a `version`
+/// whose value carries the offer. Neither is a spelling this direction has to enumerate again.
+///
+/// Negative run: with the string equality restored, the three rows after the first are each
+/// *workspace package xuanji must inherit version.workspace = true*.
+#[test]
+fn every_inherit_spelling_cargo_honours_is_read_as_inheriting() {
+    for (label, line) in [
+        ("dotted", "version.workspace = true"),
+        ("inline table", "version = { workspace = true }"),
+        ("quoted key", "\"version\".workspace = true"),
+        ("literal key", "'version'.workspace = true"),
+    ] {
+        let root = scratch(&format!("inherit-{}", label.replace(' ', "-")));
+        let fixture = build_fixture(&root, "inherit", "0.2.0");
+        let manifest = fixture.repo.join("crates/xuanji/Cargo.toml");
+        let text = std::fs::read_to_string(&manifest).expect("read");
+        std::fs::write(&manifest, text.replace("version.workspace = true", line)).expect("write");
+        development_changelog(&fixture.repo, "0.2.0", true);
+        commit(&fixture.repo, "chore: spell the inherit line another way");
+        let verdict = judge(&fixture.repo);
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(
+            verdict.is_ok(),
+            "{label}: cargo resolves this member at the workspace version through this spelling: {:?}",
+            verdict.err()
+        );
+    }
+}
+
 /// A member whose `[package]` name is spelled in quotes is read under that name, not the directory's.
 ///
 /// **Measured: `[package]` with `\"name\" = \"xuanji\"` names `xuanji` to `cargo metadata`.** The reader matched
