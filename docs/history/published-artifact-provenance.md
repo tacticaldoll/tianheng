@@ -13,10 +13,13 @@ that reaction was written against.
 
 ## Inventory
 
-Audited 2026-08-05 across **all 96 published tarballs** — every version of `xuanji`, `guibiao`,
-`hunyi`, `louke`, `tianheng`, and `xingbiao` (which joined at `0.1.6`, so `0.1.0`–`0.1.5` have five
-crates rather than six). Within every single version the recorded commit is **identical across all of
-its crates**, so the inventory is per version: each release was one publish run from one checkout.
+Audited 2026-08-05 across **all 96 published tarballs** then on the books — every version of `xuanji`,
+`guibiao`, `hunyi`, `louke`, `tianheng`, and `xingbiao` (which joined at `0.1.6`, so `0.1.0`–`0.1.5` have five
+crates rather than six). `0.5.0`'s six were audited separately on 2026-08-28, the day they were published, by
+the same command below; the earlier rows are not re-derived here, and the scope line says which audit covered
+what rather than letting one date stand for both. Within every single version the recorded commit is
+**identical across all of its crates**, so the inventory is per version: each release was one publish run from
+one checkout.
 
 | Version | Recorded in the tarballs | `vX.Y.Z` names | Verdict |
 |---|---|---|---|
@@ -37,6 +40,7 @@ its crates**, so the inventory is per version: each release was one publish run 
 | `0.2.3` | `34b114dd4895eed8f30eaad5da2616b5fdac9a98` | same | **agrees with the tag** |
 | `0.3.0` | `66e3096e2bb06c360eb350be4641198814b429ef` | same | **agrees with the tag** |
 | `0.4.0` | `f1dba52c0281d402f11c4e578ab5cd4eae2a9be8` | `e645a549` | published from the release branch |
+| `0.5.0` | `62611512095ccc8a851ba75e223d11f9fd8d4d15` | same | **agrees with the tag** |
 
 ## The two mechanisms
 

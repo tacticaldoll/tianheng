@@ -22,6 +22,25 @@ them.
 
 ## [Unreleased]
 
+### Self-governance
+
+- **`0.5.0`'s published tarballs name the commit its tag names, and the record now says so from measurement.**
+  All six were pulled from `static.crates.io` on their publication day and their `.cargo_vcs_info.json` read:
+  one distinct sha1 across the six, and it is the commit `v0.5.0` names — so
+  `docs/history/published-artifact-provenance.md` records *agrees with the tag*, the verdict `0.4.0` could not
+  earn (it was published from the release branch) and `0.2.2` lost afterwards (its snapshot was force-pushed
+  away). This is the first release the publish-source gate stood in front of, and it is the first whose
+  provenance was audited from the artifacts rather than reconstructed later.
+
+  The row could not be written in `0.5.0` itself: it is an audit **of the tarballs**, so it cannot precede
+  them, and the branch that would have carried it is archived at the release squash while `main` takes nothing
+  except through a release branch. `BACKLOG.md` carried the pointer across that gap and is retired with it.
+  The lag is structural and remains — this row reaches `main` only when `0.5.1` is cut.
+
+  The audit's scope line was restated rather than having its number bumped: the 2026-08-05 audit covered the
+  96 tarballs then on the books, and the six new ones were audited on 2026-08-28, so the sentence says which
+  audit covered what instead of letting one date stand for both.
+
 ## [0.5.0] - 2026-08-28
 
 ### Documentation
