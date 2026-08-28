@@ -2556,6 +2556,11 @@ fn two_dated_sections_for_one_version_are_not_judged() {
     for (label, stale) in [
         ("an older date first", "## [0.2.1] - 2020-01-01"),
         ("the same date twice", "## [0.2.1] - 2026-08-28"),
+        // **The sibling need not parse as a date.** A first version of this counted the candidates that had
+        // already passed the date test, so a malformed heading left one survivor and reported clean — and a
+        // heading left behind, or a typo'd date, is the likelier mistake than a second well-formed one.
+        ("a suffix that is not a date", "## [0.2.1] - notadate!!"),
+        ("no suffix at all", "## [0.2.1]"),
     ] {
         let root = scratch(&format!("two-dated-{}", label.replace(' ', "-")));
         let fixture = build_fixture(&root, "two-dated", "0.2.0");
@@ -2579,8 +2584,8 @@ fn two_dated_sections_for_one_version_are_not_judged() {
         )
         .expect("write");
         commit(&fixture.repo, "chore: two dated sections for one version");
-        let refusal = refuse(&fixture.repo, Kind::CannotJudge, "dated sections for 0.2.1");
-        refusal::expect("release-coherence#several-dated-release-sections", &refusal);
+        let refusal = refuse(&fixture.repo, Kind::CannotJudge, "sections for 0.2.1");
+        refusal::expect("release-coherence#several-release-sections", &refusal);
         let _ = std::fs::remove_dir_all(&root);
     }
 }
@@ -2635,6 +2640,41 @@ fn a_lock_block_writing_version_before_name_still_records_it() {
         verdict.is_ok(),
         "the lock records this member's version; which of two keys a block writes first is not a fact \
          about it: {:?}",
+        verdict.err()
+    );
+}
+
+/// A dependency key whose **name** carries a dot is one key, and cargo builds it.
+///
+/// **The row that tells the two readings apart.** `xuanji."version.extra" = true` is a single key literally
+/// named `version.extra`; `xuanji.version.extra = true` is two keys, structure beneath a string. Measured
+/// under cargo 1.96.0: the first builds, the second is refused as *cannot extend value of type string with a
+/// dotted key*. A reader that joins the decoded segments with dots and splits them back apart answers the
+/// same for both, and refused the manifest cargo accepts — the same collapse the table-heading reader keeps
+/// segments to avoid, on the side that had joined them.
+///
+/// Negative run: with the tail joined and re-split, this is a cannot-judge naming a field it cannot decode.
+#[test]
+fn a_dependency_key_whose_name_carries_a_dot_is_one_key() {
+    let root = scratch("dotted-name");
+    let fixture = build_fixture(&root, "dotted-name", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        format!("{text}xuanji.version = \"0.2\"\nxuanji.\"version.extra\" = true\n"),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "chore: a dependency key whose name carries a dot",
+    );
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "cargo builds this manifest — the key is named `version.extra`, not structure beneath `version`: {:?}",
         verdict.err()
     );
 }

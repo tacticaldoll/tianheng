@@ -399,6 +399,17 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 - **PINNED-BY** `a_catalog_entry_that_itself_inherits_is_named_rather_than_followed`
 - **PINNED-BY** `an_internal_pin_taking_the_workspace_offer_is_refused`
 
+#### Scenario: Two sections claim one version
+
+- **WHEN** a release-ready repository carries more than one `## [X.Y.Z]` section for the version being
+  released, whichever suffixes they carry — two dates, the same date twice, a suffix that is not a date, or
+  none at all
+- **THEN** the check refuses to judge, naming every claiming heading, because which one records the release
+  is not this reader's to choose. The count SHALL be taken over the sections that claim the version and not
+  over the ones whose suffix already parsed: a malformed sibling above a well-formed one is the likelier
+  mistake, and counting after the date filter left exactly one candidate and reported clean
+- **PINNED-BY** `two_dated_sections_for_one_version_are_not_judged`
+
 #### Scenario: A dated heading whose suffix is not a date
 
 - **WHEN** a release-ready repository carries `## [X.Y.Z] - ` followed by ten characters that are not an

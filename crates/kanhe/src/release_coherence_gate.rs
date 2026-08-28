@@ -562,7 +562,7 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                             &assignment
                         {
                             let head = name.as_str();
-                            let (tail, rest) = (tail.as_str(), *value);
+                            let (tail, rest) = (tail.as_slice(), *value);
                             // **The entry is created before the tail is judged, and that ordering is the
                             // point rather than an oversight.** A review read it as manufacturing a
                             // dependency the manifest does not declare, since `xuanji.features = [...]`
@@ -591,13 +591,18 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                                 });
                             // A tail of one segment names the field; a longer one is **structure beneath**
                             // it, which cargo refuses — `xuanji.version.extra = true` fails with *cannot
-                            // extend value of type string with a dotted key*, measured. The guard for that
-                            // shape reached the detailed spelling only when it was first written.
-                            let (head, deeper) = match tail.split_once('.') {
-                                Some((head, _)) => (head, true),
-                                None => (tail, false),
+                            // extend value of type string with a dotted key*, measured. The two are asked of
+                            // the **segments**, because a first version of this split a joined tail back
+                            // apart and so refused `xuanji."version.extra" = true` — one key whose name
+                            // carries a dot, which cargo accepts and builds.
+                            // An empty tail is not constructible — `assignment` returns `Key` for it — and
+                            // the arm answers in the safe direction anyway, so a later change that makes one
+                            // reachable refuses rather than skips the line.
+                            let (head, deeper) = match tail.split_first() {
+                                Some((head, rest)) => (Field::of(head), !rest.is_empty()),
+                                None => (None, true),
                             };
-                            match (Field::of(head), deeper) {
+                            match (head, deeper) {
                                 (Some(_), true) => {
                                     entry.field_unreadable = true;
                                     entry.paths.push(Quoted::Unreadable);
@@ -1154,7 +1159,7 @@ fn require_version_surfaces(
             .any(|line| match crate::manifest::assigned(line, "version") {
                 // `version.workspace = true`, in any spelling of the two keys.
                 crate::manifest::Assigned::Field { tail, value } => {
-                    tail == "workspace" && value.trim() == "true"
+                    tail == ["workspace"] && value.trim() == "true"
                 }
                 // `version = { workspace = true }`: the offer sits inside the value.
                 crate::manifest::Assigned::Value(value) => assignments(value, "workspace")
@@ -1238,23 +1243,34 @@ fn require_changelog_state(
             // the same assumption was made here and not checked. Four readers in this crate were each given
             // a *several* refusal when someone was in them; this one selects from a document and was never
             // asked.
-            let dated: Vec<&str> = sections
+            // **Counted over the sections, then the survivor is read — not counted over what already
+            // parsed.** The first repair placed the count *after* the date filter, so a malformed sibling was
+            // invisible to it: `## [{version}] - notadate` above a correct section left one candidate and
+            // reported clean, and so did a bare `## [{version}]`. Two headings for one version is the defect
+            // whether or not the second parses, and the malformed one — a heading left behind, a typo'd date —
+            // is the likelier mistake. The spec's own scenario for a bad suffix fires only when there is no
+            // well-formed sibling to hide behind, so nothing observed it.
+            let claiming: Vec<&str> = sections
                 .iter()
                 .filter(|section| section.name == format!("## [{version}]"))
-                .filter_map(|section| section.line.trim_end().strip_prefix(&prefix))
-                .filter(|rest| is_iso_date(rest))
+                .map(|section| section.line.trim_end())
                 .collect();
-            if dated.len() > 1 {
+            if claiming.len() > 1 {
                 return Err(cannot_judge_at(
-                    "release-coherence#several-dated-release-sections",
+                    "release-coherence#several-release-sections",
                     format!(
-                        "CHANGELOG carries {} dated sections for {version} ({}), so which one records the \
-                     release is not this reader's to choose",
-                        dated.len(),
-                        dated.join(", ")
+                        "CHANGELOG carries {} sections for {version} ({}), so which one records the release \
+                     is not this reader's to choose",
+                        claiming.len(),
+                        claiming.join(", ")
                     ),
                 ));
             }
+            let dated: Vec<&str> = claiming
+                .iter()
+                .filter_map(|line| line.strip_prefix(&prefix))
+                .filter(|rest| is_iso_date(rest))
+                .collect();
             let Some(dated) = dated.first().copied() else {
                 return Err(violation_at(
                     "release-coherence#dated-release-notes-missing",

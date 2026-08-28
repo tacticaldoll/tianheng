@@ -217,7 +217,7 @@ pub fn workspace_version(text: &str) -> WorkspaceVersion {
             .filter(|table| table.name)
             .flat_map(|table| table.body.iter())
             .find(|(_, line)| match assigned(line, "package") {
-                Assigned::Field { tail, .. } => tail == "version",
+                Assigned::Field { tail, .. } => tail == ["version"],
                 Assigned::Value(_) => true,
                 Assigned::Other | Assigned::Unreadable => false,
             })
@@ -537,13 +537,21 @@ pub(crate) fn outside_strings(text: &str) -> Vec<usize> {
 pub(crate) enum Assigned<'a> {
     /// This line assigns `key`; the text after the `=`, uninterpreted.
     Value(&'a str),
-    /// This line assigns a **field** of `key` through a dotted head: the segments after it, joined, and the
-    /// text after the `=`.
+    /// This line assigns a **field** of `key` through a dotted head: the key's remaining segments, each
+    /// decoded, and the text after the `=`.
     ///
-    /// `version.workspace = true` is this, with `workspace` as the tail. It is not a value of `key`, and the
-    /// readers that want the key's own value refuse on it — but the tail is what lets a reader asking about a
-    /// *specific* field ask for it rather than compare spellings of the whole line.
-    Field { tail: String, value: &'a str },
+    /// `version.workspace = true` is this, with `workspace` as the single tail segment. It is not a value of
+    /// `key`, and the readers that want the key's own value refuse on it — but the tail is what lets a reader
+    /// asking about a *specific* field ask for it rather than compare spellings of the whole line.
+    ///
+    /// **Segments rather than a joined string, for the reason `TableHeading` keeps them.** Joined with dots,
+    /// one key literally named `version.extra` and the two keys `version` then `extra` become the same text —
+    /// and cargo tells them apart: measured, `serde."version.extra" = true` builds while
+    /// `serde.version.extra = true` is refused as *cannot extend value of type string with a dotted key*. A
+    /// consumer splitting the join back apart cannot answer *is this structure beneath a field I judge*. That
+    /// argument is the one `TableHeading::segments` already carried; this side joined anyway, and nothing
+    /// asked the question the join answers wrongly until a consumer needed it.
+    Field { tail: Vec<String>, value: &'a str },
     /// This line assigns some other key, or is not an assignment.
     Other,
     /// This line assigns something this reader cannot attribute: a key spelling it does not decode.
@@ -624,11 +632,7 @@ pub(crate) fn assignment(line: &str) -> Assignment<'_> {
     if tail.is_empty() {
         Assignment::Key { name, value }
     } else {
-        Assignment::Field {
-            name,
-            tail: tail.join("."),
-            value,
-        }
+        Assignment::Field { name, tail, value }
     }
 }
 
@@ -640,7 +644,7 @@ pub(crate) enum Assignment<'a> {
     /// `key.tail = value`, both decoded.
     Field {
         name: String,
-        tail: String,
+        tail: Vec<String>,
         value: &'a str,
     },
     /// The key itself could not be decoded, so which key this line assigns is unknown.
