@@ -113,8 +113,8 @@ different things.
   this reader does not build; refusing names what it met, where reporting absence names a declaration nobody
   made
 - **AND** a dependency whose classification the reader could not read is **refused, not treated as external**.
-  A dependency with no `path` is external and skipped; one whose path could not be read might be internal, and
-  *might be* is not an answer. Measured: `xuanji."path" = "xuanji"` beside `xuanji.version = "0.5"` is a path
+  Which crate a dependency names decides whether it is internal; one whose path could not be read names a
+  family crate whose source is undecided, and *might be this workspace's* is not an answer. Measured: `xuanji."path" = "xuanji"` beside `xuanji.version = "0.5"` is a path
   dependency at `^0.5` to cargo, and reading the tail raw answered *no path* — so the stale pin left the
   internal check's subject in silence while one correct pin elsewhere satisfied its non-vacuity floor, and the
   release reported clean. That is the aggregate-counter shape the per-example check records having fixed, in its
@@ -269,17 +269,35 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   check kept a line-oriented scan, and the two then disagreed over a manifest cargo reads correctly — the
   scan selected any line carrying `path`, `"crates/` and `=`, so it took `path` for the dependency's name
   and never read the `version` line, refusing with *internal dependency path has no version pin*. Which
-  dependencies are internal is read from each one's own `path` value rather than from the shape of a line
+  dependencies are internal is read from each one's own **identity** — the crate it names — rather than from
+  the shape of a line or from where it points
 - **PINNED-BY** `an_internal_pin_written_as_a_detailed_table_is_read`
 - **PINNED-BY** `a_stale_internal_pin_in_a_detailed_table_is_a_violation`
+
+#### Scenario: A family crate the catalog offers from anywhere but this workspace
+
+- **WHEN** the root manifest offers a crate the workspace itself declares — `xuanji = "0.4.0"`, a `git`
+  source, or a `path` outside `crates/` — rather than by a path into this workspace
+- **THEN** the check fails, naming the crate it could not hold. The subject SHALL be selected by the crate a
+  dependency **names**, not by where it points: measured under cargo 1.96.0, a catalog entry `xuanji = "0.4.0"`
+  beside a local member `xuanji 0.9.0` gives the inheriting member `registry+…#xuanji@0.4.0` with the member
+  unused, and `cargo package` on a `git` dependency carrying a `version` drops the source and records the
+  version alone. Either way the published requirement is that version, so a stale family requirement reached
+  `cargo publish` through a line a path-selected subject never contained, and deleting one `path = …` is the
+  whole of the edit that gets there
+- **AND** the identity a dependency declares SHALL have **one** reader for both pin checks. Two readers of one
+  question is what left this open: the example check resolved identity because examples carry no path, the
+  root check selected on path, and the asymmetry was written down as earned
+- **PINNED-BY** `a_family_crate_offered_with_no_path_is_a_violation`
+- **PINNED-BY** `a_family_crate_offered_from_outside_crates_is_a_violation`
 
 #### Scenario: An internal dependency this reader cannot resolve is not one it may skip
 
 - **WHEN** the root manifest declares an internal dependency whose `path` or `version` is not a
   double-quoted string, or declares more than one of either key
 - **THEN** the check refuses as a cannot-judge saying which key and which of the two it met. An unreadable
-  **path** is the one that cannot be answered by skipping the entry, because whether the entry is an
-  internal dependency at all is what could not be read
+  **path** is the one that cannot be answered by skipping the entry, because the entry names a family crate
+  and whether members inherit *this workspace's* copy of it is what could not be read
 - **PINNED-BY** `a_path_or_a_version_this_reader_cannot_read_is_a_cannot_judge`
 - **PINNED-BY** `several_paths_or_several_versions_in_one_dependency_are_not_chosen_between`
 

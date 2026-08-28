@@ -525,8 +525,8 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                 // it is the form a maintainer reaches for — `version.workspace = true` is that spelling in
                 // every member's `[package]` table — and reading the two lines as two dependencies is what let
                 // a stale pin through: the `path` line carried a path and no version, the `version` line a
-                // version and no path, and `require_internal_pins` selects on **path**, so neither was
-                // internal to it. Measured before this repair: four correct inline siblings plus a stale
+                // version and no path, and `require_internal_pins` selected on **path** then, so neither
+                // was internal to it. Measured before this repair: four correct inline siblings plus a stale
                 // dotted pair answered `Ok(())`, where the same staleness written inline is a violation.
                 //
                 // **Grouped by head key, not repaired per line.** Filing each dotted line as its own record
@@ -1115,7 +1115,7 @@ fn require_version_surfaces(
     repo: &Path,
     root_manifest: &str,
     version: &str,
-) -> Result<Vec<(String, String)>, Refusal> {
+) -> Result<Vec<Member>, Refusal> {
     let manifests = workspace_manifests(repo)?;
     for (path, text) in &manifests {
         // Only the refusal message needs the name here — the inheritance read below works off the text
@@ -1174,8 +1174,10 @@ fn require_version_surfaces(
             ));
         }
     }
-    require_internal_pins(root_manifest, version)?;
-    require_example_pins(repo, &manifests, version)
+    let members = family_members(&manifests)?;
+    require_internal_pins(root_manifest, version, &members)?;
+    require_example_pins(repo, &members, version)?;
+    Ok(members)
 }
 
 /// The changelog surfaces whose required shape depends on which phase of the ritual this is.
@@ -1183,7 +1185,7 @@ fn require_changelog_state(
     repo: &Path,
     prose: crate::region::Prose<'_>,
     sections: &[Section],
-    manifests: &[(String, String)],
+    members: &[Member],
     version: &str,
     spine: &Spine,
 ) -> Result<(), Refusal> {
@@ -1319,7 +1321,7 @@ fn require_changelog_state(
                     },
                 ));
             }
-            require_lock_versions(repo, manifests, version)?;
+            require_lock_versions(repo, members, version)?;
         }
     }
     Ok(())
@@ -1473,12 +1475,12 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     // two problems is refused for whichever phase reaches its own first, and the failure matrix asserts the
     // message. So these are a sequence rather than a set, and moving one moves what gets reported.
     let spine = release_spine(repo, &version, version_parts)?;
-    let manifests = require_version_surfaces(repo, &root_manifest, &version)?;
+    let members = require_version_surfaces(repo, &root_manifest, &version)?;
     require_changelog_state(
         repo,
         changelog_source.prose(),
         &changelog_sections,
-        &manifests,
+        &members,
         &version,
         &spine,
     )?;
@@ -1553,6 +1555,54 @@ fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal> {
     Ok(out)
 }
 
+/// Which crate a dependency names, or a refusal saying why that cannot be decided.
+///
+/// **The identity of a dependency, asked once for both pin readers.** `whose` names the manifest for the
+/// message — *example adopter*, *the workspace catalog* — and the sites are named for the question rather
+/// than for the caller that first asked it, because the same answers decide membership on both sides.
+///
+/// Which crate a dependency names is its `package` field where it has one, and its key only otherwise. Keying
+/// on the name alone was a false negative of the class the Core Contract forbids: cargo renames with
+/// `alias = { package = "xuanji", version = "stale" }`, `alias` is in no family, and the entry was skipped
+/// entirely — while the aggregate counter stayed non-zero on the strength of the other declarations.
+///
+/// A key this reader cannot decode names some crate, and which one is exactly what it cannot say — so it can
+/// neither be matched against the family nor passed over. Passing over is what it did.
+fn dependency_identity(package: Package, key: &str, whose: &str) -> Result<String, Refusal> {
+    match package {
+        Package::Named(package) => Ok(package),
+        Package::Unreadable => Err(cannot_judge_at(
+            "release-coherence#dependency-package-value-unreadable",
+            format!(
+                "{whose} declares `{key}` with a `package` value this check cannot read, so which crate it \
+                 names cannot be decided"
+            ),
+        )),
+        Package::FieldUnreadable => Err(cannot_judge_at(
+            "release-coherence#dependency-field-unreadable",
+            format!(
+                "{whose} declares `{key}` with a field whose key this check cannot decode, so what it \
+                 declares cannot be decided"
+            ),
+        )),
+        Package::Several(several) => Err(cannot_judge_at(
+            "release-coherence#dependency-declares-several-packages",
+            format!(
+                "{whose} declares {several} `package` keys for `{key}`, so which crate it names is not this \
+                 reader's to choose"
+            ),
+        )),
+        Package::KeyUnreadable(written) => Err(cannot_judge_at(
+            "release-coherence#dependency-key-unreadable",
+            format!(
+                "{whose} declares a dependency under the key {written}, which is not a bare TOML key — cargo \
+                 decodes such a key and this check does not, so which crate it names cannot be decided. Write \
+                 it bare, or give it an explicit `package = \"…\"`"
+            ),
+        )),
+    }
+}
+
 /// Every internal path dependency in the root manifest names the workspace version.
 ///
 /// **One reader, and no loop beside it.** This held its own line-oriented scan while the sibling that judges
@@ -1566,45 +1616,69 @@ fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal> {
 ///
 /// The selection is the dependency's own `path` value rather than the shape of the line it sits on, which is
 /// the same correction the sibling made when it stopped keying on the dependency's name.
-pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Result<(), Refusal> {
+pub(crate) fn require_internal_pins(
+    root_manifest: &str,
+    version: &str,
+    members: &[Member],
+) -> Result<(), Refusal> {
+    let family: Vec<&str> = members.iter().map(|member| member.name.as_str()).collect();
     let mut pins = 0usize;
     for Dependency {
         key,
-        package: _,
+        package,
         pin,
         path,
     } in declared_dependencies(root_manifest, Subject::Requires)
         .into_iter()
         .chain(declared_dependencies(root_manifest, Subject::Offers))
     {
-        // A dependency with no path is not an internal one; one whose path this reader cannot name might be,
-        // and *might be* is not an answer. The old selection asked whether the **line** carried `path` and
-        // `"crates/`, which is why it could not tell a path from the key of the dependency declaring it.
-        //
-        // **That premise now holds for a reason rather than by luck, and the reason is upstream.** It is true
-        // only while every form cargo accepts reaches this loop as *one* dependency carrying its own path.
-        // A dotted key did not: `xuanji.path` and `xuanji.version` arrived as two records, one with a path and
-        // no version and one with a version and no path, so a stale pin was internal to neither and passed.
-        // `declared_dependencies` groups a dotted key under its head now, so *no path* means the dependency
-        // declares none rather than that the reader split it in half.
-        //
-        // **`Package` is deliberately not consulted here, and that asymmetry with `require_example_pins` is
-        // earned.** An example depends by registry version and carries no path, so identity is its only
-        // selector and all four of its arms are reachable. This selects on path, and identity never
-        // participates: measured, a quoted key, a detailed table and a renamed dependency are each already
-        // refused by the pin comparison whatever `Package::of` answered about them. Matching it here would add
-        // three arms no input can reach — the dead-branch shape this file refuses one read earlier.
-        let path = match path {
-            Declared::Value(path) => path,
-            // An inherited dependency declares no `path` of its own: whatever the catalog offers, this line
-            // carries none, which is the same answer as the key being absent rather than a state of its own.
-            Declared::Absent | Declared::Inherited => continue,
+        // **Which crate this names decides membership; where it points is then a requirement.** The selection
+        // was the dependency's `path`, and an earlier note here called the asymmetry with
+        // `require_example_pins` earned — identity for one reader, path for the other. It was not. A family
+        // crate offered with no `path` at all resolves from the **registry**: measured under cargo 1.96.0, a
+        // catalog entry `xuanji = "0.4.0"` beside a local member `xuanji 0.9.0` gives the inheriting member
+        // `registry+…#xuanji@0.4.0`, and the local member sits unused. Every such requirement is published
+        // verbatim — `cargo package` on a `git` dependency carrying a `version` drops the source and records
+        // the version alone, measured the same way. So a stale family requirement reached `cargo publish`
+        // through a line the subject never contained, and dropping one `path = …` is the whole of the edit
+        // that gets there. Two readers of one question is what made it invisible; there is one now.
+        let package = dependency_identity(package, &key, "the workspace catalog")?;
+        if !family.contains(&package.as_str()) {
+            continue;
+        }
+        pins += 1;
+        // A family crate is a member of this workspace, so the catalog holds it by path. Anything else — a
+        // registry requirement, a `git` source, a path pointing outside `crates/` — is a different crate that
+        // happens to share the name, and members inheriting it build against that one.
+        match path {
+            Declared::Value(path) if path.starts_with("crates/") => {}
+            Declared::Value(path) => {
+                return Err(violation_at(
+                    "release-coherence#internal-path-outside-crates",
+                    format!(
+                        "internal dependency {key} is offered from {path}, which is not under crates/, so \
+                     what members inherit is not this workspace's {package}"
+                    ),
+                ));
+            }
+            Declared::Absent => {
+                return Err(violation_at(
+                    "release-coherence#internal-path-absent",
+                    format!(
+                        "internal dependency {key} names the family crate {package} with no `path`, so \
+                     members inherit the registry crate rather than this workspace's"
+                    ),
+                ));
+            }
+            // An inherited dependency declares no `path` of its own — and this is the manifest that declares
+            // the catalog, so the pin arm below refuses it as undecidable rather than reading it here.
+            Declared::Inherited => {}
             Declared::Unreadable(written) => {
                 return Err(cannot_judge_at(
                     "release-coherence#dependency-path-unreadable",
                     format!(
-                        "dependency {key} declares a `path` this check cannot read ({written}), so whether it \
-                     is an internal dependency cannot be decided"
+                        "dependency {key} declares a `path` this check cannot read ({written}), so whether \
+                     members inherit this workspace's {package} cannot be decided"
                     ),
                 ));
             }
@@ -1617,11 +1691,7 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
                     ),
                 ));
             }
-        };
-        if !path.starts_with("crates/") {
-            continue;
         }
-        pins += 1;
         match pin {
             Declared::Value(pin) if pin == version => {}
             Declared::Value(pin) => {
@@ -1676,36 +1746,55 @@ pub(crate) fn require_internal_pins(root_manifest: &str, version: &str) -> Resul
     // granularity it has: nothing else's success can keep this count non-zero.
     if pins == 0 {
         return Err(cannot_judge_at(
-            "release-coherence#no-internal-path-dependency-found",
-            "found no internal path dependency in Cargo.toml — the declaration form changed, so pin \
+            "release-coherence#no-internal-family-dependency-found",
+            "found no dependency on a family crate in Cargo.toml — the declaration form changed, so pin \
              coherence would be reported over nothing",
         ));
     }
     Ok(())
 }
 
-/// Returns the `(path, package)` each workspace manifest names, because resolving them is the first thing
-/// this does and the lock reader needed exactly that list. It re-read the manifests instead, which gave it
-/// two refusals for a name this reader had already refused on — branches nothing could reach.
-pub(crate) fn require_example_pins(
-    repo: &Path,
-    manifests: &[(String, String)],
-    version: &str,
-) -> Result<Vec<(String, String)>, Refusal> {
-    // A manifest whose package this reader cannot name is not a crate the examples may quietly skip: it would
-    // drop out of `family`, and every example pinning it would then pass the `!family.iter().any(…)` filter
-    // below without being examined. The two vacuity guards in this function are aggregate, so every crate but
-    // one parsing keeps them silent while that one goes unchecked — which is the partial case a vacuity guard
-    // is exactly unable to see.
-    let mut members: Vec<(String, String)> = Vec::new();
+/// A workspace member, by the name its manifest declares.
+///
+/// **A distinct type because the swap was reachable and then happened.** This list and the `(path, text)`
+/// manifests were both `Vec<(String, String)>`, so passing one where the other belonged compiled: measured
+/// once when a proposed refactor was reverted after the lock reader reported *Cargo.lock is missing workspace
+/// package* with a whole manifest where a name belongs, and again when a unit direction handed the manifests
+/// to a reader expecting members and got a vacuity refusal instead of the one it observes. `BACKLOG.md` filed
+/// the shape with the trigger *the next edit to this sequence, or a third consumer of either list*; the
+/// identity selection below is the third consumer.
+pub(crate) struct Member {
+    /// The `[package]` name the manifest declares.
+    ///
+    /// The manifest path is **not** carried: it was half of the tuple, and no consumer read it — the lock
+    /// reader destructured it away and both pin readers want the name. A field nothing reads is the dead
+    /// state this file refuses elsewhere, and the type is what stops the swap either way.
+    pub(crate) name: String,
+}
+
+/// Each workspace manifest's member — the family, resolved once for everything that asks which crates it
+/// holds.
+///
+/// A manifest whose package cannot be named is not a crate a reader may quietly skip: it would drop out of
+/// the family, and every declaration requiring it would then pass the membership filter without being
+/// examined. The vacuity guards downstream are aggregate, so every crate but one parsing keeps them silent
+/// while that one goes unchecked — which is the partial case a vacuity guard is exactly unable to see.
+///
+/// **Resolved at the caller rather than inside one consumer.** It was the first thing `require_example_pins`
+/// did, and it returned the list for the lock reader; the pin reader for the workspace catalog needs the same
+/// list and ran *before* it, which is how that reader came to select its subject by `path` instead. One
+/// resolution, three consumers, and no reader owning a list on another's behalf.
+pub(crate) fn family_members(manifests: &[(String, String)]) -> Result<Vec<Member>, Refusal> {
+    let mut members: Vec<Member> = Vec::new();
     for (path, text) in manifests {
         match package_name(text) {
-            PackageName::Named(name) => members.push((path.clone(), name)),
+            PackageName::Named(name) => members.push(Member { name }),
             PackageName::Absent => {
                 return Err(cannot_judge_at(
                     "release-coherence#crate-package-name-absent",
                     format!(
-                        "{path} declares no `[package]` name, so whether an example pins it cannot be decided"
+                        "{path} declares no `[package]` name, so which crates the family holds cannot be \
+                     decided"
                     ),
                 ));
             }
@@ -1713,14 +1802,22 @@ pub(crate) fn require_example_pins(
                 return Err(cannot_judge_at(
                     "release-coherence#crate-package-name-unreadable",
                     format!(
-                        "{path} declares a `[package]` name this check cannot read ({what}), so whether an \
-                     example pins it cannot be decided"
+                        "{path} declares a `[package]` name this check cannot read ({what}), so which crates \
+                     the family holds cannot be decided"
                     ),
                 ));
             }
         }
     }
-    let family: Vec<String> = members.iter().map(|(_, name)| name.clone()).collect();
+    Ok(members)
+}
+
+pub(crate) fn require_example_pins(
+    repo: &Path,
+    members: &[Member],
+    version: &str,
+) -> Result<(), Refusal> {
+    let family: Vec<String> = members.iter().map(|member| member.name.clone()).collect();
     let minor = version
         .rsplit_once('.')
         .map(|(head, _)| head)
@@ -1766,58 +1863,11 @@ pub(crate) fn require_example_pins(
         } in declared_dependencies(&text, Subject::Requires)
         {
             // **Which crate a dependency names is its `package` field where it has one, and its key only
-            // otherwise.** Keying on the name alone was a false negative of the class the Core Contract
-            // forbids: cargo renames with `alias = { package = "xuanji", version = "stale" }`, `alias` is in
-            // no family, and the entry was skipped entirely — while the aggregate `requirements` counter
-            // stayed non-zero on the strength of the other examples. The sibling `require_internal_pins`
-            // never had this hole because it keys on the PATH, which a rename cannot move; examples depend
-            // by registry version and have no path, so the identity has to be read.
-            let package = match package {
-                Package::Named(package) => package,
-                Package::Unreadable => {
-                    return Err(cannot_judge_at(
-                        "release-coherence#example-package-value-unreadable",
-                        format!(
-                            "example {name} declares `{key}` with a `package` value this check cannot read, so \
-                         which crate it requires cannot be decided"
-                        ),
-                    ));
-                }
-                Package::FieldUnreadable => {
-                    return Err(cannot_judge_at(
-                        "release-coherence#example-dependency-field-unreadable",
-                        format!(
-                            "example {name} declares `{key}` with a field whose key this check cannot decode, \
-                         so what it requires cannot be decided"
-                        ),
-                    ));
-                }
-                Package::Several(several) => {
-                    return Err(cannot_judge_at(
-                        "release-coherence#example-declares-several-packages",
-                        format!(
-                            "example {name} declares {several} `package` keys for `{key}`, so which crate it \
-                         requires is not this reader's to choose"
-                        ),
-                    ));
-                }
-                // **Refused here rather than filtered below, because below is where the false negative was.**
-                // A key this reader cannot decode names some crate, and which one is exactly what it cannot
-                // say — so it can neither be matched against the family nor passed over. Passing over is what
-                // it did: the raw spelling matched no member and `continue` dropped the entry, while the
-                // aggregate counter stayed non-zero on the strength of the other examples.
-                Package::KeyUnreadable(written) => {
-                    return Err(cannot_judge_at(
-                        "release-coherence#example-dependency-key-unreadable",
-                        format!(
-                            "example {name} declares a dependency under the key {written}, which is not a bare \
-                         TOML key — cargo decodes such a key and this check does not, so whether it requires a \
-                         family crate cannot be decided. Write it bare, or give it an explicit `package = \
-                         \"…\"`"
-                        ),
-                    ));
-                }
-            };
+            // otherwise** — asked of [`dependency_identity`], which the root's pin reader asks too. This
+            // reader resolved identity because an example carries no path, and the sibling selected on path
+            // and called the asymmetry earned; a family crate the catalog offers *without* a path is what
+            // that cost. One question, one reader.
+            let package = dependency_identity(package, &key, &format!("example {name}"))?;
             if !family.contains(&package) {
                 continue;
             }
@@ -1944,7 +1994,7 @@ pub(crate) fn require_example_pins(
     // rather than a guard*. Its WHEN moved rather than vanished: the fixture that reached it, one example
     // requiring no family crate, now reaches the per-example refusal, and the direction that pinned it is
     // rewritten onto the new site rather than deleted.
-    Ok(members)
+    Ok(())
 }
 
 /// **Names resolved once, by the reader that already had to resolve them.** This re-read every manifest's
@@ -1952,11 +2002,7 @@ pub(crate) fn require_example_pins(
 /// could reach, because `manifests` exists only if the example-pin reader resolved every one of those names
 /// first and refused otherwise. Two readers asking one question of one input is the shape this file has
 /// spent the window removing; the dead branches were what it looked like from inside.
-fn require_lock_versions(
-    repo: &Path,
-    members: &[(String, String)],
-    version: &str,
-) -> Result<(), Refusal> {
+fn require_lock_versions(repo: &Path, members: &[Member], version: &str) -> Result<(), Refusal> {
     let lock = read(repo, "Cargo.lock")?;
     // **Every entry under a name, and whether each carries a `source`.** A single-valued map keyed on the
     // name kept the first entry and dropped the rest, which is only right while no name appears twice — and
@@ -2075,7 +2121,7 @@ fn require_lock_versions(
         }
     }
 
-    for (_path, package) in members {
+    for Member { name: package, .. } in members {
         let package = package.clone();
         // A workspace member is the entry with no `source`. Selecting by name alone would compare against a
         // registry entry that merely shares the name, which reads as a version disagreement that is not one.

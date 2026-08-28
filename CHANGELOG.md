@@ -1172,6 +1172,34 @@ them.
 
 ### Self-governance
 
+- **A family crate the catalog offers without a path was invisible to the release gate.** `xuanji = "0.4.0"`
+  in `[workspace.dependencies]` — no `path` — resolves from the **registry**: measured under cargo 1.96.0, a
+  catalog entry at `0.4.0` beside a local member `xuanji 0.9.0` gives the inheriting member
+  `registry+…#xuanji@0.4.0` while the member sits unused. `cargo package` on a `git` dependency carrying a
+  `version` behaves the same way — the source is dropped and the version alone is recorded. Either way the
+  published requirement is that version, and deleting one `path = …` is the whole of the edit that gets
+  there. Measured before the repair, the fixture answered *ok release coherence*: a stale family requirement
+  in front of `cargo publish`, the direction the Core Contract forbids above every other.
+
+  **The subject is the crate a dependency names, and where it points is a requirement rather than the
+  selector.** `require_internal_pins` chose its subject by `path` under `crates/`; a family crate that points
+  anywhere else was in no reader's subject. It now selects by identity, and a family entry with no `path`, or
+  a `path` outside `crates/`, is a violation naming the crate it could not hold.
+
+  Two readers of one question is what kept it open. The example check resolved identity — an example carries
+  no path, so it had to — and the root check selected on path, and the asymmetry was measured and written
+  down as *earned*. Each shape in the measurement behind that word reached the pin comparison, so each
+  carried a path — and the premise the word rested on was the one thing it never tested. Both readers now ask one `dependency_identity`, whose refusal sites are named for
+  the question rather than for the caller that first asked it.
+
+  The family is resolved once, at the caller, instead of by whichever reader ran first — and the two lists of
+  `(String, String)` that flowed through this sequence, the `(path, text)` manifests and the `(path, name)`
+  members, now have distinct types. `BACKLOG.md` had filed that with the trigger *the next edit to this
+  sequence, or a third consumer of either list*; both fired at once, and the swap stopped being latent — a
+  direction handed the manifests to a reader expecting members, compiled, and answered with the wrong
+  refusal. With `Member` the swap does not compile, and the compiler found two further sites where a binding
+  named `manifests` held members. The member's path is gone with it: no consumer ever read it.
+
 - **A dependency key whose name carries a dot was refused, and cargo builds it.** The reader that files a
   dotted line kept the key's remaining segments as a joined string and split them back apart to ask *is this
   the field I judge, or structure beneath it*. Joined, `xuanji."version.extra" = true` — one key literally
@@ -1229,18 +1257,14 @@ them.
   `Detailed` record the detailed-table arm builds. Only `path`, `version` and `package` are read from a tail;
   `features` and its neighbours are ignored dotted exactly as they are inline.
 
-  **The consumer is deliberately not changed, and that was decided by a probe rather than by symmetry.** The
-  obvious second half — have `require_internal_pins` match `Package` exhaustively as `require_example_pins`
-  does — would add three arms no input can reach. Measured across four shapes, each with a correct inline
-  sibling so the vacuity counter stayed silent: a quoted key, a detailed table and a renamed dependency are
-  **already** refused by the pin comparison whatever `Package::of` answers about them, because a path's
-  readability and a key's decodability are independent. Only the dotted form escaped, and it escaped on the
-  path branch. The asymmetry with the example reader is earned rather than drift: an example depends by
-  registry version and carries no path, so identity is its only selector and all four of its arms are live.
-
-  What the premise *a dependency with no path is not an internal one* rests on is written beside it now. It
-  holds only while every form cargo accepts reaches that loop as one dependency carrying its own path — which
-  is a property of `declared_dependencies`, one function away, and was false for a dotted key.
+  **The consumer was left alone here on the strength of a probe, and the probe asked the wrong question.**
+  The obvious second half — have `require_internal_pins` resolve identity as `require_example_pins` does —
+  was measured across four shapes and found to add arms no input could reach: a quoted key, a detailed table
+  and a renamed dependency are each already refused by the pin comparison whatever `Package::of` answers,
+  because a path's readability and a key's decodability are independent. Each of those shapes reached the pin
+  comparison, which the path selection gated — so **each carried a path**. The premise under the probe — *a dependency with no path is not an internal one* — was
+  the thing that needed testing, and no shape in it did. What that cost, and the repair, are recorded under
+  *A family crate the catalog offers without a path was invisible to the release gate*.
 
 - **The same misclassification, one state further in: the repair that lifted three no-verdict facts out of a
   boolean wrote `Ok(status.success())` and folded a fourth back.** On Unix a process terminated by a signal
