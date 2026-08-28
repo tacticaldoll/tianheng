@@ -760,20 +760,30 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // produced on an Ubuntu host, but the arm reacts and reacts correctly, so the reaction declines to
         // observe nothing — a gap in coverage is not a bound, and three carriers once said otherwise in this
         // register's own vocabulary while the register held no such entry.
-        BoundDecl::pinned(
+        // **Unpinned, and it was declared pinned for one round.** The cited direction runs on this
+        // repository's Ubuntu CI, where `CRATES/TIANHENG` names a directory that does not exist — so it
+        // demonstrates a **correct** refusal, which is the opposite of the over-reaction this bound
+        // predicts. That is the second live instance of the class `BACKLOG.md` tracks as *a pin may defend a
+        // direction its bound does not declare*, and its promotion trigger is a second instance. The
+        // direction stays, because the answer it observes is worth a row; what it is not is this bound's
+        // defence.
+        BoundDecl::unpinned(
             BoundId::new("release-coherence/a-case-alias-of-a-member-directory-a-stated-bound"),
             "a catalog path differing from the member's directory only in case, on a case-insensitive \
              filesystem",
             Extent::Reached(Reached::OverReacts {
                 because: "the comparison is component-wise and case-sensitive on every host, so it answers \
-                          the same everywhere and is right only where the filesystem is. Deciding directory \
-                          identity is the volume's rule rather than the string's, and this reader is handed \
-                          no repository to ask; obtaining one by canonicalizing would also make `..` \
-                          resolvable and move three other verdicts with it. A refusal an author can read and \
-                          argue with is the safe direction against the one bug the Core Contract forbids"
+                          the same everywhere and is right only where the filesystem is. Closing it means \
+                          asking the filesystem, since case folding is the volume's rule rather than the \
+                          string's — and a release gate whose verdict over one tree differs by the machine \
+                          it runs on is worse than a refusal an author can read and argue with. This reader \
+                          is also handed no repository to ask. An earlier wording claimed canonicalizing \
+                          would make `..` resolvable and move three other verdicts: review showed it can be \
+                          confined to the accepted branch, leaving every refusal intact, so that reason was \
+                          false and is not what keeps the bound"
                     .into(),
             }),
-            "a_case_alias_of_a_member_directory_is_a_stated_bound",
+            "`BACKLOG.md` — *a pin may defend a direction its bound does not declare*",
         ),
         BoundDecl::pinned(
             BoundId::new(

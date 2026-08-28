@@ -2384,6 +2384,14 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
     let mut machinery: Vec<String> = Vec::new();
     let mut published: BTreeSet<String> = BTreeSet::new();
     let mut enumerated = 0usize;
+    // **The members the machinery set is drawn from, kept as a set rather than counted.** The floor below
+    // guarded this subject with `enumerated`, which counts every member's tracked paths — published ones
+    // included — while `machinery` is filled from the unpublished branch alone. One tracked file under any
+    // published crate therefore kept the counter non-zero while the machinery set was `scripts/` alone,
+    // which is the state that floor's own message describes. Third time this file has written a guard over
+    // a wider set than the one it protects, so what is counted is now what is guarded, and the two facts
+    // are typed apart below.
+    let mut unpublished_members: Vec<String> = Vec::new();
     for package in metadata["packages"].as_array().into_iter().flatten() {
         // **The directory comes from the manifest, not from the package name.** Deriving it as
         // `crates/<name>/` was the residual location assumption inside a repair whose own thesis was
@@ -2412,6 +2420,9 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
             ));
         };
         let unpublished = package["publish"].as_array().is_some_and(|r| r.is_empty());
+        if unpublished {
+            unpublished_members.push(directory.trim_end_matches('/').to_string());
+        }
         // **`-z`, because git quotes a path it cannot write plainly.** `core.quotePath` defaults on and
         // `hermetic()` neutralises the config that could turn it off, so a tracked path carrying non-ASCII
         // bytes enters this set in its ESCAPED spelling and its real name is absent — after which
@@ -2443,16 +2454,29 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
             }
         }
     }
-    // Members resolved and enumerated nothing means the directories were resolved against a root this
-    // repository's git does not share — the same collapse by another route, and `scripts/` alone would still
-    // look like an answer.
+    // **Two facts, two refusals.** Members resolved and *nothing at all* enumerated means the directories were
+    // resolved against a root this repository's git does not share — cargo and git describing different trees.
     if enumerated == 0 {
         return Err(cannot_judge_at(
             "release-coherence#no-tracked-file-for-any-member",
             format!(
-                "no tracked file was found for any of the {} workspace members under {root}, so the machinery set \
-             would be `scripts/` alone and this check would pass over its own subject",
+                "no tracked file was found for any of the {} workspace members under {root}, so cargo and git \
+             are describing different trees",
                 metadata["packages"].as_array().map_or(0, Vec::len)
+            ),
+        ));
+    }
+    // The subject's own floor. A workspace declaring unpublished members none of which contributed a tracked
+    // file leaves the machinery set as `scripts/` alone, and this check would then pass over its own subject.
+    // A workspace with **no** unpublished members legitimately has `scripts/` alone, which is why the
+    // condition is *declared and contributed nothing* rather than *empty*.
+    if !unpublished_members.is_empty() && machinery.is_empty() {
+        return Err(cannot_judge_at(
+            "release-coherence#no-machinery-from-unpublished-members",
+            format!(
+                "the unpublished members ({}) contributed no tracked file, so the machinery set would be \
+             `scripts/` alone and this check would pass over its own subject",
+                unpublished_members.join(", ")
             ),
         ));
     }

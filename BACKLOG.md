@@ -1441,7 +1441,16 @@ consumer for an undemonstrated deduplication.
 
 - **WATCH:**
 - **WATCH: a pin may defend a direction its bound does not declare.** *Observed pressure:* one live instance,
-  found by review rather than by any reaction. `whether-a-mention-compiles-anything-is-not-observed` declares
+  found by review rather than by any reaction — and the trigger has since fired once. A second instance was
+  produced in the 0.5.0 window and removed in the round after it landed:
+  `release-coherence/a-case-alias-of-a-member-directory-a-stated-bound` declared `OverReacts` and cited a
+  direction that runs on Ubuntu, where the path names a directory that does not exist — so it demonstrated a
+  **correct** refusal, the opposite of the reach the bound predicts. Two reviews read the same citation and
+  disagreed about it, which is itself evidence for the entry: one accepted it because the direction's own doc
+  states its reach, the other refused it because the register's figure counts a defence. It is unpinned now
+  against this entry, so the count of live instances is one again. What the firing changes is the evidence,
+  not the refusal below: an author reaches for `pinned` because a direction exists and runs, and nothing
+  between the two says the direction shows what the bound predicts. `whether-a-mention-compiles-anything-is-not-observed` declares
   `UnderReacts` — the check counts a comment-only mention as named — and cited a test containing no comment at
   all, asserting instead that a substring is not a mention. That is a *reacting* distinction, so the citation
   ran, bit, and demonstrated the opposite of what the bound predicts. *Observation source:* that comparison,

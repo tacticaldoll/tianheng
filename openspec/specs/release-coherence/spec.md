@@ -318,12 +318,18 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   component-wise and case-sensitive on every host, so the answer is the same everywhere and is only *right*
   where the filesystem is case-sensitive. On this repository's CI it is right: the path names a directory that
   does not exist. On a case-insensitive host it over-reacts
-- **AND** the reach is kept deliberately. Deciding filesystem identity needs the filesystem — case folding is
-  the volume's rule, not the string's — and this reader is handed no repository. Canonicalizing to obtain one
-  would also make `..` resolvable, which would turn the traversal refusal into an answer and move three other
-  verdicts with it; a false refusal an author can read and argue with is the safe direction, where the Core
-  Contract forbids exactly one bug and it is the false negative
-- **PINNED-BY** `a_case_alias_of_a_member_directory_is_a_stated_bound`
+- **AND** the reach is kept deliberately. Closing it means asking the filesystem, because case folding is the
+  volume's rule and not the string's — and a release gate whose verdict over one tree differs by the machine
+  it runs on is worse than a refusal an author can read and argue with. This reader is also handed no
+  repository to ask
+- **AND** an earlier wording of this clause claimed that canonicalizing would make `..` resolvable and move
+  three other verdicts with it. Review showed otherwise: canonicalization can be confined to the branch that
+  already produced a directory, after the rooted, traversal and no-directory refusals have been returned, so
+  every one of them survives. That reason was false and is not what keeps the bound
+- **AND** the direction that observes this shape runs where the refusal is **correct**, so it demonstrates a
+  real violation rather than the over-reaction declared here — which is why this bound is unpinned. It was
+  declared pinned for one round, and that was the second instance of the tracked class below
+- **UNPINNED** `BACKLOG.md` — *a pin may defend a direction its bound does not declare*
 
 #### Scenario: An internal dependency this reader cannot resolve is not one it may skip
 
@@ -655,6 +661,24 @@ always enters; a convenience has to earn its place.
   leak — and it SHALL reach that verdict by having nothing to match. Keying the parser on the record
   number rather than on the input file makes an empty enumeration consume the changelog itself, after
   which the section vacuity guard refuses a document the reaction never read
+
+#### Scenario: The members the machinery set is drawn from contribute nothing
+
+- **WHEN** the workspace declares unpublished members and **none of them** contributes a tracked file, while a
+  published member does
+- **THEN** the check refuses to judge, naming the members that were expected to contribute. The floor SHALL
+  count what the machinery set is **built from** — the unpublished members — and not every member's tracked
+  paths: the set is drawn from the unpublished ones plus `scripts/`, so one tracked file under any published
+  crate kept a wider counter non-zero while the set was `scripts/` alone, and the check then ran against
+  `scripts/` and reported clean over a nearly-empty subject. This is the third guard in this reaction written
+  over a wider set than the one it protects
+- **AND** a workspace declaring **no** unpublished members legitimately has `scripts/` alone as its machinery,
+  so the condition is *declared and contributed nothing* rather than *the set is empty*
+- **AND** enumerating **nothing at all**, across every member, is a different fact and carries its own
+  refusal: cargo and git are then describing different trees, which is not a statement about this subject's
+  size
+- **PINNED-BY** `unpublished_members_contributing_nothing_is_refused`
+- **PINNED-BY** `a_workspace_whose_members_are_untracked_reports_over_nothing`
 
 #### Scenario: A basename an entry writes for another reason — a stated bound
 
