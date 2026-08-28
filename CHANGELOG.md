@@ -22,7 +22,7 @@ them.
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-08-27
+## [0.5.0] - 2026-08-28
 
 ### Documentation
 
@@ -8360,7 +8360,7 @@ no adopter runs. They are here rather than under the adopter headings above beca
   divergence.
 
   A fourth finding in the same review is refuted with the measurement: the entries carrying `this window` are
-  under `## [0.5.0] - 2026-08-27`, not under `[Unreleased]`, which is empty. A dated heading names the window
+  under the dated `## [0.5.0]` heading, not under `[Unreleased]`, which is empty. A dated heading names the window
   the phrase resolves against, and the released `[0.4.0]` history uses the same idiom throughout.
 
 
