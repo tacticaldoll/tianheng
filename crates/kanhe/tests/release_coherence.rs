@@ -2537,6 +2537,54 @@ fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
     }
 }
 
+/// Two dated sections for one version are not judged, and the first of them does not answer.
+///
+/// **The fourth reader in this crate to be asked *how many*, and the first that selects from a document.**
+/// The dated section was taken with `.find()`, so a changelog carrying a stale `## [0.2.1]` dated years
+/// earlier ahead of the correct one reported *ok release coherence* — measured end to end. Two sections
+/// carrying the *same* date passed too. At the snapshot the same selection inverts: the stale date would be
+/// compared against the release commit and the refusal would name the wrong line.
+///
+/// The sibling check above counts `[Unreleased]` sections and refuses any count but one, with a comment
+/// saying every arm below assumes exactly one exists. The same assumption was made here and never checked,
+/// and nothing declared it — not the spec, which is written in the singular throughout, not the observation
+/// bounds, not the backlog.
+///
+/// Negative run: with the count restored to `.find()`, both rows return `Ok`.
+#[test]
+fn two_dated_sections_for_one_version_are_not_judged() {
+    for (label, stale) in [
+        ("an older date first", "## [0.2.1] - 2020-01-01"),
+        ("the same date twice", "## [0.2.1] - 2026-08-28"),
+    ] {
+        let root = scratch(&format!("two-dated-{}", label.replace(' ', "-")));
+        let fixture = build_fixture(&root, "two-dated", "0.2.0");
+        workspace_files(&fixture.repo, "0.2.1");
+        release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+        let path = fixture.repo.join("CHANGELOG.md");
+        let text = std::fs::read_to_string(&path).expect("read");
+        let heading = text
+            .lines()
+            .find(|line| line.starts_with("## [0.2.1] - "))
+            .expect("the release changelog carries a dated section")
+            .to_string();
+        // The stale section goes **before** the correct one, which is what makes `.find()` answer from it.
+        std::fs::write(
+            &path,
+            text.replacen(
+                &heading,
+                &format!("{stale}\n\n- An adopter-facing change.\n\n{heading}"),
+                1,
+            ),
+        )
+        .expect("write");
+        commit(&fixture.repo, "chore: two dated sections for one version");
+        let refusal = refuse(&fixture.repo, Kind::CannotJudge, "dated sections for 0.2.1");
+        refusal::expect("release-coherence#several-dated-release-sections", &refusal);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
 /// A `[[package]]` block writing `version` before `name` records the version all the same.
 ///
 /// **An ordering premise nothing stated.** The version arm was guarded on a name already read, so a block
@@ -2560,10 +2608,19 @@ fn a_lock_block_writing_version_before_name_still_records_it() {
     release_changelog(&fixture.repo, "0.2.1", "0.2.0");
     let lock = fixture.repo.join("Cargo.lock");
     let text = std::fs::read_to_string(&lock).expect("read");
+    let target = "[[package]]\nname = \"xuanji\"\nversion = \"0.2.1\"";
+    // **The mutation is asserted before it is written.** `str::replace` over an absent target is a no-op, so
+    // a fixture whose format drifts leaves the coherent lock in place and this direction passes having
+    // perturbed nothing — the shape a review named after the 0.5.0 preparation produced two of them.
+    assert_eq!(
+        text.matches(target).count(),
+        1,
+        "the fixture lock must carry exactly one xuanji block in the order this direction reverses"
+    );
     std::fs::write(
         &lock,
         text.replace(
-            "[[package]]\nname = \"xuanji\"\nversion = \"0.2.1\"",
+            target,
             "[[package]]\nversion = \"0.2.1\"\nname = \"xuanji\"",
         ),
     )

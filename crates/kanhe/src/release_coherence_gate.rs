@@ -64,11 +64,14 @@ pub(crate) fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
 /// cannot see the fields it did not ask about, and one of those may be the reason the manifest does not parse.
 fn undecodable_field(value: &str) -> bool {
     inline_fields(value).into_iter().any(|field| {
-        matches!(
-            crate::manifest::assignment(field),
+        match crate::manifest::assignment(field) {
             crate::manifest::Assignment::KeyUnreadable
-                | crate::manifest::Assignment::FieldUnreadable { .. }
-        )
+            | crate::manifest::Assignment::FieldUnreadable { .. } => true,
+            // Structure beneath a field this reader judges — `{ version = "1", version.extra = true }` — is
+            // the same shape cargo refuses, in the inline spelling.
+            crate::manifest::Assignment::Field { ref name, .. } => Field::of(name).is_some(),
+            crate::manifest::Assignment::Key { .. } | crate::manifest::Assignment::None => false,
+        }
     })
 }
 
@@ -229,8 +232,33 @@ enum Subject {
     Offers,
 }
 
-/// The keys a dependency record is built from, in every spelling of a dependency.
-const DEPENDENCY_FIELDS: [&str; 4] = ["package", "version", "path", "workspace"];
+/// Which field of a dependency record a key names.
+///
+/// **One classifier, because the set was written twice and used at one of three sites.** A `const` listed the
+/// judged keys for the dotted-subfield guard while the record builder matched the same names again in a
+/// `match`, so adding a field to one and not the other reopens the silent path — and the guard itself reached
+/// only one of the three spellings a dependency can be written in. Naming the field once, and asking for it
+/// wherever a key is met, is what makes those the same question.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Field {
+    Package,
+    Version,
+    Path,
+    Workspace,
+}
+
+impl Field {
+    /// The field `name` names, or `None` where it names none this reader judges.
+    fn of(name: &str) -> Option<Self> {
+        match name {
+            "package" => Some(Field::Package),
+            "version" => Some(Field::Version),
+            "path" => Some(Field::Path),
+            "workspace" => Some(Field::Workspace),
+            _ => None,
+        }
+    }
+}
 
 const DEPENDENCY_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
 
@@ -561,13 +589,32 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                                     field_unreadable: false,
                                     written: String::new(),
                                 });
-                            match tail {
-                                "path" => entry.paths.push(quoted_value(rest)),
-                                "version" => entry.versions.push(quoted_value(rest)),
-                                "package" => entry.packages.push(quoted_value(rest)),
+                            // A tail of one segment names the field; a longer one is **structure beneath**
+                            // it, which cargo refuses — `xuanji.version.extra = true` fails with *cannot
+                            // extend value of type string with a dotted key*, measured. The guard for that
+                            // shape reached the detailed spelling only when it was first written.
+                            let (head, deeper) = match tail.split_once('.') {
+                                Some((head, _)) => (head, true),
+                                None => (tail, false),
+                            };
+                            match (Field::of(head), deeper) {
+                                (Some(_), true) => {
+                                    entry.field_unreadable = true;
+                                    entry.paths.push(Quoted::Unreadable);
+                                    entry.versions.push(Quoted::Unreadable);
+                                }
+                                (Some(Field::Path), false) => entry.paths.push(quoted_value(rest)),
+                                (Some(Field::Version), false) => {
+                                    entry.versions.push(quoted_value(rest))
+                                }
+                                (Some(Field::Package), false) => {
+                                    entry.packages.push(quoted_value(rest))
+                                }
                                 // `xuanji.workspace = true` is the dotted spelling of taking the offer.
-                                "workspace" => entry.offers.push(rest.to_string()),
-                                _ => continue,
+                                (Some(Field::Workspace), false) => {
+                                    entry.offers.push(rest.to_string())
+                                }
+                                (None, _) => continue,
                             }
                             entry.written.push_str(trimmed);
                             entry.written.push(' ');
@@ -706,14 +753,16 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                 for (_, line) in &table.body {
                     let trimmed = line.trim();
                     match crate::manifest::assignment(trimmed) {
-                        crate::manifest::Assignment::Key { name, value } => match name.as_str() {
-                            "package" => detailed.packages.push(quoted_value(value)),
-                            "version" => detailed.versions.push(quoted_value(value)),
-                            "path" => detailed.paths.push(quoted_value(value)),
-                            // `workspace = true` is a boolean, so it is kept raw for `inheritance`.
-                            "workspace" => detailed.offers.push(value.to_string()),
-                            _ => {}
-                        },
+                        crate::manifest::Assignment::Key { name, value } => {
+                            match Field::of(&name) {
+                                Some(Field::Package) => detailed.packages.push(quoted_value(value)),
+                                Some(Field::Version) => detailed.versions.push(quoted_value(value)),
+                                Some(Field::Path) => detailed.paths.push(quoted_value(value)),
+                                // `workspace = true` is a boolean, kept raw for `inheritance`.
+                                Some(Field::Workspace) => detailed.offers.push(value.to_string()),
+                                None => {}
+                            }
+                        }
                         // **A dotted key whose head is one this reader judges is structure beneath a value,
                         // and cargo refuses it.** Measured: `[dependencies.alias]` carrying `version = "1.0"`
                         // and `version.extra = true` fails with *cannot extend value of type string with a
@@ -721,7 +770,7 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                         // false-clean class this branch was repaired for, one spelling in. A dotted head
                         // naming anything else stays another key's business.
                         crate::manifest::Assignment::Field { name, .. }
-                            if DEPENDENCY_FIELDS.contains(&name.as_str()) =>
+                            if Field::of(&name).is_some() =>
                         {
                             detailed.field_unreadable = true;
                         }
@@ -1180,12 +1229,33 @@ fn require_changelog_state(
             // derived name drops the ` - DATE` suffix, so this is the one question the name cannot answer and
             // `Section::line` exists for. A sweep also accepted a dated line belonging to no section at all.
             let prefix = format!("## [{version}] - ");
-            let dated: Option<&str> = sections
+            // **Counted before it is taken, because the first of two answers is not an answer.** This
+            // asked `.find()`, so a changelog carrying two `## [{version}]` sections answered from whichever
+            // came first: a stale one dated years earlier ahead of the correct one reported *ok release
+            // coherence*, and at the snapshot the same selection would compare the stale date against the
+            // release commit and refuse naming the wrong line. The sibling check above counts `[Unreleased]`
+            // sections and refuses any count but one, saying every arm below assumes exactly one exists —
+            // the same assumption was made here and not checked. Four readers in this crate were each given
+            // a *several* refusal when someone was in them; this one selects from a document and was never
+            // asked.
+            let dated: Vec<&str> = sections
                 .iter()
                 .filter(|section| section.name == format!("## [{version}]"))
                 .filter_map(|section| section.line.trim_end().strip_prefix(&prefix))
-                .find(|rest| is_iso_date(rest));
-            let Some(dated) = dated else {
+                .filter(|rest| is_iso_date(rest))
+                .collect();
+            if dated.len() > 1 {
+                return Err(cannot_judge_at(
+                    "release-coherence#several-dated-release-sections",
+                    format!(
+                        "CHANGELOG carries {} dated sections for {version} ({}), so which one records the \
+                     release is not this reader's to choose",
+                        dated.len(),
+                        dated.join(", ")
+                    ),
+                ));
+            }
+            let Some(dated) = dated.first().copied() else {
                 return Err(violation_at(
                     "release-coherence#dated-release-notes-missing",
                     format!("CHANGELOG is missing dated release notes for {version}"),
