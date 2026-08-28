@@ -1172,6 +1172,45 @@ them.
 
 ### Self-governance
 
+- **A dependency key whose name carries a dot was refused, and cargo builds it.** The reader that files a
+  dotted line kept the key's remaining segments as a joined string and split them back apart to ask *is this
+  the field I judge, or structure beneath it*. Joined, `xuanji."version.extra" = true` — one key literally
+  named `version.extra` — and `xuanji.version.extra = true` — two keys, structure beneath a string — are the
+  same text, and cargo tells them apart: measured under cargo 1.96.0 on a synthetic workspace, the first
+  builds and the second is refused as *cannot extend value of type string with a dotted key*. The gate
+  answered *field I cannot decode* for the manifest cargo accepts.
+
+  The tail is now segments (`Vec<String>`) from the lexical reader outward, so the question is asked of the
+  structure rather than of a rejoined string, and nothing rejoins a decoded tail to ask about it. The reasoning was already written down on the
+  other side: the table-heading reader keeps segments *because* a join cannot hold the difference between one
+  key carrying a dot and a path of two. The assignment reader joined anyway, and the join went unnoticed until
+  a consumer arrived that cared which of the two it had — this window's dotted-pin repair. The direction corpus now carries the row that
+  tells the two readings apart, which is the only one whose answer differs between them.
+
+  The same shape had already been found where a heading decoded while the key did not, and again where a key
+  decoded while a recogniser compared whole lines. *Decoded* is a property of a **prefix**, and the repair
+  each time is to carry the decoded parts outward rather than to re-derive them from a join.
+
+- **Two changelog sections claiming one version reported clean when the second one was malformed.** The
+  reader that picks the dated release section counted **after** filtering for a well-formed date, so
+  `## [0.5.0] - notadate` above a correct section left exactly one candidate — and so did a bare
+  `## [0.5.0]`. Two headings for one version is the defect whether or not the second parses, and the
+  malformed sibling — a heading left behind, a typo'd date — is the likelier mistake of the two. The
+  scenario for a bad suffix fires only where there is no well-formed sibling to hide behind, so nothing in
+  the corpus observed it.
+
+  The count is now taken over every section claiming the version and the survivor is read afterwards, the
+  refusal names all of them, and the site is `release-coherence#several-release-sections` — it no longer
+  says *dated*, because it no longer requires one. It is pinned on two dates, one date twice, a suffix that is not
+  a date, and no suffix at all. The requirement is stated in the release-coherence spec, which
+  had carried the reaction without one.
+
+- **The census rule's own bound named a search nobody could run.** The paragraph forbidding hand-written
+  counts keeps one measured figure to make *sweep narrowly* falsifiable, and cited it to a pattern written
+  with an ellipsis and *and its neighbours* — a description of a search rather than a search. It now carries
+  the single `git grep` that produced it, alternation written out and the commit named inside the command,
+  so the figure stays checkable after the tree moves on.
+
 - **The release gate passed a stale internal pin written with a dotted key, and the shape is one a maintainer
   reaches for.** `xuanji.path = "crates/xuanji"` with `xuanji.version = "0.4.0"` beneath it is legal TOML that
   cargo accepts, resolves and builds — a member taking `{ workspace = true }` gets `^0.4.0` from it — and
