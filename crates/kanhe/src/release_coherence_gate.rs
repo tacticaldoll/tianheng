@@ -1659,24 +1659,37 @@ pub(crate) fn require_internal_pins(
         // lives in*, and the member is what answers it.
         match path {
             Declared::Value(path) => match normalized_directory(&path) {
-                Some(directory) if directory == member.directory => {}
-                Some(directory) => {
+                Ok(directory) if directory == member.directory => {}
+                Ok(directory) => {
                     return Err(violation_at(
                         "release-coherence#internal-path-names-another-directory",
                         format!(
-                            "internal dependency {key} is offered from {path}, which names {directory}, and \
-                     this workspace's {package} is at {}",
-                            member.directory
+                            "internal dependency {key} is offered from {path}, which names {}, and this \
+                     workspace's {package} is at {}",
+                            directory.display(),
+                            member.directory.display()
                         ),
                     ));
                 }
-                None => {
+                // **Each reason says which one it is.** One message enumerating the others sends an operator
+                // to look for a `..` that is not there.
+                Err(reason) => {
                     return Err(cannot_judge_at(
                         "release-coherence#internal-path-unresolvable",
                         format!(
-                            "internal dependency {key} is offered from {path}, which is absolute or carries \
-                     a `..` segment — this reader resolves neither without a filesystem, so whether members \
-                     inherit this workspace's {package} cannot be decided"
+                            "internal dependency {key} is offered from {path}, which {}, so whether members \
+                     inherit this workspace's {package} cannot be decided",
+                            match reason {
+                                Unresolvable::Absolute =>
+                                    "is absolute — this reader compares repository-relative directories and \
+                             is handed no repository to make one relative against",
+                                Unresolvable::Traversal =>
+                                    "carries a `..` segment — applied after symlink resolution, which this \
+                             reader touches no filesystem to follow",
+                                Unresolvable::NamesNoDirectory =>
+                                    "names no directory beneath the manifest's own — cargo refuses such a \
+                             dependency outright, measured",
+                            }
                         ),
                     ));
                 }
@@ -1786,7 +1799,7 @@ pub(crate) fn require_internal_pins(
 pub(crate) struct Member {
     /// The `[package]` name the manifest declares.
     pub(crate) name: String,
-    /// The member's directory, repository-relative, as its manifest path spells it.
+    /// The member's directory, repository-relative, as its manifest path names it.
     ///
     /// **Carried because the catalog's `path` has to be compared against something.** It was dropped one
     /// change earlier as state nothing read — true then, and the reason it stopped being true is that the
@@ -1796,31 +1809,64 @@ pub(crate) struct Member {
     /// prefix cannot decide either, and `crates/<name>` cannot be derived — this repository's own fixture
     /// holds `machinery-under-another-name` under `crates/renamed-dir`, and the machinery reader records
     /// deriving a directory from a package name as a defect it already fixed.
-    pub(crate) directory: String,
+    pub(crate) directory: PathBuf,
 }
 
-/// The repository-relative directory a `path` value names, or `None` where this reader will not resolve it.
+/// Why this reader will not name the directory a `path` value points at.
 ///
-/// **Lexical only, and it says so by refusing.** `.` segments, repeated separators and a trailing separator
-/// are spelling: cargo resolves `./crates/xuanji`, `crates//xuanji` and `crates/xuanji/` to one directory,
-/// measured, and dropping those segments is sound without touching a filesystem. `..` is not spelling — the
-/// kernel applies it after symlink resolution, so `crates/../vendor` is `vendor` only while `crates` is not a
-/// link, and this reader is handed no repository to ask. An absolute path is the same answer for the same
-/// reason. Both are refused as undecidable rather than collapsed, which is the direction that stops in front
-/// of an operator.
-fn normalized_directory(path: &str) -> Option<String> {
-    if path.starts_with('/') {
-        return None;
-    }
-    let mut segments: Vec<&str> = Vec::new();
-    for segment in path.split('/') {
-        match segment {
-            "" | "." => {}
-            ".." => return None,
-            named => segments.push(named),
+/// **Each reason typed apart, not one `None`.** The first version answered every one of them with `None` and the caller's
+/// message enumerated two of them, so `path = "."` was told it was *absolute or carries a `..` segment* —
+/// neither, and exactly the misdirection this crate's typed readers exist to prevent. Every other pair of
+/// facts in this file is typed apart for the same reason.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Unresolvable {
+    /// A root or a drive prefix. Repository-relative is the only thing this reader compares, and it is handed
+    /// no repository to make one relative against.
+    Absolute,
+    /// A `..` segment. The kernel applies it **after** symlink resolution, so `crates/../vendor` is `vendor`
+    /// only while `crates` is not a link, and this reader touches no filesystem to find out.
+    Traversal,
+    /// Every component was `.` or a separator, so the value names the directory the manifest is already in
+    /// rather than one beneath it. Measured under cargo 1.96.0: `path = "."` fails resolution with *failed to
+    /// get `xuanji` as a dependency* — a manifest nothing builds, which this reader stops in front of rather
+    /// than reading a pin past.
+    NamesNoDirectory,
+}
+
+/// The repository-relative directory a `path` value names, or why this reader will not name it.
+///
+/// **Read through [`std::path::Component`], which is also how the member side is built.** A `.` component,
+/// a repeated separator and a trailing separator are spelling: cargo resolves `crates/xuanji`,
+/// `./crates/xuanji`, `crates//xuanji` and `crates/xuanji/` to one directory, measured, and `Components`
+/// drops exactly those. Hand-splitting on `/` did the same thing on this repository's CI and only there — the
+/// member side comes from a `Path`, which renders `crates{sep}xuanji` with the **platform's** separator,
+/// while a manifest always spells `/`. On Windows the two operands then disagreed about every ordinary path,
+/// and a drive-qualified path read as an ordinary relative one. Comparing `PathBuf`s built from components
+/// gives both sides one representation on every platform, because `Path` equality is component-wise and
+/// Windows accepts both separators.
+///
+/// **Declared bound: `Component::Prefix` is compiled and not observed here.** It is produced only on Windows,
+/// and this repository's CI is Ubuntu. It is folded into the same answer as `RootDir`, which *is* observed,
+/// so the arm shares its verdict with a measured sibling rather than standing alone on reasoning.
+pub(crate) fn normalized_directory(path: &str) -> Result<PathBuf, Unresolvable> {
+    let mut directory = PathBuf::new();
+    let mut named = false;
+    for component in Path::new(path).components() {
+        match component {
+            std::path::Component::Prefix(_) | std::path::Component::RootDir => {
+                return Err(Unresolvable::Absolute);
+            }
+            std::path::Component::ParentDir => return Err(Unresolvable::Traversal),
+            std::path::Component::CurDir => {}
+            std::path::Component::Normal(segment) => {
+                directory.push(segment);
+                named = true;
+            }
         }
     }
-    (!segments.is_empty()).then(|| segments.join("/"))
+    named
+        .then_some(directory)
+        .ok_or(Unresolvable::NamesNoDirectory)
 }
 
 /// Each workspace manifest's member — the family, resolved once for everything that asks which crates it
@@ -1841,9 +1887,14 @@ pub(crate) fn family_members(manifests: &[(String, String)]) -> Result<Vec<Membe
         match package_name(text) {
             PackageName::Named(name) => members.push(Member {
                 name,
-                directory: path
-                    .strip_suffix("Cargo.toml")
-                    .map_or(path.clone(), |head| head.trim_end_matches('/').to_string()),
+                // **The member's own directory, as a `Path`.** Built by `Path::parent` rather than by
+                // trimming text, so it is component-wise comparable with the value read from a manifest on
+                // every platform — the two operands were a `Path`-rendered string and a `/`-split string,
+                // which agree only where the separator does.
+                directory: Path::new(path)
+                    .parent()
+                    .unwrap_or(Path::new(""))
+                    .to_path_buf(),
             }),
             PackageName::Absent => {
                 return Err(cannot_judge_at(

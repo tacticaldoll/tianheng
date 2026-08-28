@@ -1172,6 +1172,33 @@ them.
 
 ### Self-governance
 
+- **The refusal for a path this reader will not resolve enumerated two causes, and a third one reached it.**
+  `path = "."`, `path = "./"` and `path = ""` all name the manifest's own directory rather than one beneath
+  it, and each was told it *is absolute or carries a `..` segment* — neither. Measured under cargo 1.96.0
+  with dependency resolution on, `path = "."` fails outright with *failed to get `xuanji` as a dependency*,
+  so the outcome — a cannot-judge, exit 2 — was already the safe one; what was wrong was the sentence, which
+  sent an operator to look for a `..` that is not there. That misdirection is the reason every other pair of
+  facts in this crate is typed apart, and this reader had folded three into one `Option`.
+
+  The reader returns a typed reason now — rooted, a `..` segment, or names no directory — and the refusal
+  says which one it met. The spec's clause carried the same two-of-three enumeration and now carries all
+  three. The direction asserts the sentence, not only the site: the message *was* the defect, and a direction
+  that checks the site alone cannot see it.
+
+  **The comparison also stopped being made on text.** Both sides are read through `std::path::Component` and
+  compared as paths. The member's directory came from a `Path` and rendered with the **platform's**
+  separator, while the value read from a manifest was split on `/` — which agree only where the platform's
+  separator is `/`. On Windows every ordinary member path would have compared unequal, and a drive-qualified
+  path would have read as an ordinary relative directory instead of a rooted one; Ubuntu-only CI is what hid
+  it. `Path` equality is component-wise and Windows accepts both separators, so one representation settles
+  both. The drive-prefix arm is compiled and unobserved here, declared as a bound and folded into the same
+  answer as the rooted case, which is observed.
+
+  A unit direction now reads the classifier directly, so a change to it is caught without a repository, a
+  fixture or a judgement. Removing an arm does not compile — the match over `Component` is exhaustive — which
+  is a stronger guarantee than a direction can give, and is recorded as what the negative run actually
+  produced rather than what it was expected to.
+
 - **A family crate's path was checked by its spelling, which was wrong in both directions at once.** The arm
   that had just been added to require a family crate to be held by a path into this workspace asked
   `starts_with("crates/")`. Two reviews falsified it in one round, in opposite directions, and both were
@@ -1191,10 +1218,10 @@ them.
   `crates/renamed-dir`, and deriving a directory from a name is a defect the machinery reader already records
   fixing.
 
-  **A path this reader will not resolve is refused rather than guessed at.** An absolute path, or one carrying
-  a `..`, is a cannot-judge: `..` is applied after symlink resolution, so `crates/../vendor` is `vendor` only
-  while `crates` is not a link, and no repository is handed to this reader. Collapsing it lexically would be a
-  guess wearing an answer's clothes. The residue is declared in the spec instead of met.
+  **A path this reader will not name a directory for is refused rather than guessed at**, and the refusal says
+  which reason it met — rooted, a `..` segment, or a value naming no directory beneath the manifest's own. `..` is applied after symlink resolution, so `crates/../vendor` is `vendor` only while `crates` is not
+  a link, and no repository is handed to this reader. Collapsing it lexically would be a guess wearing an
+  answer's clothes. The residues are declared in the spec instead of met.
 
   The cause is one the previous rounds have been closing and it reappeared inside its own repair: having
   correctly moved the *subject* from the path to the identity, the same commit then answered a second question
