@@ -329,10 +329,14 @@ phrasing is stable, with nothing in the tree stating it — and the rule below i
 **A hand-written count of a live set is not written down**, and a doc stating how many variants the type
 it documents has is that rule with a number in it — measured, it goes stale in the very commit that grows the
 type. The repair is the one `xuanji::bound::Reached` states: each variant documents the **distinction** that
-earns it a place, and the compiler enumerates them. Sweep for *that* shape and nothing wider — widened to any
-figure about a set, the same search returns about a hundred hits across this tree and nearly all are reasoning
-(*two forms cannot bind a value*), which name distinctions rather than count a live set. The hundred are why
-this rule is about the typing rather than about numerals. The declared-census mechanism is retained and
+earns it a place, and the compiler enumerates them. Sweep for *that* shape and nothing wider. **The bound on
+that, with its instrument**: a line-joined search over tracked `*.rs` and `*.md` for
+`\b(one|two|…|seven)[- ](state|kind|variant|answer|form|case)s?\b` and its neighbours returned 105 hits when
+this was written, and nearly all were reasoning — *two forms cannot bind a value*, *three answers, because
+`.is_ok()` gave two* — which name distinctions rather than count a live set. One review read that figure as a
+live census and asked for it to go; another had already considered it and kept it. It stays **because it is
+what makes this sentence falsifiable**: without a measured bound, *keep the sweep narrow* is advice nothing can
+check. It is a measurement with the search that produced it beside it, which is the form this rule admits. The declared-census mechanism is retained and
 armed — `crates/kanhe/src/census.rs` enumerates a set, names the one sentence its figures may be written in,
 and one sweep holds every tracked document to it. The one sentence the tree carries is in a **generated
 projection**, whose figure a renderer computes over a freshness-checked document — the produced form this rule

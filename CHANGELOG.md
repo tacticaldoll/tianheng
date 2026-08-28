@@ -8456,6 +8456,49 @@ no adopter runs. They are here rather than under the adopter headings above beca
   retired* is answerable by measurement — find the rule it duplicates, check what it adds, keep only that.
 
 
+- **The dated release section was taken by `.find()`, so the first of two answered.** A CHANGELOG carrying a
+  stale `## [0.2.1]` dated years earlier ahead of the correct one reported *ok release coherence
+  (release-ready: 0.2.1)* — measured end to end; two sections carrying the *same* date passed too. At the
+  snapshot the same selection inverts: the stale date would be compared against the release commit and the
+  refusal would name the wrong line. **This is the phase the repository is sitting in.**
+
+  The sibling check above it counts `[Unreleased]` sections and refuses any count but one, saying in its own
+  comment that every arm below assumes exactly one exists. The same assumption was made for the dated section
+  and never checked, and nothing declared it — not the spec, which is written in the singular throughout.
+
+  It counts before it selects now, and refuses naming both dates. That makes four readers in this crate given a
+  *several* answer, and this was the first that selects one thing out of a **document** rather than a table —
+  the class had been closed at each site someone happened to be in, never as a class.
+
+- **A guard reached one of three spellings, and the set it guarded on was written twice.** Structure beneath a
+  judged dependency field — `version.extra = true` after a readable `version` — is refused by cargo in all
+  three spellings, and the guard added for it covered the detailed table only: the dotted and inline forms
+  still returned a readable identity and a readable pin. The `const` listing the judged keys was used at one of
+  three sites while the record builder matched the same names again, so adding a field to one and not the other
+  reopened the path.
+
+  One `Field` classifier answers *which field does this key name* now, at all three. The dotted branch tells a
+  tail of one segment from structure beneath it; the inline reader asks the same question of an inline table's
+  fields; the detailed body maps through it. Seen to fail per spelling.
+
+- **A fixture could have perturbed nothing and passed.** The lock-order direction wrote `text.replace(...)`
+  without checking the target occurred — a no-op mutation would have left the coherent lock in place and the
+  direction green. It asserts the target occurs exactly once before writing. Two fixtures in this window had
+  already done exactly that, which is why a review named the shape rather than the site.
+
+- **A reaction this window's own prose had forgotten caught one of these repairs.**
+  `no_tracked_source_names_a_relative_anchor` refused a comment written a minute earlier for saying *this
+  window* — the rule about moving references is not only prose here, it is a gate over tracked source, and the
+  CHANGELOG is outside its corpus because a dated record's window is its heading. Two reviews had argued that
+  distinction from the prose; the reaction settles it.
+
+- **A figure two reviews disagreed about is anchored rather than dropped.** One read *about a hundred hits* as a
+  live census in the paragraph forbidding them; the other had considered it and kept it, because deleting the
+  bound leaves *keep the sweep narrow* unfalsifiable. It now carries the search that produced it and the count
+  it returned when written — the form the census rule admits, and the reason the disagreement had an answer
+  rather than a preference.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
