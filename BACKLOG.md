@@ -584,6 +584,31 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **`0.5.0`'s row in the published-artifact provenance record cannot be written until after it is
+  published, and the branch that could carry it is archived first.** *Class:* WATCH. *Observed pressure:*
+  `docs/history/published-artifact-provenance.md` inventories what commit each published version's tarballs
+  actually name, and it is an **audit of the tarballs** — its *Reproducing the audit* section reads
+  `.cargo_vcs_info.json` back out of `static.crates.io`. So the row cannot be written before the upload
+  without predicting a figure, which is the hand-written-number shape this repository refuses. It also cannot
+  be written on `release/0.5.0`: that branch is archived at the release squash and *carries no further work
+  and is never a source of record for anything downstream*, and `main` takes nothing except through a release
+  branch. The row therefore rides the **next** release branch, one cycle behind the publication it records.
+  *Observation source:* the release plan for `0.5.0`, where this step was first written as a post-publish
+  action and was found to be a post-publish **observation** with no branch to live on at the moment it
+  becomes possible. *Current reaction or bound:* none, and none is wanted — nothing requires the Inventory to
+  be complete. `crates/kanhe/src/tests/record.rs` names the file only to classify it as a record document, so
+  a missing row goes red nowhere; this entry is the pointer that replaces the reaction. *Risk:* a reader
+  verifying a published `0.5.0` crate against this repository rediscovers by hand what the record exists to
+  save them, and the record's own scope line — *audited across all 96 published tarballs* — silently stops
+  covering what is published. *Promotion trigger:* `0.5.0` is on crates.io. What the trigger asks for is two
+  edits, not one: re-run the audit across the six new tarballs and **restate the scope line with its new date
+  and count**, then add the row. Adding a row alone makes the document claim an audit that never covered it.
+  The audit command is in the record's own *Reproducing the audit* section. *Why not simply built:* a
+  reaction would have to fetch from crates.io to know the answer, which makes a repository check depend on a
+  network service and on a version existing there — and the fact it would check is recorded once per release
+  by a person who is already running the publish. *Version class:* patch; a record document shipping in no
+  crate. *Authority:* this entry, and `AGENTS.md`'s *Branching and release*.
+
 - **Twenty-seven inner comments in published crates index their provenance by review round, and the reaction
   over doc comments does not reach them.** *Class:* WATCH. *Observed pressure:* measured in the 0.5.0 window, by
   `grep -rnE 'round[- ][0-9]+'` over every published crate's `src`: both doc-comment lines and inner-comment

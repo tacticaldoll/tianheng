@@ -1172,6 +1172,16 @@ them.
 
 ### Self-governance
 
+- **The provenance record for this release cannot be written in this release, and that is now filed rather
+  than remembered.** `docs/history/published-artifact-provenance.md` records what commit each published
+  version's tarballs actually name, and it is an audit *of the tarballs* — read back from `static.crates.io`.
+  So `0.5.0`'s row cannot exist before `0.5.0` is uploaded, and by then this release branch is archived and
+  carries no further record, while `main` takes nothing except through a release branch. The row rides the
+  next release branch, one cycle behind the publication it describes. `BACKLOG.md` carries the pointer with
+  its trigger and the audit command, and with the part that is easy to miss: the record's scope line names
+  the count and date it was audited across, so adding a row without restating that line would make the
+  document claim an audit that never covered it.
+
 - **A vacuity guard measured a wider set than the one it protects — the third of that shape in this
   reaction.** The machinery set is drawn from the workspace's **unpublished** members plus `scripts/`, and its
   floor counted every member's tracked paths, published ones included. One tracked file under a published
