@@ -4,10 +4,11 @@ Adopt **just the static dimension**: the syn-free import/dependency linter, one 
 no `syn`. This is a tiny hexagonal app whose `domain` must not import `infra` — and
 deliberately does, so you can watch 圭表 react.
 
-```toml
-[dependencies]
-guibiao = "0.4"   # the whole footprint — light by design
-```
+The committed [manifest requirement](Cargo.toml) is the adopter-facing form. 圭表 is the whole
+dependency footprint — light by design, and **declared** rather than described: the law names a
+crate-level allowlist, so adding a second dependency reacts instead of quietly outgrowing the claim.
+That is the shape this project governs itself with, at both granularities 圭表 observes — a module
+boundary and a crate one.
 
 Declare the law in Rust (`src/governance.rs`), then react:
 
@@ -28,6 +29,9 @@ cargo test               # asserts the reaction + the adoption ladder + the stab
 `tests/reaction.rs` demonstrates, as runnable proof:
 
 - **the reaction** — the `domain → infra` import trips the enforce boundary (exit 1);
+- **the boundary that holds** — the crate allowlist passes on this manifest, and the same shape with
+  the dependency excluded names it and gates, which is what makes the passing declaration evidence
+  rather than silence;
 - **the adoption ladder** — `warn` reports without gating (exit 0); a `Baseline` grandfathers
   existing violations (exit 0) while an un-baselined one still reacts (exit 1);
 - **identity ⊥ presentation/metadata** — semantic identity is governed target + `RuleKey` +

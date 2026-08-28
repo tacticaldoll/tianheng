@@ -18,6 +18,7 @@ impl TempSrcTree {
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
+        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
         let src = dir.join("src");
         std::fs::create_dir_all(&src).expect("create temp src");
         Self { dir, src }

@@ -2,10 +2,11 @@
 #
 # This example is its own workspace (`[workspace]` below) so its *deliberate* boundary
 # violation (domain → infra) is never swept by Tianheng's workspace-wide gates. CI runs it in
-# isolation via `scripts/test_examples.sh`, which patches the family crates to local source so
-# the committed `guibiao = "0.4"` — the adopter's real form — still resolves against the
-# in-development version. The footprint is deliberately one dependency, no `syn`: that light
-# footprint IS the 圭表 product pitch, demonstrated here rather than asserted.
+# isolation through `crates/shengmo/tests/examples_suite.rs`, which patches the family crates to local source so
+# the manifest keeps the adopter's real published-version requirement while exercising this
+# checkout. The footprint is deliberately one dependency, no `syn`: that light
+# footprint IS the 圭表 product pitch — and `src/governance.rs` now declares it as an allowlist, so a
+# second dependency added here reacts instead of quietly contradicting this comment.
 [package]
 name = "hexagonal_demo"
 version = "0.0.0"
@@ -13,6 +14,6 @@ edition = "2021"
 publish = false
 
 [dependencies]
-guibiao = "0.4"
+guibiao = "0.5"
 
 [workspace]

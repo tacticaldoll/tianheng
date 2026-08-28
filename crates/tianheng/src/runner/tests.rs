@@ -7,6 +7,7 @@ use super::{
     semantic_text, trait_impl_text, visibility_text,
 };
 use crate::prelude::*;
+use guibiao::Subject;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -97,8 +98,11 @@ fn merge_combines_violations_from_both_dimensions() {
 #[test]
 fn merge_is_clean_only_when_both_are_clean() {
     assert_eq!(
-        merge_outcomes(Outcome::Clean, Outcome::Clean),
-        Outcome::Clean
+        merge_outcomes(
+            Outcome::Clean(Subject::nothing_declared()),
+            Outcome::Clean(Subject::nothing_declared())
+        ),
+        Outcome::Clean(Subject::nothing_declared())
     );
 }
 
@@ -714,7 +718,7 @@ fn run_args(args: &[&str]) -> u8 {
 
 // Most runner unit tests below need no fixture: each asserts an exit code decided
 // during argument parsing, before any workspace is observed. The reaction paths that
-// require a real workspace are exercised against one directly: `tests/self_governance.rs`
+// require a real workspace are exercised against one directly: `crates/shengmo/tests/self_governance.rs`
 // drives the static `check` end-to-end against Tianheng's own workspace, and the
 // dispatch tests below (e.g. `the_trait_impl_dimension_is_wired_through_dispatch`) drive
 // each dimension through `dispatch` + real `cargo metadata`. The per-dimension finding
@@ -861,9 +865,11 @@ fn an_orphan_probe_reacts_with_no_declared_boundary() {
         0,
         "a probe-free workspace under an empty constitution stays clean"
     );
-    assert_eq!(
-        check_constitution(&Constitution::new("empty"), &PathBuf::from(clean_manifest),),
-        Outcome::Clean,
+    assert!(
+        matches!(
+            check_constitution(&Constitution::new("empty"), &PathBuf::from(clean_manifest),),
+            Outcome::Clean(_)
+        ),
         "the library check keeps an empty constitution clean on a probe-free workspace",
     );
 }
@@ -937,7 +943,7 @@ fn the_runtime_audit_reports_the_declared_unprobed_seam() {
 fn composed_runtime_audit_uses_custom_roots_and_rejects_orphan_only_coverage() {
     let base = TempPath::named("runtime-root");
     let base = base.path();
-    std::fs::create_dir_all(base).unwrap();
+    xingbiao::claim_scratch(base).unwrap();
     std::fs::write(
         base.join("Cargo.toml"),
         "[package]\nname='runtime-root-fixture'\nversion='0.0.0'\nedition='2021'\n\
@@ -1307,8 +1313,145 @@ fn markdown_reasonless_boundary_has_no_blockquote_or_orphan_blank_line() {
     let md = constitution_markdown(&c);
     assert!(!md.contains("\n> "), "no blockquote when no reason:\n{md}");
     assert!(
-        md.contains("### `core`\n- **rule**"),
+        md.contains("### `core` (crate)\n- **rule**"),
         "heading immediately followed by the rule bullet:\n{md}"
+    );
+}
+
+/// No two boundaries render the same heading — the property the heading's shape narrows but cannot close.
+///
+/// The subject is the collision that was live: `.module("crate")` is the ordinary subtree-wide form, so the
+/// module path alone repeats across crates, and one crate can carry a module boundary and a semantic one over
+/// the same module. Both pairs are constructed here rather than waited for, so this holds whatever the
+/// declared law happens to contain.
+///
+/// Asserted over the **rendered** projection, not over an identity function, because it is the rendering that
+/// a reader and an adopter see — an identity that distinguishes two boundaries while the heading collapses
+/// them is exactly the defect this exists for.
+/// A subject the fold cannot represent is refused, not wrapped into a clean verdict.
+///
+/// `Subject::of` admits any `usize` pair where something declared also reached something, so this is a value
+/// a third-party `Observer` can hand the fold from the published surface alone — `usize::MAX` declared is
+/// absurd as a count and perfectly ordinary as an input.
+///
+/// The failure it replaces was profile-dependent, which is why it is worth a case. Measured on that code,
+/// both ways: debug reported `attempt to add with overflow`; release returned
+/// `Clean(Subject { declared: 18446744073709551614, reached: 2 })`. The wrap is the dangerous half — the
+/// total still satisfies `Subject::of` because `reached` stayed positive, so the run reports **clean**
+/// carrying a figure that is the sum of nothing.
+#[test]
+fn a_composed_subject_that_cannot_be_represented_is_a_constitution_error() {
+    let huge = Subject::of(usize::MAX, 1).expect("declared something and reached something");
+    let merged = merge_outcomes(Outcome::Clean(huge), Outcome::Clean(huge));
+    match merged {
+        Outcome::ConstitutionError(why) => assert!(
+            why.contains("cannot be represented"),
+            "the refusal must say the sum is the problem: {why}"
+        ),
+        other => panic!(
+            "two clean subjects summing past `usize` must refuse rather than wrap into a verdict: {other:?}"
+        ),
+    }
+
+    // The control: the same fold over subjects that do sum is still clean, so the guard above refuses the
+    // overflow rather than the summing.
+    let small = Subject::of(2, 3).expect("declared something and reached something");
+    match merge_outcomes(Outcome::Clean(small), Outcome::Clean(small)) {
+        Outcome::Clean(subject) => {
+            assert_eq!(subject.declared(), 4, "the composed subject is the sum");
+            assert_eq!(subject.reached(), 6, "for both figures");
+        }
+        other => panic!("a representable sum must stay clean: {other:?}"),
+    }
+}
+
+/// A violation-free `Outcome::Violations` states no subject, so the fold refuses rather than substituting a
+/// zero for a figure it does not have.
+///
+/// `Report::empty()` is public and `exit_code()` answers `0` for it, so this outcome is constructible by any
+/// participant — and `0.5.0` is the first release in which an outside `Observer` can be one. Folded against a
+/// real subject it used to contribute `nothing_declared()`, so a participant that observed a whole workspace
+/// was recorded as having looked for nothing, and the composed figure under-reported with a clean verdict.
+///
+/// Negative run: with `subject_of` answering `nothing_declared()` for the `_` arm, the first fold returns
+/// `Clean(Subject { declared: 2, reached: 3 })` — the observing participant's figure alone, stated as the
+/// figure for both — and the second returns `Clean(Subject { declared: 0, reached: 0 })`.
+#[test]
+fn a_participant_carrying_no_subject_cannot_be_folded_into_a_clean_verdict() {
+    let observed = Subject::of(2, 3).expect("declared something and reached something");
+    let silent = Outcome::Violations(guibiao::Report::empty());
+    assert_eq!(
+        silent.exit_code(),
+        0,
+        "the premise: a violation-free report is not a failing outcome, which is why it reaches this fold"
+    );
+
+    for (label, merged) in [
+        (
+            "beside a participant that did observe",
+            merge_outcomes(silent.clone(), Outcome::Clean(observed)),
+        ),
+        (
+            "beside another carrying nothing",
+            merge_outcomes(silent.clone(), silent.clone()),
+        ),
+    ] {
+        match merged {
+            Outcome::ConstitutionError(why) => assert!(
+                why.contains("reported violations while carrying none"),
+                "{label}: the refusal must name what the participant did: {why}"
+            ),
+            other => panic!(
+                "{label}: a participant stating no subject must refuse, never contribute a zero: {other:?}"
+            ),
+        }
+    }
+
+    // The control: the same fold over two outcomes that DO state a subject is still clean, so the guard
+    // refuses the missing subject rather than the folding.
+    match merge_outcomes(Outcome::Clean(observed), Outcome::Clean(observed)) {
+        Outcome::Clean(subject) => assert_eq!(
+            (subject.declared(), subject.reached()),
+            (4, 6),
+            "two stated subjects still sum"
+        ),
+        other => panic!("two stated subjects must stay clean: {other:?}"),
+    }
+}
+
+#[test]
+fn markdown_headings_are_pairwise_distinct() {
+    let c = Constitution::new("t")
+        .boundary(
+            CrateBoundary::crate_("alpha")
+                .deny_external_dependencies()
+                .because("a crate boundary"),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("alpha")
+                .module("crate")
+                .must_not_call_inline("std::time")
+                .because("a module boundary over the whole of alpha"),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("beta")
+                .module("crate")
+                .must_not_call_inline("std::time")
+                .because("the same module path in a different crate"),
+        );
+
+    let md = constitution_markdown(&c);
+    let headings: Vec<&str> = md.lines().filter(|line| line.starts_with("### ")).collect();
+    assert_eq!(
+        headings.len(),
+        3,
+        "every boundary must render a heading:\n{md}"
+    );
+    let distinct: std::collections::BTreeSet<&&str> = headings.iter().collect();
+    assert_eq!(
+        distinct.len(),
+        headings.len(),
+        "two boundaries render one heading, so a reader sees one where two exist: {headings:?}\n{md}"
     );
 }
 
@@ -1628,7 +1771,8 @@ fn semantic_violation_projects_its_file_in_json_and_sarif() {
 
 #[test]
 fn sarif_clean_is_empty_and_constitution_error_marks_execution_unsuccessful() {
-    let clean: serde_json::Value = serde_json::from_str(&report_sarif(&Outcome::Clean)).unwrap();
+    let clean: serde_json::Value =
+        serde_json::from_str(&report_sarif(&Outcome::Clean(Subject::nothing_declared()))).unwrap();
     assert!(
         clean["runs"][0]["results"].as_array().unwrap().is_empty(),
         "clean → empty results"
@@ -2200,6 +2344,7 @@ fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
     // ascent over a real temp tree so the walk is proven without touching the process cwd.
     let root = TempPath::named("nearest");
     let root = root.path();
+    xingbiao::claim_scratch(root).expect("mkdir root");
     let outer = root.join("outer");
     let inner = outer.join("inner");
     let leaf = inner.join("a").join("b");
@@ -2366,7 +2511,7 @@ fn projection_gate_reacts_to_missing_stale_and_regenerates_on_bless() {
 #[test]
 fn a_symlink_is_reported_dangling_only_when_its_target_does_not_resolve() {
     let dir = TempPath::named("symlink-classification");
-    std::fs::create_dir_all(dir.path()).expect("create dir");
+    xingbiao::claim_scratch(dir.path()).expect("create dir");
 
     let dangling = dir.path().join("dangling-baseline.json");
     std::os::unix::fs::symlink(dir.path().join("absent.json"), &dangling).expect("dangling link");
@@ -2429,5 +2574,54 @@ fn a_symlink_is_reported_dangling_only_when_its_target_does_not_resolve() {
             "a symlink whose target exists but is unreachable must NOT be reported as dangling: \
              {other:?}"
         ),
+    }
+}
+
+/// A run composing ONE observer refuses an outcome that states no subject.
+///
+/// The first repair guarded `merge_outcomes`, which this path never reaches: `Run::observe` stores the first
+/// outcome verbatim, so a single participant's violation-free `Outcome::Violations` travelled all the way to
+/// `verdict()` — exit code `0`, no subject, no refusal. The check now sits where an outcome *arrives*, which
+/// every outcome passes exactly once on both paths into the fold.
+///
+/// Negative run: without `stated` in `Run::observe`, `verdict()` answers
+/// `Violations(Report { violations: [] })` and the assertion below fails on it.
+#[test]
+fn a_lone_participant_carrying_no_subject_cannot_reach_a_verdict() {
+    struct Silent;
+    impl Observer for Silent {
+        fn observe(&self, _: &Path) -> Outcome {
+            Outcome::Violations(guibiao::Report::empty())
+        }
+        fn bounds(&self) -> Vec<guibiao::BoundDecl> {
+            Vec::new()
+        }
+    }
+
+    let manifest = Path::new("Cargo.toml");
+    match Run::over(manifest).observe(Silent).verdict() {
+        Outcome::ConstitutionError(why) => assert!(
+            why.contains("reported violations while carrying none"),
+            "the refusal must name what the participant did: {why}"
+        ),
+        other => panic!(
+            "one observer stating no subject must refuse, not reach a verdict carrying nothing: {other:?}"
+        ),
+    }
+
+    // The control: a lone participant that DOES state a subject still reaches its verdict unchanged, so the
+    // guard refuses the missing subject rather than the single-observer shape.
+    struct Speaking;
+    impl Observer for Speaking {
+        fn observe(&self, _: &Path) -> Outcome {
+            Outcome::Clean(Subject::of(2, 3).expect("declared and reached"))
+        }
+        fn bounds(&self) -> Vec<guibiao::BoundDecl> {
+            Vec::new()
+        }
+    }
+    match Run::over(manifest).observe(Speaking).verdict() {
+        Outcome::Clean(subject) => assert_eq!((subject.declared(), subject.reached()), (2, 3)),
+        other => panic!("a stated subject must survive a one-observer run: {other:?}"),
     }
 }

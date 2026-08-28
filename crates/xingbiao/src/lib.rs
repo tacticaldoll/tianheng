@@ -120,7 +120,7 @@ pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
 ///
 /// Without this, one commit produced `src/lib.rs` on Linux and `src\lib.rs` on Windows, and a baseline
 /// recorded by CI matched nothing for a Windows contributor — every entry re-firing as new. That is the
-/// checkout-dependence class this window closed five times, along the one axis none of those five
+/// checkout-dependence class the 0.4.0 window closed five times, along the one axis none of those five
 /// covered: not where the repository sits, but which platform read it.
 ///
 /// **Bytes.** Every byte that is not part of a valid UTF-8 sequence is percent-escaped, and a literal
@@ -164,8 +164,19 @@ pub fn path_label(path: &Path) -> String {
                 }
                 Err(err) => {
                     let (valid, invalid) = rest.split_at(err.valid_up_to());
-                    // `valid_up_to()` bounds a checked-valid prefix, so this cannot fail.
-                    push_text(out, std::str::from_utf8(valid).unwrap_or_default());
+                    // `valid_up_to()` bounds a checked-valid prefix, so this cannot fail — and it
+                    // says so rather than branching on it. `unwrap_or_default()` was a fallback
+                    // nothing reaches, which tells a later reader that the empty case happens; the
+                    // `unreachable!()` this file already writes for `RootDir`/`CurDir` is the same
+                    // answer to the same question. `unreachable_branch` states the rule and its own
+                    // corpus cannot see this door: it recognises an always-`Some` value by the
+                    // RECEIVER (`.split(`, `.rsplit(`), and here the guarantee comes from where the
+                    // argument was cut instead.
+                    push_text(
+                        out,
+                        std::str::from_utf8(valid)
+                            .expect("`valid_up_to()` bounds a checked-valid prefix"),
+                    );
                     // `error_len() == None` means the input ends mid-sequence: every remaining byte is
                     // unusable, so escape all of them rather than looping forever on the same slice.
                     let skip = err.error_len().unwrap_or(invalid.len()).max(1);
@@ -310,4 +321,77 @@ pub fn member_root_files(metadata: &Value) -> Vec<PathBuf> {
     roots.sort();
     roots.dedup();
     roots
+}
+
+/// The runtime audit's corpus and label anchor for the workspace at `manifest_path`, in one read.
+///
+/// The corpus is every member's crate-root file; the anchor is Cargo's own resolved `workspace_root`, made
+/// absolute. The anchor matters more than it looks: the audit labels every observed file relative to it and that
+/// label is **baseline identity**, so it must be the one directory that moves neither with the checkout location
+/// nor with the workspace's member set. It is the same directory whichever member manifest `--manifest-path`
+/// named.
+///
+/// The fallback to the given manifest's own directory exists for metadata carrying no `workspace_root` field — a
+/// synthetic value in a unit test; a real `cargo metadata` read always carries it. `absolute` is used rather than
+/// canonicalization so the cargo-reported root is never rewritten, and it refuses only an empty path, hence the
+/// working-directory last resort for a bare `Cargo.toml` whose parent is empty.
+///
+/// This lives here, in the single reader of truth, because two dimensions derived it separately once: the shell
+/// computed it for the runtime audit while a runtime observer would have had to compute it again, and a
+/// twin derivation of a baseline-identity anchor is the drift this crate exists to prevent.
+pub fn audit_corpus_and_anchor(manifest_path: &Path) -> Result<(Vec<PathBuf>, PathBuf), String> {
+    let metadata = cargo_metadata(manifest_path)?;
+    let roots = member_root_files(&metadata);
+    let anchor = match workspace_root(&metadata) {
+        Some(root) => root,
+        None => {
+            let manifest_dir = manifest_path.parent().unwrap_or(Path::new(""));
+            // The working directory is the last resort for a bare `Cargo.toml` whose parent is empty. Where
+            // even that cannot be read there is no anchor, and the error channel in this signature says so:
+            // an invented root mislabels every observed file, silently, because the anchor *is* baseline
+            // identity. Inventing one here would also be the defensive over-foolproofing of an impossible
+            // state the minimalism bound forbids.
+            std::path::absolute(manifest_dir).or_else(|_| std::env::current_dir()).map_err(|err| {
+                format!(
+                    "no anchor: {manifest_path:?} names no absolute directory and the working directory \
+                     cannot be read ({err}). Every observed file is labelled relative to the anchor, so \
+                     inventing one would mislabel a whole baseline rather than fail"
+                )
+            })?
+        }
+    };
+    Ok((roots, anchor))
+}
+
+/// Claim `path` as a directory this process created, refusing to adopt one that already exists.
+///
+/// **Fixture infrastructure, deliberately withheld from the API contract.** It is `pub` because test targets
+/// in other crates need it across crate boundaries, and `#[doc(hidden)]` because 星表's domain is
+/// declared workspace data — a scratch-directory claim is not in it. It lives here for a dependency-graph
+/// reason (the lightest crate already reachable from every dimension), and a dependency-graph reason is not
+/// a domain fit.
+///
+/// The distinction is not cosmetic at `0.5.0`, which is the release that first publishes it: a documented
+/// item is a promise an adopter may build on and this family cannot then withdraw, while a hidden one keeps
+/// every present caller compiling and commits to nothing. Zero call sites outside a test target or a
+/// `#[cfg(test)]` module were measured before hiding it.
+///
+/// **`create_dir_all` accepts a pre-existing symlink to a directory.** Measured: `create_dir_all` on such a
+/// link returns `Ok(())` and every subsequent write lands in the link's *target*, while `create_dir` cannot
+/// follow a symlink and returns `AlreadyExists` — the narrow call is what makes the refusal possible at all.
+///
+/// A fixture scratch root is typically built from `temp_dir()` and a predictable name (a process id, a
+/// counter), so it is guessable by anyone on the machine. The ordinary `remove_dir_all` then `create_dir_all`
+/// idiom leaves a window between the two calls in which a planted symlink is silently adopted, and everything
+/// the fixture writes afterward lands wherever that link points. `create_dir` closes the window rather than
+/// narrowing it: the root is claimed only if this call is the one that created it, and `remove_dir_all`
+/// itself removes a symlink at the path rather than following it, so an attacker must win a race rather than
+/// leave something lying around in advance.
+///
+/// **This is about the root only.** Every directory beneath a root this call already claimed is safe to build
+/// with the ordinary `create_dir_all`, because nothing outside the fixture's own control could have planted
+/// anything there first.
+#[doc(hidden)]
+pub fn claim_scratch(path: &Path) -> std::io::Result<()> {
+    std::fs::create_dir(path)
 }

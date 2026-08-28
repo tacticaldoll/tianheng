@@ -8,6 +8,35 @@ pub(super) fn confine(governed: &str, crate_name: &str) -> ModuleBoundary {
         .because("the platform vocabulary stays behind the ffi module")
 }
 
+/// An import of the confined crate inside a `#[path]`-remapped module is observed.
+///
+/// Kept for the CONTRACT rather than for a change: the behaviour is already correct, and this pins it
+/// so the spec's resolution sentence cannot drift away from it again. That sentence listed
+/// `#[path]`-remapped modules among the scanner's out-of-scope bounds long after the scanner began
+/// following such a remap to its target, which would have let a reader dismiss a real escape here as
+/// governed policy.
+#[test]
+pub(super) fn confine_observes_an_import_inside_a_path_remapped_module() {
+    let (result, violations) = run_module_check(
+        "confine-remapped",
+        &[
+            ("lib.rs", "pub mod ffi;\npub mod service;\n"),
+            ("ffi.rs", "\n"),
+            ("service.rs", "#[path = \"far.rs\"]\npub mod inner;\n"),
+            ("far.rs", "use libc::c_int;\n"),
+        ],
+        confine("crate::ffi", "libc"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "libc");
+    assert!(
+        violations[0].finding.contains("crate::service::inner"),
+        "the finding must name the remapped module: {:?}",
+        violations[0].finding
+    );
+}
+
 #[test]
 pub(super) fn confine_flags_an_external_import_outside_the_subtree() {
     // The confined crate is the target; the offending importer module is the finding.
@@ -432,4 +461,101 @@ pub(super) fn confine_observes_an_aliased_import_of_the_confined_crate() {
     );
     assert_eq!(violations[0].target(), "libc");
     assert_eq!(violations[0].finding, "crate::service");
+}
+
+// The fourth inherited bound this capability's overview names, declared and pinned rather than left in
+// prose. It was stated twice in the spec and invisible to the register both times — once on a line with no
+// trigger words, once as "a stated, inherited bound" whose comma breaks the adjacency the scan needs — so
+// nothing defended it while the overview read as permission.
+//
+// Probed before it was declared: the assertion here is that `extern crate libc;` outside the permitted
+// subtree yields no violation, which is the scanner's use-only behaviour rather than a reasoned claim.
+#[test]
+pub(super) fn confine_ignores_an_extern_crate_declaration() {
+    let (result, violations) = run_module_check(
+        "confine-extern-crate",
+        &[
+            ("lib.rs", "pub mod ffi;\npub mod service;\n"),
+            ("ffi.rs", "\n"),
+            ("service.rs", "extern crate libc;\n"),
+        ],
+        confine("crate::ffi", "libc"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "the rule is use-only: an `extern crate` declaration is not observed: {violations:?}"
+    );
+}
+
+#[test]
+pub(super) fn confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms() {
+    let (result, violations) = run_module_check(
+        "confine-cfg-blind",
+        &[
+            ("lib.rs", "pub mod ffi;\npub mod service;\n"),
+            ("ffi.rs", "\n"),
+            (
+                "service.rs",
+                "#[cfg(impossible_predicate)]\nuse libc::c_int;\n",
+            ),
+        ],
+        confine("crate::ffi", "libc"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "libc");
+    assert_eq!(violations[0].finding, "crate::service");
+}
+
+/// A module governed by name alone (`crate::bad`) is reachable from two separate compilation units — a
+/// `lib` and a `bin` target sharing one `src/` directory, each with its own conventional `mod bad;` that
+/// resolves to the identical physical file — and the confinement violation each unit's own copy carries
+/// is reported once per unit, not conflated into one and not silently dropped for either.
+///
+/// This is the real hazard the previous, misleadingly-named occupant of this test claimed to guard:
+/// its own fixture declared no `bin` target at all (`TempWorkspace::metadata` only ever emits one `lib`
+/// target) and was byte-for-byte the same fixture as
+/// [`confine_flags_an_external_import_outside_the_subtree`] above, adding no coverage beyond it under a
+/// name that promised otherwise. `check_module_boundary`'s per-root evaluation (each root walked as its
+/// own corpus, sibling roots excluded from each other's file set) already gets this right; this pins it.
+#[test]
+pub(super) fn confine_external_crate_evaluates_each_unit_at_a_coincident_conventional_path() {
+    let ws = TempWorkspace::new("confine-lib-bin-coincident");
+    ws.write("lib.rs", "pub mod ffi;\npub mod bad;\n");
+    ws.write("main.rs", "pub mod ffi;\npub mod bad;\nfn main() {}\n");
+    ws.write("ffi.rs", "\n");
+    ws.write("bad.rs", "use libc::c_int;\n");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "targets": [
+                { "kind": ["lib"], "src_path": ws.src().join("lib.rs").to_string_lossy() },
+                { "kind": ["bin"], "src_path": ws.src().join("main.rs").to_string_lossy() },
+            ],
+        }],
+    });
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &confine("crate::ffi", "libc"), &mut violations);
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        2,
+        "the coincident-path leak exists once per compilation unit and must be reported for each, \
+         not merged into one and not dropped for either: {violations:?}"
+    );
+    let units: std::collections::BTreeSet<String> = violations
+        .iter()
+        .map(|v| {
+            v.fact().to_json()["fields"]["unit"]
+                .as_str()
+                .expect("unit is a string")
+                .to_string()
+        })
+        .collect();
+    assert_eq!(
+        units,
+        std::collections::BTreeSet::from(["lib.rs".to_string(), "main.rs".to_string()]),
+        "each unit's own copy of the leak must carry that unit's own label: {violations:?}"
+    );
 }

@@ -1,5 +1,4 @@
-//! 0.3.1 adversarial-sweep finding, closed by PR #159 ("圭表 manifest/deps"):
-//! `is_self_dependency` matched a dependency edge by NAME ALONE, so a same-named but
+//! `is_self_dependency` once matched a dependency edge by NAME ALONE, so a same-named but
 //! EXTERNALLY-sourced dependency (a real wrapper/fork/self-comparison pattern, e.g.
 //! `foo = { git = "…" }` declared by package `foo`) was wrongly swallowed by the exemption meant
 //! only for the genuine null-source self-referential path idiom (`main = { path = "." }`), and
@@ -34,6 +33,7 @@ impl ProbeWorkspace {
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
+        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
         std::fs::create_dir_all(dir.join("src")).expect("create temp src dir");
         let manifest = dir.join("Cargo.toml");
         std::fs::write(
@@ -141,7 +141,7 @@ fn a_genuine_self_path_dependency_is_still_exempt_through_the_real_entry_point()
 
     let outcome = check(&constitution, probe.manifest());
     assert!(
-        matches!(outcome, Outcome::Clean),
+        matches!(outcome, Outcome::Clean(_)),
         "a genuine null-source self-dependency must remain exempt, got {outcome:?}"
     );
 }

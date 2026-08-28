@@ -489,7 +489,7 @@ to gate against it, both exiting `2` rather than silently upgrading or reinterpr
 desired `owner`/`tracker` annotations by hand, move or delete the unsupported file, then regenerate
 with `--write-baseline`. The runnable
 `examples/guibiao-standalone/tests/reaction.rs` proves identity stability and the new-violation
-gate; `scripts/test_examples.sh` drives the real CLI write/gate path.
+gate; `cargo test -p shengmo --test examples_suite` drives the real CLI write/gate path.
 
 ### Test that a boundary actually reacts
 
@@ -546,13 +546,111 @@ assert!(coverage.uncovered.is_empty(), "ungoverned workspace crates: {:?}", cove
 
 Coverage changes no exit code on its own, so nothing gates unless *you* assert on it — the wall
 against a new, ungoverned crate slipping in is one you build deliberately. This is exactly how
-Tianheng gates its own coverage in `crates/tianheng/tests/self_governance.rs`.
+Tianheng gates its own coverage in `crates/shengmo/tests/self_governance.rs`.
+
+### Govern a rule 三儀 has no DSL for (join the run as your own participant)
+
+*Intent: you have a house rule no dimension expresses — a file-header convention, a naming scheme, a
+generated-artifact freshness check. Fold it into the **same** run and the same exit code instead of
+bolting a second gate beside 天衡 with its own reporting.*
+
+Implement `Observer`. Both methods are required: observe a workspace, and **declare what you do not
+observe** — a participant that says nothing about its limits cannot be written.
+
+A clean verdict carries its **subject**: what you were asked to enforce, and how much you reached.
+`Subject::of` refuses the one combination that is a lie — *declared something, reached nothing* — so
+you cannot report clean over a walk that read no file. Reaching nothing is fine on its own; a
+participant configured with no rule at all says so with `Subject::nothing_declared()`.
+
+```rust
+use std::path::Path;
+use tianheng::prelude::*;
+
+pub struct ModuleHeaderObserver { subtrees: Vec<String> }
+
+impl Observer for ModuleHeaderObserver {
+    fn observe(&self, manifest_path: &Path) -> Outcome {
+        // … walk each subtree; for each offending file:
+        //   Violation::new(
+        //       BoundaryKind::Module,
+        //       ViolationId::new(subtree, RuleKey::of("your.rule/…", […]),
+        //                        StructuredFactIdentity::of("your.fact/…", "missing-header", […])),
+        //       "every module file opens with a `//!` header", label, reason, Severity::Enforce)
+        // A subtree you were told to read and could NOT is `Outcome::ConstitutionError` — exit 2,
+        // never a quiet clean. Reporting clean because the look failed is the one forbidden bug,
+        // and joining a run does not exempt you from it.
+        let files_read = 0; // … however many your walk actually opened
+        match Subject::of(self.subtrees.len(), files_read) {
+            Some(subject) => Outcome::Clean(subject),
+            // Not a clean workspace: subtrees were declared and the walk read nothing, so there is
+            // no observation for a verdict to rest on. The type is what stops this being reported
+            // as cleanliness.
+            None => Outcome::ConstitutionError(format!(
+                "{} subtree(s) declared and no file read", self.subtrees.len()
+            )),
+        }
+    }
+
+    fn bounds(&self) -> Vec<BoundDecl> {
+        // Computed, because WHICH bounds you have depends on what you were configured to read.
+        //
+        // Two names, and NEITHER is the raw subtree. The pin must be a Rust identifier, or it can never
+        // name a test; the id is read as `<capability>/<name>`, so a subtree like `src/bin` would put a
+        // second slash in it and read as a second capability. Derive both with your own rule —
+        // `examples/observer-participant/src/observer.rs` carries one, and is the runnable version of
+        // this block.
+        self.subtrees.iter().map(|subtree| {
+            // The two you owe. `subtree` is yours already; these are not, and this block does not
+            // invent them for you — see the runnable version named above.
+            let (name, pin) = your_own_derivation(subtree);
+            BoundDecl::pinned(
+                BoundId::new(format!("house-rules/a-file-nested-below-{name}-is-out-of-reach")),
+                format!("a `.rs` file in a directory below `{subtree}`"),
+                Extent::OutOfReach {
+                    because: format!("this participant lists `{subtree}` one level deep and never descends").into(),
+                },
+                format!("a_file_nested_below_{pin}_is_out_of_reach"),
+            )
+        }).collect()
+    }
+}
+```
+
+Then compose it beside the dimensions — one verdict, one exit code:
+
+```rust
+Run::over(&manifest)
+    .observe(StaticObserver::new(constitution().static_boundaries().clone()))
+    .observe(ModuleHeaderObserver::reading(["src"]))
+    .verdict()
+```
+
+Three things worth knowing before you write one:
+
+- **Assembly order is part of the contract.** The fold is eager, and order decides which cannot-judge
+  is reported when more than one participant cannot judge. A participant composed onto an accumulator
+  that already cannot judge is not evaluated at all.
+- **Test the contribution, not the exit code.** If a dimension's boundary reacts on its own,
+  `exit_code() == 1` keeps holding when your participant contributes nothing. Bind your own
+  `fact_type()` — the whole point of a structured identity is that you can.
+- **`BoundaryKind` has no value you own.** Your violation must claim one of `Crate` / `Module` /
+  `Semantic` / `Runtime`; pick the nearest honest fit and say so where a reader will see it.
+
+`examples/observer-participant` is the runnable version of all of the above, including the exit-2
+direction and the computed bounds, and the repository's examples gate runs it.
+
+**One thing it demonstrates that this sketch elides**: the walk, the rule and the report are three
+functions, not one `observe` body. The rule takes the file's *text* rather than its path, so it is
+decidable from a string and a test can show it every shape it must answer for without a filesystem; the
+walk answers *which files* and returns why it could not when it cannot, so "no files" and "could not look"
+stay different facts. Copy that seam along with the rest — an `observe` that folds all three together works
+and cannot be tested a layer at a time.
 
 ### Publish an imitable Agent Law for your codebase (Three-Layer Agent Law)
 
 *Intent: publish your declared governance as a 3-layer imitable Agent Law (`AGENTS.md` / `AGENTS.self-law.md`) so AI agents imitate your architecture by gravity (潛移) — and gate it in `cargo test` so the projection never rots.*
 
-Governance follows a **Three-Layer Architecture**:
+Governance follows the **Three-Layer Agent Law**, which is this document's anatomy:
 1. **Layer 1: Universal Preamble** — meta-instructions and working agreements only (`PREAMBLE` discipline; never crate-specific or un-reacted architectural claims).
 2. **Layer 2: Qiányí Gravity Pull (Prose Reason & Projection Body)** — `because(...)` reasons projected directly from your declared `Constitution` into `AGENTS.self-law.md` to condition LLM continuations.
 3. **Layer 3: Reaction Backstop (Rust Law Source)** — functional boundaries (`restrict_dependencies_to`, `must_not_call_inline`) in code, protected by `.github/CODEOWNERS` and verified by `cargo test`.

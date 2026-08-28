@@ -299,7 +299,7 @@ fn crate_root_files_is_unique_by_root_not_by_adjacency() {
 }
 
 /// A unique, self-cleaning temp directory for a path-identity fixture: replaces the hand-rolled
-/// `temp_dir().join(format!(...))` + manual `remove_dir_all` at both ends the two tests below
+/// `temp_dir().join(format!(...))` + manual `remove_dir_all` at both ends the two directions that follow
 /// otherwise each repeat.
 struct TempDir(PathBuf);
 
@@ -307,7 +307,11 @@ impl TempDir {
     fn new(label: &str) -> Self {
         let dir = std::env::temp_dir().join(format!("xingbiao-{label}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        // Claimed the same way this crate's own `claim_scratch` requires of every other caller: a
+        // predictable, PID-based path directly under the world-writable system temp directory is
+        // exactly the shape `claim_scratch` exists to protect, and this crate's own test fixture is
+        // not exempt from the migration it shipped.
+        claim_scratch(&dir).unwrap();
         Self(dir)
     }
 
@@ -360,4 +364,47 @@ fn try_visit_reports_first_visit_then_repeat_and_fails_loud_on_an_unresolvable_p
         "a repeat visit to the same canonical file is not new"
     );
     assert!(try_visit(&mut visited, &dir.path("missing.rs")).is_err());
+}
+
+#[test]
+fn claim_scratch_creates_a_fresh_root() {
+    let dir = TempDir::new("claim-fresh");
+    let root = dir.path("root");
+    assert!(claim_scratch(&root).is_ok());
+    assert!(root.is_dir());
+}
+
+#[test]
+fn claim_scratch_refuses_an_existing_directory() {
+    let dir = TempDir::new("claim-existing");
+    let root = dir.path("root");
+    std::fs::create_dir(&root).expect("the fixture directory is writable");
+    assert!(
+        claim_scratch(&root).is_err(),
+        "a path that already exists must be refused, not silently adopted"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn claim_scratch_refuses_a_pre_existing_symlink_that_create_dir_all_would_adopt() {
+    let dir = TempDir::new("claim-symlink");
+    let target = dir.path("elsewhere");
+    std::fs::create_dir(&target).expect("the symlink target is writable");
+    let root = dir.path("root");
+    std::os::unix::fs::symlink(&target, &root).expect("create the symlink");
+
+    // The defect this replaces, measured directly: `create_dir_all` follows the symlink and reports success,
+    // so writes meant for a freshly claimed root would land in `target` instead.
+    assert!(
+        std::fs::create_dir_all(&root).is_ok(),
+        "control: create_dir_all silently adopts the symlink, which is exactly the defect claim_scratch exists \
+         to close"
+    );
+
+    assert!(
+        claim_scratch(&root).is_err(),
+        "a symlink at the path must be refused — mkdir cannot follow it, so adopting it would write through \
+         to whatever it points at"
+    );
 }

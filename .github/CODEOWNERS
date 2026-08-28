@@ -7,10 +7,21 @@
 #
 # The protected file must be the boundary whose edit turns CI green after drift, not a
 # showcase of it:
-#   - crates/tianheng/tests/self_governance.rs is Tianheng's SELF-GOVERNING constitution
+#   - crates/shengmo/ is Tianheng's SELF-GOVERNING constitution
 #     — the boundaries it enforces on itself (the 圭表 core is serde_json-only; the core
 #     crate must not depend on the gate/shell). It is the file an agent would weaken to
 #     make Tianheng's own CI pass, so it is the primary thing to protect.
+#   - crates/kanhe/ is every REPOSITORY check — whitespace, reference integrity, release
+#     coherence, DoD coherence, the bound register, the merge-message gate and the
+#     publish-source gate. 繩墨 above holds the law Tianheng declares over its own
+#     architecture; 勘合 holds this repository's record against itself. Both are things an
+#     agent would weaken to make CI pass, and only the first was named:
+#     the whole repository-check surface moved into this crate from `scripts/` and
+#     CODEOWNERS was updated for the move it noticed and not for the class.
+#   - scripts/ is the two wrappers standing in front of the irreversible acts —
+#     `cargo publish` and `gh pr merge --squash`. Neither renders a verdict; each refuses
+#     to reach the tool without one. An edit here does not relax a boundary, it removes the
+#     requirement to consult one, which is the same result by a shorter route.
 #   - deny.toml is the supply-chain gate backing the same dependency-light invariant;
 #     weakening it likewise relaxes the law.
 #   - crates/tianheng/src/constitution.rs is only the bundled DEMO constitution (target
@@ -21,6 +32,8 @@
 # that relaxes the law), the repo admin must enable branch protection on the default
 # branch with "Require review from Code Owners". Until then this documents intent.
 
-/crates/tianheng/tests/self_governance.rs   @tacticaldoll
+/crates/shengmo/                            @tacticaldoll
+/crates/kanhe/                              @tacticaldoll
+/scripts/                                   @tacticaldoll
 /crates/tianheng/src/constitution.rs        @tacticaldoll
 /deny.toml                                  @tacticaldoll

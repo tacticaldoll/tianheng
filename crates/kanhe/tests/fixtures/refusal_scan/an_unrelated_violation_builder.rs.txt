@@ -1,0 +1,3 @@
+fn violation(target: &str, rule: &str, finding: &str, file: Option<&str>) -> Violation {
+    Violation::new(BoundaryKind::Crate, test_id(target, rule, finding), rule, finding)
+}

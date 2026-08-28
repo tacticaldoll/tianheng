@@ -23,6 +23,8 @@ pub(super) struct TempSrcTree {
 impl TempSrcTree {
     pub(super) fn new(label: &str) -> Self {
         let dir = std::env::temp_dir().join(format!("hunyi-{label}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
         let src = dir.join("src");
         std::fs::create_dir_all(&src).expect("mkdir src");
         Self { dir, src }

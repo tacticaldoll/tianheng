@@ -101,6 +101,37 @@ pub(super) fn a_dyn_in_an_inherent_impl_generic_bound_is_observed() {
     );
 }
 
+/// A non-public `type` alias hiding a `dyn` in a public position is not observed — the stated bound, with
+/// its control beside it so the empty result is discriminating rather than vacuous.
+///
+/// Kept for the CONTRACT rather than for a change: `semantic-dyn-trait-boundary` declares this bound (the
+/// resolver does not expand `type` aliases) and nothing pinned it. Measured before it was written, so the
+/// assertion records behaviour rather than restating the spec: the aliased form yields no finding and the
+/// direct form yields one.
+#[test]
+pub(super) fn a_private_alias_hiding_a_dyn_is_a_stated_bound() {
+    let hidden = dyn_mod(
+        "alias-hidden-dyn",
+        "type Handler = Box<dyn crate::ports::Port>;\npub fn make() -> Handler { todo!() }\n",
+    )
+    .unwrap();
+    assert!(
+        hidden.is_empty(),
+        "a dyn behind a non-public type alias is a stated bound: {hidden:?}"
+    );
+
+    let direct = dyn_mod(
+        "alias-hidden-dyn-control",
+        "pub fn make() -> Box<dyn crate::ports::Port> { todo!() }\n",
+    )
+    .unwrap();
+    assert_eq!(
+        direct,
+        ["dyn crate::ports::Port exposed by fn crate::m::make"],
+        "the control must react, or the empty result above says nothing"
+    );
+}
+
 #[test]
 pub(super) fn dyn_operand_flags_a_named_trait_and_passes_others() {
     // A dyn of the listed trait is flagged; a dyn of an unlisted trait passes.
@@ -338,4 +369,49 @@ pub(super) fn dyn_operand_boundary_carries_its_operands_and_severity() {
         .must_not_expose_dyn()
         .because("no dyn at all");
     assert!(shape.forbidden_operands().is_empty());
+}
+
+/// A macro-generated `dyn` is not observed — the universal 渾儀 macro-expansion bound, with its control.
+///
+/// Kept for the CONTRACT rather than for a change: `semantic-dyn-trait-boundary` declares this and nothing
+/// pinned it. Measured, and the control is what makes the empty result mean something — the same signature
+/// written directly reacts, so the emptiness is about the macro body rather than about a fixture that
+/// reacts to nothing.
+#[test]
+pub(super) fn a_macro_generated_dyn_is_a_documented_coverage_bound() {
+    let hidden = dyn_mod(
+        "macro-dyn",
+        "macro_rules! mk { () => { pub fn c() -> Box<dyn crate::ports::Port> { todo!() } }; }\nmk!();\n",
+    )
+    .unwrap();
+    assert!(
+        hidden.is_empty(),
+        "a dyn produced by a macro expansion is a documented bound: {hidden:?}"
+    );
+
+    let direct = dyn_mod(
+        "macro-dyn-control",
+        "pub fn c() -> Box<dyn crate::ports::Port> { todo!() }\n",
+    )
+    .unwrap();
+    assert_eq!(
+        direct,
+        ["dyn crate::ports::Port exposed by fn crate::m::c"],
+        "the control must react, or the empty result above says nothing"
+    );
+}
+
+#[test]
+pub(super) fn an_unrenderable_sub_node_is_a_stated_rendering_bound() {
+    let out1 = dyn_mod(
+        "macro-subnode-dyn-1",
+        "pub fn f() -> Box<dyn crate::ports::Port<m!(1)>> { todo!() }\n",
+    )
+    .unwrap();
+    let out2 = dyn_mod(
+        "macro-subnode-dyn-2",
+        "pub fn f() -> Box<dyn crate::ports::Port<m!(2)>> { todo!() }\n",
+    )
+    .unwrap();
+    assert_eq!(out1, out2);
 }

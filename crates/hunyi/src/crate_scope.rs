@@ -103,30 +103,32 @@ pub(crate) fn extern_resolution(
 /// exactly one `#[cfg]`-branch's own items, never a cross-branch union. Two mutually-exclusive
 /// `#[cfg]` branches are never compiled together, so a shadow set (a child-module name, hence a
 /// shrunk extern/rename map) derived from one branch's items must never suppress resolution for a
-/// DIFFERENT, mutually-exclusive branch's own principal path (a confirmed false negative, found on
-/// a round-7 adversarial review; see `PROJECT.md`'s Decisions — the identical conflation class
-/// round 6 fixed for the `use`-map and `module_findings`'s own `externs_type`/`renames_bare`).
+/// DIFFERENT, mutually-exclusive branch's own principal path — a confirmed false negative, and the
+/// identical conflation class the `use`-map and `module_findings`'s own
+/// `externs_type`/`renames_bare` each carry per branch for the same reason.
 pub(crate) struct FileExternScope {
     pub(crate) externs_type: HashSet<String>,
     /// The crate-root rename map with aliases shadowed by a same-named child `mod` **of this
     /// file's own branch** removed — used for a **bare** head, exactly as `module_findings` does
     /// (see [`renames_shadowed`]).
     pub(crate) renames_bare: ExternRenameMap,
+    /// This branch's own type-namespace names, canonicalized — the observation source for a **bare**
+    /// principal that needs no `use` because its own module declares it (see [`resolve_principal`]).
+    /// The same set `externs_type` is derived from, kept rather than discarded.
+    pub(crate) local_types: HashSet<String>,
 }
 
 pub(crate) fn file_extern_scope(
     res: &ExternResolution,
     file_items: &[syn::Item],
 ) -> FileExternScope {
-    let externs_type = res
-        .externs
-        .difference(&local_type_namespace_names(file_items))
-        .cloned()
-        .collect();
+    let local_types = local_type_namespace_names(file_items);
+    let externs_type = res.externs.difference(&local_types).cloned().collect();
     let renames_bare = renames_shadowed(&res.extern_renames, &child_module_names(file_items));
     FileExternScope {
         externs_type,
         renames_bare,
+        local_types,
     }
 }
 
@@ -140,6 +142,13 @@ pub(crate) fn file_extern_scope(
 /// via [`apply_bare_alias_rename`] with the child-shadowed map) spellings of a crate-root rename
 /// are rewritten after the re-export closure. `file_scope` MUST be the branch that OWNS `path`
 /// (the exposure's own file), never a different branch's scope.
+///
+/// One step is this resolver's own, not `resolve_path_all`'s: a **bare single-segment** principal is
+/// resolved against `module` when — and only when — that branch declares the name
+/// ([`FileExternScope::local_types`]). `BareFallback::CurrentModule` would resolve it without
+/// proving it exists, which is why this call site passes [`BareFallback::Ignore`] and admits the
+/// declared case here instead; the undeclared case stays dropped, the resolver-coverage bound both
+/// operand capabilities declare.
 ///
 /// Returns **every** candidate canonical path, mirroring `module_findings`' own cfg-blind
 /// resolution. The caller checks every candidate against the forbidden set and reacts if any
@@ -160,9 +169,23 @@ pub(crate) fn resolve_principal(
         if !use_map_candidates.is_empty() {
             use_map_candidates
         } else {
-            extern_verbatim_renamed(path, &file_scope.externs_type, &file_scope.renames_bare)
-                .into_iter()
-                .collect()
+            let mut candidates: Vec<String> =
+                extern_verbatim_renamed(path, &file_scope.externs_type, &file_scope.renames_bare)
+                    .into_iter()
+                    .collect();
+            // A bare single-segment principal needs no `use` when its own module declares it — and
+            // only then. Resolving one the branch does NOT declare would fabricate a canonical path
+            // for a name the module never had (a prelude trait, a glob import), reacting over an
+            // operand that is not there; leaving a declared one unresolved would pass over the
+            // operand that is. `strip_raw` because the set compared against is canonical, so
+            // `r#type` and `type` are one name here exactly as at every other resolution site.
+            if candidates.is_empty() && path.segments.len() == 1 {
+                let name = strip_raw(&path.segments[0].ident.to_string());
+                if file_scope.local_types.contains(&name) {
+                    candidates.push(format!("{module}::{name}"));
+                }
+            }
+            candidates
         }
     };
     resolved

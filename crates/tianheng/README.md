@@ -65,7 +65,11 @@ match outcome {
         assert!(!violation.rule_key().rule_type().is_empty());
         assert!(!violation.fact().fact_type().is_empty());
     }
-    Outcome::Clean => {}
+    Outcome::Clean(subject) => {
+        // A clean verdict names what it was reached over, so a sound workspace is distinguishable
+        // from one that was never observed.
+        assert!(subject.declared() == 0 || subject.reached() > 0);
+    }
     Outcome::ConstitutionError(message) => panic!("cannot evaluate the law: {message}"),
     _ => unreachable!("Outcome is non-exhaustive"),
 }
@@ -109,7 +113,7 @@ by `tianheng check`.
 > crate named `example-core`). Tianheng is consumed as a **library**: declare your own
 > constitution and expose your own binary, as above.
 
-Tianheng governs **itself** with its own reaction (`crates/tianheng/tests/self_governance.rs`):
+Tianheng governs **itself** with its own reaction (`crates/shengmo/src/law.rs`):
 the core must not depend on the shell, `syn` is quarantined to `hunyi`, `xuanji` stays beneath
 every dimension.
 

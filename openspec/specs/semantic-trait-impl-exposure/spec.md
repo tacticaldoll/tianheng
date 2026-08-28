@@ -9,6 +9,12 @@ positions — method parameters and the receiver — stay out of scope, since th
 definition (which signature-coupling already governs). Opt-in, not default-on: a bare boundary
 declared trait impls out of scope, and the impl-authored/trait-dictated split is a real narrowing
 choice, so this is additive depth on the patch line, not a false-negative closure.
+
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Opt-in modifier deepens signature-coupling to trait impls
 
@@ -169,10 +175,11 @@ signature-coupling.
 - **WHEN** the governed module declares `use crate::facade::DbPool;` (where `crate::facade` declares `pub use crate::infra::DbPool;`) and declares `impl From<DbPool> for Service` under a boundary forbidding `crate::infra` with `.including_trait_impls()`
 - **THEN** the system follows the `pub use` chain, resolves `DbPool` to `crate::infra::DbPool`, and emits a `trait-arg` violation rather than silently passing it
 
-#### Scenario: A glob-imported type in an impl position is a documented coverage bound
+#### Scenario: A glob-imported type in an impl position is a documented bound
 
 - **WHEN** the governed module declares `use crate::infra::*;` and `impl From<DbPool> for Service` with `.including_trait_impls()`
 - **THEN** the system does not claim to observe it (inherited glob bound), rather than silently asserting the boundary is clean
+- **PINNED-BY** `a_glob_imported_type_in_an_impl_position_is_a_documented_coverage_bound`
 
 #### Scenario: A baselined trait-impl exposure does not fail; a new one does
 

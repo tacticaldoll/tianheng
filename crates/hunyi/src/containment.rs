@@ -28,7 +28,7 @@ pub(crate) fn under_subtree(canonical: &str, subtree: &str) -> bool {
 /// a declared marker written with a raw identifier compares equal to the observed [`path_leaf`],
 /// which strips it. (Trait names are never keywords, so this is defensive symmetry, not a live gap.)
 pub(crate) fn leaf_of(path: &str) -> &str {
-    let leaf = path.rsplit("::").next().unwrap_or(path);
+    let leaf = path.rsplit_once("::").map_or(path, |(_, leaf)| leaf);
     leaf.strip_prefix("r#").unwrap_or(leaf)
 }
 
@@ -51,10 +51,10 @@ pub(crate) fn path_leaf(path: &syn::Path) -> String {
 ///
 /// `impl_type_params` shadows the impl block's OWN declared generic type-parameter names
 /// (`impl<T> Marker for T {}`'s `T`), the identical shadowing the exposure collectors already
-/// apply (`collect.rs::type_param_names`) for every OTHER impl-site position — see
+/// apply ([`crate::collect::exposure::type_param_names`]) for every OTHER impl-site position — see
 /// `semantic-forbidden-marker`'s "Anchor resolution and observation bounds" requirement (the
-/// blanket-impl/projection/qualified-path shadow scenarios) for the full rationale. Found missing
-/// on a round-9 adversarial review: a blanket `impl<T> Marker for T {}` beside an unrelated `use
+/// blanket-impl/projection/qualified-path shadow scenarios) for the full rationale. Without the
+/// shadow, a blanket `impl<T> Marker for T {}` beside an unrelated `use
 /// crate::domain::Innocent as T;` fabricated a marker-acquisition finding on `Innocent`, which the
 /// source never actually impls the marker for.
 ///

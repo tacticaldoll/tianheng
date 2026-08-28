@@ -11,6 +11,12 @@ external-crate name set (v0.1.4), with the governed module's own child modules e
 `mod dep` is not misread as the dependency. Trait-impl positions are out of scope for a bare
 boundary (see the opt-in `semantic-trait-impl-exposure`); named public re-exports are in scope by
 default (see `semantic-reexport-exposure`).
+
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Semantic boundary declared in Rust
 
@@ -582,15 +588,17 @@ The system SHALL observe the contents of a **transparent control-flow macro** ar
 
 - **WHEN** a governed module writes `impl Api { cfg_if! { if #[cfg(unix)] { pub fn leak() -> crate::forbidden::Thing { … } } } }` and a boundary forbids `crate::forbidden::Thing`
 - **THEN** the system reports no exposure — transparency covers item position, where an arm's contents are items; an `impl`-body invocation's arms are impl items, observed through different walkers, and that remains a declared gap rather than a claimed reaction
+- **PINNED-BY** `a_cfg_if_inside_an_impl_body_is_a_stated_bound`
 
-#### Scenario: A macro under another name is not treated as transparent
+#### Scenario: A macro under another name is not treated as transparent — a stated bound
 
 - **WHEN** a governed module's body is `generate_wrapper! { impl Foo { pub fn hidden() -> crate::forbidden::Thing { … } } }` and a boundary forbids `crate::forbidden::Thing`
 - **THEN** the system reports no exposure — the invocation is not transparent, so its body stays a stated coverage bound; extracting from it would read the `impl` body's braces as an arm and report an item the macro may never emit
+- **PINNED-BY** `an_arbitrary_macro_body_is_not_read_as_transparent_arms`
 
 ### Requirement: An impl nested in a const or fn body is observed
 
-The system SHALL observe an inherent `impl` block that is written as a direct statement of the outermost body of a `const` initializer (a bare `{ … }` block expression) or of a `fn`'s own body — the "const-eval trick" idiom (`const _: () = { impl Foo { … } };`, commonly used for a compile-time trait assertion or a doctest/dogfooding scratch impl) and its fn-body-nested sibling (`fn _also() { impl Foo { … } }`) — exactly as if it were written at the enclosing module's own top level, so its public method signatures and public associated `const`/`type` items are governed like any other inherent-impl public API. Rust binds an `impl` to its self type's coherence set regardless of where the `impl` is lexically written, so wrapping it in a body does not change what it makes real: the instant `Foo` itself is module-level and reachable, `Foo::leak` is real, externally callable public API whether the `impl` sits at the module's top level or inside a body. A walker that stops at a module's own top-level items therefore has a genuine observation gap here — distinct from the correct treatment of every OTHER item kind nested in a body the same way (a `fn`, `struct`, `mod`, `trait`, or another `const`/`static` written directly in a body genuinely IS scoped to that body and unreachable as `crate::…`, the existing "a body-nested module is a stated bound" reasoning, which this requirement does not disturb or extend to any item kind but `impl`). This anchor-and-item property is shared by every single-module-anchored semantic capability that observes an inherent impl's public API (async-exposure, dyn-trait, impl-trait), not only signature-coupling, matching how this spec already states the anchor-resolution property on their behalf. Recovery is bounded to exactly this shape, stated rather than left silent: only an `impl` that is a DIRECT statement of the `const`/`fn`'s own outermost block is recovered — an `impl` nested one level FURTHER inside that body (inside an `if`/`loop`/closure/nested `fn`) is NOT recovered; a `static` initializer is NOT inspected (the const-eval trick is specifically about `const`, which forces compile-time evaluation even when the binding is never read; no audited idiom uses `static` for it); and no item kind OTHER than `impl` is recovered from a body this way.
+The system SHALL observe an inherent `impl` block that is written as a direct statement of the outermost body of a `const` initializer (a bare `{ … }` block expression) or of a `fn`'s own body — the "const-eval trick" idiom (`const _: () = { impl Foo { … } };`, commonly used for a compile-time trait assertion or a doctest/dogfooding scratch impl) and its fn-body-nested sibling (`fn _also() { impl Foo { … } }`) — exactly as if it were written at the enclosing module's own top level, so its public method signatures and public associated `const`/`type` items are governed like any other inherent-impl public API. Rust binds an `impl` to its self type's coherence set regardless of where the `impl` is lexically written, so wrapping it in a body does not change what it makes real: the instant `Foo` itself is module-level and reachable, `Foo::leak` is real, externally callable public API whether the `impl` sits at the module's top level or inside a body. A walker that stops at a module's own top-level items therefore has a genuine observation gap here — distinct from the correct treatment of every OTHER item kind nested in a body the same way (a `fn`, `struct`, `mod`, `trait`, or another `const`/`static` written directly in a body genuinely IS scoped to that body and unreachable as `crate::…`, the existing "a body-nested module is a stated bound (bound: semantic-async-exposure-boundary/a-body-nested-module-is-a-stated-bound)" reasoning, which this requirement does not disturb or extend to any item kind but `impl`). This anchor-and-item property is shared by every single-module-anchored semantic capability that observes an inherent impl's public API (async-exposure, dyn-trait, impl-trait), not only signature-coupling, matching how this spec already states the anchor-resolution property on their behalf. Recovery is bounded to exactly this shape, stated rather than left silent: only an `impl` that is a DIRECT statement of the `const`/`fn`'s own outermost block is recovered — an `impl` nested one level FURTHER inside that body (inside an `if`/`loop`/closure/nested `fn`) is NOT recovered; a `static` initializer is NOT inspected (the const-eval trick is specifically about `const`, which forces compile-time evaluation even when the binding is never read; no audited idiom uses `static` for it); and no item kind OTHER than `impl` is recovered from a body this way.
 
 #### Scenario: A const-wrapped inherent impl's method reacts
 
@@ -611,8 +619,11 @@ The system SHALL observe an inherent `impl` block that is written as a direct st
 
 - **WHEN** a governed module declares `const _: () = { pub fn also_hidden() -> crate::infra::Db { … } };` — a plain `pub fn`, not wrapped in an `impl`, directly inside the const's body
 - **THEN** the system reports no exposure — only an `impl` block is recovered from a body this way; a plain item nested the same way is genuinely scoped to that body and unreachable as `crate::…`, exactly like the existing body-nested-module bound, so it stays unobserved rather than a new, unaudited claim
+- **PINNED-BY** `a_plain_fn_directly_in_a_const_body_stays_a_stated_bound`
 
 #### Scenario: An impl nested one level further, or static-wrapped, is a stated bound
 
 - **WHEN** the impl is written one level further inside the body (`fn _also() { if true { impl Svc { … } } }`), or the wrapping binding is a `static` rather than a `const`
 - **THEN** the system reports no exposure for that impl — a stated coverage bound rather than a silent claim of cleanliness
+- **PINNED-BY** `an_impl_nested_one_level_further_stays_a_stated_bound`
+- **PINNED-BY** `a_static_wrapped_impl_stays_a_stated_bound`

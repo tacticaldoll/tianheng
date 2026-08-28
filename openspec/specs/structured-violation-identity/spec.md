@@ -4,6 +4,11 @@
 
 Define the shared structured identity model that separates a violation's stable observed fact from
 its human presentation while keeping fact meaning inside the observation dimension that owns it.
+
+## Subject
+
+- `crates/xuanji/src/*.rs`
+
 ## Requirements
 ### Requirement: A finding has stable structured identity and human presentation
 

@@ -32,4 +32,4 @@ cargo test        # asserts the reaction (see tests/reaction.rs)
 cargo run --bin demo   # renders it, exits 1
 ```
 
-(CI runs this in isolation via `scripts/test_examples.sh`, patching `hunyi = "0.4"` to local source.)
+(CI runs this in isolation via `cargo test -p shengmo --test examples_suite`, patching the manifest requirement to local source.)

@@ -1,0 +1,976 @@
+//! Repository check: the observation bound register.
+//!
+//! Every observation bound this family declares lives as a scenario in `openspec/specs/*/spec.md` whose
+//! heading marks it one. This check holds each of them to carrying exactly one citation — a `PINNED-BY`
+//! naming a test the harness registers, or an `UNPINNED` naming a tracker the repository tracks — resolves
+//! every reference, refuses a bound stated in prose and declared nowhere, and generates
+//! `docs/observation-bounds.md` from what it read.
+//!
+//! **Whether a cited name is a test that runs is decided by the test harness, not by the source text.**
+//! `observation-bound-register` makes that normative, and it is the discipline this repository adopted after
+//! measuring and rejecting the text route three times: a `pinned by` line could otherwise be satisfied by a
+//! definition commented out, inside a string literal, removed by a `cfg`, or trapped in an uninvoked macro.
+//! So this check runs `cargo test -p <member> -- --list` per package — per package rather than per
+//! workspace, because the enumeration carries no crate label while a citation may be crate-qualified, and
+//! this repository already has one test name registered in two crates.
+//!
+//! Running cargo from inside a test cargo launched was measured rather than assumed: the outer build lock is
+//! released before the test binary runs, so the inner enumeration neither blocks nor rebuilds, and it shares
+//! the warm target directory instead of paying for one of its own.
+
+use kanhe::bound_register_parse as parse;
+use kanhe::region::DO_NOT_EDIT;
+use kanhe::selection::all_of;
+use shengmo::workspace::MARKER;
+
+use parse::{
+    Bound, Citation, bounds_in, must, parse_bounds, pinning_citations, search, workspace_root,
+};
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
+
+// --- citations ------------------------------------------------------------------------------------------
+
+#[test]
+fn every_declared_bound_carries_exactly_one_citation() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let mut offences = Vec::new();
+    for bound in parse_bounds(&root) {
+        let complaint = match bound.citation {
+            Citation::Both => Some(
+                "carries both PINNED-BY and UNPINNED; a bound is either defended or tracked, and claiming \
+                 both hides which — the two are exclusive answers to one question",
+            ),
+            Citation::Neither => Some(
+                "carries neither PINNED-BY nor UNPINNED; a bound with no recorded defence is indistinguishable \
+                 from an oversight",
+            ),
+            Citation::RepeatedUnpinned => Some(
+                "carries more than one UNPINNED; several trackers are several owners of one gap, which is \
+                 two answers to one question — and the declaration holds one, so keeping the last records a \
+                 bound whose owner is whichever line came last",
+            ),
+            Citation::UnpinnedWithoutTracker => Some(
+                "is UNPINNED with no tracker; untracked debt is indistinguishable from debt nobody owns",
+            ),
+            _ => None,
+        };
+        if let Some(why) = complaint {
+            offences.push(format!(
+                "  {} ({}:{}) {why}",
+                bound.id, bound.spec, bound.line
+            ));
+        }
+    }
+    assert!(
+        offences.is_empty(),
+        "declared bounds without exactly one citation:\n{}",
+        offences.join("\n")
+    );
+}
+
+/// Every workspace member's registered test names, keyed by package.
+///
+/// Per package rather than per workspace: the enumeration carries no crate label while a citation may be
+/// crate-qualified, and this repository already has one test name registered in two crates, so a
+/// workspace-wide match would let a citation qualified to one crate be satisfied by the other's test.
+fn registered_tests(root: &Path) -> BTreeMap<String, BTreeSet<String>> {
+    // Tracked content, not the working directory, and refusing rather than shortening. A listing that emits
+    // some entries and then fails leaves a short list that reads as authoritative, and every citation in a
+    // package never enumerated is then reported as one the harness does not register — a filesystem failure
+    // charged to the register. This capability's own requirement says so; nothing held it until now.
+    let manifests = must(
+        root,
+        "`git ls-files -- crates/*/Cargo.toml`",
+        "git",
+        &["ls-files", "--", "crates/*/Cargo.toml"],
+    );
+    // git's pathspec `*` crosses directory separators, unlike the shell's — measured, the glob above also
+    // matched fixture manifests nested under a member's tests. A workspace member is one segment deep.
+    let members: Vec<String> = manifests
+        .lines()
+        .filter_map(|path| path.strip_prefix("crates/"))
+        .filter_map(|rest| rest.strip_suffix("/Cargo.toml"))
+        .filter(|member| !member.contains('/'))
+        .map(str::to_string)
+        .collect();
+    assert!(
+        !members.is_empty(),
+        "no workspace member was found under crates/ — a citation's test-ness is undecidable without the \
+         harness, and reporting every citation resolved against an empty enumeration is the vacuity direction"
+    );
+
+    let mut by_package = BTreeMap::new();
+    for member in members {
+        let listing = must(
+            root,
+            &format!("`cargo test -p {member} --all-features -- --list`"),
+            "cargo",
+            &[
+                "test",
+                "-q",
+                "-p",
+                &member,
+                "--all-features",
+                "--",
+                "--list",
+            ],
+        );
+        let names: BTreeSet<String> = listing
+            .lines()
+            .filter_map(|line| line.strip_suffix(": test"))
+            .map(|name| {
+                name.rsplit_once("::")
+                    .map_or(name, |(_, leaf)| leaf)
+                    .to_string()
+            })
+            .collect();
+        by_package.insert(member, names);
+    }
+    by_package
+}
+
+/// The offence for a citation resolving to anything other than exactly one definition, or `None` when it
+/// resolves cleanly.
+///
+/// Naming the count alone (`defined N times`) tells a reader THAT a citation is ambiguous but not where to
+/// look. For the more-than-one direction each `git grep -n` line in `sites` already carries `path:line:content`
+/// — the zero direction has no site to name, so it keeps the bare count. Extracted as its own function so this
+/// shape is testable without a live `cargo test --list` enumeration: the resolution loop that produces `sites`
+/// needs a real workspace, but the message it earns from a given `sites` value does not.
+fn definition_count_offence(at: &str, citation: &str, sites: &[String]) -> Option<String> {
+    if sites.len() == 1 {
+        return None;
+    }
+    let detail = if sites.is_empty() {
+        String::new()
+    } else {
+        format!(
+            ":\n{}",
+            sites
+                .iter()
+                .map(|site| format!("    {site}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    };
+    Some(format!(
+        "  {at} is PINNED-BY `{citation}`, defined {} times under crates/ — a citation names one defence, not \
+         a set{detail}",
+        sites.len()
+    ))
+}
+
+/// The POSIX ERE `git grep -E` pattern that locates a cited name's definition line.
+///
+/// Shared between the real check and [`a_raw_identifier_citation_resolves_to_its_definition`] so the two
+/// cannot silently diverge — a test asserting behavior against its own copy of the pattern would say
+/// nothing about the pattern the check actually runs.
+fn definition_pattern(name: &str) -> String {
+    // `\\s` and `\\b` are PCRE and match nothing here — measured, they reported every citation defined
+    // zero times. `pub(super) fn` and friends: a visibility qualifier may carry a parenthesised scope, and
+    // this repository's dimension tests use exactly that. Measured — without it, every citation in
+    // `guibiao`'s test modules reported zero definitions.
+    format!(
+        "^[[:space:]]*(pub([(][^)]*[)])?[[:space:]]+)?(async[[:space:]]+)?(const[[:space:]]+)?(unsafe[[:space:]]+)?fn {name}[[:space:]]*[(<]"
+    )
+}
+
+/// A citation naming a raw identifier (`r#name`) resolves to its definition, matching
+/// `observation-bound-register/spec.md`'s "A citation naming a raw identifier" scenario: the register
+/// imposes no naming convention beyond a valid Rust identifier, and a raw identifier is one. `#` carries no
+/// special meaning to POSIX ERE, so [`definition_pattern`]'s literal-name substitution matches an `r#`-named
+/// definition the same way it matches any other — traced by direct reasoning until now, never by a fixture.
+#[test]
+fn a_raw_identifier_citation_resolves_to_its_definition() {
+    let fixture = std::env::temp_dir().join(format!(
+        "tianheng-bound-register-raw-ident-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&fixture);
+    xingbiao::claim_scratch(&fixture).expect("the fixture directory is writable");
+    std::fs::write(
+        fixture.join("probe.rs"),
+        "#[test]\nfn r#type() {\n    assert!(true);\n}\n",
+    )
+    .expect("writable");
+    // Through the shared builder, which closes the ambient ignore channel — and written once, because this
+    // block stood byte-identical twice in this file. With a bare `Command`, `add -A` read whatever
+    // `core.excludesFile` this machine carries, so a fixture could be built without the probe file it names;
+    // the `grep` below would then find nothing and the assertion pass for the wrong reason. That is the
+    // direction the ambient table records first.
+    prepare(&fixture);
+
+    let sites = search(
+        &fixture,
+        "raw-identifier probe",
+        "git",
+        &["grep", "-n", "-E", &definition_pattern("r#type"), "--", "."],
+    );
+    let _ = std::fs::remove_dir_all(&fixture);
+    assert_eq!(
+        sites.len(),
+        1,
+        "a raw-identifier definition must resolve to exactly one site: {sites:?}"
+    );
+    assert!(
+        sites[0].contains("fn r#type"),
+        "the resolved site must be the raw-identifier definition: {sites:?}"
+    );
+}
+
+/// `search()`'s no-match/failure split, exercised against real subprocess exit codes rather than reasoned
+/// about from the source alone: a clean miss (`git ls-files` enumerating nothing, `git grep` matching
+/// nothing) must return empty, while a genuine failure (an unrecognised flag, a malformed pattern, a target
+/// repository that is not there at all — all exit above 1, or fail to spawn at all) must panic rather than
+/// be read as the same empty result. Collapsing that distinction is exactly the shell-era failure mode this
+/// module's own doc comment on `search` describes: a producer's exit-1-means-no-match contract has to be
+/// named per call site, and the untested direction is the one that turns a failed read into a silent clean
+/// pass. The unavailable-target case also closes the shell era's own regression the CHANGELOG records: a
+/// `cd` failure into a target repository that had gone missing collapsed into grep's ordinary no-match exit
+/// and reported a clean 1 rather than cannot-judge — `Command::current_dir` on a path that does not exist
+/// fails at spawn (measured: `Err(No such file or directory)`, never a status code), so it cannot be
+/// mistaken for grep's own exit 1 either.
+#[test]
+fn search_and_must_panic_on_a_genuine_failure_not_only_on_a_clean_miss() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+
+    // A clean miss: `git ls-files` enumerating a path this repository does not track. Exit 1, empty Vec,
+    // no panic.
+    assert_eq!(
+        search(
+            &root,
+            "clean-miss probe",
+            "git",
+            &["ls-files", "--", "zzz-absent-probe-path-xyz"],
+        ),
+        Vec::<String>::new(),
+        "a clean miss is empty, not a panic"
+    );
+
+    // A genuine failure: an unrecognised flag exits above 1 (129, measured), which is neither 0 (success)
+    // nor 1 (clean miss) — `search` must panic rather than silently return empty.
+    let bad_flag = std::panic::catch_unwind(|| {
+        search(
+            &root,
+            "bad-flag probe",
+            "git",
+            &["ls-files", "--this-flag-does-not-exist"],
+        )
+    });
+    assert!(
+        bad_flag.is_err(),
+        "an unrecognised flag is a genuine failure and must panic, not read as a clean miss"
+    );
+
+    // The same distinction for `must`, which requires success outright: a malformed `git grep` pattern
+    // exits above 1 (128, measured) and must panic rather than return truncated or empty output.
+    let bad_pattern = std::panic::catch_unwind(|| {
+        must(
+            &root,
+            "bad-pattern probe",
+            "git",
+            &["grep", "-E", "[", "--", "crates/"],
+        )
+    });
+    assert!(
+        bad_pattern.is_err(),
+        "a malformed pattern is a genuine failure and must panic, not be read as empty output"
+    );
+
+    // The target repository itself unavailable — the shell era's `cd` failure, ported here as a `root` that
+    // does not exist. Neither `search` nor `must` may read this as an ordinary clean miss.
+    let missing_root = std::env::temp_dir().join(format!(
+        "tianheng-bound-register-missing-root-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&missing_root);
+    let missing_search = std::panic::catch_unwind(|| {
+        search(
+            &missing_root,
+            "missing-root probe (search)",
+            "git",
+            &["ls-files"],
+        )
+    });
+    assert!(
+        missing_search.is_err(),
+        "an unavailable target repository is cannot-judge, not a clean miss"
+    );
+    let missing_must = std::panic::catch_unwind(|| {
+        must(
+            &missing_root,
+            "missing-root probe (must)",
+            "git",
+            &["ls-files"],
+        )
+    });
+    assert!(
+        missing_must.is_err(),
+        "an unavailable target repository is cannot-judge for `must` too"
+    );
+}
+
+/// `tracked_specs`'s own vacuity refusal, exercised against a real fixture repository rather than read from
+/// the source alone: a tree with no `openspec/specs/*/spec.md` at all must panic — reporting zero bounds
+/// declared would be indistinguishable from a genuinely clean repository, which is the vacuity direction
+/// every sibling enumeration in this module refuses the same way.
+#[test]
+fn tracked_specs_refuses_a_repository_with_no_spec_md_rather_than_reporting_it_empty() {
+    let fixture = std::env::temp_dir().join(format!(
+        "tianheng-bound-register-no-specs-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&fixture);
+    xingbiao::claim_scratch(&fixture).expect("the fixture directory is writable");
+    std::fs::create_dir_all(fixture.join("openspec")).expect("the fixture directory is writable");
+    std::fs::write(fixture.join("openspec").join("README.md"), "# Not a spec\n").expect("writable");
+    // Through the shared builder, which closes the ambient ignore channel — and written once, because this
+    // block stood byte-identical twice in this file. With a bare `Command`, `add -A` read whatever
+    // `core.excludesFile` this machine carries, so a fixture could be built without the probe file it names;
+    // the `grep` below would then find nothing and the assertion pass for the wrong reason. That is the
+    // direction the ambient table records first.
+    prepare(&fixture);
+
+    let refused = std::panic::catch_unwind(|| parse::tracked_specs(&fixture));
+    let _ = std::fs::remove_dir_all(&fixture);
+    assert!(
+        refused.is_err(),
+        "a repository with no openspec/specs/*/spec.md must refuse rather than report zero bounds declared"
+    );
+}
+
+#[test]
+fn a_duplicate_definition_offence_names_both_sites() {
+    let sites = vec![
+        "crates/kanhe/tests/scratch_probe.rs:12:pub fn probe_duplicate_fn() {}".to_string(),
+        "crates/xuanji/src/scratch_probe_extra.rs:4:fn probe_duplicate_fn() {}".to_string(),
+    ];
+    let offence = definition_count_offence("some-bound (spec.md:1)", "probe_duplicate_fn", &sites)
+        .expect("more than one site must be an offence");
+    assert!(
+        offence.contains("crates/kanhe/tests/scratch_probe.rs:12"),
+        "the offence must name the first definition site: {offence}"
+    );
+    assert!(
+        offence.contains("crates/xuanji/src/scratch_probe_extra.rs:4"),
+        "the offence must name the second definition site, not only the count: {offence}"
+    );
+}
+
+#[test]
+fn a_single_definition_is_not_an_offence() {
+    let sites = vec!["crates/kanhe/tests/scratch_probe.rs:12:pub fn probe_fn() {}".to_string()];
+    assert!(definition_count_offence("some-bound (spec.md:1)", "probe_fn", &sites).is_none());
+}
+
+#[test]
+fn a_zero_definition_offence_names_the_count_with_no_site_list() {
+    let offence = definition_count_offence("some-bound (spec.md:1)", "probe_fn", &[])
+        .expect("zero sites must still be an offence");
+    assert!(
+        offence
+            .ends_with("defined 0 times under crates/ — a citation names one defence, not a set"),
+        "with no sites to name, the message stays the bare count: {offence}"
+    );
+}
+
+#[test]
+fn every_pinning_citation_resolves_to_one_registered_test() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    // **Every citation in the tracked specs, not only those under a bound heading.** The register's own
+    // corpus is bound-gated and rightly so — a citation under an ordinary scenario declares no bound — but
+    // resolution is a different question, and the marker means one thing in both places. Measured: 70 of 75
+    // were resolved here and 5 were parsed by nothing, and renaming one of those five left the whole gate
+    // suite green while its spec cited a function that no longer existed.
+    let citations = pinning_citations(&root);
+    let harness = registered_tests(&root);
+
+    let mut offences = Vec::new();
+    for record in &citations {
+        let citation = &record.name;
+        let at = match &record.bound {
+            Some(id) => format!("{id} ({}:{})", record.spec, record.line),
+            None => format!("{}:{}", record.spec, record.line),
+        };
+
+        // Syntax first, and by construction rather than by escaping: the name is used as a search key and a
+        // path component, so a metacharacter or a `..` would resolve a citation for a test that does not
+        // exist against something else entirely.
+        let (qualifier, name) = match citation.split_once("::") {
+            Some((q, n)) => (Some(q), n),
+            None => (None, citation.as_str()),
+        };
+        let ascii_ident = |s: &str| {
+            let s = s.strip_prefix("r#").unwrap_or(s);
+            !s.is_empty()
+                && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                && !s.starts_with(|c: char| c.is_ascii_digit())
+        };
+        if !ascii_ident(name) || citation.matches("::").count() > 1 {
+            offences.push(format!(
+                "  {at} is PINNED-BY `{citation}`, which is not a citation this check can resolve"
+            ));
+            continue;
+        }
+
+        let packages: Vec<&String> = match qualifier {
+            Some(q) => {
+                if !harness.contains_key(q) {
+                    offences.push(format!(
+                    "  {at} is PINNED-BY `{citation}`, whose crate qualifier names no workspace member"
+                ));
+                    continue;
+                }
+                harness.keys().filter(|k| k.as_str() == q).collect()
+            }
+            None => harness.keys().collect(),
+        };
+
+        let registering: Vec<&String> = packages
+            .into_iter()
+            .filter(|p| harness[*p].contains(name))
+            .collect();
+        if registering.is_empty() {
+            offences.push(format!(
+            "  {at} is PINNED-BY `{citation}`, which the test harness does not register — a renamed or \
+             deleted test leaves this citation naming nothing"
+        ));
+            continue;
+        }
+
+        // The harness decides test-ness; the source decides uniqueness. A name registered once but defined
+        // twice names a set rather than a defence.
+        let sites = search(
+            &root,
+            "`git grep` locating the cited definition",
+            "git",
+            &[
+                "grep",
+                "-n",
+                "-E",
+                &definition_pattern(name),
+                "--",
+                // Scoped to the cited crate when the citation is qualified. That qualifier exists precisely
+                // because one test name is registered in two crates here, so searching all of `crates/`
+                // would report the citation ambiguous for the reason it was disambiguated.
+                &qualifier.map_or("crates/".to_string(), |q| format!("crates/{q}/")),
+            ],
+        );
+        if let Some(offence) = definition_count_offence(&at, citation, &sites) {
+            offences.push(offence);
+        }
+    }
+    assert!(
+        offences.is_empty(),
+        "pinning citations that do not resolve to one registered test:\n{}",
+        offences.join("\n")
+    );
+}
+
+#[test]
+fn every_unpinned_bound_names_a_tracked_tracker() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let tracked: BTreeSet<String> = must(&root, "`git ls-files`", "git", &["ls-files"])
+        .lines()
+        .map(str::to_string)
+        .collect();
+
+    let mut offences = Vec::new();
+    for bound in parse_bounds(&root) {
+        let Citation::Unpinned(tracker) = &bound.citation else {
+            continue;
+        };
+        // **How many names the tracker holds, not its first.** A tracker naming two documents had only the
+        // first checked, so a second, untracked name passed — in the check whose whole subject is that debt
+        // filed where nobody looks is debt nobody owns. Every backticked name is taken and each is held
+        // against the tracked set.
+        // The shared reader, which answers the marker count before it takes a pair — a tracker with an
+        // unpaired marker used to yield the prose between it and the next opener as a document name.
+        let names: Vec<String> =
+            match kanhe::reading::backticked("unpinned bound's tracker", tracker) {
+                Ok(names) => all_of(names),
+                Err(refusal) => {
+                    offences.push(format!(
+                        "  {} cites a tracker this reader cannot pair up: {}",
+                        bound.id, refusal.message
+                    ));
+                    continue;
+                }
+            };
+        let untracked: Vec<&String> = names.iter().filter(|n| !tracked.contains(*n)).collect();
+        if names.is_empty() || !untracked.is_empty() {
+            let named = if names.is_empty() {
+                String::new()
+            } else {
+                untracked
+                    .iter()
+                    .map(|n| n.as_str())
+                    .collect::<Vec<_>>()
+                    .join("`, `")
+            };
+            offences.push(format!(
+                "  {} ({}:{}) is UNPINNED against `{named}`, which this repository does not track — debt \
+                 filed where nobody looks is debt nobody owns",
+                bound.id, bound.spec, bound.line
+            ));
+        }
+    }
+    assert!(
+        offences.is_empty(),
+        "unpinned bounds whose tracker is not tracked:\n{}",
+        offences.join("\n")
+    );
+}
+
+#[test]
+fn no_test_is_cited_by_bounds_of_two_capabilities() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let mut by_test: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for bound in parse_bounds(&root) {
+        if let Citation::PinnedBy(names) = &bound.citation {
+            for name in names {
+                by_test
+                    .entry(name.clone())
+                    .or_default()
+                    .insert(bound.capability.clone());
+            }
+        }
+    }
+    let shared: Vec<String> = by_test
+        .iter()
+        .filter(|(_, caps)| caps.len() > 1)
+        .map(|(test, caps)| {
+            format!(
+                "  `{test}` is cited by declared bounds in {} — one behaviour has one defence, so a test \
+                 cited across capabilities means one of them is a restatement",
+                caps.iter().cloned().collect::<Vec<_>>().join(", ")
+            )
+        })
+        .collect();
+    assert!(shared.is_empty(), "restated bounds:\n{}", shared.join("\n"));
+}
+
+// --- the projection -------------------------------------------------------------------------------------
+
+/// The projection's preamble, with the two figures it states **computed** rather than written.
+///
+/// A count typed into a generated document is the hand-written census this family refuses: the generator
+/// would compare its own literal against itself and never notice the register moving underneath it.
+fn preamble(unpinned: usize, total: usize) -> String {
+    format!(
+        r#"# Observation bounds
+
+Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
+named shape, so that shape is governed policy rather than a defect.
+
+**{unpinned} of {total} declared bounds have no pinning test.** That figure is the register's
+audit backlog and leads the document because a number in a footnote is not read. Each such bound names
+the tracker that owns closing it.
+
+Generated from `openspec/specs/*/spec.md` by `crates/kanhe/tests/bound_register.rs`. **{DO_NOT_EDIT}** —
+regenerate with `BLESS=1 {MARKER}=1 cargo test -p kanhe --test bound_register`. A stale projection fails that gate.
+
+**What this document does not claim.** It lists the bounds the specs *state in a recognizable form*: a
+scenario whose heading marks it a bound. The undeclared-prose direction that keeps this list honest has known
+residuals and a deliberate exemption, each stated in this document rather than left in the check's
+comments, because a residual a reader cannot see is one the register is lying about:
+
+1. **Unrecognized wording.** A bound worded outside the scanned form — "out-of-scope", "does not claim
+   to observe", "a stated, inherited bound" — is invisible to the scan.
+2. **The scan is line-oriented.** A statement whose bound names continue onto the next line is examined
+   only on the line carrying the trigger words.
+3. **A reference clears more than it names.** `(bound: …)` clears the prose it sits with regardless of
+   how many bounds that prose states, or whether the bound it names is one of them. This is how a
+   retired `#[path]` bound survived two sweeps inside a sentence listing four inherited bounds behind
+   one reference to a fifth. The discipline is one reference per stated bound, and it is the author's:
+   closing it would mean reading which bounds a sentence lists, which no repository check can do. Scanning
+   paragraphs instead of lines was measured against that defect and would not have caught it, because
+   the paragraph carries the same clearing reference.
+
+The **exemption**: prose under a requirement whose heading names bounds is not reported, because several
+such requirements state their bounds as a numbered list, and requiring each item to become its own
+scenario would restructure them and read worse. Its price
+is charged — such a requirement must declare at least one bound scenario — but the other items of its
+list are unregistered, which is why this list is a floor rather than a proof of completeness.
+
+The second floor is the same shape. A bound declared twice is caught only when both declarations cite
+the **same pinning test**, which is a fact rather than a heuristic; two declarations of one behaviour
+citing two different tests are invisible. Telling those apart from two genuine bounds over sibling
+shapes is a semantic judgment — two operand dimensions here declare identically-worded bounds over
+`dyn` and `impl Trait`, each defended by its own test, and each must declare its own — so nothing
+observes it and no bound of the register capability claims it.
+
+A third floor was stated here for one change and is **retired**: a `pinned by` line could be satisfied
+by a definition that never ran — commented out, inside a string, removed by a `cfg`, or trapped in an
+uninvoked macro — because the scan read only the form of a line. Test-ness is now decided by the test
+harness enumeration, which registers none of those. The weakness survives only in the source-text
+fallback used where no manifest exists, which the register spec describes.
+
+"#
+    )
+}
+
+fn render_projection(bounds: &[Bound]) -> String {
+    let total = bounds.len();
+    let unpinned = bounds
+        .iter()
+        .filter(|b| !matches!(b.citation, Citation::PinnedBy(_)))
+        .count();
+
+    let mut by_capability: BTreeMap<&str, Vec<&Bound>> = BTreeMap::new();
+    for bound in bounds {
+        by_capability
+            .entry(bound.capability.as_str())
+            .or_default()
+            .push(bound);
+    }
+
+    let mut out = preamble(unpinned, total);
+    // Capabilities in path order, bounds in DOCUMENT order within each — a reader following the projection
+    // back into a spec meets them in the order that spec states them.
+    for (capability, entries) in by_capability {
+        out.push_str(&format!("\n## {capability}\n"));
+        for bound in entries {
+            out.push_str(&format!("\n### `{}`\n\n> {}\n\n", bound.id, bound.body));
+            match &bound.citation {
+                Citation::PinnedBy(names) => {
+                    // One bullet per defence, which is how this document already reads where a bound cites
+                    // two — a reader scanning for a test name finds it at the start of a line either way.
+                    for name in names {
+                        out.push_str(&format!("- **pinned by**: `{name}`\n"));
+                    }
+                }
+                Citation::Unpinned(tracker) => {
+                    out.push_str(&format!("- **unpinned**, tracked by: {tracker}\n"));
+                }
+                other => panic!(
+                    "bound {} reached the projection with an invalid citation {other:?} — the citation \
+                     check must refuse it before this one renders it",
+                    bound.id
+                ),
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn the_register_projection_is_generated_and_fresh() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    // No `if is_file` escape: a deleted projection is a stale projection, and skipping on absence lets the
+    // document be removed without anything noticing.
+    let bounds = parse_bounds(&root);
+    tianheng::testing::assert_projection_matches(
+        &root,
+        "docs/observation-bounds.md",
+        &render_projection(&bounds),
+    );
+}
+
+/// Scenario: The projection's disclosures are asserted, not only its freshness.
+///
+/// `the_register_projection_is_generated_and_fresh` only proves the tracked document and `render_projection`
+/// agree — both come from this same file, so a typo baked into the format string (the `author\s:` mangled
+/// apostrophe this repository has hit before) would regenerate byte-identically under `BLESS=1` and pass.
+/// This reads the blessed document's actual tracked content directly, independent of `render_projection`,
+/// and asserts each disclosure the requirements oblige the header to make is literally present, refusing a
+/// rendered backslash outright (this document's prose never wants one, so it is a quoting artifact rather
+/// than content).
+#[test]
+fn the_projection_s_disclosures_are_asserted_not_only_its_freshness() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let text = std::fs::read_to_string(root.join("docs/observation-bounds.md")).unwrap_or_else(|error| {
+        panic!("docs/observation-bounds.md must be readable for its disclosures to be asserted: {error}")
+    });
+
+    let required_disclosures = [
+        // The headline unpinned-count figure.
+        "have no pinning test",
+        // The undeclared-prose direction's three named residuals.
+        "Unrecognized wording",
+        "line-oriented",
+        "A reference clears more than it names",
+        // The bounds-named-requirement exemption's price.
+        "must declare at least one bound scenario",
+        // The restatement direction's own floor (a shared citation, not a shared behaviour).
+        "same pinning test",
+        // The retired third floor, recorded rather than silently removed.
+        "retired",
+        // Generated-document provenance, matching AGENTS.self-law.md's own convention. Read from the
+        // constant the recognizer uses, so the disclosure this demands and the marker that is recognised
+        // cannot become two spellings.
+        DO_NOT_EDIT,
+    ];
+    let missing: Vec<&str> = required_disclosures
+        .into_iter()
+        .filter(|phrase| !text.contains(phrase))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "docs/observation-bounds.md is missing required disclosure(s): {missing:?}"
+    );
+
+    assert!(
+        !text.contains('\\'),
+        "docs/observation-bounds.md carries a rendered backslash — this document's prose never wants one, \
+         so it is a quoting artifact (the `author\\s:` class this repository has hit before) rather than \
+         content"
+    );
+}
+
+// The census this file once swept for lives in `census.rs`, declared beside every other, so one
+// check holds them all. Two implementations of one comparison is what that file exists to end.
+
+/// A citation answered twice fails — and the asymmetry with `PINNED-BY` is deliberate, so it has a control.
+///
+/// Several pinning tests are several **defences of one bound**; several trackers are several **owners of one
+/// gap**. The declaration holds one tracker, so keeping the last silently recorded a bound whose owner was
+/// whichever line came last. The comment beside the parse described this defect and the code implemented it
+/// only for the `PINNED-BY`+`UNPINNED` pair.
+#[test]
+fn a_citation_answered_twice_fails_whichever_answer_is_repeated() {
+    let scenario = |citations: &str| {
+        format!(
+            "#### Scenario: Something is not observed — a stated bound\n\n- **WHEN** a shape appears\n- **THEN** nothing reacts\n{citations}"
+        )
+    };
+
+    let repeated_unpinned = bounds_in(
+        "some-capability",
+        "openspec/specs/some-capability/spec.md",
+        &scenario("- **UNPINNED** BACKLOG: one owner\n- **UNPINNED** BACKLOG: another owner\n"),
+    );
+    assert_eq!(repeated_unpinned.len(), 1, "{repeated_unpinned:?}");
+    assert_eq!(
+        repeated_unpinned[0].citation,
+        Citation::RepeatedUnpinned,
+        "two trackers were reduced to one, so the bound records whichever line came last"
+    );
+
+    // **The two shapes a count catches and a flag does not.** The rule is *more than one `UNPINNED`*, and
+    // the classification used to ask it of the tracker-bearing lines alone, with the bare ones behind a
+    // boolean. So a mixed pair fell through to the single-tracker arm and read as a well-formed citation —
+    // silently dropping the bare line — and two bare ones collapsed to one flag and read as a single
+    // tracker-less citation. Neither is *more than one*, which is what the variant's own doc says it is.
+    for (name, citations) in [
+        (
+            "one bare and one with a tracker",
+            "- **UNPINNED**\n- **UNPINNED** BACKLOG: an owner\n",
+        ),
+        ("two bare", "- **UNPINNED**\n- **UNPINNED**\n"),
+    ] {
+        let mixed = bounds_in(
+            "some-capability",
+            "openspec/specs/some-capability/spec.md",
+            &scenario(citations),
+        );
+        assert_eq!(mixed.len(), 1, "{name}: {mixed:?}");
+        assert_eq!(
+            mixed[0].citation,
+            Citation::RepeatedUnpinned,
+            "{name}: two UNPINNED lines are two owners of one gap, whichever form each takes"
+        );
+    }
+
+    // The control. Flattening the two would break a live declaration: `observation-bound-model` states that
+    // several `PINNED-BY` lines are all retained, and a first draft of this check read the rule as a
+    // bullet count and split the one live instance in two.
+    let repeated_pinned = bounds_in(
+        "some-capability",
+        "openspec/specs/some-capability/spec.md",
+        &scenario("- **PINNED-BY** `first_test`\n- **PINNED-BY** `second_test`\n"),
+    );
+    assert_eq!(
+        repeated_pinned[0].citation,
+        Citation::PinnedBy(vec!["first_test".into(), "second_test".into()]),
+        "several tests defending one bound is not two answers to one question"
+    );
+
+    // And one tracker still reads as one tracker.
+    let single = bounds_in(
+        "some-capability",
+        "openspec/specs/some-capability/spec.md",
+        &scenario("- **UNPINNED** BACKLOG: the one owner\n"),
+    );
+    assert_eq!(
+        single[0].citation,
+        Citation::Unpinned("BACKLOG: the one owner".into())
+    );
+}
+
+/// An indented `#### Scenario:` heading is not a declared bound scenario to `bounds_in`, and
+/// `undeclared_prose_offences` must not treat it as one either — the two disagreeing is exactly how a bound
+/// could vanish from the register while this check reports the spec clean.
+///
+/// `bounds_in`'s own opening check is `raw.strip_prefix("#### Scenario:")`, unindented; a heading with leading
+/// whitespace fails it and declares no bound. `undeclared_prose_offences` trimmed the line before checking,
+/// so it used to accept the identical indented heading, mark the requirement as having "declared" a bound
+/// scenario, and suppress the prose beneath it — a bound stated in prose, under a heading neither reader
+/// agreed was a scenario, then reported nowhere at all.
+#[test]
+fn an_indented_scenario_heading_is_not_a_declared_bound_to_either_reader() {
+    let spec = "openspec/specs/some-capability/spec.md";
+    let capabilities: BTreeSet<String> = ["some-capability".to_string()].into_iter().collect();
+    let text = "### Requirement: Something\n\n  #### Scenario: Indented — a stated bound\n\n- **WHEN** x\n- **THEN** this is a stated bound\n";
+
+    assert_eq!(
+        bounds_in("some-capability", spec, text).len(),
+        0,
+        "an indented heading must not be recognized as a declared bound scenario"
+    );
+    let offences = parse::undeclared_prose_offences(spec, text, &capabilities).offences;
+    assert_eq!(
+        offences.len(),
+        1,
+        "the prose beneath an indented, unrecognized heading states a bound and must be reported exactly \
+         as it would be with no heading above it at all: {offences:?}"
+    );
+}
+
+/// Every **bare** bound id in tracked Rust and Markdown resolves to a declared bound.
+///
+/// The `(bound: …)` form clears prose; this resolves the **id**, which is no less a reference for being
+/// written without the wrapper. Both defects that motivated it sat in a doc comment above the very test
+/// defending the bound — where the bijection cannot look, since it compares the two *declaration* sides and a
+/// doc comment is neither — and each had been derived from a requirement's prose rather than from the
+/// declaring scenario's heading.
+///
+/// This is reference resolution and not the detector over prose this repository has designed, measured three
+/// times and rejected: a bound id has a fixed shape, and the set it must land in is *produced* by the
+/// declarations. Nothing here decides what a sentence means.
+///
+/// The capability set is enumerated from the tracked specs, so a capability added later is recognized without
+/// this direction being edited.
+#[test]
+fn every_bare_bound_reference_resolves_to_a_declared_bound() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let capabilities: BTreeSet<String> = parse::tracked_specs(&root)
+        .into_iter()
+        .map(|(capability, _)| capability)
+        .collect();
+    let declared: BTreeSet<String> = parse_bounds(&root)
+        .into_iter()
+        .map(|bound| bound.id)
+        .collect();
+    assert!(
+        !declared.is_empty(),
+        "no declared bound was read, so every reference would fail for a reason that is not about the \
+         reference — a corpus that never arrived is not one in which nothing resolves"
+    );
+
+    let listing = must(&root, "`git ls-files`", "git", &["ls-files"]);
+    let corpus: Vec<&str> = listing
+        .lines()
+        .filter(|path| path.ends_with(".rs") || path.ends_with(".md"))
+        .collect();
+    assert!(
+        !corpus.is_empty(),
+        "no tracked Rust or Markdown was enumerated, so this direction would report clean over nothing"
+    );
+
+    let mut dangling = Vec::new();
+    for path in corpus {
+        // Skipping an unreadable file would report every bare reference in it as resolving, since a
+        // reference this sweep never read cannot be dangling. That is clean-over-unread, which this
+        // repository refuses wherever it enumerates tracked content.
+        let text = std::fs::read_to_string(root.join(path)).unwrap_or_else(|error| {
+            panic!(
+                "cannot read tracked file '{path}' — a file this check claims to have inspected must have \
+                 been read: {error}"
+            )
+        });
+        for (line, id) in parse::bare_references(&capabilities, &text) {
+            if !declared.contains(&id) {
+                dangling.push(format!("{path}:{line}: `{id}` names no declared bound"));
+            }
+        }
+    }
+    assert!(
+        dangling.is_empty(),
+        "a bare bound reference resolves to nothing:\n{}\nAn id that points nowhere is indistinguishable \
+         from an undeclared bound, and resolution belongs to the id rather than to the syntax around it.",
+        dangling.join("\n")
+    );
+}
+
+/// A bound stated in prose but not declared as a scenario fails, which is what stops the register being
+/// completed by declaring only the convenient bounds — the floor `observation-bound-register/spec.md`
+/// states and, until this test, nothing reacted to.
+#[test]
+fn every_bound_stated_in_prose_is_declared_as_a_scenario() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let capabilities: BTreeSet<String> = parse::tracked_specs(&root)
+        .into_iter()
+        .map(|(capability, _)| capability)
+        .collect();
+
+    let mut offences = Vec::new();
+    let mut specs = 0usize;
+    let mut stated = 0usize;
+    let mut cleared = 0usize;
+    for (_, spec) in parse::tracked_specs(&root) {
+        let text = std::fs::read_to_string(root.join(&spec)).unwrap_or_else(|error| {
+            panic!(
+                "could not read the declared bounds from {spec}: {error} — a spec this check cannot parse \
+                 leaves the register undecided rather than clean"
+            )
+        });
+        let scan = parse::undeclared_prose_offences(&spec, &text, &capabilities);
+        specs += 1;
+        stated += scan.stated;
+        cleared += scan.cleared;
+        offences.extend(scan.offences);
+    }
+    assert!(
+        offences.is_empty(),
+        "a bound stated in prose but not declared as a scenario, or a bounds-named requirement declaring \
+         none:\n{}",
+        offences.join("\n")
+    );
+    // **The size is printed rather than written down anywhere, which the requirement asks for by name.** A
+    // figure typed into the specification would be a census in prose, and this reaction had no way to say
+    // what it measured: it returned offences alone, so a clean run printed nothing at all. The sibling
+    // `pin_bites` prints its two figures on its own clean path, which made the prose direction the outlier.
+    eprintln!(
+        "bound register ok ({stated} bound-declaring prose line(s) across {specs} spec(s), {cleared} \
+         accounted for by a declared scenario, a resolvable reference or a bounds-named requirement) — the \
+         first figure is a FLOOR on this register's mandatory minimum, measured on this run rather than typed \
+         into the requirement that forbids typing it. It is a floor and not the minimum because the scan is \
+         line-oriented and a resolvable reference clears whatever prose it sits with"
+    );
+    assert!(
+        specs > 0 && stated > 0,
+        "the prose direction read {specs} spec(s) and found {stated} bound-declaring line(s), so a clean \
+         report here would be over a corpus it never opened or a predicate that matches nothing"
+    );
+}
+
+/// Initialise a fixture repository and stage everything in it, through the hermetic builder.
+///
+/// One function because the two call sites held this byte-identical, which is the twin this crate keeps
+/// converging. `hermetic_git::fixture` asserts success itself and closes the ambient ignore channel, so the
+/// `-C` dance and the status assertion both go away with it.
+fn prepare(fixture: &std::path::Path) {
+    for arguments in [["init", "-q"], ["add", "-A"]] {
+        kanhe::hermetic_git::fixture(fixture, "git", &arguments);
+    }
+}

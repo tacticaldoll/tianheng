@@ -9,7 +9,7 @@
 //! The functional cores ([`guibiao`], [`hunyi`], [`louke`]) do the observation and
 //! comparison; this crate owns the side effects (argument parsing, filesystem, stdout/stderr)
 //! and the composition. The cores must not depend on this shell — a crate-level invariant
-//! Tianheng enforces on itself (`tests/self_governance.rs`).
+//! Tianheng enforces on itself (`crates/shengmo/src/law.rs`).
 //!
 //! **One declared source, three projections.** An adopter writes one [`Constitution`] carrying
 //! every dimension's boundaries; the static and semantic dimensions project as a CI exit code,
@@ -39,13 +39,25 @@ pub use testing::GovernanceTest;
 pub use guibiao::{
     Baseline, BaselineEntry, Boundary, BoundaryKind, CrateBoundary, CrateTarget, DependencyKind,
     Finding, ModuleBoundary, ModuleRule, Outcome, Polarity, Report, Rule, RuleKey, ScanDepth,
-    Severity, SourceKind, StructuredFactIdentity, Violation, ViolationId, check,
+    Severity, SourceKind, StructuredFactIdentity, Subject, Violation, ViolationId, check,
     workspace_member_src_dirs,
 };
 // The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
 // its instrument name so the bare `Constitution` can be the unified shell-level type below. The
 // pure static core (`guibiao::check`) takes this type; the self-governance gate uses it directly.
 pub use guibiao::Constitution as GnomonConstitution;
+
+// The declared-observation-bound model is reached through 渾儀 rather than a direct shell-to-璇璣
+// edge, preserving the dependency direction this crate governs itself by.
+pub use hunyi::{
+    BoundDecl, BoundId, Defence, Demonstrates, Extent, FactGranularity, Observer, Owner, Reached,
+};
+
+// 三儀 as observation participants, so an adopter composes a run from the shell alone.
+pub use guibiao::StaticObserver;
+pub use hunyi::SemanticObserver;
+pub use louke::RuntimeObserver;
+
 // 渾儀 (semantic) dimension: the boundary DSL, re-exported so an adopter declares semantic
 // boundaries the same way as static ones, then folds them into the unified [`Constitution`].
 // `SemanticBoundaries` stays public (the runner reads it) but is off the prelude declaration path.
@@ -105,7 +117,7 @@ pub use sans_io::SansIoPure;
 #[doc(hidden)]
 pub use sans_io::{SansIoPureCrateDraft, SansIoPureDraft, SansIoPureModuleDraft};
 
-pub use runner::{check_constitution, constitution_markdown, projection_gate, run};
+pub use runner::{Run, check_constitution, constitution_markdown, projection_gate, run};
 
 /// A declared constitution composing every observation dimension's boundaries — the single
 /// source of truth, in Rust. The static (圭表) boundaries, the semantic (渾儀) bundle, and the
@@ -247,11 +259,13 @@ impl From<GnomonConstitution> for Constitution {
 /// composed governance continues through [`Constitution`] plus [`run`].
 pub mod prelude {
     pub use super::{
-        AsyncExposureBoundary, Baseline, BaselineEntry, Boundary, BoundaryKind, Constitution,
-        CrateBoundary, DependencyKind, DynTraitBoundary, Finding, ForbiddenMarkerBoundary,
-        GovernanceTest, ImplTraitBoundary, ModuleBoundary, ModuleRule, NoExistentialLeak, Outcome,
-        Polarity, Report, Rule, RuleKey, RuntimeBoundary, SansIoPure, ScanDepth, Severity,
-        SignatureBoundary, SourceKind, StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary,
+        AsyncExposureBoundary, Baseline, BaselineEntry, BoundDecl, BoundId, Boundary, BoundaryKind,
+        Constitution, CrateBoundary, Defence, Demonstrates, DependencyKind, DynTraitBoundary,
+        Extent, FactGranularity, Finding, ForbiddenMarkerBoundary, GovernanceTest,
+        ImplTraitBoundary, ModuleBoundary, ModuleRule, NoExistentialLeak, Observer, Outcome, Owner,
+        Polarity, Reached, Report, Rule, RuleKey, Run, RuntimeBoundary, RuntimeObserver,
+        SansIoPure, ScanDepth, SemanticObserver, Severity, SignatureBoundary, SourceKind,
+        StaticObserver, StructuredFactIdentity, Subject, TraitImplBoundary, UnsafeBoundary,
         Violation, ViolationId, VisibilityBoundary, VisibilityCeiling, check, check_constitution,
         run,
     };

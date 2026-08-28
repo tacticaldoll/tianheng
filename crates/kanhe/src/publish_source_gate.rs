@@ -1,0 +1,1203 @@
+//! The publish-source judgement, and one builder for the repository shape it judges.
+//!
+//! Shared by the gate (`publish_source.rs`, which runs it over this repository at publish time and over
+//! fixtures in its failure matrix) and by the pin that cites this capability's declared bound
+//! (`publish_source_integrity.rs`). Two constructions of "a signed release repository" is the twin-drift
+//! class this repository keeps closing, so there is one, here, and both callers use it.
+//!
+//! It stands before an **irreversible act**: `cargo publish` records the commit it ran on in every tarball and
+//! a version can never be re-uploaded. So the separation the shell gate held is kept in the type rather than
+//! in an exit code — a [`Refusal`] is either a violation (the source disagrees) or a cannot-judge (the source
+//! could not be read), and collapsing the two would tell an operator to go looking for a disagreement that
+//! does not exist.
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use crate::manifest::{WorkspaceVersion, is_semver};
+use crate::refusal::{Refusal, cannot_judge_at, violation_at};
+
+/// The judgement's own git, isolated from everything outside the repository it judges.
+///
+/// This file already had [`hermetic`] and used it for its **fixtures**; the judgement ran through a bare
+/// `Command::new("git")`. The fixtures were isolated and the verdict was not, which is the wrong way round —
+/// a `core.excludesFile` outside the repository made the cleanliness read return empty for an untracked file.
+///
+/// Neutralising `core.excludesFile` **explicitly** was the load-bearing half, measured rather than assumed —
+/// as this table read while it was:
+///
+/// | ambient source | hermetic alone, then | `-c core.excludesFile=/dev/null` |
+/// |---|---|---|
+/// | global / system `core.excludesFile` | closed | closed |
+/// | `$XDG_CONFIG_HOME/git/ignore`, the default no config names | **survived** | closed |
+/// | `.git/info/exclude` | **survives** | **survives** |
+///
+/// **The middle row moved into the builder**, which now names the setting through `GIT_CONFIG_COUNT` for every
+/// caller, because the row was costing more than this file: a fixture's `git add -A` anywhere in the crate
+/// could silently omit a file the fixture named, and an ignore query on the real workspace could excuse an
+/// offence. So this flag is no longer what closes it, and is kept as the narrower per-command statement rather
+/// than dropped. What the third row costs is handled by [`hidden_by_the_checkout`], which classifies rather
+/// than refuses.
+fn git(repo: &Path, args: &[&str]) -> Result<String, crate::hermetic_git::Failure> {
+    crate::hermetic_git::run(repo, &["-c", "core.excludesFile=/dev/null"], args)
+}
+
+/// One read of the worktree, and **one** refusal construction serving every caller.
+///
+/// Keeping the read and its error mapping together gives the focused failure matrix one observable source for
+/// this diagnostic; the caller supplies only what it was reading.
+fn read_worktree(repo: &Path, args: &[&str], what: &str) -> Result<String, Refusal> {
+    git(repo, args).map_err(|err| {
+        cannot_judge_at(
+            "publish-source-integrity#worktree-state-unreadable",
+            format!("could not read the worktree {what}: {err}"),
+        )
+    })
+}
+
+/// Untracked files hidden by this **checkout** rather than by the repository.
+///
+/// `clean` is defined by the repository: a file ignored by tracked repository content is clean, because
+/// `cargo publish` applies the same exclusion and would not package it either. A file hidden by this clone's
+/// `.git/info/exclude`, or by a `core.excludesFile` on this machine, is not — the same commit would otherwise
+/// get different verdicts in different places.
+///
+/// `ls-files --others` applies no exclusion and `status` applies all of them, so the difference is the
+/// excluded set; `check-ignore -v` names the source file for each. A source counts as repository content only
+/// if it is **tracked** — measured, not read: an *untracked* `.gitignore` reports a repository-looking source
+/// while being no more part of the repository than the clone's own exclude file.
+///
+/// **Every path is carried in git's `-z` form.** Git prints a name with special or non-ASCII bytes quoted,
+/// and a quoted spelling is a different string: measured, a file named `ignored-普通` ignored by a tracked
+/// `.gitignore` is listed as `"ignored-\346\231\256\351\200\232"`, `check-ignore` returns exit 1 for that
+/// literal, and the gate refused a file the repository itself ignores. Unquoting it here would be a third
+/// hand-rolled unescaper inside the judgement that decides whether a publish may proceed; `-z` removes the
+/// question instead of answering it.
+///
+/// An exclusion whose source cannot be shown to be tracked is treated as the checkout's. That is the
+/// conservative direction and it is deliberate: the alternative is granting an exemption on the strength of
+/// not having read one.
+pub fn hidden_by_the_checkout(repo: &Path) -> Result<Vec<String>, Refusal> {
+    hidden_by_the_checkout_with(repo, classify, tracks)
+}
+
+/// Whether this repository tracks `source` — the exclusion-file question, asked of one file.
+///
+/// A free function rather than a closure inline below so the caller that counts its calls and the caller
+/// that answers them are the same shape.
+///
+/// **Three answers, because `.is_ok()` gave two and one of them was a lie.** `ls-files --error-unmatch`
+/// exits non-zero for *this path is untracked*, which is the question — and it also fails when git cannot be
+/// run at all. Folded into a boolean, a machine without git reported every exclusion source as untracked,
+/// and the gate refused with *hidden by X, which this repository does not track*: an **exit 1**, a
+/// disagreement, for a fact it never read. This repository's own contract reserves `1` for a source that
+/// disagrees and `2` for one that could not be read.
+///
+/// **Three answers were not enough, because *git ran* is not *git answered*.** The split above separated
+/// spawning from running and stopped there, so the same defect survived one exit status over: a directory
+/// that is no repository and an index that cannot be parsed both exit `128`, and both reached the *untracked*
+/// answer. Which non-zero status is the answer is a fact about the subcommand, so it is read here rather than
+/// inferred from failure — see [`crate::hermetic_git::Failure::Exit`].
+pub(crate) fn tracks(repo: &Path, source: &str) -> Tracked {
+    match git(repo, &["ls-files", "--error-unmatch", "-z", "--", source]) {
+        Ok(_) => Tracked::Yes,
+        // **One status is the answer; every other one is git declining to give it.** `--error-unmatch`
+        // exits `1` for *this path is not tracked*, which is the question. `128` is what a directory that
+        // is no repository and an index that cannot be parsed both produce, and reading those as the
+        // answer reported a fact this gate never asked for — as a **violation**, in front of
+        // `cargo publish`, where `1` is reserved for a source that disagrees. The split that introduced
+        // `Tracked` stopped one door short: it separated *git could not be started* from *git ran*, and
+        // git running is not git answering.
+        Err(crate::hermetic_git::Failure::Exit { code: Some(1), .. }) => Tracked::No,
+        Err(crate::hermetic_git::Failure::Exit { code, stderr }) => {
+            let status = match code {
+                Some(code) => format!("exited {code}"),
+                None => "was ended by a signal".to_string(),
+            };
+            Tracked::Unreadable(format!(
+                "git ls-files {status} rather than answering whether {source} is tracked: {stderr}"
+            ))
+        }
+        Err(crate::hermetic_git::Failure::Spawn(why)) => Tracked::Unreadable(why),
+    }
+}
+
+/// Whether the release tag's ref resolves, or why this reader could not tell.
+///
+/// The sibling of [`Tracked`], one question over: the same *one status is the answer, the rest are git
+/// declining to give it* split, applied to the read that decides whether a release is tagged at all.
+#[derive(Debug)]
+pub(crate) enum TagPresence {
+    /// The ref resolves.
+    Present,
+    /// `rev-parse` ran and the ref does not resolve — the answer this question expects.
+    Absent,
+    /// git declined to answer, so whether the tag exists was never read.
+    Unreadable(String),
+}
+
+/// Whether `repo` carries `tag`, asked so that a refusal to answer is not an answer.
+///
+/// **`--quiet` is what makes `1` mean anything**, and it is not cosmetic. Measured on this machine's git:
+/// bare `rev-parse --verify` exits `128` for an absent ref *and* for a directory that is no repository, so
+/// the two are one status and no split exists to make. With `--quiet` an unresolvable ref exits `1` and git's
+/// own refusals keep `128`, which is the contract `ls-files --error-unmatch` already has and the reason its
+/// reader could be split at all.
+///
+/// This site read `.is_err()` and reported every failure as *there is no tag*, **as a violation**, in front
+/// of `cargo publish`. `publish-source-integrity` states the rule over the class — every git read whose
+/// answer is an exit status reads the status that is the answer and treats the rest as a refusal — and
+/// records that it was generalized because it arrived through a second door. This was the third.
+///
+/// **What stays unsplit, measured rather than assumed:** a ref file holding garbage exits `1` exactly as an
+/// absent ref does, so *the tag is missing* and *the tag's ref is corrupt* are one status here and this
+/// reader cannot separate them. `BACKLOG.md` carries that residue; it is not declared as a bound because a
+/// bound is pinned by a direction over its own WHEN, and this WHEN produces the same answer as the case
+/// beside it. A ref holding a well-formed sha with no object behind it exits `0` — read as Present — and the
+/// tag-object read downstream refuses it as unreadable, which is where that case is already answered.
+pub(crate) fn tag_presence(repo: &Path, tag: &str) -> TagPresence {
+    match git(
+        repo,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("refs/tags/{tag}"),
+        ],
+    ) {
+        Ok(_) => TagPresence::Present,
+        Err(crate::hermetic_git::Failure::Exit { code: Some(1), .. }) => TagPresence::Absent,
+        Err(crate::hermetic_git::Failure::Exit { code, stderr }) => {
+            let status = match code {
+                Some(code) => format!("exited {code}"),
+                None => "was ended by a signal".to_string(),
+            };
+            TagPresence::Unreadable(format!(
+                "git rev-parse {status} rather than answering whether {tag} exists: {stderr}"
+            ))
+        }
+        Err(crate::hermetic_git::Failure::Spawn(why)) => TagPresence::Unreadable(why),
+    }
+}
+
+/// Whether this repository tracks a file, or why that could not be decided.
+#[derive(Debug)]
+pub enum Tracked {
+    /// `ls-files` found it.
+    Yes,
+    /// `ls-files` ran and did not find it — the ordinary answer this question expects.
+    No,
+    /// git could not be run, so the question was never asked.
+    Unreadable(String),
+}
+
+/// The judgement above, with the exclusion classifier and the tracked-source question supplied.
+///
+/// Split so a direction can hand it a classifier that **failed** rather than one that matched nothing. The
+/// two are different facts and the refusal below says so; without this split the failing arm would be
+/// constructed by nothing, since a classifier that cannot run is not a state a fixture repository can be put
+/// into while `ls-files` and `status` still answer.
+///
+/// `tracks` is injected for a second reason: it is asked once per *source*, and the only way a direction can
+/// hold that — rather than re-measure a wall clock — is to count the asking.
+pub fn hidden_by_the_checkout_with(
+    repo: &Path,
+    classify: impl Fn(&Path, &[&str]) -> Result<String, NoClassification>,
+    mut tracks: impl FnMut(&Path, &str) -> Tracked,
+) -> Result<Vec<String>, Refusal> {
+    let unexcluded = read_worktree(repo, &["ls-files", "-z", "--others"], "untracked files")?;
+    let visible = read_worktree(
+        repo,
+        &["status", "-z", "--porcelain=v1", "--untracked-files=all"],
+        "state",
+    )?;
+    // `-z` records are NUL-separated and carry no quoting. An untracked record is `?? <path>`; only a rename
+    // record carries a second path, and a rename is never untracked, which is all this comparison reads.
+    let shown: Vec<&str> = visible
+        .split('\0')
+        .filter_map(|record| record.strip_prefix("?? "))
+        .collect();
+    let excluded: Vec<&str> = unexcluded
+        .split('\0')
+        .filter(|path| !path.is_empty() && !shown.contains(path))
+        .collect();
+    if excluded.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // `check-ignore` exits 1 when it matched nothing, which for a path this function computed as excluded is
+    // a disagreement between two listings rather than an answer: the source is unshown, and an unshown source
+    // is the checkout's. Any other failure is the classifier being unable to run, which is not the same fact
+    // — reading it as an empty classification lets an unusable classifier answer.
+    let classified = match classify(repo, &excluded) {
+        Ok(classified) => classified,
+        Err(NoClassification::MatchedNothing) => String::new(),
+        Err(NoClassification::Failed(err)) => {
+            return Err(cannot_judge_at(
+                "publish-source-integrity#exclusion-classifier-cannot-run",
+                format!(
+                    "could not classify which exclusion hides {} untracked path(s): {err}. An unusable \
+                 classifier is not one that found nothing",
+                    excluded.len()
+                ),
+            ));
+        }
+    };
+
+    let mut sources: std::collections::BTreeMap<&str, &str> = std::collections::BTreeMap::new();
+    // `-z -v` emits four NUL-separated fields per answer: source, line, pattern, path.
+    let fields: Vec<&str> = classified.split('\0').collect();
+    for answer in fields.chunks(4) {
+        if let [source, _line, _pattern, path] = answer {
+            sources.insert(path, source);
+        }
+    }
+
+    // The tracked question is about a SOURCE, and the sources are few where the paths are many — measured on
+    // this repository, 73,670 excluded paths named exactly one, `.gitignore`. Asked per path it was one
+    // `git ls-files` spawn each: 147 seconds of process creation to answer a single question 73,670 times,
+    // in front of the one act that cannot be undone. Asked per source it is one spawn.
+    let mut answered: std::collections::BTreeMap<&str, bool> = std::collections::BTreeMap::new();
+    let mut hidden = Vec::new();
+    for path in excluded {
+        // **`Option`, not a sentinel.** `"<unshown>"` occupied the same type as a real source path and was
+        // tested back by string comparison twice — and it reached an operator diagnostic reading *hidden by
+        // <unshown>, which this repository does not track*, as though a file of that name were the ignore
+        // source. A gitignore named `<unshown>` is a legal filename, so the sentinel was also a shape the
+        // subject could forge. The combination that would be a lie is unconstructible now.
+        let source = sources.get(path).copied();
+        // The three answers stay apart: an unreadable one refuses rather than counting as untracked, which
+        // would report a disagreement about a file whose status was never read.
+        //
+        // **Filtered rather than chained, because a let-chain is not stable at this workspace's declared
+        // MSRV.** `if let … && …` compiles on the default toolchain and fails on 1.85, which the local
+        // Definition of Done never runs — so this one line was red in CI for nineteen consecutive merges
+        // while every local gate reported green.
+        if let Some(source) = source.filter(|source| !answered.contains_key(*source)) {
+            match tracks(repo, source) {
+                Tracked::Yes => {
+                    answered.insert(source, true);
+                }
+                Tracked::No => {
+                    answered.insert(source, false);
+                }
+                Tracked::Unreadable(why) => {
+                    return Err(cannot_judge_at(
+                        "publish-source-integrity#tracking-question-unaskable",
+                        format!(
+                            "could not decide whether this repository tracks {source} ({why}), so an exclusion \
+                         it owns cannot be told from one this checkout added"
+                        ),
+                    ));
+                }
+            }
+        }
+        match source {
+            Some(source) if answered.get(source).copied().unwrap_or(false) => {}
+            Some(source) => hidden.push(format!(
+                "  {path} — hidden by {source}, which this repository does not track"
+            )),
+            None => hidden.push(format!(
+                "  {path} — the exclusion classifier named no source for it, so the exclusion is this \
+                 checkout's rather than the repository's"
+            )),
+        }
+    }
+    Ok(hidden)
+}
+
+/// Why `check-ignore` produced no classification: it matched nothing, or it could not run.
+pub enum NoClassification {
+    /// It ran and matched nothing.
+    MatchedNothing,
+    /// It could not run, which is not the same fact.
+    Failed(String),
+}
+
+/// Ask `check-ignore` which exclusion hides each path, feeding the paths as raw bytes on stdin.
+///
+/// **The answer is drained while the question is still being asked.** Writing every path and only then
+/// reading works while the conversation fits in the kernel's pipe buffers and deadlocks the moment it does
+/// not: the child fills its 64 KB stdout and blocks, so it stops reading stdin, so the parent blocks on a
+/// full 64 KB stdin, and neither can move. Measured on this repository — 73,670 excluded paths, 9.1 MB in,
+/// 11.0 MB out, against a 64 KB pipe — the gate standing in front of `cargo publish` never reached a verdict
+/// at all: `git check-ignore` sat in `pipe_wait` and `scripts/publish.sh` hung indefinitely.
+///
+/// What made it survive review is worth naming: every fixture in the failure matrix hides a handful of
+/// files, so the premise "the excluded set is small" held everywhere it was ever exercised and failed only
+/// on the repository this gate exists to judge. A green suite is no evidence about a corpus it never saw.
+///
+/// `stderr` is drained by `wait_with_output` below, which is why stdout is the only handle taken here.
+pub fn classify(repo: &Path, paths: &[&str]) -> Result<String, NoClassification> {
+    use std::io::{Read, Write};
+    let mut child = hermetic("git")
+        .args(["-c", "core.excludesFile=/dev/null"])
+        .args(["check-ignore", "-z", "-v", "--no-index", "--stdin"])
+        .current_dir(repo)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|err| NoClassification::Failed(format!("cannot run git check-ignore: {err}")))?;
+
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| NoClassification::Failed("check-ignore gave no stdout".to_string()))?;
+    let drain = std::thread::spawn(move || {
+        let mut answer = Vec::new();
+        stdout.read_to_end(&mut answer).map(|_| answer)
+    });
+
+    // Taken rather than borrowed: the write ends by DROPPING stdin, and the child cannot finish until it
+    // sees that EOF. Left in place until the end of the call it would keep the pipe open past the read below.
+    let delivered = {
+        let mut stdin = match child.stdin.take() {
+            Some(stdin) => stdin,
+            None => {
+                let _ = drain.join();
+                let _ = child.wait();
+                return Err(NoClassification::Failed(
+                    "check-ignore took no stdin".to_string(),
+                ));
+            }
+        };
+        let mut delivered = Ok(());
+        for path in paths {
+            delivered = stdin
+                .write_all(path.as_bytes())
+                .and_then(|()| stdin.write_all(b"\0"));
+            if delivered.is_err() {
+                break;
+            }
+        }
+        delivered
+    };
+
+    // Reaped on every path, including the failed write — the child is drained and waited on before any
+    // outcome is consulted, so no arm below can leave a `git` behind holding a pipe.
+    let out = child.wait_with_output();
+    let answer = drain.join();
+
+    if let Err(err) = delivered {
+        return Err(NoClassification::Failed(format!(
+            "cannot write paths to check-ignore: {err}"
+        )));
+    }
+    let out =
+        out.map_err(|err| NoClassification::Failed(format!("check-ignore did not finish: {err}")))?;
+    let answer = match answer {
+        Ok(Ok(answer)) => answer,
+        Ok(Err(err)) => {
+            return Err(NoClassification::Failed(format!(
+                "cannot read check-ignore's answer: {err}"
+            )));
+        }
+        Err(_) => {
+            return Err(NoClassification::Failed(
+                "the reader of check-ignore's answer panicked".to_string(),
+            ));
+        }
+    };
+    match out.status.code() {
+        Some(0) => Ok(String::from_utf8_lossy(&answer).to_string()),
+        Some(1) => Err(NoClassification::MatchedNothing),
+        _ => Err(NoClassification::Failed(
+            String::from_utf8_lossy(&out.stderr).trim_end().to_string(),
+        )),
+    }
+}
+
+/// The `[workspace.package]` version this repository declares, or why it could not be read.
+///
+/// The parse is [`crate::manifest::workspace_version`]; only the read is local, because this gate takes a
+/// path where its sibling already holds the text. The two used to parse it separately and disagreed about
+/// whether a `[package]` table counts — see that module for why it no longer does.
+fn workspace_version(repo: &Path) -> Result<WorkspaceVersion, String> {
+    let manifest = repo.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest)
+        .map_err(|err| format!("could not read {}: {err}", manifest.display()))?;
+    Ok(crate::manifest::workspace_version(&text))
+}
+
+/// Judge whether `repo` is the source a release publishes from.
+///
+/// `remote` names the remote whose `main` the snapshot must be the live tip of.
+pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
+    if !repo.join("Cargo.toml").is_file() {
+        return Err(cannot_judge_at(
+            "publish-source-integrity#repository-root-has-no-manifest",
+            format!("repository root {} has no Cargo.toml", repo.display()),
+        ));
+    }
+    // The cause travels. Folding it away told an operator on a machine WITHOUT git that the repository root
+    // "is not a git worktree" — a sentence about the repository, for a fact about the machine, in front of
+    // `cargo publish`. `Failure` now separates the two and this says which it met.
+    git(repo, &["rev-parse", "--is-inside-work-tree"]).map_err(|err| {
+        cannot_judge_at("publish-source-integrity#repository-root-is-not-a-worktree", match err {
+            crate::hermetic_git::Failure::Spawn(why) => format!(
+                "git could not be run at all ({why}), so whether {} is a worktree was never asked",
+                repo.display()
+            ),
+            crate::hermetic_git::Failure::Exit { stderr, .. } => format!(
+                "repository root {} is not a git worktree: {stderr}",
+                repo.display()
+            ),
+        })
+    })?;
+
+    // Answered in three, for the reason the sibling release gate states at its own call site: a value this
+    // reader cannot read is legal TOML in a form it does not take, and reporting it as a *missing* version in
+    // front of `cargo publish` sends an operator to look for a key that is already there.
+    let version = match workspace_version(repo).map_err(|why| {
+        cannot_judge_at(
+            "publish-source-integrity#workspace-manifest-unreadable",
+            why,
+        )
+    })? {
+        WorkspaceVersion::Declared(version) => version,
+        WorkspaceVersion::Absent => {
+            return Err(cannot_judge_at(
+                "publish-source-integrity#workspace-version-absent",
+                crate::manifest::VERSION_ABSENT,
+            ));
+        }
+        WorkspaceVersion::Unreadable(what) => {
+            return Err(cannot_judge_at(
+                "publish-source-integrity#workspace-version-unreadable",
+                crate::manifest::version_unreadable(
+                    &what,
+                    "which tag this tree would have to be the release snapshot of cannot be decided",
+                ),
+            ));
+        }
+    };
+    if !is_semver(&version) {
+        return Err(cannot_judge_at(
+            "publish-source-integrity#workspace-version-malformed",
+            crate::manifest::version_malformed(&version),
+        ));
+    }
+    let tag = format!("v{version}");
+
+    // HEAD describes what would be packaged only if nothing is uncommitted or untracked.
+    let dirty = read_worktree(
+        repo,
+        // `-z` for the same reason every other listing here carries it: the spec's SHALL enumerates
+        // `status` beside `ls-files` and `check-ignore`, and this was the one call without it. Only
+        // emptiness is tested, so the consequence was confined to how the diagnostic renders a quoted
+        // path — a narrower cost than the sibling's, and the same rule.
+        &["status", "--porcelain=v1", "--untracked-files=all", "-z"],
+        "state",
+    )?;
+    if !dirty.is_empty() {
+        // **The flag changed the stream's shape, so the reader of that stream changes with it.** `-z`
+        // separates records with NUL, and interpolating the raw value ran a dirty worktree's entries
+        // together on one line where `--porcelain=v1` alone printed one each — `trim_end` does not strip
+        // NUL, since U+0000 is not white space, so the trailing separator survived too. The `-z` change was
+        // made for how this diagnostic renders a quoted path, and then left the diagnostic alone.
+        let shown = dirty
+            .split('\0')
+            .filter(|record| !record.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Err(violation_at(
+            "publish-source-integrity#worktree-is-not-clean",
+            format!(
+                "worktree is not clean, so HEAD does not describe what would be packaged:\n{shown}"
+            ),
+        ));
+    }
+    let hidden = hidden_by_the_checkout(repo)?;
+    if !hidden.is_empty() {
+        return Err(violation_at(
+            "publish-source-integrity#worktree-hides-untracked-files",
+            format!(
+                "worktree carries untracked files that only this checkout hides, so the same commit would be \
+             judged differently elsewhere:\n{}",
+                hidden.join("\n")
+            ),
+        ));
+    }
+
+    // Shares the read site above. Once `clean` is defined by the repository, a clean worktree with an
+    // unresolvable HEAD cannot be constructed — measured: every route leaves either an untracked file the
+    // checkout hides or a staged one `status` reports — so a refusal of its own would be a branch no input
+    // can take.
+    let head_commit = read_worktree(repo, &["rev-parse", "HEAD"], "HEAD")?;
+    let head_subject = git(repo, &["log", "-1", "--format=%s", "HEAD"]).map_err(|err| {
+        cannot_judge_at(
+            "publish-source-integrity#head-subject-unreadable",
+            format!("could not read HEAD's subject: {err}"),
+        )
+    })?;
+    if head_subject != format!("release: {version}") {
+        return Err(violation_at(
+            "publish-source-integrity#head-is-not-the-release-snapshot",
+            format!(
+                "HEAD is not this version's release snapshot: its subject is \"{head_subject}\", expected \
+             \"release: {version}\""
+            ),
+        ));
+    }
+
+    match tag_presence(repo, &tag) {
+        TagPresence::Present => {}
+        TagPresence::Absent => {
+            return Err(violation_at(
+                "publish-source-integrity#release-tag-absent",
+                format!(
+                    "there is no tag {tag}; the release snapshot is tagged before it is published"
+                ),
+            ));
+        }
+        TagPresence::Unreadable(why) => {
+            return Err(cannot_judge_at(
+                "publish-source-integrity#release-tag-unreadable",
+                format!(
+                    "{why} — which is not the same fact as a snapshot that was never tagged, and this gate \
+                     stands in front of an upload that cannot be replaced"
+                ),
+            ));
+        }
+    }
+    // The tag object, read **once**. Asking git for its type and then for its content is two reads of one
+    // object, and the second cannot fail once the first has answered — a branch no input can take, which is
+    // dead code rather than a guard. So the content is read first, and the type is asked for only to say what
+    // that failure *means*: a lightweight tag is a violation, an unreadable object is not.
+    let tag_object = match git(repo, &["cat-file", "tag", &format!("refs/tags/{tag}")]) {
+        Ok(object) => object,
+        Err(err) => {
+            let kind = git(repo, &["cat-file", "-t", &format!("refs/tags/{tag}")]);
+            return Err(match kind.as_deref() {
+                Ok("tag") | Err(_) => cannot_judge_at(
+                    "publish-source-integrity#tag-object-unreadable",
+                    format!("could not read the tag object for {tag}: {err}"),
+                ),
+                Ok(_) => violation_at(
+                    "publish-source-integrity#release-tag-is-lightweight",
+                    format!(
+                        "{tag} is a lightweight tag; the release tags are annotated (`git tag -s`)"
+                    ),
+                ),
+            });
+        }
+    };
+
+    verify_tag_signature(repo, &tag, &tag_object)?;
+
+    let tag_commit = git(repo, &["rev-list", "-n", "1", &tag]).map_err(|err| {
+        cannot_judge_at(
+            "publish-source-integrity#tag-commit-unresolvable",
+            format!("could not resolve {tag} to a commit: {err}"),
+        )
+    })?;
+    if tag_commit != head_commit {
+        return Err(violation_at(
+            "publish-source-integrity#release-tag-does-not-name-head",
+            format!(
+                "{tag} points at {tag_commit} but HEAD is {head_commit}; publish the commit the tag names"
+            ),
+        ));
+    }
+
+    // A failed live read and a successful read of no `main` are different facts. Preserve the command's cause
+    // before parsing its output; defaulting the error to an empty string makes both branches say the ref is
+    // absent and sends an operator looking at repository state when the remote was actually unreadable.
+    let listing = git(repo, &["ls-remote", remote, "refs/heads/main"]).map_err(|err| {
+        cannot_judge_at(
+            "publish-source-integrity#remote-main-unreadable",
+            format!("could not read refs/heads/main from remote \"{remote}\": {err}"),
+        )
+    })?;
+    // **One cause for one diagnostic.** A matched `ls-remote` line is `<sha>\t<ref>`, so splitting it always
+    // yields a token — folding that `None` into the default made *read a line and found no token* and *the
+    // remote has no main* the same answer, which is the pair the comment below insists on keeping apart.
+    let remote_main = listing
+        .lines()
+        .next()
+        .map(|line| {
+            line.split_whitespace()
+                .next()
+                .expect("a matched `ls-remote` line carries the object id before its ref")
+        })
+        .unwrap_or_default()
+        .to_string();
+    if remote_main.is_empty() {
+        return Err(cannot_judge_at(
+            "publish-source-integrity#remote-has-no-main",
+            format!(
+                "remote \"{remote}\" has no refs/heads/main, so whether HEAD is the released snapshot cannot \
+             be decided"
+            ),
+        ));
+    }
+    if remote_main != head_commit {
+        return Err(violation_at(
+            "publish-source-integrity#head-is-not-the-tip-of-main",
+            format!(
+                "HEAD {head_commit} is not the tip of {remote}/main ({remote_main}); `main` is the release-only \
+             branch a publish runs from"
+            ),
+        ));
+    }
+
+    // **The tag is read from the remote too, because every other read of it was local.** The requirement is
+    // *a publish runs only from the tagged release commit on the remote's main*, and this function checked the
+    // two halves in two places: `main` against a live `ls-remote`, and the tag against the local object store
+    // alone — its presence, its object, its target, its signature. A tag created here and never pushed
+    // satisfied every one, and the success line said *tagged vX.Y.Z* about a tag nobody else had, while six
+    // crates would upload permanently and a version is yankable but never replaceable. Nothing declared the
+    // stop: no requirement, no scenario, no observation bound, no backlog entry.
+    //
+    // What made it invisible rather than accidental is that the fixture corpus shared it: `push` appeared
+    // three times in the matrix and once in the builder, always `origin main`, so *the tag is on the remote*
+    // was a claim no direction made — and the accepted-shape direction, the one every refusal is measured
+    // against, was itself the unpushed-tag case.
+    //
+    // The same three-way split the `main` read uses, for the same reason: a failed read is not an absent ref,
+    // and an absent ref is not a ref pointing elsewhere.
+    let tags = git(repo, &["ls-remote", remote, &format!("refs/tags/{tag}")]).map_err(|err| {
+        cannot_judge_at(
+            "publish-source-integrity#remote-tag-unreadable",
+            format!("could not read refs/tags/{tag} from remote \"{remote}\": {err}"),
+        )
+    })?;
+    let remote_tag = tags
+        .lines()
+        .next()
+        .map(|line| {
+            line.split_whitespace()
+                .next()
+                .expect("a matched `ls-remote` line carries the object id before its ref")
+        })
+        .unwrap_or_default()
+        .to_string();
+    if remote_tag.is_empty() {
+        return Err(violation_at(
+            "publish-source-integrity#release-tag-not-on-remote",
+            format!(
+                "{tag} exists here but not on remote \"{remote}\"; push the tag before publishing, or the \
+             uploaded crates name a commit nobody else can find"
+            ),
+        ));
+    }
+    // **The comparison is against the local *tag object*, not the commit it names.** `ls-remote` answers a
+    // `refs/tags/` query with the id the ref points at, and for an annotated tag that is the tag object — so
+    // comparing it to `tag_commit` refused the accepted fixture, which is how this reader learned the
+    // difference. Object identity is the stronger claim anyway: the same tag object carries the same
+    // signature, so a remote ref equal to this one is the tag this gate verified rather than another of that
+    // name.
+    let tag_object_id = git(repo, &["rev-parse", &format!("refs/tags/{tag}")]).map_err(|err| {
+        cannot_judge_at(
+            "publish-source-integrity#tag-object-unresolvable",
+            format!("could not resolve refs/tags/{tag} to an object: {err}"),
+        )
+    })?;
+    if remote_tag != tag_object_id {
+        return Err(violation_at(
+            "publish-source-integrity#remote-tag-names-another-object",
+            format!(
+                "{tag} on remote \"{remote}\" is {remote_tag}, but here it is {tag_object_id} naming \
+             {tag_commit}; the tag was moved or replaced after it was pushed"
+            ),
+        ));
+    }
+
+    Ok(format!(
+        "ok publish source ({remote}/main at {head_commit}, tagged {tag})"
+    ))
+}
+
+/// Take `path` as a directory this process created, or refuse.
+///
+/// **Why `create_dir` and not `create_dir_all` is stated once, in `xingbiao::claim_scratch`** — the symlink
+/// adoption, the guessable `temp_dir()`-relative root, the window between `remove_dir_all` and this call,
+/// and the measurements behind each. That statement was written here too, near-verbatim, which is one rule
+/// with two owners and free to drift; the implementations stay separate (this one returns a `Refusal`,
+/// `xingbiao` is only a dev-dependency here) but the rule does not. Named rather than linked: `xingbiao` is
+/// not in this crate's library scope, so an intra-doc link would not resolve.
+///
+/// What is local to this site, and is the reason it returns a `Refusal` at all. The scratch directory holds
+/// `tag.sig` — which the signature check then reads **back**. Redirect the directory and someone else owns
+/// both ends of that write-then-read: they can substitute a signature they made over the same payload with
+/// their own key, and `ssh-keygen -Y check-novalidate` answers *this signature is valid over this payload*
+/// without asking whose key made it. The check that would then pass is the one whose entire point is that
+/// "a signature block quoted in a tag message is text, not a signature" — so a release tag whose signature
+/// does **not** verify over the tag object would verify, in front of an act that cannot be undone.
+///
+/// **The removal is the caller's**, so a direction can supply exactly the state that appears in that window.
+/// The same split as [`hidden_by_the_checkout_with`], for the same reason: the failing arm is not a state a
+/// fixture can be left in, because the removal it follows would undo it.
+///
+/// Three harnesses in this repository already claim their scratch roots this way — the two controlled
+/// workflow directions and the reference gate — and it was this one, standing in front of `cargo publish`,
+/// that did not.
+pub fn claim_scratch(path: &Path) -> Result<(), Refusal> {
+    std::fs::create_dir(path).map_err(|err| {
+        cannot_judge_at("publish-source-integrity#signature-scratch-unclaimable", format!(
+            "could not claim a signature scratch directory at {} ({err}). After `remove_dir_all` an existing \
+             path is an anomaly rather than a leftover, and `mkdir` refuses a symlink instead of writing \
+             through it — so a signature verdict is declined rather than reached somewhere another user \
+             controls",
+            path.display()
+        ))
+    })
+}
+
+/// The tag must carry an SSH signature that verifies **over the tag object**.
+///
+/// A signature block quoted in a tag *message* is text; only the payload the object actually signs decides.
+fn verify_tag_signature(repo: &Path, tag: &str, tag_object: &str) -> Result<(), Refusal> {
+    if Command::new("ssh-keygen").arg("-h").output().is_err() {
+        return Err(cannot_judge_at(
+            "publish-source-integrity#ssh-keygen-unavailable",
+            format!("ssh-keygen is unavailable, so {tag}'s signature cannot be verified"),
+        ));
+    }
+    // Unique per CALL, not per (process, tag). Every fixture in the failure matrix tags `v9.9.9`, and the
+    // matrix runs in parallel, so a key built from the tag had each test's `Drop` deleting another's scratch
+    // mid-verification — a test that passed alone and failed beside its siblings.
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let scratch = std::env::temp_dir().join(format!(
+        "tianheng-publish-source-sig-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_dir_all(&scratch);
+    claim_scratch(&scratch)?;
+    let guard = Scratch(scratch.clone());
+
+    // The mechanism proves itself before it is trusted to judge: a round trip over a throwaway key. Without
+    // it, a broken `ssh-keygen -Y` would refuse every signature and read as a violation.
+    let probe = scratch.join("probe");
+    let round_trip = Command::new("ssh-keygen")
+        .args(["-q", "-t", "ed25519", "-N", "", "-f"])
+        .arg(&probe)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+        && sign_probe(&probe, &scratch);
+    if !round_trip {
+        return Err(cannot_judge_at(
+            "publish-source-integrity#signature-mechanism-round-trip-failed",
+            format!(
+                "the signature mechanism failed its own round-trip, so no verdict on {tag}'s signature \
+                 would be about {tag}"
+            ),
+        ));
+    }
+
+    let signature = git(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(contents:signature)",
+            &format!("refs/tags/{tag}"),
+        ],
+    )
+    .map_err(|err| {
+        cannot_judge_at(
+            "publish-source-integrity#signature-block-unreadable",
+            format!("could not read {tag}'s signature block: {err}"),
+        )
+    })?;
+
+    if signature.trim().is_empty() {
+        return Err(violation_at(
+            "publish-source-integrity#release-tag-carries-no-signature",
+            format!("{tag} carries no signature; the release tags are signed (`git tag -s`)"),
+        ));
+    }
+    if !signature.starts_with("-----BEGIN SSH SIGNATURE-----") {
+        return Err(cannot_judge_at(
+            "publish-source-integrity#signature-armour-unverifiable",
+            format!(
+                "{tag} carries a signature this gate cannot verify — it reads SSH signatures, and this block is \
+             something else"
+            ),
+        ));
+    }
+    let Some(payload) = tag_object.strip_suffix(signature.trim_end()) else {
+        return Err(cannot_judge_at(
+            "publish-source-integrity#signature-is-not-the-tag-object-suffix",
+            format!(
+                "{tag}'s extracted signature is not the tag object's suffix, so the signed payload cannot \
+                 be reconstructed"
+            ),
+        ));
+    };
+
+    let sig_path = scratch.join("tag.sig");
+    std::fs::write(&sig_path, format!("{}\n", signature.trim_end())).map_err(|err| {
+        cannot_judge_at(
+            "publish-source-integrity#signature-unwritable",
+            format!("could not write the signature for checking: {err}"),
+        )
+    })?;
+    // The guard is dropped whichever way the verdict went, and **before** the result is consulted: a
+    // `?` on the verification result before this line would leave the scratch directory behind on exactly
+    // the paths this repair adds.
+    let verified = check_novalidate(payload, &sig_path);
+    drop(guard);
+    if !verified? {
+        return Err(violation_at(
+            "publish-source-integrity#signature-does-not-verify",
+            format!(
+                "{tag}'s signature does not verify over the tag object; a signature block quoted in a tag \
+             message is text, not a signature"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+struct Scratch(PathBuf);
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// Write `payload` to `child`'s stdin, close it, and **reap the child whichever way the write went**.
+///
+/// `None` is *the child did not complete successfully as a delivery* — the write failed, or the wait did.
+/// The output is returned so a caller needing the child's stdout does not have to re-implement this.
+///
+/// **That re-implementation is why this exists.** `sign_probe` hand-rolled the same three steps and diverged
+/// on the failure path: it returned on a failed `write_all` **before** dropping stdin and before any wait,
+/// leaving an `ssh-keygen` unreaped — while the wrapper above it claimed reaping on every path. One
+/// of the two copies was the counterexample to the other's documentation. Two callers, one implementation,
+/// and the reap is now unforgettable rather than remembered twice.
+///
+/// `wait_with_output` rather than `wait`: it drains the child's pipes, so a caller that pipes stdout cannot
+/// deadlock against a full buffer — the same hazard this file already handles with a drain thread where the
+/// conversation is two-way.
+fn deliver_and_reap(mut child: std::process::Child, payload: &str) -> Option<std::process::Output> {
+    use std::io::Write;
+    let delivered = match child.stdin.as_mut() {
+        Some(stdin) => stdin.write_all(payload.as_bytes()).is_ok(),
+        None => false,
+    };
+    drop(child.stdin.take());
+    let out = child.wait_with_output().ok();
+    // Reaped either way — the wait happens before the delivery result is consulted, so a failed write
+    // cannot leave the child behind.
+    if delivered { out } else { None }
+}
+
+fn sign_probe(key: &Path, scratch: &Path) -> bool {
+    let sig = scratch.join("probe.sig");
+    let Ok(child) = Command::new("ssh-keygen")
+        .args(["-Y", "sign", "-n", "git", "-f"])
+        .arg(key)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    else {
+        return false;
+    };
+    // The payload must reach stdin before the child is waited on. Spawning and waiting immediately closes
+    // stdin at once, so `ssh-keygen` signs the EMPTY payload and the round trip then fails against "probe" —
+    // reporting the mechanism broken when only the harness was.
+    let Some(out) = deliver_and_reap(child, "probe") else {
+        return false;
+    };
+    if !out.status.success() || std::fs::write(&sig, &out.stdout).is_err() {
+        return false;
+    }
+    // The probe asks only *did the round trip work*, so a verifier that could not run and one that rejected
+    // the probe are one answer here — and that is the whole reason it runs: its caller turns either into the
+    // `signature-mechanism-round-trip-failed` cannot-judge. Collapsing the two is right in this one place and
+    // wrong in the other, which is why the distinction lives in the return type rather than in a convention.
+    check_novalidate("probe", &sig).unwrap_or(false)
+}
+
+/// Whether `ssh-keygen -Y check-novalidate` accepts `payload` under `signature`, or why it could not say.
+///
+/// **Three facts, three answers, where a `bool` had one.** A verifier that could not be spawned, could not be
+/// written to, or could not be reaped is *not* a signature that failed to verify — and this returned `false`
+/// for all three, so the caller reported `signature-does-not-verify`, a **violation**, for a machine that ran
+/// out of processes. `publish-source-integrity` states the rule the other way round in so many words: *a
+/// signature this gate cannot read SHALL be a cannot-judge, never a violation*, and the three refusals guarding armour, suffix and writability
+/// already answer that way.
+///
+/// **The round-trip probe narrows the 0.5.0 window and does not close it**, which is why the collapse survived
+/// review: a broken `ssh-keygen -Y` is caught before any verdict, so what remains is a second invocation
+/// failing where the first succeeded — process exhaustion, an I/O failure on the pipe. Narrow, and on the one
+/// path where a refusal the harness invented costs exactly what a miss costs, in front of an act that cannot
+/// be undone.
+///
+/// `Ok(false)` is reserved for a verifier that ran and rejected the payload.
+fn check_novalidate(payload: &str, signature: &Path) -> Result<bool, Refusal> {
+    verify_with("ssh-keygen", payload, signature)
+}
+
+/// The one refusal a reached-no-verdict fact is reported under.
+///
+/// A module-level function rather than a closure per call site, because `refusal_register` identifies a site
+/// by the literal opening its constructor: one fact, one literal, one place to read it from.
+fn verifier_reached_no_verdict(what: &str) -> Refusal {
+    cannot_judge_at(
+        "publish-source-integrity#signature-verifier-reached-no-verdict",
+        format!(
+            "the signature verifier reached no verdict ({what}), which is not the same fact as a signature \
+             that does not verify — so whether the tag is signed is undecided here"
+        ),
+    )
+}
+
+/// What a **reaped** verifier's exit status says, and what it does not.
+///
+/// **`success()` is not the question, and reading it as the question is what the previous repair missed.** That
+/// repair split *could not spawn*, *could not deliver* and *could not reap* out of the boolean and then wrote
+/// `Ok(out.status.success())` — which folds a fourth no-verdict state back in. On Unix a process terminated by
+/// a signal answers `success() == false` and `code() == None`: it was reaped, so the delivery succeeded, and it
+/// rejected nothing. Reporting that as `signature-does-not-verify` is the same misclassification one state
+/// further in, and it survived because the repair's attention was on the return *type* while the predicate
+/// stayed unread.
+///
+/// **The three states are exhaustive, checked rather than assumed.** `ExitStatus` answers `code()` with
+/// `Some(0)`, `Some(n)`, or `None`; the last is Unix-only, and on a platform where every exit carries a code
+/// the `Err` arm is simply unreachable rather than wrong. A verifier that *hangs* is not among these: nothing
+/// here times out, so it stalls the gate rather than misclassifying — a different property, and not this
+/// function's to answer.
+pub(crate) fn verdict_of(status: std::process::ExitStatus) -> Result<bool, Refusal> {
+    match status.code() {
+        Some(0) => Ok(true),
+        Some(_) => Ok(false),
+        None => Err(verifier_reached_no_verdict(
+            "it was terminated without an exit code, so it reached no verdict to report",
+        )),
+    }
+}
+
+/// [`check_novalidate`] with the verifier named, so the *could not run* arm is reachable from a direction.
+///
+/// **One refusal site, not four.** A failed spawn, a failed write, a failed reap and a signalled death are one
+/// fact to the caller — *the verifier reached no verdict* — and splitting them would register sites no
+/// direction can construct: process exhaustion and a broken pipe are states a test may not manufacture.
+/// Naming the program is the one perturbation that reaches the spawn arm honestly, and it is the only reason
+/// this parameter exists; [`verdict_of`] takes a real status, so the signalled arm needs no parameter at all.
+pub(crate) fn verify_with(program: &str, payload: &str, signature: &Path) -> Result<bool, Refusal> {
+    let child = Command::new(program)
+        .args(["-Y", "check-novalidate", "-n", "git", "-s"])
+        .arg(signature)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|err| {
+            verifier_reached_no_verdict(&format!("`{program}` could not be started: {err}"))
+        })?;
+    let out = deliver_and_reap(child, payload).ok_or_else(|| {
+        verifier_reached_no_verdict("its payload was not delivered, or it was not reaped")
+    })?;
+    verdict_of(out.status)
+}
+
+// --- the fixture ------------------------------------------------------------------------------------------
+
+/// A repository in the exact shape a publish runs from: `main` pushed to a bare remote, its tip a
+/// `release: <version>` snapshot, tagged with a signed annotated tag, worktree clean.
+///
+/// The caller owns the root and its cleanup, because a builder that also decided lifetime would make a
+/// caller's single guard two.
+pub struct Fixture {
+    /// The working tree a publish would run from.
+    pub repo: PathBuf,
+    /// The bare remote `main` was pushed to.
+    pub remote: PathBuf,
+    /// The signing key the annotated tag was made with.
+    pub key: PathBuf,
+}
+
+pub use crate::hermetic_git::hermetic;
+use crate::hermetic_git::{commit, fixture as run};
+
+/// Build a [`Fixture`] under `root`, in the shape a publish is allowed to run from.
+///
+/// Every step is hermetic: a fixture that inherited the machine's signing configuration once turned an
+/// intentionally unsigned tag into a signed one, which made a refusal impossible to demonstrate.
+pub fn build_fixture(root: &Path, name: &str, version: &str) -> Fixture {
+    let repo = root.join(name);
+    let remote = root.join(format!("{name}-origin.git"));
+    let key = root.join(format!("{name}-key"));
+    std::fs::create_dir_all(&repo).expect("the fixture root is writable");
+
+    run(
+        root,
+        "ssh-keygen",
+        &[
+            "-q",
+            "-t",
+            "ed25519",
+            "-N",
+            "",
+            "-C",
+            "fixture",
+            "-f",
+            &key.display().to_string(),
+        ],
+    );
+    run(
+        root,
+        "git",
+        &["init", "-q", "--bare", &remote.display().to_string()],
+    );
+    run(&repo, "git", &["init", "-q", "-b", "main"]);
+    for (k, v) in [
+        ("user.name", "Publish Source Test"),
+        ("user.email", "publish-source@example.invalid"),
+        ("gpg.format", "ssh"),
+        ("commit.gpgsign", "false"),
+        ("tag.gpgsign", "false"),
+        ("tag.forceSignAnnotated", "false"),
+    ] {
+        run(&repo, "git", &["config", k, v]);
+    }
+    run(
+        &repo,
+        "git",
+        &["config", "user.signingkey", &key.display().to_string()],
+    );
+
+    std::fs::write(
+        repo.join("Cargo.toml"),
+        format!("[workspace]\nmembers = []\n\n[workspace.package]\nversion = \"{version}\"\n"),
+    )
+    .expect("write the fixture manifest");
+    commit(&repo, &format!("release: {version}"));
+    run(
+        &repo,
+        "git",
+        &[
+            "tag",
+            "-s",
+            &format!("v{version}"),
+            "-m",
+            &format!("v{version}"),
+        ],
+    );
+    run(
+        &repo,
+        "git",
+        &["remote", "add", "origin", &remote.display().to_string()],
+    );
+    run(&repo, "git", &["push", "-q", "origin", "main"]);
+    // **The tag is pushed too, because the accepted shape is *the tagged commit on the remote's main*.** This
+    // pushed `main` alone, so the direction every refusal is measured against was itself the unpushed-tag
+    // case, and every tag read in the gate was local. A fixture that cannot express the shape cannot hold the
+    // claim; `a_tag_that_is_not_on_the_remote_is_a_violation` is the shape it could not express.
+    run(
+        &repo,
+        "git",
+        &["push", "-q", "origin", &format!("refs/tags/v{version}")],
+    );
+
+    Fixture { repo, remote, key }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A payload that could not be delivered is not a successful round trip.
+    ///
+    /// The direction the discarded write hid: with stdin unpiped there is nowhere to write, and the child —
+    /// `true`, which succeeds at nothing — then exits 0. Consulting only `wait()` reported that as the
+    /// payload having been judged, which in front of `cargo publish` means a signature verdict about a
+    /// payload the verifier never received. The child is reaped either way; only the answer changes.
+    #[test]
+    fn a_payload_that_could_not_be_delivered_is_not_a_success() {
+        let child = Command::new("true")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("`true` is spawnable");
+        assert!(
+            deliver_and_reap(child, "a payload nobody can receive").is_none(),
+            "an undeliverable payload must not report a completed delivery, however the child exits"
+        );
+    }
+
+    /// A verifier terminated by a signal reached no verdict, and did not reject the signature.
+    ///
+    /// **The state the first repair left folded in.** That repair lifted *could not spawn*, *could not deliver*
+    /// and *could not reap* out of a boolean and then wrote `Ok(out.status.success())` — and on Unix a signalled
+    /// process answers `success() == false` with `code() == None`. It was reaped, so delivery succeeded; it
+    /// rejected nothing, because it never ran to a verdict. The caller would have reported
+    /// `signature-does-not-verify`, a violation, for a process the kernel killed.
+    ///
+    /// **The status comes from the kernel rather than from a constructor.** A test that fabricated an
+    /// `ExitStatus` would be asserting against its own idea of what a signalled exit looks like; `sh -c 'kill -9
+    /// $$'` makes a real one, and the assertion below first checks that the fixture *is* what it claims — a
+    /// status with no code — so a platform where every exit carries one reports that rather than passing
+    /// vacuously.
+    ///
+    /// All three states in one direction, because each is a different way to be wrong: a clean exit must verify,
+    /// a non-zero exit must be the rejection the caller turns into a violation, and no code at all must be
+    /// unjudgeable.
+    #[test]
+    fn a_signalled_verifier_reached_no_verdict() {
+        let signalled = std::process::Command::new("sh")
+            .args(["-c", "kill -9 $$"])
+            .output()
+            .expect("`sh` is spawnable");
+        assert!(
+            signalled.status.code().is_none(),
+            "this direction needs a status carrying no exit code; got {:?} — on a platform where every exit \
+             carries one, the arm under test is unreachable rather than wrong",
+            signalled.status.code()
+        );
+        let refusal = verdict_of(signalled.status)
+            .expect_err("a process the kernel killed reached no verdict about any signature");
+        // The site is observed by `a_verifier_that_could_not_run_is_not_a_bad_signature`, which lives in
+        // the register's corpus; naming it twice would claim two observations of one site.
+        assert_eq!(
+            refusal.kind,
+            crate::refusal::Kind::CannotJudge,
+            "a signalled verifier is unjudgeable, never a disagreement: {}",
+            refusal.message
+        );
+
+        // The two arms that must survive closing the one above.
+        let clean = std::process::Command::new("true")
+            .output()
+            .expect("`true` is spawnable");
+        assert_eq!(
+            verdict_of(clean.status).as_ref().ok().copied(),
+            Some(true),
+            "a verifier exiting 0 accepted the payload"
+        );
+        let rejected = std::process::Command::new("false")
+            .output()
+            .expect("`false` is spawnable");
+        assert_eq!(
+            verdict_of(rejected.status).as_ref().ok().copied(),
+            Some(false),
+            "a verifier exiting non-zero rejected the payload, which is the caller's violation and must stay \
+             reachable"
+        );
+    }
+
+    /// The control: the same helper reports success when the payload does arrive.
+    ///
+    /// Without it the assertion above is satisfiable by a helper that always answers `false`.
+    #[test]
+    fn a_delivered_payload_reports_the_child_s_own_verdict() {
+        let child = Command::new("cat")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("`cat` is spawnable");
+        assert!(
+            deliver_and_reap(child, "a payload that arrives")
+                .is_some_and(|out| out.status.success()),
+            "a delivered payload reaching a child that exits 0 is a successful round trip"
+        );
+    }
+}

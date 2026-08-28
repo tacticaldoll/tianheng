@@ -7,7 +7,7 @@
 //! observation + comparison — it carries **no** command-line, filesystem, or
 //! stdout/stderr shell. The imperative shell lives in the sibling `tianheng` crate,
 //! which must depend on this core and never the reverse — a crate-level invariant
-//! Tianheng enforces on itself (`tianheng` workspace `tests/self_governance.rs`).
+//! Tianheng enforces on itself (`crates/shengmo/src/law.rs`).
 //!
 //! Two reaction kinds, each with its own observation source: [`CrateBoundary`] over
 //! `cargo metadata`, and [`ModuleBoundary`] over the crate's own source `use`
@@ -21,6 +21,12 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
+
+mod bounds;
+pub use bounds::observation_bounds;
+
+mod observer;
+pub use observer::StaticObserver;
 
 mod module_scan;
 mod projection;
@@ -55,8 +61,9 @@ pub use model::*;
 // (PROJECT.md). Only the per-type vocabulary moved; the report/constitution *assembly*
 // (projection.rs), which folds in the static `Coverage`, stays in this crate.
 pub use xuanji::{
-    Baseline, BaselineEntry, BoundaryKind, Finding, Outcome, Polarity, Report, RuleKey, ScanDepth,
-    Severity, StructuredFactIdentity, Violation, ViolationId, apply_baseline,
+    Baseline, BaselineEntry, BoundDecl, BoundId, BoundaryKind, Defence, Demonstrates, Extent,
+    FactGranularity, Finding, Observer, Outcome, Owner, Polarity, Reached, Report, RuleKey,
+    ScanDepth, Severity, StructuredFactIdentity, Subject, Violation, ViolationId, apply_baseline,
 };
 
 /// Run the constitution's boundaries against the Cargo workspace at `manifest_path`.
@@ -78,7 +85,13 @@ pub fn check(constitution: &Constitution, manifest_path: &Path) -> Outcome {
 /// [`check_and_cover`]). An unresolvable target or a scan error is a constitution
 /// error, never a silent pass.
 fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
-    let workspace = workspace_member_names(metadata);
+    // The membership is an input like any other: read it, or say it could not be read. An empty set
+    // reached both consumers as *nothing to govern*, which is the silent pass this function's own doc
+    // forbids where it says a scan error is a constitution error.
+    let workspace = match workspace_member_names(metadata) {
+        Members::Read(names) => names,
+        Members::Unreadable(why) => return Outcome::ConstitutionError(why),
+    };
     let mut violations = Vec::new();
     for boundary in constitution.boundaries() {
         match boundary {
@@ -123,18 +136,30 @@ fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
     violations = deduped;
 
     if violations.is_empty() {
-        Outcome::Clean
+        // The subject this dimension reached, from the two figures this function already holds: the
+        // boundaries it was given, and the workspace members it read. `None` is not a clean workspace — it
+        // is boundaries declared over a workspace with no member to observe, which is a misconfiguration.
+        match Subject::of(constitution.boundaries().len(), workspace.len()) {
+            Some(subject) => Outcome::Clean(subject),
+            None => Outcome::ConstitutionError(format!(
+                "{} static boundary/boundaries are declared and this workspace has no member to observe \
+                 them over, so nothing was judged — which is not a clean workspace",
+                constitution.boundaries().len()
+            )),
+        }
     } else {
         Outcome::Violations(Report::new(violations))
     }
 }
 
 /// Read the target workspace once and return both the reaction outcome and workspace
-/// coverage. Coverage is `Some` whenever the metadata was observed — including when the
+/// coverage. Coverage is `Some` whenever the membership was read — including when the
 /// outcome is a constitution error from a later boundary; the caller decides whether to
-/// surface it. It is `None` only when the metadata itself could not be read. One
-/// `cargo metadata` spawn feeds both, where `check` plus a separate coverage pass would
-/// have spawned twice.
+/// surface it. It is `None` for either of the two facts that make a membership unavailable:
+/// the `cargo metadata` read itself failed, or the metadata was read and its workspace
+/// membership could not be decoded from it. Both are reported as a constitution error in the
+/// outcome, so `None` never travels alone. One `cargo metadata` spawn feeds both, where
+/// `check` plus a separate coverage pass would have spawned twice.
 pub fn check_and_cover(
     constitution: &Constitution,
     manifest_path: &Path,
@@ -148,8 +173,25 @@ pub fn check_and_cover(
             );
         }
     };
-    let coverage = coverage_from(workspace_member_names(&metadata), constitution);
-    (evaluate(constitution, &metadata), Some(coverage))
+    (
+        evaluate(constitution, &metadata),
+        coverage_of(&metadata, constitution),
+    )
+}
+
+/// The workspace coverage the metadata supports, or `None` where it supports none.
+///
+/// **Named so that the two consumers of [`Members`] cannot reinterpret it apart.** Coverage over a
+/// membership that could not be read is coverage over nothing: `total = 0` with an empty uncovered list
+/// renders as complete. [`evaluate`] reports the same fact as a constitution error, so the advisory is
+/// withheld rather than fabricated — and the two arms saying so live in one function each, reachable by a
+/// direction, rather than inline in a function whose only entry point spawns `cargo metadata` and so cannot
+/// be handed a membership to fail on.
+fn coverage_of(metadata: &Value, constitution: &Constitution) -> Option<Coverage> {
+    match workspace_member_names(metadata) {
+        Members::Read(names) => Some(coverage_from(names, constitution)),
+        Members::Unreadable(_) => None,
+    }
 }
 
 /// Resolve every workspace member's source-root directory from the target workspace at

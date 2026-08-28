@@ -8,6 +8,144 @@ pub(super) fn confine_core_clock() -> ModuleBoundary {
         .because("core reads no wall clock — time is injected, not read")
 }
 
+/// A read verb outside the declared set is not observed — the bound the adopter owns by narrowing.
+///
+/// Kept for the CONTRACT rather than for a change: `inline-symbol-path-confinement` declares that a
+/// boundary narrowed with `.ending_with([…])` does not react to a verb outside that set, and nothing pinned
+/// it. Measured before the assertion was written, with the declared verb beside it as the control, so the
+/// empty result is about the narrowing rather than about a fixture that reacts to nothing.
+#[test]
+pub(super) fn inline_a_verb_outside_the_declared_set_is_a_bound() {
+    let narrowed = || {
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .ending_with(["now"])
+            .because("core reads no wall clock — time is injected, not read")
+    };
+
+    let (result, violations) = run_module_check(
+        "inline-verb-outside",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn stamp() { let _ = std::time::SystemTime::current(); }\n",
+            ),
+        ],
+        narrowed(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a verb outside the declared set is a bound the adopter owns: {violations:?}"
+    );
+
+    let (result, violations) = run_module_check(
+        "inline-verb-declared",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn stamp() { let _ = std::time::SystemTime::now(); }\n",
+            ),
+        ],
+        narrowed(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the declared verb must react: {violations:?}"
+    );
+}
+
+/// A foreign crate's re-export of the confined path is NOT observed — the stated bound, with its
+/// control beside it so the assertion is discriminating rather than vacuous.
+///
+/// Kept for the CONTRACT rather than for a change: `inline-symbol-path-confinement` declares this bound
+/// ("foreign AST is not scanned") and nothing pinned it, so a regression that started following a foreign
+/// re-export — or a rewording that quietly widened the claim — had no reaction to trip. The control
+/// direction is what makes the empty case mean something: the same call written through the confined
+/// prefix reacts in the same fixture shape.
+#[test]
+pub(super) fn inline_foreign_reexport_of_the_confined_path_is_a_bound() {
+    // The bound: reached through the foreign crate's own path, with that crate declared.
+    let (result, violations) = run_module_check_with_deps(
+        "inline-foreign-reexport",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn stamp() { let _ = shim::SystemTime::now(); }\n",
+            ),
+        ],
+        &[("shim", None)],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a foreign re-export of the confined path is a stated bound, not a reaction: {violations:?}"
+    );
+
+    // The control: the identical call written through the confined prefix reacts, so the empty result
+    // above is about the foreign path rather than about the fixture failing to be observed at all.
+    let (result, violations) = run_module_check_with_deps(
+        "inline-foreign-reexport-control",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn stamp() { let _ = std::time::SystemTime::now(); }\n",
+            ),
+        ],
+        &[("shim", None)],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "control must react: {violations:?}");
+}
+
+/// A `#[path]`-remapped child of the confined module is observed, in both attribute forms.
+///
+/// Kept for the CONTRACT rather than for a change: the behaviour is already correct, and this pins it
+/// so the spec's claim cannot drift away from it again. It used to be claimed as an inherited scanner
+/// bound — "the system does not claim to observe it" — which stopped being true when the scanner began
+/// following an unconditional remap (0.2.2) and union-scanning a `cfg_attr`-wrapped one (0.3.x); the
+/// prose outlived the behaviour on both counts, in this spec and in `external-crate-confinement`.
+#[test]
+pub(super) fn inline_path_remapped_child_is_observed() {
+    for (label, declaration) in [
+        ("direct", "#[path = \"elsewhere.rs\"]\npub mod inner;\n"),
+        (
+            "cfg_attr",
+            "#[cfg_attr(unix, path = \"elsewhere.rs\")]\npub mod inner;\n",
+        ),
+    ] {
+        let (result, violations) = run_module_check(
+            &format!("inline-remap-{label}"),
+            &[
+                ("lib.rs", "pub mod core;\n"),
+                ("core.rs", declaration),
+                (
+                    "elsewhere.rs",
+                    "fn stamp() { let _ = std::time::Instant::now(); }\n",
+                ),
+            ],
+            confine_core_clock(),
+        );
+        assert!(result.is_ok(), "{label}: {result:?}");
+        assert_eq!(violations.len(), 1, "{label}: {violations:?}");
+        assert_eq!(violations[0].target(), "std::time", "{label}");
+        assert!(
+            violations[0].finding.contains("crate::core::inner"),
+            "{label}: the finding must name the remapped module, not the declaring file: {:?}",
+            violations[0].finding
+        );
+    }
+}
+
 #[test]
 pub(super) fn inline_default_reacts_on_an_associated_fn_call() {
     let (result, violations) = run_module_check(
@@ -1927,7 +2065,7 @@ pub(super) fn legacy_inline_confinement_defaults_to_subtree_and_preserves_identi
 /// Two-crate reproduction of the audit-sweep finding: identical governed module path + rule
 /// declared against two different workspace members must stay two distinct violations, never
 /// dedup into one and never let one crate's baseline suppress the other's unaccepted violation.
-/// Mirrors the exact shape `crates/tianheng/tests/self_governance.rs` declares on itself
+/// Mirrors the exact shape `crates/shengmo/src/law.rs` declares on itself
 /// (the identical rule on guibiao/hunyi/louke).
 #[test]
 pub(super) fn two_crates_with_the_identical_module_boundary_stay_distinct_violations() {

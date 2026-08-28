@@ -5,11 +5,9 @@ shell. This is where a single-instrument adopter graduates to the composed const
 where the runtime dimension (漏刻) lives, because it reacts *at runtime in your binary*, not at CI
 time.
 
-```toml
-[dependencies]
-tianheng = "0.4"   # the CI shell — composes 圭表 + 渾儀 + 漏刻 into one `check`
-louke    = "0.4"   # the runtime dimension's prod face — you wire it into your binary
-```
+The committed [manifest requirements](Cargo.toml) are the adopter-facing forms: `tianheng` is the
+CI shell that composes 圭表 + 渾儀 + 漏刻 into one `check`, while `louke` is the runtime dimension's
+production face wired into the binary.
 
 ## The funnel, made literal
 
@@ -45,7 +43,7 @@ cargo run --bin check -- check --manifest-path Cargo.toml \
 ```
 
 Commit the generated baseline. When a violation is fixed, gate mode reports its entry as stale;
-review the fix and regenerate to ratchet the snapshot down. `scripts/test_examples.sh` executes
+review the fix and regenerate to ratchet the snapshot down. `cargo test -p shengmo --test examples_suite` executes
 this write/gate path against the example rather than merely documenting it.
 
 **run-mode** (runtime, in the binary) — the concrete type behind a `dyn Adapter` crossing the

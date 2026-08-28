@@ -127,7 +127,7 @@ pub(crate) fn missing_module_file_error(module: &str, crate_package: &str) -> St
 // `crates/tianheng/tests/dual_backed_module_conformance.rs` — never on the text.
 // `module` is the module being resolved (an anchor, which may be DEEPER than the ambiguous
 // declaration) and `declaration` is the ambiguous `mod` name itself — the two differ whenever an
-// ancestor is the dual-backed one, so naming only `module` would attribute the two paths below to a
+// ancestor is the dual-backed one, so naming only `module` would attribute both of this ancestor's paths to a
 // module they do not belong to.
 pub(crate) fn dual_backed_module_error(
     module: &str,

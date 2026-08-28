@@ -46,11 +46,45 @@ pub(in crate::runner) fn list_markdown(document: &Value) -> String {
 /// One boundary as a Markdown block, with the declared `reason` **foregrounded**.
 pub(super) fn boundary_markdown(boundary: &Value) -> String {
     let field = |key: &str| boundary.get(key).and_then(Value::as_str).unwrap_or("");
-    let mut out = format!("\n### `{}`\n", field("target"));
 
+    // **Every field that distinguishes a boundary is rendered, and none of them is a branch on kind.**
+    //
+    // The heading was `target` alone, which is unique for a crate boundary and is not for the others:
+    // `.module("crate")` is the ordinary subtree-wide form, so five boundaries rendered the identical
+    // ``### `crate` `` while the half that told them apart — the crate — sat in the body. Four of them
+    // were consecutive. This is the surface `AGENTS.md` step 1 points an agent at to learn the shape it must
+    // not drift, and the same renderer is the shipped `tianheng list --format markdown`.
+    //
+    // Kind is rendered **data**, never a `match` arm, so a new `BoundaryKind` is identified here without this
+    // function being touched. The one branch is on whether a `crate` field exists — which decides how the
+    // path is joined, not how much identity is shown; every kind shows all of it.
+    //
+    // This narrows collisions and cannot close them: `rule` distinguishes two boundaries as well, and is not
+    // in the heading. What construction cannot guarantee is held by
+    // `markdown_headings_are_pairwise_distinct`.
+    let target = field("target");
+    let qualified = match boundary.get("crate").and_then(Value::as_str) {
+        Some(krate) => format!("{krate}::{target}"),
+        None => target.to_string(),
+    };
+    let mut out = format!("\n### `{qualified}` ({})\n", field("kind"));
+
+    // **Every line of the reason is quoted, not just the first.** `because` places no restriction on
+    // newlines, and marking only the first line drops every continuation out of the blockquote — markdown
+    // that renders the rest as body text, and a projection no reader can attribute line by line. An empty
+    // line inside a reason is written as a bare `>` rather than `"> "`, so the quote stays unbroken without
+    // leaving trailing whitespace. A reason with no newline renders exactly as it did.
     let reason = field("reason");
     if !reason.is_empty() {
-        out.push_str(&format!("\n> {reason}\n\n"));
+        out.push('\n');
+        for line in reason.lines() {
+            if line.is_empty() {
+                out.push_str(">\n");
+            } else {
+                out.push_str(&format!("> {line}\n"));
+            }
+        }
+        out.push('\n');
     }
 
     out.push_str(&format!("- **rule**: {}", field("rule")));

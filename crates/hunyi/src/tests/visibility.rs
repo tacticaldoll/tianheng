@@ -598,3 +598,29 @@ pub(super) fn a_restricted_visibility_foreign_item_ranks_like_an_ordinary_one() 
         "Super ceiling reacts on pub(crate), not pub(super), inside an extern block too: {out:?}"
     );
 }
+
+/// A `pub(in narrow-path)` item over-reacts under a tighter ceiling — the stated over-reaction bound.
+///
+/// Kept for the CONTRACT rather than for a change: `semantic-visibility-boundary` declares this bound and
+/// nothing pinned it. The nearest existing test uses a `Super` ceiling, a different cell, so citing it would
+/// have been reasoning dressed as evidence. Measured before the assertion was written: under a `Module`
+/// ceiling the conservative `Crate` rank of `pub(in crate::a)` reacts even where the item is effectively
+/// private, which is the over-reaction the bound states rather than a silent pass.
+#[test]
+pub(super) fn a_pub_in_narrow_path_over_reacts_under_a_module_ceiling() {
+    let out = vis_findings_at(
+        "pub-in-module-ceiling",
+        &[
+            ("lib.rs", "pub mod a;\n"),
+            ("a.rs", "pub(in crate::a) fn helper() {}\n"),
+        ],
+        "crate::a",
+        0,
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["pub(in crate::a) fn helper"],
+        "the conservative rank must react rather than pass silently: {out:?}"
+    );
+}

@@ -10,6 +10,11 @@ declares `[Registry, Path]` to forbid any git source (an *optional* git dependen
 publishing too). It deepens the proven static engine on the *same* observation — a finer read
 of the manifest, no new source, no new crate, hermetic (a pure function of the manifests).
 
+## Subject
+
+- `crates/guibiao/src/*.rs`
+- `crates/guibiao/src/tests/crate_dependency.rs`
+
 ## Requirements
 
 ### Requirement: Dependency-source boundary declared in Rust
@@ -116,10 +121,11 @@ source yet publishes successfully; the system SHALL classify it by its declared 
 - **WHEN** the target declares a registry dependency that `[patch]` redirects to a `git` source, and the boundary permits only `[Registry]`
 - **THEN** the system classifies it as `Registry` (its declared source is `registry+…`) and reports no violation — the declared layer does not observe the patch, which is correct here because `[patch]` does not block publishing; observing the resolved git source is supply-chain tooling's lane (cargo-deny's `[sources]`), outside Tianheng's declared per-target layer
 
-#### Scenario: A git-plus-version dependency is flagged though it would publish
+#### Scenario: A git-plus-version dependency is flagged though it would publish — a stated bound
 
 - **WHEN** the target declares `dep = { git = "…", version = "…" }` and the boundary permits only `[Registry]`
 - **THEN** the system classifies it as `Git` (its declared source is `git+…`) and emits a violation — even though such a dependency would `cargo publish` successfully — because the rule governs the declared source kind, a stated conservative bound, not publish-eligibility
+- **PINNED-BY** `source_rule_flags_every_git_source_outside_a_registry_or_path_allowlist`
 
 ### Requirement: CI reaction, severity, baseline, and projection parity
 

@@ -471,8 +471,12 @@ pub(super) fn impl_trait_operand_crate_relative_extern_rename_reacts() {
 
 #[test]
 pub(super) fn dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound() {
-    // A bare single-segment principal that is neither in scope nor a declared/sysroot crate stays
-    // dropped (the stated resolver bound) — the oracle does not over-reach (crate != trait anyway).
+    // A bare single-segment principal the branch does NOT declare — and that is no declared/sysroot
+    // crate head — stays dropped: the stated resolver bound, the oracle not over-reaching a single
+    // bare segment. Forbidden as the MODULE-QUALIFIED spelling on purpose. Forbidding the bare
+    // `["Frobnicate"]` (as this test did) passes whatever the resolver does, since no ladder step
+    // produces an unqualified candidate — so it pinned a spelling mismatch, not the drop, and stayed
+    // green when the fallback began fabricating `crate::m::Frobnicate` for a name `m` never declares.
     let out = dyn_operand_findings(
         "op-unresolvable-bare",
         &[
@@ -480,13 +484,64 @@ pub(super) fn dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound() {
             ("m.rs", "pub fn f() -> Box<dyn Frobnicate> { todo!() }\n"),
         ],
         "crate::m",
-        &["Frobnicate"],
+        &["crate::m::Frobnicate"],
         &[],
     )
     .unwrap();
     assert!(
         out.is_empty(),
-        "unresolvable bare principal must stay a bound: {out:?}"
+        "an undeclared bare principal must stay a bound, even against the module-qualified spelling: {out:?}"
+    );
+}
+
+#[test]
+pub(super) fn same_module_bare_trait_resolves_without_use() {
+    // The reacting control for the bound above: identical fixture and identical forbidden set, with
+    // the trait actually declared. It is what makes the empty result there mean "dropped because the
+    // module does not declare it" rather than "this shape reacts to nothing".
+    let out = dyn_operand_findings(
+        "op-same-module-bare-trait",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            (
+                "m.rs",
+                "pub trait Frobnicate {}\npub fn f() -> Box<dyn Frobnicate> { todo!() }\n",
+            ),
+        ],
+        "crate::m",
+        &["crate::m::Frobnicate"],
+        &[],
+    )
+    .unwrap();
+    assert!(
+        !out.is_empty(),
+        "same-module bare trait must resolve to crate::m::Frobnicate: {out:?}"
+    );
+}
+
+#[test]
+pub(super) fn dyn_operand_bare_raw_identifier_local_trait_resolves_canonically() {
+    // A raw identifier is canonicalized before the candidate is built, so a real local `trait r#type`
+    // matches the canonical `crate::m::type` an adopter writes. Without that step the candidate is
+    // `crate::m::r#type`, which matches nothing the rest of the resolver can produce — a declared
+    // boundary passing silently over the operand it forbids.
+    let out = dyn_operand_findings(
+        "op-bare-raw-ident-local-trait",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            (
+                "m.rs",
+                "pub trait r#type {}\npub fn f() -> Box<dyn r#type> { todo!() }\n",
+            ),
+        ],
+        "crate::m",
+        &["crate::m::type"],
+        &[],
+    )
+    .unwrap();
+    assert!(
+        !out.is_empty(),
+        "a bare raw-identifier local trait must match the canonical forbidden spelling: {out:?}"
     );
 }
 

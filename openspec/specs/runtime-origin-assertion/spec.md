@@ -3,6 +3,10 @@
 ## Purpose
 
 The 漏刻 (runtime) dimension's first capability: declare which concrete-type **origins** may cross a named runtime **seam**, and probe live `dyn` objects in production to catch a forbidden-origin type slipping through a `dyn Trait` into a layer it must not reach — what static and semantic analysis structurally cannot see. It has two faces: a **prod face** (the probe reacts fail-closed, emitting a `Violation` event by default, panic opt-in) and a **CI face** (`audit_probe_coverage` verifies every declared seam is probed and every probe references a declared seam). Origin is **observed**: it is **derived from the type** — the module the concrete type is defined in — and never taken from the registering call, so no code in the process can present a type under an origin it does not have (the origin requirement below states this in full and is authoritative over this summary). The hot path is std-only and lock-free; the crate depends on 璇璣 (`xuanji`) only — 星表 (`xingbiao`) is an additive, `audit`-feature-gated exception for the CI face's own cycle guard that never reaches the production hot path.
+
+## Subject
+
+- `crates/louke/src/**/*.rs`
 ## Requirements
 ### Requirement: Runtime boundary declared in Rust and installed write-once
 
@@ -127,7 +131,7 @@ member crate's source root resolved from `cargo metadata` (the same source root 
 dimension scans), so a seam declared once and probed in any member counts as covered. A member
 whose source root cannot be resolved SHALL be a constitution error (never a silent skip). Source
 outside a member's library/binary target subtree (for example `tests/`, `examples/`, `build.rs`)
-is out of scope — the same stated bound as the semantic dimension.
+is out of scope — the same stated bound (bound: runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-bound) as the semantic dimension.
 
 The probe scan SHALL be build/CI-time only (std-only source scan, never on the runtime hot path),
 comment- and string-literal-aware (including raw and byte strings), tracking **nested** block
@@ -141,7 +145,7 @@ because 三儀 ⊥ 三儀 forbids importing 圭表's scanner).
 Otherwise a probe in a never-invoked macro body would report its seam covered while the seam never
 enforces at runtime — the audit's forbidden false negative. The scan is lexical and does not
 evaluate `cfg`: a probe behind a non-production `#[cfg(...)]` is still counted, so a seam's
-production probe must not live behind a non-production `cfg` — a stated bound, not a silent pass.
+production probe must not live behind a non-production `cfg` — a stated bound (bound: runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound), not a silent pass.
 A probe whose seam argument is a **string literal** (plain or raw) is auditable, and a **plain**-string
 seam SHALL be compared to the declared seams by its **decoded** value — the exact `&str` the Rust
 compiler produces from that literal, resolving the standard string escapes (`\n`, `\r`, `\t`, `\\`,
@@ -177,7 +181,7 @@ an arm escaped entirely (the audit's forbidden false negative, contradicting the
 stated above). Transparency SHALL be gated on the macro **name**, matching the static and semantic
 dimensions' identical gate rather than deriving a third rule: a byte scanner cannot distinguish an
 arbitrary macro's nested blocks from a transparent macro's arms, so a body-wrapping macro under any
-other name SHALL remain excluded — a stated bound, shared across all three dimensions. Observation
+other name SHALL remain excluded — a stated bound (bound: semantic-signature-coupling/a-macro-under-another-name-is-not-treated-as-transparent-a-stated-bound), shared across all three dimensions. Observation
 SHALL stay **cfg-blind** here as everywhere in this scan: every arm is read, so a probe in an arm the
 current configuration does not compile still counts, consistent with the already-stated `#[cfg]`
 bound above.
@@ -353,9 +357,9 @@ SHALL be extracted and unioned the same way. Absence SHALL be tolerated only whe
 `cfg_attr` target NOR the conventional file resolves anywhere, and the declaration carries no other
 cfg-conditional gate (a bare `#[cfg]` or transparent-arm membership) — that combination is a
 genuinely broken reference on every configuration, so it SHALL still fail loud. A doubly-**nested**
-`#[cfg_attr(a, cfg_attr(b, path = "…"))]` is a stated, undetected bound of this hand-rolled scanner
-(unlike `hunyi`'s `syn`-based recursive resolution of the identical shape), never a silent claim of
-coverage.
+`#[cfg_attr(a, cfg_attr(b, path = "…"))]` SHALL be resolved the same way as a single-level one: the
+scanner locates the `path` value anywhere within the outer attribute's argument span rather than parsing
+nesting structure, so nesting depth does not change whether it is found.
 
 The identical union SHALL apply to a `cfg_attr`-wrapped `#[path]` on an **inline** `mod name { ... }`
 (a body, not a `;`-terminated declaration), where it governs the **base directory** `name`'s own
@@ -458,6 +462,11 @@ existed.
 - **WHEN** a target root declares `#[cfg_attr(unix, path = "unix_dir")] pub mod x { pub mod y; }` with `unix_dir/y.rs` present and holding a declared seam's probe, but the conventional `x/y.rs` absent
 - **THEN** the audit descends `y` from the `cfg_attr` target's directory and counts its probe, rather than reporting a constitution error against the absent conventional `x/y.rs`
 
+#### Scenario: A doubly-nested cfg_attr-wrapped #[path] is followed the same as a single-level one
+
+- **WHEN** a target root declares `#[cfg_attr(unix, cfg_attr(feature = "x", path = "nested.rs"))] pub mod plat;`, `nested.rs` present and holding a declared seam's probe, and the conventional `plat.rs` present but holding none
+- **THEN** the audit reads `nested.rs`'s probe and counts it as coverage, rather than reading the conventional file alone and reporting the seam unprobed
+
 ### Requirement: An un-auditable probe's identity distinguishes distinct offending expressions
 
 An un-auditable-probe fact SHALL identify the offending non-literal seam expression's own source
@@ -472,7 +481,7 @@ trait_ref qualification `semantic-unsafe-confinement` already uses for the ident
 collision. A bare method name alone SHALL NOT be used, since two distinct owners may share one.
 
 Byte-identical expression text within the same file and the same owner-qualified enclosing item
-collapses to one finding — a stated bound, not a silent gap: at that granularity no further source
+collapses to one finding — a stated bound (bound: runtime-origin-assertion/identical-expression-repeated-in-the-same-function-collapses-to-one-finding-a-stated-bound), not a silent gap: at that granularity no further source
 content distinguishes the two occurrences, so they represent the same restated fact (mirroring
 `module-boundary`'s "the same import on multiple lines is one violation" precedent), not two masked
 problems. Neither the enclosing-item qualification nor the expression text SHALL be derived from
@@ -564,10 +573,23 @@ drop one.
 - **WHEN** a single `fn` contains both `assert_boundary!(SEAM_A, obj)` and `assert_boundary!(compute_seam(), obj)`
 - **THEN** `audit_probe_coverage` emits two distinct un-auditable-probe violations, distinguished by their expression text
 
-#### Scenario: Identical expression repeated in the same function collapses to one finding
+#### Scenario: Source outside a member's library or binary target subtree is out of scope — a stated bound
+
+- **WHEN** a probe or a seam mention sits in `tests/`, `examples/`, or `build.rs`
+- **THEN** the audit does not read it, its corpus being the member's library and binary targets — a stated bound shared with the semantic dimension, never a silent claim of coverage
+- **PINNED-BY** `source_outside_lib_or_bin_target_subtree_is_out_of_scope_corpus_bound`
+
+#### Scenario: A production probe behind a non-production cfg is still counted — a stated bound
+
+- **WHEN** a seam's only probe sits behind a `#[cfg(test)]` or another non-production predicate
+- **THEN** the audit counts it as coverage, being cfg-blind, so a seam whose production probe lives there is reported as probed — a stated bound, never a silent pass
+- **PINNED-BY** `production_probe_behind_non_production_cfg_is_counted_as_coverage`
+
+#### Scenario: Identical expression repeated in the same function collapses to one finding — a stated bound
 
 - **WHEN** a single `fn` contains `assert_boundary!(SEAM_A, obj)` written twice, verbatim
 - **THEN** `audit_probe_coverage` emits one un-auditable-probe violation for that site — a stated bound, since no further source content distinguishes the two occurrences
+- **PINNED-BY** `identical_expression_repeated_in_the_same_function_collapses_to_one_violation`
 
 #### Scenario: Two paths differing only in an undecodable byte stay distinct identities
 
@@ -597,10 +619,11 @@ drop one.
   runs, so a baseline recorded in one checkout remains valid in the other, rather than differing
   only in the `file` field's absolute prefix
 
-#### Scenario: An absolute #[path] literal's target outside the anchor keeps its absolute label
+#### Scenario: An absolute #[path] literal's target outside the anchor keeps its absolute label — a stated bound
 
 - **WHEN** a module is reached only through an absolute `#[path = "/…"]` literal whose target does not lie under the scanning checkout's own anchor, and its body contains a non-literal probe
 - **THEN** `audit_probe_coverage` still emits the un-auditable-probe violation, naming the site with the raw absolute path — a stated bound, since the literal has no textual relationship to the anchor
+- **PINNED-BY** `an_absolute_path_literal_outside_the_anchor_keeps_the_path_the_literal_wrote`
 
 ### Requirement: Un-auditable probe identity includes lexical ownership
 
@@ -788,6 +811,12 @@ matching its allowlist entry, which reacts fail-closed, and SHALL NOT be able to
 An observed origin SHALL NOT enter a rule key or any recorded baseline identity, so no accepted
 violation re-keys on a toolchain change.
 
+#### Scenario: A composite shape yields a truncated origin — a stated bound
+
+- **WHEN** a registered type is a composite — a reference, tuple, array, pointer, or function pointer — whose wrapped type is defined in a module the seam allows
+- **THEN** the derived origin is a truncated rendering that equals no module name, so it matches no allowlist entry and in particular never the wrapped type's own defining module; the crossing reacts fail-closed rather than being admitted through the wrapper
+- **PINNED-BY** `the_derived_origin_honors_its_stated_shape_bounds`
+
 #### Scenario: A foreign type's origin is its own defining path
 
 - **WHEN** a type defined in another crate is registered
@@ -846,13 +875,14 @@ instead, which reaches it through the module graph — reading a file follows sy
 applies there. The 天衡 shell passes target root files, so an adopter's `check` is unaffected; the bound
 belongs to the directory input that exists for source compatibility.
 
-#### Scenario: A probe behind a symlinked subdirectory is seen from the root and not from the directory
+#### Scenario: A probe behind a symlinked subdirectory is seen from the root and not from the directory — a stated bound
 
 - **WHEN** a module reached through a `#[path]` into a symlinked directory holds the only probe for a
   declared seam, and the audit is run twice over that package — once with the target root file, once
   with the source directory
 - **THEN** the root-file run reports the seam covered, while the directory run reports it unprobed — the
   stated bound of the legacy corpus, recorded rather than presented as equivalent coverage
+- **PINNED-BY** `a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directory`
 
 ### Requirement: A file reached through an absolute path literal keeps the path the literal wrote
 
@@ -896,3 +926,37 @@ here may drop one.
 - **THEN** the violation's `file` is the path the literal wrote, not a label relative to the anchor —
   the anchor's containment of that target being the coincidence this rule exists to keep out of the
   identity
+
+### Requirement: An audit finding SHALL carry no repair polarity, and that SHALL be stated
+
+An audit finding SHALL carry **no** polarity, and the reason SHALL be recorded rather than left as an absence a
+reader has to interpret. `Polarity` distinguishes a **deny breach** — repair by removing the offending code — from
+an **allowlist gap** — repair by removing the code *or* by widening the declared set. The audit's findings are
+neither: a declared seam with no probe is repaired by probing it or by dropping the declaration, and a probe
+naming an undeclared seam by declaring it or by deleting the probe. Assigning either value would name a repair
+direction that does not exist.
+
+This is the only production emission path in the family that carries none, and the difference is by construction
+elsewhere: 圭表's crate and module rules answer through **exhaustive matches returning `Polarity`**, so a new rule
+variant cannot compile without declaring one, and 渾儀 carries a non-optional `Polarity` on the context every
+finding is emitted through. `Violation::polarity` is therefore an `Option` for exactly this dimension's audit, and
+saying so is what keeps a reader from reading the `Option` as a gap — measured, a review did read it that way.
+
+No reaction is required for the by-construction half: an exhaustive match is a stronger guard than a test, and
+adding one would be a second copy of a fact the compiler already holds.
+
+#### Scenario: A declared seam has no probe
+
+- **WHEN** the audit reports a declared-but-unprobed seam
+- **THEN** the violation carries no polarity, because probing it and dropping the declaration are both repairs
+  and neither is the direction `Polarity` names
+
+#### Scenario: A probe names an undeclared seam
+
+- **WHEN** the audit reports a probe against a seam the constitution does not declare
+- **THEN** the violation carries no polarity, for the same reason in the mirror direction
+
+#### Scenario: A static or semantic rule is added
+
+- **WHEN** a new rule variant is added to a dimension whose findings carry a repair direction
+- **THEN** it does not compile until it declares one, so that half of the contract needs no reaction of its own

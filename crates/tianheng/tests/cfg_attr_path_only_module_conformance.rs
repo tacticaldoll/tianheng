@@ -7,9 +7,8 @@
 //! `cfg_attr(path)` candidate as legitimate grounds for the plain file's own absence. 圭表's own
 //! module-boundary reachability walk (`crates/guibiao/src/module_scan/reachability/walk.rs`) did
 //! not: it hard-errored ("source file could not be located", exit 2) on a declaration that
-//! compiles cleanly under real rustc on every platform — a cross-dimension divergence closed by
-//! PR #164 (`fix(guibiao): tolerate a resolved cfg_attr(path) candidate backing a module with no
-//! plain file`). PR #164's own suite (`crates/guibiao/tests/cfg_attr_path_only_module_absence.rs`)
+//! compiles cleanly under real rustc on every platform — a cross-dimension divergence since closed.
+//! `crates/guibiao/tests/cfg_attr_path_only_module_absence.rs`
 //! already pins 圭表 alone against the audited trigger and its corner cases; nothing had
 //! previously fed the SAME shape to all three dimensions' real public entry points and asserted
 //! they agree — this is that ledger, mirroring `dual_backed_module_conformance.rs`'s practice of
@@ -83,7 +82,7 @@ fn fixture(name: &str, lib_body: &str, files: &[(&str, &str)]) -> TempFixture {
     fixture
 }
 
-/// The audited PR #164 trigger reconstructed verbatim: TWO stacked, jointly-exhaustive
+/// The audited trigger reconstructed verbatim: TWO stacked, jointly-exhaustive
 /// `#[cfg_attr(.., path = ..)]` remaps on one `pub mod imp;`, both targets present on disk, no
 /// plain `imp.rs`/`imp/mod.rs`. All three dimensions must read the violating target and react, not
 /// hard-error on the declaration's own absent conventional file.

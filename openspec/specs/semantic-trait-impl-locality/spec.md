@@ -3,6 +3,12 @@
 ## Purpose
 
 The 渾儀 (semantic) dimension's impl-locality capability: declare in Rust that a trait may be implemented only within an allowed module location **inside the local crate** — "only `crate::commands::*` may `impl Command`". Observed via the AST (`syn`), it governs *impl locality* — the complement of exposure (`semantic-signature-coupling`) and of import (the static dimension). It governs only the crate's own impl sites; it makes no claim about downstream crates (external trait sealing is a rejected, essential-gap non-goal).
+
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Trait-impl-locality boundary declared in Rust
 
@@ -173,10 +179,11 @@ The system SHALL resolve the trait named at an impl site to a canonical path usi
 - **WHEN** a disallowed module declares `use crate::facade::Command;` (where `crate::facade` re-exports `crate::command::Command` via `pub use`) then `impl Command for Foo { … }`
 - **THEN** the system follows the re-export chain, matches the anchor `crate::command::Command`, and emits a violation rather than silently passing
 
-#### Scenario: A macro-generated impl is a documented coverage bound
+#### Scenario: A macro-generated impl is a documented bound
 
 - **WHEN** an `impl Command for Foo` is produced by a macro expansion in a disallowed module
 - **THEN** the system does not claim to observe it (out of scope, the same nature as the existing macro bound), rather than silently asserting the boundary is clean
+- **PINNED-BY** `a_macro_generated_impl_is_a_documented_bound`
 
 #### Scenario: An unconditional #[path]-remapped module is followed and its disallowed impl reacts
 
@@ -198,10 +205,11 @@ The system SHALL resolve the trait named at an impl site to a canonical path usi
 - **WHEN** a disallowed module declares a blanket `impl<T> Trait for T {}` (`T` is the impl's own generic parameter) alongside an unrelated `use SomeType as T;` naming a real crate-defined type, AND a genuine direct `impl Trait for SomeType {}` in that same module
 - **THEN** the system reports TWO distinct violations, not one — the blanket impl's own `T` is never resolved through the same-named alias to produce an owner identical to the direct impl's, which would otherwise let the two impl sites' findings collapse under exact-identity dedup and silently drop one genuine violation
 
-#### Scenario: A cfg-gated module with an absent file is skipped, not a scan error
+#### Scenario: A cfg-gated module with an absent file is skipped, not a scan error — a stated bound
 
 - **WHEN** the crate declares `#[cfg(feature = "x")] mod optional;` with no `optional.rs` (the feature is off)
 - **THEN** the whole-crate walk skips the module (a stated coverage bound) rather than failing the gate with a scan error (exit 2)
+- **PINNED-BY** `hunyi::a_cfg_gated_module_with_no_file_is_skipped_not_errored`
 
 #### Scenario: A resolvable disallowed impl is never silently passed
 
@@ -274,6 +282,8 @@ classified as identity-bearing or presentation-only; rendered impl text SHALL NO
 
 The system SHALL observe a trait `impl` block that is written as a direct statement of the outermost body of a `const` initializer (a bare `{ … }` block expression) or of a `fn`'s own body — the "const-eval trick" idiom (`const _: () = { impl Trait for Type { … } };`, commonly used for a compile-time trait assertion or a doctest/dogfooding scratch impl) and its fn-body-nested sibling (`fn _also() { impl Trait for Type { … } }`) — exactly as if it were written at the enclosing module's own top level. Rust binds a trait `impl` to its self type's coherence set regardless of where the `impl` is lexically written, so wrapping it in a body does not change what it makes real; a walker that stops at a module's own top-level items therefore has a genuine observation gap here, distinct from the correct treatment of a body-nested `mod` (whose contents genuinely are unreachable as `crate::…`, an existing bound this requirement does not disturb). Recovery is bounded to exactly this shape: only an `impl` that is a DIRECT statement of the `const`/`fn`'s own outermost block is recovered — an `impl` nested one level FURTHER inside that body (inside an `if`/`loop`/closure/nested `fn`) is NOT recovered, and a `static` initializer is NOT inspected (the const-eval trick is specifically about `const`, which forces compile-time evaluation even when the binding is never read; no audited idiom uses `static` for it). Both bounds are stated rather than left silent.
 
+An impl nested one level further inside such a body, or wrapped in a `static` initializer, stays a stated bound (bound: semantic-signature-coupling/an-impl-nested-one-level-further-or-static-wrapped-is-a-stated-bound) — declared once by `semantic-signature-coupling`, which states this anchor-and-item property on every single-module-anchored capability's behalf, and referenced here rather than restated.
+
 #### Scenario: A const-wrapped disallowed trait impl reacts
 
 - **WHEN** the boundary allows `impl Command` only under `crate::commands`, and `crate::rogue` declares `pub struct Rogue; const _: () = { impl Command for Rogue { fn run(&self) {} } };`
@@ -283,13 +293,3 @@ The system SHALL observe a trait `impl` block that is written as a direct statem
 
 - **WHEN** the boundary allows `impl Command` only under `crate::commands`, and `crate::rogue` declares `pub struct Rogue2; fn _also() { impl Command for Rogue2 { fn run(&self) {} } }`
 - **THEN** the system emits a violation identifying the offending impl by its location `crate::rogue` and the implemented-for type `Rogue2`, rather than reporting zero findings because the impl sits inside a fn body
-
-#### Scenario: An impl nested one level further inside the body is a stated bound
-
-- **WHEN** a disallowed module declares `fn _also() { if true { impl Command for Foo { fn run(&self) {} } } }`
-- **THEN** the system does not claim to observe it — recovery covers only a direct statement of the const/fn's own outermost block, and this impl is one level further in, a stated coverage bound rather than a silent claim of cleanliness
-
-#### Scenario: A static-wrapped impl is a stated bound
-
-- **WHEN** a disallowed module declares `static S: () = { impl Command for Foo { fn run(&self) {} } };`
-- **THEN** the system does not claim to observe it — only a `const` initializer or a `fn` body is inspected, never a `static` initializer, a stated coverage bound rather than a silent claim of cleanliness

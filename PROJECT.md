@@ -107,9 +107,9 @@ false negative, and only the reaction can foreclose it.
   shadow — imports, dependencies, and inline symbol-path calls (the clock-free
   `must_not_call_inline` confinement). The dependency-light static engine, derived from
   modou: declare crate- and module-import boundaries, observe from `cargo metadata` (read
-  through 星表) and source `use` / symbol scans, compare, react. Pure functional core — no shell. Depends on `xuanji`
-  (the reaction model), `xingbiao` (the metadata substrate), and `serde_json` only; the
-  report/constitution *assembly* (which folds in the static `Coverage`) lives here, not in the model.
+  through 星表) and source `use` / symbol scans, compare, react. Pure functional core — no shell; its dependency
+  allowlist is declared in the law and rendered in [`AGENTS.self-law.md`](AGENTS.self-law.md), not restated
+  here. The report/constitution *assembly* (which folds in the static `Coverage`) lives here, not in the model.
 - **`tianheng` (天衡) — the shell.** The celestial balance that weighs declared against
   observed: the imperative shell + facade — CLI (arg parsing, filesystem, stdout/stderr),
   the `run` reaction that composes every dimension into one, and the re-exported public
@@ -120,7 +120,7 @@ false negative, and only the reaction can foreclose it.
 
 **Functional core ⊥ imperative shell, at crate granularity.** `guibiao` must not depend
 on `tianheng`. This is the crate-level upgrade of modou's module-level `engine ⊥ runner`,
-and Tianheng enforces it on itself (`crates/tianheng/tests/self_governance.rs`) — eating
+and Tianheng enforces it on itself (`crates/shengmo/src/law.rs`) — eating
 its own dog food, now across crate boundaries.
 
 **A dimension is a crate born when built** (drift law at crate granularity), and the user
@@ -151,11 +151,40 @@ selects governance by depending on the dimensions they want:
 **The observatory vocabulary (manifested in governance).** The three observation
 dimensions — 圭表 (static), 渾儀 (semantic), 漏刻 (runtime) — are the **三儀** (the three
 instruments): *what* Tianheng measures; each is a crate born when built, each adds a new
-drift type. The governance & observability layer — 垂象 (the reaction surface), 實錄 (the
-baseline), 校讎 (the amendment flow) — are the **三司** (the three offices): *how* a reaction
-is surfaced, recorded, and amended (see `BACKLOG.md`). 儀 measures, 司 administers — the
-三儀 add what is observed, the 三司 wrap the reaction. Both are crate-or-convention as their
-nature dictates, never named before their reaction exists.
+drift type. Beside them the governance & observability layer names three surfaces by what
+each does: **垂象** surfaces a reaction — `crates/guibiao/src/projection.rs` assembles the
+report and constitution documents, `crates/tianheng/src/runner/render.rs` renders text and
+SARIF, `crates/xuanji` serializes a `Violation`. **實錄** records one — `crates/xuanji/src/baseline.rs`
+holds the model every crate above it folds its verdicts into. **校讎** amends one —
+`.github/CODEOWNERS` routes a change to the law to the steward, `AGENTS.md` owns the OpenSpec
+lifecycle, and `crates/tianheng/src/constitution.rs` names that routing in shipped source.
+儀 measures; each of these three administers (司) rather than measuring.
+
+**None of them is or becomes a crate**, and the reason is boundaries rather than importance.
+三儀 are orthogonal — a dimension must never learn from a sibling — so each needs a boundary
+the self-law can react to, and every dimension's `restrict_dependencies_to` naming no sibling
+**is** that reaction. A governance surface has no boundary to be: each crosses every crate it
+touches, and one lives outside `crates/` altogether. A crate there would enclose nothing, so
+the name would mark nothing — the drift law's own prohibition rather than a stylistic call.
+This says nothing about `xuanji` or `tianheng`, which are crates and are not instruments; it
+says a surface with no boundary earns no crate.
+
+**Two names are crates and are neither 儀 nor 司.** 繩墨 (the inked line) holds the law this repository
+declares over itself and the dogfood gates that run the delivered product's reactions against this workspace;
+勘合 (the split tally) holds the repository checks that fit its record against itself. Both ship in **no** package, which is what
+separates governance from product here, and both are deliberately outside the observatory vocabulary: they
+measure nothing and administer nothing. 勘合 was first drafted as 校讎 — a word already spent above, on the
+amendment flow — and taking a name that already has a referent is the misnaming these crates exist to end.
+
+This paragraph replaced one reading *crate-or-convention as their nature dictates*, which
+answered nothing and was consulted three times. The three answers written for it were all
+withdrawn, each restating a law that was then only half reacted to. None of the three is a
+crate name, and none reaches any published crate's public surface: none appears in the publishable
+crates' `///` and `//!` documentation at all, and the only executed mention is a `//` comment inside
+`tianheng`'s private `render` module. Where they do appear — that comment, `kanhe`'s manifest
+comments, `shengmo`'s source, and this repository's own governance documents and changelog — it
+is commentary about this repository's vocabulary rather than a name an adopter uses. So the
+naming was never a product question.
 
 ## Naming — narrative, with meaning in the SSOT
 
@@ -177,6 +206,45 @@ govern-by-reaction, never a thing the tool wields.
 ## Decisions
 
 Record significant decisions here (the *why*; specs and code carry the *what*).
+
+- **Accepted: 繩墨 and 勘合 are formations of the law, not a relocation of it.** The 0.5.0 window added two
+  crate boundaries to `shengmo::law::constitution()` under a commit body reading *the law itself did not change:
+  the regenerated projection differs by exactly three lines, all of them the preamble's own self-reference*.
+  The projection gained nineteen lines, fourteen of them these two entries, with their own targets, rules and
+  severities. What was recorded as a relocation was a formation, and a formation carries its own acceptance.
+
+  Accepted as declared: **繩墨 may depend on 天衡 and serde_json only; 勘合 on 繩墨, 天衡 and serde_json
+  only.** Both at `enforce`. Both crates ship in no package, so no adopter is reached either way. The cost
+  accepted with them is the ordinary one: a later edge from either to a dimension is an amendment, not a
+  commit.
+
+  The acceptance rests on evidence rather than on the record's word: four perturbations, one command, each
+  perturbed run exiting `101` with the boundary's own `reason` carried into the violation, and the clean run
+  at `0` — reproduced and written out in the `[0.5.0]` CHANGELOG entry. *(Accepted 2026-08-19.)*
+
+- **The amendment requirement is a reaction now, because as prose it never fired.**
+  `.github/CODEOWNERS` says the review requirement *is* the reaction and that a merge cannot relax the law
+  without a human accepting it — then says designation alone only auto-requests review. Measured, `main`'s
+  protection answers `require_code_owner_reviews: false` and `required_approving_review_count: 0`; and
+  enabling it would not close this, since GitHub does not let a pull request's author approve their own, so
+  for a single-steward repository the rule cannot fire at all. That is a prose prescription with no backstop
+  standing on the law itself, which is the shape this project's reason rule refuses everywhere else.
+
+  Every boundary the law declares — its heading, reason, rule and severity — is declared in
+  `crates/kanhe/tests/self_law_amendment.rs` and held against the projection in both directions. A boundary
+  added or removed, an allowlist widened, a severity lowered from `enforce` to `warn`, or a reason rewritten
+  all move it. Measured before building it: with 璇璣's allowlist quietly widened to permit 圭表 and the
+  projection re-blessed, all nine existing self-governance assertions pass and only this one fails.
+
+  **What it establishes is naming, not acceptance, and the difference is recorded rather than blurred.** It
+  forces a structural change to the law to produce a *second explicit artifact*, in a file CODEOWNERS routes
+  to the steward, so a delta cannot arrive inside a regenerated projection unremarked. One actor can still
+  change the law, re-bless the projection and edit the declaration in a single commit, and everything passes:
+  that shows the amendment was named, not that anyone accepted it. Acceptance rests on a steward decision,
+  and a single-steward repository has no mechanical second party to carry it — a pull request's author cannot
+  approve their own. That is a **judgement boundary**, recorded here as one; renaming a same-author constant
+  edit as acceptance would be the overclaim this project's own reason rule refuses.
+  *(Decided 2026-08-19; the naming/acceptance distinction stated 2026-08-19 after review.)*
 
 - **Reborn from modou as a crate family.** modou was taken as frozen/complete at its own
   `0.1.1` when Tianheng was reborn; Tianheng started fresh (clean git history, clean SemVer
@@ -226,7 +294,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   One macro is carved out of that stripping in **all three** dimensions: `cfg_if!`, whose
   arms wrap human-authored items without transforming their identities, so its contents
   are real code (圭表 0.2.3, 渾儀 and 漏刻 0.4.0 — each hand-written, 三儀 ⊥ 三儀, with
-  `cfg_if_transparency_conformance.rs` as the drift reaction). Gating that carve-out on the
+  `cfg_if_transparency_conformance.rs` as the drift check). Gating that carve-out on the
   macro **name** is soundness, not caution: an arbitrary macro's nested blocks are not arms,
   and reading them as such invents items the macro may never emit.
   Adopting a real parser (`syn`) would resolve all of this for free but would break the
@@ -247,4 +315,98 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
 - **Unsafe-site identity is structurally decomposed, not compressed into one label.** 渾儀's unsafe-confinement fact carries owner, owner kind, trait, and name as separate structured fields across nine site shapes (free fn, inherent/trait/trait-impl method, inherent/trait impl, trait, extern block, block), so two distinct sites sharing a name never collapse under one baseline entry.
 - **Async identity is the seam, not the rendered signature.** An async-exposure fact's identity is its module, owner kind, canonical owner, and item name; the full parameter/return signature is human diagnostic presentation only and never enters identity — a signature-only change preserves the baseline, while a different owner or name is a new fact.
 - **Rule construction is builder-owned; inspection stays open-ended.** Data-carrying `Rule`/`ModuleRule` variants are `#[non_exhaustive]`.
+- **Repository-check diagnostics are behavior-tested, not constructor-governed.** Kanhe keeps one pure typed
+  result separating a disagreement from an input it cannot judge, and focused matrices assert the kind and
+  actionable message at operator-facing boundaries. Constructor locations are implementation detail: they do
+  not carry runtime mutation, reach recording, exemptions, or product-visible observation bounds.
+- **Repository observation-bound catalogs stay with their unpublished check owner.** Kanhe returns bounds
+  for its record and coherence checks, Shengmo returns bounds for its self-law dogfood, and the repository model
+  composes both with the product dimensions. Tianheng exposes no repository catalog: the shell composes product
+  observers rather than claiming unpublished governance as product capability.
+- **Governance is driven by an audit cycle against an enumerated surface, not by invented hypotheses.**
+  A sweep that invents its own scope cannot be dry, only tired: it reports the shapes someone happened to
+  think of, and "the audit was thorough" is then unfalsifiable. So the standing direction is to enumerate a
+  claim surface, check it, and audit against that enumeration. `observation-bound-register` is the
+  first instance and the proof of the shape — assembling it retired two bounds that had outlived their
+  behaviour and added six tests for bounds nothing defended, after twenty pull requests, ten review rounds
+  and a three-slice hypothesis-driven sweep had missed all eight. The same three-part test applies to any
+  future instance: the surface must be enumerable, the enumeration must be **generated and
+  staleness-checked** rather than hand-maintained, and the projection must state what it does not claim.
+  A register that implied completeness would mislead exactly where it is most trusted. `observation-bound-model`
+  is the second instance: it enumerates the same surface the register does and checks what each bound's
+  stop actually *is*, which the register never governed — a slot that had accumulated many phrasings, one of
+  them used by two capabilities for bounds on opposite sides of the false-negative line. `gate-shape-contract`
+  was the third, and the first to turn the cycle on **this repository's own check surface** rather than on the
+  specs: the `check_*` gates and their twins, enumerated from tracked content, with the properties that cannot be
+  mechanically checked declared as bounds. It supplied the cycle's sharpest evidence that a
+  hand-written table is not an enumeration — the backlog entry proposing it described the surface as uniform, and
+  applying it found two properties that were not, one of which no twin held at all once the assertion was
+  actually observed rather than counted. **It was retired in the same window**, once the shell
+  gates it enumerated were deleted and its subject no longer existed; `repository-checks` holds what replaced
+  them. The lesson is what the cycle keeps — the capability was the instrument, not the finding.
+  `projection-register` is the fourth and turns the cycle on the
+  repository's own **generated documents**: the set of them was prose in `AGENTS.md`, so the mechanism whose whole
+  purpose is to stop documents drifting was described by a document that drifted. Its lesson is narrower and
+  sharper than the others' — when a check's subject is *text*, the check's own text is part of the corpus,
+  and it hit that three times in one apply (its specification quoting the marker it requires, its own source
+  naming the signature it excludes, and its projection having to be blessed twice to include itself). The fix each
+  time was to recognize by position or shape and never by the bare string. Larger surfaces are
+  named but not committed to — the requirement and scenario surface across every capability is a
+  multi-window program, and promoting one is a `BACKLOG.md` decision with its own trigger, never an
+  assumption inherited from this first success. Its size is deliberately **not** written here. This decision
+  once named two such figures, and by 2026-08-05 both had drifted by dozens — measured, not noticed — so a
+  promotion estimate read off them would have been drawn from a surface that had already moved. That is
+  stated in the past tense on purpose: a count is only ever true of the moment it was taken, so it belongs
+  to the measurement made when a surface is promoted, beside the check that will keep it honest, never to
+  prose. Writing one here would be the claim class this very decision exists to end.
+- **An observation participant declares its limits by construction.** `xuanji::Observer` has two methods and
+  no default body on either, so a participant cannot be composed into a run without declaring what it does not
+  observe — the family's central promise becomes a property of the type rather than a convention it keeps about
+  itself. Adding a stage is a breaking change on purpose: that is the enforcement working. The fold is a
+  **fan-out with a cannot-judge short-circuit, never a pipe** — 三儀 ⊥ 三儀 forbids one dimension consuming
+  another's output, so the shell composes and the dimensions do not — and it is **eager**, which is why no trait
+  object exists anywhere: the heterogeneous set never forms. Assembly order is part of the contract, because it
+  decides which cannot-judge is reported.
+- **A published vocabulary value is admissible only if a third party owns one.** The question to ask of any
+  enum reaching the public surface is whether an outsider occupies one of its values or must borrow one of this
+  family's. `Owner` (`Engine` / `Inherited` / `Adopter`) names **roles**, so a third party's own engine is its
+  `Engine`; `BoundaryKind` (`Crate` / `Module` / `Semantic` / `Runtime`) names **三儀's own dimensions**, so an
+  outside `Observer` must label its findings with a dimension that did not produce them. Identity-bound versus
+  role-relative is the discriminator, and it is applied before publication because that is the only moment the
+  answer is free: a shipped variant cannot be unshipped, and an adopter who has already labelled findings has
+  already been made to lie. It is not a general preference for abstraction — `BoundaryKind`'s four names are
+  right for the dimensions they name, and the gap is that nothing else can be said.
 - **The composed adopter surface is compile-reacted.** `tianheng::prelude::*` is the entrypoint. `check_constitution(&Constitution, &Path) -> Outcome` unifies CLI and library testing evaluation.
+- **OpenSpec is adopted in both halves, and the requirement has one home.** OpenSpec offers `specs/` as the
+  per-capability requirement truth and `changes/` as a working lifecycle — a change directory carrying
+  `proposal.md` / `design.md` / `tasks.md` and a delta spec. This project uses both, for different questions:
+  a requirement is read from its spec and from nowhere else, and a change directory plans one open change
+  while it is open. It is written and committed on the development branch and **stripped before the squash**,
+  so `main` and every `release/*` track nothing under `openspec/changes/` but `archive/.gitkeep`. What is
+  transient is the plan, not the requirement.
+
+  *(Recorded 2026-08 as `specs` mode only, and corrected 2026-08-21 after the record was measured against the
+  tree rather than against itself. The retired claim was that **zero change directories have ever existed** —
+  false in the plainest sense: `git log --all` reaches dozens of them, two commits on 2026-08-21 added one
+  each, and both say in their own bodies that the work was proposed
+  and synced through one. Four repository checks handle the directory's live content, and one of those
+  exclusions is stated as a requirement with a scenario in `openspec/specs/reference-integrity/spec.md` — so a
+  capability spec and this decision had been contradicting each other for the whole window. The claim was true
+  of the release spine, which is the corpus it never named. Its predecessor's diagnosis stands and is why this
+  correction is worth its length: a routing document describing a mode the project does not run in cost an
+  agent three misplanned attempts in one session, and the same document was then rewritten in the opposite
+  direction, which would cost the next one the same way.)*
+
+  **What would change it:** a change large enough that the plan itself becomes a second place people read
+  requirements from — at which point step 5's strip is what has failed, not the two-half adoption. Nothing
+  enforces any of this, deliberately: a reaction refusing a change directory would forbid the lifecycle, and
+  one requiring it would forbid the small change that needs no plan.
+- **繩墨 and 勘合 are two crates because they answer to different subjects, and the dependency law states only
+  what it can observe.** 繩墨 holds the law 天衡 declares over itself and the dogfood gates running the
+  delivered product's reactions against this workspace; 勘合 holds this repository's record against itself and
+  reaches no product contract. Keeping them apart is what stops a claim about the law being read as a claim
+  about document hygiene, and it is why 繩墨 is an adopter of the shell rather than a member of the family it
+  governs — exercising exactly the surface an adopter has. **None of that is observable by a dependency
+  rule**, so it lives here: the two `restrict_dependencies_to` boundaries state only their allowlists and the
+  dimension edges those forbid, which is their whole observable perimeter. The roles are the reason the
+  boundaries were formed; the boundaries react to the edges.

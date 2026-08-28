@@ -172,20 +172,7 @@ pub(crate) fn inline_symbol_findings(
             if !path_within(&resolved, &prefix) {
                 continue;
             }
-            let react = if strict {
-                true // strict: any path under the prefix, call or not
-            } else if !occurrence.is_call {
-                false // default: only calls (a mention / value capture passes — a stated bound)
-            } else if let Some(verbs) = &verbs {
-                // narrowed: the terminal segment must be a declared read verb (leaf-exact)
-                resolved
-                    .rsplit("::")
-                    .next()
-                    .is_some_and(|leaf| verbs.iter().any(|v| v == leaf))
-            } else {
-                true // default call, no narrowing: every call under the prefix
-            };
-            if react {
+            if should_react_on_occurrence(strict, occurrence.is_call, verbs.as_deref(), &resolved) {
                 findings.push(InlineFinding {
                     fact: ModuleFact::InlinePath {
                         path: resolved,
@@ -540,7 +527,7 @@ fn expand_use_leaves(tree: &str) -> Result<Vec<(String, String)>, String> {
                 let (path, alias) = match tree.split_once(" as ") {
                     Some((p, a)) => (p.trim().to_string(), a.trim().to_string()),
                     None => {
-                        let leaf = tree.rsplit("::").next().unwrap_or(tree).trim();
+                        let leaf = tree.rsplit_once("::").map_or(tree, |(_, leaf)| leaf).trim();
                         (tree.to_string(), leaf.to_string())
                     }
                 };
@@ -1203,5 +1190,43 @@ fn resolve_target(
         "std" | "core" | "alloc" | "crate" => Some(parts.join("::")),
         "self" | "super" => resolve_written_path(raw, module, root_modules),
         _ => Some(format!("{module}::{}", parts.join("::"))),
+    }
+}
+
+/// Decision helper for whether an occurrence (call or path mention) triggers a boundary reaction.
+///
+/// The three narrowing dials `inline-symbol-path-confinement` declares, in the order they decide:
+/// `strict` widens past calls, `.ending_with([…])` narrows to declared read verbs, and the default
+/// sits between them. Each branch's own reason is stated at the branch — a reader deciding whether a
+/// shape should react must not have to reconstruct the policy from four bare booleans, and one of the
+/// four is a declared observation bound rather than an implementation choice.
+fn should_react_on_occurrence(
+    strict: bool,
+    is_call: bool,
+    verbs: Option<&[String]>,
+    resolved: &str,
+) -> bool {
+    if strict {
+        // strict: any path under the prefix, call or not
+        true
+    } else if !is_call {
+        // default: only calls — a mention passes. Declared policy rather than an omission:
+        // `inline-symbol-path-confinement`'s "Call-vs-mention default" requirement states it (a type
+        // annotation and a constant each have their own passing scenario), and the value-capture
+        // corner of it is a registered observation bound
+        // (bound: inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default),
+        // pinned by `inline_value_capture_is_a_bound_under_the_default`. `.strict_prefix_only()` is
+        // what an adopter reaches for to close it, which is the `strict` arm above.
+        false
+    } else if let Some(verbs) = verbs {
+        // narrowed: the terminal segment must be a declared read verb (leaf-exact, never a prefix
+        // or substring match — `now_ish` is not `now`)
+        let leaf = resolved
+            .rsplit_once("::")
+            .map_or(resolved, |(_, leaf)| leaf);
+        verbs.iter().any(|v| v == leaf)
+    } else {
+        // default call, no narrowing: every call under the prefix
+        true
     }
 }

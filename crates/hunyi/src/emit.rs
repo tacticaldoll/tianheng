@@ -68,7 +68,7 @@ fn push_violation(
 /// Each finding carries the real file its own item's branch was resolved from (see
 /// [`crate::module_resolve::resolve_module_items_with_files`]) — never a single, first-branch file
 /// for the whole module, which would misattribute a finding produced by a non-first `#[cfg]`-split
-/// branch (a real defect found on a round-5 adversarial review; see `PROJECT.md`'s Decisions).
+/// branch.
 /// Every capability supplies `(target, rule key, structured fact)` identity; presentation, file,
 /// anchor, and polarity remain metadata.
 pub(crate) fn push_single_module_violations(
@@ -121,9 +121,9 @@ pub(crate) struct MultiModuleViolationContext<'a> {
 /// AND the real file that module's own branch was resolved from, collected directly at the site
 /// (`ImplSite`/`TypeDef`/`UnsafeSite`, or the subtree walker's own per-branch file) rather than
 /// re-resolved afterward by module string — a re-resolution keyed only by the module string
-/// misattributes a finding whenever two `#[cfg]`-split branches share one module path (the same
-/// finding as [`push_single_module_violations`]'s doc, found one hop further downstream on a
-/// round-5 adversarial review; see `PROJECT.md`'s Decisions). The violation `target` stays the
+/// misattributes a finding whenever two `#[cfg]`-split branches share one module path — the same
+/// shape [`push_single_module_violations`]'s doc names, one hop further downstream. The violation
+/// `target` stays the
 /// boundary's anchor, so a finding's structured identity is stable.
 pub(crate) fn push_multi_module_violations(
     violations: &mut Vec<Violation>,

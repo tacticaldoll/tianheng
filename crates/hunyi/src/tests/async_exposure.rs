@@ -525,8 +525,8 @@ pub(super) fn async_subtree_errors_on_a_non_cfg_missing_submodule() {
 /// A cfg_attr(path)-hidden submodule is observed, whichever candidate file exists — the identical
 /// `resolve_child_modules`/`walk_subtree_modules` mechanism fixed by
 /// `hunyi-cfg-attr-path-module-loss` for `scan_crate`'s own consumers. Not named in that change's
-/// own commit message (a documentation gap a round-3 adversarial review found and closed) but the
-/// same shared walker, independently reproduced here before being counted as fixed.
+/// own commit message, but the same shared walker — independently reproduced here before being
+/// counted as fixed.
 #[test]
 pub(super) fn async_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule() {
     let files = &[
@@ -690,7 +690,7 @@ pub(super) fn dyn_in_const_static_trait_method_assoc_default_and_where_react() {
 #[test]
 pub(super) fn dyn_in_an_inherent_impl_public_assoc_const_reacts() {
     // The dyn collector's inherent-impl arm now observes public associated `const`/`type`
-    // positions (parity with the signature-coupling collector, which gained them this release), so a
+    // positions (parity with the signature-coupling collector, which gained them in 0.4.0), so a
     // `dyn` written in an inherent-impl `pub const` type reacts — it did not before.
     assert_eq!(
         dyn_mod(

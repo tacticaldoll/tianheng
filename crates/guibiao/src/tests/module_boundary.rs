@@ -684,8 +684,8 @@ pub(super) fn a_boundary_anchored_directly_at_a_cfg_gated_missing_module_is_unkn
 /// A mutually-exclusive `#[cfg]` shim pairing an inline arm with a plain-file arm whose file is
 /// tolerated-away-missing must still report the SELF-DESCRIBING `inline_module_target_error`
 /// ("declared inline... move it into its own file"), not the generic `unknown_module_error`
-/// ("check the path", which wrongly implies a typo). Found on this session's own round-2
-/// adversarial review: the bare-`#[cfg]` tolerance above made it newly possible for a plain
+/// ("check the path", which wrongly implies a typo). The bare-`#[cfg]` tolerance above makes it
+/// possible for a plain
 /// declaration to be *declared* yet resolve to nothing, and `inline_only`'s gating on mere
 /// declaration presence (rather than actual resolution) then wrongly excluded this module from
 /// `inline_only`, misreporting which error applies.

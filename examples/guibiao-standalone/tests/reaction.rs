@@ -34,7 +34,7 @@ fn the_import_violation_reacts_with_exit_1() {
 /// 圭表 also governs the *feature* surface of a declared dependency, not just its name. This
 /// dogfoods `forbid_feature` end-to-end through the published `check` surface, on the crate's real
 /// declared edge: the adopter's law pins `guibiao` to `default-features = false` (keep the footprint
-/// minimal), but `Cargo.toml` declares `guibiao = "0.4"` with defaults on, so the declared `default`
+/// minimal), but `Cargo.toml` leaves defaults on, so the declared `default`
 /// feature trips the enforce boundary. Kept as its own constitution so the example's core teaching
 /// (the one module boundary above) stays a single, clean message.
 #[test]
@@ -63,6 +63,42 @@ fn a_forbidden_dependency_feature_reacts() {
         Outcome::Violations(report).exit_code(),
         1,
         "declaring guibiao with default features on trips the forbid-feature boundary",
+    );
+}
+
+/// The footprint boundary in `governance()` is the one that **holds**, and a boundary that holds needs
+/// different evidence from one that reacts: its silence today proves nothing on its own, because a
+/// boundary reading the wrong thing is equally silent.
+///
+/// So the same rule shape is pointed at the same real manifest with an allowlist that excludes the
+/// dependency the manifest declares. It must name `guibiao` and exit 1 — which is what establishes that
+/// the passing declaration is passing because the footprint is what it says, not because nothing is
+/// being read. The declared crate allowlist is the shape this project governs *itself* with, and until
+/// now no example carried it: an adopter running the dogfood met every other rule and not this one.
+#[test]
+fn the_footprint_allowlist_reads_the_real_declared_edge() {
+    let narrowed = Constitution::new("hexagonal_demo").boundary(
+        CrateBoundary::crate_("hexagonal_demo")
+            .restrict_dependencies_to([] as [&str; 0])
+            .because("nothing is allowed, so the one real dependency must be reported"),
+    );
+    let report = report_of(check(&narrowed, &manifest()));
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|violation| violation.finding == "guibiao"),
+        "the allowlist must name the dependency the manifest actually declares, got {:?}",
+        report
+            .violations
+            .iter()
+            .map(|violation| &violation.finding)
+            .collect::<Vec<_>>(),
+    );
+    assert_eq!(
+        Outcome::Violations(report).exit_code(),
+        1,
+        "a dependency outside the allowlist gates",
     );
 }
 

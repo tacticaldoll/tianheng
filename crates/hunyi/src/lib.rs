@@ -7,12 +7,12 @@
 //!
 //! Declare a [`SignatureBoundary`] in Rust, [`check`] it against a Cargo workspace, and get
 //! an [`Outcome`]. The heavy `syn` parser is quarantined to this crate, keeping the functional
-//! core dependency-light (`self_governance.rs`).
+//! core dependency-light (`crates/shengmo/src/law.rs`).
 //!
 //! Govern by reaction, not instruction.
 //!
 //! **Layout.** Each semantic capability is a self-contained reaction module
-//! (`check_<cap>` → `check_<cap>_boundary` → `<cap>_findings`); [`check_all`] composes the eight
+//! (`check_<cap>` → `check_<cap>_boundary` → `<cap>_findings`); [`check_all`] composes them all
 //! with a single `cargo metadata` read. The shared reaction spine lives in the `driver` module
 //! and the canonical rule labels in `rules`, below every capability so none depends on another.
 
@@ -26,9 +26,16 @@ use serde_json::Value;
 // The reaction model is the shared 璇璣 crate, re-exported so a consumer can stay on
 // hunyi's surface; these names are also used internally below.
 pub use xuanji::{
-    Baseline, BoundaryKind, Finding, Outcome, Polarity, Report, RuleKey, ScanDepth, Severity,
-    StructuredFactIdentity, Violation, ViolationId, apply_baseline,
+    Baseline, BoundDecl, BoundId, BoundaryKind, Defence, Demonstrates, Extent, FactGranularity,
+    Finding, Observer, Outcome, Owner, Polarity, Reached, Report, RuleKey, ScanDepth, Severity,
+    StructuredFactIdentity, Subject, Violation, ViolationId, apply_baseline,
 };
+
+mod bounds;
+pub use bounds::observation_bounds;
+
+mod observer;
+pub use observer::SemanticObserver;
 
 mod dsl;
 pub use dsl::*;
@@ -56,7 +63,7 @@ mod scan;
 mod shape_scan;
 mod syn_util;
 
-// The eight semantic capabilities, each a self-contained reaction (check → check_boundary →
+// The semantic capabilities, each a self-contained reaction (check → check_boundary →
 // findings). Their public `check_*` entries and crate-internal `*_findings` hearts are
 // re-exported at the crate root so both the shell and the tests keep their existing paths.
 mod async_exposure;
@@ -112,7 +119,7 @@ use crate::visibility::check_visibility_boundary;
 
 /// The 渾儀 (semantic) dimension's boundaries, gathered so the shell takes the dimension as
 /// one unit rather than one parameter per capability. Each field is one capability's
-/// boundaries; [`check_all`] evaluates them all with a single `cargo metadata` read.
+/// boundaries; [`check_all`] evaluates every non-empty bundle with a single `cargo metadata` read.
 #[derive(Debug, Clone, Default)]
 pub struct SemanticBoundaries {
     /// Exposure boundaries (`semantic-signature-coupling`).
@@ -135,12 +142,13 @@ pub struct SemanticBoundaries {
 
 /// One capability's boundaries, its `crate_package` accessor, and its `check_*_boundary`
 /// reaction, behind one dyn-safe surface — so [`SemanticBoundaries::is_empty`],
-/// [`SemanticBoundaries::crate_packages`], and [`eval_all`] each enumerate the eight capabilities
-/// via one loop over [`SemanticBoundaries::capability_sets`] rather than independently
-/// hand-enumerating all eight (the drift risk a ninth capability's addition would otherwise
-/// carry: three lists to remember, not one).
+/// [`SemanticBoundaries::crate_packages`], and [`eval_all`] each enumerate the capabilities via one
+/// loop over [`SemanticBoundaries::capability_sets`] rather than independently hand-enumerating them
+/// (the drift risk a further capability's addition would otherwise carry: three lists to remember,
+/// not one).
 trait CapabilitySet<'a> {
     fn is_empty(&self) -> bool;
+    fn len(&self) -> usize;
     fn crate_packages(&self) -> Vec<&'a str>;
     fn eval(&self, metadata: &Value, violations: &mut Vec<Violation>) -> Result<(), String>;
 }
@@ -168,13 +176,17 @@ impl<'a, B> CapabilitySet<'a> for Capability<'a, B> {
             .collect()
     }
 
+    fn len(&self) -> usize {
+        self.boundaries.len()
+    }
+
     fn eval(&self, metadata: &Value, violations: &mut Vec<Violation>) -> Result<(), String> {
         eval_into(metadata, self.boundaries, self.check, violations)
     }
 }
 
 impl SemanticBoundaries {
-    /// The eight declared capabilities as one dyn-safe list, in the fixed evaluation order
+    /// Every declared capability as one dyn-safe list, in the fixed evaluation order
     /// [`eval_all`] shares. The single enumeration point [`is_empty`](Self::is_empty),
     /// [`crate_packages`](Self::crate_packages), and [`eval_all`] each loop over.
     fn capability_sets(&self) -> Vec<Box<dyn CapabilitySet<'_> + '_>> {
@@ -227,6 +239,15 @@ impl SemanticBoundaries {
         self.capability_sets().iter().all(|set| set.is_empty())
     }
 
+    /// How many semantic boundaries are declared, across all capabilities.
+    ///
+    /// Through `capability_sets` like its neighbours, so a capability added later is counted by the same
+    /// enumeration that decides emptiness — two ways of counting one set is the drift this list exists to
+    /// prevent.
+    pub fn declared(&self) -> usize {
+        self.capability_sets().iter().map(|set| set.len()).sum()
+    }
+
     /// The target crate package of every declared semantic boundary, across all capabilities.
     ///
     /// Centralizes crate-target enumeration for composed consumers such as workspace coverage, so
@@ -240,12 +261,12 @@ impl SemanticBoundaries {
     }
 }
 
-// --- Composition: evaluate every capability with a single metadata read ------
+// --- Composition: evaluate every declared capability with a single metadata read ------
 
 /// Evaluate every declared semantic capability against `metadata` into the one accumulator, in a
 /// fixed order (shared with [`SemanticBoundaries::capability_sets`]); the first constitution error
 /// short-circuits. Split out so [`check_all`] keeps the single-read + exit-2-supersedes contract
-/// with plain `?`, not eight repeated error blocks.
+/// with plain `?`, not one repeated error block per capability.
 fn eval_all(
     metadata: &Value,
     boundaries: &SemanticBoundaries,
@@ -259,16 +280,35 @@ fn eval_all(
 
 /// Evaluate every declared semantic boundary against the workspace with a **single**
 /// `cargo metadata` read, merging all findings into one outcome. A constitution error on any
-/// boundary supersedes (exit 2). The per-capability `check`/`check_trait_impl_locality`/
-/// `check_visibility` entries remain for direct use; the shell composes via this.
+/// boundary supersedes (exit 2). An empty bundle returns [`Outcome::Clean`] before metadata is
+/// read. The per-capability `check`/`check_trait_impl_locality`/`check_visibility` entries remain
+/// for direct use; the shell and [`SemanticObserver`] compose via this.
+///
+/// `Clean` for an empty bundle is not the vacuous pass a composed run of **no** observer would be. Here a
+/// participant was composed and declares nothing for this dimension, which a static-only adoption does
+/// deliberately, so there is nothing to observe; refusing would make that adoption's every run exit 2.
+/// `observer-protocol` states the asymmetry and why unifying it fails in both directions.
 pub fn check_all(boundaries: &SemanticBoundaries, manifest_path: &Path) -> Outcome {
+    if boundaries.is_empty() {
+        // Declared nothing, reached nothing — and the subject says so, which is the whole reason the
+        // invariant is relational. A non-zero count would refuse this shape, and this shape is a
+        // static-only adoption: refusing it would make that adoption's every run exit 2.
+        //
+        // Still returned **before** the manifest is read: the subject is constructed from what this
+        // function already knows, not from an observation added to satisfy it.
+        return Outcome::Clean(Subject::nothing_declared());
+    }
     let metadata = match read_metadata(manifest_path) {
         Ok(metadata) => metadata,
         Err(outcome) => return outcome,
     };
     let mut violations = Vec::new();
     match eval_all(&metadata, boundaries, &mut violations) {
-        Ok(()) => outcome_from(violations),
+        Ok(()) => outcome_from(
+            violations,
+            boundaries.declared(),
+            xingbiao::member_root_files(&metadata).len(),
+        ),
         Err(error) => Outcome::ConstitutionError(error),
     }
 }

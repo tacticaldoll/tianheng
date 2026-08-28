@@ -455,10 +455,15 @@ fn rewriting_an_existing_baseline_leaves_no_stray_temp_file() {
         "the atomic-rename write must land the document whole, not truncated: {rewritten_doc:?}"
     );
 
+    // This direction asserts an **absence**, so a dropped entry is a leftover it did not see. The entries it
+    // counts are the evidence; failing to read one is not the same as there being none.
     let sibling_temp_files: Vec<_> = std::fs::read_dir(path.parent().unwrap())
         .expect("read baseline's parent dir")
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.file_name())
+        .map(|entry| {
+            entry
+                .expect("a readable entry beside the baseline")
+                .file_name()
+        })
         .filter(|name| {
             name.to_string_lossy()
                 .starts_with(path.file_name().unwrap().to_string_lossy().as_ref())
@@ -491,7 +496,7 @@ fn a_directory_that_cannot_be_flushed_does_not_fail_a_landed_write() {
     };
     let dir = std::env::temp_dir().join(format!("tianheng-unflushable-dir-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create the test directory");
+    xingbiao::claim_scratch(&dir).expect("create the test directory");
 
     // Restore a readable mode before any assertion can unwind, so a failure cannot leave an
     // unreadable directory behind in the temp dir.
@@ -804,7 +809,7 @@ fn rewriting_through_a_symlink_into_a_non_utf8_named_directory_still_succeeds() 
     dir_name.push(0xFF);
     let weird_dir = PathBuf::from(OsString::from_vec(dir_name));
     let _ = std::fs::remove_dir_all(&weird_dir);
-    std::fs::create_dir(&weird_dir).expect("create the non-UTF-8-named directory");
+    xingbiao::claim_scratch(&weird_dir).expect("create the non-UTF-8-named directory");
 
     let real_target = weird_dir.join("baseline.json");
     std::fs::write(&real_target, &valid_baseline_content).expect("seed the real target");
@@ -952,4 +957,103 @@ fn disallow_stale_equals_form_is_unrecognized_argument_usage_error() {
     );
 
     let _ = std::fs::remove_file(path);
+}
+
+/// Every flag `list` rejects, with the value each needs to reach the rejection at all.
+///
+/// Derived from the runner's own check rather than restated: the requirement stopped enumerating this set in prose
+/// because that enumeration had already gone stale — it named four while the runner rejected five.
+const CHECK_ONLY_FLAGS: [(&str, Option<&str>); 5] = [
+    ("--manifest-path", Some("Cargo.toml")),
+    ("--baseline", Some("baseline.json")),
+    ("--write-baseline", Some("baseline.json")),
+    ("--warn-uncovered", None),
+    ("--disallow-stale", None),
+];
+
+fn list_with(flags: &[(&str, Option<&str>)]) -> Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_tianheng"));
+    command.arg("list");
+    for (flag, value) in flags {
+        command.arg(flag);
+        if let Some(value) = value {
+            command.arg(value);
+        }
+    }
+    command.output().expect("run tianheng CLI")
+}
+
+#[test]
+fn list_names_every_check_only_flag_it_rejects() {
+    // Each driven individually. One case asserting "some flag is named" would pass while four of the five went
+    // unnamed, which is the state this test was written against: the refusal was a single sentence naming none.
+    for (flag, value) in CHECK_ONLY_FLAGS {
+        let output = list_with(&[(flag, value)]);
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "`list {flag}` must be a usage error, got: {text}"
+        );
+        let diagnostic = text
+            .lines()
+            .find(|line| line.starts_with("error:"))
+            .unwrap_or_else(|| panic!("`list {flag}` printed no error line: {text}"));
+        assert!(
+            diagnostic.contains(flag),
+            "`list {flag}` must name the flag supplied; the usage banner lists every flag by construction, so \
+             only the diagnostic line counts. Got: {diagnostic}"
+        );
+    }
+}
+
+#[test]
+fn list_names_all_of_several_check_only_flags() {
+    // Reporting the first would send a reader back for a second round.
+    let output = list_with(&[
+        ("--manifest-path", Some("Cargo.toml")),
+        ("--warn-uncovered", None),
+    ]);
+    let text = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "must be a usage error: {text}"
+    );
+    let diagnostic = text
+        .lines()
+        .find(|line| line.starts_with("error:"))
+        .unwrap_or_else(|| panic!("no error line: {text}"));
+    for flag in ["--manifest-path", "--warn-uncovered"] {
+        assert!(
+            diagnostic.contains(flag),
+            "every supplied flag must be named, {flag} was not: {diagnostic}"
+        );
+    }
+}
+
+#[test]
+fn a_list_format_value_refusal_stays_distinguishable_from_an_inapplicable_flag() {
+    // `--format` IS applicable to `list`; `sarif` is not a `list` format. Sweeping this into the inapplicable-flag
+    // message would tell a reader that the flag they got right is the problem — and that misreading is exactly what
+    // an earlier probe of this surface produced, by dragging `--manifest-path` along and tripping the other guard.
+    let output = list_with(&[("--format", Some("sarif"))]);
+    let text = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "must be a usage error: {text}"
+    );
+    let diagnostic = text
+        .lines()
+        .find(|line| line.starts_with("error:"))
+        .unwrap_or_else(|| panic!("no error line: {text}"));
+    assert!(
+        diagnostic.contains("sarif") && !diagnostic.contains("check-only"),
+        "a rejected --format VALUE must be reported as a value, not as an inapplicable flag: {diagnostic}"
+    );
 }

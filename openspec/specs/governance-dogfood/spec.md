@@ -4,31 +4,63 @@
 
 Keep Tianheng's published boundary families exercised through genuine self-governance and
 adopter-shaped examples without turning tutorials into exhaustive fixtures or inventing fake law.
+
+## Subject
+
+- `crates/shengmo/**/*.rs`
+- `examples/**/*.rs`
+- `examples/**/Cargo.toml`
+
 ## Requirements
 ### Requirement: Public boundary families have adopter-shaped reaction coverage
 
-The repository SHALL maintain an executable, reviewable inventory mapping the published 0.2.x
-`Constitution` boundary-family set to at least one repository-owned self-governance or isolated
-example reaction. That set is: static crate and module boundaries; signature, trait-impl,
-visibility, forbidden-marker, dyn-trait, impl-trait, async-exposure, and unsafe semantic
-boundaries; the `sans_io_pure` and `no_existential_leak` composed profiles; and runtime boundaries.
-A family SHALL count as fulfilled only after its owner executes the real evaluator against source
-or Cargo metadata and observes its declared structured reaction; construction, projection, an exit
-code that another family could cause, or a free-standing coverage claim SHALL NOT count. The
-dogfood gate SHALL fail when any inventoried family has no fulfilled owner or an owner claims a
-family absent from the inventory. The self-governance suite SHALL dogfood `tianheng::testing::GovernanceTest`
-to execute reaction, workspace member coverage, and projection freshness assertions.
+Every boundary family the composed shell publishes SHALL be named by at least one adopter-shaped reaction —
+an isolated example workspace, or this repository's own self-law. **Both sides of that comparison SHALL be
+derived, neither written down.** The families SHALL be the boundary types `crates/tianheng/src/lib.rs`
+re-exports, and the owners SHALL be the tracked files under `examples/` and `crates/shengmo/` naming such a
+type. The reaction SHALL fail in **both** directions: a published family no owner names, and an owned type
+the shell does not publish.
 
-#### Scenario: Every public family has a fulfilled reaction owner
+**No inventory, and the requirement used to ask for one.** It named thirteen families in prose, anchored to
+the `0.2.x` surface. A literal beside an enumerator is the shape this repository removes on sight: a family
+added to the shell keeps its old answer in the list and nobody re-examines it, which is the failure the
+inventory was for. One derivation from the shell's own re-exports replaces it, and the version anchor goes
+with it — a derived set has no release to be anchored to.
 
-- **WHEN** the dogfood suite runs against the current public `Constitution` surface via `tianheng::testing::GovernanceTest`
-- **THEN** every inventoried boundary family has at least one owner whose real evaluator and
-  structured reaction assertions completed successfully
+Two of the thirteen were **profiles, not families**, and are not covered here.
+`Constitution::sans_io_pure`'s own documentation states it is "a convenience over declaring the two
+boundaries by hand; it adds no new reaction", and `no_existential_leak` is the same shape. A profile is a
+bundle, so the boundaries it bundles cover it by construction; counting it as a family would have this
+reaction assert coverage of a reaction that does not exist.
 
-#### Scenario: Missing family ownership fails the gate
+The requirement's third clause — that the self-governance suite dogfood `tianheng::testing::GovernanceTest` —
+is **dropped rather than fixed**. That harness executes clean-reaction, workspace-member-coverage and
+projection-freshness assertions; none of them is family coverage, so it was an unrelated obligation carried
+inside this requirement and satisfied by nothing.
 
-- **WHEN** an inventoried published family has no successfully fulfilled reaction owner
-- **THEN** the dogfood gate fails and names the missing family identity
+What is **not** claimed: that an owner exercises its family well. This holds that a family is reachable from
+something an adopter can read and run, which is what makes a family losing its owner visible; whether the
+owner's assertion is a good one belongs to the owner's own test.
+
+#### Scenario: A published family no owner names
+
+- **WHEN** the composed shell re-exports a boundary type that no tracked file under `examples/` or
+  `crates/shengmo/` names
+- **THEN** the dogfood reaction fails and names that family
+- **PINNED-BY** `every_published_family_has_an_adopter_shaped_owner`
+
+#### Scenario: An owned type the shell does not publish
+
+- **WHEN** an example workspace or the self-law names a boundary type the composed shell does not re-export
+- **THEN** the dogfood reaction fails and names it, because coverage of a surface no adopter reaches is not
+  coverage of the published family set
+- **PINNED-BY** `every_published_family_has_an_adopter_shaped_owner`
+
+#### Scenario: Neither side of the comparison is empty
+
+- **WHEN** the shell's re-exports or the owner corpus yields nothing
+- **THEN** the reaction fails on the derivation itself rather than reporting every family owned, because two
+  empty sets agree
 
 ### Requirement: Breadth stays separate from teaching examples
 
@@ -110,6 +142,22 @@ only after that workspace's required quality checks and declared Tianheng reacti
 complete successfully. The gate SHALL fail when an inventoried example has no fulfilled owner or
 when the driver claims an example name absent from the live inventory. This example-workspace
 inventory SHALL remain independent of the published boundary-family inventory.
+
+**What this requirement no longer says, and why.** It used to require three "focused matrix" commands to sit
+as one contiguous ordered sequence before a positive driver, with DoD coherence enforcing that source shape
+and the driver naming no matrix basename. Those were four separate shell scripts, and the shell-to-Rust
+migration consolidated them into one Rust test — `crates/shengmo/tests/examples_suite.rs` — which owns its
+ordering internally, checked by the compiler rather than by grepping one document for another's basenames.
+There is no longer a sequence of separate commands to order, and no separate driver that could recurse into a
+matrix. The decision was taken and recorded when the consolidation landed; it did not reach this file for two
+windows.
+
+**Nothing catches this class, and saying so is more honest than naming a guard that does not.** A first draft
+of this paragraph claimed the subject-resolution direction would have caught it. It would not:
+`capability_subjects::declaration_offences` already refuses a subject glob matching no tracked path, and it
+was green throughout — this capability's globs resolve perfectly well while a requirement under them
+described a mechanism that had been deleted. What found it was reading each shell file the migration removed
+and asking which requirement it had implemented, which is a judgement over prose, not a reaction.
 
 #### Scenario: Every live example is exercised
 
@@ -197,3 +245,24 @@ The repository unit and integration test suites SHALL include lock assertions ve
 
 - **WHEN** the test harness evaluates a module boundary against source containing `use crate::a::b::{super::forbidden::X};`
 - **THEN** the harness detects `crate::a::forbidden` and reports the expected violation
+
+### Requirement: The example suite's declared set SHALL equal the tracked example directories
+
+The dogfood suite SHALL hold its declared example list against the tracked contents of `examples/`, in both
+directions. An example present on disk and absent from the list is exercised by **neither** of the suite's
+directions nor by the workflow job that runs them, which is a false negative in the gate that runs the product
+against itself — the one gate whose silence is least likely to be questioned.
+
+The enumeration SHALL come from tracked content rather than the working directory, so an untracked scratch
+directory neither fails the reaction nor is mistaken for an example.
+
+#### Scenario: An example is added and not declared
+
+- **WHEN** a directory under `examples/` carries a manifest and no entry in the declared list names it
+- **THEN** the reaction fails, naming the directory, because it would otherwise be exercised by nothing
+
+#### Scenario: A declared example no longer exists
+
+- **WHEN** the declared list names a directory the tracked tree does not carry
+- **THEN** the reaction fails, naming the entry, because a declaration that outlived its subject reads as
+  coverage while defending nothing

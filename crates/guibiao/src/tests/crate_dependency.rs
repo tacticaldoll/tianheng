@@ -656,8 +656,12 @@ pub(super) fn report_json_projects_a_violation_with_its_kind() {
 
 #[test]
 pub(super) fn report_json_renders_clean_and_constitution_error() {
-    let clean: serde_json::Value =
-        serde_json::from_str(&report_json(&Outcome::Clean, &[], None)).unwrap();
+    let clean: serde_json::Value = serde_json::from_str(&report_json(
+        &Outcome::Clean(Subject::nothing_declared()),
+        &[],
+        None,
+    ))
+    .unwrap();
     assert_eq!(clean["outcome"], "clean");
     assert_eq!(clean["exit_code"], 0);
     assert_eq!(clean["violations"].as_array().unwrap().len(), 0);
@@ -714,7 +718,7 @@ pub(super) fn stale_policy_is_one_pure_exit_code_source_for_runner_and_projectio
     let stale: Vec<BaselineEntry> = baseline.entries().cloned().collect();
 
     assert_eq!(
-        stale_policy(&Outcome::Clean, &stale, true),
+        stale_policy(&Outcome::Clean(Subject::nothing_declared()), &stale, true),
         StalePolicy {
             stale_disallowed: true,
             exit_code: 1,
@@ -730,7 +734,10 @@ pub(super) fn stale_policy_is_one_pure_exit_code_source_for_runner_and_projectio
         2,
         "stale policy never masks a constitution error"
     );
-    assert_eq!(stale_policy(&Outcome::Clean, &stale, false).exit_code, 0);
+    assert_eq!(
+        stale_policy(&Outcome::Clean(Subject::nothing_declared()), &stale, false).exit_code,
+        0
+    );
 }
 
 #[test]
@@ -739,8 +746,12 @@ pub(super) fn report_json_includes_coverage_when_present() {
         total: 3,
         uncovered: vec!["memory".to_string()],
     };
-    let doc: serde_json::Value =
-        serde_json::from_str(&report_json(&Outcome::Clean, &[], Some(&coverage))).unwrap();
+    let doc: serde_json::Value = serde_json::from_str(&report_json(
+        &Outcome::Clean(Subject::nothing_declared()),
+        &[],
+        Some(&coverage),
+    ))
+    .unwrap();
     assert_eq!(doc["coverage"]["workspace_crates"], 3);
     assert_eq!(doc["coverage"]["uncovered"][0], "memory");
 }
@@ -920,7 +931,96 @@ pub(super) fn workspace_member_names_are_the_no_deps_packages() {
     });
     assert_eq!(
         workspace_member_names(&metadata),
-        vec!["adapters".to_string(), "core".to_string()],
+        Members::Read(vec!["adapters".to_string(), "core".to_string()]),
+    );
+}
+
+/// An unreadable membership is not an empty one, in either of the two ways it can be unreadable.
+///
+/// **Both consumers read empty as *nothing to govern*.** Coverage computed `total = 0` with an empty
+/// uncovered list and rendered it as complete coverage over a membership it never read; the evaluation
+/// refused, but with the sentence for a workspace that genuinely declares no member — the wrong fact
+/// about the wrong thing. This crate already states the rule on `workspace_member_src_dirs`: *an
+/// unreadable workspace is a constitution error, never a silent empty set*.
+#[test]
+pub(super) fn an_unreadable_membership_is_not_an_empty_one() {
+    // No `packages` array at all.
+    let absent = serde_json::json!({ "workspace_root": "/w" });
+    let Members::Unreadable(why) = workspace_member_names(&absent) else {
+        panic!("metadata carrying no `packages` array cannot be read as a membership");
+    };
+    assert!(why.contains("no `packages` array"), "got: {why}");
+
+    // A package this reader cannot name: dropping it would shrink the set the workspace rule compares
+    // against, so every unlisted member of a partly-unreadable set would read as governed.
+    let unnamed = serde_json::json!({
+        "packages": [ { "name": "core" }, { "version": "0.1.0" } ]
+    });
+    let Members::Unreadable(why) = workspace_member_names(&unnamed) else {
+        panic!("a package whose name cannot be read leaves the membership incomplete");
+    };
+    assert!(why.contains("`name` is absent"), "got: {why}");
+
+    // And a workspace that genuinely declares none is read, not refused — the third state stays its own.
+    assert_eq!(
+        workspace_member_names(&serde_json::json!({ "packages": [] })),
+        Members::Read(vec![])
+    );
+}
+
+/// The two consumers of an unreadable membership, exercised through the consumers.
+///
+/// **The reader refusing is not the same fact as the consumers honouring the refusal.** The direction
+/// above holds `workspace_member_names`, which an `enum` already forces every caller to match on — but
+/// matching is not choosing the right arm, and a later edit mapping `Unreadable` to an empty membership
+/// or to a fabricated coverage would leave it green. So this one calls what the callers call: `evaluate`
+/// for the outcome and `coverage_of` for the advisory, over metadata neither can be handed through
+/// `check_and_cover`, whose only entry point spawns `cargo metadata` and therefore cannot be given a
+/// membership to fail on.
+#[test]
+pub(super) fn both_consumers_of_an_unreadable_membership_refuse() {
+    let constitution = Constitution::new("w").boundary(
+        CrateBoundary::crate_("core")
+            .restrict_dependencies_to(["serde_json"])
+            .because("a boundary is needed for coverage to have a denominator"),
+    );
+
+    for (label, metadata) in [
+        (
+            "no `packages` array",
+            serde_json::json!({ "workspace_root": "/w" }),
+        ),
+        (
+            "a package this reader cannot name",
+            serde_json::json!({ "packages": [ { "name": "core" }, { "version": "0.1.0" } ] }),
+        ),
+    ] {
+        match crate::evaluate(&constitution, &metadata) {
+            Outcome::ConstitutionError(why) => assert!(
+                why.contains("membership") || why.contains("workspace members"),
+                "{label}: the error must name what could not be read, got: {why}"
+            ),
+            other => panic!("{label}: an unreadable membership must refuse, got {other:?}"),
+        }
+        assert!(
+            crate::coverage_of(&metadata, &constitution).is_none(),
+            "{label}: coverage over a membership that was never read is coverage over nothing"
+        );
+    }
+
+    // The control: a membership that IS readable reaches both consumers, so the assertions above are
+    // about the unreadable state rather than about a constitution that refuses everything.
+    let read = serde_json::json!({ "packages": [ { "name": "core" } ] });
+    assert!(
+        !matches!(
+            crate::evaluate(&constitution, &read),
+            Outcome::ConstitutionError(_)
+        ),
+        "a readable membership must not refuse"
+    );
+    assert!(
+        crate::coverage_of(&read, &constitution).is_some(),
+        "a readable membership must produce coverage"
     );
 }
 
@@ -1054,8 +1154,7 @@ pub(super) fn no_dependency_rule_ever_flags_a_crates_own_self_referential_depend
 
 #[test]
 pub(super) fn every_crate_rule_still_flags_a_same_named_but_externally_sourced_dependency() {
-    // 0.3.1 adversarial-sweep finding, closed by PR #159 ("圭表 manifest/deps"):
-    // `is_self_dependency` matched by NAME ALONE, so a package `foo` depending on a *different*,
+    // `is_self_dependency` once matched by NAME ALONE, so a package `foo` depending on a *different*,
     // externally-sourced package that merely shares its own name (a real wrapper/fork/
     // self-comparison pattern — verified against real cargo: `foo = { git = "…" }` reads
     // `{"name":"foo","source":"git+…"}`, no error) was wrongly swallowed by the identical
@@ -1324,6 +1423,46 @@ pub(super) fn source_rule_flags_every_git_source_outside_a_registry_or_path_allo
         ],
         "every declared git source is flagged (optional/version/inherited included), \
              by real package name, while registry+path pass and the dev git dep is unscoped",
+    );
+}
+
+/// `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
+///
+/// `UnderReacts`, owned by the engine. `RestrictDependenciesTo` reads the **declared** dependency set, and
+/// cargo reports an `optional = true` edge in that set like any other. So a crate whose edge exists only
+/// under a feature is governed as though the edge were unconditional, and a boundary cannot express
+/// *depends on this only when that feature is on*.
+///
+/// Both directions on one package, differing only in the flag: the ordinary edge and the optional one are
+/// reported identically, which is what makes the bound a bound rather than an oversight. The sibling
+/// source-rule direction states the same fact for source kinds; this states it for the dependency set,
+/// which is the rule an adopter reaches for first.
+#[test]
+pub(super) fn an_optional_dependency_edge_is_observed_as_a_declared_one() {
+    let package = serde_json::json!({
+        "dependencies": [
+            { "name": "always", "source": null, "kind": null },
+            { "name": "gated", "source": null, "kind": null, "optional": true },
+        ]
+    });
+    let rule = Rule::RestrictDependenciesTo {
+        allowed: vec!["always".to_string()],
+    };
+    assert_eq!(
+        rule.findings(&package, &[], DependencyKind::Normal),
+        vec!["gated".to_string()],
+        "an optional edge is in the declared set, so it is governed exactly as an unconditional one — the \
+         reader has no way to tell them apart, which is the declared bound"
+    );
+
+    let permissive = Rule::RestrictDependenciesTo {
+        allowed: vec!["always".to_string(), "gated".to_string()],
+    };
+    assert!(
+        permissive
+            .findings(&package, &[], DependencyKind::Normal)
+            .is_empty(),
+        "and naming it in the allowlist clears it, whether or not the feature enabling it is ever on"
     );
 }
 

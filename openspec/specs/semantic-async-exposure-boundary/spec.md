@@ -9,6 +9,12 @@ observed from the pure local AST signal `syn::Signature.asyncness`. Shape-only, 
 surface impl-trait governs (free fns, inherent methods, trait method declarations; trait-impl
 methods and private items excluded). Its finding is an owner-qualified item identity so distinct
 async fns never collide under the baseline.
+
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Async-exposure boundary declared in Rust
 
@@ -128,6 +134,7 @@ bare boundary's projection stays byte-identical.
 
 - **WHEN** a subtree-scoped boundary descends a module containing `pub fn outer() { mod inner { pub async fn hidden() {} } }`
 - **THEN** the system does not observe `hidden` — a `mod` inside a fn body is not public API (not reachable as `crate::…`), a stated bound, never a silent claim about it
+- **PINNED-BY** `async_subtree_does_not_observe_a_body_nested_module`
 
 #### Scenario: The subtree opt-in projects in list output
 

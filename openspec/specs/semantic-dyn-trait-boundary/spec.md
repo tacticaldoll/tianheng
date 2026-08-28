@@ -7,6 +7,12 @@ not expose trait-object (`dyn`) syntax. It is the type-shape complement of
 exposed *type shape* (a `dyn` node at any depth in the public surface). Internal `dyn` is never a
 violation; leaking dynamic dispatch across the *declared* seam is, so the rule is declarative
 intent (by anchor scoping), not a lint. Shape-only: any exposed `dyn` reacts.
+
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Dyn-trait boundary declared in Rust
 
@@ -106,25 +112,27 @@ because a public type-alias target is part of the governed exposed surface. A pu
 that *names* such an alias SHALL NOT receive an additional reaction by expanding the alias:
 the shared `hunyi::resolve` resolver follows local `pub use` re-export chains but does
 **not** expand `type` alias definitions, so a `dyn` reached only by expanding a named alias
-is a **stated coverage bound**, not a claimed reaction. This is the same alias-resolution
+is a **stated coverage bound (bound: semantic-dyn-trait-boundary/a-public-item-naming-such-an-alias-is-not-expanded-a-stated-bound)**, not a claimed reaction. This is the same alias-resolution
 bound `semantic-signature-coupling` carries — the dyn is still caught, at the public alias
 site rather than the use site; only a *private* alias used in a public position escapes
-both reactions, and that escape is the stated bound, never silently asserted clean.
+both reactions, and that escape is the stated bound (bound: semantic-dyn-trait-boundary/a-public-item-naming-such-an-alias-is-not-expanded-a-stated-bound), never silently asserted clean.
 
 #### Scenario: A public alias whose target writes dyn is a violation
 
 - **WHEN** the governed module declares `pub type Handler = Box<dyn crate::Port>;`
 - **THEN** the system emits a violation at the alias item, because the public type-alias target exposes `dyn crate::Port`
 
-#### Scenario: A public item naming such an alias is not expanded
+#### Scenario: A public item naming such an alias is not expanded — a stated bound
 
 - **WHEN** the governed module declares `pub type Handler = Box<dyn crate::Port>;` and `pub fn make() -> Handler`
 - **THEN** the system reacts at the alias declaration but emits **no additional** reaction for `make` via alias expansion — the `dyn` is already caught at the alias, and `type` aliases are not expanded (a stated bound)
+- **PINNED-BY** `a_private_alias_hiding_a_dyn_is_a_stated_bound`
 
 #### Scenario: A private alias hiding a dyn in a public position is a stated bound
 
 - **WHEN** the governed module declares a non-public `type Handler = Box<dyn crate::Port>;` and exposes `pub fn make() -> Handler`
 - **THEN** the system does not claim to observe the hidden `dyn` (a stated coverage bound — the resolver does not expand `type` aliases), rather than silently asserting the boundary is clean
+- **PINNED-BY** `a_private_alias_hiding_a_dyn_is_a_stated_bound`
 
 ### Requirement: Stated coverage bounds with no false negative
 
@@ -140,10 +148,11 @@ declared with a `cfg_attr`-wrapped `#[path]` is NOT out of scope: like an **unco
 target both read when they exist on disk, cfg-blind union rather than a skip bound, even with no
 sibling declaration for the same name. No *new* essential gap is introduced by this capability.
 
-#### Scenario: A macro-generated dyn is a documented coverage bound
+#### Scenario: A macro-generated dyn is a documented bound
 
 - **WHEN** a macro invoked in the governed module expands to a public signature containing `dyn`, while the call site writes no `dyn` token
 - **THEN** the system does not claim to observe it (the universal 渾儀 macro-expansion bound), rather than silently asserting the boundary is clean
+- **PINNED-BY** `a_macro_generated_dyn_is_a_documented_coverage_bound`
 
 #### Scenario: A resolvable exposed dyn is never silently passed
 
@@ -160,10 +169,11 @@ sibling declaration for the same name. No *new* essential gap is introduced by t
 - **WHEN** the governed anchor exposes the *same* `dyn` shape (e.g. `Box<dyn crate::infra::Port>`) at two distinct public seams — two functions, or a function and a field — and one is recorded in the baseline as accepted
 - **THEN** the second still reacts: its structured seam kind and item/module/owner/member fields differ, so two seams sharing a `subject` do not collapse to one `(target, rule_key, fact)` and baselining one MUST NOT mask the other (the one forbidden bug); the human finding remains seam-qualified as `{rendered shape} exposed by {seam}`
 
-#### Scenario: An unrenderable sub-node is a stated rendering bound
+#### Scenario: An unrenderable sub-node is a stated bound
 
 - **WHEN** two trait objects differ only inside a sub-node that cannot be rendered without macro expansion, token printing, or edit-unstable spans — a complex const-generic *expression* (`dyn Foo<{ N + 1 }>`), a same-named macro with different arguments (`dyn Foo<m!(1)>` vs `dyn Foo<m!(2)>`), a `verbatim` type, or a distinction carried only by a **lifetime** (a reference lifetime or an HRTB `for<'a>` binder, which carry no architectural intent and are not rendered)
 - **THEN** the system does not claim to distinguish them: they share a canonical `subject` field and key at the same seam (each still *reacts* on first occurrence; only baseline-dedup granularity is bounded). This is a **stated subject-rendering bound** — the same `(target, rule_key, fact)` granularity bound `semantic-trait-impl-locality`'s `(impl for <self_ty>)` fact carries — declared here, never a silent claim of cleanliness
+- **PINNED-BY** `an_unrenderable_sub_node_is_a_stated_rendering_bound`
 
 #### Scenario: A dyn reached only through a cfg_attr-wrapped-path module reacts
 
@@ -209,8 +219,8 @@ feature, so the `hunyi` dependency allowlist (`{serde_json, syn, xuanji}`) is un
 ### Requirement: Dyn-trait facts preserve shape and seam separately
 
 Dyn-trait violations SHALL encode the canonical forbidden shape/subject and public seam as separate
-fact roles under a structured rule key. Stated renderer-granularity bounds MAY coalesce the same
-subject at the same seam, but traversal position SHALL NOT be used to claim injectivity.
+fact roles under a structured rule key. A renderer MAY declare a coarser granularity that coalesces
+the same subject at the same seam, but traversal position SHALL NOT be used to claim injectivity.
 
 #### Scenario: The same shape at two seams stays distinct
 - **WHEN** one dyn-trait shape is exposed at structurally different public seams

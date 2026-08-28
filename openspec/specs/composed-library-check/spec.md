@@ -5,6 +5,11 @@
 Define a presentation-free library entrypoint that evaluates one unified Constitution through the
 same three-dimension reaction semantics as the CLI runner.
 
+## Subject
+
+- `crates/tianheng/src/lib.rs`
+- `crates/tianheng/src/runner.rs`
+
 ## Requirements
 
 ### Requirement: A unified Constitution has an inspectable library check

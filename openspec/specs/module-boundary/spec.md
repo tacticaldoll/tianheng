@@ -8,6 +8,12 @@ one module from importing another ("the kernel must not import a projection"),
 observed from the target crate's source `use` declarations (use-only, file-based;
 see the scanner decision in `PROJECT.md`). Module violations flow through severity
 and the baseline exactly like crate violations.
+
+## Subject
+
+- `crates/guibiao/src/module_scan/**/*.rs`
+- `crates/guibiao/src/tests/module_boundary.rs`
+
 ## Requirements
 ### Requirement: Module boundary declared in Rust
 

@@ -330,15 +330,24 @@ so it is a substrate, not the measure-only model. A dimension depending on eithe
 downward edge, never a cross-dimension one.
 
 A dimension's crate is **born when it is built** — never pre-created empty. The heavy
-dependencies (AST, runtime) are quarantined to their own crates; the `guibiao` core's only
-*external* dependency stays `serde_json` (internally it depends only on the shared `serde_json`-only
-bases `xuanji` and `xingbiao`). See
+dependencies (AST, runtime) are quarantined to their own crates, and the static core stays
+dependency-light — what each crate may depend on is declared in the law and rendered in
+[`AGENTS.self-law.md`](AGENTS.self-law.md). See
 [`BACKLOG.md`](BACKLOG.md) for the deferred phases (their observation sources and open
 design questions) and the governance/observability layer.
 
 Tianheng governs **itself** with its own reaction: the live self-law is declared in
-`crates/tianheng/tests/self_governance.rs`, projected into `AGENTS.self-law.md`, and enforced as
+`crates/shengmo/src/law.rs`, projected into `AGENTS.self-law.md`, and enforced as
 a `cargo test` gate.
+
+**Two workspace members are not product and are published nowhere.**
+[`shengmo`](crates/shengmo/README.md) (繩墨, the inked line) holds that law and the reactions that
+run the delivered product against this workspace; [`kanhe`](crates/kanhe/README.md) (勘合, the split
+tally) holds the reactions that fit this repository's own record against itself — its Definition of
+Done against CI, a spec's declared bound against the test defending it, a generated document against
+its generator. Both carry `publish = false`, so `cargo publish` packages neither, and neither is one
+of the 三儀: they measure nothing about an adopter's workspace and appear in no dependency you would
+take.
 
 ## Adoption & stability
 

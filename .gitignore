@@ -12,6 +12,22 @@
 # example's own manifest, and naming it twice is how this comment went stale once already.
 /examples/*/target/
 /examples/*/Cargo.lock
+# The in-repo fixtures are their own workspaces too, and one of them now carries a dependency — the
+# shell-to-metadata edge the self-law fixture exists to violate. The reaction reads them with
+# `cargo metadata --no-deps`, which resolves nothing and writes no lock, but any ordinary command that
+# does resolve (`cargo build`, `cargo tree`, a bare `cargo metadata`) leaves one behind. Untracked and
+# unignored, that file makes `crates/kanhe/tests/publish_source.rs` refuse: it reads
+# `--untracked-files=all` and a
+# dirty worktree means `HEAD` no longer describes what would be packaged — so a test artifact would
+# block an irreversible act. Committing one is not the alternative; a fixture's resolved lock is local
+# only, exactly as an example's is.
+/crates/*/tests/fixtures/*/target/
+/crates/*/tests/fixtures/*/Cargo.lock
+# `npm ci` installs the pinned OpenSpec validator here. The tree is reproduced from the committed
+# `package-lock.json`, so the directory is build output and never repository content. It must be ignored
+# rather than merely untracked: `crates/kanhe/tests/publish_source.rs` reads `--untracked-files=all`, and an
+# untracked, unignored install would make the worktree dirty and block an irreversible act.
+/node_modules/
 /.agent/
 /.agents/
 /.amazonq/

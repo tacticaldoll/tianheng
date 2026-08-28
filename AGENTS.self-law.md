@@ -1,9 +1,11 @@
 # Tianheng Self-Law Projection
 
-Generated from `tianheng_constitution()` in `crates/tianheng/tests/self_governance.rs`.
+Generated from `shengmo::law::constitution()` by `crates/shengmo/tests/self_governance.rs`.
 **Do not edit by hand.** If this file is stale, regenerate it:
-`BLESS=1 cargo test -p tianheng self_law_projection_is_fresh`.
-If the law itself is wrong, amend `self_governance.rs` through review — never edit this projection.
+`BLESS=1 cargo test -p shengmo self_law_projection_is_fresh`.
+If the law itself is wrong, amend `shengmo::law` through review — never edit this projection.
+The law is named by module rather than by file here: this header registers the unit holding the
+projection fresh, and a second tracked path in it would be an ambiguous claim about which one does.
 
 Read the projection below as the imitable shape of Tianheng itself, and work *with* the reaction:
 
@@ -11,76 +13,90 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 - Observe only what has a real observation source; name nothing that does not react.
 - React with the outcomes: `0` clean, `1` violation, `2` constitution/usage error.
 - On a violation, repair toward the boundary's declared reason — never weaken the law to pass.
-- 三儀 (圭表 static · 渾儀 semantic · 漏刻 runtime) measure; 三司 (垂象 · 實錄 · 校讎) administer.
+- 三儀 (圭表 static · 渾儀 semantic · 漏刻 runtime) measure; 垂象 surfaces a reaction, 實錄 records one, 校讎 amends one.
 
 # Constitution: tianheng
 
 ## Static boundaries
 
-### `xuanji`
+### `xuanji` (crate)
 
-> 璇璣 is the dimension-agnostic reaction model: serde_json only, below every dimension, and must not depend on any workspace member
-
-- **rule**: restrict dependencies to (only: serde_json)
-- **kind**: crate · **severity**: enforce
-
-### `xingbiao`
-
-> 星表 is the shared metadata substrate: serde_json only, reading cargo metadata beneath the dimensions without depending on workspace members
+> 璇璣 is the dimension-agnostic reaction model: it must not depend on any workspace member; serde_json only
 
 - **rule**: restrict dependencies to (only: serde_json)
 - **kind**: crate · **severity**: enforce
 
-### `guibiao`
+### `xingbiao` (crate)
 
-> the 圭表 static core stays dependency-light: serde_json, xuanji (reaction model), and xingbiao (metadata substrate) only. functional core ⊥ imperative shell: 圭表 must not depend on the 天衡 shell. 三儀 ⊥ 三儀: naming no sibling dimension, the observation dimensions are composed only by the 天衡 shell, never by each other
+> 星表 is the shared metadata substrate: it depends on no workspace member at all; serde_json only
+
+- **rule**: restrict dependencies to (only: serde_json)
+- **kind**: crate · **severity**: enforce
+
+### `guibiao` (crate)
+
+> the 圭表 static core stays dependency-light: serde_json, xuanji (reaction model), and xingbiao (metadata substrate) only. functional core ⊥ imperative shell: 圭表 must not depend on the 天衡 shell. 三儀 ⊥ 三儀: it names no sibling dimension
 
 - **rule**: restrict dependencies to (only: serde_json, xuanji, xingbiao)
 - **kind**: crate · **severity**: enforce
 
-### `hunyi`
+### `hunyi` (crate)
 
-> 渾儀 is the semantic AST dimension: quarantined syn dependency only. 三儀 ⊥ 三儀: it depends on no sibling dimension and never on the 天衡 shell (functional dimension ⊥ imperative shell)
+> 渾儀 is the semantic AST dimension: it depends on 璇璣, 星表, serde_json and syn only. 三儀 ⊥ 三儀: it names no sibling dimension and never the 天衡 shell (functional dimension ⊥ imperative shell)
 
 - **rule**: restrict dependencies to (only: xuanji, xingbiao, serde_json, syn)
 - **kind**: crate · **severity**: enforce
 
-### `louke`
+### `louke` (crate)
 
-> 漏刻 is the runtime dimension: hot path depends on 璇璣 only, with xingbiao audit-gated for CI probe coverage. 三儀 ⊥ 三儀: naming no sibling dimension, it reacts in prod independently of the 天衡 shell
+> 漏刻 is the runtime dimension: it depends on 璇璣 and 星表 only. 三儀 ⊥ 三儀: naming no sibling dimension and never the 天衡 shell
 
 - **rule**: restrict dependencies to (only: xuanji, xingbiao)
 - **kind**: crate · **severity**: enforce
 
-### `tianheng`
+### `tianheng` (crate)
 
-> the 天衡 shell composes the 三儀 into one reaction, depending on guibiao, hunyi, louke, xingbiao, and serde_json
+> the 天衡 shell's direct normal edges end at the observation dimensions and at projection serialization, never at the lower reaction model or metadata substrate
 
-- **rule**: restrict dependencies to (only: guibiao, hunyi, louke, serde_json, xingbiao)
+- **rule**: restrict dependencies to (only: guibiao, hunyi, louke, serde_json)
 - **kind**: crate · **severity**: enforce
 
-### `crate`
+### `shengmo` (crate)
+
+> 繩墨 depends on 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist
+
+- **rule**: restrict dependencies to (only: tianheng, serde_json)
+- **kind**: crate · **severity**: enforce
+
+### `kanhe` (crate)
+
+> 勘合 depends on 繩墨, 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist
+
+- **rule**: restrict dependencies to (only: shengmo, tianheng, serde_json)
+- **kind**: crate · **severity**: enforce
+
+### `xuanji::crate` (module)
 
 > 璇璣 is the measure-only reaction model: it reads no ambient clock inline and exposes no async surface — time and effects enter only through the dimensions above it, never the model itself
 
 - **rule**: inline symbol path confined to module (confined_prefix: std::time; ending_with: now)
 - **kind**: module · **severity**: enforce · **crate**: xuanji
 
-### `crate`
+### `guibiao::crate` (module)
 
 > path canonicalization and cycle/dedup guards in guibiao must resolve through `xingbiao::canonicalize_or_fail` or `try_visit` for unified failure handling
 
 - **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
 - **kind**: module · **severity**: enforce · **crate**: guibiao
 
-### `crate`
+### `hunyi::crate` (module)
 
 > path canonicalization and cycle/dedup guards in hunyi must resolve through `xingbiao::canonicalize_or_fail` or `try_visit` for unified failure handling
 
 - **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
 - **kind**: module · **severity**: enforce · **crate**: hunyi
 
-### `crate`
+### `louke::crate` (module)
 
 > path canonicalization and cycle/dedup guards in louke must resolve through `xingbiao::try_visit` for unified failure handling
 
@@ -89,7 +105,7 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ## Async-exposure boundaries
 
-### `crate`
+### `xuanji::crate` (semantic)
 
 > 璇璣 is the measure-only reaction model: it reads no ambient clock inline and exposes no async surface — time and effects enter only through the dimensions above it, never the model itself
 

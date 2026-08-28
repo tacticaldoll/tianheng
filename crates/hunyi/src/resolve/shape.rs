@@ -61,8 +61,7 @@ impl PathCollector {
 /// `None` for anything but a bare single segment), so a MULTI-segment self type whose leading
 /// segment named the impl's own param (`impl<T> Marker for T::Assoc {}`) was never shadowed and
 /// still resolved through a same-named alias — the identical false positive this function exists
-/// to prevent, one segment deeper (found on a round-10 adversarial review; see `PROJECT.md`'s
-/// Decisions).
+/// to prevent, one segment deeper.
 pub(crate) fn is_shadowed_param_path(
     path: &syn::Path,
     shadowed: &std::collections::HashSet<String>,
@@ -407,8 +406,8 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
 /// `trait_impl.rs`, so two impls that happen to canonicalize to the same owner string dedup
 /// together, and a param resolved through an unrelated alias to the SAME target a genuine direct
 /// impl also names collapses two distinct trait-impl-locality violations into one reported
-/// finding — a real false negative, not just a wrong display string (found on a round-10
-/// adversarial review; see `PROJECT.md`'s Decisions). Returning `None` here (falling through to
+/// finding — a real false negative, not just a wrong display string. Returning `None` here
+/// (falling through to
 /// each caller's own plain-render/positional-marker path, skipping resolution entirely) gives the
 /// parameter its own stable, alias-independent label instead.
 /// The self type's head binds to more than one canonical target, so no single owner label can name

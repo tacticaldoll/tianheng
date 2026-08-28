@@ -2,7 +2,7 @@
 //!
 //! `resolve_import_module` reads only the path, so `use m::foo;` where `m` declares both `mod foo` and
 //! `fn foo` resolves to the descendant `m::foo` and would miss that the import also reaches `m` — the
-//! false negative closed in `c4f64aa`. That closure consults the value namespace, and these are the
+//! false negative closed in the 0.5.0 window. That closure consults the value namespace, and these are the
 //! shapes it must NOT mistake for one. Each was a real false positive when this file was written.
 use guibiao::{Constitution, ModuleBoundary, Outcome, check};
 use std::path::{Path, PathBuf};
@@ -19,6 +19,7 @@ impl Probe {
             N.fetch_add(1, Ordering::Relaxed)
         ));
         let _ = std::fs::remove_dir_all(&dir);
+        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
         std::fs::create_dir_all(dir.join("src")).expect("create src");
         std::fs::write(
             dir.join("Cargo.toml"),
@@ -62,12 +63,12 @@ fn findings(manifest: &Path) -> Vec<String> {
             .iter()
             .map(|v| v.finding.clone())
             .collect(),
-        Outcome::Clean => Vec::new(),
+        Outcome::Clean(_) => Vec::new(),
         other => panic!("expected a judgement, got {other:?}"),
     }
 }
 
-/// The reaction the two bounds below must not disturb: a real value binding still reacts.
+/// The reaction the inbound-value namespace bounds must not disturb: a real value binding still reacts.
 #[test]
 fn a_real_value_binding_still_reacts() {
     let probe = Probe::new(

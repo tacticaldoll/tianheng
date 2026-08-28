@@ -4,6 +4,15 @@
 
 Define the composed wildcard entrypoint and its external compilation reaction so Tianheng's
 documented adoption path remains usable and semantically honest across the 0.2 line.
+
+## Subject
+
+- `crates/tianheng/src/lib.rs`
+- `crates/tianheng/src/sans_io.rs`
+- `crates/tianheng/tests/adopter_surface.rs`
+- `crates/guibiao/tests/adopter_surface.rs`
+- `crates/hunyi/tests/adopter_surface.rs`
+- `crates/louke/tests/adopter_surface.rs`
 ## Requirements
 ### Requirement: The prelude is the composed adopter entrypoint
 
@@ -30,9 +39,15 @@ external consumer SHALL be able to compose boundaries from all three instruments
 `tianheng::prelude::*` SHALL expose the existing boundary, rule, baseline, report, violation, and
 Outcome inspection surface, plus the vocabulary-neutral `RuleKey` and `StructuredFactIdentity`
 types used by live `ViolationId`. The obsolete public `FindingKey` SHALL be removed as an
-intentional 0.3.0 break. These names SHALL form an inspection tier, not a second construction path around validated
-identity or builder-owned rules. Standalone instrument APIs SHALL expose the same reaction model
+intentional 0.3.0 break. These names SHALL form an inspection tier, not a second construction path around
+validated identity or builder-owned rules. Standalone instrument APIs SHALL expose the same reaction model
 without requiring the composed facade.
+
+**A clean outcome SHALL be inspectable for the subject it was reached over.** The Outcome inspection surface
+therefore includes the `Subject` a clean verdict carries, and `Subject` SHALL be a promised prelude member like
+the outcome that carries it. A consumer that can read a violation's target, rule key and structured fact but
+can read nothing at all from a clean verdict cannot tell a workspace that was observed and found sound from one
+that was never reached — and this surface exists so that judgement never requires decoding CLI text.
 
 The public surface SHALL NOT promise a `Dimension`/`ObservedFact` plugin trait or runtime plugin
 loading. Rust architecture tests MAY use the promised `GovernanceTest` harness or invoke the
@@ -43,20 +58,11 @@ existing pure standalone/composed checks and inspect structured `Outcome` values
 - **WHEN** an external crate checks a unified `Constitution`
 - **THEN** it can inspect target, rule key, structured fact, presentation, metadata, and outcome without decoding CLI text
 
-#### Scenario: A consumer inspects a standalone reaction
+#### Scenario: A consumer inspects a clean reaction
 
-- **WHEN** an external crate calls an instrument's public check directly
-- **THEN** it can inspect the same vocabulary-neutral reaction identity without importing `tianheng`
-
-#### Scenario: Rule inspection remains builder-owned
-
-- **WHEN** an external crate inspects a builder-produced rule and its emitted reaction
-- **THEN** it can read rule presentation and semantic key without directly constructing an invalid rule or identity
-
-#### Scenario: Architecture tests use the reaction model
-
-- **WHEN** an adopter wants a Rust test for an architectural boundary
-- **THEN** it uses `GovernanceTest` or invokes an existing pure check and asserts against structured Outcome data
+- **WHEN** an external crate checks a workspace and the reaction is clean
+- **THEN** it can read what was declared and how much of the workspace was reached, so a sound workspace is
+  distinguishable from an unreached one without decoding CLI text
 
 ### Requirement: The adopter surface has an external compilation reaction
 
@@ -66,6 +72,14 @@ identity inspection types, the promised harness and depth selector, and type-che
 builder/check chains including `NoExistentialLeak`. They SHALL NOT invoke CLI, filesystem, or
 process side effects merely to prove API availability, and SHALL NOT imply an unimplemented plugin
 protocol.
+
+Each standalone instrument's own promised check/reaction surface is compile-reacted by that
+dimension's own `tests/adopter_surface.rs` — `crates/guibiao/tests/adopter_surface.rs`,
+`crates/hunyi/tests/adopter_surface.rs`, and `crates/louke/tests/adopter_surface.rs` — alongside the
+composed shell's `crates/tianheng/tests/adopter_surface.rs`. This capability's declared subject SHALL
+name all four: a standalone dimension's own adoption compile check is this capability's concern by
+the same argument that put the shell's file there, not a file some other capability happens to leave
+unclaimed.
 
 #### Scenario: A composed export is accidentally removed
 
@@ -81,6 +95,13 @@ protocol.
 
 - **WHEN** the compile consumer references a run or check function
 - **THEN** it type-checks the signature without executing observation or presentation side effects
+
+#### Scenario: A dimension's own standalone-surface test is this capability's subject
+
+- **WHEN** a change touches `crates/guibiao/tests/adopter_surface.rs`,
+  `crates/hunyi/tests/adopter_surface.rs`, or `crates/louke/tests/adopter_surface.rs`
+- **THEN** it is filed under `adopter-surface`, because that dimension's own external compilation
+  reaction is what this requirement obligates and this capability's declared subject names the file
 
 ### Requirement: Shipped prelude additions are explicit compile-reacted promises
 
@@ -100,6 +121,39 @@ harness promise MUST NOT remain in this capability.
 
 - **WHEN** the wildcard prelude contract is compiled
 - **THEN** `GovernanceTest` and `ScanDepth` resolve as public types
+
+### Requirement: Every promised prelude member is named by the external compilation reaction
+
+The composed wildcard prelude is the adopter's entrypoint, so every name it re-exports SHALL be mentioned by
+the external-view integration test compiled against it. The relation SHALL be **containment, not equality**:
+the reaction legitimately names root imports and its own helpers, which the prelude does not promise, and
+requiring equality would refuse it for being a test. A promised member SHALL be named in whatever form its
+kind admits — a type through a type assertion, a trait through a bound, a function item through its own call
+shape — because requiring one form would demand either a hand-kept list per kind or a contract that cannot
+name its trait at all. The promise SHALL be read by entering the prelude's own module rather than by matching a re-export marker
+anywhere in the shell, so that what counts as promised does not depend on no sibling re-export of that form
+happening to exist.
+
+#### Scenario: A prelude addition the contract never mentions reacts
+
+- **WHEN** the prelude promises a member that appears nowhere in the external compilation reaction
+- **THEN** the repository check fails and names each unmentioned member
+
+#### Scenario: The contract may name more than the prelude promises
+
+- **WHEN** the reaction names an item reached by a root import rather than through the prelude
+- **THEN** that is not a disagreement, because the promise is what the prelude carries
+
+#### Scenario: An input that cannot be read is refused rather than reported clean
+
+- **WHEN** the prelude block parses to no member, the reaction yields no identifier at all, or the promise
+  names a member the reader cannot read as one
+- **THEN** the check refuses as cannot-judge, because a promise of nothing and an unread contract both make
+  every direction hold vacuously — and a member dropped for being unreadable would narrow the promise by
+  exactly what the reader failed to parse, in the check whose subject is a promise narrowing unobserved
+
+Where the holding check's own observation stops is `repository-checks`'s to declare, since the limit belongs
+to the check rather than to the promise.
 
 ### Requirement: Focused semantic checks remain explicit
 

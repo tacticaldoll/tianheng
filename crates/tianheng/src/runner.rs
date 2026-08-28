@@ -18,7 +18,7 @@
 //!
 //! IO (filesystem, stdout/stderr) is quarantined here; the `guibiao` crate stays the
 //! pure functional core (the model plus [`check`](crate::check)), and must not depend on
-//! this shell — a crate-level invariant (see `tests/self_governance.rs`). The numeric
+//! this shell — a crate-level invariant (see `crates/shengmo/src/law.rs`). The numeric
 //! work lives in the private [`dispatch`], so the exit code is unit-testable; [`run`] is
 //! a thin [`ExitCode`] wrapper.
 
@@ -27,11 +27,11 @@ use std::process::ExitCode;
 use std::{fs::OpenOptions, io::Write};
 
 use guibiao::{
-    Baseline, BaselineEntry, Coverage, Outcome, Report, apply_baseline, check_and_cover,
+    Baseline, BaselineEntry, Coverage, Outcome, Report, Subject, apply_baseline, check_and_cover,
     constitution_text, report_json, report_json_with_stale_policy, stale_policy,
 };
-use louke::audit_probe_coverage;
-use xingbiao::{cargo_metadata, member_root_files, workspace_root};
+use hunyi::{Observer, SemanticObserver};
+use louke::RuntimeObserver;
 
 use crate::Constitution;
 
@@ -113,6 +113,83 @@ pub fn check_constitution(constitution: &Constitution, manifest_path: &Path) -> 
     evaluate_constitution(constitution, manifest_path).0
 }
 
+/// One governance run, assembled observer by observer.
+///
+/// The fold is **eager**: each [`observe`](Run::observe) call folds that observer's outcome into the accumulator
+/// immediately, so the heterogeneous set never exists as a collection and no trait object appears anywhere. An
+/// earlier design held `&[&dyn Observer]` and would have needed that exposure governed; measured, it could not
+/// be — no module of this crate is governed by a semantic boundary, and the `dyn`-trait DSL offers only
+/// forbid-all and forbid-named-operands, so the declaration would have been a name with no reaction.
+///
+/// Assembly order is **semantically observable**, deterministically: it decides which cannot-judge is reported
+/// when more than one observer cannot judge. That was a property of a hand-written call sequence nobody had to
+/// think about; the moment the order is a caller's to choose, it is part of the contract.
+///
+/// ```no_run
+/// use std::path::Path;
+/// use tianheng::prelude::*;
+///
+/// # fn demo(constitution: &Constitution, manifest: &Path) -> Outcome {
+/// Run::over(manifest)
+///     .observe(StaticObserver::new(constitution.static_boundaries().clone()))
+///     .observe(SemanticObserver::new(constitution.semantic_boundaries().clone()))
+///     .verdict()
+/// # }
+/// ```
+#[derive(Debug, Clone)]
+pub struct Run<'a> {
+    manifest_path: &'a Path,
+    accumulated: Option<Outcome>,
+}
+
+impl<'a> Run<'a> {
+    /// Begin a run over the workspace whose manifest is at `manifest_path`.
+    pub fn over(manifest_path: &'a Path) -> Self {
+        Self {
+            manifest_path,
+            accumulated: None,
+        }
+    }
+
+    /// Compose one observer, folding its outcome in immediately.
+    ///
+    /// If the accumulator already cannot judge, the observer is **not evaluated at all**: a verdict resting on a
+    /// boundary that could not be evaluated is not a verdict, so further work would be spent on an answer that
+    /// cannot be reported. This is `evaluate_constitution`'s present behaviour expressed as a property of the
+    /// builder rather than an `if` before each dimension.
+    pub fn observe(mut self, observer: impl Observer) -> Self {
+        if matches!(self.accumulated, Some(Outcome::ConstitutionError(_))) {
+            return self;
+        }
+        let next = stated(observer.observe(self.manifest_path));
+        self.accumulated = Some(match self.accumulated.take() {
+            Some(previous) => merge_outcomes(previous, next),
+            None => next,
+        });
+        self
+    }
+
+    /// The composed verdict.
+    ///
+    /// A run that composed **no** observer cannot judge: reporting it clean would be a vacuous pass, which is
+    /// the direction this repository has re-opened most often. It is a misconfiguration, not a clean workspace.
+    ///
+    /// Not the same question as a composed observer that declares **nothing** — [`hunyi::check_all`] answers an
+    /// empty boundary bundle with [`Outcome::Clean`], and a static-only adoption is exactly that shape. There a
+    /// participant was composed and has nothing to observe; here nothing was composed, so no participant's
+    /// silence could be read as cleanliness. `observer-protocol` states why unifying the two fails in both
+    /// directions.
+    pub fn verdict(self) -> Outcome {
+        self.accumulated.unwrap_or_else(|| {
+            Outcome::ConstitutionError(
+                "a run composed no observer, so there is nothing to judge; composing nothing is a \
+                 misconfiguration rather than a clean workspace"
+                    .to_string(),
+            )
+        })
+    }
+}
+
 /// The one composition seam beneath the library check and CLI runner. Coverage remains static-only
 /// and is returned separately for CLI advisory presentation; it never changes the reaction.
 fn evaluate_constitution(
@@ -124,69 +201,49 @@ fn evaluate_constitution(
     // supersedes the accumulated verdict, and otherwise violations merge into one report.
     let (static_outcome, observed_coverage) =
         check_and_cover(constitution.static_boundaries(), manifest_path);
-    let mut outcome = static_outcome;
-    if !matches!(outcome, Outcome::ConstitutionError(_))
-        && !constitution.semantic_boundaries().is_empty()
-    {
+    // Every outcome entering this path is stated, exactly as `Run::observe` states each one entering the
+    // protocol's. Two ways in, one rule, applied where an outcome arrives.
+    let mut outcome = stated(static_outcome);
+    if !matches!(outcome, Outcome::ConstitutionError(_)) {
+        // The built-in path obtains this dimension's outcome BY INVOKING its observer, which is what makes the
+        // two composition paths' equality construction-held here rather than measured. Note what it is not:
+        // unlike the runtime arm below — which held a second copy of 漏刻's three statements, the corpus and
+        // anchor derivation, the audit call and the `cannot read workspace` message, until delegation left one
+        // copy — this arm always called the one implementation `SemanticObserver::observe` calls. Nothing was deduplicated, and a guard deciding
+        // emptiness above this line still compiles and passes every gate. `observer-protocol` keeps its bound
+        // on that. The cost is one clone of the declared bundle per run, paid deliberately.
         outcome = merge_outcomes(
             outcome,
-            hunyi::check_all(constitution.semantic_boundaries(), manifest_path),
+            stated(
+                SemanticObserver::new(constitution.semantic_boundaries().clone())
+                    .observe(manifest_path),
+            ),
         );
     }
 
     // Audit even an empty runtime declaration: an orphan `assert_boundary!` probe must react.
     // Once an earlier dimension errors the verdict is untrustworthy, so evaluation stops.
     if !matches!(outcome, Outcome::ConstitutionError(_)) {
-        match cargo_metadata(manifest_path) {
-            Ok(metadata) => {
-                let roots = member_root_files(&metadata);
-                // The audit labels every observed file relative to this anchor, and that label is
-                // baseline identity, so the anchor must be the one directory that moves neither
-                // with the checkout location nor with the workspace's own member set: Cargo's
-                // resolved `workspace_root`. It is the same directory whichever member manifest
-                // `--manifest-path` named. Only if metadata carries no such field does this fall
-                // back to the given manifest's own directory — a real `cargo metadata` read always
-                // carries it, so the fallback exists for a synthetic one rather than as a guess.
-                let anchor = probe_label_anchor(&metadata, manifest_path);
-                outcome = merge_outcomes(
-                    outcome,
-                    audit_probe_coverage(constitution.runtime_boundaries(), &roots, &anchor),
-                );
-            }
-            Err(message) => {
-                outcome = merge_outcomes(
-                    outcome,
-                    Outcome::ConstitutionError(format!(
-                        "cannot read workspace '{}': {message}",
-                        manifest_path.display()
-                    )),
-                );
-            }
-        }
+        // **Delegated, not restated.** This arm held its own copy of 漏刻's three statements — the corpus and
+        // anchor derivation, the audit call, and the `cannot read workspace` message — so equality between
+        // this path and the protocol's for the runtime dimension depended on nobody editing one of the two
+        // copies. That is the exact drift `observer-protocol` exists to end, and it was sitting inside the
+        // thing being compared. This path now IS the observer for this dimension, which cannot drift; the
+        // cost is one `to_vec` of the declared seams per run, paid deliberately.
+        //
+        // Consequence the spec states: for the runtime dimension the two paths agree **by construction**
+        // rather than by observation. What still bites is the equality reaction's per-dimension assertion
+        // that the fixture's runtime boundary actually reacted.
+        outcome = merge_outcomes(
+            outcome,
+            stated(
+                RuntimeObserver::new(constitution.runtime_boundaries().to_vec())
+                    .observe(manifest_path),
+            ),
+        );
     }
 
     (outcome, observed_coverage)
-}
-
-/// The directory 漏刻's audit labels every observed file's identity relative to: Cargo's own resolved
-/// `workspace_root`, the one directory that moves neither with the checkout location nor with the
-/// workspace's member set, and the same directory whichever member manifest `--manifest-path` named.
-///
-/// The fallback exists only for synthetic metadata (a unit test's hand-built `Value`); a real
-/// `cargo metadata` read always carries the field. It is put through [`std::path::absolute`] rather
-/// than used as-is because the audit **requires** an absolute anchor and refuses anything else: a
-/// relative anchor could never prefix an absolute source path, so it would silently leave every
-/// label checkout-dependent. `absolute` prepends the working directory to a relative path, refuses
-/// only an empty one (hence the `current_dir` last resort, for a bare `Cargo.toml` whose parent is
-/// empty), and leaves an already-absolute path untouched — no canonicalization, so the
-/// cargo-reported root is never rewritten.
-fn probe_label_anchor(metadata: &serde_json::Value, manifest_path: &Path) -> PathBuf {
-    if let Some(root) = workspace_root(metadata) {
-        return root;
-    }
-    let manifest_dir = manifest_path.parent().unwrap_or(Path::new(""));
-    std::path::absolute(manifest_dir)
-        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")))
 }
 
 /// The command-line flags `dispatch` parses, before command-specific dispatch reacts to them.
@@ -342,13 +399,48 @@ where
 /// check-only flag supplied to `list` is a usage error, not a silent no-op (PROJECT.md: never
 /// silently ignore a flag).
 fn dispatch_list(constitution: &Constitution, parsed: &ParsedArgs) -> u8 {
-    if parsed.manifest_path.is_some()
-        || parsed.baseline_path.is_some()
-        || parsed.write_baseline_path.is_some()
-        || parsed.warn_uncovered
-        || parsed.disallow_stale
-    {
-        return usage("list takes only --format; other flags are check-only");
+    // The flags SUPPLIED are named, not merely the fact that some inapplicable flag was present. This was a single
+    // sentence naming none of them, which satisfied this command's own requirement while the requirement covering
+    // the same conflict inside `check` — one that cites this rule as the one it extends — requires the flag to be
+    // named. The two disagreed and each implementation matched its own, so no test caught it.
+    //
+    // It matters most for `--manifest-path`, the flag a user types by habit: told only that "list takes only
+    // --format", a reader who passed both `--manifest-path` and `--format` is being shown the flag they got right.
+    //
+    // Ordered by this check rather than by the command line, so the message is a function of the set supplied and
+    // not of how it was typed — which is what makes it assertable.
+    //
+    // Exhaustively destructured (no `..`) rather than read through `parsed.field`: a `ParsedArgs` field added
+    // without a matching arm here fails to COMPILE, naming the missing field, instead of silently reaching
+    // `list` unrejected — a hand-written array beside the struct was only ever going to disagree with it again,
+    // the way this command's own single-sentence flag naming and `check`'s equivalent requirement already had.
+    let ParsedArgs {
+        command: _,
+        manifest_path,
+        baseline_path,
+        write_baseline_path,
+        format: _,
+        warn_uncovered,
+        disallow_stale,
+    } = parsed;
+    let mut inapplicable = Vec::new();
+    for (flag, supplied) in [
+        ("--manifest-path", manifest_path.is_some()),
+        ("--baseline", baseline_path.is_some()),
+        ("--write-baseline", write_baseline_path.is_some()),
+        ("--warn-uncovered", *warn_uncovered),
+        ("--disallow-stale", *disallow_stale),
+    ] {
+        if supplied {
+            inapplicable.push(flag);
+        }
+    }
+    if !inapplicable.is_empty() {
+        return usage(&format!(
+            "list takes only --format; {} {} check-only",
+            inapplicable.join(", "),
+            if inapplicable.len() == 1 { "is" } else { "are" }
+        ));
     }
     let semantic = constitution.semantic_boundaries();
     let runtime = constitution.runtime_boundaries();
@@ -469,19 +561,42 @@ where
         }
     };
 
+    // Exhaustively destructured (no `..`) and **consumed by value** — not merely matched by
+    // reference — so every remaining use of a `ParsedArgs` field in this function reads the bound
+    // local rather than `parsed.<field>`. Matching by reference (an earlier version of this guard
+    // did) only forces exhaustiveness at the match site itself: a field added later and read as
+    // `parsed.<field>` anywhere else in this function still compiles, unconsidered by the guard,
+    // which is the asymmetry a prior fix here closed for one check and left standing for the ones
+    // after it. Consuming `parsed` closes that for `manifest_path`/`baseline_path`/
+    // `write_baseline_path` outright: the compiler refuses `parsed.<field>` once its value has moved
+    // into a local, naming the field. A `Copy` field (`format`, `warn_uncovered`, `disallow_stale`)
+    // has no such backstop — copying a place doesn't consume it, so `parsed.<copy field>` stays
+    // legal even after this destructure names it — so every field in this function is, by
+    // convention, always read through the bound local below rather than through `parsed`, and no
+    // later line in this function does otherwise.
+    let ParsedArgs {
+        command: _,
+        manifest_path: manifest_path_arg,
+        baseline_path,
+        write_baseline_path,
+        format,
+        warn_uncovered,
+        disallow_stale,
+    } = parsed;
+
     // A contradictory flag pair is a pure usage error, independent of any workspace — check it
     // before resolving the manifest, so an also-absent `--manifest-path` (whose "no Cargo.toml
     // found" diagnostic would otherwise fire first) cannot mask the real misconfiguration.
-    if parsed.baseline_path.is_some() && parsed.write_baseline_path.is_some() {
+    if baseline_path.is_some() && write_baseline_path.is_some() {
         return usage("--baseline and --write-baseline are mutually exclusive");
     }
-    if parsed.disallow_stale && parsed.baseline_path.is_none() {
+    if disallow_stale && baseline_path.is_none() {
         return usage("--disallow-stale requires --baseline");
     }
     // `--write-baseline` records a snapshot; it emits no report at all, so a flag whose only effect
     // is on a report has nothing to act on here. `list` already rejects a check-only flag rather
     // than accepting it as a silent no-op, and `--disallow-stale` without `--baseline` is rejected
-    // just above for the same reason — this is that same rule applied WITHIN `check`, between its
+    // for the same reason — this is that same rule applied WITHIN `check`, between its
     // two actions, which was the one place it did not hold: `check --write-baseline out.json
     // --warn-uncovered --format sarif` recorded the baseline, exited 0, and dropped both flags with
     // no diagnostic, so an adopter could believe they had coverage advisories or a SARIF document
@@ -491,14 +606,14 @@ where
     // changes nothing observable". `--warn-uncovered` under `--format json` stays accepted: the JSON
     // report's `coverage` object already carries every uncovered crate unconditionally, so the flag
     // is redundant there rather than dropped — the consumer receives the whole fact either way.
-    if parsed.write_baseline_path.is_some() {
-        if parsed.warn_uncovered {
+    if write_baseline_path.is_some() {
+        if warn_uncovered {
             return usage(
                 "--warn-uncovered cannot apply to --write-baseline: recording a baseline emits \
                  no coverage report to raise an advisory in",
             );
         }
-        if parsed.format.is_some() {
+        if format.is_some() {
             return usage(
                 "--format cannot apply to --write-baseline: recording a baseline emits no report \
                  to format (the baseline document's own shape is fixed)",
@@ -506,14 +621,14 @@ where
         }
     }
 
-    let manifest_path = match resolve_manifest_path(parsed.manifest_path) {
+    let manifest_path = match resolve_manifest_path(manifest_path_arg) {
         Ok(path) => path,
         Err(code) => return code,
     };
 
     let (mut outcome, observed_coverage) = evaluate_constitution(constitution, &manifest_path);
 
-    if let Some(path) = parsed.write_baseline_path {
+    if let Some(path) = write_baseline_path {
         return write_baseline(&outcome, &path);
     }
 
@@ -525,23 +640,18 @@ where
         _ => observed_coverage,
     };
 
-    if let Some(path) = parsed.baseline_path {
+    if let Some(path) = baseline_path {
         return gate(
             &mut outcome,
             &path,
             report_format,
             coverage.as_ref(),
-            parsed.warn_uncovered,
-            parsed.disallow_stale,
+            warn_uncovered,
+            disallow_stale,
         );
     }
 
-    print_report(
-        report_format,
-        &outcome,
-        coverage.as_ref(),
-        parsed.warn_uncovered,
-    );
+    print_report(report_format, &outcome, coverage.as_ref(), warn_uncovered);
     outcome.exit_code()
 }
 
@@ -752,7 +862,7 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
 /// writable but not readable (mode `0300`) cannot be opened for it at all. Turning any of those
 /// into "cannot write baseline" would report failure for a baseline that is sitting correctly on
 /// disk, and would regress adopters for whom this path worked before the flush existed. So a
-/// runtime inability to flush a directory is treated exactly as the compile-time one is below: as
+/// runtime inability to flush a directory is treated exactly as the compile-time inability is: as
 /// this platform not offering the operation, not as the write having failed.
 ///
 /// Unix only for the compile-time half: `File::open` on a directory is not portable — Windows
@@ -776,8 +886,9 @@ fn sync_parent_dir(path: &Path) {
 }
 
 /// `create_new`'s `O_EXCL` fails on any existing directory entry, including a dangling symlink —
-/// a baseline path whose symlink target does not exist reads as `NotFound` one line up (so this,
-/// the create-new path, runs), then hits `AlreadyExists` here, indistinguishable from a genuine
+/// a baseline path whose symlink target does not exist reads as `NotFound` to [`write_baseline`]'s
+/// own `metadata` probe (so this, the create-new path, runs), then hits `AlreadyExists` here,
+/// indistinguishable from a genuine
 /// concurrent creation without checking `symlink_metadata` explicitly. That distinction matters:
 /// a dangling symlink is a permanent state, not a race — "rerun the command" (the concurrent-
 /// creation arm's own remedy) would fail identically forever, so this earns its own diagnosis.
@@ -827,7 +938,7 @@ fn create_baseline_file(path: &str, document: &str) -> Result<(), BaselineWriteE
             // open (restored file, or the link replaced), and classifying on symlink-ness alone then
             // told the adopter "it is a symlink to X, which does not exist" about a target that does,
             // and prescribed a remedy ("recreate the target") already satisfied. Refusing was always
-            // safe; only the reason was false, which is the misdiagnosis class this window corrected
+            // safe; only the reason was false, which is the misdiagnosis class the 0.4.0 window corrected
             // twice elsewhere.
             //
             // Falling through loses no diagnostic: [`write_baseline`]'s `create_new && AlreadyExists`
@@ -866,6 +977,45 @@ enum BaselineWriteError {
 impl From<std::io::Error> for BaselineWriteError {
     fn from(err: std::io::Error) -> Self {
         Self::Io(err)
+    }
+}
+
+/// Removes a temp file when it goes out of scope unless the write committed — the cleanup half of
+/// [`write_baseline_atomically`]'s guarantee, whose doc carries the full threat model.
+///
+/// A `bool` rather than an `Option<PathBuf>`: with the path always present, `path()` is infallible.
+/// Under an `Option`, `commit` consumed the guard and took the path, so no caller could ever observe
+/// `None` — and the `expect` standing over that unreachable state is the defensive
+/// over-foolproofing of an impossible state the minimalism bound forbids.
+struct AtomicTempFileGuard {
+    path: PathBuf,
+    committed: bool,
+}
+
+impl AtomicTempFileGuard {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            committed: false,
+        }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Consumes the guard, so a committed write cannot be followed by a use of the temp path that no
+    /// longer exists.
+    fn commit(mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for AtomicTempFileGuard {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = std::fs::remove_file(&self.path);
+        }
     }
 }
 
@@ -922,9 +1072,9 @@ impl From<std::io::Error> for BaselineWriteError {
 /// way and no test bound to it could tell the two apart: the path form issued
 /// `chmod("<target>.tmp-<pid>", 0100666)`, the descriptor form issues `fchmod(4, 0100666)`.
 ///
-/// The cleanup on the failure path below stays `remove_file(&tmp_path)`, and is not the same
-/// exposure: `unlink` does not follow symlinks, so a symlink planted at that name is itself what gets
-/// removed, never its target. The temp path is built by appending to the resolved
+/// The cleanup runs in [`AtomicTempFileGuard::drop`] and stays a `remove_file` of the temp path,
+/// which is not the same exposure: `unlink` does not follow symlinks, so a symlink planted at that
+/// name is itself what gets removed, never its target. The temp path is built by appending to the resolved
 /// target's raw `OsString`, never through `Path::display()` (which lossily replaces non-UTF-8
 /// bytes for human-readable formatting) — a resolved path is not guaranteed valid UTF-8, and a
 /// lossy round-trip through a new string can point at a directory that does not exist, failing an
@@ -959,19 +1109,18 @@ fn write_baseline_atomically(path: &str, document: &str) -> Result<(), BaselineW
         Err(err) => return Err(err.into()),
     };
 
+    let guard = AtomicTempFileGuard::new(tmp_path);
+
     // The fsync sits after `set_permissions` and before the `rename`, so one call flushes both
     // the bytes and the mode change (both live on the same inode) while the temp file is still
     // the only name reaching them. Syncing before the chmod would leave the mode unflushed; the
     // rename must come after both, since it is the step that publishes them.
-    let write_result = file
-        .write_all(document.as_bytes())
-        .and_then(|()| file.set_permissions(permissions))
-        .and_then(|()| file.sync_all())
-        .and_then(|()| std::fs::rename(&tmp_path, &target));
-    if let Err(err) = write_result {
-        let _ = std::fs::remove_file(&tmp_path);
-        return Err(err.into());
-    }
+    file.write_all(document.as_bytes())?;
+    file.set_permissions(permissions)?;
+    file.sync_all()?;
+    std::fs::rename(guard.path(), &target)?;
+    guard.commit();
+
     sync_parent_dir(&target);
     Ok(())
 }
@@ -1078,9 +1227,114 @@ fn merge_outcomes(first: Outcome, second: Outcome) -> Outcome {
         violations.extend(report.violations.iter().cloned());
     }
     if violations.is_empty() {
-        Outcome::Clean
+        // The composed subject is the sum of what the participants declared and reached. Summing rather
+        // than picking one is what keeps a fold of two clean verdicts from silently reporting only the
+        // second's subject; summing rather than intersecting is right because the figures are each
+        // dimension's own unit, and the composed claim is *these participants, together, reached this
+        // much*.
+        //
+        // **Checked, because both figures come from outside.** `Subject::of` admits any `usize` pair where
+        // something declared also reached something, so a participant may hand this fold `usize::MAX` — and
+        // two of those overflow. Unchecked, that is a debug panic and a release wrap, which is the worst
+        // pair: the profile decides between a crash and a quiet lie. Measured on the code this replaces —
+        // debug reported `attempt to add with overflow`, release returned
+        // `Clean(Subject { declared: 18446744073709551614, reached: 2 })`. The wrapped total satisfies
+        // `Subject::of` because `reached` is still positive, so the fold states a **clean** verdict carrying
+        // a figure that is the sum of nothing.
+        //
+        // This is also what the sentence that stood here got wrong. *The sum of two constructible subjects
+        // is constructible* is true of the integers and not of `usize`, and the `None` arm below was called
+        // unreachable on the strength of it.
+        // **A CONSEQUENCE of `stated`, not a second site.** Every outcome reaching this fold has passed
+        // `stated` where it entered its run — `Run::observe` for the protocol's path, `evaluate_constitution`
+        // for the built-in one — so no input can take the refusal below. It stays because this function takes
+        // two `Outcome` values and nothing in its signature says they were stated: what makes the claim true
+        // is the check, not a caller's discipline. Guarding only here was the first repair, and it left the
+        // one-observer run untouched, since `Run::observe` stores the first outcome verbatim.
+        let (Some(first_subject), Some(second_subject)) = (subject_of(&first), subject_of(&second))
+        else {
+            return Outcome::ConstitutionError(
+                "a participant reported violations while carrying none, so the subject it reached cannot be \
+                 stated and this fold has no honest figure for what the run covered. A violation-free \
+                 outcome is `Outcome::Clean(Subject)`"
+                    .to_string(),
+            );
+        };
+        let (Some(declared), Some(reached)) = (
+            first_subject
+                .declared()
+                .checked_add(second_subject.declared()),
+            first_subject
+                .reached()
+                .checked_add(second_subject.reached()),
+        ) else {
+            return Outcome::ConstitutionError(
+                "the composed run's subject cannot be represented: the participants' declared or reached \
+                 counts sum past `usize`, so this fold can state no honest figure for what they covered"
+                    .to_string(),
+            );
+        };
+        match Subject::of(declared, reached) {
+            Some(subject) => Outcome::Clean(subject),
+            // Now genuinely unreachable, and still constructed rather than asserted: with the sum checked
+            // above, either side declaring something means that side also reached something.
+            None => Outcome::ConstitutionError(
+                "the composed run declared boundaries and reached nothing, so nothing was judged"
+                    .to_string(),
+            ),
+        }
     } else {
         Outcome::Violations(Report::new(violations))
+    }
+}
+
+/// One outcome, as it enters a run — or the refusal that it states nothing a run can carry.
+///
+/// **Checked where an outcome ARRIVES, not where two are combined.** The first repair guarded
+/// [`merge_outcomes`], which a run composing one observer never reaches: [`Run::observe`] stores the first
+/// outcome verbatim, so `Run::over(m).observe(o).verdict()` still answered `Violations(Report::empty())` —
+/// exit code `0`, no subject, no refusal. Every outcome passes here exactly once, on both paths into the
+/// fold, which is what makes the guard inside it a consequence rather than a second site.
+///
+/// A violation-free `Outcome::Violations` is the one shape this refuses. `Report::empty()` is public and
+/// `exit_code()` answers `0` for it, so it is constructible by any participant — and `0.5.0` is the first
+/// release in which an outside `Observer` can be one.
+///
+/// **On the built-in path that shape is construction-held, and it is still stated here.** The composition
+/// beneath the CLI runs three concrete family observers, and each of them builds `Outcome::Violations` only
+/// in the `else` of an `if violations.is_empty()` — so none of them can produce it. Applying this to that
+/// path anyway is deliberate: the alternative applies one rule at one arrival out of four and rests the
+/// other three on a whole-family invariant that nothing checks and that a later edit to any of those three
+/// crates would quietly end. A rule stated once and applied wherever an outcome arrives costs three words;
+/// the argument for applying it selectively would have to stay true by review.
+fn stated(outcome: Outcome) -> Outcome {
+    match outcome {
+        Outcome::Violations(report) if report.violations.is_empty() => Outcome::ConstitutionError(
+            "a participant reported violations while carrying none, so the subject it reached cannot be \
+             stated and this run has no honest figure for what it covered. A violation-free outcome is \
+             `Outcome::Clean(Subject)`"
+                .to_string(),
+        ),
+        stated => stated,
+    }
+}
+
+/// The subject a participant's outcome carries, or `None` where it carries none.
+///
+/// **`None` rather than an empty subject**, because the two are opposite claims. `nothing_declared()` says
+/// *this participant was configured with nothing to enforce*, which is a real and protected shape — a
+/// static-only adoption composes the semantic dimension with an empty bundle. Answering it for an outcome
+/// that simply carries no subject makes the engine assert, on a participant's behalf, a fact the
+/// participant never stated.
+///
+/// The caller only reaches this once no side errored and no violation survived, so an outcome that is not
+/// `Clean` here is a violation-free `Outcome::Violations` — `Report::empty()` is public, `exit_code()`
+/// answers `0` for it, and the first release in which an outside `Observer` can exist is the one that makes
+/// it constructible from outside this crate.
+fn subject_of(outcome: &Outcome) -> Option<Subject> {
+    match outcome {
+        Outcome::Clean(subject) => Some(*subject),
+        _ => None,
     }
 }
 

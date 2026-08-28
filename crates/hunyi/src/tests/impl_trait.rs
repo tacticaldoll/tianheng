@@ -160,6 +160,86 @@ pub(super) fn impl_trait_operand_mod(
     )
 }
 
+/// Symmetric with `dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound`: a bare single-segment
+/// principal the branch does not declare, and that is no declared or sysroot crate head, stays dropped.
+///
+/// `semantic-impl-trait-operand-boundary` declares this bound in wording near-identical to its dyn twin,
+/// and only the dyn one was pinned — the scenario was copied when this capability was added as the depth
+/// stair's sibling, and its test was not. The shared resolver made borrowing the dyn test tempting and
+/// wrong: it exercises the dyn path, so it would have reported this surface as defended without ever
+/// touching it.
+///
+/// Forbidden as the MODULE-QUALIFIED spelling, for the reason its dyn twin records: the bare
+/// `["Frobnicate"]` this asserted first passes whatever the resolver does, no ladder step producing an
+/// unqualified candidate.
+#[test]
+pub(super) fn impl_trait_operand_genuinely_unresolvable_bare_principal_is_a_bound() {
+    let out = impl_trait_operand_findings(
+        "op-unresolvable-bare-impl",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            ("m.rs", "pub fn f() -> impl Frobnicate { todo!() }\n"),
+        ],
+        "crate::m",
+        &["crate::m::Frobnicate"],
+        &[],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "an undeclared bare principal must stay a bound, even against the module-qualified spelling: {out:?}"
+    );
+}
+
+/// The reacting control for the bound above, and 渾儀's own test rather than the dyn one: the register
+/// refuses a single test cited by declared bounds in two capabilities, and 三儀 ⊥ 三儀 wants each operand
+/// surface exercised through its own entry point.
+#[test]
+pub(super) fn impl_trait_operand_same_module_bare_trait_resolves_without_use() {
+    let out = impl_trait_operand_findings(
+        "op-same-module-bare-trait-impl",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            (
+                "m.rs",
+                "pub trait Frobnicate {}\npub fn f() -> impl Frobnicate { todo!() }\n",
+            ),
+        ],
+        "crate::m",
+        &["crate::m::Frobnicate"],
+        &[],
+    )
+    .unwrap();
+    assert!(
+        !out.is_empty(),
+        "same-module bare trait must resolve to crate::m::Frobnicate: {out:?}"
+    );
+}
+
+/// The raw-identifier half over the `impl Trait` operand: canonicalized before the candidate is built,
+/// so a real local `trait r#type` matches the canonical `crate::m::type`.
+#[test]
+pub(super) fn impl_trait_operand_bare_raw_identifier_local_trait_resolves_canonically() {
+    let out = impl_trait_operand_findings(
+        "op-bare-raw-ident-local-trait-impl",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            (
+                "m.rs",
+                "pub trait r#type {}\npub fn f() -> impl r#type { todo!() }\n",
+            ),
+        ],
+        "crate::m",
+        &["crate::m::type"],
+        &[],
+    )
+    .unwrap();
+    assert!(
+        !out.is_empty(),
+        "a bare raw-identifier local trait must match the canonical forbidden spelling: {out:?}"
+    );
+}
+
 #[test]
 pub(super) fn impl_trait_operand_flags_a_named_trait_and_passes_others() {
     assert_eq!(
@@ -398,8 +478,8 @@ pub(super) fn impl_trait_subtree_reacts_to_a_submodule_return_the_seam_scope_mis
 /// A cfg_attr(path)-hidden submodule is observed, whichever candidate file exists — the identical
 /// `resolve_child_modules`/`walk_subtree_modules` mechanism fixed by
 /// `hunyi-cfg-attr-path-module-loss` for `scan_crate`'s own consumers. Not named in that change's
-/// own commit message (a documentation gap a round-3 adversarial review found and closed) but the
-/// same shared walker, independently reproduced here before being counted as fixed.
+/// own commit message, but the same shared walker — independently reproduced here before being
+/// counted as fixed.
 #[test]
 pub(super) fn impl_trait_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule() {
     let files = &[
@@ -603,7 +683,7 @@ pub(super) fn dyn_trait_two_platform_modules_impling_the_same_owner_stay_distinc
     );
 }
 
-/// Same property as the two tests above, for the `InherentAssoc` seam kind itself (assoc
+/// Same property as its two sibling directions, for the `InherentAssoc` seam kind itself (assoc
 /// `const`/`type`), which — unlike `InherentMethod` — had no two-module regression test at all
 /// before this, in any capability. Mirrors `dyn_in_an_inherent_impl_public_assoc_const_reacts`'s
 /// fixture shape, split across two platform modules for the same owner.

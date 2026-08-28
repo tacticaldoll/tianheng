@@ -61,6 +61,7 @@ impl TempBase {
     fn new(label: &str) -> Self {
         let base = std::env::temp_dir().join(format!("louke-{label}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
+        xingbiao::claim_scratch(&base).expect("the fixture root is writable");
         Self(base)
     }
 
@@ -285,7 +286,10 @@ fn root_aware_audit_does_not_follow_a_mod_token_inside_a_macro_body() {
         "macro_rules! generated { () => { mod phantom; } } fn live() {}",
     );
     let outcome = tb.audit(&[], &[root]);
-    assert_eq!(outcome, Outcome::Clean, "macro tokens are not live modules");
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
+        "macro tokens are not live modules"
+    );
 }
 
 #[test]
@@ -968,6 +972,55 @@ fn audit_reacts_when_a_declaration_and_probe_decode_differently() {
         }
         other => panic!("expected a decode-mismatch reaction, got {other:?}"),
     }
+}
+
+/// **Neither audit direction carries a repair polarity**, which the specification requires and nothing measured.
+///
+/// A polarity names a repair *direction* — deny-breach, repair by removing the offending code; allowlist-gap,
+/// repair by removing it or by widening the declared set. Neither audit direction is either: a declared seam with
+/// no probe is repaired by probing it **or** by dropping the declaration, and a probe naming an undeclared seam by
+/// declaring it **or** by deleting the probe. Assigning a value would name a direction that does not exist, and an
+/// adopter's report and baseline both carry the label.
+///
+/// The requirement stating this was written with no reaction, in the window whose subject was closing exactly that
+/// class — so it is measured here rather than trusted. The fixture is the one that produces **both** directions at
+/// once, so neither is asserted on a report that lacks it.
+#[test]
+fn neither_audit_direction_carries_a_repair_polarity() {
+    let tb = TempBase::new("audit-polarity");
+    let dir = tb.dir("pol", "fn f() { assert_boundary!(\"a\\n\", o); }");
+    let outcome = tb.audit(&[boundary("a\\n", Severity::Enforce)], &[dir]);
+    let Outcome::Violations(report) = outcome else {
+        panic!("the fixture must react in both directions, or this asserts over nothing");
+    };
+    // Both directions present, so the assertion below covers both rather than whichever one fired.
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|v| v.finding.contains("has no configured probe marker")),
+        "the declared-but-unprobed direction must be present: {:?}",
+        report.violations
+    );
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|v| v.finding.contains("undeclared seam")),
+        "the probed-but-undeclared direction must be present: {:?}",
+        report.violations
+    );
+    let with_polarity: Vec<&str> = report
+        .violations
+        .iter()
+        .filter(|v| v.polarity.is_some())
+        .map(|v| v.finding.as_str())
+        .collect();
+    assert!(
+        with_polarity.is_empty(),
+        "an audit finding names no repair direction, because probing a seam and dropping its declaration are \
+         both repairs and neither is a deny breach or an allowlist gap: {with_polarity:?}"
+    );
 }
 
 #[test]
@@ -1688,9 +1741,8 @@ fn root_aware_audit_does_not_hang_on_a_symlinked_directory_cycle() {
     );
     tb.symlink(tb.path(), "loop_mod");
     let outcome = tb.audit(&[boundary("a", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a real, declared, and probed seam must be covered, not hang or error: {outcome:?}"
     );
 }
@@ -1705,9 +1757,8 @@ fn directory_audit_does_not_hang_on_a_symlinked_directory_cycle() {
         &[boundary("a", Severity::Enforce)],
         &[tb.path().to_path_buf()],
     );
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "directory scan on a cyclic symlinked dir must be covered without hanging or looping: {outcome:?}"
     );
 }
@@ -1724,9 +1775,8 @@ fn custom_marker_list_recognizes_user_probe_wrapper() {
         &[root],
         &["assert_boundary", "my_custom_seam"],
     );
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "custom registered probe macro wrapper must cover the seam: {outcome:?}"
     );
 }
@@ -1998,9 +2048,8 @@ fn a_seam_probed_only_inside_a_cfg_if_arm_is_covered() {
         "cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f(o: u8) { assert_boundary!(\"seam\", o); } } }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a seam probed only inside an arm must be covered, not reported unprobed: {outcome:?}"
     );
 }
@@ -2076,9 +2125,8 @@ fn a_module_declared_inside_a_cfg_if_arm_covers_a_seam() {
         "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "an arm-declared module's probe must count: {outcome:?}"
     );
 }
@@ -2107,9 +2155,8 @@ fn a_module_declared_after_a_cfg_if_body_is_still_reached() {
         ],
         &[root],
     );
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a module declared after a transparent body must still be reached: {outcome:?}"
     );
 }
@@ -2128,9 +2175,8 @@ fn an_arm_declared_module_with_no_file_is_tolerated() {
         "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a fileless arm declaration must be tolerated, not a constitution error: {outcome:?}"
     );
 }
@@ -2198,9 +2244,8 @@ fn a_clean_cfg_if_arm_stays_clean() {
          pub fn g(o: u8) { assert_boundary!(\"seam\", o); }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a clean cfg_if arm must stay clean: {outcome:?}"
     );
 }
@@ -2227,9 +2272,8 @@ fn a_spaced_transparent_invocation_is_transparent_in_both_passes() {
         "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a module declared inside a spaced transparent invocation's arm must be reached: {outcome:?}"
     );
 }
@@ -2266,9 +2310,8 @@ fn a_module_declared_inside_a_nested_cfg_if_arm_is_reached() {
         "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "a module declared inside a nested cfg_if arm must be reached: {outcome:?}"
     );
 }
@@ -2312,9 +2355,8 @@ fn an_absent_path_remap_target_inside_a_cfg_if_arm_is_tolerated() {
          pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "an absent unconditional #[path] target inside an arm must be tolerated: {outcome:?}"
     );
 }
@@ -2450,11 +2492,40 @@ fn two_cfg_attr_path_declarations_covering_every_platform_are_clean_when_probes_
     tb.source("u.rs", "pub fn q(o: u8) { assert_boundary!(\"seam\", o); }");
     tb.source("w.rs", "pub fn r(o: u8) { assert_boundary!(\"seam\", o); }");
     let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
         "source compiling cleanly on every platform, with every probe matching the declared seam, \
          must be Clean: {outcome:?}"
+    );
+}
+
+/// A doubly-nested `#[cfg_attr(a, cfg_attr(b, path = "…"))]`'s inner `path` value IS extracted, contrary to
+/// a comment this repository carried claiming it was "a stated, undetected bound of this hand-rolled
+/// scanner": `find_path_meta_value` scans linearly for a `path` identifier followed by `=` anywhere within
+/// the outer `cfg_attr`'s whole argument span, so it does not distinguish nesting depth at all — it was
+/// never the recursive-descent parse the stale comment contrasted against `hunyi`'s `syn`-based walk.
+/// Measured directly: this fixture reports `Clean` (the nested target's probe counts), not the unprobed
+/// violation a genuinely undetected target would leave from the conventional file alone. Pinned here so a
+/// future change that actually introduces the limitation is a deliberate, measured one.
+#[test]
+fn a_doubly_nested_cfg_attr_path_is_followed_the_same_as_a_single_nesting() {
+    let tb = TempBase::new("cfg-attr-path-doubly-nested");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, cfg_attr(feature = \"x\", path = \"nested.rs\"))]\npub mod plat;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    // The conventional file, present and carrying no probe at all — if the nested target were NOT
+    // followed, this is all the scanner would see, and "seam" would be reported unprobed.
+    tb.source("plat.rs", "pub fn q(_o: u8) {}\n");
+    tb.source(
+        "nested.rs",
+        "pub fn r(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
+        "the doubly-nested target's real probe must be found (the conventional file alone has none): \
+         {outcome:?}"
     );
 }
 
@@ -2915,7 +2986,7 @@ fn a_nested_absolute_path_literal_now_agrees_across_checkouts() {
 /// `Path::display()` is lossy — it replaces each byte it cannot decode with U+FFFD — so two source
 /// paths differing only in invalid-UTF-8 bytes rendered to ONE label, hence one `UnauditableProbe`
 /// identity: baselining the first would silently suppress the second's never-accepted violation.
-/// That is the injectivity class this window closed at five other identity sites; the `file`
+/// That is the injectivity class the 0.4.0 window closed at five other identity sites; the `file`
 /// component of this identity is the same kind of component.
 ///
 /// Unix-only because this is where such a path can be constructed: on Windows the analogous input is
@@ -3028,7 +3099,7 @@ fn a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directo
 
     let from_root = tb.audit(&declared, &[root]);
     assert!(
-        matches!(from_root, Outcome::Clean),
+        matches!(from_root, Outcome::Clean(_)),
         "the module graph reaches the file through the symlink — reading a file follows symlinks, so \
          the root-aware corpus has no bound here: {from_root:?}"
     );
@@ -3048,5 +3119,47 @@ fn a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directo
             .any(|v| v.rule.contains("must be probed")),
         "the directory corpus reports the seam unprobed: {:?}",
         report.violations
+    );
+}
+
+#[test]
+fn source_outside_lib_or_bin_target_subtree_is_out_of_scope_corpus_bound() {
+    let tb = TempBase::new("outside-subtree-corpus-bound");
+    let _tests_file = tb.source(
+        "crates/foo/tests/integration.rs",
+        "pub fn go(o: u8) { louke::assert_boundary!(\"seam\", o); }",
+    );
+    let src = tb.source("crates/foo/src/lib.rs", "// empty lib root\n");
+
+    let declared = [boundary("seam", Severity::Enforce)];
+    let outcome = tb.audit(&declared, &[src]);
+
+    let Outcome::Violations(report) = outcome else {
+        panic!("outside subtree is out of corpus scope: {outcome:?}");
+    };
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|v| v.rule.contains("must be probed")),
+        "reports unprobed seam: {:?}",
+        report.violations
+    );
+}
+
+#[test]
+fn production_probe_behind_non_production_cfg_is_counted_as_coverage() {
+    let tb = TempBase::new("cfg-test-probe-coverage");
+    let root = tb.source(
+        "crates/foo/src/lib.rs",
+        "#[cfg(test)]\npub fn go(o: u8) { louke::assert_boundary!(\"seam\", o); }",
+    );
+
+    let declared = [boundary("seam", Severity::Enforce)];
+    let outcome = tb.audit(&declared, &[root]);
+
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
+        "cfg(test) probe must be counted as coverage: {outcome:?}"
     );
 }

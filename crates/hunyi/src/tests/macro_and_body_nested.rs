@@ -853,7 +853,7 @@ pub(super) fn two_crates_with_the_identical_async_exposure_boundary_stay_distinc
         &mut violations,
     )
     .expect("both boundaries resolve");
-    let outcome = outcome_from(violations);
+    let outcome = outcome_from(violations, 1, 1);
     let report = match outcome {
         Outcome::Violations(report) => report,
         other => panic!("expected two violations, got {other:?}"),

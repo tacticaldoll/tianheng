@@ -876,7 +876,7 @@ mod fact_tests {
     /// shape uncovered.
     ///
     /// One link stays human, and is worth naming rather than implying the loop is closed: a new
-    /// `SeamKind` variant must be listed in `ALL` on the lines below it. Stable Rust cannot
+    /// `SeamKind` variant must be listed in the `ALL` array beside its declaration. Stable Rust cannot
     /// enumerate an enum's variants, so some single list is unavoidable; this is it. It is strictly
     /// narrower than the integer it replaces — the omission is now adjacent to the variant rather
     /// than distant from the fixture, listing a kind whose representative is missing fails loudly

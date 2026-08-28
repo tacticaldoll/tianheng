@@ -7,6 +7,15 @@ Rust-declared constitution into a CI reaction. It fixes the flag surface
 (`--manifest-path`), the usage-error handling, and how the process exit code and
 report mirror the reaction outcome (0 clean or warn-only, 1 enforce violation,
 2 constitution/usage error), so a CI gate has a stable, non-bypassable contract.
+
+## Subject
+
+- `crates/tianheng/src/main.rs`
+- `crates/tianheng/src/runner.rs`
+- `crates/tianheng/src/runner/*.rs`
+- `crates/tianheng/tests/baseline_cli.rs`
+- `crates/tianheng/tests/errors_conformance.rs`
+
 ## Requirements
 ### Requirement: Check command interface
 
@@ -427,22 +436,42 @@ When `--manifest-path` is omitted, the `check` runner SHALL default to the neare
 
 ### Requirement: List rejects flags that only apply to check
 
-The `list` command observes no workspace and performs no reaction; it SHALL accept only `--format`. Supplying a flag that applies only to `check` — `--manifest-path`, `--baseline`, `--write-baseline`, or `--warn-uncovered` — to `list` SHALL be a usage error that prints usage guidance and exits `2`, never silently ignored. This complements the unrecognized-argument rule: a flag that is recognized by `check` but inapplicable to `list` SHALL be rejected rather than accepted as a silent no-op.
+The `list` command observes no workspace and performs no reaction; it SHALL accept only `--format`. Supplying a
+flag that `check` recognizes and `list` does not honor SHALL be a usage error that exits `2`, never silently
+ignored. This complements the unrecognized-argument rule: a flag that is recognized by `check` but inapplicable to
+`list` SHALL be rejected rather than accepted as a silent no-op.
 
-#### Scenario: A check-only flag supplied to list is a usage error
+The rejected set SHALL be **derived** from the flags `check` recognizes rather than enumerated here. A prose list
+of it has already gone stale once — it named four flags while the runner rejected five, because `--disallow-stale`
+was added to the runner and not to this requirement — and a requirement that under-describes a correct
+implementation is a requirement a later reader will implement to.
 
-- **WHEN** the runner is invoked as `list --baseline <file>` (or `--write-baseline <file>`, `--manifest-path <path>`, or `--warn-uncovered`)
-- **THEN** it prints usage guidance and exits `2`, never silently ignoring the flag
+The refusal SHALL **name the flags the invocation supplied**, and SHALL name all of them rather than the first. This
+is the same obligation the requirement governing conflicts *within* `check` states while citing this one as the rule
+it extends; before this, the two disagreed and each implementation satisfied its own, which is why no test caught
+it. Naming matters most here because `--manifest-path` is in the rejected set and is the flag a user types by habit:
+told only that "`list` takes only `--format`", a reader who passed both `--manifest-path` and `--format` is being
+shown the flag they got right.
+
+The order of the named flags SHALL be a function of the set and not of the command line, so two invocations
+supplying the same flags in different order receive the same diagnostic.
+
+#### Scenario: A check-only flag supplied to list is a usage error naming it
+
+- **WHEN** the runner is invoked as `list --baseline <file>` (or with `--write-baseline`, `--manifest-path`,
+  `--warn-uncovered`, or `--disallow-stale`)
+- **THEN** it exits `2`, prints usage guidance, and names the flag that was supplied — never silently ignoring it,
+  and never reporting only that some inapplicable flag was present
+
+#### Scenario: Several check-only flags are all named
+
+- **WHEN** the runner is invoked as `list` with more than one check-only flag
+- **THEN** every one of them is named, because reporting the first would send the reader back for a second round
 
 #### Scenario: List still accepts the format flag
 
 - **WHEN** the runner is invoked as `list --format json` (or `list --format text`, or `list` with no flag)
 - **THEN** it prints the projection and exits `0`, because `--format` is the one flag `list` honors
-
-#### Scenario: An unknown flag to list is still a usage error
-
-- **WHEN** the runner is invoked as `list --bogus`
-- **THEN** it prints usage guidance and exits `2`, exactly as the unrecognized-argument rule already requires
 
 ### Requirement: A recognized flag that cannot apply to the requested action is a usage error
 

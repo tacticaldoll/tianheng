@@ -3,6 +3,12 @@
 ## Purpose
 
 The 渾儀 (semantic) dimension's forbidden-marker capability: types **defined in a governed module subtree** must not acquire a forbidden trait — observed as a `#[derive(T)]` on the type or a hand `impl T for X` (anywhere in the crate) whose self-type resolves to a definition under the subtree. It delivers the "this layer is not `T`-able" intent (both idiomatic acquisition forms), the forbidden-marker complement to exposure, impl-locality, and visibility. Matching is by leaf identifier (no false negative across the derive-macro/trait path split); the forbidden-attribute slice stays deferred.
+
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Forbidden-marker boundary declared in Rust
 
@@ -108,6 +114,7 @@ If the boundary's target crate is absent from the workspace, the system SHALL tr
 
 - **WHEN** a hand-impl's self-type is brought in by a glob import (`use crate::domain::*; impl serde::Serialize for Order`) so the scan cannot resolve `Order` to its definition
 - **THEN** the system does not claim to observe it (a stated coverage bound), rather than silently asserting cleanliness — the co-located, `use`-imported, re-export-spelled, and type-alias cases (the common ones) do resolve and react
+- **PINNED-BY** `an_unresolvable_glob_self_type_is_a_documented_bound`
 
 #### Scenario: A blanket impl's own generic parameter is never resolved through a same-named alias
 
@@ -166,6 +173,8 @@ NOT define identity.
 
 The system SHALL observe the hand-`impl T for X` acquisition form when the `impl` is written as a direct statement of the outermost body of a `const` initializer (a bare `{ … }` block expression) or of a `fn`'s own body — the "const-eval trick" idiom and its fn-body-nested sibling, the identical shape `semantic-trait-impl-locality` states this property for, since both capabilities read the crate-wide `impl` collection this requirement's observation is drawn from. Recovery carries the identical bounds: only an `impl` that is a DIRECT statement of the `const`/`fn`'s own outermost block is recovered — one level further in, or a `static` initializer, is NOT — stated rather than left silent.
 
+A hand-impl nested one level further inside such a body, or wrapped in a `static` initializer, stays a stated bound (bound: semantic-signature-coupling/an-impl-nested-one-level-further-or-static-wrapped-is-a-stated-bound) — declared once by `semantic-signature-coupling`, which states this anchor-and-item property on every single-module-anchored capability's behalf, and referenced here rather than restated.
+
 #### Scenario: A const-wrapped hand-impl reacts
 
 - **WHEN** `crate::wire` declares `const _: () = { impl serde::Serialize for crate::domain::Order {} };` under a boundary forbidding `serde::Serialize` on `crate::domain`, and `Order` is defined under that subtree
@@ -175,8 +184,3 @@ The system SHALL observe the hand-`impl T for X` acquisition form when the `impl
 
 - **WHEN** `crate::wire` declares `fn _also() { impl serde::Serialize for crate::domain::Order {} }` under the identical boundary
 - **THEN** the system emits the identical violation, rather than reporting zero findings because the impl sits inside a fn body
-
-#### Scenario: An impl nested one level further, or static-wrapped, is a stated bound
-
-- **WHEN** the hand-impl is written one level further inside the body (inside an `if`/`loop`/closure/nested `fn`), or the wrapping binding is a `static` rather than a `const`
-- **THEN** the system does not claim to observe it, a stated coverage bound shared with `semantic-trait-impl-locality`'s identical bound on the same underlying observation, rather than a silent claim of cleanliness

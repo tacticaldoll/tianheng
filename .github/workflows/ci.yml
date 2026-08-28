@@ -11,85 +11,192 @@ on:
 permissions:
   contents: read
 
+# Every `uses:` below names a COMMIT, with the release it was that tag's tip at in a trailing comment.
+#
+# This is the argument the `npm ci` step further down already makes, applied to the one ecosystem it was
+# not applied to. A tag is repointable by whoever owns the action, so `@v5` resolves the executed code
+# fresh on every run with no lock and no integrity check — verbatim what `npx` was doing before the
+# committed `package-lock.json` replaced it. Cargo is pinned by `Cargo.lock`, npm by
+# `package-lock.json`, and until now the runner's own executable dependencies were pinned by nothing.
+#
+# `permissions: contents: read` above bounds what a substituted action could reach, and bounding is not
+# closing: the grant limits the blast radius of code this repository never chose to run, rather than
+# stopping it from running.
+#
+# **Refreshing them is a human act with no automation behind it, deliberately** — see `BACKLOG.md`'s
+# accepted-debt entry. To move one, resolve the tag and paste the commit:
+#
+#   gh api repos/actions/checkout/commits/v5 --jq .sha
+#
+# The `commits` endpoint, not `git/ref/tags`. Measured against both actions pinned below: a lightweight tag's
+# ref answers `object.type=commit`, an ANNOTATED tag's answers `object.type=tag`, and its `.object.sha` is the
+# tag object rather than the commit — `cargo-deny-action@v2` is annotated, so the ref form yields a SHA that is
+# not a commit and cannot be pinned. `commits/<tag>` dereferences either kind, and its answers are byte-equal
+# to what each `uses:` in this file pins.
+#
+# Pinning is not upgrading: each SHA below is what that major tag pointed at when it was pinned, so this
+# changed which bytes run and not which version.
+
+# **Exit class by construction, not by remembering.** Both wrappers in `scripts/` argue that a script
+# choosing its exit class in one place beats every author choosing it again; a workflow whose steps each
+# decide their own strictness is the same defect one layer out. One `license-files` step set nothing while
+# `packaged-selftest` set `set -euo pipefail`, so a three-stage pipeline ending in `tr` discarded the status
+# of `cargo metadata` and of `jq` — measured, all three paths: cargo failing, malformed JSON, and `jq`
+# absent each gave exit 0 and an empty set, and every crate was then treated as publishable, reporting
+# *kanhe is missing LICENSE-MIT* for a fact about an absent interpreter. Loud only by circumstance: those
+# two crates carry no license texts today.
+#
+# `bash -euo pipefail {0}` makes it the workflow's property. Its cost is real and paid here rather than
+# discovered: `pipefail` turns a consumer that exits early into a failure of the whole pipeline —
+# `printf | grep -q` over the SARIF document measured 141 five times out of five — so a pipeline that
+# reads a value now stands alone or does not exist.
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
 jobs:
   release-coherence:
     name: Release coherence
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # State classification follows the latest exact `release: X.Y.Z` commit. A shallow
           # checkout cannot observe that release spine and must not masquerade as coherent.
           fetch-depth: 0
       - name: repository release surfaces agree
         run: |
-          bash scripts/test_release_coherence.sh
-          bash scripts/check_release_coherence.sh
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test release_coherence --test publish_source
 
   dod:
     name: Definition of Done
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # The workspace suite now carries the release-coherence check, whose state classification
+          # follows the latest exact `release: X.Y.Z` commit. A shallow checkout cannot see that spine and
+          # the check refuses rather than masquerading as coherent — which is the contract working, and
+          # the reason this job needs the whole history.
+          fetch-depth: 0
       - name: the local Definition of Done matches what CI runs
-        # AGENTS.md's Definition of Done calls itself "the single source for the local pre-flight gate
-        # list ... CI runs a superset of it". That claim drifted once (both `cargo doc` invocations here
-        # gained --document-private-items while the local list kept the flagless form), so the gate a
-        # contributor actually runs went blind to the exact class this job had just learned to catch.
-        # Checked here rather than promised in prose.
-        run: bash scripts/check_dod_coherence.sh
+        run: |
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test dod_coherence
       - name: whitespace hygiene across every tracked text file
-        # `cargo fmt` governs .rs only, so nothing in the repository checked .md, .toml, .sh, or .yml.
-        # Three blank lines at EOF reached a release branch in the 0.4.0 window, through 23 touched spec
-        # files and two independent full-range adversarial reviews — one of which ran `cargo fmt --all
-        # --check` and reported it passing. Neither had anything to consult, the property being stated
-        # nowhere and reacted nowhere.
-        run: bash scripts/check_whitespace_hygiene.sh
+        run: |
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test whitespace_hygiene
       - name: in-repository references resolve
-        # A reader who greps for a named file and finds nothing cannot tell stale prose from a bad
-        # checkout. This class was swept by hand twice — the second time across `*.md` only — and a module
-        # split landing after that sweep reintroduced it in nine places, in both documents and `.rs`
-        # comments. A sweep is a snapshot; the next rename re-opens what it closed.
-        run: bash scripts/check_reference_integrity.sh
+        run: |
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test reference_integrity
+      - name: every declared mutation kills the pin it names
+        run: |
+          TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test pin_bites
       - name: build / test / clippy / fmt / doc
         run: |
           cargo build --workspace
           cargo clippy --all-targets -- -D warnings
-          # Lint the SHIPPED lib/bins on their own (no --all-targets): an item dead in the library
-          # but constructed by a test reads as live under --all-targets, so its dead_code hides
-          # until the isolated crate build runs.
           cargo clippy --workspace -- -D warnings
-          # Every `--workspace` / `--all-targets` pass above feature-unifies louke's `audit` ON,
-          # because the tianheng shell depends on louke with features = ["audit"] unconditionally —
-          # so NONE of them ever compile louke's default, prod-light (audit-OFF) library, the exact
-          # config a shipped-but-unused `audit`-gated item hides in (the 0.2.0-class escape). Lint
-          # louke on its own (outside the workspace, so tianheng's audit edge is absent) so such
-          # dead code fails loud here, not only when `cargo publish` later builds the crate isolated.
           cargo clippy -p louke -- -D warnings
-          # Doc the default (prod-light) config too: a crate-level doc must not intra-doc-link a
-          # feature-gated item (it would break docs.rs, which builds default features).
-          # --document-private-items because nearly every item in these crates is crate-private, and
-          # without it a broken intra-doc link in that majority is invisible: 17 had accumulated,
-          # every one pointing at something a module split had moved or renamed.
+          cargo test -p louke
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items
-          # --all-features turns ON louke/audit so the gated probe-coverage scanner tests
-          # actually RUN — a plain `--workspace` would cfg them out and silently skip them.
-          # TIANHENG_WORKSPACE_TESTS=1 makes the workspace-dependent dogfood/dispatch tests
-          # fail loud if the workspace manifest is ever absent here (never silently skip in CI).
           TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
           cargo clippy --all-targets --all-features -- -D warnings
           cargo fmt --all --check
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items
+      - name: the interpreter that runs the pinned validator is pinned too
+        # **The argument the pinning above makes, applied to the one thing it left out.** A repointable
+        # dependency resolves fresh executable code on every run, so every `uses:` names a commit and the npm
+        # tree is reproduced from a committed lock with `--ignore-scripts`. The **Node** that executes that
+        # tree was whatever the runner image happened to carry: GitHub changes the image's Node major and the
+        # bytes running the validator change, with nothing in this file, the specs or `BACKLOG.md` covering
+        # it. A claim one word wider than what reacts to it is the shape this repository removes on sight.
+        #
+        # **The lock sets a floor and does not choose this major.** `@fission-ai/openspec` declares
+        # `>=20.19.0` and `posthog-node` `^20.20.0 || >=22.22.0` — Node 22 satisfies both, so an earlier
+        # comment here claiming the major was what the lock required was reading a floor as a selection. 24 is
+        # chosen by a lifecycle argument the lock cannot make: Node 20 left support before this was written
+        # and 22 follows it. The choice is stated rather than attributed.
+        #
+        # **Exact, because a major is a repointable dependency and that is what this step exists to close.**
+        # `'24'` resolves whatever 24.x the runner's mirror carries that day, so the bytes running the
+        # validator still changed with nothing in this file covering it — the same argument one field
+        # narrower. The cost is a hand-maintained pin nobody refreshes, which is the debt the action SHAs
+        # above already carry and is filed with them rather than pretended away.
+        #
+        # `package.json`'s `engines.node` bounds the same major at both ends and `.npmrc` makes npm **stop**
+        # on it rather than warn, so a local Definition of Done that cannot match CI says so instead of
+        # differing silently. Measured on npm 11.13.0: without `engine-strict`, an unsatisfiable `engines`
+        # exits 0; with it, `npm ci` exits 1 naming the requirement and what is actually installed.
+        #
+        # **The pin carries its own expiry, because the debt it created had no mechanism and its own
+        # promotion trigger had already fired.** `BACKLOG.md` filed this beside the action SHAs under
+        # *a hand-maintained pin has no mechanism keeping it from rotting*, whose trigger reads *a second
+        # ecosystem arriving whose pinning would want the same answer* — and this pin is that second
+        # ecosystem, added to the entry that says so. The half with teeth is not falling behind within a
+        # major, which `engines` plus `engine-strict` already bound; it is running an interpreter past the
+        # point anyone ships fixes for it, silently, because nobody looked.
+        #
+        # The `NOT-BEYOND` declaration is a **commitment of this repository**, not an assertion about Node:
+        # this tree does not run major 24 beyond the date it names. `interpreter_support_window` holds it,
+        # refuses when the major beside it stops matching the pin, and refuses once the date is reached — so
+        # the reminder is a reaction rather than someone's memory. The date is chosen from the Node release schedule
+        # (`nodejs.org/en/about/previous-releases`: 24 entered LTS as 24.11.0 and is maintained to the end
+        # of April 2028); that choice is the one thing here nothing offline can hold, and it is a commitment
+        # precisely so the unheld part is a decision this repository owns rather than a fact it claims.
+        # NOT-BEYOND: 24 2028-04-30
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.16.0'
+
+      - name: every spec validates
+        # `npm ci` rather than `npx --yes @fission-ai/openspec@1.4.1`. The exact-version pin was real — npm
+        # forbids republishing a version — but it bound only the direct package, while `npx` resolved the
+        # TRANSITIVE tree fresh on every run with no lock and no integrity check. So a newly published
+        # transitive release executed here, on a checkout of the release branch, and in every contributor's
+        # local Definition of Done. The committed lock pins all 80 resolved packages by integrity digest, and
+        # `--no-install` refuses to reach the network if the tree is not the one the lock names.
+        #
+        # `--ignore-scripts` closes the half the lock does not. A lock pins *which* packages install; it
+        # does not stop the 80 of them running `preinstall`/`install`/`postinstall` on a checkout of the
+        # release branch. The validator is a JS CLI with no build step, so nothing here needs them.
+        run: |
+          npm ci --ignore-scripts
+          npx --no-install openspec validate --specs --strict
+      - name: observation bounds are declared and defended
+        run: |
+          TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test bound_register
 
   msrv:
     name: MSRV (rust-version)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
       - name: build and test on the declared minimum supported Rust version
         run: |
-          msrv="$(cargo metadata --no-deps --format-version 1 \
-            | sed -n 's/.*"rust_version":"\([^"]*\)".*/\1/p' | head -n1)"
+          # **One `rust-version`, or this step says which members disagree.** A greedy `sed` over the
+          # single-line JSON followed by `head -n1` answered with one arbitrary member's value and
+          # named neither how many there were nor which one — `kanhe::selection::the_only`'s subject, in shell. `jq`
+          # collects them, `unique` decides, and a disagreement is a refusal rather than a coin toss.
+          # `pipefail` cannot see inside a process substitution, so the derivation stands where its status
+          # is visible. Written the other way, a failed `cargo metadata` or an absent `jq` gave zero lines
+          # and this step said *the workspace declares 0 distinct rust-version values* — a sentence about
+          # the workspace for a fact about the tool, which is the misdirection the `license-files` job's own
+          # comment records as removed. The empty value is caught before `mapfile`, because a here-string
+          # over one yields a single empty element.
+          declared_raw="$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '[.packages[].rust_version] | unique | .[]')"
+          if [[ -z $declared_raw ]]; then
+            echo "::error::cargo metadata and jq produced no rust-version at all — the enumerator, not the workspace"
+            exit 1
+          fi
+          mapfile -t declared <<< "$declared_raw"
+          if ((${#declared[@]} != 1)); then
+            echo "::error::the workspace declares ${#declared[@]} distinct rust-version values (${declared[*]}) — the MSRV this job builds on is not decidable"
+            exit 1
+          fi
+          msrv="${declared[0]}"
           echo "declared rust-version: ${msrv:?could not read rust-version}"
           rustup toolchain install "$msrv" --profile minimal --no-self-update
           cargo "+$msrv" build --workspace
@@ -101,35 +208,78 @@ jobs:
     name: License texts bundled
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: every publishable crate bundles its license texts
         run: |
           # `cargo publish` packages only files inside each crate's own directory, so the
           # workspace-root LICENSE-* files and the inherited SPDX `license` field are NOT enough:
           # each publishable crate must physically carry its license texts or it ships without
           # them (a packaging defect latent in 0.1.0/0.1.1). This is release hygiene, not
-          # architectural drift, so it is a CI reaction here — not a Tianheng boundary. Catch a
+          # architectural drift, so it is a CI check here — not a Tianheng boundary. Catch a
           # new crate that forgets the texts before it is ever published.
+          # **Cargo decides whether a crate publishes, not a grep for the word `false`.** Measured on cargo
+          # 1.96.0: `publish = []` is legal TOML that `cargo publish` refuses exactly as it refuses `false`,
+          # and `cargo metadata` reports `[]` for both — so a grep for `false` called the empty array
+          # published and would have demanded license texts from a crate that ships nowhere. A
+          # `publish.workspace = true` inheritance is invisible to a grep too, and cargo resolves it.
+          # `kanhe::manifest::publishable` is the text-side owner of the same fact; here cargo is asked
+          # directly, since this job has cargo and no build to pay for.
+          # `jq`, which `AGENTS.md`'s host-tool list already declares — not `python3`, which it does not.
+          # `jq`'s `null == []` is false, so the semantics are cargo's. The interpreter being declared is
+          # only half of it: an absent one used to reach the empty-set floor saying *no publishable crate
+          # was derived from cargo metadata* — a sentence about cargo for a fact about the tool — because
+          # neither `set -e` nor `pipefail` sees inside `<(…)`. Measured: exit 0, array length 0. The
+          # derivation below stands where its status is visible, so the tool's absence is now the tool's
+          # own error.
+          # **One enumerator, because a comparison between two derivations of a path has to be right on
+          # every axis and was right on only one.** This job used to derive the UNPUBLISHABLE packages from
+          # cargo and test each against a `crates/*/Cargo.toml` glob — first by `basename`, joining cargo's
+          # identity to the filesystem; then, once that was fixed, by comparing paths. The comparison closed
+          # the relative-versus-absolute axis and left the logical-versus-physical one open: `cargo metadata`
+          # emits a canonical path, while `cd "$dir" && pwd` prints `$PWD` unless given `-P`. Measured, in a
+          # workspace reached through a symlink: cargo answers `…/real/crates/kanhe/Cargo.toml`, the
+          # comparison computed `…/link/crates/kanhe/Cargo.toml`, no case arm matched, and ALL EIGHT crates
+          # were checked — including the two cargo refuses to publish, which would then be failed for license
+          # texts they need not ship. That is verbatim the outcome the previous comment named as the failure
+          # it was avoiding on the axis it did fix.
+          #
+          # `pwd -P` would close that axis too, and the next axis after it is someone else's to find. So the
+          # comparison is deleted instead: iterate the PUBLISHABLE packages cargo reports, and take each
+          # directory from the `manifest_path` cargo gave for it. There is no second spelling to normalise
+          # and no glob to disagree with — the set this job checks is the set cargo would publish, by
+          # construction. `merge-pr.sh` made the same call for the same reason, putting both sides in one
+          # form because "two spellings of the same tree would refuse".
+          #
+          # A derived set can be empty where a glob cannot, so the floor is stated, exactly as
+          # `packaged-selftest` states its own: with nothing derived the loop body never runs and the job
+          # would report success over zero crates.
+          derived="$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.publish != []) | .manifest_path')"
+          if [[ -z $derived ]]; then
+            echo "::error::cargo metadata and jq derived no publishable crate at all — the enumerator, not the set"
+            exit 1
+          fi
           missing=0
-          for manifest in crates/*/Cargo.toml; do
-            dir="${manifest%/Cargo.toml}"
-            if grep -qE '^[[:space:]]*publish[[:space:]]*=[[:space:]]*false' "$manifest"; then
-              continue  # not published — its directory need not carry license texts
-            fi
+          checked=0
+          while IFS= read -r manifest; do
+            [[ -z $manifest ]] && continue
+            dir="$(dirname "$manifest")"
+            checked=$((checked + 1))
             for f in LICENSE-MIT LICENSE-APACHE; do
               if [ ! -s "$dir/$f" ]; then
                 echo "::error file=$dir/$f::$dir is missing $f — cargo publish ships only crate-local files, so the crate would publish without its license text (the SPDX license field is not enough)"
                 missing=1
               fi
             done
-          done
+          done <<< "$derived"
+          echo "checked $checked publishable crate(s) for bundled license texts"
           exit "$missing"
 
   packaged-selftest:
     name: Packaged crate self-test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: every publishable crate's tests pass from its packaged tarball
         run: |
           # `cargo publish` ships only crate-local files, so a data file outside a crate's own
@@ -145,19 +295,75 @@ jobs:
           # packaging RESOLVE and the from-tarball test resolve them from local source via `--config
           # patch` (NOT baked into the tarball — it stays the real publishable form; the patch only
           # satisfies resolution). This is what lets the gate run at the exact pre-publish version
-          # it must guard, rather than only when the deps happen to already be published.
-          set -euo pipefail
-          ws="$PWD"
+          # it must guard, rather than only when the deps happen to already be published. The patch paths
+          # come from the `manifest_path` cargo reports for each member, so this step holds no workspace-root
+          # variable of its own — a `ws="$PWD"` left here after the patch stopped being built from it was
+          # dead, and a logical path besides.
+          # **The set is derived, and it used to be written twice.** This job's name claims *every
+          # publishable crate*, and the claim was two hand-written lists that nothing held. The
+          # `license-files` job above derives the same set from the same two facts, and
+          # `release_coherence_gate` derives it from `cargo metadata` for the recorded reason that a
+          # path-shaped corpus went stale — so a seventh publishable crate would have been caught there and
+          # silently skipped here, while this name went on saying every. One enumerator, one claim.
+          # Cargo's own verdict, for the reason the `license-files` job above records: a grep for `false`
+          # calls `publish = []` published, and cargo refuses it.
+          # `pipefail` cannot see inside `<(…)`, so the derivation stands alone as a command substitution
+          # where it can fail — and an empty value is caught before the loop, because a here-string over one
+          # yields a single empty element that the `[[ -z $cname ]]` guard would then admit as a crate. This
+          # sentence said `mapfile` until the loop below became a `while read` pair-reader and the `mapfile`
+          # went with it; the guard it describes never moved.
+          # **Name and path from the one enumerator, as a pair.** The patch below was built as
+          # `crates/$s` from the name alone, which points nowhere for a crate whose directory differs — the
+          # same name-is-a-location assumption the `license-files` job above just stopped making.
+          derived="$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.publish != []) | [.name, .manifest_path] | @tsv')"
+          if [[ -z $derived ]]; then
+            echo "::error::cargo metadata and jq derived no publishable crate at all — the enumerator, not the set"
+            exit 1
+          fi
+          crates=(); paths=()
+          while IFS=$'\t' read -r cname cmanifest; do
+            [[ -z $cname ]] && continue
+            crates+=("$cname")
+            paths+=("$(dirname "$cmanifest")")
+          done <<< "$derived"
+          # **A derived set can be empty and a hand-written one cannot, so the reach is asserted.** With
+          # `crates=()` empty, `for crate in "${crates[@]}"` expands to nothing, the loop body never runs and
+          # this job reports success over zero crates — the exact shape `gate-shape-contract` was retired for
+          # reaching, "enumerating zero gates and reporting clean over all of it". The hand lists this
+          # replaces could not do that. So the enumerator states its own floor.
+          if ((${#crates[@]} == 0)); then
+            echo "::error::no publishable crate was derived from cargo metadata — this job packages and tests every one of them, and it will not report success over none"
+            exit 1
+          fi
+          echo "derived ${#crates[@]} publishable crates: ${crates[*]}"
+          # Every derived member is patched, including one this packaging does not reach. An unused patch is
+          # a warning and exit 0 — measured on cargo 1.96.0 packaging `xuanji` with all six patched — and
+          # the alternative is a second hand-written fact, "which of them is the shell nobody depends on",
+          # replacing the one just removed.
           patch=()
-          for s in xuanji xingbiao guibiao hunyi louke; do
-            patch+=(--config "patch.crates-io.$s.path=\"$ws/crates/$s\"")
+          for i in "${!crates[@]}"; do
+            patch+=(--config "patch.crates-io.${crates[i]}.path=\"${paths[i]}\"")
           done
-          for crate in xuanji xingbiao guibiao hunyi louke tianheng; do
+          for crate in "${crates[@]}"; do
             cargo package --no-verify -p "$crate" "${patch[@]}"
-            tarball="$(ls target/package/${crate}-*.crate | head -1)"
+            # `ls | head -1` answered with one of however many `.crate` files sat there and said nothing
+            # about the rest, so a stale tarball from an earlier version could be the one self-tested.
+            # The glob becomes a value first, then the count is answered.
+            shopt -s nullglob
+            tarballs=(target/package/"$crate"-*.crate)
+            if ((${#tarballs[@]} != 1)); then
+              echo "::error::expected exactly one packaged tarball for $crate, found ${#tarballs[@]}: ${tarballs[*]}"
+              exit 1
+            fi
             work="$(mktemp -d)"
-            tar xzf "$tarball" -C "$work"
-            dir="$(ls -d "$work"/${crate}-*/)"
+            tar xzf "${tarballs[0]}" -C "$work"
+            unpacked=("$work"/"$crate"-*/)
+            if ((${#unpacked[@]} != 1)); then
+              echo "::error::the tarball for $crate unpacked to ${#unpacked[@]} directories: ${unpacked[*]}"
+              exit 1
+            fi
+            dir="${unpacked[0]}"
             echo "::group::packaged self-test: $crate"
             ( cd "$dir" && cargo test --all-features "${patch[@]}" )
             echo "::endgroup::"
@@ -167,9 +373,9 @@ jobs:
     name: Supply chain (cargo-deny)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: license / advisory / bans / sources policy
-        uses: EmbarkStudios/cargo-deny-action@v2
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check
 
@@ -177,7 +383,7 @@ jobs:
     name: Tianheng reaction
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: reaction passes on a clean target
         run: cargo run -p tianheng -- check --manifest-path crates/tianheng/tests/fixtures/clean/Cargo.toml
       - name: reaction fails with exit 1 on a violating target (1, not 2 — the contract separates them)
@@ -193,7 +399,11 @@ jobs:
           status=0
           out=$(cargo run -q -p tianheng -- check --manifest-path crates/tianheng/tests/fixtures/violating/Cargo.toml --format sarif) || status=$?
           printf '%s\n' "$out"
-          printf '%s' "$out" | grep -q '"version": "2.1.0"' \
+          # A here-string, not a pipe: `grep -q` exits at the first match, and under `pipefail` the
+          # `printf` upstream of it takes SIGPIPE and fails the pipeline — measured 141 on five of five
+          # runs over a document this size. The assertion would have failed for the shape of the check
+          # rather than for the document.
+          grep -q '"version": "2.1.0"' <<< "$out" \
             || { echo "::error::--format sarif did not emit a SARIF 2.1.0 document"; exit 1; }
           if [ "$status" -ne 1 ]; then
             echo "::error::--format sarif must still react with exit 1 on a violation, got $status"
@@ -204,9 +414,7 @@ jobs:
     name: Examples dogfood
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: every example reacts as declared
-        # Each example under examples/ is its own workspace carrying a deliberate fault and the
-        # adopter's real `= "0.3"` dependency form; the script patches the family to local source
-        # (the packaged-selftest idiom) and asserts each reaction — the dogfood does not rot.
-        run: bash scripts/test_examples.sh
+        run: |
+          TIANHENG_EXAMPLES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p shengmo --test examples_suite

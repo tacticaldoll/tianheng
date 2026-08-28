@@ -14,8 +14,14 @@ non-forbidden-root glob, a re-export routed through a *foreign* module (needs th
 **module-scoped** source `extern crate … as` rename (the **crate-root** form reacts, including
 through a type alias or a facade closure) or a distinct `[lib] name` (absent from `cargo metadata
 --no-deps`), a facade hop re-exporting a privately-`use`d bare name, an edition-2015 relative local
-re-export, macro-generated — is a stated bound, never a silent pass. (`pub extern crate` is now an
+re-export, macro-generated — is a stated bound (bound: semantic-reexport-exposure/a-facade-hop-re-exporting-a-privately-used-bare-name-is-a-stated-bound), never a silent pass. (`pub extern crate` is now an
 observed exposure, not a bound.)
+
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
 ## Requirements
 ### Requirement: Named public re-exports are observed by default
 
@@ -102,7 +108,7 @@ crate X [as Y];`** in the governed module republishes the external crate root `X
 public surface — like `pub use ::X;` — and SHALL react when `X` is in/under the forbidden set; the
 exposure names the **real crate `X`** (not the `as`-rename `Y`), seam-qualified `X exposed by pub
 extern crate X` (`extern crate self as …` is not an external exposure and is skipped). One form
-SHALL remain a **documented non-observed bound**, never a silent claim of cleanliness: an
+SHALL remain a **documented non-observed bound (bound: semantic-reexport-exposure/an-underscore-rename-is-a-documented-bound)**, never a silent claim of cleanliness: an
 **underscore rename** (`pub use crate::infra::DbPool as _;`) imports a trait's methods without
 binding a nameable path, so it exposes no name a consumer can reach through the module.
 
@@ -126,10 +132,11 @@ binding a nameable path, so it exposes no name a consumer can reach through the 
 - **WHEN** the governed module declares `extern crate worklane_core;` (no `pub`) under `must_not_expose("worklane_core")`
 - **THEN** the system reports no violation, because a private extern crate does not republish the crate on the public surface
 
-#### Scenario: An underscore rename is a documented non-observed bound
+#### Scenario: An underscore rename is a documented bound
 
 - **WHEN** the governed module declares `pub use crate::infra::DbPool as _;` under `must_not_expose("crate::infra")`
 - **THEN** the system does not react — `as _` binds no nameable path a consumer can reach — and this is a stated bound, not a silent claim of cleanliness
+- **PINNED-BY** `restricted_and_private_and_underscore_reexports_do_not_react`
 
 ### Requirement: Glob re-export reacts on a forbidden root, else a stated bound
 
@@ -163,11 +170,13 @@ future cross-module-resolution capability, not a guess.
 
 - **WHEN** the governed module declares `pub use crate::elsewhere::*;` where `crate::elsewhere` transitively re-exports a `crate::infra` type, under `must_not_expose("crate::infra")`
 - **THEN** the system does not claim to observe the transitively re-exported leaf (the inherited glob bound — the glob's leaves are not enumerable here), rather than silently asserting the boundary is clean
+- **PINNED-BY** `sibling_root_glob_does_not_react`
 
 #### Scenario: An ancestor-root glob spanning a deeper forbidden prefix is a documented bound
 
 - **WHEN** the governed module declares `pub use crate::infra::*;` under `must_not_expose("crate::infra::db")` (the forbidden prefix is *deeper* than the glob root)
 - **THEN** the system treats it as a stated bound (it cannot enumerate whether `crate::infra` publicly re-exports the forbidden `db` subtree), documented as the sharper ancestor-root sub-case rather than lumped with the innocent sibling glob or silently claimed clean
+- **PINNED-BY** `ancestor_root_glob_over_a_deeper_forbidden_prefix_does_not_react`
 
 ### Requirement: External-crate re-exports are observed by default
 
@@ -263,7 +272,7 @@ so a head `Y` SHALL be mapped to the real crate `X` **before** the external-crat
 does not parse source `extern crate` renames), and is applied in the signature-coupling exposure
 pipeline, covering a renamed head in a **type position** and in the **governed module's own
 `pub use`**. Only a **crate-root** rename is collected — a module-scoped `extern crate … as …`
-binds only within its module, so collecting it crate-wide would be a false positive (a stated bound
+binds only within its module, so collecting it crate-wide would be a false positive (a stated bound (bound: semantic-reexport-exposure/a-module-scoped-extern-crate-rename-is-a-documented-bound)
 below).
 
 The rename SHALL be resolved rustc-correctly in three positions of the head:
@@ -414,7 +423,7 @@ endpoints the facade-chain guarantee already given for local endpoints. The re-e
 SHALL retain an extern-headed target (head ∈ the external-crate set) so the chain canonicalizes
 to the forbidden extern type rather than being dropped. A hop written as a re-export of a
 privately-`use`d bare name (`use dep::spi::Foo; pub use Foo;`) is NOT captured (the closure
-follows inline `pub use` paths only) — an inherited stated bound, not a silent claim.
+follows inline `pub use` paths only) — an inherited stated bound (bound: semantic-reexport-exposure/a-facade-hop-re-exporting-a-privately-used-bare-name-is-a-stated-bound), not a silent claim.
 
 #### Scenario: A facade chain of inline re-exports to an extern type is followed
 
@@ -425,6 +434,7 @@ follows inline `pub use` paths only) — an inherited stated bound, not a silent
 
 - **WHEN** `crate::facade` declares `use worklane_core::spi::Foo; pub use Foo;` (private import then bare re-export), re-exported onward by `crate::domain`, under `must_not_expose("worklane_core::spi")`
 - **THEN** the system does not follow that hop (the closure captures only inline `pub use` paths) and this is a documented inherited bound, not silently claimed clean
+- **PINNED-BY** `facade_hop_reexporting_a_privately_used_bare_name_is_a_stated_bound`
 
 ### Requirement: External resolution has stated residual bounds
 
@@ -464,6 +474,7 @@ AST + declared manifest:
 
 - **WHEN** the governed module declares `pub use worklane_core::spi::*;` under `must_not_expose("worklane_core::other")`
 - **THEN** the system does not claim to observe the glob's individual leaves, rather than silently asserting the boundary is clean
+- **PINNED-BY** `extern_glob_nonforbidden_root_is_a_stated_bound`
 
 #### Scenario: A forbidden-root external glob reacts on the root
 
@@ -474,6 +485,7 @@ AST + declared manifest:
 
 - **WHEN** the governed module declares `pub use worklane_core::prelude::Foo;` where the foreign `worklane_core::prelude` re-exports `worklane_core::spi::Foo`, under `must_not_expose("worklane_core::spi")`
 - **THEN** the system matches only the written path (`worklane_core::prelude::Foo`, not in/under the forbidden set) and does not silently claim to have followed the foreign chain
+- **PINNED-BY** `foreign_prelude_rename_is_a_stated_bound`
 
 #### Scenario: A crate-root extern-crate rename reached through a type alias resolves and reacts
 
@@ -489,6 +501,7 @@ AST + declared manifest:
 
 - **WHEN** the governed crate declares `extern crate worklane_core as wc;` **inside** a module `mod m { … }` (not at the crate root) and `m` declares `pub fn make() -> wc::spi::Foo`, under `must_not_expose("worklane_core::spi")`
 - **THEN** the system does not resolve `wc` to `worklane_core` (only crate-root renames are collected, since a module-scoped alias binds only locally) and this is a documented bound, distinct from the handled crate-root rename
+- **PINNED-BY** `module_scoped_extern_crate_rename_is_a_stated_bound`
 
 #### Scenario: A crate-root rename reached by its crate-relative spelling reacts
 

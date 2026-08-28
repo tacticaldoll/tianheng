@@ -10,6 +10,13 @@ use tianheng::prelude::*;
 
 fn assert_public_type<T>() {}
 
+/// A trait is not a type, so [`Observer`] cannot go through `assert_public_type` — that is
+/// `E0782: expected a type, found a trait`. Naming it in a **bound** proves more than a type
+/// assertion would: the trait is reachable through the prelude *and* the observer the prelude
+/// re-exports beside it satisfies it, which is what a third party writing their own participant
+/// needs to be true.
+fn assert_public_observer<T: Observer>() {}
+
 #[test]
 fn wildcard_prelude_is_the_external_adopter_contract() {
     // Declaration and execution tier.
@@ -45,10 +52,33 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     assert_public_type::<RuleKey>();
     assert_public_type::<StructuredFactIdentity>();
     assert_public_type::<Outcome>();
+    // The evidence a clean verdict carries. Named here because an adopter that can read a violation's
+    // structure but nothing from a clean run cannot tell an observed workspace from an unreached one.
+    assert_public_type::<Subject>();
     assert_public_type::<Polarity>();
     assert_public_type::<Report>();
     assert_public_type::<Violation>();
     assert_public_type::<ViolationId>();
+
+    // Observation-protocol tier. A third party's participant is written against exactly these: the
+    // trait, the bound model it must return, and the run it joins. Each is promised by the prelude,
+    // so each is named here in the form its kind admits — the observers as types, the trait as a
+    // bound, and `Run` through the composition shape below.
+    assert_public_type::<StaticObserver>();
+    assert_public_type::<SemanticObserver>();
+    assert_public_type::<RuntimeObserver>();
+    assert_public_observer::<StaticObserver>();
+    assert_public_observer::<SemanticObserver>();
+    assert_public_observer::<RuntimeObserver>();
+    assert_public_type::<Run>();
+    assert_public_type::<BoundDecl>();
+    assert_public_type::<BoundId>();
+    assert_public_type::<Extent>();
+    assert_public_type::<Reached>();
+    assert_public_type::<Owner>();
+    assert_public_type::<Defence>();
+    assert_public_type::<Demonstrates>();
+    assert_public_type::<FactGranularity>();
 
     let violation = Violation::new(
         BoundaryKind::Crate,
@@ -140,6 +170,29 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     let _composed_check = |manifest: &Path| check_constitution(&constitution, manifest);
     let _signature_check = |manifest: &Path| {
         tianheng::check_semantic(&constitution.semantic_boundaries().signature, manifest)
+    };
+
+    // The composition shape, type-checked and never executed like the checks above: a run is opened
+    // over a manifest, each dimension observer joins it, and one verdict comes out. This is the whole
+    // entrypoint a participant outside this family composes into, so proving it reachable from the
+    // wildcard prelude is the promise that matters most about `Run`.
+    //
+    // The clone per dimension is the documented shape, not an accident of this contract: each
+    // observer's constructor takes its dimension's declarations by value while the composed
+    // `Constitution` lends them, so an outside caller composing a run from one owns a copy. Writing it
+    // here is what makes that cost visible from outside rather than only in the shell.
+    let _composed_run = |manifest: &Path| {
+        Run::over(manifest)
+            .observe(StaticObserver::new(
+                constitution.static_boundaries().clone(),
+            ))
+            .observe(SemanticObserver::new(
+                constitution.semantic_boundaries().clone(),
+            ))
+            .observe(RuntimeObserver::new(
+                constitution.runtime_boundaries().to_vec(),
+            ))
+            .verdict()
     };
 
     assert_eq!(BoundaryKind::Crate.as_str(), "crate");

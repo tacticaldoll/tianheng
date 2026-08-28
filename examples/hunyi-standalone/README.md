@@ -6,10 +6,8 @@ complement. A type imported for internal use is fine; a type named in a `pub` si
 leak, and one named by a fully-qualified path (no `use`) is invisible to a token scanner but
 caught here.
 
-```toml
-[dependencies]
-hunyi = "0.4"   # the semantic instrument carries the quarantined `syn` — the honest footprint
-```
+The committed [manifest requirement](Cargo.toml) is the adopter-facing form. The semantic
+instrument carries the quarantined `syn` — the honest footprint.
 
 Declare the law and react:
 

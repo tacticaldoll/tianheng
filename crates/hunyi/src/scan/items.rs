@@ -492,7 +492,7 @@ fn resolve_conventional_child(
     Ok(())
 }
 
-// `child_dir` and `file_dir` are distinct module-resolution bases (see the two helpers above), not
+// `child_dir` and `file_dir` are distinct module-resolution bases (see `child_dir` and `file_dir`), not
 // bundled: they thread the descent by position alongside the crate-scan accumulator and guards.
 pub(super) fn resolve_child_modules(
     items: &[FlatItem],
@@ -535,7 +535,7 @@ pub(super) fn resolve_child_modules(
         let child_module = format!("{module}::{name}");
         // May this declaration legitimately have no source file on this build? Its own bare
         // `#[cfg]`, or arm membership (every `cfg_if!` arm is gated by a predicate in the macro
-        // header). The same rule `module_resolve::descend` applies, and 圭表's own from `a567211`.
+        // header). The same rule `module_resolve::descend` applies, and 圭表's own from the 0.5.0 window.
         let cfg_conditional = flat.in_transparent_arm || has_cfg_attr(&module_item.attrs);
         if let Some(rel) = direct_path_value(&module_item.attrs) {
             resolve_direct_path_child(
