@@ -1172,6 +1172,35 @@ them.
 
 ### Self-governance
 
+- **A family crate's path was checked by its spelling, which was wrong in both directions at once.** The arm
+  that had just been added to require a family crate to be held by a path into this workspace asked
+  `starts_with("crates/")`. Two reviews falsified it in one round, in opposite directions, and both were
+  measured through `cargo metadata` under cargo 1.96.0:
+
+  - `./crates/xuanji` resolves to the member — `path=…/crates/xuanji`, `source=None` — and was **refused at
+    exit 1**, a false refusal over a manifest cargo builds. `crates//xuanji` passed the same test, which is
+    what shows the criterion was the spelling rather than the location.
+  - `crates/../vendor/xuanji` resolves to `vendor/xuanji`, outside the workspace, and **passed** — the
+    forbidden direction, in the arm written to close it.
+
+  The path is now compared against **that member's own directory**, lexically normalized: `.` segments,
+  repeated separators and a trailing separator are dropped, because cargo resolves those spellings to one
+  directory. A path naming any other directory is a violation that says where the member actually is —
+  including a path to a *different* member, which no prefix could ever have caught. The directory cannot be
+  derived from the package name: this repository's own fixture keeps `machinery-under-another-name` under
+  `crates/renamed-dir`, and deriving a directory from a name is a defect the machinery reader already records
+  fixing.
+
+  **A path this reader will not resolve is refused rather than guessed at.** An absolute path, or one carrying
+  a `..`, is a cannot-judge: `..` is applied after symlink resolution, so `crates/../vendor` is `vendor` only
+  while `crates` is not a link, and no repository is handed to this reader. Collapsing it lexically would be a
+  guess wearing an answer's clothes. The residue is declared in the spec instead of met.
+
+  The cause is one the previous rounds have been closing and it reappeared inside its own repair: having
+  correctly moved the *subject* from the path to the identity, the same commit then answered a second question
+  — *is this path into this workspace* — with the text in front of it. Moving one proxy does not retire the
+  habit that put it there.
+
 - **A family crate the catalog offers without a path was invisible to the release gate.** `xuanji = "0.4.0"`
   in `[workspace.dependencies]` — no `path` — resolves from the **registry**: measured under cargo 1.96.0, a
   catalog entry at `0.4.0` beside a local member `xuanji 0.9.0` gives the inheriting member
@@ -1183,8 +1212,9 @@ them.
 
   **The subject is the crate a dependency names, and where it points is a requirement rather than the
   selector.** `require_internal_pins` chose its subject by `path` under `crates/`; a family crate that points
-  anywhere else was in no reader's subject. It now selects by identity, and a family entry with no `path`, or
-  a `path` outside `crates/`, is a violation naming the crate it could not hold.
+  anywhere else was in no reader's subject. It now selects by identity, and a family entry with no `path` is a
+  violation naming the crate it could not hold. (What a path that *is* present must satisfy was still decided
+  by a prefix here, and is corrected under *A family crate's path was checked by its spelling*.)
 
   Two readers of one question is what kept it open. The example check resolved identity — an example carries
   no path, so it had to — and the root check selected on path, and the asymmetry was measured and written
@@ -1198,7 +1228,9 @@ them.
   sequence, or a third consumer of either list*; both fired at once, and the swap stopped being latent — a
   direction handed the manifests to a reader expecting members, compiled, and answered with the wrong
   refusal. With `Member` the swap does not compile, and the compiler found two further sites where a binding
-  named `manifests` held members. The member's path is gone with it: no consumer ever read it.
+  named `manifests` held members. The member's directory was dropped at the same time, since no consumer read
+  it — and it came back one change later, when the reader that should have been reading it was found still
+  answering *is this path into this workspace* by its spelling.
 
 - **A dependency key whose name carries a dot was refused, and cargo builds it.** The reader that files a
   dotted line kept the key's remaining segments as a joined string and split them back apart to ask *is this

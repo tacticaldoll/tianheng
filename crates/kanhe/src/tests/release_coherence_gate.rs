@@ -40,6 +40,7 @@ fn family() -> Vec<crate::release_coherence_gate::Member> {
     .into_iter()
     .map(|name| crate::release_coherence_gate::Member {
         name: name.to_string(),
+        directory: format!("crates/{name}"),
     })
     .collect()
 }

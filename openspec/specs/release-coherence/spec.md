@@ -277,19 +277,27 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 #### Scenario: A family crate the catalog offers from anywhere but this workspace
 
 - **WHEN** the root manifest offers a crate the workspace itself declares — `xuanji = "0.4.0"`, a `git`
-  source, or a `path` outside `crates/` — rather than by a path into this workspace
-- **THEN** the check fails, naming the crate it could not hold. The subject SHALL be selected by the crate a
-  dependency **names**, not by where it points: measured under cargo 1.96.0, a catalog entry `xuanji = "0.4.0"`
-  beside a local member `xuanji 0.9.0` gives the inheriting member `registry+…#xuanji@0.4.0` with the member
-  unused, and `cargo package` on a `git` dependency carrying a `version` drops the source and records the
-  version alone. Either way the published requirement is that version, so a stale family requirement reached
-  `cargo publish` through a line a path-selected subject never contained, and deleting one `path = …` is the
-  whole of the edit that gets there
-- **AND** the identity a dependency declares SHALL have **one** reader for both pin checks. Two readers of one
-  question is what left this open: the example check resolved identity because examples carry no path, the
-  root check selected on path, and the asymmetry was written down as earned
+  source, or a `path` that is not the member's own directory — rather than by a path to that member
+- **THEN** the check fails, naming the crate it could not hold and where that member actually is. The subject
+  SHALL be selected by the crate a dependency **names**, not by where it points: measured under cargo 1.96.0,
+  a catalog entry `xuanji = "0.4.0"` beside a local member `xuanji 0.9.0` gives the inheriting member
+  `registry+…#xuanji@0.4.0` with the member unused, and `cargo package` on a `git` dependency carrying a
+  `version` drops the source and records the version alone. Either way the published requirement is that
+  version, so a stale family requirement reached `cargo publish` through a line a path-selected subject never
+  contained, and deleting one `path = …` is the whole of the edit that gets there
+- **AND** the path SHALL be compared against **that member's own directory**, not against a prefix, and the
+  comparison SHALL be made on a **lexically normalized** path: `.` segments, repeated separators and a
+  trailing separator are dropped, because cargo resolves `crates/xuanji`, `./crates/xuanji`, `crates//xuanji`
+  and `crates/xuanji/` to one directory, measured. A prefix decided neither direction correctly —
+  `./crates/xuanji` names the member and was refused, `crates/../vendor/xuanji` resolves to `vendor/xuanji`
+  and passed — and the member's directory cannot be derived from its package name, which this repository's own
+  fixture holds apart
+- **AND** a path this reader will **not** resolve — absolute, or carrying a `..` segment — is a cannot-judge
+  rather than a collapsed guess. `..` is applied after symlink resolution, so `crates/../vendor` is `vendor`
+  only while `crates` is not a link, and this reader is handed no repository to ask. That residue is declared
+  here rather than met
 - **PINNED-BY** `a_family_crate_offered_with_no_path_is_a_violation`
-- **PINNED-BY** `a_family_crate_offered_from_outside_crates_is_a_violation`
+- **PINNED-BY** `a_family_crate_path_is_compared_against_the_members_own_directory`
 
 #### Scenario: An internal dependency this reader cannot resolve is not one it may skip
 
