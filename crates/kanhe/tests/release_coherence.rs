@@ -2728,37 +2728,121 @@ fn a_family_crate_offered_with_no_path_is_a_violation() {
     );
 }
 
-/// A family crate offered from outside `crates/` is a violation, and it says which crate it could not hold.
+/// A family crate's path is compared against the member's own directory, spelling by spelling.
 ///
-/// The same door as the pathless entry, one step along: a `path` that resolves is not a path into this
-/// workspace, so what members inherit is a different crate that happens to share the name.
+/// **A prefix test decided this, and it was wrong in both directions at once.** `starts_with("crates/")`
+/// refused `./crates/xuanji` — which cargo resolves to the member, measured: `path=…/crates/xuanji`,
+/// `source=None` — and accepted `crates/../vendor/xuanji`, which cargo resolves to `vendor/xuanji`, outside
+/// the workspace. One review found each. The question is not whether the text begins with `crates/` but
+/// whether it names the directory this member lives in, and the member is what answers it — a directory that
+/// cannot be derived from the package name, since this fixture keeps `machinery-under-another-name` under
+/// `crates/renamed-dir`.
 ///
-/// Negative run: with the arm replaced by `continue`, this returns `Ok`.
+/// **What each spelling earns.** A spelling of the member's own directory is clean; a path naming some other
+/// directory is a violation, whether it leaves the workspace or lands on a different member; a path this
+/// reader will not resolve — absolute, or carrying a `..` — is a cannot-judge rather than a guess, because
+/// `..` is applied after symlink resolution and no repository is handed to this reader.
+///
+/// Negative run: with the prefix test restored, the four clean rows refuse and both `..` rows report clean.
 #[test]
-fn a_family_crate_offered_from_outside_crates_is_a_violation() {
-    let root = scratch("outside-crates");
-    let fixture = build_fixture(&root, "outside-crates", "0.2.0");
-    let manifest = fixture.repo.join("Cargo.toml");
-    let text = std::fs::read_to_string(&manifest).expect("read");
-    std::fs::write(
-        &manifest,
-        text.replace(
-            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }",
-            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }\ntianheng = { path = \"vendor/tianheng\", version = \"0.2.0\" }",
+fn a_family_crate_path_is_compared_against_the_members_own_directory() {
+    #[derive(PartialEq)]
+    enum Answer {
+        Clean,
+        Violation,
+        CannotJudge,
+    }
+    for (label, spelling, answer) in [
+        ("bare", "crates/tianheng", Answer::Clean),
+        ("a leading dot-slash", "./crates/tianheng", Answer::Clean),
+        ("a doubled separator", "crates//tianheng", Answer::Clean),
+        ("a trailing separator", "crates/tianheng/", Answer::Clean),
+        (
+            "an interior dot segment",
+            "crates/./tianheng",
+            Answer::Clean,
         ),
-    )
-    .expect("write");
-    development_changelog(&fixture.repo, "0.2.0", true);
-    commit(
-        &fixture.repo,
-        "chore: offer a family crate from outside crates/",
-    );
-    let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
-    let refusal =
-        verdict.expect_err("a path outside the workspace names a crate that only shares the name");
-    refusal::expect("release-coherence#internal-path-outside-crates", &refusal);
-    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
+        (
+            "outside the workspace",
+            "vendor/tianheng",
+            Answer::Violation,
+        ),
+        // The directory of a real member of this fixture, under another crate's name.
+        (
+            "another member's directory",
+            "crates/xuanji",
+            Answer::Violation,
+        ),
+        (
+            "a dot-dot leaving the crates directory",
+            "crates/../vendor/tianheng",
+            Answer::CannotJudge,
+        ),
+        (
+            "a leading dot-dot",
+            "../crates/tianheng",
+            Answer::CannotJudge,
+        ),
+        ("absolute", "/opt/crates/tianheng", Answer::CannotJudge),
+    ] {
+        let root = scratch(&format!("member-dir-{}", label.replace(' ', "-")));
+        let fixture = build_fixture(&root, "member-dir", "0.2.0");
+        let manifest = fixture.repo.join("Cargo.toml");
+        let text = std::fs::read_to_string(&manifest).expect("read");
+        std::fs::write(
+            &manifest,
+            text.replace(
+                "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }",
+                &format!(
+                    "xuanji = {{ path = \"crates/xuanji\", version = \"0.2.0\" }}\ntianheng = {{ path = \"{spelling}\", version = \"0.2.0\" }}"
+                ),
+            ),
+        )
+        .expect("write");
+        development_changelog(&fixture.repo, "0.2.0", true);
+        commit(&fixture.repo, "chore: spell a member path");
+        let verdict = judge(&fixture.repo);
+        let _ = std::fs::remove_dir_all(&root);
+        match answer {
+            Answer::Clean => assert!(
+                verdict.is_ok(),
+                "{label}: cargo resolves {spelling} to this workspace's tianheng: {:?}",
+                verdict.err()
+            ),
+            Answer::Violation => {
+                let refusal = verdict.expect_err(&format!(
+                    "{label}: {spelling} is not the member's directory"
+                ));
+                refusal::expect(
+                    "release-coherence#internal-path-names-another-directory",
+                    &refusal,
+                );
+                assert_eq!(
+                    refusal.kind,
+                    Kind::Violation,
+                    "{label}: {}",
+                    refusal.message
+                );
+                assert!(
+                    refusal.message.contains("crates/tianheng"),
+                    "{label}: the refusal names where the member actually is: {}",
+                    refusal.message
+                );
+            }
+            Answer::CannotJudge => {
+                let refusal = verdict.expect_err(&format!(
+                    "{label}: {spelling} is not this reader's to resolve"
+                ));
+                refusal::expect("release-coherence#internal-path-unresolvable", &refusal);
+                assert_eq!(
+                    refusal.kind,
+                    Kind::CannotJudge,
+                    "{label}: {}",
+                    refusal.message
+                );
+            }
+        }
+    }
 }
 
 /// A stale internal pin behind a quoted tail is refused, where it used to pass the gate.

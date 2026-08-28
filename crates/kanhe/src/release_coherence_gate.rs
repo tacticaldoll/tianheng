@@ -1621,7 +1621,6 @@ pub(crate) fn require_internal_pins(
     version: &str,
     members: &[Member],
 ) -> Result<(), Refusal> {
-    let family: Vec<&str> = members.iter().map(|member| member.name.as_str()).collect();
     let mut pins = 0usize;
     for Dependency {
         key,
@@ -1643,24 +1642,45 @@ pub(crate) fn require_internal_pins(
         // through a line the subject never contained, and dropping one `path = …` is the whole of the edit
         // that gets there. Two readers of one question is what made it invisible; there is one now.
         let package = dependency_identity(package, &key, "the workspace catalog")?;
-        if !family.contains(&package.as_str()) {
+        let Some(member) = members.iter().find(|member| member.name == package) else {
             continue;
-        }
+        };
         pins += 1;
-        // A family crate is a member of this workspace, so the catalog holds it by path. Anything else — a
-        // registry requirement, a `git` source, a path pointing outside `crates/` — is a different crate that
-        // happens to share the name, and members inheriting it build against that one.
+        // A family crate is a member of this workspace, so the catalog holds it by a path to **that member's
+        // own directory**. Anything else — a registry requirement, a `git` source, a path to somewhere else,
+        // a path to a different member — is another crate that happens to share the name, and members
+        // inheriting it build against that one.
+        //
+        // **Compared against the member, not against a prefix.** `starts_with("crates/")` was a spelling
+        // test standing in for a location, and two reviews falsified it in opposite directions in one round:
+        // `./crates/xuanji` names the member and was refused at exit 1, `crates/../vendor/xuanji` resolves
+        // to `vendor/xuanji` and passed. Both measured under cargo 1.96.0 through `cargo metadata`. The
+        // question was never *does this text begin with `crates/`* but *is this the directory this member
+        // lives in*, and the member is what answers it.
         match path {
-            Declared::Value(path) if path.starts_with("crates/") => {}
-            Declared::Value(path) => {
-                return Err(violation_at(
-                    "release-coherence#internal-path-outside-crates",
-                    format!(
-                        "internal dependency {key} is offered from {path}, which is not under crates/, so \
-                     what members inherit is not this workspace's {package}"
-                    ),
-                ));
-            }
+            Declared::Value(path) => match normalized_directory(&path) {
+                Some(directory) if directory == member.directory => {}
+                Some(directory) => {
+                    return Err(violation_at(
+                        "release-coherence#internal-path-names-another-directory",
+                        format!(
+                            "internal dependency {key} is offered from {path}, which names {directory}, and \
+                     this workspace's {package} is at {}",
+                            member.directory
+                        ),
+                    ));
+                }
+                None => {
+                    return Err(cannot_judge_at(
+                        "release-coherence#internal-path-unresolvable",
+                        format!(
+                            "internal dependency {key} is offered from {path}, which is absolute or carries \
+                     a `..` segment — this reader resolves neither without a filesystem, so whether members \
+                     inherit this workspace's {package} cannot be decided"
+                        ),
+                    ));
+                }
+            },
             Declared::Absent => {
                 return Err(violation_at(
                     "release-coherence#internal-path-absent",
@@ -1765,11 +1785,42 @@ pub(crate) fn require_internal_pins(
 /// identity selection below is the third consumer.
 pub(crate) struct Member {
     /// The `[package]` name the manifest declares.
-    ///
-    /// The manifest path is **not** carried: it was half of the tuple, and no consumer read it — the lock
-    /// reader destructured it away and both pin readers want the name. A field nothing reads is the dead
-    /// state this file refuses elsewhere, and the type is what stops the swap either way.
     pub(crate) name: String,
+    /// The member's directory, repository-relative, as its manifest path spells it.
+    ///
+    /// **Carried because the catalog's `path` has to be compared against something.** It was dropped one
+    /// change earlier as state nothing read — true then, and the reason it stopped being true is that the
+    /// pin reader was still answering *is this path into this workspace* with `starts_with("crates/")`. Two
+    /// reviews falsified that in opposite directions: `./crates/xuanji` names the member and was refused,
+    /// and `crates/../vendor/xuanji` resolves outside and passed. Both measured under cargo 1.96.0. A
+    /// prefix cannot decide either, and `crates/<name>` cannot be derived — this repository's own fixture
+    /// holds `machinery-under-another-name` under `crates/renamed-dir`, and the machinery reader records
+    /// deriving a directory from a package name as a defect it already fixed.
+    pub(crate) directory: String,
+}
+
+/// The repository-relative directory a `path` value names, or `None` where this reader will not resolve it.
+///
+/// **Lexical only, and it says so by refusing.** `.` segments, repeated separators and a trailing separator
+/// are spelling: cargo resolves `./crates/xuanji`, `crates//xuanji` and `crates/xuanji/` to one directory,
+/// measured, and dropping those segments is sound without touching a filesystem. `..` is not spelling — the
+/// kernel applies it after symlink resolution, so `crates/../vendor` is `vendor` only while `crates` is not a
+/// link, and this reader is handed no repository to ask. An absolute path is the same answer for the same
+/// reason. Both are refused as undecidable rather than collapsed, which is the direction that stops in front
+/// of an operator.
+fn normalized_directory(path: &str) -> Option<String> {
+    if path.starts_with('/') {
+        return None;
+    }
+    let mut segments: Vec<&str> = Vec::new();
+    for segment in path.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => return None,
+            named => segments.push(named),
+        }
+    }
+    (!segments.is_empty()).then(|| segments.join("/"))
 }
 
 /// Each workspace manifest's member — the family, resolved once for everything that asks which crates it
@@ -1788,7 +1839,12 @@ pub(crate) fn family_members(manifests: &[(String, String)]) -> Result<Vec<Membe
     let mut members: Vec<Member> = Vec::new();
     for (path, text) in manifests {
         match package_name(text) {
-            PackageName::Named(name) => members.push(Member { name }),
+            PackageName::Named(name) => members.push(Member {
+                name,
+                directory: path
+                    .strip_suffix("Cargo.toml")
+                    .map_or(path.clone(), |head| head.trim_end_matches('/').to_string()),
+            }),
             PackageName::Absent => {
                 return Err(cannot_judge_at(
                     "release-coherence#crate-package-name-absent",
