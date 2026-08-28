@@ -28,6 +28,22 @@ fn versions_in(value: &str) -> Vec<String> {
 /// still admits `/version` and the `=`-follows half alone still admits a key ending in `version` — but the
 /// delimiter half rejects both of those, so the pair of examples established nothing about either half. One
 /// case each, and a run rather than a description.
+/// The workspace members these fixtures are written against, in the shape the caller resolves.
+///
+/// `require_internal_pins` selects its subject by **identity** — the crate a dependency names — so a unit
+/// fixture has to say which crates the family holds, exactly as the end-to-end caller reads them from the
+/// member manifests.
+fn family() -> Vec<crate::release_coherence_gate::Member> {
+    [
+        "xuanji", "xingbiao", "guibiao", "hunyi", "louke", "tianheng",
+    ]
+    .into_iter()
+    .map(|name| crate::release_coherence_gate::Member {
+        name: name.to_string(),
+    })
+    .collect()
+}
+
 #[test]
 fn each_half_of_the_key_recogniser_rejects_a_shape_of_its_own() {
     // The DELIMITER half. In both of these `version` is glued to the character before it — `/` in a path,
@@ -100,7 +116,7 @@ fn a_dated_suffix_is_a_date_and_not_only_three_digit_runs() {
 fn several_paths_or_several_versions_in_one_dependency_are_not_chosen_between() {
     let several_paths = "[workspace.dependencies]\n\
                          xuanji = { path = \"crates/xuanji\", path = \"crates/other\", version = \"0.2.0\" }\n";
-    let refusal = require_internal_pins(several_paths, "0.2.0")
+    let refusal = require_internal_pins(several_paths, "0.2.0", &family())
         .expect_err("two paths name two places and this reader may pick neither");
     crate::refusal::expect(
         "release-coherence#dependency-declares-several-paths",
@@ -115,7 +131,7 @@ fn several_paths_or_several_versions_in_one_dependency_are_not_chosen_between() 
 
     let several_versions = "[workspace.dependencies]\n\
                             xuanji = { path = \"crates/xuanji\", version = \"0.2.0\", version = \"0.1.0\" }\n";
-    let refusal = require_internal_pins(several_versions, "0.2.0")
+    let refusal = require_internal_pins(several_versions, "0.2.0", &family())
         .expect_err("two versions are two requirements and this reader may pick neither");
     crate::refusal::expect("release-coherence#internal-pin-several", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
@@ -139,7 +155,7 @@ fn several_paths_or_several_versions_in_one_dependency_are_not_chosen_between() 
 fn a_path_or_a_version_this_reader_cannot_read_is_a_cannot_judge() {
     let path = "[workspace.dependencies]\n\
                 xuanji = { path = 'crates/xuanji', version = \"0.2.0\" }\n";
-    let refusal = require_internal_pins(path, "0.2.0")
+    let refusal = require_internal_pins(path, "0.2.0", &family())
         .expect_err("a path this reader cannot take is not a path it may ignore");
     crate::refusal::expect("release-coherence#dependency-path-unreadable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
@@ -153,7 +169,7 @@ fn a_path_or_a_version_this_reader_cannot_read_is_a_cannot_judge() {
 
     let version = "[workspace.dependencies]\n\
                    xuanji = { path = \"crates/xuanji\", version = '0.2.0' }\n";
-    let refusal = require_internal_pins(version, "0.2.0")
+    let refusal = require_internal_pins(version, "0.2.0", &family())
         .expect_err("a version this reader cannot take is not one that satisfies");
     crate::refusal::expect("release-coherence#internal-pin-unreadable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
@@ -204,18 +220,17 @@ fn a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped() {
         "[package]\nname = \"xuanji\"\n".to_string(),
     )];
 
+    let members = super::super::release_coherence_gate::family_members(&manifests)
+        .expect("these manifests each name their package");
     let refusal = super::super::release_coherence_gate::require_example_pins(
-        &root, &manifests, "0.5.0",
+        &root, &members, "0.5.0",
     )
     .expect_err(
         "a key this reader cannot decode names some crate, and which one is what it cannot say — so the \
          entry can neither be matched against the family nor passed over. Passed over, the stale \
          \"0.0.1\" reaches a release as clean",
     );
-    crate::refusal::expect(
-        "release-coherence#example-dependency-key-unreadable",
-        &refusal,
-    );
+    crate::refusal::expect("release-coherence#dependency-key-unreadable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge);
     assert!(
         refusal.message.contains("not a bare TOML key"),
@@ -266,7 +281,7 @@ fn an_escaped_path_is_refused_and_an_ordinary_sibling_does_not_cover_for_it() {
              xingbiao = {{ path = \"crates/xingbiao\", version = \"0.5.0\" }}\n\
              xuanji = {{ path = \"{path}\", version = \"0.0.1\" }}\n"
         );
-        let refusal = require_internal_pins(&manifest, "0.5.0").expect_err(
+        let refusal = require_internal_pins(&manifest, "0.5.0", &family()).expect_err(
             "cargo resolves this path and this reader cannot, so whether the entry is an internal \
              dependency is what could not be read",
         );
@@ -316,8 +331,10 @@ fn an_escaped_renamed_package_is_refused_and_an_ordinary_sibling_does_not_cover_
         ),
     ];
 
+    let members = super::super::release_coherence_gate::family_members(&manifests)
+        .expect("these manifests each name their package");
     let refusal = super::super::release_coherence_gate::require_example_pins(
-        &root, &manifests, "0.5.0",
+        &root, &members, "0.5.0",
     )
     .expect_err(
         "cargo reads this package as a family crate and this reader cannot, so the entry can \
@@ -327,7 +344,7 @@ fn an_escaped_renamed_package_is_refused_and_an_ordinary_sibling_does_not_cover_
     // The SITE, not only the kind. Without it, a refusal the vacuity guard produced reads as this
     // direction's evidence — which is exactly how its first version passed under the perturbation.
     crate::refusal::expect(
-        "release-coherence#example-package-value-unreadable",
+        "release-coherence#dependency-package-value-unreadable",
         &refusal,
     );
 
@@ -346,7 +363,7 @@ fn an_internal_pin_taking_the_workspace_offer_is_refused() {
 [workspace.dependencies]
 xuanji = { path = \"crates/xuanji\", workspace = true }
 ";
-    let refusal = require_internal_pins(manifest, "0.5.0").expect_err(
+    let refusal = require_internal_pins(manifest, "0.5.0", &family()).expect_err(
         "a pin inheriting from the catalog it sits in is not a pin this reader can read",
     );
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
@@ -382,7 +399,7 @@ version = \"9.9.9\"
 path = \"crates/xingbiao\"
 version = \"0.5.0\"
 ";
-    require_internal_pins(manifest, "0.5.0").expect(
+    require_internal_pins(manifest, "0.5.0", &family()).expect(
         "both internal dependencies pin the workspace version; the `9.9.9` between them is a docs.rs key and \
          belongs to neither table",
     );
@@ -390,9 +407,9 @@ version = \"0.5.0\"
 
 /// A dotted internal pin is read, and a stale one in that form is refused.
 ///
-/// **The gate passed a stale pin written this way.** `require_internal_pins` selects on **path**, and the
-/// per-line reading gave the `.path` line a path with no version and the `.version` line a version with no
-/// path — so neither was internal to it. Measured before the repair: four correct inline siblings plus a stale
+/// **The gate passed a stale pin written this way.** `require_internal_pins` selected on **path** then, and
+/// the per-line reading gave the `.path` line a path with no version and the `.version` line a version with
+/// no path — so neither was internal to it. Measured before the repair: four correct inline siblings plus a stale
 /// dotted pair answered `Ok(())`, where the same staleness written inline is a violation. Not a shape nobody
 /// writes: `version.workspace = true` is that spelling in every member's `[package]` table.
 ///
@@ -412,7 +429,7 @@ fn a_dotted_internal_pin_is_read_and_a_stale_one_refused() {
     let correct = format!(
         "[workspace.dependencies]\n{sibling}xuanji.path = \"crates/xuanji\"\nxuanji.version = \"0.5.0\"\n"
     );
-    require_internal_pins(&correct, "0.5.0").expect(
+    require_internal_pins(&correct, "0.5.0", &family()).expect(
         "a dotted internal pin at the workspace version is read and passes; refusing it would be a false \
          refusal over a manifest cargo accepts",
     );
@@ -420,7 +437,7 @@ fn a_dotted_internal_pin_is_read_and_a_stale_one_refused() {
     let stale = format!(
         "[workspace.dependencies]\n{sibling}xuanji.path = \"crates/xuanji\"\nxuanji.version = \"0.4.0\"\n"
     );
-    let refusal = require_internal_pins(&stale, "0.5.0")
+    let refusal = require_internal_pins(&stale, "0.5.0", &family())
         .expect_err("a stale dotted pin is the defect this direction exists for");
     crate::refusal::expect("release-coherence#internal-pin-disagrees", &refusal);
     assert!(
@@ -435,6 +452,6 @@ fn a_dotted_internal_pin_is_read_and_a_stale_one_refused() {
         "[workspace.dependencies]\n{sibling}xuanji.path = \"crates/xuanji\"\nxuanji.version = \"0.5.0\"\n\
          xuanji.features = [\"serde\"]\n"
     );
-    require_internal_pins(&with_features, "0.5.0")
+    require_internal_pins(&with_features, "0.5.0", &family())
         .expect("`features` is not a field this reader judges, dotted or inline");
 }

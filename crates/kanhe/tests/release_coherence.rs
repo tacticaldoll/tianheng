@@ -1662,9 +1662,9 @@ fn a_release_subject_with_no_space_is_a_violation() {
 fn every_enumeration_refuses_rather_than_reporting_clean_over_nothing() {
     for (_shape, wreck, needle) in [
         (
-            "no internal path dependency",
+            "no dependency on a family crate",
             "internal-pins" as &str,
-            "found no internal path dependency",
+            "found no dependency on a family crate",
         ),
         // Two sites once produced one needle — an unreadable directory and a readable empty one — so the
         // direction could not say which fired, and only the first was ever reached.
@@ -2523,10 +2523,7 @@ fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
         // `package` key at all, sending an operator to look for a key that is not there. A review read the
         // emitted diagnostic rather than the exit class and found it; every sibling direction here asserts
         // the site.
-        refusal::expect(
-            "release-coherence#example-dependency-field-unreadable",
-            &refusal,
-        );
+        refusal::expect("release-coherence#dependency-field-unreadable", &refusal);
         assert!(
             refusal
                 .message
@@ -2684,6 +2681,84 @@ fn a_dependency_key_whose_name_carries_a_dot_is_one_key() {
         "cargo builds this manifest — the key is named `version.extra`, not structure beneath `version`: {:?}",
         verdict.err()
     );
+}
+
+/// A family crate the catalog offers without a `path` is a violation, where it used to pass the gate.
+///
+/// **The subject was *where a dependency points*, and the defect is a family crate that points nowhere
+/// local.** Measured under cargo 1.96.0 on a synthetic workspace: a catalog entry `xuanji = "0.4.0"` beside a
+/// local member `xuanji 0.9.0` gives the inheriting member `registry+…#xuanji@0.4.0` — the registry crate,
+/// with the member sitting unused — and `cargo package` on a `git` dependency carrying a `version` drops the
+/// source and records the version alone. Either way the published requirement is that version, and deleting
+/// one `path = …` is the whole of the edit that gets there. Measured before this repair: the same fixture
+/// answered *ok release coherence*.
+///
+/// The correct sibling stays, so the vacuity floor cannot be what refuses: one path dependency satisfies the
+/// count while the pathless one is dropped from the subject in silence.
+///
+/// Negative run: with the subject selected by `path` again, this returns `Ok`.
+#[test]
+fn a_family_crate_offered_with_no_path_is_a_violation() {
+    let root = scratch("pathless-family");
+    let fixture = build_fixture(&root, "pathless-family", "0.2.0");
+    let manifest = fixture.repo.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        text.replace(
+            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }",
+            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }\ntianheng = \"0.5\"",
+        ),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: offer a family crate with no path");
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err(
+        "members inheriting this entry build against the registry crate, and the requirement it publishes is \
+         whatever it says",
+    );
+    refusal::expect("release-coherence#internal-path-absent", &refusal);
+    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("tianheng"),
+        "the refusal names the crate it could not hold: {}",
+        refusal.message
+    );
+}
+
+/// A family crate offered from outside `crates/` is a violation, and it says which crate it could not hold.
+///
+/// The same door as the pathless entry, one step along: a `path` that resolves is not a path into this
+/// workspace, so what members inherit is a different crate that happens to share the name.
+///
+/// Negative run: with the arm replaced by `continue`, this returns `Ok`.
+#[test]
+fn a_family_crate_offered_from_outside_crates_is_a_violation() {
+    let root = scratch("outside-crates");
+    let fixture = build_fixture(&root, "outside-crates", "0.2.0");
+    let manifest = fixture.repo.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        text.replace(
+            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }",
+            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }\ntianheng = { path = \"vendor/tianheng\", version = \"0.2.0\" }",
+        ),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "chore: offer a family crate from outside crates/",
+    );
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal =
+        verdict.expect_err("a path outside the workspace names a crate that only shares the name");
+    refusal::expect("release-coherence#internal-path-outside-crates", &refusal);
+    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
 }
 
 /// A stale internal pin behind a quoted tail is refused, where it used to pass the gate.
@@ -2978,7 +3053,7 @@ fn an_example_whose_package_value_is_unreadable_is_not_judged() {
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: name a crate unreadably");
     refusal::expect(
-        "release-coherence#example-package-value-unreadable",
+        "release-coherence#dependency-package-value-unreadable",
         &refuse(
             &fixture.repo,
             Kind::CannotJudge,
@@ -3010,7 +3085,7 @@ fn an_example_declaring_several_package_keys_is_not_judged() {
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: name two crates at once");
     refusal::expect(
-        "release-coherence#example-declares-several-packages",
+        "release-coherence#dependency-declares-several-packages",
         &refuse(
             &fixture.repo,
             Kind::CannotJudge,
@@ -3249,7 +3324,7 @@ fn an_example_pin_this_reader_cannot_take_is_not_one_that_satisfies() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// A root manifest declaring no internal path dependency is a check reporting over nothing.
+/// A root manifest declaring no dependency on a family crate is a check reporting over nothing.
 ///
 /// The vacuity guard: the declaration form is cargo's to change, and a reader that found none would
 /// otherwise pass every release while judging no pin at all.
@@ -3271,13 +3346,16 @@ fn a_root_manifest_with_no_internal_path_dependency_reports_over_nothing() {
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
-    commit(&fixture.repo, "chore: declare no internal path dependency");
+    commit(
+        &fixture.repo,
+        "chore: declare no dependency on a family crate",
+    );
     refusal::expect(
-        "release-coherence#no-internal-path-dependency-found",
+        "release-coherence#no-internal-family-dependency-found",
         &refuse(
             &fixture.repo,
             Kind::CannotJudge,
-            "found no internal path dependency",
+            "found no dependency on a family crate",
         ),
     );
     let _ = std::fs::remove_dir_all(&root);

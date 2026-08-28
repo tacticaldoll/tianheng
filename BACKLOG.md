@@ -466,8 +466,14 @@ consumer for an undemonstrated deduplication.
   *Authority:* this entry, `AGENTS.self-law.md`, `crates/kanhe/tests/release_coherence.rs`'s documented bug
   history.
 
-  **Two lists of `(String, String)` with different meanings flow through one function, and only the failure
-  matrix can tell them apart.** `require_version_surfaces` takes the `(path, text)` manifests and returns the
+  ~~**Two lists of `(String, String)` with different meanings flow through one function, and only the failure
+  matrix can tell them apart.**~~ **BUILT — the trigger fired on both clauses at once.** Selecting the
+  internal-pin subject by identity made `require_internal_pins` the third consumer *and* an edit to this
+  sequence, and the swap stopped being latent: a unit direction handed the `(path, text)` manifests to a
+  reader expecting members, compiled, and answered with a vacuity refusal instead of the site it observes.
+  The two lists now have distinct types — a `Member` carrying the name against the `(String, String)`
+  manifests — so the swap cannot compile; the compiler found two further sites where a binding named
+  `manifests` held members. What follows is the entry as it was filed. `require_version_surfaces` takes the `(path, text)` manifests and returns the
   `(path, name)` pairs `require_example_pins` produced; `require_changelog_state` and the lock reader read the
   second. *Observation source:* a review opened Gate 4 on that function needing an *and then* to state its job,
   and proposed moving the two pin calls to the caller "since the `Vec<(String, String)>` return already exists
