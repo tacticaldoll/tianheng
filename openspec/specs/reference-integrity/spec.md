@@ -392,9 +392,10 @@ being one. A floor this reader invents is a floor it misses every shorter citati
   refusal outranks a miss — the Core Contract names a *silent* false negative as the one forbidden bug, so a
   miss is never the cheaper direction by default. What makes this one admissible is that it is not silent: it
   is this declaration, with an owner and a tracker, and the alternative is refusing prose that cites nothing,
-  which no declaration would cover. The same reasoning is the `because` this bound carries in
-  `crates/kanhe/src/bounds.rs`; a round corrected that carrier and left this one, so the two halves of one
-  reason contradicted each other while the id bijection between them saw nothing
+  which no declaration would cover
+- **AND** this scenario and the `because` this bound carries in `crates/kanhe/src/bounds.rs` SHALL state the
+  same reason. They are two carriers of one bound's rationale and the register's bijection between them is on
+  the **id**, so nothing observes a divergence
 - **UNPINNED** `BACKLOG.md` — *an abbreviation carrying no letter or no digit*
 
 ### Requirement: Deliberate absence does not become a stale-reference finding

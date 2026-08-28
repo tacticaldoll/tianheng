@@ -2474,44 +2474,48 @@ fn an_example_inheriting_what_no_catalog_offers_is_not_judged() {
 /// unreadable and identity left to fall back, it returns `Ok` too, which is the row this one adds.
 #[test]
 fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
-    let root = scratch("undecodable-field");
-    let fixture = build_fixture(&root, "undecodable-field", "0.2.0");
-    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
-    let text = std::fs::read_to_string(&manifest).expect("read");
-    std::fs::write(
-        &manifest,
-        format!("{text}alias = {{ version = \"0.2\", \"\\q\" = \"xuanji\" }}\n"),
-    )
-    .expect("write");
-    development_changelog(&fixture.repo, "0.2.0", true);
-    commit(
-        &fixture.repo,
-        "chore: an inline field this reader cannot decode",
-    );
-    let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
-    let refusal = verdict.expect_err("a field this reader cannot decode is not a clean pin");
-    assert_eq!(
-        refusal.kind,
-        Kind::CannotJudge,
-        "an undecodable key is not a disagreement, it is an unread one: {}",
-        refusal.message
-    );
-    // **The site, not only the class.** Asserting the class alone let the first version of this pass while the
-    // gate said *a `package` value this check cannot read* — about a dependency declaring no `package` key at
-    // all, sending an operator to look for a key that is not there. A review read the emitted diagnostic rather
-    // than the exit class and found it; every sibling direction in this file asserts the site.
-    refusal::expect(
-        "release-coherence#example-dependency-field-unreadable",
-        &refusal,
-    );
-    assert!(
-        refusal
-            .message
-            .contains("a field whose key this check cannot decode"),
-        "the refusal names what it could not read: {}",
-        refusal.message
-    );
+    for (label, entry) in [
+        (
+            "inline",
+            "alias = { version = \"0.2\", \"\\q\" = \"xuanji\" }",
+        ),
+        ("dotted", "alias.\"\\q\" = \"xuanji\""),
+    ] {
+        let root = scratch(&format!("undecodable-field-{label}"));
+        let fixture = build_fixture(&root, "undecodable-field", "0.2.0");
+        let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+        let text = std::fs::read_to_string(&manifest).expect("read");
+        std::fs::write(&manifest, format!("{text}{entry}\n")).expect("write");
+        development_changelog(&fixture.repo, "0.2.0", true);
+        commit(&fixture.repo, "chore: a field this reader cannot decode");
+        let verdict = judge(&fixture.repo);
+        let _ = std::fs::remove_dir_all(&root);
+        let refusal = verdict.expect_err(&format!(
+            "{label}: a field this reader cannot decode is not a clean pin"
+        ));
+        assert_eq!(
+            refusal.kind,
+            Kind::CannotJudge,
+            "{label}: an undecodable key is not a disagreement, it is an unread one: {}",
+            refusal.message
+        );
+        // **The site, not only the class.** Asserting the class alone let the first version of this pass
+        // while the gate said *a `package` value this check cannot read* — about a dependency declaring no
+        // `package` key at all, sending an operator to look for a key that is not there. A review read the
+        // emitted diagnostic rather than the exit class and found it; every sibling direction here asserts
+        // the site.
+        refusal::expect(
+            "release-coherence#example-dependency-field-unreadable",
+            &refusal,
+        );
+        assert!(
+            refusal
+                .message
+                .contains("a field whose key this check cannot decode"),
+            "{label}: the refusal names what it could not read: {}",
+            refusal.message
+        );
+    }
 }
 
 /// A stale internal pin behind a quoted tail is refused, where it used to pass the gate.
