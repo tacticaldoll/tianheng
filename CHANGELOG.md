@@ -1172,6 +1172,31 @@ them.
 
 ### Self-governance
 
+- **A coverage gap was written in the bound register's vocabulary, and a real bound beside it was not written
+  at all.** Three carriers called the drive-prefix arm a *declared bound*. That phrase is load-bearing here:
+  `AGENTS.md` directs a reader to consult `docs/observation-bounds.md` before reporting a behaviour as a
+  defect, because a declared bound means the shape is governed policy. The register held no such entry, and
+  it could not: the arm **reacts**, and reacts correctly — a drive prefix is rooted — so the reaction declines
+  to observe nothing. What is missing is a run on a host this repository does not build for, which is a gap in
+  coverage rather than a bound. All three carriers now say that instead.
+
+  The same review pass found the residue that **is** a bound, one the reader had not declared anywhere. The
+  path comparison is component-wise and case-sensitive on every host. On a case-insensitive filesystem cargo
+  resolves `CRATES/TIANHENG` and `crates/tianheng` to one directory and the check reports a violation over a
+  manifest cargo builds — an over-reaction. On this repository's CI the same answer is correct, because the
+  path names a directory that does not exist.
+
+  It is registered rather than repaired, and the reason is recorded with it. Directory identity is the
+  volume's rule, not the string's, so deciding it needs the filesystem — and this reader is handed no
+  repository. Obtaining one by canonicalizing would make `..` resolvable too, turning a refusal that stops in
+  front of an operator into an answer and moving three other verdicts with it. A refusal an author can read
+  and argue with is the safe direction against the one bug the Core Contract forbids. The bound carries a
+  scenario, a typed declaration and a direction that observes the answer on this host.
+
+  The shape is one this window keeps producing: a claim written where the machinery that would hold it cannot
+  see it. What is new is that the same paragraph carried both errors at once — a coverage gap dressed as a
+  bound, and a bound left undressed.
+
 - **The refusal for a path this reader will not resolve enumerated two causes, and a third one reached it.**
   `path = "."`, `path = "./"` and `path = ""` all name the manifest's own directory rather than one beneath
   it, and each was told it *is absolute or carries a `..` segment* — neither. Measured under cargo 1.96.0
@@ -1191,8 +1216,10 @@ them.
   separator is `/`. On Windows every ordinary member path would have compared unequal, and a drive-qualified
   path would have read as an ordinary relative directory instead of a rooted one; Ubuntu-only CI is what hid
   it. `Path` equality is component-wise and Windows accepts both separators, so one representation settles
-  both. The drive-prefix arm is compiled and unobserved here, declared as a bound and folded into the same
-  answer as the rooted case, which is observed.
+  both. The drive-prefix arm is compiled and unexercised here, sharing its answer with the rooted case, which
+  is exercised. (That arm was first written up as a *declared bound* — this repository's term for a shape the
+  bound register holds — and the register held no such entry. Corrected under *A coverage gap was written in
+  the bound register's vocabulary*.)
 
   A unit direction now reads the classifier directly, so a change to it is caught without a repository, a
   fixture or a judgement. Removing an arm does not compile — the match over `Component` is exhaustive — which

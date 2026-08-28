@@ -754,6 +754,27 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         // an inline span wrapped across a line — and the word-run scan that closes all three reaches unquoted
         // prose too. Its WHEN was rerun against the new tree and the check fires, which is what retires a
         // bound rather than an argument that it should have closed.
+        // --- release-coherence: what the path reader compares, and what it cannot ---
+        //
+        // The sibling limitation is deliberately NOT declared here. `Component::Prefix` is compiled and never
+        // produced on an Ubuntu host, but the arm reacts and reacts correctly, so the reaction declines to
+        // observe nothing — a gap in coverage is not a bound, and three carriers once said otherwise in this
+        // register's own vocabulary while the register held no such entry.
+        BoundDecl::pinned(
+            BoundId::new("release-coherence/a-case-alias-of-a-member-directory-a-stated-bound"),
+            "a catalog path differing from the member's directory only in case, on a case-insensitive \
+             filesystem",
+            Extent::Reached(Reached::OverReacts {
+                because: "the comparison is component-wise and case-sensitive on every host, so it answers \
+                          the same everywhere and is right only where the filesystem is. Deciding directory \
+                          identity is the volume's rule rather than the string's, and this reader is handed \
+                          no repository to ask; obtaining one by canonicalizing would also make `..` \
+                          resolvable and move three other verdicts with it. A refusal an author can read and \
+                          argue with is the safe direction against the one bug the Core Contract forbids"
+                    .into(),
+            }),
+            "a_case_alias_of_a_member_directory_is_a_stated_bound",
+        ),
         BoundDecl::pinned(
             BoundId::new(
                 "release-coherence/prose-about-the-marker-is-read-as-a-marker-a-stated-bound",

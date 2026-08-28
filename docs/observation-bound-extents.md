@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**50 of 97 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**50 of 98 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -343,7 +343,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (13)
+## over-reacts (14)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -384,6 +384,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: a word is matched against basenames as well as paths, because the document cites both forms; narrowing it to full paths would lose every bare citation, and deciding which of two files a bare name means is a judgement about the sentence rather than about the reference
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_colliding_basename_is_a_stated_bound`
+
+### `release-coherence/a-case-alias-of-a-member-directory-a-stated-bound`
+
+> a catalog path differing from the member's directory only in case, on a case-insensitive filesystem
+
+- **because**: the comparison is component-wise and case-sensitive on every host, so it answers the same everywhere and is right only where the filesystem is. Deciding directory identity is the volume's rule rather than the string's, and this reader is handed no repository to ask; obtaining one by canonicalizing would also make `..` resolvable and move three other verdicts with it. A refusal an author can read and argue with is the safe direction against the one bug the Core Contract forbids
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_case_alias_of_a_member_directory_is_a_stated_bound`
 
 ### `release-coherence/prose-about-the-marker-is-read-as-a-marker-a-stated-bound`
 

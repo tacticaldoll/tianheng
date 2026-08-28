@@ -1845,9 +1845,12 @@ pub(crate) enum Unresolvable {
 /// gives both sides one representation on every platform, because `Path` equality is component-wise and
 /// Windows accepts both separators.
 ///
-/// **Declared bound: `Component::Prefix` is compiled and not observed here.** It is produced only on Windows,
-/// and this repository's CI is Ubuntu. It is folded into the same answer as `RootDir`, which *is* observed,
-/// so the arm shares its verdict with a measured sibling rather than standing alone on reasoning.
+/// **A coverage limitation, not a bound: `Component::Prefix` is compiled and unexercised here.** It is
+/// produced only on Windows, and this repository's CI is Ubuntu. The arm *reacts*, and correctly — a drive
+/// prefix is rooted — so there is nothing the reaction declines to observe and nothing for the bound register
+/// to hold; what is missing is a run, not a verdict. It shares its answer with `RootDir`, which the absolute
+/// row does exercise. An earlier wording here called it a *declared bound*, which is this repository's term
+/// of art for a shape the register holds, and the register held no such entry.
 pub(crate) fn normalized_directory(path: &str) -> Result<PathBuf, Unresolvable> {
     let mut directory = PathBuf::new();
     let mut named = false;

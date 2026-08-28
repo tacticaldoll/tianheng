@@ -413,10 +413,11 @@ version = \"0.5.0\"
 /// which classification each spelling earns on the host that runs them, so a change to the classifier is
 /// caught without a repository, a fixture or a `judge`.
 ///
-/// **Declared bound: the drive-prefix arm is compiled and unobserved.** It is folded into the same answer as
-/// `RootDir`, which the absolute row *does* observe, so it shares its verdict with a measured sibling rather
-/// than standing alone on reasoning. What a Unix host does with `C:/x` is read it as an ordinary relative
-/// directory named `C:` — cargo on that host would do the same, so the two agree there too.
+/// **The drive-prefix arm is compiled and unexercised here — a gap in coverage, not a bound.** It reacts, and
+/// correctly, so the reaction declines to observe nothing and the bound register has nothing to hold; what is
+/// missing is a run on a host this repository does not build for. It shares its answer with `RootDir`, which
+/// the absolute row does exercise. What a Unix host does with `C:/x` is read it as an ordinary relative
+/// directory named `C:` — cargo on that host does the same, so the two agree there too.
 ///
 /// Negative runs. Removing the `CurDir` arm does not compile at all — the match over `Component` is
 /// exhaustive, so an arm cannot be dropped in silence, which is a stronger guarantee than a direction can
