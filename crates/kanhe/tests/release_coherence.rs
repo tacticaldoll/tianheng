@@ -3777,6 +3777,66 @@ fn a_workspace_whose_members_are_untracked_reports_over_nothing() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// The unpublished members contributing nothing is refused, where a published sibling used to cover for it.
+///
+/// **A vacuity guard measuring a wider set than the one it protects — the third of that shape in this file.**
+/// The machinery set is drawn from the **unpublished** members plus `scripts/`, and the floor counted every
+/// member's tracked paths, published ones included. One tracked file under `crates/xuanji` therefore kept the
+/// counter non-zero while the machinery set was `scripts/` alone — the state the floor's own message
+/// described. The check would then run against `scripts/` alone and report clean over a nearly-empty subject.
+///
+/// **Reachable, and reported as run rather than as read.** A review found this by reading and judged the
+/// state unreachable through `build_fixture`. It is reachable: untrack the two unpublished members and leave
+/// the published one alone, which is what this does. `cargo metadata` still names all three, because it reads
+/// the filesystem rather than the index.
+///
+/// Negative run: with the floor restored to `enumerated == 0`, this reports `ok release coherence` — one
+/// tracked file under the published member covering for a subject that is empty.
+#[test]
+fn unpublished_members_contributing_nothing_is_refused() {
+    let root = scratch("machinery-empty");
+    let fixture = build_fixture(&root, "machinery-empty", "0.2.0");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: prepare");
+    // Through git directly, because the fixture's `commit` stages everything and would put them back. Only
+    // the unpublished members go: `crates/xuanji` stays tracked, and it is what kept the old floor silent.
+    git(
+        &fixture.repo,
+        &[
+            "rm",
+            "-r",
+            "--cached",
+            "-q",
+            "crates/tianheng",
+            "crates/renamed-dir",
+        ],
+    );
+    git(
+        &fixture.repo,
+        &[
+            "commit",
+            "-qm",
+            "chore: stop tracking the unpublished members",
+        ],
+    );
+    let refusal = refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "contributed no tracked file",
+    );
+    refusal::expect(
+        "release-coherence#no-machinery-from-unpublished-members",
+        &refusal,
+    );
+    assert!(
+        refusal.message.contains("crates/tianheng")
+            && refusal.message.contains("crates/renamed-dir"),
+        "the refusal names the members that were expected to contribute: {}",
+        refusal.message
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A dotted key whose tail this reader does not judge is still a declared dependency.
 ///
 /// **A review read the ordering as a hygiene defect and it is the opposite.** `declared_dependencies` creates

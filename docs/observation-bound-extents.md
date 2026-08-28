@@ -389,9 +389,9 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > a catalog path differing from the member's directory only in case, on a case-insensitive filesystem
 
-- **because**: the comparison is component-wise and case-sensitive on every host, so it answers the same everywhere and is right only where the filesystem is. Deciding directory identity is the volume's rule rather than the string's, and this reader is handed no repository to ask; obtaining one by canonicalizing would also make `..` resolvable and move three other verdicts with it. A refusal an author can read and argue with is the safe direction against the one bug the Core Contract forbids
+- **because**: the comparison is component-wise and case-sensitive on every host, so it answers the same everywhere and is right only where the filesystem is. Closing it means asking the filesystem, since case folding is the volume's rule rather than the string's — and a release gate whose verdict over one tree differs by the machine it runs on is worse than a refusal an author can read and argue with. This reader is also handed no repository to ask. An earlier wording claimed canonicalizing would make `..` resolvable and move three other verdicts: review showed it can be confined to the accepted branch, leaving every refusal intact, so that reason was false and is not what keeps the bound
 - **its defence must show**: reacts on a harmless shape
-- **pinned by**: `a_case_alias_of_a_member_directory_is_a_stated_bound`
+- **unpinned**, tracked by: `BACKLOG.md` — *a pin may defend a direction its bound does not declare*
 
 ### `release-coherence/prose-about-the-marker-is-read-as-a-marker-a-stated-bound`
 

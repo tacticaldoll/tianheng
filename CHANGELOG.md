@@ -1172,6 +1172,41 @@ them.
 
 ### Self-governance
 
+- **A vacuity guard measured a wider set than the one it protects — the third of that shape in this
+  reaction.** The machinery set is drawn from the workspace's **unpublished** members plus `scripts/`, and its
+  floor counted every member's tracked paths, published ones included. One tracked file under a published
+  crate therefore kept the counter non-zero while the machinery set was `scripts/` alone — the state the
+  floor's own message described — and the check would then run against `scripts/` and report clean over a
+  nearly-empty subject. The floor now counts the members the set is built from, and names them when they
+  contribute nothing. A workspace with no unpublished members legitimately has `scripts/` alone, so the
+  condition is *declared and contributed nothing* rather than *empty*, and enumerating nothing at all across
+  every member stays a separate refusal saying what it actually detects: cargo and git describing different
+  trees.
+
+  A review found this by reading and judged the state unreachable through the fixture builder. It is
+  reachable — untrack the unpublished members and leave the published one tracked — so it is pinned by a
+  direction that runs, and the negative run reports `ok release coherence` over an empty subject. No live
+  instance: this repository's two unpublished members carry tracked files.
+
+- **A bound was declared pinned by a direction that demonstrates the opposite of what it predicts.** The
+  case-alias bound added in this window declares an over-reaction — a path differing only in case is refused
+  over a manifest cargo builds on a case-insensitive volume — and cited a direction that runs on this
+  repository's Ubuntu CI, where the path names a directory that does not exist and the refusal is **correct**.
+  A citation that shows a real violation cannot defend a bound about a harmless shape.
+
+  `BACKLOG.md` already tracked that class — *a pin may defend a direction its bound does not declare* — with a
+  promotion trigger of a second instance, and this was it. The bound is unpinned against that entry now, and
+  the entry records that its trigger fired, what produced it, and that two reviews read the same citation and
+  disagreed about it. The refusal to build a reaction is unchanged and re-stated: deciding what a test
+  demonstrates from its body is a judgement over prose this repository has measured and rejected three times.
+
+  **The bound's stated reason was also false, and the same review falsified it.** It claimed that
+  canonicalizing the path would make `..` resolvable and move three other verdicts with it. It would not:
+  canonicalization can be confined to the branch that already produced a directory, after the rooted,
+  traversal and no-directory refusals have been returned, leaving every one of them intact. The reason that
+  actually keeps the bound is different and now stated — a release gate whose verdict over one tree differs by
+  the machine it runs on is worse than a refusal an author can read and argue with.
+
 - **A coverage gap was written in the bound register's vocabulary, and a real bound beside it was not written
   at all.** Three carriers called the drive-prefix arm a *declared bound*. That phrase is load-bearing here:
   `AGENTS.md` directs a reader to consult `docs/observation-bounds.md` before reporting a behaviour as a
