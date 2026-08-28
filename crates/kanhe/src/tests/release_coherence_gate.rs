@@ -40,7 +40,7 @@ fn family() -> Vec<crate::release_coherence_gate::Member> {
     .into_iter()
     .map(|name| crate::release_coherence_gate::Member {
         name: name.to_string(),
-        directory: format!("crates/{name}"),
+        directory: std::path::PathBuf::from(format!("crates/{name}")),
     })
     .collect()
 }
@@ -404,6 +404,70 @@ version = \"0.5.0\"
         "both internal dependencies pin the workspace version; the `9.9.9` between them is a docs.rs key and \
          belongs to neither table",
     );
+}
+
+/// A `path` value is read through its components, and the three refusals are told apart.
+///
+/// **Here as well as end to end, because the end-to-end rows cannot reach one of the arms.**
+/// `Component::Prefix` is produced only on Windows, and this repository's CI is Ubuntu; the unit rows say
+/// which classification each spelling earns on the host that runs them, so a change to the classifier is
+/// caught without a repository, a fixture or a `judge`.
+///
+/// **Declared bound: the drive-prefix arm is compiled and unobserved.** It is folded into the same answer as
+/// `RootDir`, which the absolute row *does* observe, so it shares its verdict with a measured sibling rather
+/// than standing alone on reasoning. What a Unix host does with `C:/x` is read it as an ordinary relative
+/// directory named `C:` — cargo on that host would do the same, so the two agree there too.
+///
+/// Negative runs. Removing the `CurDir` arm does not compile at all — the match over `Component` is
+/// exhaustive, so an arm cannot be dropped in silence, which is a stronger guarantee than a direction can
+/// give. Answering `CurDir` with `NamesNoDirectory` instead: `./crates/tianheng` classifies as
+/// `NamesNoDirectory` where the row requires `crates/tianheng`. Folding `ParentDir` into `Absolute`: the
+/// traversal rows come back `Absolute`, which is the wrong cause named — the defect this direction exists
+/// for, one arm along.
+#[test]
+fn a_path_value_is_read_through_its_components() {
+    use crate::release_coherence_gate::{Unresolvable, normalized_directory};
+    use std::path::PathBuf;
+
+    for spelling in [
+        "crates/tianheng",
+        "./crates/tianheng",
+        "crates//tianheng",
+        "crates/tianheng/",
+        "crates/./tianheng",
+    ] {
+        assert_eq!(
+            normalized_directory(spelling),
+            Ok(PathBuf::from("crates/tianheng")),
+            "cargo resolves {spelling} to that directory, measured"
+        );
+    }
+    assert_eq!(
+        normalized_directory("vendor/tianheng"),
+        Ok(PathBuf::from("vendor/tianheng")),
+        "a directory this reader can name is named, whether or not it is the member's"
+    );
+    for spelling in ["/opt/crates/tianheng", "/"] {
+        assert_eq!(
+            normalized_directory(spelling),
+            Err(Unresolvable::Absolute),
+            "{spelling} is rooted, and this reader is handed no repository to make it relative against"
+        );
+    }
+    for spelling in ["crates/../vendor/tianheng", "../crates/tianheng", ".."] {
+        assert_eq!(
+            normalized_directory(spelling),
+            Err(Unresolvable::Traversal),
+            "{spelling} carries a `..`, applied after symlink resolution"
+        );
+    }
+    for spelling in [".", "./", "", "./."] {
+        assert_eq!(
+            normalized_directory(spelling),
+            Err(Unresolvable::NamesNoDirectory),
+            "{spelling} names the manifest's own directory, which cargo refuses as a dependency"
+        );
+    }
 }
 
 /// A dotted internal pin is read, and a stale one in that form is refused.

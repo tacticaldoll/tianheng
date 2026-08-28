@@ -2740,17 +2740,21 @@ fn a_family_crate_offered_with_no_path_is_a_violation() {
 ///
 /// **What each spelling earns.** A spelling of the member's own directory is clean; a path naming some other
 /// directory is a violation, whether it leaves the workspace or lands on a different member; a path this
-/// reader will not resolve — absolute, or carrying a `..` — is a cannot-judge rather than a guess, because
-/// `..` is applied after symlink resolution and no repository is handed to this reader.
+/// reader will not name a directory for is a cannot-judge that says **which** reason it met, rather than a
+/// guess or a sentence enumerating the other reasons.
 ///
-/// Negative run: with the prefix test restored, the four clean rows refuse and both `..` rows report clean.
+/// Negative run, measured rather than described: with the prefix test deciding first, the row that offers
+/// `crates/xuanji` for `tianheng` — another member's directory — reports `ok release coherence`. That is the
+/// row no prefix could ever have answered, and it is the first one the perturbation reaches.
 #[test]
 fn a_family_crate_path_is_compared_against_the_members_own_directory() {
-    #[derive(PartialEq)]
     enum Answer {
         Clean,
         Violation,
-        CannotJudge,
+        /// The reason the refusal must name. **Asserted, because the message was the defect**: three causes
+        /// once reached one arm that enumerated two of them, and `.` was told it was absolute or carried a
+        /// `..`. A direction checking only the site cannot see that.
+        CannotJudge(&'static str),
     }
     for (label, spelling, answer) in [
         ("bare", "crates/tianheng", Answer::Clean),
@@ -2776,14 +2780,32 @@ fn a_family_crate_path_is_compared_against_the_members_own_directory() {
         (
             "a dot-dot leaving the crates directory",
             "crates/../vendor/tianheng",
-            Answer::CannotJudge,
+            Answer::CannotJudge("carries a `..` segment"),
         ),
         (
             "a leading dot-dot",
             "../crates/tianheng",
-            Answer::CannotJudge,
+            Answer::CannotJudge("carries a `..` segment"),
         ),
-        ("absolute", "/opt/crates/tianheng", Answer::CannotJudge),
+        (
+            "absolute",
+            "/opt/crates/tianheng",
+            Answer::CannotJudge("is absolute"),
+        ),
+        // The third cause. Measured under cargo 1.96.0 with dependency resolution on: `path = "."` fails
+        // with *failed to get `xuanji` as a dependency*, so it is a manifest nothing builds — and it is
+        // neither absolute nor a traversal, which is what the one-message arm used to tell an operator.
+        (
+            "the manifest's own directory",
+            ".",
+            Answer::CannotJudge("names no directory"),
+        ),
+        (
+            "the manifest's own directory with a separator",
+            "./",
+            Answer::CannotJudge("names no directory"),
+        ),
+        ("empty", "", Answer::CannotJudge("names no directory")),
     ] {
         let root = scratch(&format!("member-dir-{}", label.replace(' ', "-")));
         let fixture = build_fixture(&root, "member-dir", "0.2.0");
@@ -2829,7 +2851,7 @@ fn a_family_crate_path_is_compared_against_the_members_own_directory() {
                     refusal.message
                 );
             }
-            Answer::CannotJudge => {
+            Answer::CannotJudge(reason) => {
                 let refusal = verdict.expect_err(&format!(
                     "{label}: {spelling} is not this reader's to resolve"
                 ));
@@ -2838,6 +2860,11 @@ fn a_family_crate_path_is_compared_against_the_members_own_directory() {
                     refusal.kind,
                     Kind::CannotJudge,
                     "{label}: {}",
+                    refusal.message
+                );
+                assert!(
+                    refusal.message.contains(reason),
+                    "{label}: the refusal names the cause it met rather than a sibling's: {}",
                     refusal.message
                 );
             }
