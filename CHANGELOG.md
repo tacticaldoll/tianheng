@@ -8434,6 +8434,28 @@ no adopter runs. They are here rather than under the adopter headings above beca
   moving references, three sections above it, rejects. It names `Declared` now.
 
 
+- **A governance paragraph written this window is retired, because it was a second carrier of a rule the
+  document already held.** *A count of a set the code owns is the same defect wearing a number* restated
+  `AGENTS.md`'s own **A hand-written count of a live set is not written down** — which already carries the
+  census mechanism, the typing argument a person maintains and a renderer recomputes, and the instruction to
+  print a figure from the run rather than from prose. Two carriers of one rule, two hundred lines apart, in the
+  document that tells an agent what the rules are.
+
+  It is the shape this window has spent its reviews closing — a bound's reason in two places, one predicate
+  written twice, one question answered by two walkers — and this instance had already gone wrong twice in the
+  two commits after it was written: three hand-maintained counts inside the paragraph forbidding them, and a
+  positional anchor inside the document rejecting those.
+
+  What was durable is folded into the rule that already existed rather than deleted: a doc stating how many
+  variants **the type it documents** has is that rule with a number in it, the repair is the one
+  `xuanji::bound::Reached` states, and the sweep stays narrow because the wide form returns about a hundred
+  hits across this tree that are reasoning rather than counting. The sweep rule now points at the census rule
+  for what counts as a hand-maintained assertion instead of restating it.
+
+  Recorded because the question that produced this was worth more than the paragraph: *should that doc be
+  retired* is answerable by measurement — find the rule it duplicates, check what it adds, keep only that.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

@@ -326,7 +326,13 @@ The census direction in `crates/kanhe/tests/bound_register.rs` stays what it is 
 phrasing is stable, with nothing in the tree stating it — and the rule below is what keeps a figure honest.
 
 
-**A hand-written count of a live set is not written down.** The declared-census mechanism is retained and
+**A hand-written count of a live set is not written down**, and a doc stating how many variants the type
+it documents has is that rule with a number in it — measured, it goes stale in the very commit that grows the
+type. The repair is the one `xuanji::bound::Reached` states: each variant documents the **distinction** that
+earns it a place, and the compiler enumerates them. Sweep for *that* shape and nothing wider — widened to any
+figure about a set, the same search returns about a hundred hits across this tree and nearly all are reasoning
+(*two forms cannot bind a value*), which name distinctions rather than count a live set. The hundred are why
+this rule is about the typing rather than about numerals. The declared-census mechanism is retained and
 armed — `crates/kanhe/src/census.rs` enumerates a set, names the one sentence its figures may be written in,
 and one sweep holds every tracked document to it. The one sentence the tree carries is in a **generated
 projection**, whose figure a renderer computes over a freshness-checked document — the produced form this rule
@@ -535,7 +541,7 @@ and doc for the retired term across its *whole* file, not only the new diff: syn
 correctly-worded requirement while the same file's older prose still names the retired shape is
 itself an undetected drift, invisible to a diff-only read (the 0.3.0 `finding_key` lesson).
 
-**A sweep is keyed to the claim, not to the phrasing it last saw — and its subject is any hand-maintained assertion about a live set, not only a wording.** Each correction of one inverted statement
+**A sweep is keyed to the claim, not to the phrasing it last saw.** Its subject is any hand-maintained assertion — a wording, and equally a count, which the census rule states in full rather than restating here. Each correction of one inverted statement
 of the Core Contract left instances behind, because each sweep searched for the wording in front of it: a
 line-oriented one could not see an instance wrapped across two comment lines; joining lines fixed that and
 kept the phrase, so another spelling of the same claim survived; and a review proposing the repair named a
@@ -545,20 +551,6 @@ line-joined search for the **claim** — here `forbid\w*.{0,40}more strictly` �
 document doing the reporting inside its own corpus. **Record the pattern beside the correction**, or the next
 round re-derives a narrower one: when a second run finds new instances of a phrasing variant, the pattern is
 the subject rather than the sites.
-
-**A count of a set the code owns is the same defect wearing a number.** An enum's doc saying *four states* is
-a hand-maintained assertion about a live set exactly as a phrasing is, and it goes stale in the commit that
-grows the enum — measured here more than once, including in `Declared`, forty lines from the
-`Package` doc rewritten to remove that very shape in the same commit. The repair is the one `xuanji::bound::Reached` already states: each variant
-documents the **distinction** that earns it a place, and the compiler enumerates them. Sweep for the shape,
-not for the site in hand.
-
-**The decidable subject is a type's own cardinality, not every number in prose.** Widened to *any figure about
-a set*, the sweep returns about a hundred hits across this tree and nearly all are reasoning — *two forms
-cannot bind a value*, *three answers, because `.is_ok()` gave two* — which name distinctions rather than count
-a live set, and rewriting them would be the over-wide sweep this file warns about elsewhere. What drifts is a
-doc stating how many variants **the type it documents** has, in the commit that grows that type. That is the
-pattern to run; the hundred are the reason to keep it narrow.
 
 Once a claim like that is corrected, its pattern does not return zero and should not: what it finds afterwards
 is **the pattern's own occurrences and the marked quotations** — a dated entry recording what the wrong wording
