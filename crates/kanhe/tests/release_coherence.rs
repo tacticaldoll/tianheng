@@ -2537,7 +2537,7 @@ fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
     }
 }
 
-/// Two dated sections for one version are not judged, and the first of them does not answer.
+/// Two sections claiming one version are not judged, and the first of them does not answer.
 ///
 /// **The fourth reader in this crate to be asked *how many*, and the first that selects from a document.**
 /// The dated section was taken with `.find()`, so a changelog carrying a stale `## [0.2.1]` dated years
@@ -2545,12 +2545,19 @@ fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
 /// carrying the *same* date passed too. At the snapshot the same selection inverts: the stale date would be
 /// compared against the release commit and the refusal would name the wrong line.
 ///
-/// The sibling check above counts `[Unreleased]` sections and refuses any count but one, with a comment
-/// saying every arm below assumes exactly one exists. The same assumption was made here and never checked,
-/// and nothing declared it — not the spec, which is written in the singular throughout, not the observation
-/// bounds, not the backlog.
+/// The `[Unreleased]` reader counts its sections and refuses any count but one, with a comment saying its
+/// every arm assumes exactly one exists. The same assumption was made here and never checked, and nothing
+/// declared it — not the spec, which was written in the singular throughout, not the observation bounds, not
+/// the backlog. The release-coherence spec now carries *Two sections claim one version*, which is what these
+/// rows pin.
 ///
-/// Negative run: with the count restored to `.find()`, both rows return `Ok`.
+/// **The count is over the sections that claim the version, not over the ones whose suffix parsed.** The
+/// malformed rows are the reason: a heading left behind or a typo'd date is the likelier sibling, and
+/// counting after the date filter left one survivor and reported clean on both of them.
+///
+/// Negative run, both halves: with the count removed and the section taken by `.find()`, every row reports
+/// clean; with the count kept but taken *after* the date filter, the two well-formed rows still refuse and
+/// the two malformed ones report clean.
 #[test]
 fn two_dated_sections_for_one_version_are_not_judged() {
     for (label, stale) in [
