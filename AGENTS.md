@@ -548,10 +548,17 @@ the subject rather than the sites.
 
 **A count of a set the code owns is the same defect wearing a number.** An enum's doc saying *four states* is
 a hand-maintained assertion about a live set exactly as a phrasing is, and it goes stale in the commit that
-grows the enum — measured here more than once, including in a doc rewritten to remove that very shape while a
-sibling forty lines below kept it. The repair is the one `xuanji::bound::Reached` already states: each variant
+grows the enum — measured here more than once, including in `Declared`, forty lines from the
+`Package` doc rewritten to remove that very shape in the same commit. The repair is the one `xuanji::bound::Reached` already states: each variant
 documents the **distinction** that earns it a place, and the compiler enumerates them. Sweep for the shape,
-not for the site in hand: an enum whose own doc states a count of its variants is decidable text.
+not for the site in hand.
+
+**The decidable subject is a type's own cardinality, not every number in prose.** Widened to *any figure about
+a set*, the sweep returns about a hundred hits across this tree and nearly all are reasoning — *two forms
+cannot bind a value*, *three answers, because `.is_ok()` gave two* — which name distinctions rather than count
+a live set, and rewriting them would be the over-wide sweep this file warns about elsewhere. What drifts is a
+doc stating how many variants **the type it documents** has, in the commit that grows that type. That is the
+pattern to run; the hundred are the reason to keep it narrow.
 
 Once a claim like that is corrected, its pattern does not return zero and should not: what it finds afterwards
 is **the pattern's own occurrences and the marked quotations** — a dated entry recording what the wrong wording
