@@ -3015,12 +3015,25 @@ it before assigning a horizon here; the entries below are horizons, not a second
   name: no open pull request targeted it, CI triggers on `main` and on any pull request rather than on a
   branch name, and the only prose naming it was this paragraph.
 
-  What was deliberately not done **when this entry was written**: the version bump, the dated CHANGELOG
-  section, the internal pins and `Cargo.lock`, which move together at release preparation. The 0.5.0 preparation has
-  since done all four, so the gate reports `release-ready: 0.5.0` rather than the `development: 0.4.0` this
-  paragraph described. Corrected rather than deleted, because the point it was making survives and is the
-  one that matters here: the gate reads versions, never a branch name, so the rename changed nothing it
-  judges.
+  What was deliberately not done **as of 2026-08-06**, when the rename above happened: the version bump, the
+  dated CHANGELOG section, the internal pins and `Cargo.lock`, which move together at release preparation.
+  The 0.5.0 preparation has since done each.
+
+  **This paragraph used to end by naming the gate's current answer, and that sentence was wrong three times
+  in a row.** It said `development: 0.4.0`, was corrected to `release-ready: 0.5.0`, and was already false
+  at the commit that froze it — the release squash makes HEAD's subject `release: X.Y.Z`, which is
+  `State::Snapshot`, so the tree it shipped in reports `snapshot: 0.5.0`. A fourth correction would have been
+  the same mistake again: **the gate's answer is a live state and this is a record.** What a record can say
+  is the property and how to re-derive it, which is what the commit-count sentence above already does and
+  what this one now does too:
+
+  ```bash
+  TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test release_coherence \
+    the_release_surfaces_are_coherent -- --nocapture     # prints `<state>: <version>` for the checkout
+  ```
+
+  The property that survives, and the only one this entry needed: **the gate reads versions, never a branch
+  name** — grep the reaction for one and there is none — so the rename changed nothing it judges.
 - **Next breaking window (if earned)** — requires real adopter or correctness pressure.
 
 ## Explicitly not on the roadmap

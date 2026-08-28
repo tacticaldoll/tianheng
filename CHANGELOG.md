@@ -24,6 +24,28 @@ them.
 
 ### Self-governance
 
+- **A record stated the gate's current answer, and was wrong three times running — the fourth correction
+  would have been the same mistake.** A *Version horizons* paragraph in `BACKLOG.md` ended by naming what
+  the release-coherence gate reports. It said `development: 0.4.0`; that was corrected to
+  `release-ready: 0.5.0`; and that was **already false at the commit that froze it**, because the release
+  squash makes HEAD's subject `release: X.Y.Z`, which is `State::Snapshot` — the tree it shipped in reports
+  `snapshot: 0.5.0`. Measured at `v0.5.0` itself.
+
+  The defect was never the label. A gate's answer is a **live state**, and a record cannot hold one: the
+  paragraph's own two earlier drifts are its evidence, and the paragraph already prescribed the remedy for
+  its commit counts one screen earlier — *re-derive rather than trusting a figure here*, with the command to
+  do it. It simply had not applied that to itself. It now states the property that survives — the gate reads
+  versions, never a branch name — and carries the command that prints the state for any checkout.
+
+  Two smaller carriers went with it: *has since done **all four*** was a hand-written count of the list
+  beside it, and *when this entry was written* was a relative anchor in a paragraph that names an absolute
+  date two sentences earlier.
+
+  It could not be fixed before the release. The only way was to rewrite `main`'s release snapshot — the act
+  that orphaned `0.2.2`'s tarballs — over one sentence in a document that ships in no crate and fails no
+  reaction. A BACKLOG entry is also a record, and this repository's own stated bound refuses rewriting a
+  record to satisfy a rule written afterwards.
+
 - **`0.5.0`'s published tarballs name the commit its tag names, and the record now says so from measurement.**
   All six were pulled from `static.crates.io` on their publication day and their `.cargo_vcs_info.json` read:
   one distinct sha1 across the six, and it is the commit `v0.5.0` names — so
