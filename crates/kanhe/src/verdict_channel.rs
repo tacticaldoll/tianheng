@@ -117,7 +117,7 @@ pub fn deliver(gate: &str, verdict: Verdict) {
 
 /// What became of a write to the channel.
 ///
-/// Three states rather than a `bool`, for the reason every other split in this crate has: *no channel was
+/// Typed apart rather than a `bool`, for the reason every other split in this crate has: *no channel was
 /// opened* and *a channel was opened and could not be written* are different facts, and a boolean makes the
 /// second unobservable. A gate run in the ordinary suite opens none, which is not a failure; a gate run by a
 /// wrapper opens one, and a failure there is a verdict lost.

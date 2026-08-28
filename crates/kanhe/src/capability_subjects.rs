@@ -41,8 +41,8 @@ pub type Subjects = BTreeMap<String, Vec<String>>;
 /// What a spec's `## Subject` section declares.
 ///
 /// A bullet this reader cannot parse is not a section listing fewer globs, and several sections are not the
-/// first of them — see [`subject_globs`]. Four outcomes are what keeps those four answers apart; collapsing
-/// any two of them is how one becomes the other's report.
+/// first of them — see [`subject_globs`]. Keeping the outcomes apart is what stops one becoming the other's
+/// report; collapsing any two of them is how that happens.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Declared {
     /// The spec carries no `## Subject` section.
@@ -57,7 +57,7 @@ pub enum Declared {
 
 /// What a proposal's `## Capabilities` section names.
 ///
-/// Sibling of [`Declared`], and the same four answers minus the one this section cannot give: a proposal with
+/// Sibling of [`Declared`], answering the same way minus the one this section cannot give: a proposal with
 /// no such section names nothing, which is [`Named::Names`] over an empty set rather than an absence. The
 /// error channel this replaced was a bare `usize`, which had room for *how many sections* and none for
 /// *unreadable* — so the reader that could not express the state skipped it, in the module whose sibling

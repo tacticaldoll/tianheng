@@ -176,7 +176,7 @@ fn workspace_root() -> Option<PathBuf> {
 
 /// What the projection renders, or why it could not be read.
 ///
-/// Three states rather than an empty set: a projection this reader cannot parse is not a law with no
+/// Typed apart rather than collapsed into an empty set: a projection this reader cannot parse is not a law with no
 /// boundaries, and an empty answer compared two-way against an empty declaration would pass over nothing.
 #[derive(Debug, PartialEq, Eq)]
 enum Projected {

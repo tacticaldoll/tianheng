@@ -1452,6 +1452,25 @@ consumer for an undemonstrated deduplication.
   crate. *Authority:* `observation-bound-register`, and `observation-bound-model`'s sibling bound that a
   rationale contradicting its extent is accepted — the prose beside an extent was already free to disagree with
   it, and so, until this was found, was the test beneath it.
+- **WATCH: a declared bound's reason is written in two carriers and nothing joins them.** *Observed pressure:*
+  every declared bound states its reason twice — as the `because` of a `BoundDecl` in a `bounds.rs`, and as
+  prose in the spec scenario that declares it — and `observation_bound_model` holds the two together by **id**
+  only. *Observation source:* a round corrected the `because` of
+  `reference-integrity/an-abbreviation-carrying-no-letter-or-no-digit-is-not-observed-a-stated-bound` to say
+  that a declared under-reaction with an owner is not a *silent* false negative, and left the spec clause
+  asserting that the Core Contract forbids a false refusal more strictly than a miss — the opposite of
+  `PROJECT.md`. One bound's two halves contradicted each other and the id bijection saw nothing; a review found
+  it by reading the spec against the contract. A per-instance `SHALL` for that one bound was then written into
+  the scenario and removed again: a normative sentence that says in its own text that nothing observes it, over
+  one of the bounds that carry a `because`, is prose prescription rather than a held claim. *Risk, bounded:*
+  prose only, and the agent-facing projection renders the scenario's `THEN` rather than these clauses — but the
+  spec is the layer `AGENTS.md` tells an agent to read as authoritative. *The shape:* generate the `because`
+  from the spec clause so there is one carrier, or hold every bound's two carriers to each other. Both compare
+  prose, which this repository has measured and rejected in the general case; the narrow form holds a *named*
+  phrase rather than a similarity. *Promotion trigger:* a second bound found with diverging carriers, or a
+  bound whose reason reaches the agent-facing projection. *Compatibility class:* patch; no crate ships either
+  carrier. *Authority:* this entry.
+
 - **WATCH: a bare reference to a registered constructor's name cannot be told from a local variable sharing
   its spelling without name resolution.** *Observed pressure:* `refusal_register.rs`'s reader moved from a
   character-by-character scan to `syn`, which closed the *lexical* half of the wider bound this entry used

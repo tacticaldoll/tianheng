@@ -313,7 +313,7 @@ fn dependency_table(heading: &str, subject: Subject) -> Table {
 
 /// What a dependency declares as its version requirement, or why this reader could not tell.
 ///
-/// **Four states, and every consumer answers all four.** Three call sites read a dependency's pin and each
+/// **Every consumer answers every state, and the compiler is what asks.** Three call sites read a dependency's pin and each
 /// decided the refusal class for itself: two matched exhaustively and the third collapsed to `_ => None`,
 /// which reported an *absent* key as one this reader *could not read* — the very distinction its sibling had
 /// just been repaired to make. A typed result makes the compiler ask each consumer when a state is added,
@@ -693,33 +693,59 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                     field_unreadable: false,
                     written: String::new(),
                 };
+                // **This body is read through the one reader too, and a field it cannot decode marks the
+                // record.** It scanned the line once per watched key and kept whatever each scan attributed,
+                // so a key it could not decode was filtered out four times over: `[dependencies.alias]`
+                // carrying `package = "xuanji"`, `version = "0.5"` and `"\q" = true` produced a readable
+                // identity and a readable pin, and a manifest `cargo metadata` refuses to parse reported a
+                // clean release. That is the same false negative the inline and dotted spellings each had,
+                // at the third producer of one record — a review found it after the other two were closed.
                 for (_, line) in &table.body {
                     let trimmed = line.trim();
-                    detailed
-                        .packages
-                        .extend(inline_assignments(trimmed, "package"));
-                    detailed
-                        .versions
-                        .extend(inline_assignments(trimmed, "version"));
-                    detailed.paths.extend(inline_assignments(trimmed, "path"));
-                    detailed.offers.extend(
-                        assignments(trimmed, "workspace")
-                            .into_iter()
-                            .map(str::to_string),
-                    );
+                    match crate::manifest::assignment(trimmed) {
+                        crate::manifest::Assignment::Key { name, value } => match name.as_str() {
+                            "package" => detailed.packages.push(quoted_value(value)),
+                            "version" => detailed.versions.push(quoted_value(value)),
+                            "path" => detailed.paths.push(quoted_value(value)),
+                            // `workspace = true` is a boolean, so it is kept raw for `inheritance`.
+                            "workspace" => detailed.offers.push(value.to_string()),
+                            _ => {}
+                        },
+                        // A dotted key inside a detailed table assigns a field of some other key, which is
+                        // not one of the four this reader judges.
+                        crate::manifest::Assignment::Field { .. }
+                        | crate::manifest::Assignment::None => {}
+                        crate::manifest::Assignment::KeyUnreadable
+                        | crate::manifest::Assignment::FieldUnreadable { .. } => {
+                            detailed.field_unreadable = true;
+                        }
+                    }
                     if !trimmed.is_empty() {
                         detailed.written.push_str(trimmed);
                         detailed.written.push(' ');
                     }
                 }
+                let unreadable = detailed.field_unreadable;
                 found.push(Dependency {
-                    package: Package::of(detailed.packages, &detailed.key),
-                    pin: requirement(
-                        detailed.offers.iter().map(String::as_str),
-                        detailed.versions,
-                        &detailed.written,
-                    ),
-                    path: Declared::of(detailed.paths, &detailed.written),
+                    package: if unreadable {
+                        Package::FieldUnreadable
+                    } else {
+                        Package::of(detailed.packages, &detailed.key)
+                    },
+                    pin: if unreadable {
+                        Declared::Unreadable(detailed.written.trim().to_string())
+                    } else {
+                        requirement(
+                            detailed.offers.iter().map(String::as_str),
+                            detailed.versions,
+                            &detailed.written,
+                        )
+                    },
+                    path: if unreadable {
+                        Declared::Unreadable(detailed.written.trim().to_string())
+                    } else {
+                        Declared::of(detailed.paths, &detailed.written)
+                    },
                     key: detailed.key,
                 });
             }
@@ -794,7 +820,7 @@ pub fn is_iso_date(suffix: &str) -> bool {
 
 /// What a member manifest says its package is called, or why this reader could not tell.
 ///
-/// Three states rather than an `Option`, because every consumer here treated `None` as *not a package* and
+/// Typed apart rather than an `Option`, because every consumer here treated `None` as *not a package* and
 /// skipped it — so a manifest this reader could not parse left its package's lock version unchecked and its
 /// examples' pins unexamined, with the function still returning `Ok`. The template is
 /// `capability_subjects::Declared`, applied to a second reader.
@@ -1308,7 +1334,7 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     })?;
 
     let root_manifest = read(repo, "Cargo.toml")?;
-    // The three states are answered separately, and the middle one is why the reader has three. A value this
+    // Each state is answered separately, and the middle one is why the reader has three. A value this
     // reader cannot read is not a key that is absent, and it is not a malformed version either: it is legal
     // TOML in a form this reader does not take, and telling an operator their version is *missing* sends them
     // to look for a key that is sitting in front of them.

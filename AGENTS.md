@@ -535,7 +535,7 @@ and doc for the retired term across its *whole* file, not only the new diff: syn
 correctly-worded requirement while the same file's older prose still names the retired shape is
 itself an undetected drift, invisible to a diff-only read (the 0.3.0 `finding_key` lesson).
 
-**A sweep is keyed to the claim, not to the phrasing it last saw.** Each correction of one inverted statement
+**A sweep is keyed to the claim, not to the phrasing it last saw — and its subject is any hand-maintained assertion about a live set, not only a wording.** Each correction of one inverted statement
 of the Core Contract left instances behind, because each sweep searched for the wording in front of it: a
 line-oriented one could not see an instance wrapped across two comment lines; joining lines fixed that and
 kept the phrase, so another spelling of the same claim survived; and a review proposing the repair named a
@@ -545,6 +545,13 @@ line-joined search for the **claim** — here `forbid\w*.{0,40}more strictly` �
 document doing the reporting inside its own corpus. **Record the pattern beside the correction**, or the next
 round re-derives a narrower one: when a second run finds new instances of a phrasing variant, the pattern is
 the subject rather than the sites.
+
+**A count of a set the code owns is the same defect wearing a number.** An enum's doc saying *four states* is
+a hand-maintained assertion about a live set exactly as a phrasing is, and it goes stale in the commit that
+grows the enum — measured here more than once, including in a doc rewritten to remove that very shape while a
+sibling forty lines below kept it. The repair is the one `xuanji::bound::Reached` already states: each variant
+documents the **distinction** that earns it a place, and the compiler enumerates them. Sweep for the shape,
+not for the site in hand: an enum whose own doc states a count of its variants is decidable text.
 
 Once a claim like that is corrected, its pattern does not return zero and should not: what it finds afterwards
 is **the pattern's own occurrences and the marked quotations** — a dated entry recording what the wrong wording

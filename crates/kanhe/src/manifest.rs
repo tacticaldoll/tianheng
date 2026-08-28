@@ -118,7 +118,7 @@ pub(crate) fn quoted_value(value: &str) -> Quoted {
 
 /// What `[workspace.package]` declares its version to be, or why this reader could not tell.
 ///
-/// Three states rather than an `Option`, because both consumers read `None` as *the key is absent* and said
+/// Typed apart rather than an `Option`, because both consumers read `None` as *the key is absent* and said
 /// so to an operator — over a manifest whose value is legal to cargo and merely not in a form this reader
 /// takes. The template is the sibling `PackageName` in `release_coherence_gate`, applied to the one manifest
 /// fact both git-reading gates ask for.

@@ -1,4 +1,4 @@
-//! An input a wrapper hands a gate across the process boundary, in the three states it can be in.
+//! An input a wrapper hands a gate across the process boundary, in each state it can be in.
 //!
 //! A gate that stands in front of an irreversible act is run by a wrapper, and its inputs arrive as
 //! environment. `std::env::var` answers **not set** and **set but not UTF-8** with one `Err`, which is the
@@ -19,7 +19,7 @@ use std::ffi::OsString;
 
 /// What a wrapper handed a gate for one judged input.
 ///
-/// Three states rather than an `Option`, because a caller reading `None` as *the wrapper never supplied this*
+/// Typed apart rather than an `Option`, because a caller reading `None` as *the wrapper never supplied this*
 /// says so to an operator — over a value the wrapper did supply, and that the operator can see they passed.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Supplied {

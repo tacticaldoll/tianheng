@@ -15,7 +15,7 @@ pub enum Kind {
 
 /// Which branch produced a refusal, or that it came from outside the register's corpus.
 ///
-/// **Two states rather than a sentinel, because a sentinel let a false sentence be written.** This was a
+/// **Typed apart rather than a sentinel, because a sentinel let a false sentence be written.** This was a
 /// `&'static str` with the empty string standing for *outside the corpus*, and the doc on it then claimed
 /// that nothing could construct a refusal unable to say which branch produced it — which
 /// [`violation`]`("…")` and [`cannot_judge`]`("…")` do, at every site outside `src`, while [`violation`]'s
