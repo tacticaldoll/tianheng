@@ -8398,6 +8398,42 @@ no adopter runs. They are here rather than under the adopter headings above beca
   rather than in the intent to write it.
 
 
+- **The lock reader carried an ordering premise nothing stated, and it was the last reader in this file built
+  the old way.** `"version" if !name.is_empty()` silently required `name` to appear *before* `version` inside a
+  `[[package]]` block: written the other way round, the version was dropped, the block recorded nothing, and
+  the member reached *Cargo.lock is missing workspace package xuanji* — exit 1, about a lock recording it two
+  lines apart. Cargo writes `name` first, so no lock it writes fires this; nothing said so, in a comment, a
+  spec clause, an observation bound, or the backlog entry covering that reader, which addressed its key
+  decoding and not key order.
+
+  The guard is gone and the body parses each line once through the shared reader, which is what makes the
+  premise unstateable rather than unstated — the shape the three dependency producers were converted away from,
+  and the last of its kind here. Its backlog entry's trigger was *the next change to either reader*, and this
+  is that change, so the entry now names only what is left.
+
+  Seen to fail — and the first version of that direction was itself the finding: built on a development
+  fixture, it never reached the reader at all and asserted `Ok` for the wrong reason. On a release-ready
+  fixture, which is the phase the lock check runs in, restoring the guard gives *Cargo.lock is missing
+  workspace package xuanji*.
+
+- **A dotted key beneath a value the dependency reader judges was discarded as unrelated.** Inside
+  `[dependencies.alias]`, `version.extra = true` after a readable `version = "1.0"` is structure beneath a
+  string, and cargo refuses it — *cannot extend value of type string with a dotted key*, measured. The reader
+  kept the readable pin and reported clean. A dotted head naming one of the four keys this reader builds a
+  record from now marks the record unread; a head naming anything else stays another key's business.
+
+- **The enum-count sweep had run over leading docs only, and the completion claim was wider than it.** Three
+  live counts remained in prose *about* the types it had just repaired — `Supplied`, `PackageName`. They are
+  gone, and the rule is narrowed to what is decidable rather than widened to what sounds general: a doc stating
+  how many variants **the type it documents** has. Widened to any figure about a set, the same sweep returns
+  about a hundred hits across this tree, nearly all of them reasoning — *two forms cannot bind a value* — and
+  acting on those would be the over-wide sweep `AGENTS.md` warns about two sections earlier. The hundred are
+  recorded there as the reason the pattern stays narrow.
+
+  And the rule itself carried a positional anchor — *a sibling forty lines below* — which the rule against
+  moving references, three sections above it, rejects. It names `Declared` now.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

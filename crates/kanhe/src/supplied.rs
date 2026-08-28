@@ -32,7 +32,7 @@ pub enum Supplied {
     Unreadable,
 }
 
-/// Which of the three states `value` is, where `value` is what [`std::env::var_os`] answered.
+/// Which state `value` is in, where `value` is what [`std::env::var_os`] answered.
 ///
 /// Taking the `Option<OsString>` rather than reading the variable itself is what makes both non-`Value`
 /// answers reachable from a direction: the inputs are process environment, a parallel test run shares one,

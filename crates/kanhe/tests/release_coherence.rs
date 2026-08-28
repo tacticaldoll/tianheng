@@ -2493,6 +2493,12 @@ fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
             "detailed",
             "[dependencies.alias]\npackage = \"xuanji\"\nversion = \"0.2\"\n\"\\q\" = true",
         ),
+        // Structure beneath a value this reader judges: cargo answers *cannot extend value of type string
+        // with a dotted key*, and discarding it as unrelated kept the readable pin.
+        (
+            "detailed dotted subfield",
+            "[dependencies.alias]\npackage = \"xuanji\"\nversion = \"0.2\"\nversion.extra = true",
+        ),
     ] {
         let root = scratch(&format!("undecodable-field-{label}"));
         let fixture = build_fixture(&root, "undecodable-field", "0.2.0");
@@ -2529,6 +2535,51 @@ fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
             refusal.message
         );
     }
+}
+
+/// A `[[package]]` block writing `version` before `name` records the version all the same.
+///
+/// **An ordering premise nothing stated.** The version arm was guarded on a name already read, so a block
+/// written the other way round dropped the version, recorded nothing, and reached *Cargo.lock is missing
+/// workspace package xuanji* — exit 1, about a lock that records it two lines apart. Cargo writes `name`
+/// first, so no lock it writes fires this; nothing said so, in a comment, a spec clause, an observation bound
+/// or the backlog entry covering this reader, which addressed its key decoding and not key order.
+///
+/// The guard is gone and the block-level test decides, which is safe against the shape the guard appeared to
+/// defend: a top-level `version = 4` sits outside every block and is dropped by the block filter. This
+/// fixture carries that line, which is what makes the row evidence rather than an assertion.
+///
+/// Negative run: with the guard restored, this is that violation.
+#[test]
+fn a_lock_block_writing_version_before_name_still_records_it() {
+    let root = scratch("lock-order");
+    let fixture = build_fixture(&root, "lock-order", "0.2.0");
+    // Release-ready, because the lock reader runs only in that phase and in the snapshot — a development
+    // fixture never reaches it, which is what a first version of this direction asserted `Ok` past.
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    let lock = fixture.repo.join("Cargo.lock");
+    let text = std::fs::read_to_string(&lock).expect("read");
+    std::fs::write(
+        &lock,
+        text.replace(
+            "[[package]]\nname = \"xuanji\"\nversion = \"0.2.1\"",
+            "[[package]]\nversion = \"0.2.1\"\nname = \"xuanji\"",
+        ),
+    )
+    .expect("write");
+    commit(
+        &fixture.repo,
+        "chore: a lock block written the other way round",
+    );
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "the lock records this member's version; which of two keys a block writes first is not a fact \
+         about it: {:?}",
+        verdict.err()
+    );
 }
 
 /// A stale internal pin behind a quoted tail is refused, where it used to pass the gate.

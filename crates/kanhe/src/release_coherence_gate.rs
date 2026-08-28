@@ -229,6 +229,9 @@ enum Subject {
     Offers,
 }
 
+/// The keys a dependency record is built from, in every spelling of a dependency.
+const DEPENDENCY_FIELDS: [&str; 4] = ["package", "version", "path", "workspace"];
+
 const DEPENDENCY_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
 
 /// Which dependency table `heading` opens, if any.
@@ -711,8 +714,17 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                             "workspace" => detailed.offers.push(value.to_string()),
                             _ => {}
                         },
-                        // A dotted key inside a detailed table assigns a field of some other key, which is
-                        // not one of the four this reader judges.
+                        // **A dotted key whose head is one this reader judges is structure beneath a value,
+                        // and cargo refuses it.** Measured: `[dependencies.alias]` carrying `version = "1.0"`
+                        // and `version.extra = true` fails with *cannot extend value of type string with a
+                        // dotted key*, and discarding it as unrelated kept the readable pin — the same
+                        // false-clean class this branch was repaired for, one spelling in. A dotted head
+                        // naming anything else stays another key's business.
+                        crate::manifest::Assignment::Field { name, .. }
+                            if DEPENDENCY_FIELDS.contains(&name.as_str()) =>
+                        {
+                            detailed.field_unreadable = true;
+                        }
                         crate::manifest::Assignment::Field { .. }
                         | crate::manifest::Assignment::None => {}
                         crate::manifest::Assignment::KeyUnreadable
@@ -845,7 +857,7 @@ pub enum PackageName {
 /// `the_only` is deliberately **not** used, though this is a class-A shape: it reports none and several as one
 /// refusal, and here they are different facts — no `[package]` table means this is not a package manifest,
 /// while two `name` keys in one means it is malformed. The consumer needs to tell them apart, so the
-/// three-state return carries the distinction instead.
+/// return carries the distinction instead of collapsing it.
 pub fn package_name(manifest: &str) -> PackageName {
     // Executed manifest text. Raw lines were safe against a commented-out `name` only by accident — a
     // `#`-led line matched no key — and not safe at all against a comment on the **table
@@ -1334,7 +1346,7 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     })?;
 
     let root_manifest = read(repo, "Cargo.toml")?;
-    // Each state is answered separately, and the middle one is why the reader has three. A value this
+    // Each state is answered separately, and the middle one is why the reader does not collapse them. A value this
     // reader cannot read is not a key that is absent, and it is not a malformed version either: it is legal
     // TOML in a form this reader does not take, and telling an operator their version is *missing* sends them
     // to look for a key that is sitting in front of them.
@@ -1908,19 +1920,26 @@ fn require_lock_versions(
             // `contains` had already made unreachable — two decisions about the same character and a default
             // nothing could reach. A prefix is also not a key: `versionx = 1` would have entered the version
             // arm, and cargo treats a key it does not know as unused.
-            let Some((key, value)) = trimmed.split_once('=') else {
-                continue;
+            // **Through the one reader, which is what removes the ordering premise below.** This split the
+            // line and picked out the keys it cared about, accumulating as it went — the shape the three
+            // dependency producers were converted away from, and the last of its kind in this file. It is
+            // what let `"version" if !name.is_empty()` be written: an unstated requirement that `name`
+            // appear *before* `version` inside a `[[package]]` block. Measured, a block writing them in the
+            // other order dropped the version and reached *Cargo.lock is missing workspace package xuanji*,
+            // exit 1, about a lock recording it two lines apart. Cargo writes `name` first, so no lock it
+            // writes fires this — but nothing said so, and an undeclared stop is a defect rather than
+            // governed policy.
+            //
+            // A key carrying an escape cargo itself rejects is in a file cargo could not have written, and a
+            // lock file is written by cargo alone — so that arm is the shape's, not an instance's.
+            let (key, value) = match crate::manifest::assignment(trimmed) {
+                crate::manifest::Assignment::Key { name, value } => (name, value),
+                crate::manifest::Assignment::Field { .. }
+                | crate::manifest::Assignment::KeyUnreadable
+                | crate::manifest::Assignment::FieldUnreadable { .. }
+                | crate::manifest::Assignment::None => continue,
             };
-            // A key carrying an escape cargo itself rejects is in a file cargo could not have written, and
-            // a lock file is written by cargo alone — so this arm is the shape's, not an instance's. A
-            // reviewer read the former wording, *not `continue`-able either*, as contradicting the
-            // `continue` beneath it; what it meant is that skipping is not free, and the clause after the
-            // dash was already the narrowing. Said plainly now, and narrower still: decoding removed every
-            // other spelling that used to arrive here.
-            let Some(key) = crate::manifest::unquoted(key.trim()) else {
-                continue;
-            };
-            match &*key {
+            match key.as_str() {
                 "source" => sourced = true,
                 "name" => {
                     // An unreadable name defaulted to the empty string, which the `!name.is_empty()` guard
@@ -1941,7 +1960,11 @@ fn require_lock_versions(
                         }
                     }
                 }
-                "version" if !name.is_empty() => match quoted_value(value) {
+                // **Unguarded, and the block-level test below decides whether anything is recorded.** The
+                // guard here required a name already read, which is the ordering premise. A top-level
+                // `version = 4` sits outside every `[[package]]` block and is dropped by the block filter,
+                // not by this arm — measured against a lock carrying that line.
+                "version" => match quoted_value(value) {
                     Quoted::Value(value) => {
                         version_of = Some(value);
                     }

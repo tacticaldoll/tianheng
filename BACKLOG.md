@@ -494,7 +494,8 @@ consumer for an undemonstrated deduplication.
   entry key in `declared_dependencies` (which hands its raw key to `Package::of`, so a quoted dependency key
   becomes `KeyUnreadable` — fail-closed, and **pinned** by
   `a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped` with its own spec scenario), and
-  the lock reader, which applies `unquoted` to its key but not `assignment`. Converting the first would turn a
+  the lock reader — which was converted when its own ordering premise came due, so what remains is the
+  bare-and-inline entry key alone. Converting the first would turn a
   visible cannot-judge into the answer cargo gives, which is better — and it inverts a pinned scenario, so it
   is not a release-eve edit. *Promotion trigger:* the next change to either reader, or an adopter manifest in
   the subject corpus spelling a dependency key non-bare. *Compatibility class:* patch.
