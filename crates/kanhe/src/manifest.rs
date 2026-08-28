@@ -577,8 +577,15 @@ pub(crate) fn assigned<'a>(line: &'a str, key: &str) -> Assigned<'a> {
     match assignment(line) {
         Assignment::Key { name, value } if name == key => Assigned::Value(value),
         Assignment::Field { name, tail, value } if name == key => Assigned::Field { tail, value },
-        Assignment::Unreadable => Assigned::Unreadable,
-        Assignment::Key { .. } | Assignment::Field { .. } | Assignment::None => Assigned::Other,
+        // A key this reader cannot decode might be the one asked about, and a field of it that cannot be
+        // decoded leaves the key's own value undecided too — both are `Unreadable` to a caller asking about
+        // one named key, and which half failed is what the *dependency* reader needs, not this one.
+        Assignment::KeyUnreadable => Assigned::Unreadable,
+        Assignment::FieldUnreadable { ref name } if name == key => Assigned::Unreadable,
+        Assignment::FieldUnreadable { .. }
+        | Assignment::Key { .. }
+        | Assignment::Field { .. }
+        | Assignment::None => Assigned::Other,
     }
 }
 
@@ -604,16 +611,16 @@ pub(crate) fn assignment(line: &str) -> Assignment<'_> {
     let value = &value[1..];
     let mut segments = dotted(head.trim()).into_iter();
     let Some(name) = segments.next().and_then(|first| unquoted(first.trim())) else {
-        return Assignment::Unreadable;
+        return Assignment::KeyUnreadable;
     };
+    let name = name.into_owned();
     let mut tail = Vec::new();
     for segment in segments {
         match unquoted(segment.trim()) {
             Some(segment) => tail.push(segment.into_owned()),
-            None => return Assignment::Unreadable,
+            None => return Assignment::FieldUnreadable { name },
         }
     }
-    let name = name.into_owned();
     if tail.is_empty() {
         Assignment::Key { name, value }
     } else {
@@ -636,8 +643,17 @@ pub(crate) enum Assignment<'a> {
         tail: String,
         value: &'a str,
     },
-    /// A key or tail segment this reader cannot decode.
-    Unreadable,
+    /// The key itself could not be decoded, so which key this line assigns is unknown.
+    KeyUnreadable,
+    /// The key decoded and a **tail** segment did not: this assigns some field of `name`, and which field is
+    /// unknown.
+    ///
+    /// **Kept apart from [`Assignment::KeyUnreadable`] because the diagnostics differ.** Folded together, a
+    /// dependency written `alias."\q" = "xuanji"` was reported as *a dependency under the key
+    /// `alias."\q" = "xuanji"`, which is not a bare TOML key* — the whole line quoted as if it were the key,
+    /// for a problem that is a field. Which half failed is exactly what a reader downstream needs to say what
+    /// it could not read.
+    FieldUnreadable { name: String },
     /// Not an assignment.
     None,
 }

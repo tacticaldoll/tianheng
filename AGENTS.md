@@ -535,11 +535,12 @@ and doc for the retired term across its *whole* file, not only the new diff: syn
 correctly-worded requirement while the same file's older prose still names the retired shape is
 itself an undetected drift, invisible to a diff-only read (the 0.3.0 `finding_key` lesson).
 
-**A sweep is keyed to the claim, not to the phrasing it last saw.** Measured across one window: the same
-inverted statement of the Core Contract was corrected three times and survived twice, because each sweep
-searched for the wording in front of it. The first was line-oriented and could not see an instance wrapped
-across two comment lines; the second joined lines but kept the phrase, and missed a third spelling of the
-claim; a review proposing the fix named a pattern narrower than its own finding. What finds all of them is a
+**A sweep is keyed to the claim, not to the phrasing it last saw.** Each correction of one inverted statement
+of the Core Contract left instances behind, because each sweep searched for the wording in front of it: a
+line-oriented one could not see an instance wrapped across two comment lines; joining lines fixed that and
+kept the phrase, so another spelling of the same claim survived; and a review proposing the repair named a
+pattern narrower than its own finding. The kinds are what generalise — a wrapped instance, an excluded
+corpus, a variant phrasing — and `CHANGELOG.md` carries the window's own count of them. What finds all of them is a
 line-joined search for the **claim** — here `forbid\w*.{0,40}more strictly` — over tracked content, with the
 document doing the reporting inside its own corpus. **Record the pattern beside the correction**, or the next
 round re-derives a narrower one: when a second run finds new instances of a phrasing variant, the pattern is

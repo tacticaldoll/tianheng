@@ -66,7 +66,8 @@ fn undecodable_field(value: &str) -> bool {
     inline_fields(value).into_iter().any(|field| {
         matches!(
             crate::manifest::assignment(field),
-            crate::manifest::Assignment::Unreadable
+            crate::manifest::Assignment::KeyUnreadable
+                | crate::manifest::Assignment::FieldUnreadable { .. }
         )
     })
 }
@@ -355,9 +356,13 @@ impl Declared {
 
 /// Which crate a dependency names, or why this reader cannot say.
 ///
-/// **Three states and not four, because absence is not unnameability here.** A dependency declaring no
+/// **There is no *absent* state, because absence is not unnameability here.** A dependency declaring no
 /// `package` key names the crate by its own key — that is cargo's rule, not a gap — so absence resolves to a
-/// name rather than to a missing one. What is left are the two ways an identity is present and unreadable.
+/// name rather than to a missing one. What the rest of the enum carries is one distinct way of *failing* to
+/// name it each: a value this reader cannot read, more than one such key, a key that is not bare, and a field
+/// whose own key could not be decoded. Each has its own refusal site and its own sentence, because a reader
+/// told the wrong cause looks for the wrong thing — which is what this type exists to prevent, and what it
+/// did wrong twice while the last two of those were folded into the first.
 ///
 /// It was a `String` with the empty string standing for both of those, in the same struct whose `pin` field
 /// had just been given `Declared::{Absent, Unreadable, Several}` for exactly this distinction: one field was typed
@@ -457,6 +462,8 @@ struct Detailed {
     paths: Vec<Quoted>,
     /// The raw text of every `workspace` assignment, which is a boolean rather than a string.
     offers: Vec<String>,
+    /// A tail this reader could not decode was met, so which crate this names is undecided.
+    field_unreadable: bool,
     written: String,
 }
 
@@ -548,6 +555,7 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                                     versions: Vec::new(),
                                     paths: Vec::new(),
                                     offers: Vec::new(),
+                                    field_unreadable: false,
                                     written: String::new(),
                                 });
                             match tail {
@@ -562,7 +570,28 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                             entry.written.push(' ');
                             continue;
                         }
-                        if matches!(assignment, crate::manifest::Assignment::Unreadable) {
+                        if let crate::manifest::Assignment::FieldUnreadable { name } = &assignment {
+                            // **The head decoded and a tail did not, so this is a field of a named
+                            // dependency.** Filed under that name with the field state, where folding it into
+                            // the key case reported *a dependency under the key `alias."\q" = "xuanji"`* —
+                            // the whole line quoted as its own key, for a problem that is a field.
+                            let entry = dotted.entry(name.clone()).or_insert_with(|| Detailed {
+                                key: name.clone(),
+                                packages: Vec::new(),
+                                versions: Vec::new(),
+                                paths: Vec::new(),
+                                offers: Vec::new(),
+                                field_unreadable: false,
+                                written: String::new(),
+                            });
+                            entry.field_unreadable = true;
+                            entry.paths.push(Quoted::Unreadable);
+                            entry.versions.push(Quoted::Unreadable);
+                            entry.written.push_str(trimmed);
+                            entry.written.push(' ');
+                            continue;
+                        }
+                        if matches!(assignment, crate::manifest::Assignment::KeyUnreadable) {
                             // A key or tail this reader cannot decode belongs to some dependency and names
                             // some field of it. Both are unknown, so the fields it could have carried are
                             // reported unreadable rather than left absent: a dependency whose path is
@@ -577,6 +606,7 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                                         versions: Vec::new(),
                                         paths: Vec::new(),
                                         offers: Vec::new(),
+                                        field_unreadable: false,
                                         written: trimmed.to_string(),
                                     });
                             entry.paths.push(Quoted::Unreadable);
@@ -638,7 +668,11 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                 }
                 for (_, detailed) in dotted {
                     found.push(Dependency {
-                        package: Package::of(detailed.packages, &detailed.key),
+                        package: if detailed.field_unreadable {
+                            Package::FieldUnreadable
+                        } else {
+                            Package::of(detailed.packages, &detailed.key)
+                        },
                         pin: requirement(
                             detailed.offers.iter().map(String::as_str),
                             detailed.versions,
@@ -656,6 +690,7 @@ fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
                     versions: Vec::new(),
                     paths: Vec::new(),
                     offers: Vec::new(),
+                    field_unreadable: false,
                     written: String::new(),
                 };
                 for (_, line) in &table.body {

@@ -8335,6 +8335,35 @@ no adopter runs. They are here rather than under the adopter headings above beca
   is the section heading, and the released `[0.4.0]` history uses the same idiom.
 
 
+- **The field-versus-key split reached one spelling and not the other.** A dotted tail that cannot be decoded —
+  `alias."\q" = "xuanji"` — was still answered as *a dependency under the key `alias."\q"`, which is not a bare
+  TOML key*: the whole line quoted as if it were the key, for a problem that is a field. The cause is that the
+  reader's `Unreadable` answer discarded **which half** failed, so nothing downstream could choose between the
+  two diagnostics. It reports the head and the tail apart now — `KeyUnreadable` and `FieldUnreadable { name }` —
+  and the dependency reader files a field failure under the name it decoded. Seen to fail: folded back, the
+  dotted row reports `example-dependency-key-unreadable`. The direction runs both spellings.
+
+- **A doc counted its own enum and the count went stale in the commit that grew it.** `Package` said *three
+  states and not four* while carrying five, and named *the two ways an identity is unreadable* where there are
+  now four. The count is gone; what stays is the distinction each variant carries, which is the fact the type
+  exists for.
+
+- **The rule written to stop hand-maintained counts introduced three of them.** `AGENTS.md`'s new sweep rule
+  said the inverted claim was *corrected three times and survived twice* — figures over a live set, in live
+  governance prose, in the paragraph that exists to forbid exactly that. What generalises is the **kinds** of
+  miss — a wrapped instance, an excluded corpus, a variant phrasing — and those are what the rule names now.
+
+- **Change provenance inside a live requirement is provenance.** The reference-integrity scenario carried *a
+  round corrected that carrier and left this one*, which belongs in this record and not in a spec. What stays
+  there is the invariant it was evidence for, stated as one: this scenario and the bound's `because` shall
+  state the same reason, because the register's bijection between them is on the id and nothing observes a
+  divergence.
+
+  A fourth finding in the same review is refuted with the measurement: the entries carrying `this window` are
+  under `## [0.5.0] - 2026-08-27`, not under `[Unreleased]`, which is empty. A dated heading names the window
+  the phrase resolves against, and the released `[0.4.0]` history uses the same idiom throughout.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
