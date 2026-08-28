@@ -301,12 +301,29 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   whose components are all `.` or separators, which **names no directory** beneath the manifest's own —
   measured under cargo 1.96.0, `path = "."` fails resolution outright. Enumerating two of the three sent an
   operator reading the third's refusal to look for a `..` that was not there
-- **AND** the drive-prefix case is a **declared bound**: it is produced only on Windows and this repository's
-  CI is Ubuntu, so the arm is compiled and unobserved here. It shares its answer with the rooted case, which
-  is observed, rather than standing alone
+- **AND** the drive-prefix case is a **coverage limitation and not a bound**: the classifier reacts to it, and
+  correctly — a drive prefix is rooted — so nothing is declined and the bound register has nothing to hold.
+  What is absent is a run: the component is produced only on Windows and this repository's CI is Ubuntu. It
+  shares its answer with the rooted case, which is exercised
 - **PINNED-BY** `a_family_crate_offered_with_no_path_is_a_violation`
 - **PINNED-BY** `a_family_crate_path_is_compared_against_the_members_own_directory`
 - **PINNED-BY** `a_path_value_is_read_through_its_components`
+
+#### Scenario: A case alias of a member directory — a stated bound
+
+- **WHEN** the catalog offers a family crate through a path whose components differ from the member's only in
+  case — `CRATES/TIANHENG` for `crates/tianheng` — on a **case-insensitive** filesystem, where cargo resolves
+  the two to one directory
+- **THEN** the check reports a violation, naming a directory that is the member's. The comparison is
+  component-wise and case-sensitive on every host, so the answer is the same everywhere and is only *right*
+  where the filesystem is case-sensitive. On this repository's CI it is right: the path names a directory that
+  does not exist. On a case-insensitive host it over-reacts
+- **AND** the reach is kept deliberately. Deciding filesystem identity needs the filesystem — case folding is
+  the volume's rule, not the string's — and this reader is handed no repository. Canonicalizing to obtain one
+  would also make `..` resolvable, which would turn the traversal refusal into an answer and move three other
+  verdicts with it; a false refusal an author can read and argue with is the safe direction, where the Core
+  Contract forbids exactly one bug and it is the false negative
+- **PINNED-BY** `a_case_alias_of_a_member_directory_is_a_stated_bound`
 
 #### Scenario: An internal dependency this reader cannot resolve is not one it may skip
 

@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**26 of 97 declared bounds have no pinning test.** That figure is the register's
+**26 of 98 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -284,6 +284,12 @@ fallback used where no manifest exists, which the register spec describes.
 - **unpinned**, tracked by: `BACKLOG.md` — *a Rust identifier named in prose is resolved by no reaction*
 
 ## release-coherence
+
+### `release-coherence/a-case-alias-of-a-member-directory-a-stated-bound`
+
+> the check reports a violation, naming a directory that is the member's. The comparison is component-wise and case-sensitive on every host, so the answer is the same everywhere and is only *right* where the filesystem is case-sensitive. On this repository's CI it is right: the path names a directory that does not exist. On a case-insensitive host it over-reacts
+
+- **pinned by**: `a_case_alias_of_a_member_directory_is_a_stated_bound`
 
 ### `release-coherence/prose-about-the-marker-is-read-as-a-marker-a-stated-bound`
 

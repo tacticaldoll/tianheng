@@ -2872,6 +2872,53 @@ fn a_family_crate_path_is_compared_against_the_members_own_directory() {
     }
 }
 
+/// A case alias of a member's directory is refused — a stated bound.
+///
+/// **The answer is the same on every host, and only right where the filesystem is case-sensitive.** On this
+/// repository's CI `CRATES/TIANHENG` names a directory that does not exist, so the violation is correct. On a
+/// case-insensitive volume cargo resolves it to the member and the same violation is an over-reaction. This
+/// direction observes the answer; the bound declares what that answer costs elsewhere.
+///
+/// **Kept rather than closed, and the reason is what the bound records.** Directory identity is the volume's
+/// rule, not the string's, so deciding it needs the filesystem — and this reader is handed no repository.
+/// Canonicalizing to obtain one would make `..` resolvable too, turning a refusal that stops in front of an
+/// operator into an answer and moving three other verdicts with it.
+///
+/// Negative run: with the comparison made case-insensitively, this reports `ok release coherence` — which is
+/// the answer a case-insensitive host wants and the wrong one here.
+#[test]
+fn a_case_alias_of_a_member_directory_is_a_stated_bound() {
+    let root = scratch("case-alias");
+    let fixture = build_fixture(&root, "case-alias", "0.2.0");
+    let manifest = fixture.repo.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read");
+    std::fs::write(
+        &manifest,
+        text.replace(
+            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }",
+            "xuanji = { path = \"crates/xuanji\", version = \"0.2.0\" }\ntianheng = { path = \"CRATES/TIANHENG\", version = \"0.2.0\" }",
+        ),
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: offer a member through a case alias");
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err(
+        "on a case-sensitive filesystem CRATES/TIANHENG is not a directory this workspace has",
+    );
+    refusal::expect(
+        "release-coherence#internal-path-names-another-directory",
+        &refusal,
+    );
+    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("CRATES/TIANHENG") && refusal.message.contains("crates/tianheng"),
+        "the refusal names what was written and where the member is: {}",
+        refusal.message
+    );
+}
+
 /// A stale internal pin behind a quoted tail is refused, where it used to pass the gate.
 ///
 /// **The first false negative found in three rounds of review, and the one that mattered most.** The
