@@ -53,8 +53,8 @@ const ATTRIBUTION: [(&str, Shape); 3] = [
 /// How a mark is recognized. **Not every mark is the same kind of thing.**
 ///
 /// A first draft read all three by position and would have introduced a false negative: `fix(x): 🤖 wrote this`
-/// was refused by the substring it replaced and would have passed, because the glyph sits mid-line. The two kinds
-/// need different recognition, so the recognition travels in the same array as the mark rather than in a second
+/// was refused by the substring it replaced and would have passed, because the glyph sits mid-line. Each kind
+/// needs its own recognition, so it travels in the same array as the mark rather than in a second
 /// rule beside it.
 #[derive(Clone, Copy)]
 enum Shape {

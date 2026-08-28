@@ -8364,6 +8364,40 @@ no adopter runs. They are here rather than under the adopter headings above beca
   the phrase resolves against, and the released `[0.4.0]` history uses the same idiom throughout.
 
 
+- **One record has three producers, and the undecodable state was wired into them one at a time.** An inline
+  table's fields, a dotted key's tail and a detailed table's body all build the same dependency record. The
+  first two were closed in earlier commits; the third — `[dependencies.alias]` carrying `package = "xuanji"`,
+  `version = "0.5"` and `"\q" = true` — scanned each line once per watched key, so the undecodable key was
+  filtered out four times over and a readable identity sat beside a readable pin. A clean release over a
+  manifest `cargo metadata` refuses to parse, found by a review looking for the sibling rather than the site.
+  That body reads through the one reader now, which also removes three redundant scans per line. Seen to fail:
+  with the state dropped again, *ok release coherence (development: 0.2.0)*.
+
+- **A doc that counted its own enum, forty lines below the doc rewritten to remove that shape.** `Declared`
+  said *four states, and every consumer answers all four* while carrying five — `Inherited` was added earlier
+  in this window and the count was not — and its closing sentence, *a typed result makes the compiler ask each
+  consumer when a state is added*, describes precisely what happened without being applied to itself.
+
+  The sweep found the rest of the class: `Shape` naming *two kinds* over three, `Members` and `Projected` each
+  naming *three states* over two, the `capability_subjects` pair counting each other, and five more whose
+  counts were *correct today* — `WorkspaceVersion`, `PackageName`, `Site`, `Supplied`, `Delivery` — which is
+  the same assertion one variant away from being wrong. All are repaired the way
+  `xuanji::bound::Reached` already states — each variant documents the **distinction** that earns it a place,
+  and the compiler enumerates them. `AGENTS.md`'s sweep rule now names this shape beside the phrasing shape:
+  the subject is any hand-maintained assertion about a live set, and an enum doc stating a count of its
+  variants is decidable text.
+
+- **A `SHALL` that said in its own text that nothing observes it is gone, and the tracker it should have had
+  exists now.** The reference-integrity scenario carried a normative sentence requiring one bound's two
+  rationale carriers to agree — over one of the bounds that carry a `because`, with no reaction, and placed
+  under a scenario heading where the register's own floor exemption hides it from the undeclared-prose scan.
+
+  Worse, the entry announcing it said the general gap was *filed with its trigger*, and it was not: `git log --
+  BACKLOG.md` shows the commit never touched that file. The claim was written from an edit that did not land,
+  and two reviews caught it independently. The entry exists now, and its presence was checked in the tree
+  rather than in the intent to write it.
+
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation

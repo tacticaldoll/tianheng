@@ -2461,7 +2461,14 @@ fn an_example_inheriting_what_no_catalog_offers_is_not_judged() {
 /// The examples check runs `cargo metadata` per example and would fail on that file in the same run, which
 /// bounds the damage; a compensating control in another gate is not this gate answering, and the Core
 /// Contract's one forbidden bug is a real violation that silently passes. The dotted spelling already reported
-/// the fields the line could have carried as unreadable, so this is one treatment for both spellings.
+/// the fields the line could have carried as unreadable.
+///
+/// **One record has three producers, and the state was wired into them one at a time.** An inline table's
+/// fields, a dotted key's tail and a detailed table's body all build the same `Detailed`; each was closed in
+/// its own round, the last of them after a review went looking for the sibling rather than the site. The
+/// detailed body was the worst of the three, because it scanned the line once per watched key — so an
+/// undecodable key was filtered out four times over, leaving a readable identity beside a readable pin. A row
+/// below reaches each producer.
 ///
 /// **The outer key is deliberately *not* a family crate, which is the shape the first version of this
 /// direction could not see.** That version used `xuanji` as the key, so identity classification succeeded and
@@ -2480,6 +2487,12 @@ fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
             "alias = { version = \"0.2\", \"\\q\" = \"xuanji\" }",
         ),
         ("dotted", "alias.\"\\q\" = \"xuanji\""),
+        // The third producer of one record: a detailed table's body, which scanned the line once per
+        // watched key and so filtered an undecodable one out four times over.
+        (
+            "detailed",
+            "[dependencies.alias]\npackage = \"xuanji\"\nversion = \"0.2\"\n\"\\q\" = true",
+        ),
     ] {
         let root = scratch(&format!("undecodable-field-{label}"));
         let fixture = build_fixture(&root, "undecodable-field", "0.2.0");

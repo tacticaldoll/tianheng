@@ -15,7 +15,7 @@ pub(crate) use xingbiao::{
 
 /// The membership set, or why it could not be read.
 ///
-/// **Three states, because an empty answer had three causes and reported one.** A `packages` array
+/// **Typed apart, because an empty answer had several causes and reported one.** A `packages` array
 /// that is absent or is not an array, a package whose `name` this reader cannot take, and a workspace
 /// that genuinely has no member all produced the same empty `Vec` — and both consumers read empty as
 /// *nothing to govern*. Coverage rendered `total = 0, uncovered = []` as complete coverage over a
