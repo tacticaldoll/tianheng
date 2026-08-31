@@ -1009,6 +1009,7 @@ fn release_spine(
     repo: &Path,
     version: &str,
     version_parts: (u64, u64, u64),
+    changelog: &str,
 ) -> Result<Spine, Refusal> {
     // `%ad` with `--date=short`, because the dated release section's value is held against the release
     // commit's own date and reading it here costs nothing — the log that answers "which commit" answers
@@ -1063,7 +1064,37 @@ fn release_spine(
     let head =
         head.expect("the log line that produced a release commit also produced HEAD's own commit");
 
-    let state = if head == release_commit {
+    // **A snapshot is a checkout, not a commit.** This asked `head == release_commit` alone — a fact about
+    // the COMMIT — while every other reader in this gate judges the worktree, which `read` takes with
+    // `std::fs::read_to_string`. Two sources, one answer, and the first edit of the next cycle falls between
+    // them: at the release commit, writing the `[Unreleased]` entry that `Development` **requires** is judged
+    // in `Snapshot`, where `[Unreleased]` must be **empty**. Measured on `release/0.5.1`'s first change — the
+    // tree could not be made to pass until it was committed, because committing is what moved `head`.
+    //
+    // **The CHANGELOG is what carries the cycle, so it is what decides.** A first attempt asked whether
+    // *anything* tracked was modified, and two existing directions refuted it: a fixture whose `Cargo.lock`
+    // has been replaced by a directory is a **broken release checkout**, not the next cycle beginning, and
+    // classifying it as `Development` made it refuse for a missing `[Unreleased]` entry before it could
+    // report the lockfile it cannot read. The directions were right and the wider rule was wrong.
+    //
+    // What distinguishes the two states is exactly what this repository's own requirement names: *active
+    // development SHALL retain the current released version and at least one changelog list item under
+    // `[Unreleased]`*. Writing that item is how a cycle begins, and it is a change to this file. Untracked
+    // files are excluded — this gate reads named tracked paths, so a file it never opens decides nothing.
+    // **Read from the object database, not the index.** `git status` was the first spelling and it took a
+    // WHEN that belonged to another guard: an existing direction corrupts `.git/index` to make the machinery
+    // enumeration fail, and a `status` here intercepted it — measured, that direction stopped reaching its
+    // own site. `git show HEAD:…` reads the tree, so the same corrupt index leaves it working, also measured.
+    //
+    // A read that fails means `CHANGELOG.md` is not in HEAD, which no release commit is — so the answer is
+    // *not a snapshot* rather than a refusal. A root carrying no changelog is refused earlier, by the reader
+    // that owns that question.
+    // `hermetic_git::run` trims trailing whitespace from git's output, so the committed text arrives without
+    // its final newline while `read` keeps one. Measured: every snapshot direction in the corpus failed on
+    // that difference alone before the two sides were compared on the same footing.
+    let unmodified = git(repo, &["show", "HEAD:CHANGELOG.md"])
+        .is_ok_and(|committed| committed.trim_end() == changelog.trim_end());
+    let state = if head == release_commit && unmodified {
         if version != release_version {
             return Err(violation_at(
                 "release-coherence#release-snapshot-version-disagrees",
@@ -1463,6 +1494,7 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
         ));
     };
     let changelog = read(repo, "CHANGELOG.md")?;
+    let changelog_text = changelog.clone();
     // Cut **once**, and hand the value down. Four walks in this file each carried their own section cursor
     // over the same predicate; `sections::cut` owns the boundary question and `section_of` the naming one,
     // which is the split `section_of`'s own doc asks for. Over a `Prose` region, so a fenced `## [` heading
@@ -1474,7 +1506,7 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     // The phases, in the order a reader meets a refusal in. **The order is observable**: a repository with
     // two problems is refused for whichever phase reaches its own first, and the failure matrix asserts the
     // message. So these are a sequence rather than a set, and moving one moves what gets reported.
-    let spine = release_spine(repo, &version, version_parts)?;
+    let spine = release_spine(repo, &version, version_parts, &changelog_text)?;
     let members = require_version_surfaces(repo, &root_manifest, &version)?;
     require_changelog_state(
         repo,

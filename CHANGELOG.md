@@ -24,6 +24,63 @@ them.
 
 ### Self-governance
 
+- **The release-state classifier read the commit while every other reader read the worktree, and the first
+  change of a new cycle fell between them.** `State::Snapshot` was decided by `head == release_commit` alone —
+  a fact about the **commit** — while the reaction takes its content through `std::fs::read_to_string`. Sitting
+  on the release commit, an author writes the `[Unreleased]` entry that development **requires**, and it is
+  judged in snapshot state, where `[Unreleased]` must be **empty**. Two real rules, no tree satisfying both,
+  and the only escape is to commit — which is the act that moves `head`. Measured on this repository:
+  `release/0.5.1`'s first change could not pass the Definition of Done until it was committed, and passed
+  immediately afterwards unaltered.
+
+  A snapshot is a **checkout**, not a commit. The state now also asks whether the `CHANGELOG.md` being judged
+  is still the one that commit carries, so the state and the content come from one source.
+
+  **Two wider spellings were tried and refuted by the corpus, which is the part worth keeping.** Asking
+  whether *anything* tracked was modified made a release checkout whose `Cargo.lock` had been replaced by a
+  directory classify as development — it is a broken release checkout, not a new cycle — so it reported a
+  missing `[Unreleased]` entry instead of the lockfile it could not read. And asking `git status` read the
+  **index**, which intercepted a corrupt-index fixture another guard uses to reach its own refusal: measured,
+  that guard stopped reaching it. Reading `git show HEAD:CHANGELOG.md` takes the object database instead, and
+  the same corruption is left to the reader that owns it. Both were caught by existing directions rather than
+  by review.
+
+  This is a repair the reaction made *quieter*, not louder: the failure it removes was a misclassification,
+  not a rule being too strict. Downgrading the verdict would have kept the misdiagnosis and lowered its
+  volume, in the direction the Core Contract orders above every other.
+
+- **A release checkout being edited was judged as a release checkout, and no tree could satisfy the state it
+  was put in.** The phase was read from `HEAD` alone — is this commit the release commit — while every other
+  reader in the reaction takes its content from the worktree. The first change of a new cycle falls between
+  those two sources: sitting on the release commit, an author writes the `[Unreleased]` entry that
+  **development requires**, and it is judged in **snapshot**, where `[Unreleased]` must be **empty**. Two real
+  rules, and the only escape is to commit — the act that moves `HEAD`. Measured on this repository:
+  `release/0.5.1`'s first change could not pass the Definition of Done until it was committed, and passed
+  immediately afterwards unaltered.
+
+  The state now reads the same source the reaction judges. What it does **not** do is report the conflict as a
+  notice instead of a failure: the failure was a **misclassification**, not a policy that was too strict, and
+  a misdiagnosis delivered quietly is still a misdiagnosis. Nothing was relaxed.
+
+  Two wider spellings were tried and both were refuted by directions already in the corpus. *Any modified
+  tracked file* makes a release checkout whose `Cargo.lock` was replaced by a directory into "development",
+  which then reports a missing `[Unreleased]` entry instead of the lockfile it cannot read — that is a broken
+  release checkout, not a new cycle. And reading the index through `git status` intercepted a corrupt-index
+  fixture another guard uses to reach its own refusal, taking a WHEN that was not this reader's; `git show
+  HEAD:…` reads the object database and leaves it alone. Both measured.
+
+- **The 0.5.0 window spent more than half its landed work on the machinery that judges this repository.**
+  Measured over the window's own history, one landed change per squash: `284/540 (52%)` touched
+  `crates/kanhe` or `crates/shengmo` and no published crate's source; `100/540 (18%)` touched a published
+  source at all. Two reviewers separately recorded the other side of it — the published surface moved by two
+  lines of a private doc comment across sixteen rounds.
+
+  Filed in `BACKLOG.md` with the command that produced it, so the next window's figure is derived rather than
+  recalled, and with what the figure argues for: the weight is in how much of the tree is under reaction at
+  all, not in how loudly a reaction speaks, so the lever is retiring rules rather than softening verdicts. No
+  reaction is proposed for the ratio itself — it rests on which crates are the product, which is a judgement,
+  and the remedy it points at is removal, which no reaction performs.
+
 - **A record stated the gate's current answer, and was wrong three times running — the fourth correction
   would have been the same mistake.** A *Version horizons* paragraph in `BACKLOG.md` ended by naming what
   the release-coherence gate reports. It said `development: 0.4.0`; that was corrected to

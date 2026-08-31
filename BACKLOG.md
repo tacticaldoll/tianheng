@@ -584,6 +584,33 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **Over half of the 0.5.0 window's landed work touched the machinery that judges this repository and nothing
+  an adopter receives.** *Class:* WATCH. *Observed pressure:* measured over the window's own history, one
+  landed change per squash:
+
+  ```bash
+  git log --format='@%H' --name-only e645a54..<release-branch> | …   # classify each change's paths
+  ```
+
+  `284/540 (52%)` touched `crates/kanhe` or `crates/shengmo` and **no** published crate's `src/`; `100/540
+  (18%)` touched a published source at all; `68/540 (12%)` touched product without touching governance. Two
+  independent reviewers separately observed the other side of the same fact — that across sixteen rounds the
+  published `0.5.0` surface moved by two lines of a private doc comment. *Observation source:* that
+  classification, run over `e645a54..release/0.5.0` after the release was cut; the command is written out so
+  the next window's figure is derived rather than recalled. *Current reaction or bound:* none, and none is
+  proposed — a ratio is not a property a reaction can hold without deciding what counts as product, which is
+  a judgement over intent. This entry is the instrument and the record of one reading. *Risk:* the window's
+  own evidence is that each repair produced the next round's finding — *every reaction built in this window
+  had a defect found in the next round, three of three* — so a system that generates work proportional to
+  itself will keep spending the budget on itself unless the figure is looked at. *Promotion trigger:* the
+  next window's figure not falling. What that asks for is **retiring rules, not softening verdicts**: the
+  weight is in how much of the tree is under reaction at all, not in how loudly a reaction speaks. A first
+  decidable question for that, unasked so far: which refusal sites have only ever fired on fixtures.
+  *Why not simply built:* stated above — the classification rests on which crates are the product, which the
+  manifest answers today and would have to keep answering for a reaction to be sound; and the remedy the
+  figure argues for is removal, which no reaction performs. *Version class:* patch; repository-internal,
+  shipping in no crate. *Authority:* this entry.
+
 - **Twenty-seven inner comments in published crates index their provenance by review round, and the reaction
   over doc comments does not reach them.** *Class:* WATCH. *Observed pressure:* measured in the 0.5.0 window, by
   `grep -rnE 'round[- ][0-9]+'` over every published crate's `src`: both doc-comment lines and inner-comment

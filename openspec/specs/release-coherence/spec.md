@@ -16,7 +16,8 @@ surfaces, lock snapshot, and adopter-facing changelog coherent without time-base
 ### Requirement: Repository state determines the release phase
 
 The repository SHALL classify its release phase solely from the latest exact `release: X.Y.Z`
-commit in git history, the position of `HEAD`, and the current workspace version. A later commit at
+commit in git history, the position of `HEAD`, the current workspace version, and whether the
+`CHANGELOG.md` being judged is still the one that commit carries. A later commit at
 the same version SHALL be development; a strictly newer numeric `X.Y.Z` current version SHALL be
 release-ready; and the exact latest release commit SHALL be a release snapshot. A current version
 older than the latest release, or missing or malformed release history, SHALL fail as an observable
@@ -42,8 +43,30 @@ time, warning windows, or hosted-CI-only variables.
 
 #### Scenario: The release commit is a snapshot
 
-- **WHEN** `HEAD` is the latest exact `release: X.Y.Z` commit
+- **WHEN** `HEAD` is the latest exact `release: X.Y.Z` commit **and** the `CHANGELOG.md` being judged is the
+  one that commit carries
 - **THEN** the repository is checked as a release snapshot for `X.Y.Z`
+
+#### Scenario: Editing at the release commit is the next cycle
+
+- **WHEN** `HEAD` is the latest exact release commit and `CHANGELOG.md` has been edited away from it — the
+  first `[Unreleased]` entry of a new cycle, written before anything is committed
+- **THEN** the repository is checked as **development**, not as a snapshot with a modified tree. The state is
+  read from the same source every other reader takes its content from: this reaction reads the worktree, so a
+  state read from `HEAD` alone put the two out of step. Snapshot requires `[Unreleased]` to be **empty** while
+  development **requires an entry in it**, so at that moment no tree satisfied the state it was judged in, and
+  the only escape was to commit — which is the act that moves `HEAD`. Measured on this repository's own
+  `release/0.5.1`: its first change could not pass the Definition of Done until it was committed, and passed
+  immediately afterwards unaltered
+- **AND** the comparison SHALL be against the **committed tree** rather than the index. A first spelling asked
+  `git status`, which reads the index and so intercepted a corrupt-index fixture that another guard uses to
+  reach its own refusal — measured, that guard stopped reaching it. `git show HEAD:…` reads the object
+  database and leaves the same corruption to the reader that owns it
+- **AND** the changelog is the carrier because it is what this specification's own development requirement
+  names. A wider rule — any modified tracked file — was measured wrong: a release checkout whose `Cargo.lock`
+  has been replaced by a directory is a **broken release checkout**, not a new cycle, and classifying it as
+  development made it report a missing `[Unreleased]` entry instead of the lockfile it could not read
+- **PINNED-BY** `editing_at_a_release_snapshot_is_development`
 
 #### Scenario: Shallow or absent history fails loud
 

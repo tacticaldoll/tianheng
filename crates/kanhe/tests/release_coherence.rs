@@ -2919,6 +2919,44 @@ fn a_case_alias_of_a_member_directory_is_a_stated_bound() {
     );
 }
 
+/// Editing at a release snapshot is development, not a snapshot with a dirty tree.
+///
+/// **The state was read from the commit while everything else read the worktree.** `release_spine` decided
+/// `Snapshot` on `head == release_commit` alone; every other reader takes its content through
+/// `std::fs::read_to_string`. The first change of a new cycle falls between those two sources: sitting on the
+/// release commit, the author writes the `[Unreleased]` entry that `Development` **requires**, and it is
+/// judged in `Snapshot`, where `[Unreleased]` must be **empty**. Two rules, both real, and no tree satisfies
+/// them at once — the author's only way out is to commit, which is what moves `head`.
+///
+/// Measured on this repository: `release/0.5.1`'s first change could not pass the Definition of Done until it
+/// was committed, and passed immediately afterwards with nothing else altered.
+///
+/// A release snapshot is an unmodified **checkout** of one. This writes the entry without committing and
+/// requires the answer an author can act on.
+///
+/// Negative run: with the state read from the commit alone, this refuses with *[Unreleased] must be empty in
+/// snapshot state*.
+#[test]
+fn editing_at_a_release_snapshot_is_development() {
+    let root = scratch("snapshot-edited");
+    let fixture = build_fixture(&root, "snapshot-edited", "0.2.0");
+    release_changelog(&fixture.repo, "0.2.0", "0.1.0");
+    // The release commit has to carry a change, as its sibling direction records; what it carries is beside
+    // the point.
+    std::fs::write(fixture.repo.join("NOTES.md"), "prepared\n").expect("write");
+    commit(&fixture.repo, "release: 0.2.0");
+    // The next cycle's first edit, uncommitted — `head` is still the release commit.
+    development_changelog(&fixture.repo, "0.2.0", true);
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let ok =
+        verdict.expect("an edited checkout of a release is the next cycle, not a dirty snapshot");
+    assert!(
+        ok.contains("development: 0.2.0"),
+        "the state follows the tree the gate reads, not the commit it sits on: {ok}"
+    );
+}
+
 /// A stale internal pin behind a quoted tail is refused, where it used to pass the gate.
 ///
 /// **The first false negative found in three rounds of review, and the one that mattered most.** The
