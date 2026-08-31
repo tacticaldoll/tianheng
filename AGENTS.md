@@ -721,9 +721,12 @@ commit must never be amended or force-pushed away: the published artifact points
 permanently, so replacing it orphans the pointer just as surely as publishing from the wrong branch
 does. `0.2.2` was published from `main` correctly and then force-pushed away an hour later, which the
 publish-source gate cannot foresee — at publish time it would have passed — so this half stays a
-convention. What each published version actually records, and the two mechanisms that produced the
-disagreements, is inventoried in
-[`docs/history/published-artifact-provenance.md`](docs/history/published-artifact-provenance.md).
+convention. The two mechanisms that produced the disagreements, and the audit of every version published before this
+reaction existed, are in
+[`docs/history/published-artifact-provenance.md`](docs/history/published-artifact-provenance.md). That
+inventory is **closed**: a sha1 exists only after the upload that records it, the registry already holds it
+permanently, and a committed copy costs a branch and a release cycle to arrive one release late. What a
+published version records is asked of the tarball and the tag, by the command that record carries.
 
 `TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test release_coherence` is the release-state check. During development it
 requires an adopter-facing `[Unreleased]` entry and aligned workspace/internal dependency versions,

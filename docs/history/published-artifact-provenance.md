@@ -11,6 +11,33 @@ than re-learned.
 through `scripts/publish.sh` (see *Branching and release* in `AGENTS.md`). This record is the state
 that reaction was written against.
 
+## The inventory is closed at `0.5.0`
+
+**A commit sha1 does not belong in this repository, and the reason is its timing and its price.** The sha1
+exists only *after* the upload that records it, so a committed copy is structurally late — it cannot be
+written before the act, and the branch that would carry it is archived at the release squash, so it arrives
+one release behind the thing it describes. And the price of writing forty hexadecimal characters is a
+branch, a pull request, a full CI run and a squash merge. `0.5.0`'s row was paid for exactly that way.
+
+What it buys is a **second copy of a permanent record**. The premise of this whole document is that
+`cargo publish` writes the sha1 into the tarball and a version can never be re-uploaded: the registry holds
+it, unalterably, for as long as the crate exists. Re-typing it here caches a value that is already
+canonical somewhere else, and the cache is the half that can go stale.
+
+So the table stops here. Its rows stay: they are a real audit of the era **before** the publish-source
+reaction existed, and the *verdicts* in them — which disagreement, and which mechanism produced it — are
+judgements that took an audit to establish rather than figures anyone can look up.
+
+**Nothing replaces the table, because the question was always answerable without it.** *Reproducing the
+audit* below is not a way to rebuild this table; it is the standing way to ask what any published version
+records, at any time, from the two places that hold the answer. A reader who wants `0.6.0`'s provenance runs
+it rather than looking for a row.
+
+One consequence is stated rather than left to be discovered: the mechanism this reaction **cannot** prevent
+is a release snapshot force-pushed away *after* a clean publish, as `0.2.2` was an hour later. A row appended
+at publish time never catches that — at publish time the gate has just passed — so per-release rows were
+never the instrument for it. Re-running the audit later is.
+
 ## Inventory
 
 Audited 2026-08-05 across **all 96 published tarballs** then on the books — every version of `xuanji`,
@@ -101,9 +128,10 @@ no artifact or ref survives from which to determine it. They are listed for comp
 findings. Their tags were lightweight and unsigned until 2026-08-05, when all eleven were re-created as
 signed annotated tags pointing at their own unchanged commits.
 
-## Reproducing the audit
+## Asking the question of any version
 
-Read-only, and it re-derives the table above rather than trusting it. For one version:
+Read-only, and it answers from the two places that hold the answer rather than from the table above — which
+is why the table could stop growing. For one version, published or about to be:
 
 ```bash
 crate=xuanji version=0.4.0
