@@ -148,10 +148,10 @@ pub fn constitution() -> Constitution {
         )
         .boundary(
             CrateBoundary::crate_("kanhe")
-                .restrict_dependencies_to(["shengmo", "tianheng", "serde_json"])
+                .restrict_dependencies_to(["shengmo", "tianheng", "serde_json", "toml_edit"])
                 .because(
-                    "勘合 depends on 繩墨, 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 \
-                     or 璇璣 can exist",
+                    "勘合 depends on 繩墨, 天衡, serde_json and toml_edit only: no edge to 圭表, \
+                     渾儀, 漏刻 or 璇璣 can exist",
                 ),
         )
         // The first *semantic* self-boundary: the family dogfoods its own `sans_io_pure` profile on

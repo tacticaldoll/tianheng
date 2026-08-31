@@ -84,9 +84,11 @@ text, and the same reader serves `publish-source-integrity`, so both refusals mo
 
 The same holds of the **key**, and it did not: the heading side of that reader decoded while the key side
 compared raw text, so spellings cargo accepts answered *absent*. The scenario below records what was
-measured. A value the reader cannot read — a single-quoted or literal string, which cargo accepts and this
-reader does not take — names a different operator action from a missing key: one is a key to add, the other a spelling
-this check has never met. Each refusal SHALL name the value as written, and SHALL say which judgement it
+measured. A value the reader cannot read names a different operator action from a missing key: one is a key to add,
+the other a value this check cannot take. **That set narrowed when a real parser replaced the hand-rolled
+reader**: a single-quoted or literal string is legal TOML cargo accepts, and it was refused — a false refusal
+this specification used to declare as a limitation. What remains unreadable is a `version` that is not a
+string at all, and a manifest the parser cannot read, which is one cargo cannot read either. Each refusal SHALL name the value as written, and SHALL say which judgement it
 blocked rather than only which fact was unreadable, because the two gates sharing the reader cannot decide
 different things.
 

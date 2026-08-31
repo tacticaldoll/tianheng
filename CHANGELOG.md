@@ -24,6 +24,40 @@ them.
 
 ### Self-governance
 
+- **The manifest grammar is parsed rather than hand-split, and the amendment that allows it was measured
+  before it was proposed.** `toml_edit` enters `kanhe`'s dependencies through the self-law amendment ritual —
+  the allowlist in `crates/shengmo/src/law.rs`, the regenerated `AGENTS.self-law.md`, and the boundary
+  declared verbatim in `self_law_amendment.rs`, all three of which must move together or the check refuses.
+
+  **The case, measured rather than argued.** Of the 0.5.0 window's 540 landed changes, 89 touched
+  `manifest.rs` or `release_coherence_gate.rs` and **69 of those 89 were typed `fix`** — one hand-rolled
+  grammar produced the largest run of repairs in the repository. Every shape those repairs were about was
+  then put to a real parser, which answered all of them: a dotted pin as one dependency rather than two, a
+  quoted tail as a path rather than none, a key literally named `version.extra` as one key, an escaped dot in
+  a heading not overwriting the real table, three inherit spellings as one answer, a comment glued to a value,
+  a commented-out pin, and `[lib]` before `[package]` not becoming the package name.
+
+  **`toml_edit` rather than `toml`, because both halves are needed.** The structure says which dependency
+  carries which field; the original spelling is required because `release-coherence` holds an internal pin to
+  equal the workspace version *as written*, and a normalising reader loses that. `cargo metadata` was weighed
+  and does not serve: it reports a requirement normalised to `^0.5.0`, and whether a member inherits its
+  version or hardcodes it is invisible in resolved data.
+
+  **Two declared limitations turn out to have been false refusals, and both are gone.** A single-quoted
+  version, and `[workspace]` with the table composed as `package.version`, `package = { version = … }` or
+  `package."version"` — measured under cargo 1.96.0, **all four resolve at the declared version**, and the
+  reader refused them. One of the two was written into this specification as a limitation the reader has.
+
+  **Two refusal sites kept their place by having their WHEN rerun**, which is the ritual this repository
+  states for retiring a bound: their old WHEN was the single-quoted value, and what reaches them now is a
+  `version` that is not a string at all — the catalog declaring that it inherits — plus a manifest the parser
+  cannot read, which is one cargo cannot read either. A duplicate `version` key is now answered by the parser,
+  which names the key and says *duplicate key*.
+
+  Scoped deliberately to `workspace_version`. The line-oriented readers (`assigned`, `assignment`,
+  `table_heading`) are reached from thirty-one call sites and each carries its own bound accounting; migrating
+  them is separate work, not a larger version of this change.
+
 - **`AGENTS.md`'s carrier taxonomy answers which binding a carrier admits and never whether the claim earns
   one, and that missing question is what the 0.5.0 window answered by default.** It built `crates/kanhe` from
   nothing — 142 refusal call sites, 98 declared bounds, about 37,229 lines of Rust replacing 1,562 lines of
