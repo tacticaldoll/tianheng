@@ -24,6 +24,15 @@ them.
 
 ### Self-governance
 
+- **A relative anchor was a vaguer restatement of a sentence three lines above it, so it is deleted rather
+  than dated.** The `InherentGenerics` entry closed its cross-module half and said exactly what closed it —
+  *the module role was added in the 0.4.0 window* — then described the remaining risk as *one step narrower
+  than when this entry was written*. That phrase names a moving reference for a narrowing the entry had
+  already named by its **item**, which is what `AGENTS.md`'s disposition table asks for. Nothing is lost by
+  removing it; giving it a date would have added a second, weaker carrier of one fact.
+
+  Found by a sweep run for a different repair and reported rather than folded into it, then done on its own.
+
 - **The workspace's members had two enumerators and nothing asked whether they agree.** `cargo` names its
   members in `[workspace] members`; the release gate reaches them by walking `crates/*/Cargo.toml`. Both
   answer *which crates are the family*, and the premise that they answer the same held by **layout** — which
