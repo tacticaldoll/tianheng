@@ -24,6 +24,29 @@ them.
 
 ### Self-governance
 
+- **`AGENTS.md`'s carrier taxonomy answers which binding a carrier admits and never whether the claim earns
+  one, and that missing question is what the 0.5.0 window answered by default.** It built `crates/kanhe` from
+  nothing — 142 refusal call sites, 98 declared bounds, about 37,229 lines of Rust replacing 1,562 lines of
+  shell — while over half its landed changes touched that machinery and no published source.
+
+  The bar now stated has two halves, and the split is measured rather than asserted. **A cannot-judge is not
+  a rule**: a reader declining to answer where it cannot see is never the forbidden direction, since the
+  alternative is a silent skip. **A violation is a rule and needs a reachable instance** — a shape a
+  maintainer would plausibly write, demonstrated against the real toolchain, not a fixture built to display
+  the gap and not a gap derived by reading the code. Otherwise it takes prose and a trigger, the form two
+  rules took the same day and which cost a sentence each.
+
+  **Two discriminators for retiring existing rules were tried and neither survives.** *Only ever fired on
+  fixtures* answers **all** of them, because every direction here builds a synthetic fixture — that is the
+  method. *Named by no release note* answers 135 of 140, and measures how release notes are written: **70 of
+  those are cannot-judge**, and retiring one trades a refusal for silence. So no retirement list is offered.
+  The reducible weight is elsewhere and was measured too — tests are 26,568 of the crate's 37,229 lines —
+  and none of it shrinks by retiring refusal sites.
+
+  The bar is on the **rate**, and that is the reason it is the answer rather than a cut. Retiring rules once
+  leaves the mechanism that produced them, and this window's reviews recorded it: every reaction built had a
+  defect found in the next round, three of three.
+
 - **A relative anchor was a vaguer restatement of a sentence three lines above it, so it is deleted rather
   than dated.** The `InherentGenerics` entry closed its cross-module half and said exactly what closed it —
   *the module role was added in the 0.4.0 window* — then described the remaining risk as *one step narrower

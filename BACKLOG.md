@@ -631,6 +631,23 @@ consumer for an undemonstrated deduplication.
   next window's figure not falling. What that asks for is **retiring rules, not softening verdicts**: the
   weight is in how much of the tree is under reaction at all, not in how loudly a reaction speaks. A first
   decidable question for that, unasked so far: which refusal sites have only ever fired on fixtures.
+
+  *That question was asked and it does not discriminate.* Every direction in `kanhe` builds a synthetic
+  fixture — that is the method — so the answer is all of them. A second discriminator was tried, *which sites
+  no release note names*, and it measures how release notes are written rather than whether a site earns its
+  place: 135 of 140, of which **70 are cannot-judge**, a reader declining to answer where it cannot see.
+  Retiring one of those trades a refusal for a silent skip, which is the direction the Core Contract forbids.
+  So there is no retirement list, and producing one would have meant defending a cut the measurement does not
+  support.
+
+  *Where the reducible weight actually is, measured:* tests are 26,568 of `kanhe`'s 37,229 lines, and beside
+  them stand 98 declared bounds and the WATCH queue itself. None of that shrinks by retiring refusal sites.
+
+  *What was done instead.* Retiring rules addresses the **stock**; this window's own reviews recorded a
+  mechanism producing more — every reaction built had a defect found in the next round, three of three. A bar
+  on the **rate** is in `AGENTS.md` beside the carrier taxonomy, which until now answered which binding a
+  carrier admits and never whether the claim earns one: a cannot-judge needs no instance, a violation needs a
+  reachable one, and a gap that exists only in an argument gets prose and a trigger.
   *Why not simply built:* stated above — the classification rests on which crates are the product, which the
   manifest answers today and would have to keep answering for a reaction to be sound; and the remedy the
   figure argues for is removal, which no reaction performs. *Version class:* patch; repository-internal,

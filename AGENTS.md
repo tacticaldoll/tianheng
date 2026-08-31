@@ -227,6 +227,28 @@ binding available when the claim lives in a sentence. It stays stated on its own
 with a working instrument and a measured cost, and because a general principle nobody can check is the shape
 this repository dissolves rather than keeps.
 
+**Whether a claim earns a binding at all is a separate question, and it was never asked here.** The three
+branches above answer *which* binding a carrier admits; none of them asks whether to bind. The 0.5.0 window
+answered it by default — build the reaction — and built `crates/kanhe` from nothing: 142 refusal call sites
+and 98 declared bounds, replacing 1,562 lines of shell with about 37,229 lines of Rust, while over half its
+landed changes touched that machinery and no published source. The bar below is what was missing.
+
+**A cannot-judge is not a rule, and needs no instance.** A reader declining to answer where it cannot see is
+never the forbidden direction — the alternative is a silent skip, which is. Add one wherever a reader can
+fail. Measured over the registered sites no release note names: **70 of them are exactly this**, and
+retiring any would trade a refusal for silence.
+
+**A violation is a rule, and a rule needs a reachable instance.** Not a fixture built to display the gap, and
+not a gap derived by reading the code: a shape a maintainer would plausibly write, demonstrated against the
+real toolchain. `xuanji."path" = "xuanji"` earned its reaction that way — cargo was measured accepting it,
+and the pin behind it reached the release gate. A gap that exists only in an argument gets **prose and a
+trigger** instead, with the test that trigger would use where it is decidable. Two rules took that form the
+day this was written and cost a sentence each.
+
+This is a bar on the **rate**, not the stock. The stock is not what grew: retiring rules once leaves the
+mechanism that produced them, and this window's own reviews recorded that mechanism — every reaction it built
+had a defect found in the next round, three of three.
+
 **This rule has no repository check, and that is stated rather than left to be discovered.** Its text branch
 does — `crates/kanhe/tests/census.rs` holds every declared census — but the rule *above* that branch asks
 which binding a carrier admits, and answering it means reading what a value is a claim **about**. Nothing can
