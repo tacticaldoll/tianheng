@@ -2406,7 +2406,7 @@ that also holds a closed READY-PATCH record.
   seam, since owner-plus-module distinguishes where an impl is written, not which block it is.
   Risk: a false negative on a narrow idiom (two inherent impl blocks on one type in one
   module, each with its own where-clause bound exposing a forbidden type) — not yet observed
-  as adopter pressure, and one step narrower than when this entry was written. Promotion
+  as adopter pressure. Promotion
   trigger: a real per-block distinguisher added to `PublicSeam::InherentGenerics` — real
   design work, and constrained rather than open: `semantic-signature-coupling` forbids
   identity from resting on "scan order, item ordinal, and renderer fallback position", so an
