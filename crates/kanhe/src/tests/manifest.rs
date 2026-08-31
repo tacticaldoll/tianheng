@@ -74,10 +74,13 @@ fn a_comment_never_becomes_the_version_and_an_unreadable_value_is_not_an_absent_
         WorkspaceVersion::Declared("0.5.0".to_string()),
         "a trailing comment was carried into the value"
     );
+    // **This row asserted the opposite until a real parser replaced the hand-rolled one.** A single-quoted
+    // string is legal TOML that cargo accepts, and the reader not taking it was a limitation declared in the
+    // release-coherence spec. The parser takes it, so the limitation is gone rather than documented.
     assert_eq!(
         workspace_version("[workspace.package]\nversion = '0.5.0'\n"),
-        WorkspaceVersion::Unreadable("'0.5.0'".to_string()),
-        "a single-quoted value is legal TOML this reader does not take — not a key that is absent"
+        WorkspaceVersion::Declared("0.5.0".to_string()),
+        "a single-quoted value is legal TOML and cargo accepts it"
     );
     assert_eq!(
         workspace_version("[workspace.package]\n# version = \"9.9.9\"\n"),
@@ -438,8 +441,8 @@ fn two_workspace_version_keys_refuse_rather_than_the_first_answering() {
     let doubled = "[workspace.package]\nversion = \"0.5.0\"\nversion = \"0.6.0\"\n";
     match workspace_version(doubled) {
         WorkspaceVersion::Unreadable(what) => assert!(
-            what.contains('2') && what.contains("version"),
-            "the refusal says how many and which key: {what}"
+            what.contains("version") && what.contains("duplicate"),
+            "the refusal names the key and says it is duplicated: {what}"
         ),
         other => panic!(
             "two `version` keys must refuse rather than answer from the first; got {other:?}"
@@ -596,9 +599,13 @@ fn a_key_spelling_cargo_accepts_is_read_and_a_table_written_as_a_value_is_refuse
             "[workspace]\npackage.\"version\" = \"0.5.0\"\n",
         ),
     ] {
-        assert!(
-            matches!(workspace_version(manifest), WorkspaceVersion::Unreadable(_)),
-            "{label}: this declares the table as a value, which is not the same fact as declaring nothing"
+        // **Measured against cargo, all three resolve at the declared version**, so refusing them was a
+        // false refusal over legal TOML rather than a bound worth declaring. A real parser builds the table
+        // these spellings compose, which is what cargo does.
+        assert_eq!(
+            workspace_version(manifest),
+            WorkspaceVersion::Declared("0.5.0".to_string()),
+            "{label}: cargo resolves this at 0.5.0, measured"
         );
     }
 

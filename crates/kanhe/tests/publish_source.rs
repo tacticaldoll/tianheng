@@ -508,7 +508,12 @@ fn a_version_this_reader_cannot_read_stops_the_publish_as_a_cannot_judge() {
     // read — so the order of `judge`'s phases is what keeps this direction about the thing it names.
     std::fs::write(
         fixture.repo.join("Cargo.toml"),
-        "[workspace]\nmembers = []\n\n[workspace.package]\nversion = '9.9.9'\n",
+        // **This WHEN moved when a real parser replaced the hand-rolled reader.** It was `version = '9.9.9'`
+        // — a single-quoted string, legal TOML the old reader declined — and the parser takes it, so that
+        // shape no longer reaches this site. What still does is a value that is not a string at all: the
+        // catalog declaring it inherits, which is the manifest that declares the catalog inheriting from
+        // itself. The site is kept because its WHEN was rerun, not because it used to fire.
+        "[workspace]\nmembers = []\n\n[workspace.package]\nversion = { workspace = true }\n",
     )
     .expect("write");
     let refusal = judge(&fixture.repo, &fixture.remote.display().to_string())

@@ -1855,9 +1855,14 @@ fn a_trailing_comment_on_the_version_line_still_reads_the_version() {
 
 /// A value this reader cannot read is not a value that is absent.
 ///
-/// A single-quoted literal is valid TOML and is not a form this reader takes. Reporting it as *missing or
-/// malformed* sends an operator to look for a version key that is sitting right there, correctly spelled for
-/// cargo — the same conflation `Quoted` was introduced to end one reader over.
+/// Reporting an unreadable value as *missing or malformed* sends an operator to look for a version key that
+/// is sitting right there — the same conflation `Quoted` was introduced to end one reader over.
+///
+/// **This WHEN moved when a real parser replaced the hand-rolled reader.** It was a single-quoted literal,
+/// valid TOML the old reader declined; the parser takes it, so that shape now reports the version it declares
+/// and the limitation is gone rather than declared. What still reaches this site is a value that is not a
+/// string at all — here the catalog declaring that it inherits, which is the table that declares the catalog
+/// inheriting from itself. The site is kept because its WHEN was rerun against the new reader.
 #[test]
 fn a_version_value_this_reader_cannot_read_is_not_one_that_is_absent() {
     let root = scratch("unreadable-version-value");
@@ -1865,7 +1870,7 @@ fn a_version_value_this_reader_cannot_read_is_not_one_that_is_absent() {
     initialised(&repo);
     std::fs::write(
         repo.join("Cargo.toml"),
-        "[workspace.package]\nversion = '0.4.0'\n",
+        "[workspace.package]\nversion = { workspace = true }\n",
     )
     .expect("write");
     std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");

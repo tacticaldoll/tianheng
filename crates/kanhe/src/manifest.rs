@@ -149,92 +149,37 @@ pub enum WorkspaceVersion {
 /// The sibling `package_name` had already been repaired this way, which left one root `Cargo.toml` scanned
 /// under two different region decisions inside a single judgement.
 pub fn workspace_version(text: &str) -> WorkspaceVersion {
-    let source = crate::region::Source::of(text);
-    // **One predicate where there were two, which is what the bug above was made of.** This walked a heading
-    // twice — an equality that opened the table, then a `starts_with('[')` that closed it — so a heading
-    // failing the first matched the second and closed a table that had never opened. Reading a `toml()` region
-    // stopped the comment from causing that; taking the cut removes the second test entirely, so the shape
-    // cannot recur for a spelling nobody thought of.
-    // **One reader answers the whole question.** `is_table(line).then(…)` asked *is this a heading* twice —
-    // once here and once inside `table_heading`, whose `None` arm then became a branch nothing reached. It
-    // also put two referents on one name — one predicate meaning *is this a heading* and one method meaning
-    // *is this heading that table* — standing a few lines apart at every call site.
-    let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
-        table_heading(line).map(|heading| heading.names("workspace.package"))
-    });
-    // **An undecodable heading is refused rather than skipped.** Its name matches nothing, so the table would
-    // be passed over and the version would read `Absent` — the answer that says *nothing declared this* about
-    // a manifest whose declaration is simply unreadable here.
-    if let Some(line) = source
-        .toml()
-        .numbered_lines()
-        .find_map(|(_, line)| table_heading(line).filter(|h| h.undecodable).map(|_| line))
-    {
-        return WorkspaceVersion::Unreadable(line.trim().to_string());
-    }
-    // `version` then `=`, so `version.workspace` and any other `version…` key is not this key.
-    let values: Vec<Result<&str, String>> = tables
-        .iter()
-        .filter(|table| table.name)
-        .flat_map(|table| table.body.iter())
-        .filter_map(|(_, line)| match assigned(line, "version") {
-            Assigned::Value(value) => Some(Ok(value)),
-            Assigned::Other => None,
-            // A spelling this reader does not decode is not an absent key, and saying so is the whole of
-            // `WorkspaceVersion`'s third state. A dotted head naming `version` assigns a field of it —
-            // `version.workspace = true` — which is not a version and is not an absent key either.
-            Assigned::Field { .. } | Assigned::Unreadable => Some(Err(line.trim().to_string())),
-        })
-        .collect();
-    let values: Vec<&str> = match values.into_iter().collect::<Result<Vec<&str>, String>>() {
-        Ok(values) => values,
-        Err(written) => return WorkspaceVersion::Unreadable(written),
-    };
-    // **Two keys refuse rather than the first one answering, which its two siblings already did.** This
-    // returned on the first `version` it met. `publishable` states the reason in its own words — *cargo
-    // refuses a manifest that declares one key twice, so a reader answering from the first of two would speak
-    // for a file cargo will not read at all* — and `package_name` answers the same way. One of three reading
-    // the same root manifest disagreed, and taking a value first is what made the count askable.
-    if values.is_empty() {
-        // **The table can be written as a value inside `[workspace]`, and that is not the same as absent.**
-        // Measured under cargo 1.96.0, each resolves a member at `0.5.0`: `[workspace]` with
-        // `package.version = "0.5.0"`, and with `package = { version = "0.5.0" }`. Composing a table out of a
-        // dotted key path or an inline table is structure this reader does not build — it cuts headings — so
-        // the shape is refused where it is met instead of being reported as a declaration nobody made. The
-        // message an operator gets then names the line rather than saying *missing or malformed*.
-        let workspace = crate::sections::cut(source.toml().numbered_lines(), |line| {
-            table_heading(line).map(|heading| heading.names("workspace"))
-        });
-        //
-        // **Only where that key could carry the version.** A review noted the over-refusal: `[workspace]` with
-        // `package.authors = […]` and no version anywhere is a manifest whose workspace version genuinely IS
-        // absent, and naming that line unreadable would answer the wrong fact. A dotted head is therefore
-        // asked for its tail. The inline form is refused whatever it holds, because this reader does not parse
-        // an inline table and so cannot tell `package = { version = "0.5.0" }` from
-        // `package = { authors = […] }` — refusing there names the line it could not read, which is the fact.
-        if let Some(line) = workspace
-            .iter()
-            .filter(|table| table.name)
-            .flat_map(|table| table.body.iter())
-            .find(|(_, line)| match assigned(line, "package") {
-                Assigned::Field { tail, .. } => tail == ["version"],
-                Assigned::Value(_) => true,
-                Assigned::Other | Assigned::Unreadable => false,
-            })
-            .map(|(_, line)| line)
-        {
-            return WorkspaceVersion::Unreadable(line.trim().to_string());
+    let doc = match text.parse::<toml_edit::DocumentMut>() {
+        Ok(doc) => doc,
+        // A root manifest cargo cannot parse has no version to report as absent. Answering `Absent` would
+        // send an operator to add a key that may already be there, so the parse error is what it met.
+        // The whole error, collapsed onto one line rather than its first line: measured, a duplicate
+        // `version` reports the position on line one and names the key and *duplicate key* on later lines,
+        // so truncating loses exactly the two facts an operator needs.
+        Err(err) => {
+            return WorkspaceVersion::Unreadable(format!(
+                "a manifest this parser cannot read — {}",
+                err.to_string()
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ));
         }
-    }
-    match values.len() {
-        0 => WorkspaceVersion::Absent,
-        1 => match quoted_value(values[0]) {
-            Quoted::Value(version) => WorkspaceVersion::Declared(version),
-            Quoted::Unreadable => WorkspaceVersion::Unreadable(values[0].trim().to_string()),
-        },
-        several => WorkspaceVersion::Unreadable(format!(
-            "{several} `version` keys in `[workspace.package]`"
-        )),
+    };
+    let Some(version) = doc
+        .get("workspace")
+        .and_then(toml_edit::Item::as_table_like)
+        .and_then(|workspace| workspace.get("package"))
+        .and_then(toml_edit::Item::as_table_like)
+        .and_then(|package| package.get("version"))
+    else {
+        return WorkspaceVersion::Absent;
+    };
+    match version.as_str() {
+        Some(declared) => WorkspaceVersion::Declared(declared.to_string()),
+        // Still reachable, and now only for what it always meant: a `version` that is not a string at all —
+        // `version = 5`, or the inheritance spelling in a table that declares the catalog.
+        None => WorkspaceVersion::Unreadable(version.to_string().trim().to_string()),
     }
 }
 

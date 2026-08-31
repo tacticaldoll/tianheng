@@ -70,9 +70,9 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `kanhe` (crate)
 
-> 勘合 depends on 繩墨, 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist
+> 勘合 depends on 繩墨, 天衡, serde_json and toml_edit only: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist
 
-- **rule**: restrict dependencies to (only: shengmo, tianheng, serde_json)
+- **rule**: restrict dependencies to (only: shengmo, tianheng, serde_json, toml_edit)
 - **kind**: crate · **severity**: enforce
 
 ### `xuanji::crate` (module)
