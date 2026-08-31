@@ -655,6 +655,36 @@ fn an_example_pin_the_workspace_version_does_not_satisfy_is_a_violation() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// A lock file this parser cannot read is a cannot-judge, not a missing package.
+///
+/// **A diagnosis this reader could not give before.** The hand-rolled walker found no `[[package]]` blocks in
+/// an unparseable lock and reported *Cargo.lock is missing workspace package xuanji* — a violation naming a
+/// package that may be sitting right there, in a file cargo cannot read either. Reading the document says
+/// which fact was met.
+///
+/// Negative run: with the parse failure folded into an empty entry set, this reports the missing-package
+/// violation instead.
+#[test]
+fn a_lock_file_this_parser_cannot_read_cannot_be_judged() {
+    let root = scratch("lock-unparseable");
+    let fixture = build_fixture(&root, "lock-unparseable", "0.2.0");
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("Cargo.lock"),
+        "version = 4\n\n[[package]\nname = \"xuanji\"\n",
+    )
+    .expect("write");
+    commit(&fixture.repo, "chore: leave the lock unparseable");
+    let refusal = refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "not a lock file this parser can read",
+    );
+    refusal::expect("release-coherence#lock-unreadable", &refusal);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// The lockfile direction must reach EVERY workspace package, not only the first.
 #[test]
 fn a_stale_lock_entry_for_the_second_package_is_a_violation() {
@@ -993,7 +1023,14 @@ fn a_lock_name_this_reader_cannot_read_is_a_cannot_judge() {
     release_changelog(&fixture.repo, "0.2.1", "0.2.0");
     let lock = fixture.repo.join("Cargo.lock");
     let text = std::fs::read_to_string(&lock).expect("read the fixture lock");
-    std::fs::write(&lock, text.replace("name = \"xuanji\"", "name = 'xuanji'")).expect("write");
+    // **This WHEN moved when a real parser replaced the hand-rolled walker.** It was `name = 'xuanji'` — a
+    // single-quoted string, legal TOML the old reader declined — and the parser takes it. What still reaches
+    // the site is a `name` that is not a string at all.
+    std::fs::write(
+        &lock,
+        text.replace("name = \"xuanji\"", "name = [\"xuanji\"]"),
+    )
+    .expect("write");
     commit(&fixture.repo, "chore: quote a lock name the other way");
     refusal::expect(
         "release-coherence#lock-package-name-unreadable",
@@ -3737,9 +3774,11 @@ fn a_lock_version_this_reader_cannot_take_stops_the_comparison() {
     let text = std::fs::read_to_string(&lock).expect("read");
     std::fs::write(
         &lock,
+        // The same moved WHEN: a single-quoted version is read now, so what stops the comparison is a
+        // version that is no string.
         text.replace(
             "name = \"xuanji\"\nversion = \"0.2.1\"",
-            "name = \"xuanji\"\nversion = '0.2.1'",
+            "name = \"xuanji\"\nversion = 3",
         ),
     )
     .expect("write");

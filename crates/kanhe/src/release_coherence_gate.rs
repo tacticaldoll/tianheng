@@ -2132,121 +2132,65 @@ pub(crate) fn require_example_pins(
 /// spent the window removing; the dead branches were what it looked like from inside.
 fn require_lock_versions(repo: &Path, members: &[Member], version: &str) -> Result<(), Refusal> {
     let lock = read(repo, "Cargo.lock")?;
-    // **Every entry under a name, and whether each carries a `source`.** A single-valued map keyed on the
-    // name kept the first entry and dropped the rest, which is only right while no name appears twice — and
-    // two entries under one name is ordinary in a lock file, either as two versions of one crate or as a
-    // workspace member sharing a name with something from a registry. Nothing here stated that premise, and
-    // `source` is what tells the two apart: a workspace member has none, everything fetched has one.
+    let doc = lock.parse::<toml_edit::DocumentMut>().map_err(|err| {
+        cannot_judge_at(
+            "release-coherence#lock-unreadable",
+            format!(
+                "Cargo.lock is not a lock file this parser can read — {}",
+                err.to_string()
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
+        )
+    })?;
+
+    // **Every entry under a name, and whether each carries a `source`.** Two entries under one name is
+    // ordinary in a lock, either as two versions of one crate or as a workspace member sharing a name with
+    // something from a registry, so a single-valued map keyed on the name would keep whichever came first.
+    // `source` is what tells them apart: a workspace member has none, everything fetched has one.
+    //
+    // **The block boundary comes from the parser now.** It was the literal string `[[package]]` and an
+    // ordering premise beneath it — `source` is written after `version` in cargo's own output, so filing an
+    // entry early recorded every one as source-less. An array of tables has neither question: each element
+    // *is* one entry, and the order its keys were written in is not a fact this reader has to know.
     let mut entries: BTreeMap<String, Vec<(String, bool)>> = BTreeMap::new();
-    // **A block's fields are the block's by construction, where they were the block's by a boundary rule.**
-    // This walked the lock with `name`, `version_of` and `sourced` as function-level state and a `close`
-    // closure called on *every* table header — because `[[patch.unused]]`, written whenever a `[patch]`
-    // section exists, carries its own `name`, `version` and `source`, and read as ordinary content it
-    // overwrote the block above. That rule was correct and it was a *rule*: drop the call on the foreign
-    // header and the fields bleed again.
-    //
-    // The cut gives each `[[package]]` its own body, so the three values are per-block locals and a foreign
-    // table's keys are not reachable from here at all. Filing still happens after the body rather than when
-    // the version is read — `source` is written after `version` in cargo's own output, and filing early would
-    // record every entry as source-less — but *after the body* is where the block ends now, rather than where
-    // the next header happens to be.
-    //
-    // The header stays an exact `[[package]]` rather than sharing the manifest readers' tolerance for
-    // `[ package ]`: cargo generates this file and writes one spelling, so admitting others here would be a
-    // tolerance no measurement asked for.
-    //
-    // **Every entry under a name, and whether each carries a `source`.** A single-valued map keyed on the
-    // name kept the first entry and dropped the rest, which is only right while no name appears twice — and
-    // two entries under one name is ordinary in a lock, either as two versions of one crate or as a workspace
-    // member sharing a name with something from a registry. `source` tells the two apart: a workspace member
-    // has none, everything fetched has one.
-    let blocks = crate::sections::cut(
-        crate::region::Source::of(lock.as_str())
-            .toml()
-            .numbered_lines(),
-        // Through the shared reader, which is what makes the array-of-tables shape a question rather than a
-        // literal: this was the fifth place deciding which table a heading names, and the only one whose
-        // subject was an array.
-        |line| crate::manifest::table_heading(line).map(|heading| heading.names_array("package")),
-    );
-    for block in blocks.iter().filter(|block| block.name) {
-        let mut name = String::new();
-        let mut version_of: Option<String> = None;
-        let mut sourced = false;
-        for (_, line) in &block.body {
-            let trimmed = line.trim();
-            // **The key is identified exactly, and `=` is decided once.** Each arm used to ask
-            // `starts_with(..) && contains('=')` and then split again with an `unwrap_or_default()` the
-            // `contains` had already made unreachable — two decisions about the same character and a default
-            // nothing could reach. A prefix is also not a key: `versionx = 1` would have entered the version
-            // arm, and cargo treats a key it does not know as unused.
-            // **Through the one reader, which is what removes the ordering premise below.** This split the
-            // line and picked out the keys it cared about, accumulating as it went — the shape the three
-            // dependency producers were converted away from, and the last of its kind in this file. It is
-            // what let `"version" if !name.is_empty()` be written: an unstated requirement that `name`
-            // appear *before* `version` inside a `[[package]]` block. Measured, a block writing them in the
-            // other order dropped the version and reached *Cargo.lock is missing workspace package xuanji*,
-            // exit 1, about a lock recording it two lines apart. Cargo writes `name` first, so no lock it
-            // writes fires this — but nothing said so, and an undeclared stop is a defect rather than
-            // governed policy.
-            //
-            // A key carrying an escape cargo itself rejects is in a file cargo could not have written, and a
-            // lock file is written by cargo alone — so that arm is the shape's, not an instance's.
-            let (key, value) = match crate::manifest::assignment(trimmed) {
-                crate::manifest::Assignment::Key { name, value } => (name, value),
-                crate::manifest::Assignment::Field { .. }
-                | crate::manifest::Assignment::KeyUnreadable
-                | crate::manifest::Assignment::FieldUnreadable { .. }
-                | crate::manifest::Assignment::None => continue,
-            };
-            match key.as_str() {
-                "source" => sourced = true,
-                "name" => {
-                    // An unreadable name defaulted to the empty string, which the `!name.is_empty()` guard
-                    // below then read as *no package here* — so that entry's version never entered the map
-                    // and the workspace lookup reported it missing, or found a stale one under the previous
-                    // name.
-                    match quoted_value(value) {
-                        Quoted::Value(value) => name = value,
-                        Quoted::Unreadable => {
-                            return Err(cannot_judge_at(
-                                "release-coherence#lock-package-name-unreadable",
-                                format!(
-                                    "Cargo.lock carries a package name this check cannot read ({}), so the \
-                                     versions it records cannot be compared",
-                                    trimmed
-                                ),
-                            ));
-                        }
-                    }
-                }
-                // **Unguarded, and the block-level test below decides whether anything is recorded.** The
-                // guard here required a name already read, which is the ordering premise. A top-level
-                // `version = 4` sits outside every `[[package]]` block and is dropped by the block filter,
-                // not by this arm — measured against a lock carrying that line.
-                "version" => match quoted_value(value) {
-                    Quoted::Value(value) => {
-                        version_of = Some(value);
-                    }
-                    Quoted::Unreadable => {
-                        return Err(cannot_judge_at(
-                            "release-coherence#lock-version-unreadable",
-                            format!(
-                                "Cargo.lock records a version for {name} that this check cannot read ({}), \
-                                 so whether it matches the workspace cannot be decided",
-                                trimmed
-                            ),
-                        ));
-                    }
-                },
-                _ => {}
-            }
-        }
-        if !name.is_empty() {
-            if let Some(found) = version_of {
-                entries.entry(name).or_default().push((found, sourced));
-            }
-        }
+    for entry in doc
+        .get("package")
+        .and_then(toml_edit::Item::as_array_of_tables)
+        .into_iter()
+        .flatten()
+    {
+        let Some(name) = entry.get("name") else {
+            continue;
+        };
+        let Some(name) = name.as_str() else {
+            return Err(cannot_judge_at(
+                "release-coherence#lock-package-name-unreadable",
+                format!(
+                    "Cargo.lock carries a package name this check cannot read ({}), so the versions it \
+                     records cannot be compared",
+                    name.to_string().trim()
+                ),
+            ));
+        };
+        let Some(found) = entry.get("version") else {
+            continue;
+        };
+        let Some(found) = found.as_str() else {
+            return Err(cannot_judge_at(
+                "release-coherence#lock-version-unreadable",
+                format!(
+                    "Cargo.lock records a version for {name} that this check cannot read ({}), so whether \
+                     it matches the workspace cannot be decided",
+                    found.to_string().trim()
+                ),
+            ));
+        };
+        entries
+            .entry(name.to_string())
+            .or_default()
+            .push((found.to_string(), entry.get("source").is_some()));
     }
 
     for Member { name: package, .. } in members {

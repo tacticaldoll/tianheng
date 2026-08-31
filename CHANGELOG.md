@@ -24,6 +24,24 @@ them.
 
 ### Self-governance
 
+- **The lock reader takes `[[package]]` from the parser, which removes an ordering premise it had to know.**
+  The block boundary was the literal string `[[package]]`, and beneath it sat a fact about cargo's output
+  order: `source` is written *after* `version`, so filing an entry before the body ended recorded every one
+  as source-less — and source is what tells a workspace member from a registry entry sharing its name. An
+  array of tables has neither question. Each element **is** one entry, and the order its keys were written in
+  is not something this reader has to know.
+
+  **A diagnosis it could not give before.** An unparseable lock produced no blocks, so the reader reported
+  *Cargo.lock is missing workspace package …* — a violation naming a package that may be sitting right there,
+  in a file cargo cannot read either. It is now a cannot-judge saying which fact was met, with its own
+  direction; the negative run that folds the parse failure into an empty document reports the old
+  misdiagnosis verbatim.
+
+  Two more sites had their WHEN moved by the same cause — both used a single-quoted value the parser now
+  takes — and what reaches them is a `name` or a `version` that is no string. One message drifted in the
+  rewrite and was restored to what it said before: a direction asserts it, and changing a refusal's words for
+  no reason is churn a reader has to re-learn.
+
 - **The second whole-document manifest reader is parsed rather than hand-split, and its improvement is
   guarded because a negative run said it was not.** `package_name` now asks a real parser for
   `[package].name`; 46 lines of hand-rolled table walking are gone.
