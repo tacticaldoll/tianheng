@@ -24,6 +24,35 @@ them.
 
 ### Self-governance
 
+- **The published-artifact inventory is closed: a commit sha1 does not belong in this repository.** Its
+  timing and its price are both wrong. The sha1 exists only *after* the upload that records it, so a
+  committed copy cannot be written before the act — and the branch that would carry it is archived at the
+  release squash, so it arrives one release behind the thing it describes. The price of writing forty
+  hexadecimal characters is a branch, a pull request, a full CI run and a squash merge; `0.5.0`'s row was
+  paid for exactly that way, one cycle late.
+
+  What it bought was a **second copy of a permanent record**. The document's own premise is that
+  `cargo publish` writes the sha1 into the tarball and a version can never be re-uploaded — the registry
+  holds it unalterably for as long as the crate exists. The committed copy is the only half that can go
+  stale.
+
+  The existing rows stay. They are a real audit of the era before the publish-source reaction existed, and
+  their *verdicts* — which disagreement, and which mechanism produced it — are judgements an audit
+  established rather than figures anyone can look up. What stops is the growth.
+
+  Nothing replaces the table because the question was always answerable without it: the record's command
+  asks the tarball and the tag directly, for any version, at any time. The section that carried it is
+  renamed from *Reproducing the audit* to what it actually is.
+
+  Stated rather than left to be discovered: the one mechanism the reaction **cannot** prevent is a release
+  snapshot force-pushed away after a clean publish, as `0.2.2` was an hour later. A row appended at publish
+  time never catches that — at publish time the gate has just passed — so per-release rows were never its
+  instrument. Re-running the audit later is.
+
+  `AGENTS.md`'s pointer is made consistent in the same change. The sentence in the dated `[0.5.0]` section
+  that calls the document an inventory of *every* published version is left alone: rewriting a dated section
+  to satisfy a rule written afterwards falsifies the record, which this repository holds as a stated bound.
+
 - **The release-state classifier read the commit while every other reader read the worktree, and the first
   change of a new cycle fell between them.** `State::Snapshot` was decided by `head == release_commit` alone —
   a fact about the **commit** — while the reaction takes its content through `std::fs::read_to_string`. Sitting
