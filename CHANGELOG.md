@@ -24,6 +24,16 @@ them.
 
 ### Self-governance
 
+- **A closed entry called a consequence *structural*, and that is how its premise escaped being examined.**
+  The `BACKLOG.md` record of the `0.5.0` provenance row reasoned that the row is an audit of the tarballs and
+  so cannot precede them, that the branch carrying it is archived at the release squash, and that `main` takes
+  nothing except through a release branch — therefore the one-cycle lag was **structural and remains**. Every
+  step below the premise was accurate.
+
+  The premise was that a commit sha1 is kept in this repository at all, and the entry never put that
+  question. Once it was put, the answer removed the lag instead of accommodating it. The entry now records
+  where it reasoned wrongly rather than only what it got right.
+
 - **The one instance the widened rule forbade is gone, and the tree now agrees with the rule.**
   `crates/kanhe/tests/merge_workflow.rs` used a real commit of this tree as its fixture head — made and
   squashed away inside the `0.5.0` window, contained in no branch, resolving only in a clone that still
