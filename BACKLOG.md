@@ -2043,12 +2043,23 @@ consumer for an undemonstrated deduplication.
   covered the 96 tarballs then on the books and the six new ones were audited on their publication day, so
   the sentence now says which audit covered what instead of letting one date stand for both.
 
-  *What it said, and what it got right.* The entry existed because the row is an audit **of the tarballs**
-  and so cannot precede them, while the branch that would carry it is archived at the release squash and
-  `main` takes nothing except through a release branch. That lag is structural and remains: this row reaches
-  `main` only when `0.5.1` is cut. It also named the part that is easy to miss — adding a row without
-  restating the scope line makes the document claim an audit that never covered it — and that is what the
-  edit did.
+  *What it said, and where it reasoned wrongly.* The entry existed because the row is an audit **of the
+  tarballs** and so cannot precede them, while the branch that would carry it is archived at the release
+  squash and `main` takes nothing except through a release branch. It called the resulting one-cycle lag
+  **structural** — and that word did the damage. The constraint it described was real, but a constraint is
+  only structural relative to a premise, and the premise here was *that a commit sha1 is kept in this
+  repository at all*. The entry never asked whether it should be. Once that question was put, the answer
+  removed the lag rather than accommodating it: the registry already holds the sha1 permanently, a committed
+  copy is the only half that can go stale, and forty hexadecimal characters were costing a branch, a pull
+  request, a full CI run and a squash merge to arrive one release late. The inventory is closed, and there is
+  no lag because there is nothing further to append.
+
+  The shape is worth keeping even though the entry closed correctly: **calling a consequence structural is
+  how a premise escapes being examined.** The entry was accurate about every step below the premise and
+  wrong about the one thing that mattered.
+
+  It also named the part that is easy to miss — adding a row without restating the scope line makes the
+  document claim an audit that never covered it — and that is what the edit did.
 
 - ~~**WATCH: a dependency declared under a cfg target carrying a dot is not observed.**~~ **RETIRED** — the
   reader it described was replaced, and the shape it warned about cannot arise in the one that replaced it.
