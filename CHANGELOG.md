@@ -24,6 +24,20 @@ them.
 
 ### Self-governance
 
+- **The second whole-document manifest reader is parsed rather than hand-split, and its improvement is
+  guarded because a negative run said it was not.** `package_name` now asks a real parser for
+  `[package].name`; 46 lines of hand-rolled table walking are gone.
+
+  The two directions that observed its unreadable state both used a **single-quoted** name — legal TOML that
+  cargo resolves and the old reader declined — so both had their WHEN moved to a `name` that is no string at
+  all, which is what still reaches the site. Then the negative run that restores the old double-quote-only
+  rule **broke nothing**: with both WHENs moved, nobody was left observing the new answer, and the
+  improvement could have been reverted in silence. A direction now judges a stale example pin behind a
+  single-quoted member name, and the same perturbation fails it.
+
+  That is the second time in this window a reader's *improvement* went unobserved while its *refusal* stayed
+  pinned. Moving a WHEN keeps the site honest; it does not carry the new answer, and nothing says so.
+
 - **The manifest grammar is parsed rather than hand-split, and the amendment that allows it was measured
   before it was proposed.** `toml_edit` enters `kanhe`'s dependencies through the self-law amendment ritual —
   the allowlist in `crates/shengmo/src/law.rs`, the regenerated `AGENTS.self-law.md`, and the boundary
