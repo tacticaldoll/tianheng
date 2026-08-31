@@ -584,6 +584,31 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **This repository's own commit objects are kept out of tracked content by prose, and the reaction that
+  would hold it reaches only live prose.** *Class:* WATCH. *Observed pressure:* two instances, one caught and
+  one not. `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach` refused a `BACKLOG.md` citation of the
+  `0.5.0` release commit and named the reason — `main` carries one commit per release, so a development commit
+  is unreachable from a fresh clone by construction. The second sat outside it:
+  `crates/kanhe/tests/merge_workflow.rs` carries a real commit of this tree, made and squashed away inside the
+  `0.5.0` window, that is contained in
+  **no branch** and resolves only in a clone that still happens to hold it, used as an opaque fixture token in
+  **code**. That reaction reads `.rs` as `Prose::LineComment("//")` — comments only — on the coherent ground
+  that prose carries citations while code carries values, so the instance is outside its corpus by design
+  rather than by oversight. Record documents are exempt for the same kind of reason. *Observation source:* a
+  sweep of every 40-hex literal in tracked content, run when the published-artifact inventory was closed.
+  *Current reaction or bound:* the rule is stated in `AGENTS.md`'s disposition table and has a reaction in
+  live prose only. *Risk:* a reader meets a hash that resolves for the author and for nobody else, and cannot
+  tell a fixture token from a reference. *Promotion trigger:* a **second** instance outside live prose. What
+  it would take is small and already decidable, which is why the trigger is worth arming rather than
+  guessing at: for every 40-hex literal in tracked content, `git cat-file -t` decides whether it is an object
+  of **this** repository — and that same test excludes a third party's action pin without maintaining a list,
+  because `owner/action@<sha>` does not resolve here. *Why not simply built:* one instance, in a repository
+  whose own measurement says over half of the last window's landed work fed the machinery that judges it. A
+  rule whose carrier is prose is a first-class form here — the census rule states that it has no repository
+  check rather than leaving it to be discovered — and this is that form, with the upgrade path written down
+  instead of rediscovered. *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
+  this entry, and `AGENTS.md`'s disposition table.
+
 - **Over half of the 0.5.0 window's landed work touched the machinery that judges this repository and nothing
   an adopter receives.** *Class:* WATCH. *Observed pressure:* measured over the window's own history, one
   landed change per squash:

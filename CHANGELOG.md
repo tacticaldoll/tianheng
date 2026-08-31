@@ -24,6 +24,28 @@ them.
 
 ### Self-governance
 
+- **The rule against citing this repository's own commits covered live prose only, and one instance sat
+  outside it.** `AGENTS.md`'s disposition table said *a commit object in live text*; the reaction behind it
+  reads `.rs` as comments only, on the coherent ground that prose carries citations while code carries
+  values. `crates/kanhe/tests/merge_workflow.rs` carries one as an opaque fixture token — a real commit of this tree,
+  made and squashed away inside the `0.5.0` window, contained in **no branch**, which resolves only in a
+  clone that still happens to hold it. A reader cannot tell that from a reference, and neither can a fresh clone.
+
+  The row now reads *anywhere in tracked content*, and carries what makes the rule correct rather than merely
+  strict: a **third party's** object is not this shape. An action pinned as `owner/action@<sha>` is right, and
+  the same criterion excludes it without maintaining a list — that sha does not resolve here.
+
+  **Stated as prose with its reaction's reach named, which is a first-class form here.** The census rule
+  already declares that it has no repository check rather than leaving it to be discovered. `BACKLOG.md`
+  carries the upgrade path with a trigger of a second instance outside live prose, and the test it would use,
+  which is decidable today: `git cat-file -t` on every 40-hex literal decides whether it is an object of this
+  repository.
+
+  Not built now, and the reason is the measurement in this same section: over half of the last window's
+  landed work fed the machinery that judges this repository. One instance does not earn a reaction there —
+  but it does earn a sentence, and the difference between those two was the mistake in the first reading of
+  this question.
+
 - **The published-artifact inventory is closed: a commit sha1 does not belong in this repository.** Its
   timing and its price are both wrong. The sha1 exists only *after* the upload that records it, so a
   committed copy cannot be written before the act — and the branch that would carry it is archived at the
