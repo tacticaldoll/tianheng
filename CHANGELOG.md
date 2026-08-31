@@ -24,6 +24,28 @@ them.
 
 ### Self-governance
 
+- **The workspace's members had two enumerators and nothing asked whether they agree.** `cargo` names its
+  members in `[workspace] members`; the release gate reaches them by walking `crates/*/Cargo.toml`. Both
+  answer *which crates are the family*, and the premise that they answer the same held by **layout** — which
+  is not something anyone declared.
+
+  The direction that matters is the false negative: a member declared outside `crates/` is invisible to the
+  walk, so it is held to no inherited version, enters no family the catalog's pins are judged against, and is
+  read in no lock. Its stale pin would reach `cargo publish` through a subject that never contained it — the
+  same shape as a family crate offered without a `path`, one layer up, in the **enumerator** rather than the
+  selector. Both directions are now asserted, the other being a crate cargo does not build held to this
+  workspace's version.
+
+  **Asked of this repository rather than inside the gate.** The gate's phases are a sequence whose order is
+  observable and whose failure matrix asserts which refusal a repository meets first; adding a
+  `cargo metadata` call to that sequence would move that order for every repository it judges. The premise is
+  about *this* workspace's layout, so the question is put to this workspace — and it goes through the gate's
+  own walker rather than restating it, since a third enumerator is the defect itself.
+
+  Negative runs, both measured: a member added at `tools/probe` is reported as unreached by the walk; a
+  manifest at `crates/stray` that `members` does not name is reported as held to a version cargo never builds
+  it at.
+
 - **A closed entry called a consequence *structural*, and that is how its premise escaped being examined.**
   The `BACKLOG.md` record of the `0.5.0` provenance row reasoned that the row is an audit of the tarballs and
   so cannot precede them, that the branch carrying it is archived at the release squash, and that `main` takes
