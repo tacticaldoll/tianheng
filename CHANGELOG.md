@@ -24,6 +24,17 @@ them.
 
 ### Self-governance
 
+- **The one instance the widened rule forbade is gone, and the tree now agrees with the rule.**
+  `crates/kanhe/tests/merge_workflow.rs` used a real commit of this tree as its fixture head — made and
+  squashed away inside the `0.5.0` window, contained in no branch, resolving only in a clone that still
+  happened to hold it. The fixture needs an **opaque token**, not a reference: what the assertions require is
+  that the wrapper pins the head its evidence came from. It now uses a value that resolves to no object in
+  any repository, and the stub says why the value is what it is.
+
+  Swept afterwards rather than assumed: every 40-hex literal in tracked content put to `git cat-file -t`.
+  Seven still resolve, and all seven are rows of `docs/history/published-artifact-provenance.md` — the record
+  the rule exempts, and one that is now closed, so the exemption has no way to grow.
+
 - **The rule against citing this repository's own commits covered live prose only, and one instance sat
   outside it.** `AGENTS.md`'s disposition table said *a commit object in live text*; the reaction behind it
   reads `.rs` as comments only, on the coherent ground that prose carries citations while code carries

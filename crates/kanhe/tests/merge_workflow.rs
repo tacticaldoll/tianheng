@@ -207,7 +207,12 @@ elif [[ $1 == pr && $2 == view && $* == *"--json headRefOid"* ]]; then
     if [[ $FAKE_GH_MODE == unreadable-head ]]; then
         printf '%s\n' ''
     else
-        printf '%s\n' '81c9ef062fafee9fafe2ebfaacf68288f5554747'
+        # A head this fixture invents, and deliberately one that resolves to no object in **any** repository:
+        # the value here was a real commit of this tree until the 0.5.0 window, squashed away and reachable
+        # from no branch, so it resolved for whoever still held it and for nobody else. What the assertions
+        # below need is that the wrapper pins the head the evidence came from — an opaque token, whose one
+        # requirement is that a reader cannot mistake it for a reference.
+        printf '%s\n' 'feedfacedeadbeefcafebabe0123456789abcdef'
     fi
 elif [[ $1 == api ]]; then
     case $FAKE_GH_MODE in
@@ -865,7 +870,7 @@ fn the_merge_is_pinned_to_the_head_the_gate_read() {
         .find(|line| line.starts_with("pr merge"))
         .unwrap_or_else(|| panic!("the merge must be reached:\n{}", run.gh_log));
     assert!(
-        merge.contains("--match-head-commit 81c9ef062fafee9fafe2ebfaacf68288f5554747"),
+        merge.contains("--match-head-commit feedfacedeadbeefcafebabe0123456789abcdef"),
         "the merge must pin the head the evidence came from, got {merge}"
     );
 
