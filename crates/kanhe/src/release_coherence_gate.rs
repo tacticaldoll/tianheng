@@ -1555,7 +1555,13 @@ fn entries_of(dir: &Path) -> Result<Vec<PathBuf>, Refusal> {
     Ok(paths)
 }
 
-fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal> {
+/// Every member manifest this gate reaches, as `(repository-relative path, text)`.
+///
+/// The set is the directories under `crates/` that carry a `Cargo.toml`, which is a **layout** premise:
+/// cargo's own answer is `[workspace] members`. The two agree in this repository today, and
+/// `crates/kanhe/tests/member_enumeration.rs` is what asks them rather than assuming it — public for that
+/// reader, so the comparison uses this walk rather than restating it and becoming a third enumerator.
+pub fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal> {
     let crates = repo.join("crates");
     let mut out = Vec::new();
     let dirs = entries_of(&crates)?;
