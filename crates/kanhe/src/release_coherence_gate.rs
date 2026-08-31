@@ -913,53 +913,33 @@ pub enum PackageName {
 /// while two `name` keys in one means it is malformed. The consumer needs to tell them apart, so the
 /// return carries the distinction instead of collapsing it.
 pub fn package_name(manifest: &str) -> PackageName {
-    // Executed manifest text. Raw lines were safe against a commented-out `name` only by accident — a
-    // `#`-led line matched no key — and not safe at all against a comment on the **table
-    // heading**: `[package] # the repository checks` fails `trimmed == "[package]"`, so the table never
-    // opens, no `name` is found, and `require_example_pins` answers `cannot_judge` over a legal manifest.
-    // Held by `a_package_heading_with_a_trailing_comment_still_opens_the_table`, run against raw lines.
-    //
-    // A first version of this comment claimed the benefit was at the `name` **value** —
-    // `name = "kanhe" # …` supposedly reaching `quoted_value` as `Unreadable`. It never did:
-    // `quoted_value` takes the text between the first pair of quotes and discards what follows. The claim
-    // was refuted by a reviewer, and stating a benefit a reader could have checked against the function ten
-    // lines up is the cheaper half of the discipline the previous commit wrote down.
-    let source = crate::region::Source::of(manifest);
-    // The cut owns the table boundary. `in_package` was a boolean walked by hand here, in
-    // `require_lock_versions`, and once more as a `Table` cursor in `declared_dependencies` — three copies of
-    // *a heading opens, the next heading closes*, which is the one thing all three shared. `is_table` says
-    // which lines are headings and this predicate says which heading matters; `[package.metadata.docs.rs]` is
-    // a different table and names no package.
-    let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
-        crate::manifest::table_heading(line).map(|heading| heading.names("package"))
-    });
-    let names: Vec<Result<&str, String>> = tables
-        .iter()
-        .filter(|table| table.name)
-        .flat_map(|table| table.body.iter())
-        // **Through the shared key reader, because this matched the key's raw text.** `[package]` with
-        // `"name" = "kanhe"` is the package's name to cargo — measured — and answering `Absent` for it made
-        // this say *declares no `[package]` name* about a manifest that declares one, and made the sibling
-        // caller fall back to the directory, comparing a member under the wrong identity.
-        .filter_map(|(_, line)| match crate::manifest::assigned(line, "name") {
-            crate::manifest::Assigned::Value(value) => Some(Ok(value.trim())),
-            crate::manifest::Assigned::Other => None,
-            crate::manifest::Assigned::Field { .. } | crate::manifest::Assigned::Unreadable => {
-                Some(Err(line.trim().to_string()))
-            }
-        })
-        .collect();
-    let names: Vec<&str> = match names.into_iter().collect::<Result<Vec<&str>, String>>() {
-        Ok(names) => names,
-        Err(written) => return PackageName::Unreadable(written),
+    let doc = match manifest.parse::<toml_edit::DocumentMut>() {
+        Ok(doc) => doc,
+        // A manifest cargo cannot parse declares no name to be reported absent, and answering `Absent` would
+        // send an operator to add a key that may already be there. The whole error, collapsed: a duplicate
+        // key reports its position on the first line and names the key on later ones.
+        Err(err) => {
+            return PackageName::Unreadable(format!(
+                "a manifest this parser cannot read — {}",
+                err.to_string()
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ));
+        }
     };
-    match names.len() {
-        0 => PackageName::Absent,
-        1 => match quoted_value(names[0]) {
-            Quoted::Value(name) => PackageName::Named(name),
-            Quoted::Unreadable => PackageName::Unreadable(names[0].to_string()),
-        },
-        several => PackageName::Unreadable(format!("{several} `name` keys in `[package]`")),
+    let Some(name) = doc
+        .get("package")
+        .and_then(toml_edit::Item::as_table_like)
+        .and_then(|package| package.get("name"))
+    else {
+        return PackageName::Absent;
+    };
+    match name.as_str() {
+        Some(named) => PackageName::Named(named.to_string()),
+        // What remains unreadable is a `name` that is not a string: an inheritance spelling, an inline table,
+        // an array. The old reader also answered this for a single-quoted string, which cargo accepts.
+        None => PackageName::Unreadable(name.to_string().trim().to_string()),
     }
 }
 

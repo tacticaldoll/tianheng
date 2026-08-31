@@ -963,7 +963,10 @@ fn a_package_name_this_reader_cannot_read_is_a_cannot_judge() {
     let fixture = build_fixture(&root, "unreadable-name", "0.2.0");
     std::fs::write(
         fixture.repo.join("crates/xuanji/Cargo.toml"),
-        "[package]\nname = 'xuanji'\nversion.workspace = true\nedition = \"2024\"\n",
+        // **This WHEN moved when a real parser replaced the hand-rolled reader.** It was `name = 'xuanji'` — a
+        // single-quoted string, legal TOML the old reader declined — and the parser takes it. What still
+        // reaches the site is a `name` that is not a string at all.
+        "[package]\nname = { workspace = true }\nversion.workspace = true\nedition = \"2024\"\n",
     )
     .expect("write");
     commit(&fixture.repo, "chore: quote the name the other way");
@@ -2962,6 +2965,54 @@ fn editing_at_a_release_snapshot_is_development() {
     );
 }
 
+/// A crate whose `[package]` name is a single-quoted string is read, not refused.
+///
+/// **The row a negative run demanded.** Migrating `package_name` to a real parser made this readable, and
+/// restoring the old double-quote-only rule broke nothing in the corpus — so the improvement was unguarded
+/// and could have been reverted in silence. Two directions had asserted the refusal; both had their WHEN
+/// moved to a `name` that is no string at all, which leaves nobody observing the new answer.
+///
+/// Measured under cargo 1.96.0: a single-quoted `name` is legal TOML that cargo resolves. Refusing it made
+/// `require_example_pins` answer *cannot judge* over a manifest cargo builds.
+///
+/// Negative run: with the double-quote-only rule restored, this row refuses instead of judging the pin.
+#[test]
+fn a_single_quoted_package_name_is_read() {
+    let root = scratch("single-quoted-name");
+    let fixture = build_fixture(&root, "single-quoted-name", "0.2.0");
+    // The member's own manifest, spelled the legal way this reader used to decline. A stale example pin sits
+    // beside it, so the verdict is about that pin being judged at all rather than about reading nothing.
+    std::fs::write(
+        fixture.repo.join("crates/xuanji/Cargo.toml"),
+        "[package]NLname = QQxuanjiQQNLversion.workspace = trueNLedition = QQ2024QQNL"
+            .replace("NL", "\n")
+            .replace("QQ", "'"),
+    )
+    .expect("write");
+    let example = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&example).expect("read");
+    std::fs::write(&example, {
+        let staled = text.replace("xuanji = \"0.2\"", "xuanji = \"0.0.1\"");
+        assert_ne!(staled, text, "the example's pin must actually be staled");
+        staled
+    })
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "chore: name the package with a single-quoted string",
+    );
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("the stale example pin is judged, so the name was read");
+    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("xuanji"),
+        "the crate was named, so its pin could be judged: {}",
+        refusal.message
+    );
+}
+
 /// A stale internal pin behind a quoted tail is refused, where it used to pass the gate.
 ///
 /// **The first false negative found in three rounds of review, and the one that mattered most.** The
@@ -3481,7 +3532,10 @@ fn a_crate_package_name_this_reader_cannot_take_stops_the_example_check() {
     let fixture = build_fixture(&root, "crate-unreadable-name", "0.2.0");
     std::fs::write(
         fixture.repo.join("crates/xuanji/Cargo.toml"),
-        "[package]\nname = 'xuanji'\nversion.workspace = true\nedition = \"2024\"\n",
+        // **This WHEN moved when a real parser replaced the hand-rolled reader.** It was `name = 'xuanji'` — a
+        // single-quoted string, legal TOML the old reader declined — and the parser takes it. What still
+        // reaches the site is a `name` that is not a string at all.
+        "[package]\nname = { workspace = true }\nversion.workspace = true\nedition = \"2024\"\n",
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
