@@ -955,8 +955,9 @@ consumer for an undemonstrated deduplication.
   release cut, in front of the two acts that cannot be undone. Promoting it is the first work of the window
   after this release rather than the last of this one.
 
-- **WATCH: A branch name is governed by prose alone, and the sentence saying so was wrong about why.**
-  *Class:* WATCH. *Observed pressure:* `AGENTS.md` requires `<type>/<scope>-<slug>` with `<type>` drawn from
+- **ACCEPTED DEBT: A branch name is governed by prose alone, and the gate that would hold it is declined.**
+  *Class:* ACCEPTED DEBT, re-classified 2026-09-01 when the trigger fired and the steward re-decided; WATCH
+  until then, and the sentence that first declined a check was wrong about why. *Observed pressure:* `AGENTS.md` requires `<type>/<scope>-<slug>` with `<type>` drawn from
   the Conventional Commit set, and nothing reads a branch name at any point. Measured over every merged pull
   request into `release/0.5.0`: **84 head branches open with `change/`** — the role `AGENTS.md` itself records
   as retired — and **seven carry no `/` at all** (`release-prep`, `refusal-register-reads-rust-not-text`,
@@ -981,11 +982,26 @@ consumer for an undemonstrated deduplication.
   written over the other two. The convention drifted in the very next window, by the sole contributor,
   after the steward had caught it once — which is the condition `AGENTS.md` names for a rule read as
   license rather than law, now measured rather than argued. *Version class:* patch; no crate is touched. *Authority:* `repository-checks`.
-  *Shape:* `scripts/merge-pr.sh` already resolves the pull request and could read `headRefName` beside the
-  title it re-reads, and `merge_message_gate` already owns the admitted type set — so the judgement is one
-  comparison against a list that exists, not a new vocabulary. What it needs first is a decision about the
-  84 historical `change/` branches: a check that refused them would refuse nothing live, but a reader meeting
-  it needs to know the rule governs new branches rather than the record.
+  *Shape, kept written down though declined:* `scripts/merge-pr.sh` already resolves the pull request and
+  could read `headRefName` beside the title it re-reads, and `merge_message_gate` already owns the admitted
+  type set — so the judgement is one comparison against a list that exists, not a new vocabulary. A check
+  refusing the historical `change/` branches would refuse nothing live, so that blocker dissolves for a
+  merge-time reader; it is recorded here so a later steward does not re-derive it.
+
+  **The trigger fired and the decision was taken rather than deferred again: the gate is declined.** Two
+  reasons, and the second is the load-bearing one. First, the cost this entry itself measures is bounded —
+  a branch name reaches no artifact, no adopter and no published crate, and the one drifted branch in the
+  `0.5.1` window landed a squash whose own subject was well-formed, so nothing downstream carried the fault.
+  Second, the repair is a **new gate on the merge ritual**, and this repository's standing goal for the
+  window is that its governance-only share of landed work must fall. Closing a bounded prose-level gap by
+  adding a reaction that runs in front of every merge moves that number the wrong way, and it does so to
+  hold a convention whose entire consequence is legibility.
+
+  What is accepted, stated plainly rather than left implicit: `AGENTS.md`'s branch-naming rule stays
+  unenforced, and this file now records that as a decision instead of an omission. *Reopening trigger:* a
+  branch name reaching an artifact, an adopter or a published crate — the premise that bounds the cost — or
+  a squash landing with a subject type that contradicts its branch's, which is the disagreement the naming
+  rule exists to prevent and the one shape whose cost is not merely legibility.
 
 - **ACCEPTED DEBT: A release date is only held at the snapshot, and an earlier check would be noise.**
   *Class:* ACCEPTED DEBT. *Observed pressure:* the dated CHANGELOG section for the version under preparation
