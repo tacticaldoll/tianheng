@@ -271,6 +271,13 @@ consumer for an undemonstrated deduplication.
   decided. *Version class:* patch; a repository check shipping in no crate. *Authority:*
   `openspec/specs/release-coherence/spec.md`, and `CHANGELOG.md`'s own marking rule.
 
+  *A collision the shape has to answer, found while dispositioning this queue.* The named join would backfill
+  a handle into every existing Migration bullet — and `[0.5.0]`'s bullets sit in a **dated, released**
+  section. Rewriting one to satisfy a rule written afterwards is what this repository refuses as a stated
+  bound, the same reasoning that leaves `docs/history/` alone. So the join holds over sections still being
+  written and released sections keep the shape they were released with; the instance that produced this entry
+  stays unmarked, as a record rather than as debt. That is part of the design and not a detail after it.
+
   *Shape.* The direction that actually matters — *an entry that should be marked and is not* — is undecidable
   by any reaction, because it asks whether a change requires adopter action. The candidates below work around
   that, and they separate on whether the rule is a **theorem** — so it can be a violation without inviting a
