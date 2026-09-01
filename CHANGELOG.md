@@ -24,6 +24,33 @@ them.
 
 ### Self-governance
 
+- **The dependency grammar is parsed, and the spellings cargo accepts are decided rather than refused.**
+  `declared_dependencies` asked a heading's text which table it opened, matched it segment by segment against
+  every admitted form, then collected a detailed table's fields across lines and filed the record when the
+  *next* heading proved the table over. It walks the document now: `[dependencies.xuanji]` and
+  `xuanji = { … }` are one entry in one table, and there is no boundary to find.
+
+  **Four states became unconstructible and six refusal sites retired with them**, because what they refused is
+  now either decided or refused by the parser. A quoted key names its crate, so `"xuanji" = "0.0.1"` is a
+  stale family requirement that is **judged**. An escaped path is decoded and compared against the member's
+  own directory. A `package` written `xuan\u006ai` is matched against the family as `xuanji`. And a key
+  declared twice is a document **cargo itself will not load**, so the honest answer is the parse error, which
+  names the key and its position rather than a count this reader had to keep.
+
+  **Two fixtures were themselves invalid TOML, which the hand-rolled reader tolerated.** Both appended a
+  second declaration of `xuanji` beside the example's own, and a line reader never met the collision. They
+  compose one declaration now, and assert that the edit landed — a fixture that stopped being about the thing
+  it names is the shape a reader of lines cannot see.
+
+  Ten integration directions moved with the reader, each to what a parser answers rather than by
+  substitution: three to the parse refusal, three to a value that is no string, two to a judgement where they
+  had asserted a refusal, and two to a fixture that composes correctly. Four unit directions were deleted with
+  their subject — they pinned a hand-rolled lexer — and one moved onto the new reader, keeping the property
+  that a value is not a key.
+
+  Negative runs: with a rename left unresolved, four directions bite; with a parse failure read as declaring
+  nothing, five.
+
 - **The `READY-PATCH` queue is dispositioned, and none of the five remaining closes by patching now.** That
   is what the class says it means: it grades **evidence and compatibility, not how much design the correction
   still needs**. Reading it as *small* or *next* is the misreading the class definition itself warns about,

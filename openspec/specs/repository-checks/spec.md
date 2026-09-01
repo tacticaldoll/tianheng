@@ -2485,12 +2485,16 @@ third scenario's, one layer up.
 - **THEN** the empty field between them is counted, so a reader asking for three fields refuses four
 - **PINNED-BY** `a_character_separator_keeps_the_empty_field_a_collapsing_reader_would_drop`
 
-#### Scenario: A TOML escape is not a value a manifest reader can read
+#### Scenario: A TOML escape is decoded, because a real parser decodes it
 
 - **WHEN** a quoted manifest value carries any escape — `\uXXXX`, `\UXXXXXXXX`, `\\`, `\n`, or an escaped quote
-- **THEN** the reader refuses rather than answering with the undecoded source, because cargo decodes the
-  escape and this reader decodes none — and decoding it here would be a second hand-rolled TOML grammar
-- **PINNED-BY** `a_toml_escape_is_refused_rather_than_returned_undecoded`
+- **THEN** the value reads as cargo reads it. The reader refused these rather than answering with the
+  undecoded source, on the ground that decoding them would be a second hand-rolled TOML grammar — which was
+  true of a hand-rolled reader and is the reason there is no longer one. A path written `cr\u0078tes/xuanji`
+  is now compared as `crxtes/xuanji`, and a `package` written `xuan\u006ai` is matched against the family as
+  `xuanji`
+- **PINNED-BY** `an_escaped_path_is_refused_and_an_ordinary_sibling_does_not_cover_for_it`
+- **PINNED-BY** `an_escaped_renamed_package_names_its_crate_and_its_pin_is_judged`
 
 #### Scenario: The interpreter support window reads its declaration through it
 
