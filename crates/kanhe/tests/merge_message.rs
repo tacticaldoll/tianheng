@@ -404,6 +404,51 @@ fn an_empty_body_is_a_violation() {
     refusal::expect("repository-checks#squash-body-is-empty", &refusal);
 }
 
+/// The release snapshot's empty body is the one the ritual requires, and the wrapper may now perform it.
+///
+/// **The trigger this closes fired on `release: 0.5.0`.** `AGENTS.md` states the exception in its own words —
+/// the release-branch-to-`main` squash's subject is `release: X.Y.Z` and *its body is deliberately empty* —
+/// while this gate refused exactly that. So the one merge the ritual cares about most could not go through
+/// the wrapper, and it was made around it; `BACKLOG.md`'s *a merge or publish made outside the wrapper is not
+/// observed* names that act as its trigger. Measured: `0.4.0`'s release commit carries an empty body too, so
+/// this has been true of every release.
+///
+/// Letting it through is **more** observation, not less: the subject shape, the attribution marks and the
+/// title match are all still judged on that merge, where before none of them were.
+///
+/// Negative run: with the exception removed, the release row is refused as an empty body; with the version
+/// test dropped so any `release:` prefix passes, the malformed row stops being refused.
+#[test]
+fn the_release_snapshot_may_carry_the_empty_body_the_ritual_requires() {
+    gate::judge(
+        "release: 0.5.0",
+        "",
+        "release: 0.5.0",
+        &["chore: x".to_string()],
+    )
+    .expect("the release snapshot's body is required to be empty, and the ritual says so");
+
+    // **The exception is for that act, not for the word.** A malformed version is refused, and by the
+    // conventional-subject rule rather than the empty-body one — `release: not-a-version` is neither a
+    // Conventional Commit nor a release snapshot, so the first rule it fails is the one that answers. The
+    // release-history reader refuses the same line for the same reason, and the two must not disagree.
+    let refusal = refuse(
+        "release: not-a-version",
+        "",
+        "release: not-a-version",
+        Kind::Violation,
+        "not a Conventional Commit",
+    );
+    refusal::expect(
+        "repository-checks#squash-subject-is-not-conventional",
+        &refusal,
+    );
+
+    // And an ordinary subject's empty body is still a violation, so the exception did not widen.
+    let refusal = refuse(OK_SUBJECT, "", OK_SUBJECT, Kind::Violation, "body is empty");
+    refusal::expect("repository-checks#squash-body-is-empty", &refusal);
+}
+
 #[test]
 fn a_body_that_is_a_bare_commit_list_is_a_violation() {
     let refusal = refuse(
