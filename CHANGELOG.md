@@ -24,6 +24,34 @@ them.
 
 ### Self-governance
 
+- **The `READY-PATCH` queue is dispositioned, and none of the five remaining closes by patching now.** That
+  is what the class says it means: it grades **evidence and compatibility, not how much design the correction
+  still needs**. Reading it as *small* or *next* is the misreading the class definition itself warns about,
+  and it is the misreading this pass started with.
+
+  - *The breaking-marker pairing* — the shape is decided (a named join with explicit handles), and
+    dispositioning it surfaced a collision the design has to answer: backfilling handles would rewrite
+    `[0.5.0]`'s **released** Migration bullets, which this repository refuses as a stated bound. Resolved by
+    holding the join over sections still being written; recorded in the entry. Its own trigger is a **second**
+    unmarked entry and one is observed, so it waits.
+  - *Pinning citations seen to fail* — ongoing, not closable: `pin_bites` prints 4 declared mutations covering
+    4 of 186 cited tests, and the entry states that authoring one is per-bound expert work. Adding one would
+    read as progress and close nothing.
+  - *The shell's semantic delegation* — closing it needs the semantic outcome to be unreachable except through
+    the observer, *a design step and not a call-site swap*, in the entry's own words. Tracked by a declared
+    unpinned bound.
+  - *Every normative SHALL reacted or bounded* — its trigger has fired **six times**, three of them in
+    requirements written by the window that was closing the class. The obvious instrument, a citation per
+    SHALL, is refused by this family's own rule against hand-maintained pointers on the order of the thing
+    counted.
+  - *A prose claim held only where declared* — two instances; the trigger is a third, and the instrument is
+    sketched as a sibling of `Census` holding a produced **set** rather than a figure.
+
+  The first draft of this entry spelled the breaking marker literally while describing it, and the reaction
+  refused the release for a section that marks a change and carries no migration — which is the declared
+  over-reaction that entry names in its own words: *the classifier reads the marker's presence rather than
+  its position*. The bound fired on prose about itself, and the entry is written without the token instead.
+
 - **Four of the manifest readers are parsed; the fifth is scoped rather than attempted again.**
   `workspace_version`, `package_name`, `require_lock_versions` and `publishable` ask a real parser now.
   `declared_dependencies` does not, and `BACKLOG.md` records why with the measurement from the attempt
