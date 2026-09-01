@@ -259,6 +259,22 @@ fn every_publish_shape_cargo_honours_is_read_as_cargo_reads_it() {
         Publishable::No,
         "and however much it is spaced"
     );
+
+    // **The key decoded, which the hand-rolled reader answered `Unreadable` for.** Measured against cargo,
+    // `"\u0070ublish" = false` reports `publish=[]` — the crate does not publish. The old answer was the safe
+    // one rather than the right one, and a reader that cannot decode a key cannot tell *might be publish*
+    // from *is publish*. Kept as a row because a negative run over the migration that made it readable
+    // otherwise breaks nothing: the improvement would be revertible in silence.
+    assert_eq!(
+        publishable(&package("\"\\u0070ublish\" = false")),
+        Publishable::No,
+        "cargo decodes this key to `publish`, measured, so the crate does not publish"
+    );
+    assert_eq!(
+        publishable(&package("publish.workspace = true")),
+        Publishable::Unreadable("workspace = true".to_string()),
+        "deferring to the workspace manifest is not a verdict this text carries"
+    );
     assert_eq!(
         publishable(&package(r#"publish = [ "crates-io" ]"#)),
         Publishable::Yes,
