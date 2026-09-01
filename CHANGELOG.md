@@ -24,6 +24,24 @@ them.
 
 ### Self-governance
 
+- **The OpenSpec lifecycle is retained, and the entry that asked read a rule as a claim about the tree.** The
+  trigger was *a human call about intent* and the steward made it: a new capability must go through OpenSpec,
+  so the section stays. The absence of instances is explained rather than unexplained — the recent windows
+  were patches and prose, and neither is a capability change.
+
+  The correction is the part worth keeping. The entry called the present-indicative *a capability change
+  moves through OpenSpec* "prose stating a fact about the tree that the tree contradicts", and counted zero
+  instances as the contradiction. **A rule is not falsified by having no instances; it is left
+  unexercised.** The evidence it gathered was real and its reading of that evidence was the error — the same
+  distinction this window wrote into `AGENTS.md`'s bar, where a rule needs a reachable instance to earn a
+  *reaction*, not to be true.
+
+  What survives is narrower than the entry and is filed as its own watch: the lifecycle is retained and has
+  never been run, so the first capability change is the first thing that will tell anyone whether it still
+  works. Half of it is already exercised — the sync-evidence rule is followed and the tracked
+  `archive/.gitkeep` is exactly as described — and rehearsing the rest would mean inventing a capability to
+  have one, when the lifecycle's whole subject is a change someone actually needs.
+
 - **The promotion-trigger sweep was run, which is the thing its own entry says nothing runs.** Seven `Not
   fired` annotations carried evaluation dates of 2026-08-18/19 — **thirteen days and one shipped release**
   stale — and it was the dates that made that visible, which is exactly what they were added for.

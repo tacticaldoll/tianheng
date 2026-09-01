@@ -616,6 +616,23 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
+- **The OpenSpec capability lifecycle is retained and has never been exercised.** *Class:* WATCH. *Observed
+  pressure:* the steward's decision on 2026-08-31 to keep it — a new capability must go through OpenSpec —
+  taken together with the measurement that produced the question: zero `docs(openspec): propose`/`sync`
+  commits in the full history and `openspec/changes/**` untouched since `0.1.0`. The two are consistent, not
+  in tension: the recent windows were patches and prose, and neither is a capability change. *Observation
+  source:* that decision, and the path evidence behind the entry it closes, which is independent of commit
+  subjects and so unaffected by the 2026-07-17 history rewrite. *Current reaction or bound:* none, and none
+  is proposed — a process nobody has run is not a property a reaction can hold. *Risk:* the first capability
+  change discovers whatever has drifted in a four-phase process that has never been run, at the moment
+  someone is trying to use it. Bounded: half the section is already exercised, since the sync-evidence rule
+  is followed and the tracked `archive/.gitkeep` is exactly as described. *Promotion trigger:* the first
+  capability change to run it — at which point what this entry asks for is that whoever runs it records what
+  did not work, rather than a sweep anyone can do beforehand. *Why not simply rehearsed:* a rehearsal would
+  invent a capability to have one, and the lifecycle's whole subject is a change someone actually needs.
+  *Version class:* not release-affecting; the section ships in no crate. *Authority:* `AGENTS.md` itself, and
+  the steward's decision.
+
 - **This repository's own commit objects are kept out of tracked content by prose, and the reaction that
   would hold it reaches only live prose.** *Class:* WATCH. *Observed pressure:* two instances, one caught and
   one not. `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach` refused a `BACKLOG.md` citation of the
@@ -1306,23 +1323,7 @@ consumer for an undemonstrated deduplication.
   one-sided scan — a smaller change than the sibling entry above, filed alongside it rather than folded into
   the 0.5.0 window's fix because both were found by the same pass and neither has a live instance forcing it.
 
-- **WATCH: `AGENTS.md`'s OpenSpec lifecycle section describes a process with no instances.** *Class:* WATCH.
-  *Observed pressure:* found while deciding the entry above — its four phases, commit-type conventions and
-  archive-pruning guardrail are written in the present indicative ("A capability change **moves through**
-  OpenSpec") about something that has never happened here. *Observation source:* zero
-  `docs(openspec): propose`/`sync` commits in the full history; `openspec/changes/**` untouched since
-  `0.1.0`; 151 direct spec edits in the last window. The path evidence is independent of commit subjects,
-  so the 2026-07-17 history rewrite does not weaken it. *Current reaction or bound:* none — this is prose
-  stating a fact about the tree that the tree contradicts, the same class as the three orphans above and
-  larger. *Risk:* an agent reading `AGENTS.md` first, as that file instructs, plans work through a lifecycle
-  nobody runs — which this session did, three times, before measuring. *Not simply deleted:* half of it is
-  live and load-bearing. The sync-evidence rule (a materially changed scenario carries its observation
-  evidence in the same change) **is** followed, and `openspec/changes/archive/.gitkeep` is tracked exactly as
-  described. So the disposition is audit-then-dissolve/convert/keep per claim, not removal. *Promotion
-  trigger:* a decision on whether the lifecycle is being restored or is being acknowledged as abandoned —
-  a human call about intent, not a defect to repair. **Not fired** (evaluated 2026-08-31; `openspec/changes/`
-  unchanged across the whole `0.5.0` window, so the call has now gone unmade through a release). *Version class:* not release-affecting.
-  *Authority:* `AGENTS.md` itself.
+
 
 - **WATCH: the family-coverage reaction credits ownership by type NAME, so a profile is invisible to it.**
   *Class:* WATCH. *Observed pressure:* a profile constructs its boundaries internally —
@@ -2116,6 +2117,24 @@ consumer for an undemonstrated deduplication.
   - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
 ### Closed — reproduction records (0.4.0 onward)
+
+- ~~**WATCH: `AGENTS.md`'s OpenSpec lifecycle section describes a process with no instances.**~~ **DECIDED —
+  the lifecycle is retained.** The trigger was *a human call about intent*, and the steward made it on
+  2026-08-31: a new capability must go through OpenSpec, so the section stays. The absence of instances is
+  explained rather than unexplained — the recent windows were patches and prose, and neither is a capability
+  change.
+
+  *And the entry read a rule as a claim about the tree, which is the part worth keeping.* It called the
+  present-indicative *A capability change **moves through** OpenSpec* "prose stating a fact about the tree
+  that the tree contradicts", and counted zero instances as the contradiction. A **rule** is not falsified by
+  having no instances; it is left **unexercised**. The evidence the entry gathered was real and its reading
+  of that evidence was the error — the same distinction this window wrote into `AGENTS.md`'s bar one document
+  over, where a rule needs a reachable instance to earn a *reaction* and not to be true.
+
+  *What the entry got right and what survives.* Half the section is live and load-bearing: the sync-evidence
+  rule is followed, and `openspec/changes/archive/.gitkeep` is tracked exactly as described. What remains is
+  narrower than the entry and is filed as its own watch above: the lifecycle is retained and unexercised, so
+  the next capability change is the first thing that will tell anyone whether it still works.
 
 - ~~**`0.5.0`'s row in the published-artifact provenance record cannot be written until after it is
   published, and the branch that could carry it is archived first.**~~ **BUILT** — the trigger fired when
