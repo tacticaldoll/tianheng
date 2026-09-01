@@ -635,6 +635,11 @@ consumer for an undemonstrated deduplication.
   *Version class:* not release-affecting; the section ships in no crate. *Authority:* `AGENTS.md` itself, and
   the steward's decision.
 
+  **Not fired, swept 2026-09-01.** `openspec/changes/**` is still untouched since `0.1.0` — the only commits
+  reaching it are the `0.1.0` release itself and one archive-scaffolding prune — so no capability change has
+  run the lifecycle. This trigger turns on an event, but whether the event has happened is decidable, and it
+  has not.
+
 - **This repository's own commit objects are kept out of tracked content by prose, and the reaction that
   would hold it reaches only live prose.** *Class:* WATCH. *Observed pressure:* two instances, one caught and
   one not. `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach` refused a `BACKLOG.md` citation of the
@@ -659,6 +664,18 @@ consumer for an undemonstrated deduplication.
   check rather than leaving it to be discovered — and this is that form, with the upgrade path written down
   instead of rediscovered. *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
   this entry, and `AGENTS.md`'s disposition table.
+
+  **Swept 2026-09-01: not fired, and the instance this entry was written against is gone.** The uncaught
+  one — `crates/kanhe/tests/merge_workflow.rs` carrying a commit of this tree as an opaque fixture token —
+  was repaired inside the 0.5.1 window by `test(kanhe): the merge fixture's head resolves nowhere`; the token is
+  now a synthetic value that resolves in no clone. So the *second instance* this trigger counts has no first
+  standing behind it. Re-run over every 40-hex literal in tracked content: the ones that resolve as objects
+  of this repository all sit in `docs/history/published-artifact-provenance.md`, a record, which is exempt
+  for the reason the disposition table gives. **One correction to the upgrade path written above:** the
+  proposed `git cat-file -t` answers from the local object store, so a commit that has been squashed away —
+  exactly the hazard — reads as *not an object of this repository* in a fresh clone or in CI. The instrument
+  is clone-dependent, which is the same defect that declines resolution for the citation reader below, and
+  the two entries now share that one reason.
 
 - **Over half of the 0.5.0 window's landed work touched the machinery that judges this repository and nothing
   an adopter receives.** *Class:* WATCH. *Observed pressure:* measured over the window's own history, one
@@ -744,6 +761,15 @@ consumer for an undemonstrated deduplication.
 
  / ACCEPTED / DECLINED / BUILT
 
+  **Not fired, swept 2026-09-01, and the first instrument was wrong.** A `git grep` with a `crates/*/src`
+  pathspec matched nothing at all and read as a clean tree; a control group over `kanhe`, which has none of
+  these comments and should have answered zero either way, is what exposed it. Re-run with a plain recursive
+  grep: the comments are still there, across `guibiao`, `hunyi` and `louke`. Every one was read, and every one
+  names its invariant in words beside the round number — `canonical_self_owner`, `resolve_self_type`,
+  `mod_preamble_attrs`, `module_findings`, `descend()`, `extern_resolution`, `build_file_scopes`. None has the
+  round number as its only identifier, which is the shape this trigger names, and the doc-comment corpus is
+  unchanged.
+
 - **`merge_workflow`'s fixture takes `jq` from the host without declaring it, and its absence reads as fifteen
   defects in the subject.** *Class:* WATCH. *Observed pressure:* measured 2026-08-23 on a machine where `jq`
   is not installed — 15 of that target's 30 cases fail, each reporting
@@ -801,6 +827,11 @@ consumer for an undemonstrated deduplication.
   A neighbouring case IS separated and is recorded so the two are not confused: a ref holding a well-formed
   sha with no object behind it exits `0`, is read as present, and the tag-object read downstream refuses it as
   unreadable.
+
+  **Not fired, re-measured 2026-09-01 on git 2.50.1.** The scratch-repository probe recorded above still
+  answers the same way: `rev-parse --verify --quiet` exits `1` for a corrupt ref and `1` for an absent one,
+  and `for-each-ref` exits `0` for both. Neither separates them, and no corrupt ref has stood in front of a
+  release.
 
 - **WATCH: no reaction asks what each repository check observed, and the check surface is now an order of
   magnitude larger than the product it guards.** *Class:* WATCH. *Observed pressure:* the drift law — *no
@@ -975,6 +1006,9 @@ consumer for an undemonstrated deduplication.
   `AGENTS.md` records for the untracked-file guard it declined for the Definition of Done. `AGENTS.md` states
   the step instead, at the moment the value stops being a guess.
 
+  **Not fired, swept 2026-09-01.** No release has been cut since `0.5.0`, so the *twice* this trigger counts
+  cannot have advanced.
+
 - **WATCH: A commit reaching a `release/*` branch without a pull request meets no CI.** *Class:* WATCH.
   *Observed pressure:* `.github/workflows/ci.yml` triggers on `push` to `main` and on `pull_request`, so a
   commit pushed straight onto a release branch runs no job at all — the branch that every development change
@@ -992,6 +1026,10 @@ consumer for an undemonstrated deduplication.
   trigger — one line, whose cost is a full eight-job run on every push to a release branch, including the
   worktree-building `pin_bites`. Filed rather than done because this repository's own rule is evidence before
   promotion, and the evidence measured zero.
+
+  **Not fired, swept 2026-09-01.** Every commit on `release/0.5.1` resolves to a merged pull request, checked
+  the same way as the `0.4.0` measurement — each commit's hash against the merge commit of every merged pull
+  request. The structural gap is unchanged; the evidence still measures zero.
 
 - **WATCH: The declared MSRV is observable only in CI.** *Class:* WATCH. *Observed pressure:* `rust-version =
   "1.85"` lives in `Cargo.toml` and nothing pins the local toolchain, so the Definition of Done compiles on
@@ -1038,6 +1076,13 @@ consumer for an undemonstrated deduplication.
   non-empty assertion over the set so a rename cannot empty it into a vacuous pass. Filed rather than built
   because it widens a check whose stated corpus was chosen deliberately, and changing that is a decision
   rather than a repair.
+
+  **Not fired, swept 2026-09-01, and the obvious instrument could not have answered it.** Grepping for the
+  token's own spelling finds only correct copies by construction and can never see a mistype, which is the
+  half this trigger watches. The sweep instead enumerated **every** environment-variable name literal in
+  tracked Rust and compared the set: the marker's spelling is the only member of its neighbourhood, appears
+  in each of the reaching sites identically to `shengmo::workspace::MARKER`, and no near-miss exists.
+  `shengmo` still declares one other `pub const`, and it has acquired no out-of-reach copies.
 
 - **WATCH: A backticked identifier in a live document is resolved by nothing.** *Class:* WATCH. *Observed
   pressure:* `reference_integrity` resolves paths and `bound_register` resolves pinning-test names; a bare
@@ -1183,6 +1228,11 @@ consumer for an undemonstrated deduplication.
   target must be a tracked file with an executable mode*, which git records. Two corpora and two rules under one
   requirement, which is why it is filed rather than folded into the existing check.
 
+  **Not fired, swept 2026-09-01.** The `bash <path>` shape appears in tracked Rust and Markdown a handful of
+  times: one live command (`bash scripts/publish.sh`, tracked with an executable mode), this entry's own
+  record of the repaired instance, a fictional example in a doc comment, and two deliberate fixture strings
+  in failure matrices. No second live instance, and no third shape of the class.
+
 - **WATCH: A private item's doc comment can be stolen by an item inserted above it, and nothing reacts.** *Class:*
   WATCH. *Observed pressure:* two in-window instances of one class, where a function was inserted between
   another's doc run and the function itself, so Rust attached the whole run to the newcomer and left the
@@ -1322,6 +1372,15 @@ consumer for an undemonstrated deduplication.
   logic, a file the 0.5.0 window's fixes did not otherwise touch, and reworking it deserves its own scoped review
   rather than folding into an adversarial-review pass over a different fix.
 
+  **Not fired, swept 2026-09-01, and the first instrument matched prose rather than headings.** Searching for
+  the shape anywhere on a line finds this file and the changelog quoting it; anchoring the search to heading
+  position finds none. Both latent shapes are still absent from every tracked spec — no `#### Scenario:`
+  without its following space, and no indented closing heading. No fourth scanner either: `bound_register.rs`
+  and `pin_bites.rs` both call the shared reader, and their `Scenario:` occurrences are fixture strings and
+  doc prose. The third scanner survives with both divergences intact — `observation_bound_model.rs`'s
+  `spec_bounds` still opens on a literal trailing space and still tests an untrimmed line for its closing
+  heading.
+
 - **WATCH: `negates_bound_in_prose`'s one-interposed-word budget is measured from `a`/`an`, independently of
   `states_a_bound_in_prose`'s own budget measured from `stated`/`documented`, so a sentence stacking both
   qualifiers is read as a declaration rather than the denial it is.** *Class:* WATCH. *Observed pressure:* an
@@ -1345,6 +1404,9 @@ consumer for an undemonstrated deduplication.
   negator's own qualifier, one for the states-side qualifier) rather than each independently assuming it owns
   the only interposed word in the sentence — a design question, not a one-line patch, which is why it is
   filed rather than widened here under time pressure.
+
+  **Not fired, swept 2026-09-01.** The stacked shape appears nowhere in a tracked spec, which is this pair's
+  corpus; the matches are this file and the changelog quoting the example sentence.
 
 - **WATCH: `requirement_heading_is_bounds_named` matches `bound`/`bounds` as a bare substring with no check on the
   character *before* the match, so an unrelated word like `Outbound`/`Rebound`/`Unbounded` in a requirement
@@ -1730,6 +1792,29 @@ consumer for an undemonstrated deduplication.
   entry, and `AGENTS.md`'s *Bind a claim to its measurement*, whose three bindings this is the trigger-shaped
   case of.
 
+- **WATCH: half this file's promotion triggers can be swept for and half can only be witnessed, and nothing
+  says which.** *Class:* WATCH. *Observed pressure:* the 2026-09-01 sweep, which set out to give every
+  unevaluated trigger a dated state and found that they are not one instrument. Most turn on a property of
+  the tree, of the installed toolchain, or of this repository's own merged history, and anyone can decide
+  them by running something — those now carry a verdict and what was checked. The rest turn on an occurrence
+  that leaves no trace to sweep for: a review round choosing the wrong binding, a window in which a class
+  costs a review round, a count finding after the disposal rule, a third instance of a shape only a reader
+  recognises, an input two people failed to construct, a harness someone would have to design, a syntax
+  someone would have to declare, and an audit that is a window's work. *Observation source:* that sweep, and
+  the shape of what it could and could not answer. *Current reaction or bound:* none. *Risk:* the two kinds
+  read identically, so a witness-only trigger looks armed while nothing will ever trip it — the entry is
+  filed, the class is answered on paper, and the observation it needs is one that has to be written down by
+  whoever is present at the moment it happens, which is exactly what does not happen when the entry reads as
+  already handled. Bounded, and this is the useful half: several of these entries already say in their own
+  text that what they ask for is a record made at the time, so the discipline exists and only the label is
+  missing. *Promotion trigger:* a witness-only trigger found to have been trippable all along by something
+  anyone could have run — which would mean the two kinds were sorted wrong, not that the sorting is
+  worthless. *Why not a field on every entry:* a new field is a form to maintain, and the property is
+  already legible from the trigger's own sentence once someone has asked the question of it. What was
+  missing was the question, and it is asked here. *Version class:* patch; this file ships in no crate.
+  *Authority:* this entry, and the trigger-corpus entry above, of which this is the other half — that one
+  asks whether a trigger's set is the residue's set, and this one asks whether anyone can ever evaluate it.
+
 - **WATCH: a gate that is its own test is outside the refusal register.** *Observed pressure:* several
   gates are implemented under `crates/kanhe/tests`, where the judgement and the directions over it share a
   file; their refusals carry no site identity, because *which direction observes this branch* has no answer
@@ -1740,6 +1825,10 @@ consumer for an undemonstrated deduplication.
   refusal with no direction over it is visible to anyone reading the file it lives in. *Next trigger:*
   moving such a judgement out of its test file, at which point it enters the corpus and is triaged like
   every other. *Authority:* engine. *Compatibility:* patch; the checks ship in no crate.
+
+  **Not fired, swept 2026-09-01.** No judgement moved out of a test file into the register's corpus — the
+  refusal sites in `crates/kanhe/src` fell rather than rose across the 0.5.1 window, as the parser conversions
+  deleted hand-rolled readers.
 
 - **WATCH: a promotion trigger is evaluated by whoever next reads the entry.** *Class:* WATCH. *Observed
   pressure:* an entry in this document recorded a class, its instances, its risk and its own promotion
@@ -1811,6 +1900,9 @@ consumer for an undemonstrated deduplication.
   available move and it is already taken. *Authority:* engine. *Compatibility:* patch; the wrapper ships in
   no crate.
 
+  **Not fired, re-measured 2026-09-01 against the installed toolchain.** cargo 1.96.0 offers no argument
+  naming the commit a publish must package; `--index` names a registry, not a revision.
+
 - **WATCH: a code span shaped like an object that names none.** *Class:* WATCH. *Observed pressure:* the
   citation reader decides by shape, so a code span carrying 4 to 40 lowercase hex characters with both a
   letter and a digit is refused whether or not it names a commit — a review planted an unrelated hex value
@@ -1852,6 +1944,14 @@ consumer for an undemonstrated deduplication.
   existed. *Next trigger:* an instance, which the sweep this entry names would find. *Authority:* engine.
   *Compatibility:* patch; the reaction is repository machinery and ships in no package.
 
+  **Not fired, and the residue stopped being hypothetical, swept 2026-09-01.** This entry said the residue is
+  what a future citation might look like rather than what one does. One does: `docs/history/`'s
+  published-artifact inventory abbreviates the `0.2.2` release commit to eight characters that carry no
+  letter at all, so the reader would not recognise it as a citation. Nothing is missed, because it lands in
+  the record corpus the reaction exempts — but the shape is now realised in the tree rather than computed
+  from the alphabet, and the trigger's *an instance* means an instance in live governance text, which is
+  still zero.
+
 - **WATCH: a relative phrase in non-record Markdown.** *Observed pressure:* `AGENTS.md` states the rule for
   prose generally — a relative anchor "names a moving reference, so it is stale the moment the window closes"
   — while `no_tracked_source_names_a_relative_anchor` reads line-comment formats only. The exclusion for
@@ -1892,6 +1992,11 @@ consumer for an undemonstrated deduplication.
   the primitive's name is the wrong instrument and the question is the expression's shape. *Authority:*
   engine. *Compatibility:* patch; the reaction is repository machinery and ships in no package.
 
+  **Not fired, swept 2026-09-01.** The five primitives appear with a backtick literal at a handful of sites,
+  each reading one delimited value rather than walking a sequence. The one site inside an iterator chain was
+  read whole to be sure: `projection_offences` strips a prefix and then a suffix from each line, taking one
+  value per line, which is not a pairing.
+
 - **WATCH: the always-Some consumer reached through a binding.** *Observed pressure:* `str::split` and
   `str::rsplit` always yield at least one item, so every consumer treating `.next()` as fallible is a branch
   nothing reaches. `no_branch_reads_an_always_some_value_as_if_it_could_be_absent` decides the consumer by
@@ -1906,6 +2011,10 @@ consumer for an undemonstrated deduplication.
   binding the value and consuming it later — following that binding is name resolution, which is the point at
   which a reader over text is the wrong instrument. *Authority:* engine. *Compatibility:* patch; the reaction
   is repository machinery and ships in no package.
+
+  **Not fired, swept 2026-09-01.** No site binds a `split(…).next()` and consumes it on a later statement.
+  The one candidate consumes the `Option` on the same statement it is produced, which the reader already
+  sees; the other matches are a doc comment and a fixture string.
 
 - **WATCH: the early-exit consumers the pipeline reader names.** *Observed pressure:* adopting
   `defaults.run.shell: bash -euo pipefail {0}` made a consumer that stops before its producer finishes fail
@@ -1928,6 +2037,11 @@ consumer for an undemonstrated deduplication.
   read its input to EOF*, which no reader over shell text can answer. *Authority:* engine. *Compatibility:* patch; the
   reaction is repository machinery and ships in no package.
 
+  **Not fired, swept 2026-09-01, and the first instrument counted `||` and regex alternations as pipelines.**
+  Read line by line instead, the pipelines across the tracked files this repository runs shell in end in
+  `jq`, which reads to EOF, and in the one `head` and the one `grep` the reaction already names. No stage
+  reads a value through some other program that exits early.
+
 - **WATCH: the title race the wrapper can only narrow.** *Observed pressure:* the merge wrapper judges three
   inputs and pins two by construction — the body travels as the value the gate judged, and the commit set
   through `--match-head-commit`, which GitHub decides atomically. The title is the third, and `gh` offers no
@@ -1942,6 +2056,10 @@ consumer for an undemonstrated deduplication.
   `gh` gaining a `--match-title`, or another judged input arriving that can only be re-read — the second
   would make this a shape rather than an instance. *Authority:* engine. *Compatibility:* patch; the wrapper
   ships in no crate.
+
+  **Not fired, re-measured 2026-09-01 against the installed toolchain.** `gh` 2.97.0 offers
+  `--match-head-commit` and no `--match-title`, and no second judged input has arrived that can only be
+  re-read.
 
 - **WATCH: a merge or publish made outside the wrapper is not observed.** *Observed pressure:* both
   assertions guard the sanctioned path — the wrapper's `1 passed` and the reaction pinning the identifier it
