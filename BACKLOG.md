@@ -1660,11 +1660,25 @@ consumer for an undemonstrated deduplication.
   it by reading the spec against the contract. A per-instance `SHALL` for that one bound was then written into
   the scenario and removed again: a normative sentence that says in its own text that nothing observes it, over
   one of the bounds that carry a `because`, is prose prescription rather than a held claim. *Risk, bounded:*
-  prose only, and the agent-facing projection renders the scenario's `THEN` rather than these clauses — but the
-  spec is the layer `AGENTS.md` tells an agent to read as authoritative. *The shape:* generate the `because`
+  prose only, and `docs/observation-bounds.md` renders the scenario's `THEN` rather than these clauses — but the
+  spec is the layer `AGENTS.md` tells an agent to read as authoritative. **That sentence named one projection
+  and there are two; measured 2026-09-01, the other renders exactly these clauses.**
+  `docs/observation-bound-extents.md` carries a `because` line for every declared bound, generated from the
+  `bounds.rs` field, and `AGENTS.md` lists it as a contract projection in the same sentence as its sibling.
+  So the second half of the trigger below has been satisfied for every bound since that projection existed —
+  one more trigger standing satisfied rather than armed, the class filed above arriving a fifth time, in the
+  same sweep that filed it, which says the enumeration was short rather than that the class is growing.
+  *The shape:* generate the `because`
   from the spec clause so there is one carrier, or hold every bound's two carriers to each other. Both compare
   prose, which this repository has measured and rejected in the general case; the narrow form holds a *named*
-  phrase rather than a similarity. *Promotion trigger:* a second bound found with diverging carriers, or a
+  phrase rather than a similarity. **An instance measured the same day says this shape buys less than it
+  reads.** The citation bound's reason was false in three hand-maintained carriers — the spec clause, the
+  `because`, and that entry's own observation source — and the generated extents projection carried it into
+  an agent-facing document as a fourth. Every carrier **agreed**. Joining them, or generating one from
+  another, is exactly what already holds `bounds.rs` and the extents projection together, and it propagated
+  the false ground rather than catching it. Agreement is not correctness, and the repair proposed here buys
+  agreement; what caught that instance was a person running the entry's own trigger against the file that
+  answers it. *Promotion trigger:* a second bound found with diverging carriers, or a
   bound whose reason reaches the agent-facing projection. *Compatibility class:* patch; no crate ships either
   carrier. *Authority:* this entry.
 
