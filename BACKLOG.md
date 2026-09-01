@@ -862,8 +862,15 @@ consumer for an undemonstrated deduplication.
   cover. It is in the list because a person remembered. *Current reaction or bound:* the one direction.
   *Risk:* the DoD's own prose records this exact class — *the gate a contributor actually runs went blind to
   the exact class this job had just learned to catch* — and the residue is a named CI step whose local
-  coverage nothing holds. *Promotion trigger:* a second CI step that the workspace run does not cover, or a
-  contributor's green local run followed by a red CI job on a step the list does not name. *Version class:*
+  coverage nothing holds. *Promotion trigger, rewritten 2026-09-01 over the corpus it watches:* a CI step the Definition of Done
+  list does not name **and** the listed `cargo test --workspace --all-features` does not cover, or a
+  contributor's green local run followed by a red CI job on a step the list does not name. The two halves
+  are joined because either alone is already satisfied by steps that are harmless: measured on 2026-09-01,
+  `cargo test -p shengmo --test examples_suite` and `cargo test -p kanhe --test pin_bites` are both gated on
+  environment variables the workspace run does not set, so the workspace run covers neither — and both are
+  in the list, which is the property that makes them safe. The hazard is a step the list does not name;
+  the old trigger said coverage where this entry means naming, and so stood satisfied twice over while
+  the residue it watches was unchanged. *Version class:*
   patch; governance and CI configuration only. *Authority:* `repository-checks`. *Shape:* assert the converse
   — every named CI step running a suite is either in the list or covered by a listed command — which needs a
   reader that can say which suites a listed command covers, and that is the half not built.
@@ -932,8 +939,17 @@ consumer for an undemonstrated deduplication.
   acquired a gate — so the decision is now open rather than settled by a premise that did not hold.
   *Risk:* low and bounded, since a branch name reaches no artifact and no adopter; the cost is that the type a
   branch declares and the type its squash lands as can disagree, which is the disagreement the naming rule
-  exists to prevent. *Promotion trigger:* a squash whose subject type differs from its branch's, or a second
-  retired role accumulating. *Version class:* patch; no crate is touched. *Authority:* `repository-checks`.
+  exists to prevent. *Promotion trigger, rewritten 2026-09-01 over the corpus it watches:* a merged pull request whose head
+  branch does not parse as `<type>/<scope>-<slug>` with `<type>` in the admitted set, or whose parsed type
+  differs from its squash subject's, or a second retired role accumulating. **So rewritten it fires, on the
+  0.5.1 window's own work.** Measured over all 22 pull requests merged into `release/0.5.1`: 21 branches
+  parse and every one of those agrees with its squash subject's type, and one carries no `/` at all
+  (`test-kanhe-a-fixture-sha-that-resolves-nowhere`), so it declares no type for a subject to disagree with.
+  The old trigger could not fire on it: this entry's own *Observed pressure* had already counted seven
+  slash-less branches in `0.5.0`, so the shape was known when the trigger was written, and the trigger was
+  written over the other two. The convention drifted in the very next window, by the sole contributor,
+  after the steward had caught it once — which is the condition `AGENTS.md` names for a rule read as
+  license rather than law, now measured rather than argued. *Version class:* patch; no crate is touched. *Authority:* `repository-checks`.
   *Shape:* `scripts/merge-pr.sh` already resolves the pull request and could read `headRefName` beside the
   title it re-reads, and `merge_message_gate` already owns the admitted type set — so the judgement is one
   comparison against a list that exists, not a new vocabulary. What it needs first is a decision about the
@@ -1664,10 +1680,41 @@ consumer for an undemonstrated deduplication.
   and `a_siteful_constructor_taken_by_name.rs.txt`, the two fixtures this residue is written against.
   *Risk:* a module that actually shadows a refusal constructor's name with an unrelated local would be
   over-counted as constructing one — the safe direction, since it can only report a site that does not exist
-  rather than miss one that does. Bounded by the corpus: `kanhe` ships in no package, and no file in this
-  repository currently shadows a constructor's name this way. *Next trigger:* a real occurrence of the
-  shadowing shape in this repository's own source, which would be the first evidence the residue is more
-  than theoretical. *Authority:* engine. *Compatibility:* patch; the checks ship in no crate.
+  rather than miss one that does. Bounded by the corpus, which is the whole of the bound: `kanhe` ships in
+  no package, and the reader reads `crates/kanhe/src`. **The clause that used to stand here said no file in
+  this repository shadows a constructor's name this way, and that was false when written.** Measured on
+  2026-09-01: nine do — `let violation = …` in `guibiao`, `louke`, `xuanji`, `tianheng` and two of `kanhe`'s
+  own test binaries. Every one lies outside `crates/kanhe/src`, which is why the over-count has never been
+  realised and why the corpus, not the tree, is what bounds it. *Next trigger, rewritten 2026-09-01 over
+  the corpus it watches:* an occurrence of the shadowing shape **inside `crates/kanhe/src`**, the only place
+  the over-count can be produced. The old trigger said *this repository's own source*, and so stood
+  satisfied nine times over while the residue it watches had never occurred. *Authority:* engine. *Compatibility:* patch; the checks ship in no crate.
+
+- **WATCH: a promotion trigger is a predicate, and nothing holds one to the corpus of the thing it
+  watches.** *Class:* WATCH. *Observed pressure:* the 2026-09-01 sweep of this file's unevaluated triggers,
+  which set out to date them and instead found three written over a set wider or narrower than the residue
+  they guard, in both directions. *The branch-name entry* named two shapes and the drift arrived through a
+  third, so its trigger could not fire on the instance that occurred. *The constructor-shadowing entry* said
+  *this repository's own source* where the reader reads `crates/kanhe/src`, so it stood satisfied nine times
+  over with the residue unrealised. *The Definition-of-Done entry* said *coverage* where it meant *naming*,
+  and stood satisfied twice over by steps that are in the list. All three are rewritten in place. *Observation
+  source:* that sweep, and one instance this file had already recorded on its own — the title-race entry
+  notes a tracker whose trigger, *an act reaching either without the wrapper*, can never fire for a race
+  reached only by going **through** it. That fourth instance is what makes this a class rather than three
+  slips: it was found in the same way, one entry at a time, by a reader who happened to hold both halves.
+  *Current reaction or bound:* none, and none is available. Deciding whether a trigger's set is the residue's
+  set means knowing what the entry means, which is intent rather than shape — the judgement-over-text class
+  this repository has measured and rejected. *Risk:* a WATCH entry reads as armed and is not. That is worse
+  than an unarmed entry that says so, because the file's whole discipline is that a filed class is answered
+  rather than forgotten, and a trigger nobody can trip converts filing into forgetting. Bounded by the
+  triggers being read by a person against the tree — which is how all four were found, and also why three
+  windows passed before they were. *Promotion trigger:* a fifth instance, or a trigger found to have fired
+  unnoticed for a whole window. *Why not a rule that triggers name their corpus:* it would be a rule about
+  how prose is written with no reaction behind it, and the bar this window set is that a rule needs a
+  reachable instance — this has four, so the rule is earned, but its instrument is not, and the honest form
+  is prose with the reason stated. *Version class:* patch; this file ships in no crate. *Authority:* this
+  entry, and `AGENTS.md`'s *Bind a claim to its measurement*, whose three bindings this is the trigger-shaped
+  case of.
 
 - **WATCH: a gate that is its own test is outside the refusal register.** *Observed pressure:* several
   gates are implemented under `crates/kanhe/tests`, where the judgement and the directions over it share a
