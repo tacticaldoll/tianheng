@@ -24,6 +24,22 @@ them.
 
 ### Self-governance
 
+- **Four of the manifest readers are parsed; the fifth is scoped rather than attempted again.**
+  `workspace_version`, `package_name`, `require_lock_versions` and `publishable` ask a real parser now.
+  `declared_dependencies` does not, and `BACKLOG.md` records why with the measurement from the attempt
+  rather than an estimate: **287 insertions against 1,168 deletions**, four enum variants made
+  unconstructible, six refusal sites retired, four unit directions deleted with their subject, two spec
+  scenarios rewritten, and ten integration directions each needing a judgement about the right new answer —
+  one of whose fixtures is itself invalid TOML the hand-rolled reader tolerated.
+
+  It does not split. The four variants die together the moment the reader stops constructing them, and
+  staging it by keeping the hand-rolled reader alongside the parser would be two readers of one question,
+  which is the defect being repaired.
+
+  The attempt is also recorded because of how it went wrong: a failure check that grepped for test names
+  could not see a test module that had **stopped compiling**, so several steps ran on a false green. The
+  check used since asks for a `test result` line per binary and treats a compile error as not green.
+
 - **The publication reader is parsed, and the key it could not decode is now decided rather than deferred.**
   `publishable` walked its own table and asked a shared key reader whether a line assigned `publish`. A key
   spelling it could not decode answered `Unreadable` — the safe answer, and not the right one: measured
