@@ -646,8 +646,21 @@ consumer for an undemonstrated deduplication.
   landed change per squash:
 
   ```bash
-  git log --format='@%H' --name-only e645a54..<release-branch> | …   # classify each change's paths
+  # Against the RELEASE BRANCH's own history, never against `main`: `main` squashes a whole window into one
+  # commit, so the same range there answers `0/1`. Measured — that is what the first re-run of this returned.
+  git log --format='@%H' --name-only <previous-release-commit>..<release-branch> | awk '
+    function flush() { if (seen) { t++; if (g && !p) gov++ } }
+    /^@/  { flush(); seen=1; g=0; p=0; next }
+    /^crates\/(kanhe|shengmo)\//                                    { g=1 }
+    /^crates\/(xuanji|xingbiao|guibiao|hunyi|louke|tianheng)\/src\// { p=1 }
+    END   { flush(); printf "%d/%d (%d%%)\n", gov, t, 100*gov/t }'
   ```
+
+  *The command above replaced one written as `git log … | …`* — a pipeline with a literal ellipsis where the
+  classifier belongs, which is a description of a measurement rather than one. It was filed in the same
+  window, and by the same hand, that removed exactly that shape from `AGENTS.md`'s census rule; it was caught
+  by trying to re-run it. An instrument that cannot be run is the figure form of the defect this entry is
+  about.
 
   `284/540 (52%)` touched `crates/kanhe` or `crates/shengmo` and **no** published crate's `src/`; `100/540
   (18%)` touched a published source at all; `68/540 (12%)` touched product without touching governance. Two
@@ -659,7 +672,14 @@ consumer for an undemonstrated deduplication.
   a judgement over intent. This entry is the instrument and the record of one reading. *Risk:* the window's
   own evidence is that each repair produced the next round's finding — *every reaction built in this window
   had a defect found in the next round, three of three* — so a system that generates work proportional to
-  itself will keep spending the budget on itself unless the figure is looked at. *Promotion trigger:* the
+  itself will keep spending the budget on itself unless the figure is looked at. *First re-run, `0.5.1` so far:* **8/17
+  (47%)** against `0.5.0`'s 52%, with `kanhe` down from 37,154 lines to 36,460 — the first window in which it
+  shrank. **Neither number carries much yet.** Seventeen changes is a sample two differently-classified
+  commits would move ten points, and nearly all of them are the same hand working on governance, so the
+  figure largely measures who was working rather than whether the bar changed anything. The crate also fell
+  by less than the migrations removed, because the same window added elsewhere. What the re-run establishes
+  is that the instrument runs and the direction is not wrong; a window of ordinary size is what would make it
+  evidence. *Promotion trigger:* the
   next window's figure not falling. What that asks for is **retiring rules, not softening verdicts**: the
   weight is in how much of the tree is under reaction at all, not in how loudly a reaction speaks. A first
   decidable question for that, unasked so far: which refusal sites have only ever fired on fixtures.

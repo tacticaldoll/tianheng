@@ -24,6 +24,21 @@ them.
 
 ### Self-governance
 
+- **The governance-ratio entry's own instrument was a pipeline with an ellipsis in it, and it was caught by
+  trying to run it.** `git log … | …` describes a measurement rather than being one — the same shape this
+  window removed from `AGENTS.md`'s census rule, filed by the same hand, in the entry whose entire purpose is
+  to make a figure re-derivable. The classifier is written out now.
+
+  Re-running it also found a second thing the entry had not said: the range must be taken against the
+  **release branch's own history**, never against `main`, which squashes a whole window into one commit. The
+  same range on `main` answers `0/1`, which is what the first re-run returned.
+
+  **First reading: 8/17 (47%)** for `0.5.1` so far against `0.5.0`'s 52%, with `crates/kanhe` down from
+  37,154 lines to 36,460 — the first window in which it has shrunk. Neither number carries much yet, and the
+  entry says so: seventeen changes is a sample two differently-classified commits would move ten points, and
+  nearly all of them are one hand working on governance, so it measures who was working more than whether the
+  bar changed anything.
+
 - **The dependency grammar is parsed, and the spellings cargo accepts are decided rather than refused.**
   `declared_dependencies` asked a heading's text which table it opened, matched it segment by segment against
   every admitted form, then collected a detailed table's fields across lines and filed the record when the
