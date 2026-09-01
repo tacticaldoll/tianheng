@@ -1838,7 +1838,15 @@ consumer for an undemonstrated deduplication.
   assertions guard the sanctioned path — the wrapper's `1 passed` and the reaction pinning the identifier it
   cites. A `cargo publish` run directly, or a merge made in the browser, reaches neither. *Risk:* the record
   or the published source escapes the gate that stands in front of it. *Next trigger:* an act reaching either
-  without the wrapper. *Authority:* engine. *Compatibility:* none — reaching further means observing the
+  without the wrapper. **FIRED, on `release: 0.5.0` (PR #845, 2026-08-28), and not by an operator slipping
+  past.** The merge wrapper *could not perform it*: `AGENTS.md` names the release-branch-to-`main` squash as
+  the **sole message exception** — subject `release: X.Y.Z`, body deliberately empty — and the gate refused
+  both, as a non-Conventional subject and as an empty body. So the one merge the ritual cares about most was
+  the one act structurally outside the wrapper, and `0.4.0`'s release commit carries an empty body too, so
+  this had been true of every release. The gate learns the exception it was already told about, which is
+  **more** observation and not less: the subject shape, the attribution marks and the title match are now
+  judged on that merge where before none of them were. What remains of this entry is the half no repository
+  can reach — a `cargo publish` run directly, or a merge made in the browser. *Authority:* engine. *Compatibility:* none — reaching further means observing the
   operator's shell or GitHub's servers rather than this repository.
 - **WATCH: which governance member a check belongs to is unobserved.** *Observed pressure:* the split
   between 繩墨 (the law and the delivered product) and 勘合 (this repository's record) is a judgement about

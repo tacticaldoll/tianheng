@@ -24,6 +24,26 @@ them.
 
 ### Self-governance
 
+- **The one merge the ritual cares about most was the one act the wrapper could not perform.** Sweeping the
+  promotion triggers turned up one that had fired, on `release: 0.5.0` itself: *a merge or publish made
+  outside the wrapper is not observed*. The release squash onto `main` was made with `gh pr merge` directly —
+  and not because anyone slipped past the gate. **The wrapper could not do it.**
+
+  `AGENTS.md` names that squash as the **sole message exception**: subject `release: X.Y.Z`, body deliberately
+  empty. The merge gate refused both — as a non-Conventional subject, and as an empty body. It encoded every
+  rule of the ritual except the one the ritual itself names, so the release snapshot had to go around it.
+  `0.4.0`'s release commit carries an empty body too, so this had been true of **every** release.
+
+  The gate learns that exception now, narrowly: exactly `release: X.Y.Z` with a well-formed version, which is
+  the same line the release-history reader accepts — a malformed one is still refused, and by the
+  conventional-subject rule rather than the empty-body one. An ordinary subject's empty body is still a
+  violation.
+
+  This is **more** observation, not a relaxation: the subject shape, the attribution marks and the title
+  match are all judged on that merge now, where before none of them were because the merge never reached the
+  gate at all. What remains of the entry is the half no repository can reach — a `cargo publish` run
+  directly, or a merge made in the browser.
+
 - **The OpenSpec lifecycle is retained, and the entry that asked read a rule as a claim about the tree.** The
   trigger was *a human call about intent* and the steward made it: a new capability must go through OpenSpec,
   so the section stays. The absence of instances is explained rather than unexplained — the recent windows
