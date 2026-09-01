@@ -2126,8 +2126,8 @@ fn a_glued_comment_cannot_supply_an_internal_version_pin() {
 ///
 /// Recorded because the entry claiming this conversion's benefit named the wrong one: it said
 /// `name = "kanhe" # the repository checks` had been answering `Unreadable`. It had not.
-/// `quoted_value` takes the text between the first pair of quotes and discards what follows, so a
-/// trailing comment there was always read correctly. The claim was refuted by a reviewer and is replaced by
+/// `quoted_value`, the reader of the time, took the text between the first pair of quotes and discarded
+/// what followed, so a trailing comment there was always read correctly. The claim was refuted by a reviewer and is replaced by
 /// the direction the measurement actually supports.
 #[test]
 fn a_package_heading_with_a_trailing_comment_still_opens_the_table() {
