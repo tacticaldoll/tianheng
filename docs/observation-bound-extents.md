@@ -373,7 +373,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > a code span in live prose carrying 4 to 40 lowercase hex characters with both a letter and a digit, which names something other than a commit
 
-- **because**: the reader decides by shape and nothing in the tree distinguishes a value with that shape from a citation without resolving it against an object database. Resolving was declined by measurement: CI checks out one commit, so the objects a citation names are absent there and the reader would either answer clean over all of them or refuse to judge at all. Measured over the live corpus: no span of this shape names anything but a commit, so the over-reaction is unrealised rather than tolerated
+- **because**: the reader decides by shape and nothing in the tree distinguishes a value with that shape from a citation without resolving it against an object database. Resolving is declined because the verdict would then depend on the object store rather than on the tracked text: the job running this reader checks out full history, but jobs checking out at the default depth would answer clean over every citation, so the reader would report clean for a reason unrelated to the content. The ground first written here — that CI checks out one commit — was false, and is corrected rather than restated. Measured over the live corpus: no span of this shape names anything but a commit, so the over-reaction is unrealised rather than tolerated
 - **its defence must show**: reacts on a harmless shape
 - **unpinned**, tracked by: `BACKLOG.md` — *a code span shaped like an object that names none*
 
