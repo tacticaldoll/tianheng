@@ -24,6 +24,24 @@ them.
 
 ### Self-governance
 
+- **The promotion-trigger sweep was run, which is the thing its own entry says nothing runs.** Seven `Not
+  fired` annotations carried evaluation dates of 2026-08-18/19 — **thirteen days and one shipped release**
+  stale — and it was the dates that made that visible, which is exactly what they were added for.
+
+  All seven were re-evaluated against the tree rather than re-dated. **None had fired.** Each now carries
+  what was checked beside its date, because a date alone asserts an evaluation without saying what it looked
+  at — the same shape as a figure without its instrument, one document over.
+
+  What the checks were: `openspec/changes/` unchanged across the whole window; `examples/` moved 32 times and
+  `sans-io-pure` still declares through the one profile with no bare boundary beside it; the capability
+  filing join passes and the scenarios rewritten this window stayed under the capabilities already holding
+  them; the sites named by the length entry were worked in heavily and **shrank**; `PROJECT.md` moved eight
+  times and its two decidable graph claims were re-derived true.
+
+  One is not a defect and is not mine to decide: the OpenSpec lifecycle entry's trigger is *a human call
+  about intent* — whether the lifecycle is being restored or acknowledged as abandoned — and it has now gone
+  unmade through a full release.
+
 - **The governance-ratio entry's own instrument was a pipeline with an ellipsis in it, and it was caught by
   trying to run it.** `git log … | …` describes a measurement rather than being one — the same shape this
   window removed from `AGENTS.md`'s census rule, filed by the same hand, in the entry whose entire purpose is

@@ -1320,7 +1320,8 @@ consumer for an undemonstrated deduplication.
   evidence in the same change) **is** followed, and `openspec/changes/archive/.gitkeep` is tracked exactly as
   described. So the disposition is audit-then-dissolve/convert/keep per claim, not removal. *Promotion
   trigger:* a decision on whether the lifecycle is being restored or is being acknowledged as abandoned —
-  a human call about intent, not a defect to repair. **Not fired** (evaluated 2026-08-18). *Version class:* not release-affecting.
+  a human call about intent, not a defect to repair. **Not fired** (evaluated 2026-08-31; `openspec/changes/`
+  unchanged across the whole `0.5.0` window, so the call has now gone unmade through a release). *Version class:* not release-affecting.
   *Authority:* `AGENTS.md` itself.
 
 - **WATCH: the family-coverage reaction credits ownership by type NAME, so a profile is invisible to it.**
@@ -1341,7 +1342,9 @@ consumer for an undemonstrated deduplication.
   closure is not a longer name list but asking what a profile *expands to*, which means evaluating
   constructor bodies rather than reading declarations — a different instrument from the one this reaction
   is. *Promotion trigger:* a family whose only adopter-shaped owner declares it through a profile, or a
-  second profile reaching a family no bare declaration names. **Not fired** (evaluated 2026-08-18). *Version class:* patch;
+  second profile reaching a family no bare declaration names. **Not fired** (evaluated 2026-08-31; `examples/`
+  moved 32 times since the last evaluation, and `sans-io-pure` still declares through the one profile with no
+  bare boundary beside it — neither a second profile nor a family owned only that way). *Version class:* patch;
   repository-internal, shipping in no crate. *Authority:* `governance-dogfood`.
 
 - **WATCH: the capability-subject filing join observes nothing under the declared OpenSpec mode.** *Class:*
@@ -1361,7 +1364,8 @@ consumer for an undemonstrated deduplication.
   join compares a proposal's **declared** capability set against the subjects a diff touches, and where no
   proposal is present there is no independent declaration to compare against — reading the set from the
   touched spec paths is near-tautological, since touching a spec is naming its capability. *Promotion
-  trigger:* a requirement found filed under the wrong capability. **Not fired** (evaluated 2026-08-18).
+  trigger:* a requirement found filed under the wrong capability. **Not fired** (evaluated 2026-08-31; the filing join
+  passes, and the scenarios this window rewrote stayed under the capabilities that already held them).
   *Version class:* patch; repository-internal, shipping in no crate. *Authority:* `capability-subjects`, and
   `PROJECT.md`'s adoption-mode decision.
 
@@ -1383,7 +1387,9 @@ consumer for an undemonstrated deduplication.
   *Risk:* low and legible. These are pure structural changes to gate code that stabilised inside the window
   that found them, and the risk of moving it is not symmetric with the risk of leaving it long. *Promotion
   trigger:* a defect found in one of the named sites whose diagnosis was made harder by its length — not the
-  length itself, which is the measurement that already exists and is not the evidence. **Not fired** (evaluated 2026-08-18).
+  length itself, which is the measurement that already exists and is not the evidence. **Not fired** (evaluated
+  2026-08-31; the named sites were worked in heavily and *shrank* — `release_coherence_gate.rs` 2,809 to 2,184
+  lines, `manifest.rs` 820 to 637 — and no defect's diagnosis was made harder by their length).
   *One of the twelve left this list on its own evidence, not on the trigger:*
   `examples/observer-participant`'s `observe` was split, because a second review pointed out that
   `COOKBOOK.md` sends adopters to it as the runnable version of its recipe — so a design whose layers cannot
@@ -1433,7 +1439,9 @@ consumer for an undemonstrated deduplication.
   path-checked and none content-checked. Filing this entry as a smaller problem than before would have been
   the comfortable reading and the false one. *Promotion trigger:* a claim in `PROJECT.md` about the tree
   found false **after** this entry — the three found before it are the control and cannot stand as evidence
-  for themselves. **Not fired** (evaluated 2026-08-18). *Version class:* not release-affecting. *Authority:* `projection-register`,
+  for themselves. **Not fired** (evaluated 2026-08-31; `PROJECT.md` moved eight times since the last
+  evaluation and its two decidable graph claims were re-derived — `xuanji` and `xingbiao` depend on no
+  workspace member, and all three dimensions depend on `xuanji`). *Version class:* not release-affecting. *Authority:* `projection-register`,
   which already enumerates the documents a claim could cite, and `self-law-projection`, which owns the one
   carrying the architecture. *Shape, if it fires:* not a detector over prose — that instrument was measured
   three times and rejected. The reachable direction is to make more of what the file asserts **citable**, so
@@ -1513,7 +1521,8 @@ consumer for an undemonstrated deduplication.
   one-directional — the adopter reads a paragraph about housekeeping, never a wrong claim about what they get.
   *Promotion trigger:* an entry of this shape carrying a claim an adopter could **act on** — a version, a
   migration step, a behaviour change — rather than a description of internals. That is a property of one
-  entry and decidable by reading it, unlike a threshold on a population nothing counts. **Not fired** (evaluated 2026-08-18): every
+  entry and decidable by reading it, unlike a threshold on a population nothing counts. **Not fired** (evaluated
+  2026-08-31; no entry written this window carries a claim an adopter could act on): every
   instance found so far describes this repository's own machinery and asks nothing of a reader. *Version class:* patch; a
   document and a `scripts/` reaction of this repository. *Authority:* `release-coherence`. *Shape:* closing it
   needs a judgement over the entry's **subject** rather than its references, which is the prose detector
@@ -1539,7 +1548,8 @@ consumer for an undemonstrated deduplication.
   one refused approach with its measurement ("scanning paragraphs instead of lines … would not have caught it").
   One instance in a projection is the pattern existing without being enumerated, not the gap being closed.
   *Risk:* a rejection is re-proposed, re-measured and re-rejected; the reverse risk is equally real and is why
-  this is WATCH rather than READY — see the trigger. *Promotion trigger:* **Not fired** (evaluated 2026-08-19). The candidate evidence
+  this is WATCH rather than READY — see the trigger. *Promotion trigger:* **Not fired** (evaluated 2026-08-31; the candidate evidence is unchanged and still
+  points both ways). The candidate evidence
   points both ways. The harness enumeration was rejected twice on an unmeasured premise, then measured at 107ms
   cold and adopted — a rejection a later reader *did* consult and correctly overturn, which argues that a
   durable, projected register would have entrenched a wrong answer twice. **Where that record now lives is the
@@ -1650,7 +1660,12 @@ consumer for an undemonstrated deduplication.
   subject. *Risk:* an entry states the condition under which a decision must be re-taken, and the condition
   arrives silently — which is the same shape as a requirement whose clause has no reaction, one document
   over, and the only way this class of entry fails. Bounded by the entries themselves: each names its
-  trigger, so the sweep is possible and cheap; what is missing is anything that runs it. *Next trigger:* a
+  trigger, so the sweep is possible and cheap; what is missing is anything that runs it. **It was run a second
+  time on purpose, on 2026-08-31**, thirteen days and one shipped release after the annotations were last
+  evaluated — and it was the dates that made the staleness visible, which is what they were added for. All
+  seven were re-evaluated against the tree rather than re-dated: none had fired. Each annotation now carries
+  what was checked beside its date, because a date alone asserts an evaluation without saying what it looked
+  at, which is the same shape as a figure without its instrument. *Next trigger:* a
   second trigger found to have fired unnoticed, at which point the answer is a reaction over this document
   rather than a sweep run on purpose — the same escalation the orphaned-corpus entry declares for itself.
   **That trigger is decidable only because the annotations now carry a moment.** They were written as
