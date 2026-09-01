@@ -1110,12 +1110,19 @@ consumer for an undemonstrated deduplication.
   or source check. A member declaring a registry dependency that happens to be named after another member
   would gain an edge to the local crate it does not depend on. *Observation source:* measured against this
   workspace — all eight members' directory basenames equal their package names, so no edge is silently *lost*,
-  which is the direction that would matter; and the eight declare no registry dependency at all, so the
-  spurious-edge input does not exist here and the self-law's own allowlists (`serde_json only`, plus syn
+  which is the direction that would matter; and the eight declared no registry dependency at all, so the
+  spurious-edge input did not exist here and the self-law's own allowlists (`serde_json only`, plus syn
   quarantined in one crate) refuse it before this reader would see it. *Current reaction or bound:* the check's
   two-way `assert_eq!(declared, reaching)`, which a spurious edge breaks **loudly** — the corpus can only grow
   under this defect, never shrink, so the failure direction is a false positive. *Risk:* a gate refusing a
-  crate that cannot in fact reach the constant. Low, and loud. *Promotion trigger:* a workspace member
+  crate that cannot in fact reach the constant. Low, and loud. **Re-evaluated 2026-08-31, and one of the two premises above is now false.** The members *do* declare
+  non-path dependencies — `serde_json` in seven of the eight, `syn` in 渾儀, and `toml_edit` in 勘合 since
+  this window's self-law amendment — so *the eight declare no registry dependency at all* no longer holds,
+  and the allowlist it cites has grown with it. What keeps the spurious-edge input absent is not their
+  absence but that **no such name matches any member's directory basename**, which is the property the
+  trigger actually turns on and the one this entry should have rested on. The other premise still holds: the
+  eight basenames equal their package names, re-derived the same day, so no edge is silently lost.
+  *Promotion trigger:* a workspace member
   declaring a non-path dependency whose name matches another member's directory basename, or a member whose
   directory basename stops matching its package name. *Version class:* patch; the reader is repository
   machinery, shipping in no crate. *Authority:* `repository-checks`.
@@ -1310,7 +1317,10 @@ consumer for an undemonstrated deduplication.
   (`requirement_heading_is_bounds_named("Outbound Requests")` returns `true`: `"bound"` matches inside
   `"outbound"`, and the character following it — a space, from `" requests"` — reads as "no letter follows"),
   then grepped every tracked `### Requirement:` heading for a `bound`-containing word that is not
-  `bound(s)`/`boundary/boundaries` itself — none found, so latent. *Current reaction or bound:* none.
+  `bound(s)`/`boundary/boundaries` itself — none found, so latent. **Not fired** (evaluated 2026-08-31; still
+  none in a `### Requirement:` heading, which is the only corpus that reaches this reader — but the
+  vocabulary is now in the tree: `Inbound` and `Outbound` appear in `#### Scenario:` headings, so a
+  requirement heading using one is a rename away rather than hypothetical). *Current reaction or bound:* none.
   *Risk:* a requirement heading using an ordinary English word containing `bound` as a substring
   (`outbound`, `rebound`, `abound`) would be wrongly classified as bounds-named, exempting real
   bound-stating prose beneath it from `undeclared_prose_offences` and instead charging that requirement with
@@ -1686,7 +1696,9 @@ consumer for an undemonstrated deduplication.
   reads as coverage to anyone who finds it and holds nothing. Bounded by measurement: every tracked fixture
   corpus in this repository is referenced by at least one reader — eight of eight, swept the day this was
   written — so this is one instance rather than a class. *Next trigger:* a second orphan, at which point the
-  shape changes and a reaction enumerates them instead of a sweep run on purpose. *Authority:* engine.
+  shape changes and a reaction enumerates them instead of a sweep run on purpose. **Not fired** (evaluated
+  2026-08-31; `crates/kanhe/tests/fixtures/` holds `refusal_scan`, this entry's own subject and now read, and
+  `pin_mutations.tsv`, which `pin_bites` reads on every run). *Authority:* engine.
   *Compatibility:* patch.
 
 - **WATCH: a refusal reachable only by a broken tool is not observed.** *Observed pressure:* fifteen refusal
@@ -1855,7 +1867,8 @@ consumer for an undemonstrated deduplication.
   `TIANHENG_WORKSPACE_TESTS` means both "this needs the repository as its subject" and "this needs a fixture".
   *Risk:* a check lands in the wrong member and the two identities blur again, which is the failure the
   split was built to end. *Next trigger:* a third member, or a check whose placement two readers disagree
-  about. *Authority:* engine. *Compatibility:* none — neither member ships.
+  about. **Not fired** (evaluated 2026-08-31; `publish = false` still names exactly 勘合 and 繩墨, and no
+  check's placement was disputed this window). *Authority:* engine. *Compatibility:* none — neither member ships.
   - **A `#[path]`-shared test module's `allow(dead_code)` cannot distinguish "used by no binary" from "used by
     some".** *Observed pressure:* `crates/tianheng/tests/support/` is compiled fresh into each `*_conformance.rs`
     binary, so an item only some callers use is genuinely dead in the others — which is why the blanket

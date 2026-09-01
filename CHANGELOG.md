@@ -24,6 +24,26 @@ them.
 
 ### Self-governance
 
+- **Six more promotion triggers evaluated, and one entry's evidence had gone false under this window's own
+  work.** None of the six had fired; the finding is in what one of them rested on.
+
+  *The one-spelling corpus reader* argued its safety from two premises. One still holds — the eight members'
+  directory basenames equal their package names, re-derived — and the other does not: *the eight declare no
+  registry dependency at all* is false. `serde_json` is declared by seven of them, `syn` by 渾儀, and
+  `toml_edit` by 勘合 since this window's self-law amendment, which is the entry's own evidence overtaken by
+  a change made two hundred lines away in the same document. What actually keeps the spurious edge absent is
+  that **no such name matches any member's directory basename** — the property the trigger turns on, and the
+  one the entry should have rested on from the start.
+
+  *The bounds-named heading reader* is still latent, and the annotation says how narrowly: no
+  `### Requirement:` heading carries a word ending in `bound`, which is the only corpus reaching it — but
+  `Inbound` and `Outbound` now appear in `#### Scenario:` headings, so the vocabulary is in the tree and a
+  rename away rather than hypothetical.
+
+  The other four are annotated with what was checked: two governance members and no third, both tracked
+  fixture corpora read, this repository's own commit objects absent outside the closed record, and the
+  citation reader green.
+
 - **The one merge the ritual cares about most was the one act the wrapper could not perform.** Sweeping the
   promotion triggers turned up one that had fired, on `release: 0.5.0` itself: *a merge or publish made
   outside the wrapper is not observed*. The release squash onto `main` was made with `gh pr merge` directly —
