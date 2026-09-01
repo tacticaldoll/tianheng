@@ -7,20 +7,8 @@
 //! on cargo's parse error rather than on what it meant to observe. A predicate over text is testable as a
 //! predicate over text.
 
-use crate::manifest::Quoted;
 use crate::refusal::Kind;
-use crate::release_coherence_gate::{inline_assignments, is_iso_date, require_internal_pins};
-
-/// The readable values `inline_assignments` found, so a direction asserts what was read rather than a shape.
-fn versions_in(value: &str) -> Vec<String> {
-    inline_assignments(value, "version")
-        .into_iter()
-        .map(|found| match found {
-            Quoted::Value(version) => version,
-            Quoted::Unreadable => "<unreadable>".to_string(),
-        })
-        .collect()
-}
+use crate::release_coherence_gate::{is_iso_date, require_internal_pins};
 
 /// Each half of the key recogniser, shown by the shape only that half rejects.
 ///
@@ -46,29 +34,29 @@ fn family() -> Vec<crate::release_coherence_gate::Member> {
 }
 
 #[test]
-fn each_half_of_the_key_recogniser_rejects_a_shape_of_its_own() {
-    // The DELIMITER half. In both of these `version` is glued to the character before it — `/` in a path,
-    // `-` in a longer key — so neither opens a key. Without this half both would be read as assignments.
-    for glued in [
-        r#"{ path = "crates/version-utils", version = "0.2.0" }"#,
-        r#"{ rust-version = "1.85", version = "0.2.0" }"#,
+fn a_value_is_not_a_key_however_it_reads() {
+    // **The property the hand-rolled key recogniser needed two halves for.** One half rejected `version`
+    // glued to the character before it — `/` in a path, `-` in a longer key — and the other rejected a
+    // `version` preceded by a delimiter but not followed by `=`, which is what an occurrence inside a string
+    // value looks like. A parser asks neither question: a value is a value. The property is kept and the
+    // halves are gone with the recogniser.
+    for manifest in [
+        "[dependencies]\nxuanji = { path = \"crates/version-utils\", version = \"0.2.0\" }\n",
+        "[dependencies]\nxuanji = { rust-version = \"1.85\", version = \"0.2.0\" }\n",
+        "[dependencies]\nxuanji = { path = \"crates/xuanji\", version = \"0.2.0\", note = \"a version of record\" }\n",
     ] {
+        let read = crate::release_coherence_gate::declared_dependencies(
+            manifest,
+            crate::release_coherence_gate::Subject::Requires,
+        )
+        .expect("these manifests parse");
+        assert_eq!(read.len(), 1, "one dependency: {manifest}");
         assert_eq!(
-            versions_in(glued),
-            vec!["0.2.0".to_string()],
-            "only the assignment is a key: {glued}"
+            read[0].pin,
+            crate::release_coherence_gate::Declared::Value("0.2.0".to_string()),
+            "the requirement is the `version` key's value and nothing that merely reads like one: {manifest}"
         );
     }
-
-    // The `=`-FOLLOWS half. Here `version` IS preceded by a delimiter — a space inside a string value — so
-    // the delimiter half admits it and only this half rejects it. Without it the reader finds two.
-    let in_a_value =
-        r#"{ path = "crates/xuanji", version = "0.2.0", note = "a version of record" }"#;
-    assert_eq!(
-        versions_in(in_a_value),
-        vec!["0.2.0".to_string()],
-        "a delimiter-preceded occurrence that is not an assignment is not a key: {in_a_value}"
-    );
 }
 
 /// A dated heading's fields are ranged, not merely three digit runs.
@@ -107,96 +95,89 @@ fn a_dated_suffix_is_a_date_and_not_only_three_digit_runs() {
     }
 }
 
-/// Several `path` or several `version` keys in one internal dependency are not this reader's to choose from.
+/// Two `path` or two `version` keys in one dependency are a manifest cargo refuses.
+///
+/// **This direction named two sites of its own until a real parser replaced the hand-rolled reader**, which
+/// counted the values it had collected and reported *declares 2 `path` keys*. A duplicate key is not a
+/// choice a reader has to decline — it is a document **cargo itself will not load**, so the honest answer is
+/// the parse error, which names the key and says *duplicate key* at the position it met it.
 ///
 /// Here rather than end-to-end for the reason this module's header gives: a duplicate key is a shape cargo
 /// rejects outright, so a fixture carrying one fails on the parse rather than on what it means to observe.
-///
-/// Negative run: with each arm replaced by `continue`, the matching half returned `Ok`.
 #[test]
-fn several_paths_or_several_versions_in_one_dependency_are_not_chosen_between() {
+fn a_duplicate_key_in_one_dependency_is_a_manifest_cargo_refuses() {
     let several_paths = "[workspace.dependencies]\n\
                          xuanji = { path = \"crates/xuanji\", path = \"crates/other\", version = \"0.2.0\" }\n";
-    let refusal = require_internal_pins(several_paths, "0.2.0", &family())
-        .expect_err("two paths name two places and this reader may pick neither");
-    crate::refusal::expect(
-        "release-coherence#dependency-declares-several-paths",
-        &refusal,
+    let refusal = require_internal_pins(several_paths, "0.2.0", &family()).expect_err(
+        "a duplicate key is a manifest cargo refuses, so nothing here is chosen between",
     );
+    crate::refusal::expect("release-coherence#manifest-unparseable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
-        refusal.message.contains("declares 2 `path` keys"),
-        "the refusal must say how many paths, got: {}",
+        refusal.message.contains("duplicate key") && refusal.message.contains("path"),
+        "the refusal names the key and says it is duplicated, got: {}",
         refusal.message
     );
 
     let several_versions = "[workspace.dependencies]\n\
                             xuanji = { path = \"crates/xuanji\", version = \"0.2.0\", version = \"0.1.0\" }\n";
-    let refusal = require_internal_pins(several_versions, "0.2.0", &family())
-        .expect_err("two versions are two requirements and this reader may pick neither");
-    crate::refusal::expect("release-coherence#internal-pin-several", &refusal);
+    let refusal = require_internal_pins(several_versions, "0.2.0", &family()).expect_err(
+        "a duplicate key is a manifest cargo refuses, so nothing here is chosen between",
+    );
+    crate::refusal::expect("release-coherence#manifest-unparseable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
-        refusal.message.contains("declares 2 `version` keys"),
-        "the refusal must say how many versions, got: {}",
+        refusal.message.contains("duplicate key") && refusal.message.contains("version"),
+        "the refusal names the key and says it is duplicated, got: {}",
         refusal.message
     );
 }
 
-/// A `path` or a `version` this reader cannot read is a cannot-judge, and the two say which they are.
+/// A single-quoted `path` or `version` is read, and a value that is no string is still refused.
 ///
-/// Single-quoted TOML strings are legal and this reader does not take them, which is a limit of the reader
-/// rather than a fact about the manifest — the distinction `Quoted` exists to keep. The unreadable **path**
-/// is the one that matters most: it cannot be answered by skipping the entry, because whether the entry is
-/// an internal dependency at all is the thing that could not be read.
+/// **This direction asserted the opposite until a real parser replaced the hand-rolled reader.** A
+/// single-quoted TOML string is legal and cargo takes it; declining it was a limit of the reader written up
+/// as though it were a fact about the manifest. Both halves now read, and the pin is judged against the
+/// workspace version like any other.
 ///
-/// Negative run: with the `Declared::Unreadable` arms replaced by `continue`, the path half reported the
-/// vacuity refusal — *found no internal path dependency* — and the version half returned `Ok`.
+/// The refusals themselves are kept and their WHEN rerun: what a parser will not take as a string is a value
+/// that is not one. The unreadable **path** is still the half that matters most — it cannot be answered by
+/// skipping the entry, because whether members inherit this workspace's crate is the thing that could not be
+/// read.
 #[test]
-fn a_path_or_a_version_this_reader_cannot_read_is_a_cannot_judge() {
+fn a_single_quoted_path_or_version_is_read_and_a_non_string_is_not() {
+    let read = "[workspace.dependencies]\n\
+                xuanji = { path = 'crates/xuanji', version = '0.2.0' }\n";
+    require_internal_pins(read, "0.2.0", &family())
+        .expect("cargo takes single-quoted strings, so this pin is judged and it agrees");
+
     let path = "[workspace.dependencies]\n\
-                xuanji = { path = 'crates/xuanji', version = \"0.2.0\" }\n";
+                xuanji = { path = 5, version = \"0.2.0\" }\n";
     let refusal = require_internal_pins(path, "0.2.0", &family())
         .expect_err("a path this reader cannot take is not a path it may ignore");
     crate::refusal::expect("release-coherence#dependency-path-unreadable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
-    assert!(
-        refusal
-            .message
-            .contains("declares a `path` this check cannot read"),
-        "got: {}",
-        refusal.message
-    );
 
     let version = "[workspace.dependencies]\n\
-                   xuanji = { path = \"crates/xuanji\", version = '0.2.0' }\n";
+                   xuanji = { path = \"crates/xuanji\", version = 5 }\n";
     let refusal = require_internal_pins(version, "0.2.0", &family())
         .expect_err("a version this reader cannot take is not one that satisfies");
     crate::refusal::expect("release-coherence#internal-pin-unreadable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
-    assert!(
-        refusal
-            .message
-            .contains("declares a version this check cannot read"),
-        "got: {}",
-        refusal.message
-    );
 }
 
-/// A dependency key this reader cannot decode is refused, not skipped.
+/// A quoted dependency key names its crate, and the stale pin behind it is judged.
 ///
-/// **The falsifier is the stale pin that got away.** TOML admits a quoted key and cargo decodes it —
-/// measured, `"serde_json" = "1"` resolves to a dependency named `serde_json` — so `"xuanji" = "0.0.1"` is a
-/// real family requirement whose raw spelling matches no family member. Before this it was dropped by the
-/// `!family.contains(…)` filter, and the aggregate requirement counter stayed non-zero on the strength of the
-/// second example here, so the judgement reported **clean** over a stale pin. That is the false-negative
-/// direction the Core Contract forbids, reached through the same door the `Named` arm's own comment already
-/// describes for a rename.
+/// **This direction asserted a refusal until a real parser replaced the hand-rolled reader.** TOML admits a
+/// quoted key and cargo decodes it — measured, `"serde_json" = "1"` resolves to a dependency named
+/// `serde_json` — so `"xuanji" = "0.0.1"` is a real family requirement. The old reader could not decode the
+/// key, and refusing was the safe answer available to it; the parser decodes it, so the stale `0.0.1` is
+/// **judged** rather than stopped in front of.
 ///
-/// The second example is load-bearing rather than decoration: with only the quoted one present the counter
-/// would reach zero and the existing vacuity guard would refuse for its own reason, which is not this one.
+/// The second example is load-bearing rather than decoration: with only the quoted one present the per-example
+/// counter would reach zero and the vacuity guard would refuse for its own reason, which is not this one.
 #[test]
-fn a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped() {
+fn a_quoted_dependency_key_names_its_crate_and_its_pin_is_judged() {
     let root = std::env::temp_dir().join(format!("kanhe-quoted-key-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("the scratch root is writable");
@@ -223,19 +204,14 @@ fn a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped() {
 
     let members = super::super::release_coherence_gate::family_members(&manifests)
         .expect("these manifests each name their package");
-    let refusal = super::super::release_coherence_gate::require_example_pins(
-        &root, &members, "0.5.0",
-    )
-    .expect_err(
-        "a key this reader cannot decode names some crate, and which one is what it cannot say — so the \
-         entry can neither be matched against the family nor passed over. Passed over, the stale \
-         \"0.0.1\" reaches a release as clean",
-    );
-    crate::refusal::expect("release-coherence#dependency-key-unreadable", &refusal);
-    assert_eq!(refusal.kind, Kind::CannotJudge);
+    let refusal =
+        super::super::release_coherence_gate::require_example_pins(&root, &members, "0.5.0")
+            .expect_err("the quoted key names xuanji, so its stale pin is judged");
+    crate::refusal::expect("release-coherence#example-pin-disagrees", &refusal);
+    assert_eq!(refusal.kind, Kind::Violation);
     assert!(
-        refusal.message.contains("not a bare TOML key"),
-        "the refusal must name what it could not decode, got: {}",
+        refusal.message.contains("0.0.1"),
+        "the stale requirement is what the refusal names, got: {}",
         refusal.message
     );
 
@@ -252,54 +228,57 @@ const ESCAPED_X: &str = "\\u0078";
 /// The TOML escape for `j`, for the reason [`ESCAPED_X`] records.
 const ESCAPED_J: &str = "\\u006A";
 
-/// An escaped path is refused, and only one of the two positions was ever a false negative.
+/// An escaped path is decoded and compared, where it used to be refused.
 ///
-/// **Cargo decodes the escape and this reader decodes none.** Measured on cargo 1.96.0 against a scratch
-/// workspace: a `path` of `crates/` + [`ESCAPED_X`] + `uanji` resolves the member at `crates/xuanji`.
+/// **This direction asserted a refusal until a real parser replaced the hand-rolled reader.** Cargo decodes a
+/// TOML escape in a value — measured — so `cr` + [`ESCAPED_A`] + `tes/xuanji` is the directory
+/// `crxtes/xuanji`, and the old reader could only say it did not know. The parser decodes it, so the path is
+/// compared against the member's own directory like any other: it names somewhere else, which is a violation
+/// that says where the member actually is.
 ///
-/// **The two positions are not two instances of one defect, and an earlier version of this comment said they
-/// were.** Measured by removing the backslash branch and running this direction:
-///
-/// - **inside the prefix** (`cr` + [`ESCAPED_X`] + `tes/xuanji`) — the raw source does not begin `crates/`,
-///   so `starts_with` did not select the entry, `continue` took it, and the ordinary sibling kept the
-///   vacuity counter non-zero so *found no internal path dependency* never fired. The stale `0.0.1` reached
-///   a release as clean. **This is the false-negative regression direction.**
-/// - **after the prefix** (`crates/` + [`ESCAPED_X`] + `uanji`) — the raw source still begins `crates/`, so
-///   the entry WAS selected and its version WAS compared. Measured: the old reader answered
-///   `release-coherence#internal-pin-disagrees`, naming *internal dependency xuanji is pinned to 0.0.1;
-///   expected 0.5.0*. Not clean, and not a missed check. **This position is coverage of the uniform
-///   fail-closed rule, not evidence of the old silence** — and `require_internal_pins` never resolves a
-///   crate identity from a path, so nothing here was ever "compared against a name no crate has".
+/// The ordinary sibling stays: without it the vacuity floor would refuse for its own reason, which is not
+/// this one.
 #[test]
 fn an_escaped_path_is_refused_and_an_ordinary_sibling_does_not_cover_for_it() {
-    // Ordered as the doc comment reads them: the regression direction first, then the uniform-rule one.
-    for path in [
-        format!("cr{ESCAPED_X}tes/xuanji"),
-        format!("crates/{ESCAPED_X}uanji"),
+    // **The escape decodes, so where it sits decides which check answers.** Before the parser both rows were
+    // one refusal — *this reader cannot decode the path* — and the difference between them was invisible.
+    for (path, site) in [
+        (
+            format!("cr{ESCAPED_X}tes/xuanji"),
+            "release-coherence#internal-path-names-another-directory",
+        ),
+        // Decoded, this **is** the member's own directory, so the path is right and the stale pin is what is
+        // left to refuse. The doc comment above always said this position was compared; now it is.
+        (
+            format!("crates/{ESCAPED_X}uanji"),
+            "release-coherence#internal-pin-disagrees",
+        ),
     ] {
         let manifest = format!(
             "[workspace.dependencies]\n\
              xingbiao = {{ path = \"crates/xingbiao\", version = \"0.5.0\" }}\n\
              xuanji = {{ path = \"{path}\", version = \"0.0.1\" }}\n"
         );
-        let refusal = require_internal_pins(&manifest, "0.5.0", &family()).expect_err(
-            "cargo resolves this path and this reader cannot, so whether the entry is an internal \
-             dependency is what could not be read",
-        );
-        crate::refusal::expect("release-coherence#dependency-path-unreadable", &refusal);
-        assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+        let refusal = require_internal_pins(&manifest, "0.5.0", &family())
+            .expect_err("cargo resolves this path and so does the parser, so it is compared");
+        crate::refusal::expect(site, &refusal);
+        assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
     }
 }
 
-/// An escaped renamed package is refused, and an ordinary family dependency does not cover for it.
+/// An escaped renamed package names its crate, and the stale pin behind it is judged.
 ///
-/// `release-coherence` requires a renamed dependency to be resolved by its `package` identity. Measured on
-/// cargo 1.96.0: a `package` of `xuan` + [`ESCAPED_J`] + `i` reads as `xuanji`. Before `quoted_value` refused
-/// a backslash, the `family.contains(&package)` filter compared the undecoded source, found no family crate,
-/// and took the `continue` — while the ordinary sibling kept `requirements_here` non-zero, so the per-example
-/// vacuity guard stayed silent and the stale `0.0.1` reached a release as clean.
+/// **This direction asserted a refusal until a real parser replaced the hand-rolled reader.**
+/// `release-coherence` requires a renamed dependency to be resolved by its `package` identity, and measured on
+/// cargo 1.96.0 a `package` of `xuan` + [`ESCAPED_J`] + `i` reads as `xuanji`. The old reader compared the
+/// undecoded source, found no family crate, and — after `quoted_value` learned to refuse a backslash —
+/// stopped in front of it. The parser decodes it, so the entry is matched against the family and its stale
+/// `0.0.1` is judged.
+///
+/// The ordinary sibling in the same example is load-bearing: `requirements_here` is counted per example, so
+/// without it the vacuity guard would refuse for its own reason.
 #[test]
-fn an_escaped_renamed_package_is_refused_and_an_ordinary_sibling_does_not_cover_for_it() {
+fn an_escaped_renamed_package_names_its_crate_and_its_pin_is_judged() {
     let root = std::env::temp_dir().join(format!("kanhe-escaped-rename-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("the scratch root is writable");
@@ -338,15 +317,16 @@ fn an_escaped_renamed_package_is_refused_and_an_ordinary_sibling_does_not_cover_
         &root, &members, "0.5.0",
     )
     .expect_err(
-        "cargo reads this package as a family crate and this reader cannot, so the entry can \
-                 neither be matched against the family nor passed over",
+        "cargo reads this package as xuanji and so does the parser, so its stale pin is judged",
     );
-    assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
+    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
     // The SITE, not only the kind. Without it, a refusal the vacuity guard produced reads as this
     // direction's evidence — which is exactly how its first version passed under the perturbation.
-    crate::refusal::expect(
-        "release-coherence#dependency-package-value-unreadable",
-        &refusal,
+    crate::refusal::expect("release-coherence#example-pin-disagrees", &refusal);
+    assert!(
+        refusal.message.contains("0.0.1"),
+        "the stale requirement is what the refusal names, got: {}",
+        refusal.message
     );
 
     let _ = std::fs::remove_dir_all(&root);

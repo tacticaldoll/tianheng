@@ -26,96 +26,6 @@
 
 use std::borrow::Cow;
 
-/// A double-quoted value this reader found, or a statement that it could not read one.
-///
-/// **Not an `Option`, because every consumer of the one this replaces read `None` as *the key is absent* and
-/// skipped the line.** Single-quoted and literal TOML strings are valid and are not read here; that is a
-/// limit of this reader, not a fact about the manifest, and conflating the two let a readable-to-cargo
-/// manifest go unchecked while the surrounding function still returned `Ok`. Measured on this repository with
-/// one crate's name single-quoted, the release gate reported a clean release.
-///
-/// A type that cannot be defaulted, so the compiler asks each site which of the two it meant.
-///
-/// It lives here rather than beside one of its readers because **both** manifest facts this module owns need
-/// it, and a value-reading rule with two owners is the twin this module's header exists to close.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Quoted {
-    /// The double-quoted string the value **is**.
-    Value(String),
-    /// The value is not a double-quoted string: a single-quoted or literal value, a number or boolean, or a
-    /// shape this reader has never met.
-    Unreadable,
-}
-
-/// The double-quoted string `value` is, or a statement that it is not one.
-///
-/// `value` is the text **after** the `=`, and the quote has to open it. Taking the first pair of quotes
-/// anywhere in the text instead let an unquoted value borrow the next key's: `package = xuanji, version =
-/// "0.2.0"` read its package as `0.2.0`, so an identity this reader cannot read was reported as one it
-/// could, and the entry then failed to match any family crate and was skipped in silence. `Unreadable` is
-/// the whole point of this type and it was reachable only when nothing else on the line was quoted.
-///
-/// Unifying the contract is what makes strictness possible: two `Cargo.lock` readers passed a whole line
-/// where every other caller passed the value, so a rule about where the quote sits had no single subject to
-/// be about. They split on the `=` now, like everyone else.
-pub(crate) fn quoted_value(value: &str) -> Quoted {
-    let Some(rest) = value.trim_start().strip_prefix('"') else {
-        return Quoted::Unreadable;
-    };
-    // **A multiline basic string opens with three quotes, and this reader reads one.** TOML admits
-    // `"""…"""` wherever it admits `"…"`, and cargo reads it — measured on cargo 1.96.0,
-    // `path = """crates/xuanji"""` resolves the member and `name = """xuanji"""` reads as `xuanji`. Stripping
-    // one quote and taking the next left `body` EMPTY, so this answered `Value("")`: an empty path, an empty
-    // identity, an empty version, each of which its consumer compares and passes over. That is the same
-    // silence the backslash branch below closes, reached without a backslash — so that branch cannot see this
-    // shape and a check of its own is what closes it.
-    //
-    // **Its position is not the property, and an earlier version of this comment said it was.** It reads
-    // `rest`, not `body`, so it answers the same before or after the split. Measured by moving it past the
-    // body read: the direction over it stayed green. What matters is that it exists, not where it sits.
-    //
-    // Two quotes rather than three is what is tested, because `rest` has already lost the opening one. An
-    // ordinary empty string is `""` — one quote here — and stays a value it can read.
-    if rest.starts_with("\"\"") {
-        return Quoted::Unreadable;
-    }
-    let Some((body, _)) = rest.split_once('"') else {
-        return Quoted::Unreadable;
-    };
-    // **A backslash opens an escape, and this reader decodes none — so it refuses instead of returning the
-    // source as though it were the value.** In a TOML *basic* string a `\\` is never literal; cargo decodes
-    // the escape and this reader would hand its consumers the raw sequence. Measured on cargo 1.96.0 against
-    // a scratch workspace: `path = "crates/\\u0078uanji"` resolves the member at `crates/xuanji`,
-    // `name = "xuan\\u006Ai"` reads as `xuanji`, and `version = "0.\\u0035.0"` reads as `0.5.0`. Every
-    // consumer here then compares the *undecoded* text — against a family crate list, against a
-    // `crates/` prefix, against a version — and a comparison that fails takes a `continue`, so an internal
-    // dependency or a renamed family crate stops being checked with nothing saying so. The per-manifest
-    // vacuity guards cannot see it either: one escaped entry beside one ordinary one leaves their counters
-    // non-zero.
-    //
-    // `Unreadable` is what this type exists for, and each consumer already answers it by refusing to judge.
-    //
-    // **A decoder now exists in this module, and a value is still refused rather than decoded -- for a
-    // different reason than the one written here before.** That reason was *no decoder, and hand-rolling a
-    // TOML grammar is the class `BACKLOG.md` carries*; [`decoded`] closed the first half in the same window,
-    // so leaving the old sentence standing would have been a reason that had expired. The reason that holds:
-    // a **key** decides which table or which key this is, so misreading one drops a whole table's contents
-    // with nothing said, while a **value** is the thing being judged -- refusing it stops the judgement in
-    // front of an operator and skips nothing. The refusal here is also measured to be unreached: no tracked
-    // manifest carries a backslash in a quoted value. Decoding values would additionally mean finding the
-    // closing quote past an escaped one, which is parsing the string rather than decoding a known body.
-    //
-    // It also closes the narrower shape the same check missed: `"a\\"b"` split at the ESCAPED quote and
-    // answered `a\\`, an identity no manifest declares.
-    //
-    // No tracked manifest carries a backslash in a quoted value — measured over `git ls-files '*.toml'` —
-    // so this refuses nothing this repository writes today.
-    if body.contains('\\') {
-        return Quoted::Unreadable;
-    }
-    Quoted::Value(body.to_string())
-}
-
 /// What `[workspace.package]` declares its version to be, or why this reader could not tell.
 ///
 /// Typed apart rather than an `Option`, because both consumers read `None` as *the key is absent* and said
@@ -629,11 +539,6 @@ impl TableHeading {
     /// Whether this heading names an array of tables called `path`.
     pub fn names_array(&self, path: &str) -> bool {
         self.array && self.is(path)
-    }
-
-    /// The keys this heading names, in order.
-    pub(crate) fn segments(&self) -> &[String] {
-        &self.segments
     }
 
     /// Whether the segments are exactly the keys `path` spells.

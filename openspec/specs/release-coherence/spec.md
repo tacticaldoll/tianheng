@@ -254,7 +254,7 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   examples. It is the same false negative as a renamed dependency, through a second door, and the identity
   rule that closed the first — a dependency names the crate its `package` field names, and its key only
   otherwise — is where the key's own spelling has to be judged
-- **PINNED-BY** `a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped`
+- **PINNED-BY** `a_quoted_dependency_key_names_its_crate_and_its_pin_is_judged`
 
 #### Scenario: A dependency table whose heading cargo decodes
 
@@ -363,8 +363,8 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 - **THEN** the check refuses as a cannot-judge saying which key and which of the two it met. An unreadable
   **path** is the one that cannot be answered by skipping the entry, because the entry names a family crate
   and whether members inherit *this workspace's* copy of it is what could not be read
-- **PINNED-BY** `a_path_or_a_version_this_reader_cannot_read_is_a_cannot_judge`
-- **PINNED-BY** `several_paths_or_several_versions_in_one_dependency_are_not_chosen_between`
+- **PINNED-BY** `a_single_quoted_path_or_version_is_read_and_a_non_string_is_not`
+- **PINNED-BY** `a_duplicate_key_in_one_dependency_is_a_manifest_cargo_refuses`
 
 #### Scenario: A key outside a dependency table is not a dependency
 
@@ -441,14 +441,17 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   offered to members, is still read where the subject is the repository's own pins
 - **PINNED-BY** `a_workspace_table_is_not_a_dependency_of_the_package_carrying_it`
 
-#### Scenario: A value that is not a string does not borrow the next one
+#### Scenario: A value that is not a string
 
-- **WHEN** a dependency's `package` or `version` value is not a double-quoted string while a later key on
-  the same line is — `alias = { package = xuanji, version = "0.2.0" }`
-- **THEN** the value reads as unreadable. The quote SHALL open the value; taking the first pair of quotes
-  anywhere in the text answered one key with the next key's string, which made the unreadable state
-  reachable only when nothing else on the line was quoted
-- **PINNED-BY** `a_value_that_is_not_a_string_does_not_borrow_the_next_one`
+- **WHEN** a dependency's `package`, `version` or `path` is a value that is not a string — `path = 5`, an
+  inline table, an array
+- **THEN** that field reads as unreadable, and the dependency is refused rather than judged on the fields
+  around it
+- **AND** the shape this scenario used to describe — a bare word borrowing the next key's quotes, as in
+  `alias = { package = xuanji, … }` — is not a manifest at all. A parser refuses the document, which is what
+  cargo does with it, so the reader never reaches the question. The quote-scanning rule that made *unreadable*
+  reachable only when nothing else on the line was quoted went with the hand-rolled reader
+- **PINNED-BY** `a_single_quoted_path_or_version_is_read_and_a_non_string_is_not`
 
 #### Scenario: An example requires a family crate with no version at all
 
@@ -806,7 +809,7 @@ read, and the undecoded source then decided a comparison.
   same example manifest** — which is the configuration the guards cannot see, because `requirements_here` is
   counted per example and an escaped entry alone in its own example leaves that counter at zero
 - **THEN** the judgement refuses, rather than reading the entry as naming no family crate at all
-- **PINNED-BY** `an_escaped_renamed_package_is_refused_and_an_ordinary_sibling_does_not_cover_for_it`
+- **PINNED-BY** `an_escaped_renamed_package_names_its_crate_and_its_pin_is_judged`
 
 ### Requirement: A release section is dated on the day its release commit was made
 

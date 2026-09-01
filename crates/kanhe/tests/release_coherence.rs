@@ -345,7 +345,16 @@ fn a_detailed_dependency_table_is_read_renamed_or_not() {
         let fixture = build_fixture(&root, "detailed", "0.2.0");
         let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
         let text = std::fs::read_to_string(&manifest).expect("read");
-        std::fs::write(&manifest, format!("{text}\n{table}")).expect("write");
+        // **The example's own inline entry goes, so the table under test is the only declaration of it.**
+        // Left in place, the plainly-named row declares `xuanji` twice and cargo refuses the manifest — the
+        // fixture stopped being about the detailed table at all. The hand-rolled reader read lines and never
+        // met the collision.
+        let without_inline = text.replace("xuanji = \"0.2\"", "");
+        assert_ne!(
+            without_inline, text,
+            "{label}: the example's inline entry must be the one this table replaces"
+        );
+        std::fs::write(&manifest, format!("{without_inline}\n{table}")).expect("write");
         development_changelog(&fixture.repo, "0.2.0", true);
         commit(&fixture.repo, "chore: a detailed dependency table");
         let verdict = judge(&fixture.repo);
@@ -2555,7 +2564,7 @@ fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
         let verdict = judge(&fixture.repo);
         let _ = std::fs::remove_dir_all(&root);
         let refusal = verdict.expect_err(&format!(
-            "{label}: a field this reader cannot decode is not a clean pin"
+            "{label}: a manifest cargo will not load is not a clean pin"
         ));
         assert_eq!(
             refusal.kind,
@@ -2568,11 +2577,11 @@ fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
         // `package` key at all, sending an operator to look for a key that is not there. A review read the
         // emitted diagnostic rather than the exit class and found it; every sibling direction here asserts
         // the site.
-        refusal::expect("release-coherence#dependency-field-unreadable", &refusal);
+        refusal::expect("release-coherence#manifest-unparseable", &refusal);
         assert!(
             refusal
                 .message
-                .contains("a field whose key this check cannot decode"),
+                .contains("a manifest this parser cannot read"),
             "{label}: the refusal names what it could not read: {}",
             refusal.message
         );
@@ -2711,7 +2720,14 @@ fn a_dependency_key_whose_name_carries_a_dot_is_one_key() {
     let text = std::fs::read_to_string(&manifest).expect("read");
     std::fs::write(
         &manifest,
-        format!("{text}xuanji.version = \"0.2\"\nxuanji.\"version.extra\" = true\n"),
+        // **The dotted form replaces the example's own entry rather than being appended beside it.** Appended,
+        // `xuanji` is already a string and `xuanji.version` cannot extend it — a document cargo refuses too,
+        // so the fixture stopped being about the thing it names. The hand-rolled reader never noticed because
+        // it read lines rather than a document.
+        text.replace(
+            "xuanji = \"0.2\"",
+            "xuanji.version = \"0.2\"\nxuanji.\"version.extra\" = true",
+        ),
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
@@ -3216,7 +3232,15 @@ fn assignment_shaped_text_inside_a_value_is_not_a_key() {
         let fixture = build_fixture(&root, "value-not-a-key", "0.2.0");
         let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
         let text = std::fs::read_to_string(&manifest).expect("read");
-        std::fs::write(&manifest, format!("{text}{entry}\n")).expect("write");
+        // **Replaces the example's own entry rather than being appended beside it.** Appended, the manifest
+        // declares `xuanji` twice and cargo refuses it — so the fixture stopped being about the thing it
+        // names. The hand-rolled reader never noticed, because it read lines rather than a document.
+        let composed = text.replace("xuanji = \"0.2\"", entry);
+        assert_ne!(
+            composed, text,
+            "{label}: the entry must replace the example's own"
+        );
+        std::fs::write(&manifest, composed).expect("write");
         development_changelog(&fixture.repo, "0.2.0", true);
         commit(
             &fixture.repo,
@@ -3255,12 +3279,8 @@ fn two_workspace_keys_in_one_dependency_are_not_one_inheritance() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: two workspace keys in one dependency");
-    let refusal = refuse(
-        &fixture.repo,
-        Kind::CannotJudge,
-        "with a version this check cannot read",
-    );
-    refusal::expect("release-coherence#example-pin-unreadable", &refusal);
+    let refusal = refuse(&fixture.repo, Kind::CannotJudge, "duplicate key");
+    refusal::expect("release-coherence#manifest-unparseable", &refusal);
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -3276,8 +3296,12 @@ fn a_catalog_entry_whose_identity_is_unresolvable_stops_the_inheriting_example()
     let fixture = build_fixture(&root, "catalog-unresolvable", "0.2.0");
     std::fs::write(
         fixture.repo.join("examples/adopter/Cargo.toml"),
+        // **This WHEN moved when a real parser replaced the hand-rolled reader.** The catalog entry was
+        // written under a quoted key, `"xuanji" = "0.2"`, which the old reader could not decode and the
+        // parser resolves. What still cannot be resolved is an entry whose `package` is no string.
         "[workspace]\n[package]\nname = \"adopter\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
-         [workspace.dependencies]\n\"xuanji\" = \"0.2\"\n\n[dependencies]\nxuanji = { workspace = true }\n",
+         [workspace.dependencies]\nalias = { package = 5, version = \"0.2\" }\n\n\
+         [dependencies]\nxuanji = { workspace = true }\n",
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
@@ -3336,7 +3360,10 @@ fn an_example_whose_package_value_is_unreadable_is_not_judged() {
     let text = std::fs::read_to_string(&manifest).expect("read");
     std::fs::write(
         &manifest,
-        format!("{text}alias = {{ package = xuanji, version = \"0.2.0\" }}\n"),
+        // **This WHEN moved when a real parser replaced the hand-rolled reader.** It was a bare word,
+        // `package = xuanji`, which is not TOML at all — the parser refuses the document, so the site this
+        // direction observes would go unobserved. A `package` that is a value but no string still reaches it.
+        format!("{text}alias = {{ package = 5, version = \"0.2.0\" }}\n"),
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
@@ -3374,12 +3401,8 @@ fn an_example_declaring_several_package_keys_is_not_judged() {
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: name two crates at once");
     refusal::expect(
-        "release-coherence#dependency-declares-several-packages",
-        &refuse(
-            &fixture.repo,
-            Kind::CannotJudge,
-            "declares 2 `package` keys",
-        ),
+        "release-coherence#manifest-unparseable",
+        &refuse(&fixture.repo, Kind::CannotJudge, "duplicate key"),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -3436,12 +3459,8 @@ fn an_example_declaring_several_version_keys_is_not_judged() {
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: require one crate at two versions");
     refusal::expect(
-        "release-coherence#example-declares-several-pins",
-        &refuse(
-            &fixture.repo,
-            Kind::CannotJudge,
-            "declares 2 `version` keys",
-        ),
+        "release-coherence#manifest-unparseable",
+        &refuse(&fixture.repo, Kind::CannotJudge, "duplicate key"),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -3600,7 +3619,10 @@ fn an_example_pin_this_reader_cannot_take_is_not_one_that_satisfies() {
     let text = std::fs::read_to_string(&manifest).expect("read");
     std::fs::write(
         &manifest,
-        format!("{text}tianheng = {{ version = '0.2.0' }}\n"),
+        // **This WHEN moved when a real parser replaced the hand-rolled reader.** It was a single-quoted
+        // version, legal TOML the old reader declined; the parser takes it. What still cannot be taken as a
+        // requirement is a value that is no string.
+        format!("{text}tianheng = {{ version = 5 }}\n"),
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
