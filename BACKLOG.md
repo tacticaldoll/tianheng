@@ -466,6 +466,31 @@ consumer for an undemonstrated deduplication.
   *Authority:* this entry, `AGENTS.self-law.md`, `crates/kanhe/tests/release_coherence.rs`'s documented bug
   history.
 
+  **The amendment fired and four of the readers are migrated. The fifth is scoped here rather than
+  attempted again.** `toml_edit` entered `kanhe`'s allowlist through the ritual, and `workspace_version`,
+  `package_name`, `require_lock_versions` and `publishable` now ask the parser. `declared_dependencies` does
+  not, and the reason is its **consequences**, not its difficulty: the reader itself was written and the
+  corpus confirmed every behaviour it changes is an improvement — a quoted key names its crate, an escaped
+  path is compared, a duplicate key is the parse error cargo also gives.
+
+  What it costs, measured on the attempt rather than estimated: **287 insertions against 1,168 deletions**,
+  four enum variants made unconstructible (`Declared::Several`, `Package::Several`,
+  `Package::FieldUnreadable`, `Package::KeyUnreadable`), **six refusal sites retired**, four unit directions
+  deleted with their subject, one moved onto the new reader, two spec scenarios rewritten — and **ten
+  integration directions each needing a judgement about what the right new answer is**, one of whose fixtures
+  is itself invalid TOML the hand-rolled reader tolerated.
+
+  *Why it is not split:* the four variants die together, the moment the reader stops constructing them. There
+  is no slice that retires one state without the reader, and keeping the hand-rolled reader alongside the
+  parser to stage it would be two readers of one question — the defect the entry is about. So it is one
+  change, and it is a large one.
+
+  *Promotion trigger, second half:* a session that can carry ten fixture judgements and a six-site retirement
+  as its own piece of work. It was attempted at the end of one that had already landed four migrations, and
+  stopped rather than finished, because the attempt had already produced one false green — a failure grep
+  that could not see a test module which had stopped compiling. The reader is worth writing again from the
+  measurement above; what it needs is room, not rediscovery.
+
   ~~**Two lists of `(String, String)` with different meanings flow through one function, and only the failure
   matrix can tell them apart.**~~ **BUILT — the trigger fired on both clauses at once.** Selecting the
   internal-pin subject by identity made `require_internal_pins` the third consumer *and* an edit to this
