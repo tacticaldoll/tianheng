@@ -24,6 +24,20 @@ them.
 
 ### Self-governance
 
+- **The publication reader is parsed, and the key it could not decode is now decided rather than deferred.**
+  `publishable` walked its own table and asked a shared key reader whether a line assigned `publish`. A key
+  spelling it could not decode answered `Unreadable` — the safe answer, and not the right one: measured
+  against cargo, `"\u0070ublish" = false` reports `publish=[]`, so the crate does **not** publish. The parser
+  decodes the key and the verdict follows.
+
+  The negative run is the part worth keeping. With an undecoded key passed over, `publishable` answers
+  **`Yes`** for a crate cargo refuses to publish — which is what the old `Unreadable` was standing in front
+  of. Two rows now hold it: the decoded key, and `publish.workspace = true`, which defers to the workspace
+  manifest and is still no verdict this text carries.
+
+  `classify` went with it — the value classifier is what `as_bool` and `as_array` answer, so it became dead
+  code the moment the parse landed.
+
 - **The lock reader takes `[[package]]` from the parser, which removes an ordering premise it had to know.**
   The block boundary was the literal string `[[package]]`, and beneath it sat a fact about cargo's output
   order: `source` is written *after* `version`, so filing an entry before the body ended recorded every one

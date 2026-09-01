@@ -284,57 +284,45 @@ pub enum Publishable {
 /// Executed TOML text, so a commented-out `publish = false` is not read as a declared one — the reason
 /// `require_internal_pins` records for the same corpus.
 pub fn publishable(text: &str) -> Publishable {
-    let mut declared: Option<(&str, Publishable)> = None;
-    let source = crate::region::Source::of(text);
-    // The cut owns the table boundary; `names_the_package_table` says which heading is this reader's, which
-    // is the only part that was ever specific to it.
-    // An undecodable heading could be the package table, so the verdict is refused rather than reached by
-    // passing over it — measured against cargo, `["\u0070ackage"]` is the package table to it.
-    if let Some(line) = source
-        .toml()
-        .numbered_lines()
-        .find_map(|(_, line)| table_heading(line).filter(|h| h.undecodable).map(|_| line))
-    {
-        return Publishable::Unreadable(line.trim().to_string());
-    }
-    let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
-        table_heading(line).map(|heading| heading.names("package"))
-    });
-    for (_, line) in tables
-        .iter()
-        .filter(|table| table.name)
-        .flat_map(|table| table.body.iter())
-    {
-        let trimmed = line.trim();
-        // **Through the shared key reader, which exists in this file to answer exactly this.** This held its
-        // own chain — `split_once('=')`, then `split_once('.')`, then `unquoted` — reaching the right answer
-        // for `publish` while splitting on the first *raw* `=` and the first raw `.`, where the shared reader
-        // cuts outside strings. A second implementation of one predicate, in the same module as the first, is
-        // the shape this file spends its history closing; a review found it one round after the reader landed.
-        //
-        // What each answer means here has not changed. A key spelling this reader cannot decode **might** be
-        // `publish` — measured against cargo, `"\u0070ublish" = false` reports `publish=[]`, so passing over
-        // it answers *publishable* for a crate cargo refuses. And `publish.workspace = true` assigns a field
-        // of the key rather than the key, deferring to the workspace manifest, which is not a verdict this
-        // text carries.
-        let verdict = match assigned(trimmed, "publish") {
-            Assigned::Value(value) => classify(value.trim(), trimmed),
-            Assigned::Field { .. } | Assigned::Unreadable => {
-                Publishable::Unreadable(trimmed.to_string())
-            }
-            Assigned::Other => continue,
-        };
-        // Cargo refuses a manifest that declares one key twice, so a reader answering from the first of two
-        // would speak for a file cargo will not read at all.
-        if let Some((first, _)) = declared {
+    let doc = match text.parse::<toml_edit::DocumentMut>() {
+        Ok(doc) => doc,
+        // Cargo refuses a manifest it cannot parse — a key declared twice among them — so a reader answering
+        // *publishable* from one would speak for a file cargo will not read at all.
+        Err(err) => {
             return Publishable::Unreadable(format!(
-                "two `publish` keys in one `[package]` table ({first}, {trimmed})"
+                "a manifest this parser cannot read — {}",
+                err.to_string()
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
             ));
         }
-        declared = Some((trimmed, verdict));
+    };
+    let Some(declared) = doc
+        .get("package")
+        .and_then(toml_edit::Item::as_table_like)
+        .and_then(|package| package.get("publish"))
+    else {
+        // An absent key is cargo's default, which is publishable.
+        return Publishable::Yes;
+    };
+    if let Some(flag) = declared.as_bool() {
+        return if flag {
+            Publishable::Yes
+        } else {
+            Publishable::No
+        };
     }
-    // An absent key is cargo's default, which is publishable.
-    declared.map_or(Publishable::Yes, |(_, verdict)| verdict)
+    match declared.as_array() {
+        // **Decided by contents, not by one spelling of the array.** `publish = [ ]` — one space, legal TOML
+        // — is refused by `cargo publish` exactly as `[]` is, measured on cargo 1.96.0.
+        Some(registries) if registries.is_empty() => Publishable::No,
+        Some(_) => Publishable::Yes,
+        // A `publish` that is neither a boolean nor an array: `publish.workspace = true` defers to the
+        // workspace manifest, which is not a verdict this text carries, and any other shape is one this
+        // reader has not met.
+        None => Publishable::Unreadable(declared.to_string().trim().to_string()),
+    }
 }
 
 /// A TOML table heading: which table it names, and whether it opens an **array** of tables.
@@ -741,25 +729,4 @@ fn scalar(rest: &mut std::str::Chars<'_>, digits: usize) -> Option<char> {
         value = value * 16 + rest.next()?.to_digit(16)?;
     }
     char::from_u32(value)
-}
-
-/// What a `publish` value says, once the key is known to be exactly `publish`.
-fn classify(value: &str, line: &str) -> Publishable {
-    match value {
-        "false" => Publishable::No,
-        "true" => Publishable::Yes,
-        // **The array is decided by its contents, not by matching one spelling of it.** A literal `"[]"` arm
-        // stood here and every other bracketed value went to `Yes`, so `publish = [ ]` — one space, legal
-        // TOML, and refused by `cargo publish` exactly as `[]` is (measured on cargo 1.96.0: `cargo
-        // metadata` reports `[]` and the dry run errors) — was answered *publishable*, in the function
-        // written because text readers called the empty array published.
-        other if other.starts_with('[') && other.ends_with(']') => {
-            if other[1..other.len() - 1].trim().is_empty() {
-                Publishable::No
-            } else {
-                Publishable::Yes
-            }
-        }
-        _ => Publishable::Unreadable(line.to_string()),
-    }
 }
