@@ -870,6 +870,11 @@ consumer for an undemonstrated deduplication.
   class:* patch; both crates ship in no package, so any retirement it produced would reach no adopter.
   *Authority:* this entry, `PROJECT.md`'s drift law and its audit-cycle decision, `governance-dogfood`.
 
+  **Witness-only, sorted 2026-09-01.** No sweep decides this: the trigger is an audit nobody has run, and
+  this entry already says running it is a window's work rather than a review round's. What would settle it
+  is the audit's own output — each target's answer to *what did this catch, and when* — enumerated from
+  tracked content, and there is nothing to look at until someone does that.
+
 - **WATCH: the prose-claim class is filed but not closed, and no rule says how much of a class must react.**
   *Class:* WATCH. *Observed pressure:* `AGENTS.md` says a governance rule measured un-reacted is *given a
   reaction or filed, in the same change* — and filing counts as answering. The `READY-PATCH` entry above
@@ -883,6 +888,10 @@ consumer for an undemonstrated deduplication.
   prose. *Promotion trigger:* a third window in which this class costs a review round after the `READY-PATCH`
   above lands. *Version class:* patch. *Authority:* `AGENTS.md`'s *A repair loop is a diagnosis, not a
   schedule*.
+
+  **Witness-only, sorted 2026-09-01.** No sweep decides this: it turns on a third window in which the class
+  costs a review round, which only whoever pays that round can report. The `READY-PATCH` it waits behind has
+  not landed, so the count cannot have advanced either way.
 
 - **WATCH: The Definition of Done and CI mirror each other in one direction only.** *Class:* WATCH.
   *Observed pressure:* `dod_coherence` asserts that every command in `AGENTS.md`'s list appears in CI, and
@@ -1203,6 +1212,11 @@ consumer for an undemonstrated deduplication.
   which is why this is filed rather than declared. *Version class:* patch; `hunyi` ships. *Authority:*
   `semantic-*` capabilities, which own the resolver's reach.
 
+  **Witness-only, sorted 2026-09-01.** No sweep decides this: the trigger is an input rustc accepts and this
+  reader rejects, and two people have tried to construct one and failed. A sweep of the tree cannot produce
+  an input that does not exist in it; what would settle it is a construction, and the same construction is
+  what the declared bound needs to be pinned by.
+
 - **WATCH: The one-spelling corpus reader matches a dependency by name, not by resolved identity.** *Class:*
   WATCH. *Observed pressure:* `one_spelling.rs`'s `members_reaching` builds its edge set by comparing a
   declared dependency's name against each workspace member's **directory basename**, with no path, workspace,
@@ -1318,6 +1332,11 @@ consumer for an undemonstrated deduplication.
   `census::figures_in` reading only the first match on a line — was closed the following day and is no longer
   live; this entry went uncorrected until a later adversarial-review pass noticed the drift.)
 
+  **Witness-only, sorted 2026-09-01.** No sweep decides this: the fourth shape is recognised by a reader
+  holding a check's corpus against the claim it serves, which this entry records as sitting outside the
+  observation surface this repository ships. What would settle it is a third instance **named in a review**,
+  written down when it is found rather than counted later.
+
 - **WATCH: `Bind a claim to its measurement` is a governing rule with no reaction.** *Class:* WATCH. *Observed
   pressure:* nine review rounds in the 0.5.0 window, whose largest class by far was *the corpus was wrong or
   its narrowing was undeclared* — nine of roughly twenty findings. The rule was written from that sweep and
@@ -1336,6 +1355,11 @@ consumer for an undemonstrated deduplication.
   which is intent rather than shape, and the measured-and-rejected class here is exactly judgements over text.
   If it is ever reacted, the reaction is more likely to be a **type** that makes the weak binding harder to
   reach than a scan that recognises it.
+
+  **Witness-only, sorted 2026-09-01, and deliberately so.** The rule is its own control: only an instance
+  where the weak binding was chosen **after** the rule was written counts, so nothing in the tree today can
+  answer it and no sweep ever will. It is settled by a reviewer noting, at the moment they find one, that
+  the rule existed and was not reached for.
 
 - **WATCH: a figure a repository check already produces can be repeated in prose that declares no census, and
   the join between producers and repetitions has never been taken.** *Class:* WATCH. *Observed pressure:* the
@@ -1359,6 +1383,10 @@ consumer for an undemonstrated deduplication.
   second test — *is this figure a census* cannot be generated and staleness-checked, only hand-maintained, so
   such a sweep would produce the drifting artifact it exists to police, one level up. The checks are code and
   therefore enumerable. Its size is deliberately not written here.
+
+  **Witness-only, sorted 2026-09-01, for the same reason as the entry above and stated there:** the disposal
+  rule is the control, so the instances that produced it cannot stand as evidence for it, and only a count
+  finding made after it was written counts. The producers are enumerable; the *finding* is not.
 
 - **WATCH: A third hand-written scanner of the `#### Scenario:`/`- **PINNED-BY**` grammar still disagrees with the
   other two on two edge cases.** *Class:* WATCH. *Observed pressure:* `bound_register_parse::bounds_in` and
@@ -1757,7 +1785,13 @@ consumer for an undemonstrated deduplication.
   the false ground rather than catching it. Agreement is not correctness, and the repair proposed here buys
   agreement; what caught that instance was a person running the entry's own trigger against the file that
   answers it. *Promotion trigger:* a second bound found with diverging carriers, or a
-  bound whose reason reaches the agent-facing projection. *Compatibility class:* patch; no crate ships either
+  bound whose reason reaches the agent-facing projection. **State, sorted 2026-09-01:** the second half is
+  fired and recorded above. The first half is **witness-only** for the reason this entry gives for not
+  building its own reaction — deciding whether a `because` and its spec clause say the same thing is a
+  comparison of prose, so the set is enumerable but the judgement is not, and a sweep would produce the
+  similarity measure this repository has measured and rejected. It is settled by a reviewer reading one
+  bound's two carriers against each other and finding they disagree, as the reviewer who found the first
+  one did. *Compatibility class:* patch; no crate ships either
   carrier. *Authority:* this entry.
 
 - **WATCH: a bare reference to a registered constructor's name cannot be told from a local variable sharing
@@ -1902,6 +1936,10 @@ consumer for an undemonstrated deduplication.
   boundary rather than a fake binary on the path. *Authority:* engine. *Compatibility:* patch; the checks
   ship in no crate.
 
+  **Witness-only, sorted 2026-09-01.** No sweep decides this: the trigger is a harness that can supply a
+  failing tool without the fixture becoming a test of that harness — a thing someone would have to design,
+  not a state of the tree. Until one exists there is nothing to look for.
+
 - **WATCH: the window the publish wrapper can only narrow.** *Observed pressure:* the publish wrapper runs
   the source gate, then `cd`s and `exec`s `cargo publish`. Between those the repository can be altered — a
   commit, an amend, a tag moved, the remote's `main` advancing — and the gate's verdict is about the tree as
@@ -1991,6 +2029,11 @@ consumer for an undemonstrated deduplication.
   does not read the sentence — a declared syntax for anchoring, say, so the reaction judges a form rather
   than a meaning. *Authority:* engine. *Compatibility:* patch; the reaction is repository machinery and
   ships in no package.
+
+  **Witness-only, sorted 2026-09-01.** No sweep decides this: the trigger is a *declared syntax for
+  anchoring* — a decision about how these documents are written, so that the reaction judges a form rather
+  than a meaning. The corpus and the command are written above and stay runnable; what is missing is the
+  convention, and no run produces one.
 
 - **WATCH: the backtick primitives the pairing reader names.** *Observed pressure:* pairing markers as they
   arrive lets one unpaired marker shift every pair after it, which reads as prose named and a name dropped
