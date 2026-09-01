@@ -364,10 +364,16 @@ being one. A floor this reader invents is a floor it misses every shorter citati
   digit, which names something other than a commit
 - **THEN** the reaction fails anyway. It decides by **shape**, and nothing in the tree distinguishes a value
   of that shape from a citation without resolving it against an object database
-- **AND** resolving was measured and declined: CI checks out one commit, so the objects a citation names are
-  absent there — the reader would answer clean over every citation, or refuse to judge the whole gate,
-  depending on which way its floor was written. A shape test that over-reacts on a value nobody writes is the
-  better trade, and measured over the live corpus no span of this shape names anything but a commit
+- **AND** resolving was measured and declined, for a reason corrected on 2026-09-01. The ground first
+  written here — *CI checks out one commit* — was false, and had been since `0.2.1`, three releases before
+  this bound was declared: the job that runs this reader checks out with `fetch-depth: 0`, for a reason the
+  workflow states in that job's own checkout block. What actually declines resolution is that the verdict
+  would then depend on the object store rather than on the tracked text — jobs in this workflow that check
+  out at the default depth would answer clean over every citation, so moving the reader to one of them, or
+  dropping that line for cost, would report clean for a reason unrelated to the content. That is a false
+  negative produced by configuration, the one direction this family forbids. A shape test that over-reacts
+  on a value nobody writes is the better trade, and measured over the live corpus no span of this shape
+  names anything but a commit
 - **UNPINNED** `BACKLOG.md` — *a code span shaped like an object that names none*
 
 #### Scenario: A dated changelog section is a record, and an undated one is not

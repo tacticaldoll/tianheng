@@ -1801,14 +1801,27 @@ consumer for an undemonstrated deduplication.
   citation reader decides by shape, so a code span carrying 4 to 40 lowercase hex characters with both a
   letter and a digit is refused whether or not it names a commit — a review planted an unrelated hex value
   and watched it refused. *Observation source:* resolving each token against the object database was measured
-  and declined; CI checks out one commit, so the objects a citation names are absent there and the reader
-  would either answer clean over all of them or refuse to judge the whole gate. Measured over the live
+  and declined. **The ground given for declining was false, and the trigger below fired on it on
+  2026-09-01.** It said CI checks out one commit; the job that runs this reader checks out with
+  `fetch-depth: 0`, and has since `0.2.1` — three releases before this bound was declared — for a reason the
+  workflow states in that job's own checkout block. Resolution is therefore decidable where the reader runs,
+  in CI and in a contributor's clone alike. What actually declines it is a different property, now written
+  in its place: the verdict would depend on the object store rather than on the tracked text, and the jobs
+  in this workflow that check out at the default depth would answer clean over every citation, so moving the
+  reader to one of them — or dropping that line for cost — would report clean for a reason unrelated to the
+  content. That is a false negative produced by configuration. **The same defect afflicts the
+  `git cat-file -t` instrument the own-commit-objects entry proposes as its upgrade path**, which is now one
+  shared reason rather than two entries each arguing alone. Measured over the live
   corpus: no span of this shape names anything but a commit, and no span of 4 to 6 characters carries both
   kinds of character at all, so the over-reaction is unrealised. *Current reaction or bound:*
   `reference-integrity/a-code-span-shaped-like-an-object-is-refused-though-it-names-none-a-stated-bound`.
   *Risk:* prose that means to write a hex value in a code span is refused and has to reword — visible and
-  fixable, which is why this direction was chosen over the miss. *Next trigger:* a real value of that shape
-  arriving in live prose, or a CI checkout that carries history, which would make resolution decidable.
+  fixable, which is why this direction was chosen over the miss. *Next trigger:* a real value of that shape arriving in live prose, or a CI
+  checkout that carries history, which would make resolution decidable — **that second clause fired, and is
+  kept rather than struck**: it was already true when the bound was declared, so it never named a future
+  event, and the entry records the state instead of dropping the clause that revealed it. It is answered
+  above: resolution *is* decidable, and the property that declines it is a different one. What would reopen
+  the decision is a way to resolve an object that does not depend on the checkout.
   *Authority:* engine. *Compatibility:* patch; the reaction is repository machinery and ships in no package.
 
 - **WATCH: an abbreviation carrying no letter or no digit.** *Class:* WATCH. *Observed pressure:*
