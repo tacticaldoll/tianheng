@@ -549,7 +549,9 @@ consumer for an undemonstrated deduplication.
   refusals that gave that reason kept their behaviour and changed the reason: a **value** carrying an escape
   (`manifest::quoted_value`) and a **non-bare dependency key** (`Package::KeyUnreadable`) both said *no
   decoder exists*, and both now say what actually separates them from a heading — a refusal there is visible
-  to an operator, and `is_bare_key` answers *is this one bare key*, which `unquoted` does not.
+  to an operator. **That paragraph describes the hand-rolled reader, which a real parser has since replaced**
+  (`refactor(kanhe): the dependency grammar is parsed`): `manifest::quoted_value` and the bare-key predicate
+  it contrasted are both gone, and the parser answers the key question without either.
 
   **A third reader of the same class arrived, and it is on the cheap side of this entry's own dividing line.**
   `crates/kanhe/tests/merge_workflow.rs`'s `workflow_shape` reads `.github/workflows/ci.yml` line by line to
@@ -1037,7 +1039,18 @@ consumer for an undemonstrated deduplication.
   *Risk:* a dead pointer in the actionable half of an entry sends an implementer to a name that is not there —
   and the class it belongs to is one this repository declares: *an entry that still describes the retired
   mechanism in the present tense is exactly as stale as one naming a retired term*. *Promotion trigger:* a
-  third live instance, or a convention that makes the exemption decidable. *Version class:* patch; governance
+  third live instance, or a convention that makes the exemption decidable. **The trigger fired on
+  2026-09-01, and two of the three instances were made by the 0.5.1 window that swept for them.** Re-run over every
+  tracked Markdown file outside `CHANGELOG.md` and `docs/history/`: 433 backticked `snake_case` tokens, 13 resolving to nothing, of which eleven are the
+  legitimate forms this entry already names — past-tense (*since removed*, *was one*, *has never existed*),
+  a spec's own hypothetical (`foo_thing`, `some_instant`), an anti-pattern named from outside this tree
+  (`freeze_methods`, which `git log -S` shows was never in it), and one sitting under a closing paragraph
+  that names the surviving test. The two that are not: `is_bare_key`, present-tense at this file's own
+  line, deleted by the 0.5.1 window's `refactor(kanhe): the dependency grammar is parsed`; and
+  `imports_and_rest`, pointing into a file that still exists after the reader moved to `syn`. Both are
+  repaired here, and a third of the same class was found outside the Markdown corpus — a live doc comment
+  in `crates/kanhe/tests/release_coherence.rs` describing `quoted_value` in the present tense, deleted by
+  the same refactor. *Version class:* patch; governance
   documents only. *Authority:* `repository-checks`. *Shape:* filed rather than built, and the measurement is
   why. The token and the question are both decidable — *does this name exist in tracked code* — but every one
   of the six exemptions is a name cited **as history**, and recognizing that is prose judgement, which this
@@ -1045,7 +1058,16 @@ consumer for an undemonstrated deduplication.
   **declaration** — the idiom `one_spelling` already uses — requiring a retired name cited in a live document
   to carry a marker. That is a change to how entries are written, not a detector, which is why it is filed
   with its measurement rather than half-built. The probe also needs the `name()` form, which the run above
-  did not match. A second constraint, measured over the remaining sixty live documents by a later review:
+  did not match. **A second measured reason, from the 2026-09-01 re-run: the two available resolvers fail in
+  opposite directions, and neither is the one this entry assumed.** Resolving a token against the *text* of
+  tracked files — the instrument named above — reports 13 unresolved but reads a name that survives only in
+  prose about its own deletion as resolved, which is exactly how `quoted_value` escaped. Resolving against
+  *definition sites* catches that and reports 60, of which the overwhelming majority are legitimate: `std`
+  methods (`split_once`, `read_dir`, `symlink_metadata`), crate names (`serde_json`, `toml_edit`), JSON field
+  names a spec normatively defines (`stale_baseline`, `repair_hint`, `deny_breach`), and shell functions in
+  `scripts/*.sh` (`require_ci_green`, `require_changed_files`). A backticked identifier in these documents
+  names one of six kinds of thing, and no single corpus resolves all six — so the missing half is not a
+  better corpus but the declaration this entry already proposes. A second constraint, measured over the remaining sixty live documents by a later review:
   **a negative requirement cites the name it forbids** — `adopter-surface`'s *the obsolete public `FindingKey`
   SHALL be removed* and *SHALL NOT promise a `Dimension`/`ObservedFact` plugin trait* — so a resolver keyed on
   the bare name refuses exactly the requirements being honoured. Recognize by position and shape, never by the
@@ -1161,8 +1183,9 @@ consumer for an undemonstrated deduplication.
   package. *Authority:* none — this is a lint policy, not a Tianheng boundary or a repository check.
 
   **The trigger fired, and the decision was re-taken on a measurement rather than on the count.** A third
-  instance arrived on 2026-08-18 — `imports_and_rest` in `crates/kanhe/tests/refusal_register.rs`, private,
-  in a test binary, after this entry — satisfying both halves of the trigger this entry had written down:
+  instance arrived on 2026-08-18 — `imports_and_rest`, then in `crates/kanhe/tests/refusal_register.rs`,
+  private, in a test binary, after this entry (the name went with the reader's move to `syn` and no longer
+  resolves) — satisfying both halves of the trigger this entry had written down:
   *a third instance, or any instance on a private item after this entry*. The reason recorded here for not
   adopting the lint was bound to the count (*a class with two instances*), so the count moving obliged a
   re-decision rather than a restatement.
