@@ -498,6 +498,40 @@ consumer for an undemonstrated deduplication.
   that could not see a test module which had stopped compiling. The reader is worth writing again from the
   measurement above; what it needs is room, not rediscovery.
 
+  **That trigger fired and the reader landed; the list above is wrong in both directions, measured
+  2026-09-02.** `declared_dependencies` asks the parser now, through
+  `refactor(kanhe): the dependency grammar is parsed` — so does `package_name`, `require_lock_versions`,
+  `workspace_version` and `publishable` — and the `Package` enum this entry said would die with it is gone
+  entirely, variants and all. Two corrections follow, and neither is a detail:
+
+  - **`prelude_promise.rs`'s `block_body` was never in scope.** The *Observed pressure* above names it among
+    the readers that route through `Source::of(text).toml()` and then hand-split lines for table structure.
+    It does not: it calls `.rust()` and walks braces to find a block body, and `.toml()` appears nowhere in
+    that file's history. Whoever picked this entry up would have gone looking for a TOML reader that is not
+    there.
+  - **The survivor is `manifest::assignment`, which this entry never named.** It finds the `=` outside
+    strings, splits the head, and walks the dotted segments by hand — and its own doc comment records
+    *three rounds of one defect*, each round the boundary of *decoded* moved one segment right. The
+    production gate reaches it from two call sites: the workspace-version inherit check, and the inline-table
+    field reader beside it.
+
+  **The fourth round is live, and it is the first of them found by measurement rather than by review.**
+  A member may inherit through a sub-table heading — `[package.version]` with `workspace = true` — and
+  cargo 1.96.0 resolves it, measured in a scratch workspace whose member declares exactly that and whose
+  `cargo metadata` reports the inherited version. The inherit check walks lines asking each one whether it
+  assigns `version`; a table heading assigns nothing, so no line answers, and the member is refused for not
+  inheriting a version it does inherit. A false refusal — not the direction the Core Contract forbids, but a
+  defect, and the same defect the three recorded rounds are, arriving through the one spelling a
+  line-oriented reader cannot represent at all.
+
+  *What the repair deletes rather than swaps, measured the same day:* `dotted(` and `unquoted(` are called
+  only inside `manifest.rs`, and `outside_strings`, `split_outside`, and the gate's `inline_fields` and
+  `offer_value` are local to their own files. A parsed document answers the inherit question in one
+  expression over every spelling — the four this entry's history records, the quoted-inner form, and the
+  sub-table form above — verified against `toml_edit` on all six together with five negatives before any of
+  this was written down. So the remaining migration takes the hand-rolled TOML machinery out rather than
+  standing a parser beside it.
+
   ~~**Two lists of `(String, String)` with different meanings flow through one function, and only the failure
   matrix can tell them apart.**~~ **BUILT — the trigger fired on both clauses at once.** Selecting the
   internal-pin subject by identity made `require_internal_pins` the third consumer *and* an edit to this
