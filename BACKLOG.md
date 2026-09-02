@@ -443,184 +443,6 @@ consumer for an undemonstrated deduplication.
   requirement prose instead. This does not close the entry — review convention cannot derive the missing binding —
   but it prevents sync from knowingly admitting another un-reacted scenario while the derived capability is designed.
 
-- **kanhe's TOML readers hand-parse a grammar `region::toml()` already tokenizes but does not structure.**
-  *Class:* READY-PATCH. *Observed pressure:* `release_coherence_gate.rs`'s `declared_dependencies`,
-  `package_name` and `require_lock_versions`, and `prelude_promise.rs`'s `block_body`, each route through
-  `kanhe::region::Source::of(text).toml()` for comment/string-stripping but still hand-split the resulting
-  lines for table and block structure. `crates/kanhe/tests/release_coherence.rs`'s own doc comments record
-  the resulting bug class as a still-open well, not a closed one: a `[lib]` name-line preceding `[package]`
-  misread as the package name, single- versus double-quoted TOML string values silently unreadable, a
-  `[[patch.unused]]` table's fields bleeding into the `[[package]]` block above it because the block boundary
-  was the literal string `[[package]]` and nothing else, a commented-out dependency line counted as a real
-  pin, and a comment glued to a value with zero whitespace tripping an older lexer. *Observation source:* a
-  `v0.4.0..release/0.5.0` review that also sampled the most recent 60 commits on `release/0.5.0` and found 46
-  (78%) carrying `kanhe` in their Conventional Commit scope and 38 (64%) typed `fix` — this entry's TOML
-  readers are the still-unclosed half of that pattern; the Rust-side half (`refusal_register.rs`,
-  `observer_protocol.rs`'s body-extent reader) closed via syn as a `[dev-dependencies]`-only addition,
-  requiring no self-law amendment because `restrict_dependencies_to` observes only `DependencyKind::Normal`
-  by default. *Current reaction or bound:* none declared in any capability spec; the bugs above are recorded
-  only in doc comments and `CHANGELOG.md` history, not in `openspec/specs/repository-checks/spec.md` as a
-  stated bound. *Risk, bounded rather than assumed:* kanhe ships in no package (`publish = false`), so a
-  misread here misfires only this repository's own release-coherence gate — never an adopter's build or a
-  published artifact. *Promotion trigger:* unlike the Rust-side closure above, these four functions run from
-  non-test `crates/kanhe/src/` code that the `release-coherence` production gate calls directly, so a real
-  TOML parser (`toml` or `toml_edit`) would land in kanhe's `[dependencies]`, not `[dev-dependencies]` —
-  crossing kanhe's declared dependency allowlist (`AGENTS.self-law.md`, rendered from `crates/shengmo/src/law.rs`)
-  and requiring the self-law amendment ritual `crates/kanhe/tests/self_law_amendment.rs` records, with steward
-  review per `.github/CODEOWNERS`. The trigger is that amendment being proposed and accepted — this entry does
-  not promise a minor release until it fires. *Compatibility class:* patch; the correction itself ships in no
-  crate, but the prerequisite amendment is an architectural change decided by the steward, not a code patch.
-  *Authority:* this entry, `AGENTS.self-law.md`, `crates/kanhe/tests/release_coherence.rs`'s documented bug
-  history.
-
-  **The amendment fired and four of the readers are migrated. The fifth is scoped here rather than
-  attempted again.** `toml_edit` entered `kanhe`'s allowlist through the ritual, and `workspace_version`,
-  `package_name`, `require_lock_versions` and `publishable` now ask the parser. `declared_dependencies` does
-  not, and the reason is its **consequences**, not its difficulty: the reader itself was written and the
-  corpus confirmed every behaviour it changes is an improvement — a quoted key names its crate, an escaped
-  path is compared, a duplicate key is the parse error cargo also gives.
-
-  What it costs, measured on the attempt rather than estimated: **287 insertions against 1,168 deletions**,
-  four enum variants made unconstructible (`Declared::Several`, `Package::Several`,
-  `Package::FieldUnreadable`, `Package::KeyUnreadable`), **six refusal sites retired**, four unit directions
-  deleted with their subject, one moved onto the new reader, two spec scenarios rewritten — and **ten
-  integration directions each needing a judgement about what the right new answer is**, one of whose fixtures
-  is itself invalid TOML the hand-rolled reader tolerated.
-
-  *Why it is not split:* the four variants die together, the moment the reader stops constructing them. There
-  is no slice that retires one state without the reader, and keeping the hand-rolled reader alongside the
-  parser to stage it would be two readers of one question — the defect the entry is about. So it is one
-  change, and it is a large one.
-
-  *Promotion trigger, second half:* a session that can carry ten fixture judgements and a six-site retirement
-  as its own piece of work. It was attempted at the end of one that had already landed four migrations, and
-  stopped rather than finished, because the attempt had already produced one false green — a failure grep
-  that could not see a test module which had stopped compiling. The reader is worth writing again from the
-  measurement above; what it needs is room, not rediscovery.
-
-  **That trigger fired and the reader landed; the list above is wrong in both directions, measured
-  2026-09-02.** `declared_dependencies` asks the parser now, through
-  `refactor(kanhe): the dependency grammar is parsed` — so does `package_name`, `require_lock_versions`,
-  `workspace_version` and `publishable` — and the `Package` enum this entry said would die with it is gone
-  entirely, variants and all. Two corrections follow, and neither is a detail:
-
-  - **`prelude_promise.rs`'s `block_body` was never in scope.** The *Observed pressure* above names it among
-    the readers that route through `Source::of(text).toml()` and then hand-split lines for table structure.
-    It does not: it calls `.rust()` and walks braces to find a block body, and `.toml()` appears nowhere in
-    that file's history. Whoever picked this entry up would have gone looking for a TOML reader that is not
-    there.
-  - **The survivor is `manifest::assignment`, which this entry never named.** It finds the `=` outside
-    strings, splits the head, and walks the dotted segments by hand — and its own doc comment records
-    *three rounds of one defect*, each round the boundary of *decoded* moved one segment right. The
-    production gate reaches it from two call sites: the workspace-version inherit check, and the inline-table
-    field reader beside it.
-
-  **The fourth round is live, and it is the first of them found by measurement rather than by review.**
-  A member may inherit through a sub-table heading — `[package.version]` with `workspace = true` — and
-  cargo 1.96.0 resolves it, measured in a scratch workspace whose member declares exactly that and whose
-  `cargo metadata` reports the inherited version. The inherit check walks lines asking each one whether it
-  assigns `version`; a table heading assigns nothing, so no line answers, and the member is refused for not
-  inheriting a version it does inherit. A false refusal — not the direction the Core Contract forbids, but a
-  defect, and the same defect the three recorded rounds are, arriving through the one spelling a
-  line-oriented reader cannot represent at all.
-
-  *What the repair deletes rather than swaps, measured the same day:* `dotted(` and `unquoted(` are called
-  only inside `manifest.rs`, and `outside_strings`, `split_outside`, and the gate's `inline_fields` and
-  `offer_value` are local to their own files. A parsed document answers the inherit question in one
-  expression over every spelling — the four this entry's history records, the quoted-inner form, and the
-  sub-table form above — verified against `toml_edit` on all six together with five negatives before any of
-  this was written down. So the remaining migration takes the hand-rolled TOML machinery out rather than
-  standing a parser beside it.
-
-  ~~**Two lists of `(String, String)` with different meanings flow through one function, and only the failure
-  matrix can tell them apart.**~~ **BUILT — the trigger fired on both clauses at once.** Selecting the
-  internal-pin subject by identity made `require_internal_pins` the third consumer *and* an edit to this
-  sequence, and the swap stopped being latent: a unit direction handed the `(path, text)` manifests to a
-  reader expecting members, compiled, and answered with a vacuity refusal instead of the site it observes.
-  The two lists now have distinct types — a `Member` carrying the name against the `(String, String)`
-  manifests — so the swap cannot compile; the compiler found two further sites where a binding named
-  `manifests` held members. What follows is the entry as it was filed. `require_version_surfaces` takes the `(path, text)` manifests and returns the
-  `(path, name)` pairs `require_example_pins` produced; `require_changelog_state` and the lock reader read the
-  second. *Observation source:* a review opened Gate 4 on that function needing an *and then* to state its job,
-  and proposed moving the two pin calls to the caller "since the `Vec<(String, String)>` return already exists
-  for that". The move was made and reverted: the caller's `manifests` became the text list, and the lock check
-  reported *Cargo.lock is missing workspace package* with a whole manifest where a name belongs. Nothing but
-  the message assertions caught it. *Risk, bounded:* latent — today's flow is correct, and the swap is only
-  reachable by editing this sequence. *The shape:* give the two lists distinct types, so the swap cannot
-  compile and the Gate 4 rename becomes free. *Promotion trigger:* the next edit to this sequence, or a third
-  consumer of either list. *Compatibility class:* patch; the gate ships in no crate. *Authority:* this entry.
-
-  ~~**A second question about a table-body line is still answered in two places, and the general form is named
-  here rather than built.**~~ **BUILT AND RETIRED THE SAME DAY IT WAS FILED.** The deferral rested on *both
-  reach fail-closed answers today; the dependency reader refuses where it cannot decode* — true of a quoted
-  **head**, and false of a quoted **tail**, which was dropped silently. A review measured it:
-  `xuanji."path" = "xuanji"` beside `xuanji.version = "0.5"` is a path dependency at `^0.5` to cargo, and the
-  reader answered *no path*, so the stale pin left the internal check's subject while one correct pin elsewhere
-  satisfied its floor and the release reported clean. A **false negative** is not deferrable on a fail-closed
-  premise, so `manifest::assignment` was built and the two sites the false negative ran through were converted:
-  the dependency reader's **dotted** branch and the inline-table reader now decode every segment, and an
-  undecodable key reports unreadable rather than absent. `a_stale_internal_pin_behind_a_quoted_tail_is_refused`
-  holds it. *Authority:* this entry.
-
-  **What is left of it, stated rather than implied.** Two key reads still decide their own: the bare-and-inline
-  entry key in `declared_dependencies` (which hands its raw key to `Package::of`, so a quoted dependency key
-  becomes `KeyUnreadable` — fail-closed, and **pinned** by
-  `a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped` with its own spec scenario), and
-  the lock reader — which was converted when its own ordering premise came due, so what remains is the
-  bare-and-inline entry key alone. Converting the first would turn a
-  visible cannot-judge into the answer cargo gives, which is better — and it inverts a pinned scenario, so it
-  is not a release-eve edit. *Promotion trigger:* the next change to either reader, or an adopter manifest in
-  the subject corpus spelling a dependency key non-bare. *Compatibility class:* patch.
-
-  **The surface grew by an escape decoder, and that was the cheaper of two wrong answers rather than a
-  reversal of this entry.** `manifest::decoded` resolves the escapes cargo resolves in a table heading or a
-  key. It was added because the alternative was measured and was worse: `cargo metadata` reads `serde` under
-  `[target.x86_64-unknown-linux-gnu."\u0064ependencies"]` and under `["dep\u0065ndencies"]`, so a reader that
-  answered *undecidable* for a backslash left every pin in such a table unread while an ordinary pin beside it
-  kept the aggregate guard satisfied — a silent false negative in the production gate, reproduced as a clean
-  release in `an_escaped_dependency_table_heading_is_read_as_the_table_cargo_reads`. The promotion trigger
-  above is a steward amendment ritual, which is not a thing to wait behind with a false negative open. The
-  refusals that gave that reason kept their behaviour and changed the reason: a **value** carrying an escape
-  (`manifest::quoted_value`) and a **non-bare dependency key** (`Package::KeyUnreadable`) both said *no
-  decoder exists*, and both now say what actually separates them from a heading — a refusal there is visible
-  to an operator. **That paragraph describes the hand-rolled reader, which a real parser has since replaced**
-  (`refactor(kanhe): the dependency grammar is parsed`): `manifest::quoted_value` and the bare-key predicate
-  it contrasted are both gone, and the parser answers the key question without either.
-
-  **A third reader of the same class arrived, and it is on the cheap side of this entry's own dividing line.**
-  `crates/kanhe/tests/merge_workflow.rs`'s `workflow_shape` reads `.github/workflows/ci.yml` line by line to
-  hold the premise `require_ci_green` states to an operator. Seven consecutive adversarial review rounds each
-  closed its finding and surfaced one more position in the same reader: the job-name indentation, the job-key
-  indentation, the scope of the two trigger keys, the flow form at the top level, and the flow form one level
-  down. Every repair was correct and every one was verified by a fixture row and a negative run; the count is
-  the argument rather than any single miss. Two of the five failed **open** — the reader reported a premise
-  intact over a workflow that carried a real path filter.
-
-  **That severity has since been withdrawn, and the withdrawal is the useful part of this paragraph.** The
-  premise existed because the wrapper's refusal asserted it to an operator; the classification never read the
-  workflow at all. With that sentence removed the reader decides **when** an operator learns a job may skip,
-  not **whether** — a skipping job reports `SKIPPED` and the wrapper refuses either way. So the two open
-  positions cost minutes rather than admitting a merge, and a sixth would too.
-
-  **What this entry establishes and the YAML case inherits:** the Rust-side half closed with `syn` as a
-  `[dev-dependencies]`-only addition, needing no self-law amendment because `restrict_dependencies_to`
-  observes `DependencyKind::Normal` by default. `workflow_shape` lives in `crates/kanhe/tests/`, so a YAML
-  parser lands in the same table `syn` and `proc-macro2` already occupy. It is therefore **not** blocked on
-  the amendment ritual this entry's TOML half is blocked on — the two halves have different prices, and only
-  one of them was priced. *Promotion trigger for this third reader:* **a second file in
-  `.github/workflows/`**, and not a sixth position in the reader. The severity above is per mechanism and only
-  three of the five keys carry it unconditionally: `if:`, `needs:` and `continue-on-error:` move a check's
-  conclusion, so the check reports `SKIPPED` and the wrapper refuses whatever the reader did. `paths:` and
-  `paths-ignore:` stop the workflow triggering, so its checks are **absent** from the rollup — which refuses
-  today only because `ci.yml` is the sole workflow and an empty rollup takes the *no workflow has claimed this
-  head* arm. Add a second and a filtered-out `ci.yml` contributes nothing to a rollup that is non-empty and
-  green, so a missed filter is a merge rather than a delay. That count is held by
-  `a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists` rather than assumed, which is what makes
-  this trigger a reaction instead of a sentence. The TOML half being promoted would also earn it, since the
-  two share the argument if not the dependency. *Version class:* patch; `kanhe` is `publish = false` and the reader is a test.
-  *Deferred here rather than done* on the same ground as the wrapper extraction: a dependency is not added at
-  a release cut, and the reader is currently correct on every shape a fixture can construct.
-
 - **A claim about this tree, written as prose, is held only where its author declared it.** *Class:*
   READY-PATCH. *Observed pressure:* two claims were found false in the 0.5.0 window by the same shape — a
   statement about an enumerable property of this repository, written with no producer and an outer edge wider
@@ -3455,6 +3277,194 @@ that also holds a closed READY-PATCH record.
   reaction. **Still not claimed**, unchanged from the original entry: that enumerated denylists are wrong, or
   that the self-law avoids them. It does not — its inline-symbol-path confinements each carry an enumerated verb
   list, and `inline-symbol-path-confinement` declares the unlisted remainder as a bound the adopter owns.
+
+- ~~**kanhe's TOML readers hand-parse a grammar `region::toml()` already tokenizes but does not structure.**~~ **CLOSED** by `refactor(kanhe): the inherit question is parsed`, which
+  migrated the last hand-rolled TOML reader and deleted the layer beneath it. The entry is kept verbatim
+  below because two of its own claims were wrong and the corrections are the part worth not re-deriving: it
+  named `prelude_promise.rs`'s `block_body` as a TOML reader, and that function reads Rust and walks braces;
+  and it never named `manifest::assignment`, which was the actual survivor. What closed it was a defect
+  neither review nor reading found — a member inheriting through a `[package.version]` sub-table heading,
+  which cargo resolves and a line-oriented reader cannot represent — measured against cargo rather than
+  argued. One thing is left behind and is not this entry's: `region::Source::toml()` now has no production
+  caller at all, only directions over the lexer itself, and whether a lexer mode with no reader should be
+  retired is a question about `region` rather than about the readers this entry watched.
+
+  *Class:* READY-PATCH. *Observed pressure:* `release_coherence_gate.rs`'s `declared_dependencies`,
+  `package_name` and `require_lock_versions`, and `prelude_promise.rs`'s `block_body`, each route through
+  `kanhe::region::Source::of(text).toml()` for comment/string-stripping but still hand-split the resulting
+  lines for table and block structure. `crates/kanhe/tests/release_coherence.rs`'s own doc comments record
+  the resulting bug class as a still-open well, not a closed one: a `[lib]` name-line preceding `[package]`
+  misread as the package name, single- versus double-quoted TOML string values silently unreadable, a
+  `[[patch.unused]]` table's fields bleeding into the `[[package]]` block above it because the block boundary
+  was the literal string `[[package]]` and nothing else, a commented-out dependency line counted as a real
+  pin, and a comment glued to a value with zero whitespace tripping an older lexer. *Observation source:* a
+  `v0.4.0..release/0.5.0` review that also sampled the most recent 60 commits on `release/0.5.0` and found 46
+  (78%) carrying `kanhe` in their Conventional Commit scope and 38 (64%) typed `fix` — this entry's TOML
+  readers are the still-unclosed half of that pattern; the Rust-side half (`refusal_register.rs`,
+  `observer_protocol.rs`'s body-extent reader) closed via syn as a `[dev-dependencies]`-only addition,
+  requiring no self-law amendment because `restrict_dependencies_to` observes only `DependencyKind::Normal`
+  by default. *Current reaction or bound:* none declared in any capability spec; the bugs above are recorded
+  only in doc comments and `CHANGELOG.md` history, not in `openspec/specs/repository-checks/spec.md` as a
+  stated bound. *Risk, bounded rather than assumed:* kanhe ships in no package (`publish = false`), so a
+  misread here misfires only this repository's own release-coherence gate — never an adopter's build or a
+  published artifact. *Promotion trigger:* unlike the Rust-side closure above, these four functions run from
+  non-test `crates/kanhe/src/` code that the `release-coherence` production gate calls directly, so a real
+  TOML parser (`toml` or `toml_edit`) would land in kanhe's `[dependencies]`, not `[dev-dependencies]` —
+  crossing kanhe's declared dependency allowlist (`AGENTS.self-law.md`, rendered from `crates/shengmo/src/law.rs`)
+  and requiring the self-law amendment ritual `crates/kanhe/tests/self_law_amendment.rs` records, with steward
+  review per `.github/CODEOWNERS`. The trigger is that amendment being proposed and accepted — this entry does
+  not promise a minor release until it fires. *Compatibility class:* patch; the correction itself ships in no
+  crate, but the prerequisite amendment is an architectural change decided by the steward, not a code patch.
+  *Authority:* this entry, `AGENTS.self-law.md`, `crates/kanhe/tests/release_coherence.rs`'s documented bug
+  history.
+
+  **The amendment fired and four of the readers are migrated. The fifth is scoped here rather than
+  attempted again.** `toml_edit` entered `kanhe`'s allowlist through the ritual, and `workspace_version`,
+  `package_name`, `require_lock_versions` and `publishable` now ask the parser. `declared_dependencies` does
+  not, and the reason is its **consequences**, not its difficulty: the reader itself was written and the
+  corpus confirmed every behaviour it changes is an improvement — a quoted key names its crate, an escaped
+  path is compared, a duplicate key is the parse error cargo also gives.
+
+  What it costs, measured on the attempt rather than estimated: **287 insertions against 1,168 deletions**,
+  four enum variants made unconstructible (`Declared::Several`, `Package::Several`,
+  `Package::FieldUnreadable`, `Package::KeyUnreadable`), **six refusal sites retired**, four unit directions
+  deleted with their subject, one moved onto the new reader, two spec scenarios rewritten — and **ten
+  integration directions each needing a judgement about what the right new answer is**, one of whose fixtures
+  is itself invalid TOML the hand-rolled reader tolerated.
+
+  *Why it is not split:* the four variants die together, the moment the reader stops constructing them. There
+  is no slice that retires one state without the reader, and keeping the hand-rolled reader alongside the
+  parser to stage it would be two readers of one question — the defect the entry is about. So it is one
+  change, and it is a large one.
+
+  *Promotion trigger, second half:* a session that can carry ten fixture judgements and a six-site retirement
+  as its own piece of work. It was attempted at the end of one that had already landed four migrations, and
+  stopped rather than finished, because the attempt had already produced one false green — a failure grep
+  that could not see a test module which had stopped compiling. The reader is worth writing again from the
+  measurement above; what it needs is room, not rediscovery.
+
+  **That trigger fired and the reader landed; the list above is wrong in both directions, measured
+  2026-09-02.** `declared_dependencies` asks the parser now, through
+  `refactor(kanhe): the dependency grammar is parsed` — so does `package_name`, `require_lock_versions`,
+  `workspace_version` and `publishable` — and the `Package` enum this entry said would die with it is gone
+  entirely, variants and all. Two corrections follow, and neither is a detail:
+
+  - **`prelude_promise.rs`'s `block_body` was never in scope.** The *Observed pressure* above names it among
+    the readers that route through `Source::of(text).toml()` and then hand-split lines for table structure.
+    It does not: it calls `.rust()` and walks braces to find a block body, and `.toml()` appears nowhere in
+    that file's history. Whoever picked this entry up would have gone looking for a TOML reader that is not
+    there.
+  - **The survivor is `manifest::assignment`, which this entry never named.** It finds the `=` outside
+    strings, splits the head, and walks the dotted segments by hand — and its own doc comment records
+    *three rounds of one defect*, each round the boundary of *decoded* moved one segment right. The
+    production gate reaches it from two call sites: the workspace-version inherit check, and the inline-table
+    field reader beside it.
+
+  **The fourth round is live, and it is the first of them found by measurement rather than by review.**
+  A member may inherit through a sub-table heading — `[package.version]` with `workspace = true` — and
+  cargo 1.96.0 resolves it, measured in a scratch workspace whose member declares exactly that and whose
+  `cargo metadata` reports the inherited version. The inherit check walks lines asking each one whether it
+  assigns `version`; a table heading assigns nothing, so no line answers, and the member is refused for not
+  inheriting a version it does inherit. A false refusal — not the direction the Core Contract forbids, but a
+  defect, and the same defect the three recorded rounds are, arriving through the one spelling a
+  line-oriented reader cannot represent at all.
+
+  *What the repair deletes rather than swaps, measured the same day:* `dotted(` and `unquoted(` are called
+  only inside `manifest.rs`, and `outside_strings`, `split_outside`, and the gate's `inline_fields` and
+  `offer_value` are local to their own files. A parsed document answers the inherit question in one
+  expression over every spelling — the four this entry's history records, the quoted-inner form, and the
+  sub-table form above — verified against `toml_edit` on all six together with five negatives before any of
+  this was written down. So the remaining migration takes the hand-rolled TOML machinery out rather than
+  standing a parser beside it.
+
+  ~~**Two lists of `(String, String)` with different meanings flow through one function, and only the failure
+  matrix can tell them apart.**~~ **BUILT — the trigger fired on both clauses at once.** Selecting the
+  internal-pin subject by identity made `require_internal_pins` the third consumer *and* an edit to this
+  sequence, and the swap stopped being latent: a unit direction handed the `(path, text)` manifests to a
+  reader expecting members, compiled, and answered with a vacuity refusal instead of the site it observes.
+  The two lists now have distinct types — a `Member` carrying the name against the `(String, String)`
+  manifests — so the swap cannot compile; the compiler found two further sites where a binding named
+  `manifests` held members. What follows is the entry as it was filed. `require_version_surfaces` takes the `(path, text)` manifests and returns the
+  `(path, name)` pairs `require_example_pins` produced; `require_changelog_state` and the lock reader read the
+  second. *Observation source:* a review opened Gate 4 on that function needing an *and then* to state its job,
+  and proposed moving the two pin calls to the caller "since the `Vec<(String, String)>` return already exists
+  for that". The move was made and reverted: the caller's `manifests` became the text list, and the lock check
+  reported *Cargo.lock is missing workspace package* with a whole manifest where a name belongs. Nothing but
+  the message assertions caught it. *Risk, bounded:* latent — today's flow is correct, and the swap is only
+  reachable by editing this sequence. *The shape:* give the two lists distinct types, so the swap cannot
+  compile and the Gate 4 rename becomes free. *Promotion trigger:* the next edit to this sequence, or a third
+  consumer of either list. *Compatibility class:* patch; the gate ships in no crate. *Authority:* this entry.
+
+  ~~**A second question about a table-body line is still answered in two places, and the general form is named
+  here rather than built.**~~ **BUILT AND RETIRED THE SAME DAY IT WAS FILED.** The deferral rested on *both
+  reach fail-closed answers today; the dependency reader refuses where it cannot decode* — true of a quoted
+  **head**, and false of a quoted **tail**, which was dropped silently. A review measured it:
+  `xuanji."path" = "xuanji"` beside `xuanji.version = "0.5"` is a path dependency at `^0.5` to cargo, and the
+  reader answered *no path*, so the stale pin left the internal check's subject while one correct pin elsewhere
+  satisfied its floor and the release reported clean. A **false negative** is not deferrable on a fail-closed
+  premise, so `manifest::assignment` was built and the two sites the false negative ran through were converted:
+  the dependency reader's **dotted** branch and the inline-table reader now decode every segment, and an
+  undecodable key reports unreadable rather than absent. `a_stale_internal_pin_behind_a_quoted_tail_is_refused`
+  holds it. *Authority:* this entry.
+
+  **What is left of it, stated rather than implied.** Two key reads still decide their own: the bare-and-inline
+  entry key in `declared_dependencies` (which hands its raw key to `Package::of`, so a quoted dependency key
+  becomes `KeyUnreadable` — fail-closed, and **pinned** by
+  `a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped` with its own spec scenario), and
+  the lock reader — which was converted when its own ordering premise came due, so what remains is the
+  bare-and-inline entry key alone. Converting the first would turn a
+  visible cannot-judge into the answer cargo gives, which is better — and it inverts a pinned scenario, so it
+  is not a release-eve edit. *Promotion trigger:* the next change to either reader, or an adopter manifest in
+  the subject corpus spelling a dependency key non-bare. *Compatibility class:* patch.
+
+  **The surface grew by an escape decoder, and that was the cheaper of two wrong answers rather than a
+  reversal of this entry.** `manifest::decoded` resolves the escapes cargo resolves in a table heading or a
+  key. It was added because the alternative was measured and was worse: `cargo metadata` reads `serde` under
+  `[target.x86_64-unknown-linux-gnu."\u0064ependencies"]` and under `["dep\u0065ndencies"]`, so a reader that
+  answered *undecidable* for a backslash left every pin in such a table unread while an ordinary pin beside it
+  kept the aggregate guard satisfied — a silent false negative in the production gate, reproduced as a clean
+  release in `an_escaped_dependency_table_heading_is_read_as_the_table_cargo_reads`. The promotion trigger
+  above is a steward amendment ritual, which is not a thing to wait behind with a false negative open. The
+  refusals that gave that reason kept their behaviour and changed the reason: a **value** carrying an escape
+  (`manifest::quoted_value`) and a **non-bare dependency key** (`Package::KeyUnreadable`) both said *no
+  decoder exists*, and both now say what actually separates them from a heading — a refusal there is visible
+  to an operator. **That paragraph describes the hand-rolled reader, which a real parser has since replaced**
+  (`refactor(kanhe): the dependency grammar is parsed`): `manifest::quoted_value` and the bare-key predicate
+  it contrasted are both gone, and the parser answers the key question without either.
+
+  **A third reader of the same class arrived, and it is on the cheap side of this entry's own dividing line.**
+  `crates/kanhe/tests/merge_workflow.rs`'s `workflow_shape` reads `.github/workflows/ci.yml` line by line to
+  hold the premise `require_ci_green` states to an operator. Seven consecutive adversarial review rounds each
+  closed its finding and surfaced one more position in the same reader: the job-name indentation, the job-key
+  indentation, the scope of the two trigger keys, the flow form at the top level, and the flow form one level
+  down. Every repair was correct and every one was verified by a fixture row and a negative run; the count is
+  the argument rather than any single miss. Two of the five failed **open** — the reader reported a premise
+  intact over a workflow that carried a real path filter.
+
+  **That severity has since been withdrawn, and the withdrawal is the useful part of this paragraph.** The
+  premise existed because the wrapper's refusal asserted it to an operator; the classification never read the
+  workflow at all. With that sentence removed the reader decides **when** an operator learns a job may skip,
+  not **whether** — a skipping job reports `SKIPPED` and the wrapper refuses either way. So the two open
+  positions cost minutes rather than admitting a merge, and a sixth would too.
+
+  **What this entry establishes and the YAML case inherits:** the Rust-side half closed with `syn` as a
+  `[dev-dependencies]`-only addition, needing no self-law amendment because `restrict_dependencies_to`
+  observes `DependencyKind::Normal` by default. `workflow_shape` lives in `crates/kanhe/tests/`, so a YAML
+  parser lands in the same table `syn` and `proc-macro2` already occupy. It is therefore **not** blocked on
+  the amendment ritual this entry's TOML half is blocked on — the two halves have different prices, and only
+  one of them was priced. *Promotion trigger for this third reader:* **a second file in
+  `.github/workflows/`**, and not a sixth position in the reader. The severity above is per mechanism and only
+  three of the five keys carry it unconditionally: `if:`, `needs:` and `continue-on-error:` move a check's
+  conclusion, so the check reports `SKIPPED` and the wrapper refuses whatever the reader did. `paths:` and
+  `paths-ignore:` stop the workflow triggering, so its checks are **absent** from the rollup — which refuses
+  today only because `ci.yml` is the sole workflow and an empty rollup takes the *no workflow has claimed this
+  head* arm. Add a second and a filtered-out `ci.yml` contributes nothing to a rollup that is non-empty and
+  green, so a missed filter is a merge rather than a delay. That count is held by
+  `a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists` rather than assumed, which is what makes
+  this trigger a reaction instead of a sentence. The TOML half being promoted would also earn it, since the
+  two share the argument if not the dependency. *Version class:* patch; `kanhe` is `publish = false` and the reader is a test.
+  *Deferred here rather than done* on the same ground as the wrapper extraction: a dependency is not added at
+  a release cut, and the reader is currently correct on every shape a fixture can construct.
 
 
 ## Version horizons

@@ -112,26 +112,21 @@ different things.
   `version.workspace = true`: each resolves the member at `0.5.0`, and `[package]` with `"name" = "m"` names
   `m`. The heading side decoded and the key side matched raw text, so each answered *the key is absent* — the
   state reserved for a key that is not there — and the gates then said *workspace version is missing or
-  malformed*, and *declares no `[package]` name*, about manifests that declare both. **Every reader asking
-  whether a line assigns a named key asks one reader** — the workspace version, the package name, and
-  publishability — rather than each deciding it over raw text
-- **AND** the dependency reader and the lock reader ask a different question and are not that reader's: they
-  ask *which* key a line assigns, with the key unknown, where this one is asked about a key it is given.
-  A first statement of this requirement said *one reader owns the question for every table body*, which was
-  wider than the code by those two; the general form that would unify them is filed with its trigger rather
-  than asserted here
-- **AND** a **dotted** head naming the sought key assigns a field of it rather than the key —
-  `version.workspace = true`, the line every member of this workspace writes — so the reader reports **which
-  field**, with every segment of the tail decoded. A reader wanting the key's own value refuses on it, because
-  taking `true` as a version would not be visible; a reader asking about that named field compares the field's
-  name. A dotted head naming any other key is another key's business, since refusing on those would refuse
-  every member manifest in the tree
-- **AND** *decoded* is a property of the whole answer, not of its first segment. Three review rounds each moved
-  that boundary one segment right and left the next raw: the heading decoded while the key did not, then the
-  key while one recogniser compared whole lines, then the head while the tail was joined raw. Measured under
-  cargo 1.96.0, the last of those refused `version."workspace" = true`, `version.'workspace' = true`,
-  `version."\u0077orkspace" = true` and `version = { "workspace" = true }` — all four inherit — and read
-  `xuanji."path" = "xuanji"` as a dependency with no path, which is the **false negative** recorded below
+  malformed*, and *declares no `[package]` name*, about manifests that declare both
+- **AND** every one of these answers comes from a **parsed document**, so a key's spelling is the parser's
+  question and not this repository's. What this requirement asked for through four review rounds was that
+  *decoded* be a property of the whole answer rather than of its first segment, and each round moved that
+  boundary one segment right and left the next raw: the heading decoded while the key did not, then the key
+  while one recogniser compared whole lines, then the head while the tail was joined raw, then the one
+  spelling no line-oriented reader can represent at all. Measured under cargo 1.96.0, those rounds
+  successively refused `version."workspace" = true`, `version.'workspace' = true`,
+  `version."\u0077orkspace" = true`, `version = { "workspace" = true }` and `[package.version]` with
+  `workspace = true` — every one of which inherits — and read `xuanji."path" = "xuanji"` as a dependency with
+  no path, which is the **false negative** recorded below. A parser answers all of them without a clause
+  each, which is why the hand-rolled readers are gone rather than extended
+- **AND** the read is scoped to the table cargo scopes it to. `version.workspace` is honoured under
+  `[package]` and nowhere else, and the line-walking reader took such an assignment in any table; narrowing
+  to `[package]` is the answer agreeing with cargo rather than a tightening of this requirement
 - **AND** where the table is written as a **value** inside its parent — `[workspace]` with
   `package.version = "0.5.0"`, or with `package = { version = "0.5.0" }`, both of which cargo resolves — the
   check refuses naming the line. Composing a table out of a dotted key path or an inline table is structure
@@ -147,7 +142,20 @@ different things.
 - **PINNED-BY** `a_key_spelling_cargo_accepts_is_read_and_a_table_written_as_a_value_is_refused`
 - **PINNED-BY** `a_stale_internal_pin_behind_a_quoted_tail_is_refused`
 - **PINNED-BY** `every_inherit_spelling_cargo_honours_is_read_as_inheriting`
+- **PINNED-BY** `a_member_inheriting_through_a_sub_table_heading_is_read_as_inheriting`
 - **PINNED-BY** `a_member_whose_package_name_is_quoted_is_read_under_that_name`
+
+#### Scenario: A member manifest the parser cannot read
+
+- **WHEN** a workspace member's manifest is not a document the parser accepts — a duplicate key, say, which
+  cargo also refuses
+- **THEN** the check refuses as a cannot-judge naming **which** member, rather than reporting that the member
+  does not inherit the workspace version. A manifest nobody can read declares nothing either way, and the
+  reader runs once per member, so an operator told only that a manifest is unreadable would have to find it
+- **AND** the refusal carries an identity of its own rather than the one the dependency reader already
+  registers for the same condition. The register compares identities, so a second construction of a held one
+  would report this branch as observed by a direction that never reaches it
+- **PINNED-BY** `a_member_manifest_the_parser_cannot_read_is_not_judged`
 
 ### Requirement: Development carries adopter-facing release narrative
 

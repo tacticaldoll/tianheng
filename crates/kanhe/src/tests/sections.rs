@@ -150,8 +150,15 @@ fn a_foreign_table_heading_still_closes_the_block() {
          version = \"9.9.9\"\n\
          source = \"registry+https://example.invalid/index\"\n",
     );
+    // The predicate is local rather than borrowed from the manifest reader: this direction's subject is
+    // `cut`, and the lock file's headings are bare, so recognising them needs no decoder. Borrowing one
+    // coupled this direction to a reader it does not test, and that reader is gone.
     let blocks = cut(lock.toml().numbered_lines(), |line| {
-        crate::manifest::table_heading(line).map(|h| h.names_array("package"))
+        let trimmed = line.trim();
+        trimmed
+            .strip_prefix('[')
+            .and_then(|rest| rest.strip_suffix(']'))
+            .map(|inner| inner == "[package]")
     });
 
     let mine: Vec<&Section<bool>> = blocks.iter().filter(|block| block.name).collect();

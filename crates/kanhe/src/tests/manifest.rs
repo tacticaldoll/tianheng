@@ -1,5 +1,5 @@
 use crate::manifest::{
-    Publishable, WorkspaceVersion, is_semver, publishable, semver, table_heading, workspace_version,
+    Publishable, WorkspaceVersion, is_semver, publishable, semver, workspace_version,
 };
 
 /// The two gates asked the same question about a version and answered differently.
@@ -275,48 +275,6 @@ fn every_publish_shape_cargo_honours_is_read_as_cargo_reads_it() {
         publishable("[package]\nname = \"kanhe\"\npublish = false\n"),
         Publishable::No
     );
-}
-
-/// A table heading needs both brackets, so an array's continuation line is not a table.
-///
-/// **The readers this predicate replaces each wrote `starts_with('[')`.** That also matches `  [1, 2],` — a
-/// multi-line array's continuation — which would close whatever table was open and drop every key after it.
-/// No manifest here writes that shape, so the over-inclusion was latent rather than live; requiring the
-/// closing bracket refuses it and costs a real heading nothing.
-///
-/// Given both ends of the boundary rather than one: the arrays that must **not** open a table, and the
-/// headings that must. A fixture holding only the first passes for a predicate that answers `false` always.
-///
-/// **Asked of the production reader.** This tested a second predicate that answered the same question, so the
-/// boundary it pinned and the boundary the gates used were two things that happened to agree.
-#[test]
-fn a_table_heading_needs_both_brackets() {
-    for heading in [
-        "[package]",
-        "[[package]]",
-        "[dependencies.serde_json]",
-        "  [workspace.dependencies]",
-        "[package] ",
-    ] {
-        assert!(
-            table_heading(heading).is_some(),
-            "`{heading}` opens a table and must be read as one"
-        );
-    }
-    for value in [
-        "  [1, 2],",
-        "include = [",
-        "  \"src/**/*.rs\",",
-        "]",
-        "features = [\"a\"]",
-        "",
-    ] {
-        assert!(
-            table_heading(value).is_none(),
-            "`{value}` is value text, not a heading; reading it as one closes the open table and drops \
-             every key after it"
-        );
-    }
 }
 
 /// Two `version` keys in `[workspace.package]` refuse, rather than the first one answering.
