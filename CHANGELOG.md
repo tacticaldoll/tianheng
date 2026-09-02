@@ -24,6 +24,31 @@ them.
 
 ### Self-governance
 
+- **Sixteen requirements-to-reaction citations added, and the half of the backlog entry that called itself
+  cheap turns out to have a third state.** The entry *Every normative SHALL either has a reaction or is a
+  declared bound* splits into extending the existing citation where a reaction exists (no capability needed)
+  and deriving the binding for the rest (a capability). The first half was run against the sample the entry
+  names.
+
+  Measured: across every tracked spec, 371 requirements, and 297 carried no citation anywhere under them.
+  `PINNED-BY` attaches to a scenario and never to a requirement, so the unit is a requirement with no
+  citation under any of its scenarios. In `repository-checks`, six of the fourteen uncited requirements were
+  citable and are cited, each pairing verified by reading the test against the scenario's `THEN` rather than
+  matched by name. A planted citation naming nothing fails
+  `every_pinning_citation_resolves_to_one_registered_test`, so the new ones are held.
+
+  *The eight that remain are not "a reaction nobody cited".* Three of them are **gate-only**: the reaction
+  asserts the clean tree while the requirement's `THEN` describes the refusal — `one_spelling` asserts that
+  no second spelling of a token exists, where the requirement says the check refuses *naming every site and
+  the constant that owns the token*, which nothing observes. One is a gate that **returns early where CI
+  runs it**, and says so in its own comment. One is **undefendable by construction**, telling a reader that a
+  projection is a view rather than an authority.
+
+  *One limit of the citation grammar, found by using it.* A defence defined in two **targets** of one crate
+  cannot be cited: the register refuses a name defined twice, and the recorded disambiguation is a crate
+  prefix, which answers two crates and not two targets. That scenario stays uncited rather than pointing at
+  half its defence.
+
 - **The workspace-version inherit question is parsed, and the hand-rolled TOML layer it was the last caller
   of is deleted.** Net 130 insertions against 548 deletions, more than half of
   `crates/kanhe/src/manifest.rs` among them, and no production code calls `region::Source::toml()` any more.

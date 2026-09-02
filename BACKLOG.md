@@ -434,7 +434,41 @@ consumer for an undemonstrated deduplication.
   of them, where a citation per SHALL would be the hand-maintained pointers this entry already refuses — find
   a derivation. That half is a capability to design, and designing
   it inside the closing review of a window would be the same haste this entry documents. What the earlier
-  draft got wrong was not the second part; it was reaching it by asserting that the first part did not exist. *Version class:* not release-affecting; a new
+  draft got wrong was not the second part; it was reaching it by asserting that the first part did not exist.
+
+  **Part one was run against the sample this entry names, and it is not the cheap half — measured
+  2026-09-02.** Across every tracked spec: 371 requirements, and before this change 297 carried no citation
+  anywhere under them. `PINNED-BY` attaches to a scenario and never to a requirement, so *uncited
+  requirement* means one with no citation under any of its scenarios; the figure is not a handful whose
+  reaction someone forgot to name. In `repository-checks` — 38 requirements, 14 of them uncited — six were
+  citable and are cited, with sixteen citations each verified by reading the test against the scenario's
+  `THEN` rather than matched by name. A planted citation naming nothing fails
+  `every_pinning_citation_resolves_to_one_registered_test`, so they are held rather than decoration.
+
+  **The eight that remain are not *a reaction nobody cited*, and that is the finding.** This entry's binary —
+  a `SHALL` has a reaction or it does not — has a third state, and the sample is mostly in it:
+
+  - **Gate-only.** The reaction asserts the **clean tree**, and the requirement's `THEN` describes the
+    refusal. `one_spelling`'s check asserts no second spelling of a token exists; the requirement says the
+    check *refuses, naming every site and the constant that owns the token*, and nothing observes that. Same
+    shape for the constant-against-its-enumerator requirement. A citation there would name a test that holds
+    the direction nobody was worried about.
+  - **A gate that returns early where CI runs it.** `capability_subjects`'s check returns early when no
+    change is active, which is the state on `main` and on every `release/*` — its own comment says *a
+    reaction that did not run reads as coverage*, and that the class is defended by review alone wherever it
+    returns early. A citation would assert holding that does not happen there.
+  - **Undefendable by construction.** *A projection is not a check and ships in nothing*, whose `THEN` tells
+    a reader they are looking at a view. There is no observation to make, and this is the class recorded
+    elsewhere in this file for a requirement stated as a property of the implementation rather than of the
+    behaviour.
+
+  **A limit of the citation grammar, found by using it.** *The act completes* is held by
+  `no_temporary_file_survives_the_wrapper`, which is defined in **two targets of one crate** — the merge
+  wrapper's and the publish wrapper's — and the register refuses a name defined twice, saying *a citation
+  names one defence, not a set*. The disambiguation this entry records is a **crate** prefix, which answers
+  two crates and cannot answer two targets. That scenario is left uncited rather than pointed at half its
+  defence, and extending the grammar to name a target is part of the second half rather than a step inside
+  the first. *Version class:* not release-affecting; a new
   capability with its own gate, preserving every published API. *Authority:* `observation-bound-register`, which
   solves the same problem for bounds and is the shape any answer here would have to generalize.
 
