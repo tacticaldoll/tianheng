@@ -24,6 +24,40 @@ them.
 
 ### Self-governance
 
+- **The workspace-version inherit question is parsed, and the hand-rolled TOML layer it was the last caller
+  of is deleted.** Net 130 insertions against 548 deletions, more than half of
+  `crates/kanhe/src/manifest.rs` among them, and no production code calls `region::Source::toml()` any more.
+
+  *The defect that ended the approach rather than extending it.* A member may inherit through a sub-table
+  heading — `[package.version]` with `workspace = true` — and cargo 1.96.0 resolves it, measured in a scratch
+  workspace whose `cargo metadata` reports the inherited version. The reader asked each **line** whether it
+  assigned `version`; a table heading assigns nothing, so no line answered and the member was refused for not
+  inheriting a version it does inherit. That is the fourth round of one defect, each earlier round having
+  moved the boundary of *decoded* one segment right — and the first found by measuring cargo rather than by
+  reading a review. There was no segment left to move: the spelling is a heading, and a line-oriented reader
+  cannot represent it at all.
+
+  One expression over a parsed document answers every spelling the three recorded rounds fixed one clause at
+  a time, and the sub-table form with them. With the inherit read migrated, `manifest::assignment`,
+  `assigned`, `Assignment`, `Assigned`, `table_heading`, `TableHeading`, `dotted`, `unquoted`,
+  `split_outside`, `outside_strings` and the escape decoder beneath them had no production caller left, along
+  with the gate's own `inline_fields`, `assignments` and `offer_value` — whose doc comment already said it
+  "survives for the one caller left". The compiler named each as it fell rather than a grep guessing.
+
+  *One behaviour narrowed, in the direction that agrees with cargo.* The line walk took a
+  `version.workspace` assignment in **any** table; cargo honours it under `[package]` and nowhere else, so
+  the parsed read is scoped there.
+
+  *One refusal gained an identity of its own.* A member manifest the parser cannot read is now a cannot-judge
+  naming which member, rather than a member reported as not inheriting. It is registered separately from the
+  dependency reader's site for the same condition, because the refusal register compares identities — a
+  second construction of a held one would report the new branch as observed by a direction that never reaches
+  it. Negative run: mapped to *does not inherit*, it answered `Violation` where `CannotJudge` was expected.
+
+  The spec scenario carrying this requirement described **which reader owns the question**, and that prose
+  had gone stale before this change — the readers it named were migrated earlier in the 0.5.1 window. It now
+  states the behaviour and keeps the measurements, which is one fewer hand-maintained structural claim.
+
 - **Six more promotion triggers evaluated, and one entry's evidence had gone false under this window's own
   work.** None of the six had fired; the finding is in what one of them rested on.
 

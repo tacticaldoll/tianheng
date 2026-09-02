@@ -33,60 +33,6 @@ fn read(repo: &Path, rel: &str) -> Result<String, Refusal> {
     })
 }
 
-/// The fields an inline table assigns, cut at the commas outside strings.
-///
-/// **Two adjacent functions opened with these five lines byte-for-byte**, both answering *what are this
-/// table's fields* — and a change to one (a nested table, a trailing comma, a value that is an array rather
-/// than a table) would have left the other reading a different grammar. That is the two-implementations
-/// shape this file has spent five review rounds closing, and it was reintroduced by the fix for a false
-/// negative. A caller that is handed something other than an inline table gets the text back as one field,
-/// which is what the bare-value spellings need.
-fn inline_fields(value: &str) -> Vec<&str> {
-    let inner = value.trim();
-    let inner = inner
-        .strip_prefix('{')
-        .and_then(|inner| inner.strip_suffix('}'))
-        .unwrap_or(inner);
-    crate::manifest::split_outside(inner, ',')
-}
-
-fn assignments<'a>(value: &'a str, key: &str) -> Vec<&'a str> {
-    // **The inner keys are cut and decoded, where this used to position a raw substring search.** It looked
-    // for the key's letters with a delimiter in front and the position outside a string — which is not a
-    // narrow match but an *exclusion*: a quoted inner key can never be found, because its letters sit inside
-    // the quotes. Measured under cargo 1.96.0, `version = { "workspace" = true }` inherits, and this reader
-    // could not see that key at all, so the member was refused for not inheriting. The fields are split at
-    // the commas outside strings and each is asked of `manifest::assignment`, so an inner key is decoded
-    // exactly as a table-body key is — one reader for both, which is what closed the same asymmetry twice
-    // before.
-    //
-    // An array value carrying commas — `features = ["a", "b"]` — is cut across them, and each piece then
-    // fails to be an assignment to `key`. That is why the split is safe without understanding arrays: a
-    // fragment answers `None` or another key, never this one.
-    inline_fields(value)
-        .into_iter()
-        .filter_map(|field| match crate::manifest::assigned(field, key) {
-            crate::manifest::Assigned::Value(value) => Some(value),
-            crate::manifest::Assigned::Field { .. }
-            | crate::manifest::Assigned::Other
-            | crate::manifest::Assigned::Unreadable => None,
-        })
-        .collect()
-}
-
-/// One assignment's value, ended where the value ends.
-///
-/// The scan hands back everything after the `=`, which inside an inline table runs on to the next field or to
-/// the closing brace: `{ workspace = true }` yields ` true }`. A quoted value was delimited by its own quotes
-/// and so never needed this; a boolean is delimited by the table around it. The reader that made that
-/// distinction is gone — the dependency grammar is parsed — and this survives for the one caller left.
-fn offer_value(text: &str) -> &str {
-    text.split(['}', ','])
-        .next()
-        .expect("`str::split` yields at least one field")
-        .trim()
-}
-
 /// The kinds of table whose entries are dependency declarations.
 /// Which tables a caller means by *a dependency*, because this reader's consumers do not all mean the same
 /// thing by it.
@@ -270,6 +216,18 @@ fn dependency_of(key: &str, item: &toml_edit::Item) -> Dependency {
 /// vacuity floor, which then said *found no dependency on a family crate* — a sentence about the declaration
 /// form over a file cargo will not read at all. That is the misdirection this crate's typed readers exist to
 /// prevent, so the refusal carries the parse error instead.
+/// A parse error on one line.
+///
+/// `toml_edit` renders its errors over several lines with a caret rule under the offending span, and a
+/// refusal message is one line. Both parse sites flatten it the same way, so the rule is written once — the
+/// spelling this repository's own `one_spelling` check exists to require.
+fn one_line(err: &toml_edit::TomlError) -> String {
+    err.to_string()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 pub(crate) fn declared_dependencies(
     text: &str,
     subject: Subject,
@@ -277,13 +235,7 @@ pub(crate) fn declared_dependencies(
     let doc = text.parse::<toml_edit::DocumentMut>().map_err(|err| {
         cannot_judge_at(
             "release-coherence#manifest-unparseable",
-            format!(
-                "a manifest this parser cannot read — {}",
-                err.to_string()
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ),
+            format!("a manifest this parser cannot read — {}", one_line(&err)),
         )
     })?;
     let mut found = Vec::new();
@@ -641,48 +593,43 @@ fn require_version_surfaces(
             PackageName::Named(name) => name,
             PackageName::Absent | PackageName::Unreadable(_) => path.clone(),
         };
-        // This reader held its own `split('#')` — the last hand-rolled cut over TOML text outside `region`.
-        // Measured, because an earlier wording called it "a fourth spelling of one language's rule": four
-        // `split('#')`-shaped sites existed, but the other three read a Markdown heading, a shell command
-        // and a URL fragment, so they are not this rule and never were.
+        // **One expression over a parsed document, where a line-oriented reader spent four rounds.** Each
+        // round moved the boundary of *decoded* one segment right and each closed real false refusals:
+        // measured under cargo 1.96.0, all of `version.workspace = true`, `version = { workspace = true }`,
+        // `"version".workspace = true`, `'version'.workspace = true`, the quoted and escaped spellings of
+        // the tail, and the quoted inner key inherit — and a raw-text recogniser took one of them.
         //
-        // It was kept out of `region` while `toml()` cut at a token
-        // start, because converting it then would have refused `version.workspace = true#c`, which is a
-        // legal comment on a line that still inherits. `toml()` now tracks strings and cuts where TOML cuts,
-        // so the exception has nothing left to protect and the hand-rolled rule is gone with it.
+        // The fourth round is the one that ended the approach rather than extending it: a member may inherit
+        // through a **sub-table heading**, `[package.version]` with `workspace = true`, which cargo resolves
+        // — measured in a scratch workspace — and which a reader asking each line *does this assign
+        // `version`* cannot represent at all, because a heading assigns nothing. There was no segment left to
+        // move.
         //
-        // Both directions run through `judge`: `an_inherit_line_with_a_glued_comment_still_inherits` and
-        // `a_member_whose_only_inherit_line_is_commented_out_is_refused`.
-        // **Through the shared key reader, because string equality recognised one spelling of four.** Measured
-        // under cargo 1.96.0, each inherits `0.5.0`: `version.workspace = true`,
-        // `version = { workspace = true }`, `"version".workspace = true` and `'version'.workspace = true`. The
-        // whitespace-stripped equality took only the first, and the other three reached
-        // `member-does-not-inherit-workspace-version` — a `violation_at`, exit 1, over a manifest cargo reads.
-        // A false refusal is a defect and this is one; what the Core Contract names as *the one forbidden
-        // bug* is the other direction — a real violation that silently passes. The window's own repair two
-        // hundred lines up is what made the asymmetry worth naming: the key side
-        // decodes now, so a recogniser comparing raw text is the odd one out.
+        // The parser also makes the read `[package]`-scoped, which the line walk was not: it took an
+        // assignment in any table. Cargo honours `version.workspace` under `[package]` and nowhere else, so
+        // narrowing is the answer agreeing with cargo, not a tightening.
         //
-        // Two shapes inherit, and `manifest::assigned` tells them apart: a **dotted** head naming `version`
-        // assigns a field of it, and this asks whether that field is `workspace`; or a `version` whose value
-        // is an inline table carries the offer inside it. Both comparisons are of **decoded names** — the
-        // tail's segments and the inline table's inner keys — which they were not when this comment was first
-        // written, and a review refused four more spellings on that account. `manifest::assignment` is where
-        // *decoded* became a property of the whole answer rather than of its first segment.
-        let inherits = crate::region::Source::of(text.as_str())
-            .toml()
-            .lines()
-            .any(|line| match crate::manifest::assigned(line, "version") {
-                // `version.workspace = true`, in any spelling of the two keys.
-                crate::manifest::Assigned::Field { tail, value } => {
-                    tail == ["workspace"] && value.trim() == "true"
-                }
-                // `version = { workspace = true }`: the offer sits inside the value.
-                crate::manifest::Assigned::Value(value) => assignments(value, "workspace")
-                    .into_iter()
-                    .any(|offer| offer_value(offer) == "true"),
-                crate::manifest::Assigned::Other | crate::manifest::Assigned::Unreadable => false,
-            });
+        // Directions: `every_inherit_spelling_cargo_honours_is_read_as_inheriting`,
+        // `a_member_inheriting_through_a_sub_table_heading_is_read_as_inheriting`,
+        // `an_inherit_line_with_a_glued_comment_still_inherits` — `true#c` is legal TOML and the parser
+        // takes it — and `a_member_whose_only_inherit_line_is_commented_out_is_refused`.
+        let doc = text.parse::<toml_edit::DocumentMut>().map_err(|err| {
+            cannot_judge_at(
+                "release-coherence#member-manifest-unparseable",
+                format!(
+                    "{name}: a member manifest this parser cannot read — {}",
+                    one_line(&err)
+                ),
+            )
+        })?;
+        let inherits = doc
+            .get("package")
+            .and_then(toml_edit::Item::as_table_like)
+            .and_then(|package| package.get("version"))
+            .and_then(toml_edit::Item::as_table_like)
+            .and_then(|version| version.get("workspace"))
+            .and_then(toml_edit::Item::as_bool)
+            .unwrap_or(false);
         if !inherits {
             return Err(violation_at(
                 "release-coherence#member-does-not-inherit-workspace-version",

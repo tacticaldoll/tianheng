@@ -3165,6 +3165,74 @@ fn every_inherit_spelling_cargo_honours_is_read_as_inheriting() {
     }
 }
 
+/// A member inheriting through a `[package.version]` sub-table heading is read as inheriting.
+///
+/// **The one inherit spelling a line-oriented reader cannot represent at all**, which is why it sits apart
+/// from the table of spellings above rather than as a row in it: the form is a *heading*, and substituting it
+/// for the inline line would put every `[package]` key after it inside the sub-table.
+///
+/// Measured under cargo 1.96.0 rather than reasoned: a scratch workspace whose member declares
+/// `[package.version]` with `workspace = true` and nothing else resolves at the catalog version, reported by
+/// `cargo metadata`. The three rounds `manifest::assignment` records are each the same defect one segment
+/// further right; this is the fourth, and the first found by measuring cargo instead of by reading a review.
+///
+/// Negative run: against the line-walking reader this was a violation —
+/// *workspace package xuanji must inherit version.workspace = true* — because the reader asks each line
+/// whether it assigns `version`, and a table heading assigns nothing, so no line answers.
+#[test]
+fn a_member_inheriting_through_a_sub_table_heading_is_read_as_inheriting() {
+    let root = scratch("inherit-sub-table");
+    let fixture = build_fixture(&root, "inherit-sub-table", "0.2.0");
+    let manifest = fixture.repo.join("crates/xuanji/Cargo.toml");
+    std::fs::write(
+        &manifest,
+        "[package]\nname = \"xuanji\"\nedition = \"2024\"\n\n[package.version]\nworkspace = true\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: inherit through a sub-table heading");
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "cargo resolves this member at the workspace version through this spelling: {:?}",
+        verdict.err()
+    );
+}
+
+/// A member manifest the parser cannot read is not judged, and the refusal names which member.
+///
+/// **A site of its own rather than the one `declared_dependencies` already carries.** Both refuse the same
+/// condition, and reusing that identity would leave this branch reported as held by a direction that never
+/// reaches it — the register compares identities, so a second construction of a held one is invisible to it.
+///
+/// The message names the member because this reader runs per manifest: an operator told only *a manifest this
+/// parser cannot read* would have to find which of them.
+///
+/// Negative run, run rather than reasoned: with the parse failure mapped to *does not inherit*, this
+/// answered `Violation` where `CannotJudge` was expected, saying *workspace package
+/// crates/xuanji/Cargo.toml must inherit version.workspace = true* — the false refusal this migration
+/// exists to stop giving, and named by path because a manifest the parser cannot read has no readable
+/// package name either.
+#[test]
+fn a_member_manifest_the_parser_cannot_read_is_not_judged() {
+    let root = scratch("member-unparseable");
+    let fixture = build_fixture(&root, "member-unparseable", "0.2.0");
+    let manifest = fixture.repo.join("crates/xuanji/Cargo.toml");
+    std::fs::write(
+        &manifest,
+        "[package]\nname = \"xuanji\"\nname = \"xuanji\"\nversion.workspace = true\nedition = \"2024\"\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: write a member manifest twice over");
+    refusal::expect(
+        "release-coherence#member-manifest-unparseable",
+        &refuse(&fixture.repo, Kind::CannotJudge, "duplicate key"),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A member whose `[package]` name is spelled in quotes is read under that name, not the directory's.
 ///
 /// **Measured: `[package]` with `\"name\" = \"xuanji\"` names `xuanji` to `cargo metadata`.** The reader matched
