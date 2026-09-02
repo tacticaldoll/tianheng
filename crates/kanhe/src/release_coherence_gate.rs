@@ -138,7 +138,12 @@ pub(crate) enum Declared {
     /// The key is absent. Legal for both of this reader's keys: a path-only dependency declares no
     /// `version`, and a registry dependency declares no `path`.
     Absent,
-    /// A value this reader cannot read — one not in double quotes — quoted as written.
+    /// A value this reader will not take as a string — quoted as written.
+    ///
+    /// **Not *not in double quotes*, which is what this said while the reader was hand-rolled.** The parser
+    /// reads a literal-quoted string as readily as a basic one, so what reaches here is a value that is no
+    /// string at all — an integer, an array, a table — which is the condition
+    /// `a_single_quoted_path_or_version_is_read_and_a_non_string_is_not` observes from both sides.
     Unreadable(String),
     /// The requirement is the one the workspace catalog offers, taken with `workspace = true`.
     ///
