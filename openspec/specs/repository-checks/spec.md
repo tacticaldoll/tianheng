@@ -161,6 +161,7 @@ was a shell script and its refusal was an exit code, and it is why retiring the 
 - **THEN** it SHALL be declared unheld — with why, an owner and a tracker — or the register refuses. There
   is no third state: a site is held or declared. The declaration is the escape hatch and is deliberately
   expensive, because an escape hatch nothing forces you through is the prose that drifted
+- **PINNED-BY** `a_site_declared_unheld_exists_and_is_not_observed`
 
 #### Scenario: An input the wrapper never supplied is not a message that disagrees
 
@@ -292,12 +293,14 @@ uses; the check SHALL NOT claim to interpret arbitrary GitHub Actions.
 - **WHEN** the DoD contains `cargo deny check` and CI contains an `EmbarkStudios/cargo-deny-action` step whose
   `with.command` is `check`
 - **THEN** the coherence check recognizes the effective command and does not report it missing
+- **PINNED-BY** `cargo_deny_action_contributes_its_effective_command`
 
 #### Scenario: The supply-chain step is absent or misconfigured
 
 - **WHEN** the DoD contains `cargo deny check` and CI omits the cargo-deny action or gives it a different or
   absent command
 - **THEN** the coherence check fails and names `cargo deny check` as missing from CI
+- **PINNED-BY** `a_missing_supply_chain_action_leaves_cargo_deny_missing`
 
 ### Requirement: A hand-maintained pin SHALL carry the window it is good for
 
@@ -1127,6 +1130,7 @@ judged.
 
 - **WHEN** a wrapper names a channel the gate cannot write to, and the gate reaches a verdict
 - **THEN** the gate fails naming the channel and the error, rather than continuing with the class discarded
+- **PINNED-BY** `a_verdict_that_cannot_reach_the_channel_is_not_an_absent_one`
 
 #### Scenario: A refused verdict whose class could not be delivered
 
@@ -1166,6 +1170,7 @@ wrapper exiting `91` in silence.
 A direction holding any of these stops SHALL assert the **class**, not merely that the wrapper failed. Asserting
 non-zero cannot see `1` from `2`, which is how five could-not-read conditions were split across both classes while
 every direction covering them passed.
+- **PINNED-BY** `a_refused_verdict_that_cannot_reach_the_channel_still_reads_as_unjudged`
 
 #### Scenario: An input the wrapper could not read
 
@@ -1188,6 +1193,7 @@ every direction covering them passed.
 - **WHEN** a wrapper's variable name or class spelling differs from the judgement's, or a gate fails without
   reporting on the channel it was given
 - **THEN** a repository check fails naming which, because every violation would otherwise be reported as unjudged
+- **PINNED-BY** `the_channel_this_helper_names_is_the_one_it_reads`
 
 #### Scenario: An input that exists and cannot be read
 
@@ -1227,6 +1233,7 @@ record that cannot be amended.
 
 - **WHEN** a commit is pushed to the pull request after the gate has read its commit subjects
 - **THEN** the merge is refused, because the head no longer matches the one the evidence came from
+- **PINNED-BY** `the_merge_is_pinned_to_the_head_the_gate_read`
 
 #### Scenario: A caller supplies the pin
 
@@ -1237,6 +1244,7 @@ record that cannot be amended.
 
 - **WHEN** the pull request's head commit cannot be obtained
 - **THEN** the wrapper stops before the gate and the merge, saying the merge could not be pinned
+- **PINNED-BY** `an_unreadable_head_stops_before_the_gate_and_merge`
 
 ### Requirement: The squash wrapper SHALL judge the complete live pull-request commit set
 
@@ -1253,6 +1261,7 @@ NOT construct an endpoint from the unresolved selector or fall back to a local s
 - **WHEN** the live pull request contains a commit absent from the local base-to-head ref range
 - **THEN** the wrapper supplies the live commit's full subject to the squash-message gate, so a default body
   containing it cannot escape as an unrecognized shape
+- **PINNED-BY** `live_pull_request_commits_reach_the_gate_without_local_refs`
 
 #### Scenario: Pull-request commits span multiple API pages
 
@@ -1264,12 +1273,14 @@ NOT construct an endpoint from the unresolved selector or fall back to a local s
 - **WHEN** the pull-request commits read fails or yields no commit subjects
 - **THEN** the wrapper exits non-zero before invoking the squash-message gate or `gh pr merge`, without
   substituting local refs
+- **PINNED-BY** `a_failed_live_commit_read_stops_before_the_gate_and_merge`
 
 #### Scenario: The accepted selector does not resolve to one canonical number
 
 - **WHEN** `gh pr view` does not return a positive numeric pull-request identity for the accepted selector
 - **THEN** the wrapper exits non-zero before constructing the commits endpoint, invoking the squash-message
   gate, or invoking `gh pr merge`
+- **PINNED-BY** `an_unresolved_canonical_pull_request_number_stops_before_live_acquisition`
 
 ### Requirement: A capability SHALL declare the subject it governs
 
@@ -1750,11 +1761,13 @@ was the form not caught. Measured before the widening, two canonical spellings w
 
 - **WHEN** a squash message carries a line that is an attribution trailer in any ASCII case
 - **THEN** the gate refuses it as a violation
+- **PINNED-BY** `a_line_that_is_an_agent_attribution_is_a_violation`
 
 #### Scenario: A sentence naming an attribution mark
 
 - **WHEN** a body names a trailer mark inside a sentence, as prose about the rule
 - **THEN** the gate accepts it, because naming a mark is not carrying one
+- **PINNED-BY** `a_sentence_naming_an_attribution_mark_is_not_carrying_one`
 
 #### Scenario: A glyph mid-line
 
@@ -1769,6 +1782,7 @@ to the shape, because falling back is the false refusal being removed.
 - **WHEN** a subject carries `!` after the `": "` and its head does not end in one
 - **THEN** the message is accepted without a `BREAKING CHANGE:` footer, while a head ending in `!` still
   requires one
+- **PINNED-BY** `a_bang_in_the_summary_is_not_a_breaking_marker`
 
 #### Scenario: A terse body written entirely as bullets
 
@@ -1776,6 +1790,7 @@ to the shape, because falling back is the false refusal being removed.
   subjects
 - **THEN** the message is accepted: the body is self-contained, and its formatting is not what the rule is
   about
+- **PINNED-BY** `a_bullet_body_that_is_not_the_commit_subjects_is_accepted`
 
 #### Scenario: GitHub's default body
 
@@ -1787,6 +1802,7 @@ to the shape, because falling back is the false refusal being removed.
 - **WHEN** the wrapper supplies no commit subjects
 - **THEN** the judgement refuses as a cannot-judge naming what it could not read, rather than falling back to
   the shape it was refusing before
+- **PINNED-BY** `a_body_judged_without_the_commit_subjects_cannot_be_judged`
 
 ### Requirement: The prelude promise SHALL be held against the contract compiled from outside
 
