@@ -329,10 +329,9 @@ consumer for an undemonstrated deduplication.
   composition path this capability offers. Not *someone finds time*: the three routes are closed by
   properties of the tree, and only one of those properties can move.
 
-### READY-PATCH
-
 - **The `**BREAKING**` marking rule is paired per section, so an unmarked breaking entry beside a marked
-  one is invisible.** *Class:* READY-PATCH. *Observed pressure:* `require_section_shape` collects
+  one is invisible.** *Class:* ACCEPTED DEBT — **reclassified from READY-PATCH on 2026-09-03, when the one surviving candidate
+  was priced.** *Observed pressure:* `require_section_shape` collects
   `shape.breaking` as a set of **section names**, and requires each such section to carry a `### Migration`
   heading. One marked entry plus one Migration heading therefore satisfies the whole section however many
   unmarked breaking entries sit beside them. Measured on this repository's own `[0.5.0]`: its `### Migration`
@@ -439,6 +438,27 @@ consumer for an undemonstrated deduplication.
 
   The third candidate's stated need survives: `[0.5.0]`'s third Migration bullet is *Nothing else requires
   action*, so a join does have to admit a declared-empty form.
+
+  **Decided: the named join is not built, and the price is the reason.** It is the only candidate that is both
+  a theorem and covers its own instance, so the choice is not between candidates — it is between paying for
+  that one and accepting the gap. The price is a **permanent authoring tax**: every future Migration bullet
+  gains a handle, at every release, forever. What it buys is that a breaking entry cannot go unannounced
+  while its migration step is present — and *present* is the operative word, because the information a
+  reader needs is in the `### Migration` section either way. The failure this closes is an adopter skimming
+  `### Changed` and not seeing a mark that exists; it cannot make a released guarantee false, which this
+  entry's own risk clause already says.
+
+  Permanent cost against a bounded, visible failure is the trade this repository declines elsewhere — the
+  release-date entry above declines a check for being right at one moment and wrong the rest of the time,
+  and the branch-naming entry declines a gate whose whole consequence is legibility. This is that shape a
+  third time, and taking it consistently is what keeps the governance share falling.
+
+  *Reopening — both halves kept, and one added rather than substituted:* a second unmarked breaking entry,
+  or an adopter reporting a missed migration, **or a `### Migration` section found to omit a step a breaking
+  change actually needed** — the last being the case where the information is absent rather than merely
+  unannounced, which is the failure the price would be worth paying for.
+
+### READY-PATCH
 
 - **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
   register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
