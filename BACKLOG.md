@@ -1818,6 +1818,37 @@ consumer for an undemonstrated deduplication.
   *Authority:* this entry, and the trigger-corpus entry above, of which this is the other half — that one
   asks whether a trigger's set is the residue's set, and this one asks whether anyone can ever evaluate it.
 
+- **WATCH: a `Shape` clause is a hypothesis, and this file records no difference between one that has been
+  run and one that has not.** *Class:* WATCH. *Observed pressure:* three `READY-PATCH` entries were taken to
+  the tree in the 0.5.1 window and none of their proposed shapes survived contact — **and the three failed in
+  three different ways, which is the finding rather than an aggregate**. *The citation half* of the
+  un-reacted-`SHALL` entry proposed extending an existing pointer, and the pointer turned out to be held only
+  to its name resolving: the instrument holds less than the entry assumed. *The prose-claim entry* proposed a
+  declared phrase held against a produced set, and the class's instances are claims their author believed, so
+  a declaration-armed mechanism cannot be armed for them: the arming cannot reach the instances. *The
+  semantic-delegation entry* proposed invoking the observer at the call site, and doing it closed the two
+  paths' **equality** rather than the delegation: the repair closed an adjacent property. No reaction can
+  predict all three, because they are not one mechanism — which is why what is filed here is the **status of a
+  shape**, not a rule about shapes being wrong. *Observation source:* those three, plus the counter-example
+  that keeps the claim honest: the TOML-reader entry's shape was **right** — migrate the readers to a parser —
+  and what was wrong was its subject list, naming a reader that had never read TOML and omitting the one that
+  survived. A shape is not usually wrong; its status is unrecorded. *Current reaction or bound:* none, and
+  none is available: whether a shape has been run is a question about this repository's history and the
+  author's intent, which is the judgement-over-text class measured and rejected three times. *Risk:* a
+  `Shape` clause is the actionable half of an entry, and an implementer reads one designed in the same act
+  that found the defect exactly as they read one that has been attempted and revised. The cost is a window
+  spent building the wrong thing, and it is paid by whoever picks the entry up rather than by whoever wrote
+  it. Bounded by the shapes being prose that nothing executes. *Promotion trigger:* a fourth entry whose
+  shape does not survive contact **after** this entry was written — the entry being the control, so the three
+  that produced it cannot stand as evidence for themselves — or an implementer following a shape to
+  completion and finding at the end that it closed nothing. *Why prose and not a field:* the convention
+  already exists in one entry and cost nothing to write there. The semantic-delegation entry records its own
+  failed attempt and what the attempt measured, in its own text, and that record is what stopped the next
+  window from repeating it — so the form is proven and what is missing is that the other entries do not use
+  it. A new field would be a form to maintain for a property one sentence carries. *Version class:* patch;
+  this file ships in no crate. *Authority:* this entry, and `AGENTS.md`'s *A repair loop is a diagnosis, not
+  a schedule*, which sorts a round's findings and says nothing about the status of a repair a round proposed.
+
 - **WATCH: a gate that is its own test is outside the refusal register.** *Observed pressure:* several
   gates are implemented under `crates/kanhe/tests`, where the judgement and the directions over it share a
   file; their refusals carry no site identity, because *which direction observes this branch* has no answer
