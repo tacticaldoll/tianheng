@@ -84,6 +84,31 @@ over-inclusion — delete it and what remains is an assertion nothing can falsif
 this file spends four rules closing. `fixed in round 6` or `two independent reviews read this as requiring X`
 is provenance: it names when or how a disagreement was resolved, not what reacts, and nothing downstream reads it.
 
+**A specification clause is a baseline, and a baseline is atemporal.** The test above is the doc-comment
+test: a `///` passage sits beside the code it describes, so its observation source is what makes *that code's*
+claim falsifiable at that site. A specification is the thing everything else is checked **against**, and
+history embedded in it drifts — it describes a tree state that moves while the clause does not. So over
+`openspec/specs/*` the test is sharper: **reproducible now, or not at all.** *Measured under cargo 1.96.0,
+these five spellings inherit* stays, because anyone can re-run it. *Twenty entries named it, spread across
+four adopter headings* goes, because the section it counted has been collapsed and nothing produces the
+figure. Where a mechanism is carried only by its history, restate the mechanism as a property: *a squash can
+carry a message over a tree byte-identical to its parent's while every other guard is satisfied*, never *this
+wrapper merged one*.
+
+**This is an appeal, and what makes it an appeal rather than a reaction is a property of the author, not of
+the rule.** A reaction is worth building when it is decidable **and** its refusal names a repair the author
+can apply without judging meaning. `doc_provenance` refuses `round[- ][0-9]+` and the repair is *delete the
+number*; the relative-anchor reader refuses four declared phrases and the repair is *name the release*. Both
+converge in one step. This vocabulary does not, measured while converting twenty-one sites: `used to` is
+ambiguous between *formerly* and *employed to* — `SHALL NOT be used to anticipate them` is legitimate and
+matches — and `was rewritten` occurs inside a quoted argument, where it is the subject of a sentence rather
+than an assertion. A matcher over those refuses text whose correct repair is sometimes deletion, sometimes
+retention and sometimes restructuring the paragraph, so an author cannot converge on it and writes to the
+checker instead of writing well. That inverts 潛移: the idiom is what gets imitated and the reaction is the
+backstop, never the audience. The unambiguous half — `Measured before`, `no longer says`, `used to be wider`,
+`the shape that failed` — would be reactable, and is deliberately left unbuilt, because the half that matters
+is the ambiguous one and this paragraph is the measurement that says so.
+
 Applied to the shapes a review is likely to file:
 
 | shape | disposition |
