@@ -341,11 +341,24 @@ consumer for an undemonstrated deduplication.
     counting rule over a population the entry never says how to recognise, which is this repository's own
     recorded lesson about a text reaction reading its own text, arriving where the count is the whole
     argument.
-  - **And the existing reader's own subject is wider than the marks, which nothing above says.**
-    `section_shape` arms `breaking` on any line containing the marker, so **prose about the marking rule arms
-    it**: eight of `[0.5.0]`'s ten are entries that discuss the rule rather than carry it. A section
-    discussing the rule and migrating nothing is therefore refused — observed directly in an earlier window,
-    when a passage written about this very rule was refused and no exemption was taken for it.
+  - **The reader's subject is wider than the marks, and that reach is declared, deliberate and pinned.**
+    `section_shape` arms `breaking` on any line containing the marker, so prose about the marking rule arms
+    it: eight of `[0.5.0]`'s ten are entries that discuss the rule rather than carry it, and a section
+    discussing the rule while migrating nothing is refused. **This was written down as new when it was
+    already recorded in three places, and the correction matters more than the observation.**
+    `release-coherence/prose-about-the-marker-is-read-as-a-marker-a-stated-bound` declares it as an engine-owned
+    over-reaction, `prose_about_the_marker_is_read_as_a_marker_a_stated_bound` pins it against a body that
+    announces nothing and is refused anyway, and `CHANGELOG.md` states the decision with its reason. That
+    reason is the one that governs the candidate above: **recognising the marker at an entry's start was
+    considered and declined**, because a positional matcher buys a false negative in the floor — a real break
+    whose marker sits anywhere but the first token would stop being observed — and the Core Contract forbids
+    exactly one bug, which is that one.
+
+    So the second candidate's population is not merely undefined; **defining it the way that makes it fire
+    would reverse a declared bound.** Counting by containment, the asymmetry does not fire on the instance it
+    is said to catch. Counting by position, it fires and the floor moves. Whoever picks this entry up inherits
+    that choice already made against them, which is a narrower option space than *a counting rule needing a
+    definition*.
 
   The third candidate's stated need survives: `[0.5.0]`'s third Migration bullet is *Nothing else requires
   action*, so a join does have to admit a declared-empty form.
