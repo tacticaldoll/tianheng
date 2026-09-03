@@ -543,6 +543,31 @@ consumer for an undemonstrated deduplication.
   syn dependency lives here* stays a reviewer's, and coverage stays opt-in — declaring is an author's act. That
   residual is the honest floor of this repair, not an argument against it.
 
+  **The floor was measured on 2026-09-03, and it decides the shape rather than qualifying it.** Two live
+  instances of this class were found and repaired in the same change, both normative: `semantic-signature-
+  coupling` said the AST observation's crate *is the only crate permitted to depend on `syn`*, and
+  `semantic-dyn-trait-boundary` said the same in an aside. Both are false — `crates/kanhe/Cargo.toml` names
+  `syn` in `[dev-dependencies]`, which is permitted, and the root manifest's own comment says so and names
+  the occupant. Both now say *the only **packaged** crate that depends on `syn`*, which is the wording that
+  manifest already reached and is exactly true.
+
+  **Neither would have been caught by declaring a phrase, and the reason generalises: the instances of this
+  class are claims their author believed.** A declared set-claim is armed by an author writing it down, and
+  nobody declares a sentence they think is true — so the mechanism can hold the claims someone already
+  doubted and not the ones that go wrong. The two above sat in specifications for windows, under a
+  requirement whose own scenarios were narrower than its prose.
+
+  What did find them was a sweep of the **absolute-quantifier vocabulary near a named enumerable subject** —
+  *only*, *alone*, *the one place*, *no other* within a line of `syn` — over tracked documents. That is not
+  the prose detector this repository designed, measured and rejected three times: it decides nothing, and it
+  starts from a subject the tree already enumerates (which crates declare a dependency) rather than from the
+  meaning of a sentence. It produces a review queue, which is the interim-instrument form `AGENTS.md` already
+  states for the corpus-narrowing class.
+
+  *So the shape above is not built, and this is the measured reason rather than a deferral:* a declared set
+  is a producer for a claim someone chose to arm, and this class's instances are the claims nobody would
+  have. The sweep is what the next window should run, from the subject side, at each pre-release review.
+
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 

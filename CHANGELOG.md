@@ -24,6 +24,33 @@ them.
 
 ### Self-governance
 
+- **Two normative clauses said the semantic dimension's crate is the only one permitted to depend on `syn`,
+  and it is not.** A `publish = false` member of this workspace names `syn` in `[dev-dependencies]`, which is
+  permitted — the dependency allowlists observe the normal table only, a specified default with its own
+  scenario — and the root manifest's own comment states that and names the occupant.
+  `semantic-signature-coupling`'s requirement and `semantic-dyn-trait-boundary`'s aside now say *the only
+  **packaged** crate that depends on `syn`*, the wording that manifest already reached. **No published
+  surface, guarantee or reaction moves**: the requirement's own scenarios were already narrower than its
+  prose — they assert that the static core does not acquire `syn` — so what changed is the sentence above
+  them and not what anything reacts to.
+
+- **The declared-set instrument for prose claims is not built, and the reason is measured rather than
+  deferred.** The backlog entry *A claim about this tree, written as prose, is held only where its author
+  declared it* proposed extending the census idiom: a declared phrase whose held value is a produced **set**,
+  so *only 渾儀 names syn* is compared against the enumerator that answers it. Its stated floor was that
+  coverage stays opt-in, declaring being an author's act.
+
+  That floor was measured, and it decides the shape. The two live instances found in this change are claims
+  their authors plainly believed — one of them a normative `SHALL` whose own scenarios were narrower than
+  its prose. **Nobody declares a sentence they think is true**, so a declaration-armed instrument holds the
+  claims someone already doubted and not the ones that go wrong.
+
+  What found them was a sweep of the absolute-quantifier vocabulary — *only*, *alone*, *the one place* —
+  within a line of a named enumerable subject. That is not the prose detector this repository has designed,
+  measured and rejected three times: it decides nothing and starts from a subject the tree enumerates rather
+  than from a sentence's meaning. It produces a review queue, which is the interim-instrument form already
+  stated for the corpus-narrowing class.
+
 - **Sixteen requirements-to-reaction citations added, and the half of the backlog entry that called itself
   cheap turns out to have a third state.** The entry *Every normative SHALL either has a reaction or is a
   declared bound* splits into extending the existing citation where a reaction exists (no capability needed)

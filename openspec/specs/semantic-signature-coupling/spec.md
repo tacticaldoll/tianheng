@@ -314,7 +314,7 @@ A semantic violation report SHALL identify the governed anchor, the rule, the of
 
 ### Requirement: The syn dependency is quarantined
 
-The AST observation SHALL be implemented in the `hunyi` crate, which is the only crate permitted to depend on `syn`. The dependency-light static core (`guibiao`) MUST NOT acquire `syn`, and `hunyi` MUST NOT depend on the imperative shell `tianheng`. These invariants SHALL be enforced as `cargo test` self-governance gates.
+The AST observation SHALL be implemented in the `hunyi` crate, which is the only **packaged** crate that depends on `syn`. The dependency-light static core (`guibiao`) MUST NOT acquire `syn`, and `hunyi` MUST NOT depend on the imperative shell `tianheng`. These invariants SHALL be enforced as `cargo test` self-governance gates.
 
 #### Scenario: The core does not gain syn
 
