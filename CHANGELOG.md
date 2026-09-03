@@ -22,6 +22,15 @@ them.
 
 ## [Unreleased]
 
+### Documentation
+
+- **Provenance trimmed from the published crates' rustdoc.** Doc comments that named the window or the review
+  round a behaviour came from now state the behaviour itself: a canonical path label says why one separator
+  makes a baseline portable rather than which release found that out, and the cycle guards say they share one
+  canonicalize-failure policy rather than recounting how they once disagreed. **No documented guarantee, API,
+  outcome, identity shape or exit class moves** — every changed line in every published crate is a comment,
+  and the compiled behaviour is the `0.5.0` behaviour.
+
 ### Self-governance
 
 - **A pinning citation now arrives with its mutation, or with the reason it has none, in the same change.**

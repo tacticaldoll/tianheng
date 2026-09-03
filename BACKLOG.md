@@ -9,7 +9,7 @@ branch when you pick it up. Every future reaction obeys the drift law:
 Nothing here is "designed" yet — reaction *phases* with their observation sources named,
 not APIs. A new observation dimension is **a crate, born when it is built** (never a
 pre-created empty stub); the heavy dependency it needs is quarantined to that crate so the
-`guibiao` core stays `serde_json`-only.
+`guibiao` core keeps `serde_json` as its only **external** dependency.
 
 ## Backlog governance — evidence before promotion
 

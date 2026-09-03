@@ -326,7 +326,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   macro **name** is soundness, not caution: an arbitrary macro's nested blocks are not arms,
   and reading them as such invents items the macro may never emit.
   Adopting a real parser (`syn`) would resolve all of this for free but would break the
-  dependency-light core (the `serde_json`-only self-law); that is an amendment, not a
+  dependency-light core, whose self-law admits no external dependency besides `serde_json`; that is an amendment, not a
   silent trade. A boundary's governed *target* is file-based: an inline `mod name { … }`
   is reachable for import attribution but owns no file, so it cannot be a target — a
   boundary on one fails loud with a self-describing constitution error (exit 2), distinct
