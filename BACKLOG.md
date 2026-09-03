@@ -439,6 +439,31 @@ consumer for an undemonstrated deduplication.
   re-measurement intact. The record is what kept them about what was measured rather than about what was
   assumed.
 
+  **The Shape's price was measured on 2026-09-03 and it is not a refactor.** *Unreachable except through the
+  observer* means the shell cannot see the semantic bundle, and the shell is where `Constitution` is defined —
+  so nothing about the layering prevents a guard; what would prevent one is
+  `Constitution::semantic_boundaries()` no longer being callable. That accessor is **documented adopter
+  surface**: `COOKBOOK.md` hands a reader `check_all(constitution().semantic_boundaries(), &manifest())` as
+  the way to unit-test the semantic teeth, `crates/tianheng/tests/adopter_surface.rs` exercises it twice
+  including in the `Run` composition the protocol exists to offer, and `examples/sans-io-pure` reads through
+  it. So the design step is an adopter-facing removal that would take the composition path this capability
+  exists to provide, not a restructuring inside the shell.
+
+  **The other two routes were already closed in the tree, and reading them first is why no code was written
+  here.** The source-shape reaction was built, defeated four times and retired
+  (`refactor(tianheng): retire the composition-body reaction, declare the gap`). And folding the shell's two
+  `if !matches!` arms into `Run` removes no duplication: `crates/kanhe/tests/observer_protocol.rs`'s own
+  header records that two composition paths exist for the **static** dimension alone — coverage needs
+  `check_and_cover` and a second call would read `cargo metadata` twice — while *for the semantic and runtime
+  dimensions there is no second path left to compare*. `Run` offers no seed by which the already-computed
+  static outcome could enter it, and a seed adapter is refused by
+  `every_observer_declares_exactly_its_dimension_s_bounds`, since it would claim a dimension's bounds a
+  second time.
+
+  So all three routes are closed and none of the closures is a defect. Whether this stays a class someone may
+  pick up, or becomes accepted debt beside its permanent bound, is a steward's decision rather than a patch —
+  it turns on whether the adopter accessor is worth the delegation, and nothing in the tree decides that.
+
 - **Every normative SHALL either has a reaction or is a declared bound.** *Class:* READY-PATCH — by the
   definition above, which classifies evidence and compatibility rather than remaining design effort: the
   pressure is measured and the correction preserves every published API. It declared no class at all until
