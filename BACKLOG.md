@@ -776,7 +776,34 @@ consumer for an undemonstrated deduplication.
   a judgement over intent. This entry is the instrument and the record of one reading. *Risk:* the window's
   own evidence is that each repair produced the next round's finding — *every reaction built in this window
   had a defect found in the next round, three of three* — so a system that generates work proportional to
-  itself will keep spending the budget on itself unless the figure is looked at. *First re-run, `0.5.1` so far:* **8/17
+  itself will keep spending the budget on itself unless the figure is looked at. **The instrument undercounts, measured 2026-09-03 at the end of the `0.5.1` window, and the
+  correction reverses its verdict.** Its classifier calls a change *governance* only when it touches
+  `crates/{kanhe,shengmo}`. Governance here is also carried by `BACKLOG.md`, `AGENTS.md`, `PROJECT.md`,
+  `CHANGELOG.md`, `openspec/specs/**`, `docs/**` and `.github/**` — so a window spent almost entirely on those
+  reads as a **fall**. Over `v0.5.0..release/0.5.1` the classifier as written answers `13/42 (30%)` against
+  `0.5.0`'s 52%; classified by carrier it answers **42/42 (100%)**, of which `29/42 (69%)` touched no code at
+  all, and **0/42 touched any published crate's `src/`** where `0.5.0` had 18%. The share did not fall: the
+  work moved into a category the classifier ignores, which is the corpus defect this file records under its
+  own name elsewhere — a reader whose subject is narrower than the claim it serves.
+
+  ```bash
+  git log --format='@%H' --name-only <previous-release-commit>..<release-branch> | awk '
+    function flush() { if (seen) { t++; if (p) prod++; else if (g || d) gov++; if (!p && !g && d) doc++ } }
+    /^@/  { flush(); seen=1; g=0; p=0; d=0; next }
+    /^crates\/(kanhe|shengmo)\//                                    { g=1 }
+    /^crates\/(xuanji|xingbiao|guibiao|hunyi|louke|tianheng)\/src\// { p=1 }
+    /^(BACKLOG|CHANGELOG|AGENTS|PROJECT|COOKBOOK|README)|^openspec\/|^docs\/|^\.github\// { d=1 }
+    END   { flush(); printf "product %d/%d, governance %d/%d, documents-only %d/%d\n",
+                     prod, t, gov, t, doc, t }'
+  ```
+
+  *And this correction lands in the 69%*, which is the shape of the problem rather than an aside: every act of
+  pruning governance stock in this window — a reader layer deleted, deferred entries closed or reclassified, a
+  queue halved — was itself recorded in a governance document, and the recording is counted where the pruning
+  is not. What the corrected figure asks for is not a better classifier. It is a window in which something an
+  adopter receives moves.
+
+  *First re-run, mid-window and superseded by the correction above:* **8/17
   (47%)** against `0.5.0`'s 52%, with `kanhe` down from 37,154 lines to 36,460 — the first window in which it
   shrank. **Neither number carries much yet.** Seventeen changes is a sample two differently-classified
   commits would move ten points, and nearly all of them are the same hand working on governance, so the
