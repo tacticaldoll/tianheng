@@ -477,6 +477,17 @@ records is the comparison rather than a class still open. Filing counts as answe
 cost and a recorded trigger is not the same as one nobody has priced — but silence does not. Say which of the
 two the change is doing.
 
+**A pinning citation arrives with its mutation, or with the reason it has none, in the same change.** A
+`PINNED-BY` is held to its name resolving to one registered test; whether that test would fail if the
+behaviour it defends changed is decided only where a mutation is declared for it, and `pin_bites` reports the
+size of the part it does not cover on every clean run. Citing is cheap and authoring a mutation is not, so a
+change that adds citations without mutations enlarges exactly the population that entry exists to report —
+measured here, when six requirements gained citations and not one of them declared a mutation. The obligation
+is the shape of the rule above: do it, or say why not, in the change that creates the debt. What it is **not**
+is a campaign to author mutations for the standing set — that was measured and declined, because the rate is
+against it: the citation set grows faster than mutations can be written, so the move that changes the
+trajectory is stopping the denominator rather than chasing the numerator.
+
 Measured, in the window that produced this rule: three consecutive repair rounds on one text reader, and across
 all three **not one finding was a new code defect**. Every one was a sentence describing what the reader does —
 "the line start refuses a mention", "the two cannot diverge", "three inputs decline", a declared bound's WHEN

@@ -24,6 +24,18 @@ them.
 
 ### Self-governance
 
+- **A pinning citation now arrives with its mutation, or with the reason it has none, in the same change.**
+  A `PINNED-BY` is held to its name resolving to one registered test; whether the test would fail if the
+  behaviour it defends changed is decided only where a mutation is declared, and the biting check reports the
+  uncovered part on every clean run. Citing is cheap and authoring a mutation is not, so a change that cites
+  without mutating enlarges the population that check exists to report — measured when six requirements gained
+  citations and none declared a mutation.
+
+  **What was declined is the campaign.** Authoring mutations for the standing citation set was costed on its
+  rate rather than its size: the set grows faster than mutations can be written, so chasing the numerator
+  loses to stopping the denominator. The obligation costs nothing now and changes the trajectory; the grind
+  costs a window and does not.
+
 - **Two normative clauses said the semantic dimension's crate is the only one permitted to depend on `syn`,
   and it is not.** A `publish = false` member of this workspace names `syn` in `[dev-dependencies]`, which is
   permitted — the dependency allowlists observe the normal table only, a specified default with its own
