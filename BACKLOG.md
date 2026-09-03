@@ -449,6 +449,13 @@ consumer for an undemonstrated deduplication.
   *Current reaction or bound:* `crates/kanhe/tests/pin_bites.rs` over the declared mutations; nothing over the rest.
   *Risk:* a defence that has stopped defending is indistinguishable from one that has not, which is the failure
   the register was built to end one level down. *Promotion trigger:* fired — the gate exists; what remains is
+  coverage. **Decided 2026-09-03: coverage grows as an obligation on citing, not as a campaign.** Grinding the
+  standing set was costed and declined on its rate — `pin_bites` reports the uncovered part on every clean
+  run, and the citation set grows faster than mutations can be authored, so chasing the numerator loses to
+  stopping the denominator. `AGENTS.md` now requires a citation to arrive with its mutation or with the reason
+  it has none, in the same change. The debt this entry already carries from the 0.5.1 window is answered
+  collectively rather than per-citation, above: six requirements gained citations, none declared a mutation,
+  and the reason is recorded where the economics are. What remains is
   coverage, which grows one considered record at a time. That last claim was false while the tree under test
   was an export of tracked content: a pin reading the repository through git failed its own control run, so no
   record could ever exercise it — `units_outside_the_gate_pairing_are_outside_the_surface` was one. The tree is
