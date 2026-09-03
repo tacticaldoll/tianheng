@@ -99,7 +99,7 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 #### Scenario: A cfg_attr-wrapped-path sibling reacts through its own file, not absorbed by another sibling's success
 
 - **WHEN** the anchored module `crate::foo` is declared as two mutually-exclusive `#[cfg]` branches — one `#[cfg_attr(<pred>, path = "weird.rs")] mod foo;` and the other a plain `mod foo;` — and only the `cfg_attr` branch's target file exposes a forbidden type
-- **THEN** the system reacts on that exposure — the `cfg_attr` branch's own resolution is never silently dropped merely because the OTHER, mutually-exclusive branch's plain declaration also resolved successfully (found on adversarial review: the prior fail-loud-only-when-completely-unresolvable check never fired once any sibling succeeded, so the `cfg_attr` branch's file vanished with no error and no reaction at all)
+- **THEN** the system reacts on that exposure — the `cfg_attr` branch's own resolution is never silently dropped merely because the OTHER, mutually-exclusive branch's plain declaration also resolved successfully
 
 ### Requirement: Public-signature observation governs exposure
 

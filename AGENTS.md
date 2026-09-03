@@ -71,17 +71,18 @@ themselves. The ordinals now have one owner; these three have names.
 
 Keep every reason **within the boundary's observable perimeter** — a reason must never assert structure the law does not react to (that is prose prescription, an open loop with no backstop). Forward voice, bounded to what reacts, minimal in reactions.
 
-## What earns a place in a doc comment
+## What earns a place in doc comments and specification prose
 
-A `///` or `//!` passage carries the item's contract. **The test is whether the passage carries an
-observation source or a falsifier for a claim the item makes.** Where it does, it stays and is load-bearing;
-where it is only *how the code got here*, it is provenance and belongs with the record.
+A `///` or `//!` passage, or an OpenSpec specification clause (`openspec/specs/*`), carries the item's
+contract. **The test is whether the passage carries an observation source or a falsifier for a claim the item makes.**
+Where it does, it stays and is load-bearing; where it is only *how the code or text got here*, it is provenance
+and belongs with the record.
 
 That distinction, and not a ban on past-tense verbs, is what separates the two. `Measured:
 bash -c 'printf a;#b' prints a, so bash opens a comment there` is the **observation source** for a declared
 over-inclusion — delete it and what remains is an assertion nothing can falsify, which is the defect class
-this file spends four rules closing. `fixed in round 6` is provenance: it names when, not what, and nothing
-downstream reads it.
+this file spends four rules closing. `fixed in round 6` or `two independent reviews read this as requiring X`
+is provenance: it names when or how a disagreement was resolved, not what reacts, and nothing downstream reads it.
 
 Applied to the shapes a review is likely to file:
 
@@ -179,7 +180,9 @@ edited in one pass, or they diverge in whichever direction was not looked at.
 request**: either name the existing reaction or repository check in the PR's `## Verification`, or
 add a new guard and record the required negative run. If a property cannot fail because the data
 model constructs it, state that construction in requirement prose rather than inventing a scenario.
-A scenario with neither form of evidence does not belong in a spec.
+A scenario with neither form of evidence does not belong in a spec. Requirement prose and scenarios
+state the forward contract and its evidence; historical review rounds, past defect narratives, and
+review debriefs belong in commit provenance and PR records, never in specification text.
 
 **Four repository checks already encode the lifecycle, which is how the paragraph this replaces was
 found to be false.** `reference_integrity` excludes a change directory from its corpus — a plan
