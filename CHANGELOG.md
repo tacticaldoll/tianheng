@@ -49,6 +49,21 @@ them.
   prefix, which answers two crates and not two targets. That scenario stays uncited rather than pointing at
   half its defence.
 
+  *Extending this to the rest is declined, on what a citation is held to rather than on its size.* The
+  register decides that a citation's name resolves to exactly one registered test — proven by planting a name
+  that resolves to nothing — and nothing decides the **pairing**. `pin_bites` closes the neighbouring half
+  only where a mutation is declared, and even a biting pin ties its test to an author-chosen perturbation
+  rather than to the requirement. So extending part one to the remaining requirements would produce
+  hand-authored claims on the order of the requirement count, each held by name resolution — the drifting
+  artifact the entry's own second half refuses. The citations added are kept: they are correct, and a renamed
+  test turns them red.
+
+  *And a cost this entry owed its sibling.* None of the new citations declares a mutation, so each landed in
+  the part of the citation set `pin_bites` reports as uncovered on every clean run. Citing a pin is cheap and
+  authoring its mutation is not, so work that cites more pins enlarges *most pinning citations have never
+  been seen to fail* unless it authors the mutations too. That is booked in that entry rather than left in
+  the change that caused it.
+
 - **The workspace-version inherit question is parsed, and the hand-rolled TOML layer it was the last caller
   of is deleted.** Net 130 insertions against 548 deletions, more than half of
   `crates/kanhe/src/manifest.rs` among them, and no production code calls `region::Source::toml()` any more.
