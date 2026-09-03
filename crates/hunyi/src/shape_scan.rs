@@ -138,8 +138,7 @@ pub(crate) fn operand_module_findings(
     let uses_by_branch = uses_by_branch(&items_with_files);
     // Per-branch, not crate-wide and not per-file: `externs_type`/`renames_bare` derive from a
     // specific branch's own child-module names, so a #[cfg]-split module's several branches must
-    // never share one (see `file_extern_scope`'s doc — the identical conflation class round 6 fixed
-    // for the use-map).
+    // never share one (see `file_extern_scope`'s doc).
     let items_by_branch = group_items_by_branch(&items_with_files);
     let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names)?;
     let file_scopes: HashMap<usize, crate::crate_scope::FileExternScope> = items_by_branch

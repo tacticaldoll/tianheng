@@ -414,12 +414,9 @@ impl Rule {
                 .collect(),
             // A dependency on the TARGET'S OWN name is never a cross-crate layering violation —
             // Cargo allows (and dogfooding/doctest patterns genuinely use) a crate listing
-            // itself as a dev-dependency path on itself. `dependencies()` itself now excludes
-            // this self-referential edge (see `cargo_metadata.rs::is_self_dependency`), a
-            // round-12 fix that closed the identical gap for every OTHER rule reading the same
-            // observation too — round 11's own fix filtered it only HERE, leaving every sibling
-            // rule (`ForbidDependencyOn`, `RestrictDependenciesTo`, `RestrictDependencySourcesTo`)
-            // still vulnerable; see `PROJECT.md`'s Decisions.
+            // itself as a dev-dependency path on itself. `dependencies()` excludes this
+            // self-referential edge at observation (see `cargo_metadata.rs::is_self_dependency`)
+            // so every dependency rule observes it consistently.
             Rule::RestrictWorkspaceDependenciesTo { allowed } => dependencies(package, kind)
                 .into_iter()
                 .filter(|dependency| {

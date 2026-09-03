@@ -41,7 +41,7 @@ pub(crate) fn direct_path_value(attrs: &[syn::Attribute]) -> Option<String> {
 /// real `rustc` build: `cfg_attr` never removes the `mod` item, so a missing file behind one with
 /// no `path` remap is a genuine E0583 in every configuration). Shared by both of this crate's
 /// module walkers (`scan::resolve_child_modules` and `module_resolve::descend`)
-/// so they agree on this policy rather than silently drifting — the 0.2.2 lesson. A `cfg_attr`
+/// so they agree on this policy consistently. A `cfg_attr`
 /// wrapping `path` specifically is a different, already-handled case ([`cfg_attr_path_values`]).
 /// 漏刻's CI-audit scanner independently hand-rolls the identical bare-`cfg`-only distinction for
 /// the same reason (`louke::audit::scan::mod_preamble_attrs`).

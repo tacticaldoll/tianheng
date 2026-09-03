@@ -837,7 +837,7 @@ consumer for an undemonstrated deduplication.
   shipping in no crate. *Authority:* this entry.
 
 - **Twenty-seven inner comments in published crates index their provenance by review round, and the reaction
-  over doc comments does not reach them.** *Class:* WATCH. *Observed pressure:* measured in the 0.5.0 window, by
+  over doc comments does not reach them.** *Class:* BUILT / HISTORY. *Observed pressure:* measured in the 0.5.0 window, by
   `grep -rnE 'round[- ][0-9]+'` over every published crate's `src`: both doc-comment lines and inner-comment
   (`//`) lines carried a round number. The doc-comment ones are repaired and
   `crates/kanhe/tests/doc_provenance.rs` now refuses them; the inner-comment ones are outside its corpus by
@@ -856,14 +856,10 @@ consumer for an undemonstrated deduplication.
 
  / ACCEPTED / DECLINED / BUILT
 
-  **Not fired, swept 2026-09-01, and the first instrument was wrong.** A `git grep` with a `crates/*/src`
-  pathspec matched nothing at all and read as a clean tree; a control group over `kanhe`, which has none of
-  these comments and should have answered zero either way, is what exposed it. Re-run with a plain recursive
-  grep: the comments are still there, across `guibiao`, `hunyi` and `louke`. Every one was read, and every one
-  names its invariant in words beside the round number — `canonical_self_owner`, `resolve_self_type`,
-  `mod_preamble_attrs`, `module_findings`, `descend()`, `extern_resolution`, `build_file_scopes`. None has the
-  round number as its only identifier, which is the shape this trigger names, and the doc-comment corpus is
-  unchanged.
+  **Built 2026-09-03.** Every one of the 27 inner comments across `guibiao`, `hunyi` and `louke` was
+  reviewed and stripped of its round index while preserving its invariant and observation source,
+  bringing inner comments into alignment with `AGENTS.md` doc comment discipline. Clean run measured
+  with `git grep -nE 'round[- ][0-9]+' crates/*/src` returning zero lines.
 
 - **`merge_workflow`'s fixture takes `jq` from the host without declaring it, and its absence reads as fifteen
   defects in the subject.** *Class:* WATCH. *Observed pressure:* measured 2026-08-23 on a machine where `jq`

@@ -371,17 +371,11 @@ fn a_semicolon_inside_an_earlier_doc_attributes_string_does_not_hide_a_later_pat
 
 #[test]
 fn a_brace_delimited_attribute_argument_does_not_hide_an_earlier_path_attribute() {
-    // Round-10 finding: round 9's fix made mod_preamble_attrs' backward-then-forward preamble
-    // scan literal/comment-aware, but not attribute-group-aware. Its forward pass found `start`
-    // by remembering the position just past the LAST raw `;`/`{`/`}` byte seen, with no tracking
-    // of nesting -- so a brace-delimited attribute ARGUMENT (`#[foo({ 1 })]`, a valid token tree,
-    // not a string literal) sitting between an earlier, real `#[path = "..."]` and the `mod`
-    // keyword had its own internal `{`/`}` mistaken for item-boundary terminators, resetting
-    // `start` to a point AFTER the real `#[path]` attribute -- reproducing the round-9 bug's exact
-    // failure mode (a #[path]-relocated module falsely reported as unresolvable) through a
-    // different vector. Fixed by skipping a whole `#[...]` group as one atomic unit (via the same
-    // attr_group_end already used by the second, attribute-matching pass) when scanning for the
-    // preamble's own start, so its internal bytes are never examined as boundary candidates.
+    // A brace-delimited attribute argument (`#[foo({ 1 })]`) sitting between an earlier real
+    // `#[path = "..."]` and the `mod` keyword must not have its internal `{`/`}` mistaken for
+    // item-boundary terminators (which would reset `start` past the real `#[path]`). Skipping a
+    // whole `#[...]` group as one unit when scanning for the preamble start ensures its internal
+    // bytes are never examined as boundary candidates.
     let tb = TempBase::new("brace-attr");
     let root = tb.source("lib.rs", "mod worker;\nfn live() {}");
     tb.source(
@@ -982,9 +976,7 @@ fn audit_reacts_when_a_declaration_and_probe_decode_differently() {
 /// declaring it **or** by deleting the probe. Assigning a value would name a direction that does not exist, and an
 /// adopter's report and baseline both carry the label.
 ///
-/// The requirement stating this was written with no reaction, in the window whose subject was closing exactly that
-/// class — so it is measured here rather than trusted. The fixture is the one that produces **both** directions at
-/// once, so neither is asserted on a report that lacks it.
+/// The fixture produces **both** directions at once, so neither is asserted on a report that lacks it.
 #[test]
 fn neither_audit_direction_carries_a_repair_polarity() {
     let tb = TempBase::new("audit-polarity");
@@ -2984,10 +2976,8 @@ fn a_nested_absolute_path_literal_now_agrees_across_checkouts() {
 }
 
 /// `Path::display()` is lossy — it replaces each byte it cannot decode with U+FFFD — so two source
-/// paths differing only in invalid-UTF-8 bytes rendered to ONE label, hence one `UnauditableProbe`
-/// identity: baselining the first would silently suppress the second's never-accepted violation.
-/// That is the injectivity class the 0.4.0 window closed at five other identity sites; the `file`
-/// component of this identity is the same kind of component.
+/// paths differing only in invalid-UTF-8 bytes must not render to one label, which would cause
+/// baselining the first to silently suppress the second's violation.
 ///
 /// Unix-only because this is where such a path can be constructed: on Windows the analogous input is
 /// an unpaired surrogate, which the same encoder escapes (its `as_encoded_bytes()` WTF-8 form is

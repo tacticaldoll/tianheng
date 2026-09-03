@@ -40,9 +40,7 @@ pub(crate) const DEFAULT_MARKERS: &[&str] = &["assert_boundary"];
 /// observing platform uses, and every byte preserved. `display()` is **lossy** — it replaces each
 /// undecodable byte with U+FFFD, so two source paths differing only in invalid-UTF-8 bytes would produce
 /// one label, one `UnauditableProbe` identity, and a baseline accepting the first would silently
-/// suppress the second's never-accepted violation. That is the injectivity class the 0.4.0 window closed at
-/// five other identity sites, and the same lossy-`display` lesson `write_baseline_atomically` applied to
-/// the temp path. An identity component must not lose information the observation had.
+/// suppress the second's violation. An identity component must not lose information the observation had.
 ///
 /// 漏刻 held that rule privately while 圭表 and 渾儀's compilation-unit label did not, which is how the two
 /// came to disagree about the same input; it is shared rather than copied so they cannot drift again.

@@ -118,10 +118,9 @@ pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
 /// which is which per platform. A component cannot contain `/` anywhere, so `/` in a label
 /// unambiguously means a component boundary.
 ///
-/// Without this, one commit produced `src/lib.rs` on Linux and `src\lib.rs` on Windows, and a baseline
-/// recorded by CI matched nothing for a Windows contributor — every entry re-firing as new. That is the
-/// checkout-dependence class the 0.4.0 window closed five times, along the one axis none of those five
-/// covered: not where the repository sits, but which platform read it.
+/// Canonical path separators ensure cross-platform baseline stability: without this, paths would
+/// produce `src/lib.rs` on Linux and `src\lib.rs` on Windows, causing a baseline recorded on one
+/// platform to match nothing on the other.
 ///
 /// **Bytes.** Every byte that is not part of a valid UTF-8 sequence is percent-escaped, and a literal
 /// `%` becomes `%25` so no escaped label can be spelled by an unescaped one. `Path::display()` is
