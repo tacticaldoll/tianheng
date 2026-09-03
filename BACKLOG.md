@@ -338,7 +338,15 @@ consumer for an undemonstrated deduplication.
   a detached worktree now and the claim holds. One citation is still outside it for a different reason:
   `a_cfg_gated_module_with_no_file_is_skipped_not_errored` is defined in two files under `crates/`, so the
   target to run it in cannot be derived from a set and any record naming it refuses. Both episodes are kept
-  because the entry's economics rest on the claim. *What closing it costs, measured while seeding:* a
+  because the entry's economics rest on the claim. **This entry's residue grew by the citations added on 2026-09-02, and the growth is recorded here rather
+  than left in the change that caused it.** Six requirements in `repository-checks` gained citations, and
+  **none of them declares a mutation**, so every one landed in the part of the citation set this check
+  reports as uncovered on each clean run. The figure is produced there and not typed here; what is written
+  down is the direction it moved and why — a citation is cheap to add and its mutation is not, so any work
+  that cites more pins enlarges this entry unless it authors the mutations too. That is the economics this
+  entry rests on, observed on itself.
+
+  *What closing it costs, measured while seeding:* a
   mutation must genuinely perturb the pinned point, and authoring one is per-bound expert work. One attempt
   during this change did not — masking a brace inside a block comment left the exact one-statement comparison
   refusing the body anyway, so the pin held and the record reported a biting pin as a dead one. That direction
@@ -461,6 +469,36 @@ consumer for an undemonstrated deduplication.
     a reader they are looking at a view. There is no observation to make, and this is the class recorded
     elsewhere in this file for a requirement stated as a property of the implementation rather than of the
     behaviour.
+
+  **Part one is DECLINED at scale, decided 2026-09-03 on the measurement above rather than on its size.**
+  What stays is what was done: the six requirements whose reaction genuinely holds their `THEN` are cited,
+  and the third state is named. What is declined is extending that to the rest, and the reason is what a
+  citation is held to. `bound_register` decides that the name resolves to exactly one registered test —
+  proven by planting a name that resolves to nothing and watching it refuse — and **nothing decides the
+  pairing**. `pin_bites` closes the neighbouring half where a mutation is declared, and even a biting pin
+  ties its test to an author-chosen perturbation rather than to the requirement. So the binding a `PINNED-BY`
+  asserts to a reader is a human's single reading, held thereafter by name resolution alone.
+
+  The magnitudes are deliberately not restated here: `bound_register` prints the register's size on every
+  clean run and `pin_bites` prints the part of the citation set it does not cover, and a figure copied into
+  this entry would be a second copy that can disagree. What they say is that biting coverage is the exception
+  and the cited fraction of requirements is a minority. Extending part one to the remainder would therefore
+  produce hand-authored claims, on the order of the requirement count, each held by name resolution — which
+  is the drifting artifact this entry's own second half refuses, arrived at from the other direction.
+
+  *Why this is a decline and not a deletion.* The citations added are correct, and a renamed or deleted test
+  turns them red, so they cannot rot silently. The claim being declined is that the road ends somewhere good,
+  not that the steps taken were wrong.
+
+  *Nothing is added to the specs by this decision, deliberately.* The biting limits are already declared —
+  three unpinned bounds in `crates/kanhe/src/bounds.rs`, each tracking to the sibling entry — so stating them
+  again here would be the *saying it twice held it nowhere* failure this file records for its own governance
+  section. What is **not** declared anywhere is the higher fact above, that the requirement-to-test pairing is
+  intent rather than shape; it stays prose with its reason, under the bar the 0.5.1 window set — a cannot-judge
+  not a rule and needs no instance.
+
+  *Reopening:* the derived binding of part two, or biting coverage becoming the rule rather than the
+  exception, either of which changes what a citation is held to rather than how many there are.
 
   **A limit of the citation grammar, found by using it.** *The act completes* is held by
   `no_temporary_file_survives_the_wrapper`, which is defined in **two targets of one crate** — the merge
