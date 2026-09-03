@@ -2,8 +2,9 @@
 //!
 //! `cargo` names its members in `[workspace] members`; this repository's release gate reaches them by
 //! walking `crates/*/Cargo.toml`. Both answer *which crates are the family*, and nothing has ever asked
-//! whether they answer the same. Today they do — eight each — so this is a premise that holds by layout
-//! rather than by declaration, and layout is not a thing anyone declared.
+//! whether they answer the same. They do, and this direction is what says so: the agreement is a premise
+//! holding by layout rather than by declaration, and layout is not a thing anyone declared. The figure is
+//! the run's, not this sentence's.
 //!
 //! **The direction that matters is the false negative.** A member declared outside `crates/` is invisible to
 //! the walk: it would never be held to `version.workspace = true`, never enter the family the catalog's pins

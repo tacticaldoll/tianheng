@@ -167,11 +167,9 @@ pub fn is_semver(version: &str) -> bool {
 ///
 /// [`Publishable::Unreadable`] is not defensive: `publish.workspace = true` is legal and cargo honours it —
 /// measured, a member inheriting `publish = false` from `[workspace.package]` reports `[]`. Its text alone
-/// cannot say, so this refuses rather than guessing, exactly as `Quoted::Unreadable` does for a value one
-/// field over. Written as prose rather than a link because this type is public and that one is
-/// `pub(crate)`: rustdoc refuses the link form under `-D warnings`, which is `reference-integrity`'s
-/// declared bound about prose-form references met from the other side — the link form has a reaction, so
-/// the shape it refuses is the one left.
+/// cannot say, so this refuses rather than guessing, exactly as [`WorkspaceVersion::Unreadable`] does one
+/// field over. Both are public, so this is the **link** form and rustdoc resolves it under `-D warnings`:
+/// a reference with a reaction, rather than the prose form `reference-integrity` declares a bound for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Publishable {
     /// No `publish` key, an explicit `true`, or a non-empty registry list.

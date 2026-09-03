@@ -99,8 +99,6 @@ pub(crate) enum Declared {
     Inherited,
 }
 
-impl Declared {}
-
 /// Which crate a dependency names, or why this reader cannot say.
 ///
 /// **There is no *absent* state, because absence is not unnameability here.** A dependency declaring no
@@ -123,8 +121,6 @@ enum Package {
     /// A `package` value this reader cannot read — a value not in double quotes.
     Unreadable,
 }
-
-impl Package {}
 
 /// One dependency a manifest declares: the key it is written under, the package it names, and its pin.
 pub(crate) struct Dependency {
@@ -1735,7 +1731,7 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
     let metadata = cargo_metadata(repo)?;
     // **The prefix comes from cargo, not from the caller's path.** `manifest_path` is canonical, while the
     // live call site passes `PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")`, which renders with its
-    // `..` components intact — so stripping `repo.display()` failed for **all eight** members, machinery
+    // `..` components intact — so stripping `repo.display()` failed for **every** member, machinery
     // collapsed to the two `scripts/` files, `published` stayed empty, and two `continue`s made it silent.
     // `workspace_root` is cargo's own answer for the tree it just described, so the two strings cannot
     // disagree about spelling.

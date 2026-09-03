@@ -2,7 +2,7 @@
 //!
 //! A gate that stands in front of an irreversible act is run by a wrapper, and its inputs arrive as
 //! environment. `std::env::var` answers **not set** and **set but not UTF-8** with one `Err`, which is the
-//! absent-versus-unreadable collapse this crate draws everywhere else: `Quoted`, `WorkspaceVersion`,
+//! absent-versus-unreadable collapse this crate draws everywhere else: `WorkspaceVersion`,
 //! `PackageName`, `Declared`, `Package`, `Tracked`, `Failure` and `Site` all carry it inside `src`.
 //!
 //! **It was drawn for three of one gate's four inputs and not the fourth**, and the fourth was the one whose
