@@ -323,6 +323,33 @@ consumer for an undemonstrated deduplication.
   that found it: the only candidate that is both a theorem and covers its own instance is a capability, not a
   tightening.
 
+  **The premises were measured against the tree on 2026-09-03, before any of this was costed, and two of them
+  do not hold.** The first does: `section_shape` collects `breaking` as a set of **section names**, so one
+  occurrence plus one `### Migration` heading satisfies the whole section, however many unmarked entries sit
+  beside them.
+
+  - **The first candidate is said to have *zero observations of its own*. It has one.** `[0.3.0]` carries a
+    `### Migration` heading and **no** `**BREAKING**` occurrence at all — a released, dated section that
+    predates the marking rule this file records the reason for. So *a migration section that marks nothing*
+    is not a shape with no instance; it is a shape whose one instance sits in history, needing exactly the
+    released-section exemption the named join needs. The candidate stays rejected and the reason changes.
+  - **The second candidate's count is not defined yet, and which way it falls depends on that.** *Migration
+    bullets outnumber marked entries* is said to have caught the observed instance. Measured on `[0.5.0]`,
+    whose content is frozen: by the rule the existing reader uses — a line **containing** the marker — ten of
+    its entries are marked against three bullets, and the asymmetry does **not** fire. By a marker recognised
+    at an entry's **opening**, two are marked against three bullets, and it does. The candidate is a
+    counting rule over a population the entry never says how to recognise, which is this repository's own
+    recorded lesson about a text reaction reading its own text, arriving where the count is the whole
+    argument.
+  - **And the existing reader's own subject is wider than the marks, which nothing above says.**
+    `section_shape` arms `breaking` on any line containing the marker, so **prose about the marking rule arms
+    it**: eight of `[0.5.0]`'s ten are entries that discuss the rule rather than carry it. A section
+    discussing the rule and migrating nothing is therefore refused — observed directly in an earlier window,
+    when a passage written about this very rule was refused and no exemption was taken for it.
+
+  The third candidate's stated need survives: `[0.5.0]`'s third Migration bullet is *Nothing else requires
+  action*, so a join does have to admit a declared-empty form.
+
 - **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
   register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
   in a worktree left the suite green and the register clean. `crates/kanhe/tests/pin_bites.rs` closes that for the citations
@@ -384,6 +411,20 @@ consumer for an undemonstrated deduplication.
   collapse and this one never did. What would close it is the shell's semantic outcome being unreachable except
   through the observer — a shape in which the guard stops compiling rather than one in which it merely has
   nowhere tidy to sit.
+
+  **Premises re-measured 2026-09-03, and every one holds.** The semantic arm invokes
+  `SemanticObserver::new(...).observe(...)`; the declared gap is
+  `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound`,
+  unpinned and engine-owned; and the runtime contrast is stated where it can be checked rather than only
+  here — that arm's own comment records the second copy delegation collapsed, and this arm's records that it
+  never had one. **The failed attempt's measurement is carried in the code itself**, in the arm's comment: *a
+  guard deciding emptiness above this line still compiles and passes every gate*. Nothing has drifted, and
+  the shape is unchanged: a design step, not a call-site swap.
+
+  Worth noting beside the entry above about a shape's unrecorded status: of the entries taken to the tree,
+  this is the one that wrote down its own failed attempt, and it is the one whose premises survived
+  re-measurement intact. The record is what kept them about what was measured rather than about what was
+  assumed.
 
 - **Every normative SHALL either has a reaction or is a declared bound.** *Class:* READY-PATCH — by the
   definition above, which classifies evidence and compatibility rather than remaining design effort: the
