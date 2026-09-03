@@ -139,7 +139,7 @@ transitive effect-purity.
 with `RuleKey` + `StructuredFactIdentity`. The adopter-written boundary DSL remains the guarded
 surface; callers may inspect the returned structured `Outcome` directly through this crate.
 
-Adopt 渾儀 on its own — it carries the quarantined `syn`, the one place the AST dependency lives —
+Adopt 渾儀 on its own — it carries the quarantined `syn`, the only packaged crate that depends on it —
 or graduate to the composed constitution through the
 [`tianheng`](https://crates.io/crates/tianheng) shell, which composes these boundaries into one
 reaction: a single 儀 is an on-ramp, the suite is the destination. Onboard without a red wall —
