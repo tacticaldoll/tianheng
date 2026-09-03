@@ -37,13 +37,11 @@ set **as arguments to the judgement**, so a fixture and the real workspace run t
 inputs. The required governance-document set SHALL NOT be narrowable at all — not by an option, not by the
 environment, not for a fixture.
 
-**This requirement was rewritten to describe what the port does.** It used to require the gate to *accept an
-explicit fixture-only governance-document set*, refused on the real workspace, with an unreadable or surplus
-input naming what could not be read — a CLI-shaped option the shell-era gate carried. The shell-to-Rust
-migration removed it and gave the fixtures a stronger shape instead: `offences_in` takes the corpus root, the
+**The fixtures reach the corpus by parameter, not by an option.** `offences_in` takes the corpus root, the
 tracked paths and the corpus as parameters, and `GOVERNANCE_DOCUMENTS` is a compile-time `const` no caller can
-reach. The three scenarios below replace three that described the option's behaviour, which nothing had
-implemented for two windows.
+reach. So there is no input for a caller to supply, and therefore no surplus or unreadable one for this
+requirement to refuse: the fixture shape is stronger than an option would be, because a test cannot reach the
+real workspace's set at all.
 
 The direction the old wording was protecting survives, and is stronger: a narrowing that cannot be expressed
 cannot be requested on the real workspace, so the refusal it demanded is unreachable by construction rather
@@ -83,7 +81,7 @@ file's lines are read, SHALL both derive from that one declaration. Outside acti
 gate SHALL inspect every classified format's prose, including Rust rustdoc forms. A Rust test source SHALL NOT be
 excluded wholesale; its admitted comment lines are judged through the same region rule as other Rust.
 
-**Two lists is the shape that failed.** An extension filter deciding what to open while a marker rule decides
+**Two lists is the shape that breaks.** An extension filter deciding what to open while a marker rule decides
 which lines to read risks formats sitting in one and not the other. Discovery by declared format classifies
 what to open and which comment syntax to read in one mapping, rather than accumulating extensions piecemeal. A tracked script's shebang
 SHALL NOT be a reference: it names an absolute path outside every prefix this gate recognizes. Before judging references it SHALL require the repository's
@@ -185,10 +183,10 @@ end, and it left `.toml`, `.yml`, `Cargo.lock`, `CODEOWNERS` and `.gitignore` un
 covers every one of them. A format admitted to the corpus SHALL be swept for both properties or for neither.
 
 **The ladder this sits at the bottom of.** An intra-doc link is checked by the compiler; a path is checked by the
-sweep above; a path with a line number is checked by nothing; a position is not even a name. Measured on this
-repository, two such references were off by 86 and 98 lines, and the second was written after the first had been
-corrected — the criterion `scripts/publish.sh` states for itself, that a rule stated and then missed needs a
-check rather than another sentence.
+sweep above; a path with a line number is checked by nothing; a position is not even a name. It rots the
+moment anything above it moves, and the rot is invisible because the reference still resolves to *a* line —
+which is why a rule stated and then missed needs a check rather than another sentence, the criterion
+`scripts/publish.sh` states for itself.
 
 The corpus SHALL be comment lines, by the same rule that decides the sibling sweep's corpus, so a specimen
 written as a string literal sits on an executed line and cannot be read as a reference. That is a position rather
@@ -358,16 +356,14 @@ being one. A floor this reader invents is a floor it misses every shorter citati
   digit, which names something other than a commit
 - **THEN** the reaction fails anyway. It decides by **shape**, and nothing in the tree distinguishes a value
   of that shape from a citation without resolving it against an object database
-- **AND** resolving was measured and declined, for a reason corrected on 2026-09-01. The ground first
-  written here — *CI checks out one commit* — was false, and had been since `0.2.1`, three releases before
-  this bound was declared: the job that runs this reader checks out with `fetch-depth: 0`, for a reason the
-  workflow states in that job's own checkout block. What actually declines resolution is that the verdict
-  would then depend on the object store rather than on the tracked text — jobs in this workflow that check
-  out at the default depth would answer clean over every citation, so moving the reader to one of them, or
-  dropping that line for cost, would report clean for a reason unrelated to the content. That is a false
-  negative produced by configuration, the one direction this family forbids. A shape test that over-reacts
-  on a value nobody writes is the better trade, and measured over the live corpus no span of this shape
-  names anything but a commit
+- **AND** resolving is declined because the verdict would then depend on the **object store** rather than on
+  the tracked text: jobs in this workflow that check out at the default depth answer clean over every
+  citation, so a reader placed in one of them — or a job whose full-history checkout is dropped for cost —
+  reports clean for a reason unrelated to the content. That is a false negative produced by configuration,
+  the one direction this family forbids. **Not** because the objects are absent under CI: the job that runs
+  this reader checks out with `fetch-depth: 0`, for a reason that job's own checkout block states. A shape
+  test that over-reacts on a value nobody writes is the better trade, and measured over the live corpus no
+  span of this shape names anything but a commit
 - **UNPINNED** `BACKLOG.md` — *a code span shaped like an object that names none*
 
 #### Scenario: A dated changelog section is a record, and an undated one is not

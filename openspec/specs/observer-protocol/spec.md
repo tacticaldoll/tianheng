@@ -303,9 +303,8 @@ comparison resting on the dimensions that did not.
 - **THEN** the reaction reads the method's real body, to its real closing brace, whichever construct the brace
   sits inside. The extent step parses the source with `syn` rather than counting braces by eye, so a comment or
   a string literal is tokenized as what it is before any brace inside either is ever available to be counted —
-  closing the bound this scenario used to declare, in both directions it named: neither a block comment nor a
-  string literal moves the extent any longer. What replaces that closed bound is this implementation's own
-  failure mode: if the source does not parse as a Rust file, or parses without a function-like item beginning
+  so neither a block comment nor a string literal moves the extent. What the implementation declares instead
+  is its own failure mode: if the source does not parse as a Rust file, or parses without a function-like item beginning
   exactly where the anchor step said the definition starts, the reaction refuses to verify rather than passing —
   never a silent acceptance of a body it could not attribute to that exact site
 - **PINNED-BY** `a_brace_in_a_block_comment_or_a_string_literal_no_longer_moves_the_body_extent`
