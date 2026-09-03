@@ -83,12 +83,9 @@ file's lines are read, SHALL both derive from that one declaration. Outside acti
 gate SHALL inspect every classified format's prose, including Rust rustdoc forms. A Rust test source SHALL NOT be
 excluded wholesale; its admitted comment lines are judged through the same region rule as other Rust.
 
-**Two lists is the shape that failed.** An extension filter decided what to open while a marker rule decided
-which lines to read, so a format could sit in one and not the other — and shell did, for a whole window, while
-the marker rule had known `#` all along. The files that left unread are the sanctioned merge and publish
-wrappers, which cite the Rust gate they sequence *by path*, where a renamed test target is exactly what rots a
-citation; YAML, where this repository's own gate list is duplicated, was unread the same way. Adding one
-extension per discovery is the denylist shape the 0.5.0 window replaced twice elsewhere. A tracked script's shebang
+**Two lists is the shape that failed.** An extension filter deciding what to open while a marker rule decides
+which lines to read risks formats sitting in one and not the other. Discovery by declared format classifies
+what to open and which comment syntax to read in one mapping, rather than accumulating extensions piecemeal. A tracked script's shebang
 SHALL NOT be a reference: it names an absolute path outside every prefix this gate recognizes. Before judging references it SHALL require the repository's
 governance-document surface, at least one tracked workspace member under `crates/`, and at least one inspected
 source; absence of any prerequisite SHALL fail loudly rather than read as clean.
@@ -212,10 +209,8 @@ declined judgement. The ladder's own argument reaches it without help — a posi
 one in any tense, so a record citing a coordinate serves its reader no better than a live reference does. Naming
 the entry costs a clause and cannot rot.
 
-Measured before this was written: two existed, both in one `BACKLOG.md` clause, both correct when written and
-both since landed mid-paragraph in unrelated entries — one of them moved by the very window that repaired the
-source instances. After their repair the reaction holds an empty set, which is kept rather than pruned, by the
-same rule that keeps a recognizer asserting its own emptiness elsewhere here.
+Line numbers are moving coordinates that rot when adjacent content moves. The reaction holds an empty set,
+kept to ensure newly introduced coordinates are rejected immediately.
 
 #### Scenario: A coordinate in whole-document prose
 
@@ -470,12 +465,10 @@ was deleted when it migrated to Rust.
 
 **The exemption SHALL be exactly this, and SHALL NOT extend to a document because of where it lives.**
 `docs/history/` was exempt as a whole directory, and the exemption was declared nowhere — not in this
-specification, not as a scenario, not as a bound. Measured, it hid exactly one reference: a present-tense
-pointer at a gate that had moved crates inside the `0.5.0` window, in the document the CHANGELOG advertises
-to adopters as the provenance authority for verifying published tarballs. Fourteen of that directory's
-fifteen path references already resolved. The facts a record must keep are shas, dates, versions and counts,
-and none of those is a path — so a record document is judged like any other, and only a dated section within
-one is not.
+specification, not as a scenario, not as a bound. Measured, it hid a present-tense pointer at a relocated gate
+in the provenance verification document. Fourteen of that directory's fifteen path references already resolved.
+The facts a record must keep are shas, dates, versions and counts, and none of those is a path — so a record
+document is judged like any other, and only a dated section within one is not.
 
 Both directions SHALL be held by one reaction. A reaction asserting only the silence is satisfied by a check
 that reads no CHANGELOG at all.

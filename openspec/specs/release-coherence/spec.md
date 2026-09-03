@@ -559,12 +559,10 @@ would refuse the development case the exemption exists for.
 
 `CHANGELOG.md` is the adopter's document. It carries nine kinds of heading — `### Added`, `### Changed`,
 `### Fixed`, `### Migration`, `### Documentation`, `### Removed`, `### Compatibility`,
-`### Compatibility evidence` and `### Self-governance` — and every one of the first eight is an adopter's vocabulary. It offered none that was
-not, so every
-change to this repository's own governance machinery has been written into one of them. Measured **before this rule existed**, in the window that introduced it: twenty entries named it, spread
-across four adopter headings, for a directory that ships in **zero** packages. That figure is a record of a
-past state rather than a census — no reaction produces it now, the section it counted has been collapsed, and
-holding a record to today's enumeration would demand the record change every time the tree does.
+`### Compatibility evidence` and `### Self-governance` — and every one of the first eight is an adopter's vocabulary.
+Without a distinct heading, changes to repository-internal governance machinery risked being filed under adopter
+headings for a directory that ships in **zero** packages. The `### Self-governance` heading provides an explicit
+home for that machinery.
 
 The `[Unreleased]` section SHALL be permitted a `### Self-governance` heading,
 under which naming that machinery is what belongs; a heading is adopter-facing when it is any `### `
@@ -619,11 +617,9 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
 - **THEN** the reaction fails in every one of those, because the word is the unit rather than the span
 
 The machinery set SHALL be **produced from the workspace manifests**: every tracked path under a member the
-workspace does not publish, plus `scripts/`. It SHALL NOT be a location. The set was `git ls-files scripts/`,
-which was right while the machinery *was* fourteen shell gates and stopped being right in the window that
-deleted them and moved it into unpublished crates — leaving `scripts/` naming two wrappers, and this
-requirement's own scenario naming a path the enumeration could not resolve. `publish = false` is the same
-criterion the refusal states, read from the build rather than from a path.
+workspace does not publish, plus `scripts/`. It SHALL NOT be a location: defining the set by a single directory
+risks missing machinery that lives across unpublished workspace members or scripts. `publish = false` is the
+criterion the refusal states, read from the build rather than from a hardcoded path.
 
 A **basename**, and an ancestor directory the enumeration derives, SHALL enter the set only where it names
 machinery alone. Measured when the corpus widened: 78 machinery paths against 182 published ones, with five

@@ -212,12 +212,10 @@ attribute beginning with `#` remains executed Rust text.
 
 Where the built-in path obtains a dimension's outcome **by invoking that dimension's observer**, equality for
 that dimension holds **by construction rather than by observation**, and the spec SHALL say which dimensions
-those are — otherwise a reader takes a constructed equality for a measured one. The list is now held to that:
+those are — otherwise a reader takes a constructed equality for a measured one. The list is held both ways:
 a reaction reads the built-in path's own source and refuses if a dimension it declares construction-held is
-not constructed there, or if a dimension it does not declare so is. This was true in only one direction until
-the 0.5.0 window: the list named runtime alone, the shell's semantic arm changed under it, and the list was
-repaired by hand — a membership claim about a set with an enumerator, which is the shape this family refuses
-everywhere else. What answers it is textual rather than a perturbed build: for a construction-held dimension
+not constructed there, or if a dimension it does not declare so is. What answers it is textual rather than
+a perturbed build: for a construction-held dimension
 the built-in path does not call some *other* function that happens to agree with the observer today, it
 directly constructs that dimension's own `Observer` and calls `.observe()` on it, so there is exactly one
 implementation to read rather than two runs to compare. The **runtime** and **semantic** dimensions are such
