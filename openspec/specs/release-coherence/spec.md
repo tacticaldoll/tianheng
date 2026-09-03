@@ -85,10 +85,9 @@ text, and the same reader serves `publish-source-integrity`, so both refusals mo
 The same holds of the **key**, and it did not: the heading side of that reader decoded while the key side
 compared raw text, so spellings cargo accepts answered *absent*. The scenario below records what was
 measured. A value the reader cannot read names a different operator action from a missing key: one is a key to add,
-the other a value this check cannot take. **That set narrowed when a real parser replaced the hand-rolled
-reader**: a single-quoted or literal string is legal TOML cargo accepts, and it was refused — a false refusal
-this specification used to declare as a limitation. What remains unreadable is a `version` that is not a
-string at all, and a manifest the parser cannot read, which is one cargo cannot read either. Each refusal SHALL name the value as written, and SHALL say which judgement it
+the other a value this check cannot take. **A single-quoted or literal string is legal TOML cargo accepts, so
+it is read rather than refused.** What is unreadable is a `version` that is not a string at all, and a
+manifest the parser cannot read, which is one cargo cannot read either. Each refusal SHALL name the value as written, and SHALL say which judgement it
 blocked rather than only which fact was unreadable, because the two gates sharing the reader cannot decide
 different things.
 
@@ -452,10 +451,9 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   inline table, an array
 - **THEN** that field reads as unreadable, and the dependency is refused rather than judged on the fields
   around it
-- **AND** the shape this scenario used to describe — a bare word borrowing the next key's quotes, as in
-  `alias = { package = xuanji, … }` — is not a manifest at all. A parser refuses the document, which is what
-  cargo does with it, so the reader never reaches the question. The quote-scanning rule that made *unreadable*
-  reachable only when nothing else on the line was quoted went with the hand-rolled reader
+- **AND** a bare word borrowing the next key's quotes — `alias = { package = xuanji, … }` — is not a
+  manifest at all: a parser refuses the document, as cargo does with it, so this reader never reaches the
+  question
 - **PINNED-BY** `a_single_quoted_path_or_version_is_read_and_a_non_string_is_not`
 
 #### Scenario: An example requires a family crate with no version at all

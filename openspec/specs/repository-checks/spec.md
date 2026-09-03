@@ -78,10 +78,10 @@ a different direction. The corpus is this repository's own check crate; sites no
 are counted in a produced projection that falls to zero.
 
 Shipping in zero packages is what this capability already gives as the criterion separating governance from
-product — the reason `scripts/` and `docs/` count as governance. Measured before this change, the checks
-themselves failed it: `cargo package --list -p tianheng` carried every file under `tests/`, so every
-check judging this repository's changelog, specs, scripts and documents reached every adopter, where it
-could only detect no workspace and return.
+product — the reason `scripts/` and `docs/` count as governance. A check that ships inside a published
+package reaches every adopter, where it can only detect no workspace and return; `cargo package --list -p
+<member>` is what decides whether a path ships, so whether a check meets this criterion is read from the
+build rather than from where the file sits.
 
 Outside every published package is a floor, not the whole answer: it says where a check must **not** live and
 nothing about where it belongs. Checks SHALL therefore be held apart by **what they judge** — the law this
@@ -131,13 +131,13 @@ was a shell script and its refusal was an exit code, and it is why retiring the 
 - **WHEN** a registered or unregistered constructor is referenced by a bare name rather than called directly
   — a binding taken by value and called through the alias, or a reference to the name that a local binding
   of the same spelling has shadowed
-- **THEN** the reference is read as a construction, whichever it actually names. **This bound used to be
-  wider.** The register's reader was text over Rust and not exhaustive over the language: a byte char
-  literal, a raw string, or a closure whose parameter list spanned two lines could desynchronise a
-  character-by-character scan entirely, producing a site the reader neither parsed nor counted as
-  unparseable — invisible to both of its readings at once, which was the unsafe direction this bound named,
-  since a missed citation fails loud while a missed construction reports clean over a site nothing holds.
-  Reading this repository's own Rust with a real parser instead of scanning it closes that floor: every
+- **THEN** the reference is read as a construction, whichever it actually names. **The floor is name
+  resolution and nothing narrower, and a real parser is what keeps it there.** A text scan over Rust is not
+  exhaustive over the language: a byte char literal, a raw string, or a closure whose parameter list spans
+  two lines desynchronises a character-by-character scan entirely, producing a site such a reader neither
+  parses nor counts as unparseable — invisible to both of its readings at once, which is the unsafe
+  direction, since a missed citation fails loud while a missed construction reports clean over a site
+  nothing holds. Reading this repository's own Rust with a real parser closes that floor: every
   syntactically valid construction is seen by construction, not by an arm added the day a shape was found
   wrong. **What remains is not lexical.** Whether a bare reference names the constructor taken by value or a
   local variable that happens to share its spelling is not written down anywhere a parse tree carries —
@@ -1018,15 +1018,15 @@ second is not a merge, so the wrapper would run its gate, reach the tool, and ex
 An argument the wrapper supplies as a default SHALL be supplied as a default and not written over an argument the
 caller gave.
 
-**Enumerating what to forbid is the shape that failed, four times across both wrappers.** At the merge: a
-`--repo` flag, a positional pull-request URL, and every short spelling of the flags the long-form arms named —
-the last the sharpest, since `gh` accepts `-t` for `--subject` and `-F` for `--body-file`, the wrapper splices
-forwarded arguments after its own, and `gh` reads the last occurrence of a repeated flag, so one unlisted
-spelling replaced the message the gate had just approved. At the publish: everything but `--manifest-path` was
-forwarded, so `--no-verify`, `--allow-dirty`, `--exclude`, `--config` naming a whole configuration file, and a
-flag no cargo has all reached `cargo publish` with the wrapper exiting `0`. Both scripts carried the sentence *a
-guard catching one would be a guard catching neither* while arguments walked past them. Refusing arms MAY remain
-for the diagnostics they carry, but they SHALL decide nothing the default refusal would not.
+**Enumerating what to forbid is the shape that breaks.** At the merge an enumeration has to admit `--repo`, a
+positional pull-request URL, and every short spelling of the flags the long-form arms name — the last the
+sharpest, since `gh` accepts `-t` for `--subject` and `-F` for `--body-file`, the wrapper splices forwarded
+arguments after its own, and `gh` reads the last occurrence of a repeated flag, so one unlisted spelling
+replaces the message the gate approved. At the publish, forwarding everything but `--manifest-path` lets
+`--no-verify`, `--allow-dirty`, `--exclude`, `--config` naming a whole configuration file, and a flag no cargo
+has reach `cargo publish` with the wrapper exiting `0`. A sentence saying *a guard catching one would be a
+guard catching neither* decides nothing while arguments walk past it. Refusing arms MAY remain for the
+diagnostics they carry, but they SHALL decide nothing the default refusal would not.
 
 #### Scenario: An argument the wrapper does not name
 
@@ -1308,9 +1308,9 @@ the join below, and the check SHALL say so rather than imply a coverage it does 
   it unfalsifiable
 
 **A bullet the reader cannot understand SHALL be refused, never dropped.** The form read is one backticked
-glob and nothing else. A `- ` bullet the reader cannot parse used to fall out of a `filter_map`, so the
-capability's declared subject shrank by exactly the bullets that failed to parse and the filing join then
-missed every file those globs claimed — a capability quietly governing less than it says, which is the
+glob and nothing else. A `- ` bullet the reader cannot parse must not fall out of a `filter_map`: the
+capability's declared subject would shrink by exactly the bullets that fail to parse, and the filing join
+would then miss every file those globs claim — a capability quietly governing less than it says, which is the
 condition this requirement exists to make falsifiable, produced by the reader enforcing it. This is the same
 obligation `adopter-surface` states for the prelude's members, for the same reason: a reader that narrows a
 claim by the amount it failed to read reports the narrowed claim as the whole one.
@@ -1751,9 +1751,9 @@ The gate holds the marks `AGENTS.md` names. That document also forbids "any othe
 not enumerable, so the open clause SHALL remain a reviewer's obligation and SHALL be stated as such rather than
 implied by a list that reads as complete.
 
-Case-sensitivity was the live defect: the canonical spellings are not the ones the check listed — git writes the
-trailer with only its first letter capitalised and GitHub renders it that way — so the form most likely to appear
-was the form not caught. Measured before the widening, two canonical spellings were accepted.
+Case-sensitivity is the whole of it: git writes the trailer with only its first letter capitalised and GitHub
+renders it that way, so any list of spellings omits the form most likely to appear. The rule is therefore
+**any ASCII case** rather than an enumeration.
 
 #### Scenario: An attribution mark in the case the tool actually writes
 
@@ -2212,11 +2212,10 @@ The wrapper standing in front of `gh pr merge` SHALL read how many files the pul
 to reach the tool when that count is zero. A count it cannot read SHALL be its own refusal, never treated as
 a count of some.
 
-Measured: this wrapper merged a squash whose message asserted seven repairs across five files and whose tree
-was byte-identical to its parent's. The content had been committed onto the release branch itself while the
-branch the pull request named still pointed at an already-merged commit, so every other guard was satisfied —
-the live commit set was non-empty, the message gate judged it against that set, CI was green because nothing
-had changed, and the head pin named a real commit. The message is curated separately from the tree and
+A squash can carry a message asserting repairs over a tree byte-identical to its parent's: where the content
+was committed onto the release branch itself and the branch the pull request names still points at an
+already-merged commit, every other guard is satisfied — the live commit set is non-empty, the message gate
+judges it against that set, CI is green because nothing changed, and the head pin names a real commit. The message is curated separately from the tree and
 travels through `argv`, which is what lets the squash message be the record; the pull request's diff is the
 only thing tying the two together, and nothing read it.
 
@@ -2403,8 +2402,8 @@ rather than reasoned about — an ignore query answers *ignored*, and a fixture'
 file untracked, until it is named.
 
 The shared command builder SHALL name it, so the property holds for every caller rather than for whichever
-call site was last edited. That the builder did not was found by a read that had been fixed on its own: the
-same channel was silently omitting files from fixtures across the crate. The builder's guarantee SHALL be held
+call site was last edited: a builder that does not name it leaves the same channel silently omitting files
+from fixtures across the crate. The builder's guarantee SHALL be held
 by a case comparing a command that closes the channel against one that does not, and the control SHALL leave
 the channel open — a control that closed it would compare a value against itself.
 

@@ -31,10 +31,9 @@ is how a governance document came to describe the reactions beside it as somethi
 
 Authored text SHALL NOT restate a declared dependency allowlist, and the reaction holding that SHALL read
 **every** declared allowlist against **every** tracked governance document, not one crate's line comments
-against one dimension's. Measured before this change, the reaction read only Rust line comments under the
-`tianheng` shell and only the shell's allowlist, while `PROJECT.md` named every member of `guibiao`'s live
-allowlist — the same second source of truth, in a file class nothing scanned. A rule enforced at one site and
-not its neighbour is a rule about the site.
+against one dimension's. A restatement in a file class the reaction does not scan, or of an allowlist it does
+not read, is the same second source of truth as one it does — and a rule enforced at one site and not its
+neighbour is a rule about the site.
 
 What a declaration cannot carry SHALL stay prose: why a boundary exists, what it protects, the narrative of
 the family. What it can carry — the membership — belongs to the declaration and its projection, and the repair
