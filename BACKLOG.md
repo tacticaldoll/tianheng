@@ -252,6 +252,83 @@ consumer for an undemonstrated deduplication.
   `examples/observer-participant/Cargo.toml`'s own header comment, the one place this constraint is
   declared.
 
+- **The shell's semantic delegation, held by construction.** **Still open**, and one attempt at it is recorded
+  here because the attempt's own reasoning was wrong. The shell's semantic arm now invokes `SemanticObserver`
+  rather than calling 渾儀's composed entry point beside it, which was this entry's named shape — and review
+  measured that it closes nothing here: writing the bound's exact WHEN into the arm, a guard deciding
+  emptiness itself before delegating, leaves the whole suite and every gate green. What it *did* close is the
+  two paths' **equality** for this dimension, which is a different property and is now construction-held. The
+  runtime precedent does not transfer: that arm held a second implementation of the corpus derivation, the
+  audit call and the `cannot read workspace` message, and delegating collapsed its two copies into one, whereas
+  the semantic arm always had one implementation with two callers. Closing this one needs the shell's semantic
+  outcome to be *unreachable* except through the observer — a shape where the guard stops compiling — which is
+  a design step, not a call-site swap. *Class:* ACCEPTED DEBT — **reclassified from READY-PATCH on 2026-09-03, when every route to its own
+  Shape was measured closed.** The choice was made on a stated principle rather than on taste: an entry
+  nobody can act on charges every future reader who reads it as actionable, and closing that costs
+  nothing, where the one remaining route costs an adopter accessor. The bound below is untouched and
+  still fires; what changed is the claim that someone may patch this. *Observed pressure:* the
+  source-shape reaction that claimed to observe it is retired in the 0.5.0 window after four review rounds each
+  defeated the narrowing before it — by name resolution, by the parameter's binding site, by which definition is
+  the subject, by the caller frame, and by execution, which no reading of text reaches. `observer-protocol`
+  declares the resulting gap as an unpinned bound owned by the engine, and it is the tracker for this entry.
+  *Observation source:* that bound and the retired reaction's history on `change/refuse-ambiguous-delegation-extent`.
+  *Current reaction or bound:* the declared bound; no reaction. *Risk:* the shell grows a second semantic
+  behaviour owner and nothing says so — the drift a seam exists to end. The dimension's *equality* is
+  construction-held since the 0.5.0 window; its *delegation* is the seam that is not, and the two are one word
+  apart. *Promotion trigger:* fired; the bound is declared unpinned, which the register leads with.
+  *Version class:* patch if the composition is restructured without moving a public signature; minor if the
+  shell's entry point changes shape. *Authority:* `observer-protocol`, whose spec states both the obligation and
+  the retirement. *Shape:* **not** the runtime route, which the 0.5.0 window
+  tried and measured wrong: invoking the observer makes the *equality* construction-held and leaves an
+  independent shell decision as writable as before, because the runtime arm had a second implementation to
+  collapse and this one never did. What would close it is the shell's semantic outcome being unreachable except
+  through the observer — a shape in which the guard stops compiling rather than one in which it merely has
+  nowhere tidy to sit.
+
+  **Premises re-measured 2026-09-03, and every one holds.** The semantic arm invokes
+  `SemanticObserver::new(...).observe(...)`; the declared gap is
+  `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound`,
+  unpinned and engine-owned; and the runtime contrast is stated where it can be checked rather than only
+  here — that arm's own comment records the second copy delegation collapsed, and this arm's records that it
+  never had one. **The failed attempt's measurement is carried in the code itself**, in the arm's comment: *a
+  guard deciding emptiness above this line still compiles and passes every gate*. Nothing has drifted, and
+  the shape is unchanged: a design step, not a call-site swap.
+
+  Worth noting beside the entry above about a shape's unrecorded status: of the entries taken to the tree,
+  this is the one that wrote down its own failed attempt, and it is the one whose premises survived
+  re-measurement intact. The record is what kept them about what was measured rather than about what was
+  assumed.
+
+  **The Shape's price was measured on 2026-09-03 and it is not a refactor.** *Unreachable except through the
+  observer* means the shell cannot see the semantic bundle, and the shell is where `Constitution` is defined —
+  so nothing about the layering prevents a guard; what would prevent one is
+  `Constitution::semantic_boundaries()` no longer being callable. That accessor is **documented adopter
+  surface**: `COOKBOOK.md` hands a reader `check_all(constitution().semantic_boundaries(), &manifest())` as
+  the way to unit-test the semantic teeth, `crates/tianheng/tests/adopter_surface.rs` exercises it twice
+  including in the `Run` composition the protocol exists to offer, and `examples/sans-io-pure` reads through
+  it. So the design step is an adopter-facing removal that would take the composition path this capability
+  exists to provide, not a restructuring inside the shell.
+
+  **The other two routes were already closed in the tree, and reading them first is why no code was written
+  here.** The source-shape reaction was built, defeated four times and retired
+  (`refactor(tianheng): retire the composition-body reaction, declare the gap`). And folding the shell's two
+  `if !matches!` arms into `Run` removes no duplication: `crates/kanhe/tests/observer_protocol.rs`'s own
+  header records that two composition paths exist for the **static** dimension alone — coverage needs
+  `check_and_cover` and a second call would read `cargo metadata` twice — while *for the semantic and runtime
+  dimensions there is no second path left to compare*. `Run` offers no seed by which the already-computed
+  static outcome could enter it, and a seed adapter is refused by
+  `every_observer_declares_exactly_its_dimension_s_bounds`, since it would claim a dimension's bounds a
+  second time.
+
+  So all three routes are closed and none of the closures is a defect. Whether this stays a class someone may
+  pick up, or becomes accepted debt beside its permanent bound, is a steward's decision rather than a patch —
+  it turns on whether the adopter accessor is worth the delegation, and nothing in the tree decides that.
+
+  *Reopening:* the accessor's price changing — `Constitution::semantic_boundaries()` leaving the documented
+  adopter surface for a reason of its own, at which point the compile-time shape stops costing the
+  composition path this capability offers. Not *someone finds time*: the three routes are closed by
+  properties of the tree, and only one of those properties can move.
+
 ### READY-PATCH
 
 - **The `**BREAKING**` marking rule is paired per section, so an unmarked breaking entry beside a marked
@@ -395,74 +472,6 @@ consumer for an undemonstrated deduplication.
   mutated file rather than from the test's definition. Both are fixed and neither recurs.) *Version class:* not release-affecting; a
   repository gate over this repository's own governance tests. *Authority:* `observation-bound-register`, whose
   added requirement states the obligation and the arrangements that make it observable.
-
-- **The shell's semantic delegation, held by construction.** **Still open**, and one attempt at it is recorded
-  here because the attempt's own reasoning was wrong. The shell's semantic arm now invokes `SemanticObserver`
-  rather than calling 渾儀's composed entry point beside it, which was this entry's named shape — and review
-  measured that it closes nothing here: writing the bound's exact WHEN into the arm, a guard deciding
-  emptiness itself before delegating, leaves the whole suite and every gate green. What it *did* close is the
-  two paths' **equality** for this dimension, which is a different property and is now construction-held. The
-  runtime precedent does not transfer: that arm held a second implementation of the corpus derivation, the
-  audit call and the `cannot read workspace` message, and delegating collapsed its two copies into one, whereas
-  the semantic arm always had one implementation with two callers. Closing this one needs the shell's semantic
-  outcome to be *unreachable* except through the observer — a shape where the guard stops compiling — which is
-  a design step, not a call-site swap. *Class:* READY-PATCH. *Observed pressure:* the
-  source-shape reaction that claimed to observe it is retired in the 0.5.0 window after four review rounds each
-  defeated the narrowing before it — by name resolution, by the parameter's binding site, by which definition is
-  the subject, by the caller frame, and by execution, which no reading of text reaches. `observer-protocol`
-  declares the resulting gap as an unpinned bound owned by the engine, and it is the tracker for this entry.
-  *Observation source:* that bound and the retired reaction's history on `change/refuse-ambiguous-delegation-extent`.
-  *Current reaction or bound:* the declared bound; no reaction. *Risk:* the shell grows a second semantic
-  behaviour owner and nothing says so — the drift a seam exists to end. The dimension's *equality* is
-  construction-held since the 0.5.0 window; its *delegation* is the seam that is not, and the two are one word
-  apart. *Promotion trigger:* fired; the bound is declared unpinned, which the register leads with.
-  *Version class:* patch if the composition is restructured without moving a public signature; minor if the
-  shell's entry point changes shape. *Authority:* `observer-protocol`, whose spec states both the obligation and
-  the retirement. *Shape:* **not** the runtime route, which the 0.5.0 window
-  tried and measured wrong: invoking the observer makes the *equality* construction-held and leaves an
-  independent shell decision as writable as before, because the runtime arm had a second implementation to
-  collapse and this one never did. What would close it is the shell's semantic outcome being unreachable except
-  through the observer — a shape in which the guard stops compiling rather than one in which it merely has
-  nowhere tidy to sit.
-
-  **Premises re-measured 2026-09-03, and every one holds.** The semantic arm invokes
-  `SemanticObserver::new(...).observe(...)`; the declared gap is
-  `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound`,
-  unpinned and engine-owned; and the runtime contrast is stated where it can be checked rather than only
-  here — that arm's own comment records the second copy delegation collapsed, and this arm's records that it
-  never had one. **The failed attempt's measurement is carried in the code itself**, in the arm's comment: *a
-  guard deciding emptiness above this line still compiles and passes every gate*. Nothing has drifted, and
-  the shape is unchanged: a design step, not a call-site swap.
-
-  Worth noting beside the entry above about a shape's unrecorded status: of the entries taken to the tree,
-  this is the one that wrote down its own failed attempt, and it is the one whose premises survived
-  re-measurement intact. The record is what kept them about what was measured rather than about what was
-  assumed.
-
-  **The Shape's price was measured on 2026-09-03 and it is not a refactor.** *Unreachable except through the
-  observer* means the shell cannot see the semantic bundle, and the shell is where `Constitution` is defined —
-  so nothing about the layering prevents a guard; what would prevent one is
-  `Constitution::semantic_boundaries()` no longer being callable. That accessor is **documented adopter
-  surface**: `COOKBOOK.md` hands a reader `check_all(constitution().semantic_boundaries(), &manifest())` as
-  the way to unit-test the semantic teeth, `crates/tianheng/tests/adopter_surface.rs` exercises it twice
-  including in the `Run` composition the protocol exists to offer, and `examples/sans-io-pure` reads through
-  it. So the design step is an adopter-facing removal that would take the composition path this capability
-  exists to provide, not a restructuring inside the shell.
-
-  **The other two routes were already closed in the tree, and reading them first is why no code was written
-  here.** The source-shape reaction was built, defeated four times and retired
-  (`refactor(tianheng): retire the composition-body reaction, declare the gap`). And folding the shell's two
-  `if !matches!` arms into `Run` removes no duplication: `crates/kanhe/tests/observer_protocol.rs`'s own
-  header records that two composition paths exist for the **static** dimension alone — coverage needs
-  `check_and_cover` and a second call would read `cargo metadata` twice — while *for the semantic and runtime
-  dimensions there is no second path left to compare*. `Run` offers no seed by which the already-computed
-  static outcome could enter it, and a seed adapter is refused by
-  `every_observer_declares_exactly_its_dimension_s_bounds`, since it would claim a dimension's bounds a
-  second time.
-
-  So all three routes are closed and none of the closures is a defect. Whether this stays a class someone may
-  pick up, or becomes accepted debt beside its permanent bound, is a steward's decision rather than a patch —
-  it turns on whether the adopter accessor is worth the delegation, and nothing in the tree decides that.
 
 - **Every normative SHALL either has a reaction or is a declared bound.** *Class:* READY-PATCH — by the
   definition above, which classifies evidence and compatibility rather than remaining design effort: the
