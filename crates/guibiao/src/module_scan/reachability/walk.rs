@@ -623,13 +623,11 @@ pub(crate) fn reachable_modules(
             }
             // Whether at least one plain declaration for this child actually resolved to a real
             // file — NOT merely whether one was declared: a bare-`#[cfg]`-tolerated declaration
-            // (tolerated below) can now be declared yet resolve to nothing, and that must not count
-            // as "a real plain file exists" for the `inline_only` decision (a false
-            // negative found on this session's own round-2 adversarial review — an inline arm
-            // paired with an entirely-tolerated-away plain arm was wrongly excluded from
-            // `inline_only`, misreporting the self-describing `inline_module_target_error` as a
-            // generic `unknown_module_error`). Defaults to `false` (matching the original
-            // `!seen_plain_file` semantics) when no plain declaration exists at all.
+            // (tolerated below) can be declared yet resolve to nothing, and that must not count as
+            // "a real plain file exists" for the `inline_only` decision. An inline arm paired with
+            // an entirely-tolerated-away plain arm must still be recognized as `inline_only`
+            // (reporting `inline_module_target_error` rather than `unknown_module_error`). Defaults
+            // to `false` when no plain declaration exists at all.
             let plain_file_resolved = if seen_plain_file {
                 resolve_plain_sources(
                     &child,

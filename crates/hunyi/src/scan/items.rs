@@ -512,9 +512,8 @@ pub(super) fn resolve_child_modules(
     // (`ImplSite`/`TypeDef`/`UnsafeSite`), inflating one real violation into two apparently-
     // distinct findings whenever a self-type's generic argument is unrenderable and falls back to
     // a positional ordinal that differs between the two scan-Vec positions (escaping the eventual
-    // fact-identity dedup). Mirrors `module_resolve.rs::descend`'s own `seen_files` guard, closing
-    // the identical gap left open here (found on a round-6 adversarial review; see `PROJECT.md`'s
-    // Decisions). Keyed on the NAME too, not the file alone: two DIFFERENT declared names that
+    // fact-identity dedup). Mirrors `module_resolve.rs::descend`'s own `seen_files` guard.
+    // Keyed on the NAME too, not the file alone: two DIFFERENT declared names that
     // happen to `#[path]`-remap to the identical file (`#[path="s.rs"] mod a;` / `#[path="s.rs"]
     // mod b;`) are two real, separately-compiled modules — already an existing, tested case — and
     // must never collide with each other's own dedup entry.
@@ -535,7 +534,7 @@ pub(super) fn resolve_child_modules(
         let child_module = format!("{module}::{name}");
         // May this declaration legitimately have no source file on this build? Its own bare
         // `#[cfg]`, or arm membership (every `cfg_if!` arm is gated by a predicate in the macro
-        // header). The same rule `module_resolve::descend` applies, and 圭表's own from the 0.5.0 window.
+        // header). The same rule `module_resolve::descend` applies, matching 圭表.
         let cfg_conditional = flat.in_transparent_arm || has_cfg_attr(&module_item.attrs);
         if let Some(rel) = direct_path_value(&module_item.attrs) {
             resolve_direct_path_child(
@@ -727,14 +726,13 @@ fn walk_module(
     // The re-export closure applies the same per-defining-module child-module shadow the direct
     // head oracle does: a bare `pub use dep::X;` / `pub use wc::X;` head named by this module's own
     // child `mod dep` / `mod wc` is not recorded as the dependency / renamed crate, so a
-    // cross-module facade reaching it through this crate-wide map does not mis-canonicalize (the
-    // facade-closure FP). That exclusion is now computed PER re-export item (via `flat`'s own
-    // arm/`#[cfg]` tag, inside `collect_reexports`), not once over this module's whole child-module
-    // set: a `mod` that is provably mutually exclusive with a SPECIFIC `pub use` in `flat` (a
-    // different `cfg_if!` arm, or a syntactic `#[cfg]` negation) must not shadow that item's own
-    // head even though both live in this same file (the round-9 sibling of the direct-head fix —
-    // see `collect_reexports`'s own doc). `collect_reexports` keeps a leading-`::` head on the raw
-    // sets regardless.
+    // cross-module facade reaching it through this crate-wide map does not mis-canonicalize. That
+    // exclusion is now computed PER re-export item (via `flat`'s own arm/`#[cfg]` tag, inside
+    // `collect_reexports`), not once over this module's whole child-module set: a `mod` that is
+    // provably mutually exclusive with a SPECIFIC `pub use` in `flat` (a different `cfg_if!` arm,
+    // or a syntactic `#[cfg]` negation) must not shadow that item's own head even though both live
+    // in this same file (see `collect_reexports`'s own doc).
+    // `collect_reexports` keeps a leading-`::` head on the raw sets regardless.
     let child_mod_decls = child_module_decls(&flat);
     collect_reexports(
         &flat,

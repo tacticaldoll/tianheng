@@ -1529,9 +1529,8 @@ pub(crate) fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
 /// exact `&str` value the Rust compiler produces — see `runtime-origin-assertion`'s "CI face —
 /// every declared seam is probed" requirement for the full decoded-value-matching and
 /// un-auditable-on-failure rationale (including backslash-newline line continuation). Also used
-/// for a `#[path]` value (the OTHER caller, below), matching 渾儀's syn-derived `s.value()` on the
-/// same input — the fix a v0.2.0..v0.2.1 cross-dimension sweep found missing here and in 圭表's
-/// independent copy. No real seam name spans lines, so this never meaningfully changes the
+/// for a `#[path]` value (the other caller, below), matching 渾儀's syn-derived `s.value()` on the
+/// same input. No real seam name spans lines, so this never meaningfully changes the
 /// seam-name caller's behavior. The escape set is the `&str` string-literal set only;
 /// byte-string-only escapes never reach here (byte strings are already un-auditable).
 pub(crate) fn decode_str_escapes(inner: &[u8]) -> Option<String> {

@@ -2,9 +2,7 @@
 //! walks a module graph or a `#[path]` remap needs to know "is this file the same file I have
 //! already opened", and the answer must be the resolved (symlink-following) identity, never the
 //! literal path string — two literal paths can name one real file. Centralized here so 圭表 and
-//! 渾儀's independently hand-rolled cycle guards cannot drift to different canonicalize-failure
-//! policies the way they once did (the 0.2.2 lesson: the same guard, reimplemented per call site,
-//! settled on three disagreeing policies in one file alone).
+//! 渾儀's cycle guards share one canonicalize-failure policy rather than drifting across call sites.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};

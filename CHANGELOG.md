@@ -24,6 +24,12 @@ them.
 
 ### Self-governance
 
+- **Twenty-seven inner comments indexing review rounds across published crates are retired.**
+  `AGENTS.md`'s doc comment discipline assigns review round numbers to provenance rather than contracts.
+  The 27 inner comments across `guibiao`, `hunyi`, and `louke` that retained review round indices have been
+  lightened to state their invariant and observation source directly, eliminating historical review noise.
+  Retrospective window debriefs across crate docs have been tightened to forward-voice contract statements.
+
 - **A pinning citation now arrives with its mutation, or with the reason it has none, in the same change.**
   A `PINNED-BY` is held to its name resolving to one registered test; whether the test would fail if the
   behaviour it defends changed is decided only where a mutation is declared, and the biting check reports the

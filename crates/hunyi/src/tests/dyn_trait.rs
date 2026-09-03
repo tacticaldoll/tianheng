@@ -201,14 +201,11 @@ pub(super) fn dyn_operand_matches_a_reexported_trait_by_its_defining_path() {
 #[test]
 pub(super) fn a_cfg_sibling_child_module_does_not_shadow_a_different_branchs_own_extern_principal()
 {
-    // Round-7 finding: extern_resolution computed externs_type/renames_bare ONCE over the
-    // flattened union of every #[cfg] branch's items (feeding operand_module_findings, backing
-    // dyn-trait/impl-trait operand-scoped boundaries) -- the identical conflation round 6 fixed
-    // for signature-coupling's use-map, left unfixed here too. The "u" branch (platform.rs)
-    // declares a LOCAL `mod traits { .. }`; the mutually-exclusive "w" branch (win_platform.rs)
-    // has no local `mod traits` at all and its own `dyn traits::Marker` genuinely names the real
-    // extern crate `traits`. Before the fix, the "u" branch's local `mod traits` silently
-    // suppressed the "w" branch's own genuine extern dyn-principal match.
+    // extern_resolution must not compute externs_type/renames_bare over the flattened union
+    // of mutually-exclusive #[cfg] branches. The "u" branch (platform.rs) declares a LOCAL
+    // `mod traits { .. }`; the mutually-exclusive "w" branch (win_platform.rs) has no local
+    // `mod traits` and its `dyn traits::Marker` genuinely names the extern crate `traits`.
+    // The "u" branch's local `mod traits` must not suppress the "w" branch's extern match.
     let files = &[
         (
             "lib.rs",

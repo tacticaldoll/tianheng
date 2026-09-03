@@ -938,8 +938,7 @@ fn create_baseline_file(path: &str, document: &str) -> Result<(), BaselineWriteE
             // open (restored file, or the link replaced), and classifying on symlink-ness alone then
             // told the adopter "it is a symlink to X, which does not exist" about a target that does,
             // and prescribed a remedy ("recreate the target") already satisfied. Refusing was always
-            // safe; only the reason was false, which is the misdiagnosis class the 0.4.0 window corrected
-            // twice elsewhere.
+            // safe; classifying on symlink-ness alone risked reporting a false reason if the target reappeared.
             //
             // Falling through loses no diagnostic: [`write_baseline`]'s `create_new && AlreadyExists`
             // arm already reports that the baseline "appeared while the new snapshot was being
