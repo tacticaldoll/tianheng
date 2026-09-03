@@ -207,6 +207,34 @@ govern-by-reaction, never a thing the tool wields.
 
 Record significant decisions here (the *why*; specs and code carry the *what*).
 
+- **How deferred work is chosen, written down because deriving it cost a round trip.** The `0.5.1` window took
+  the deferred queue's entries to the tree one at a time, and the ordering that produced value was not the one
+  a reader of the queue would guess. Four rules, in priority order:
+
+  **One — prefer work that shrinks the queue over work that shrinks a gap.** An entry whose premises have
+  drifted charges every future reader: it reads as actionable, points at the wrong file, and invites someone to
+  re-design a question already settled. Closing it is free. Of the entries measured in that window, half had a
+  premise that had gone false or had never been true — one named a reader that had never read the grammar it was
+  filed about, and one proposed a change the tree had already declined in three carriers.
+
+  **Two — measure an entry's premises before costing its repair.** Not after. Every wasted proposal in that
+  window came from costing a `Shape` whose premises nobody had re-run.
+
+  **Three — never add a permanent authoring tax to close a bounded, visible failure.** Three entries were
+  declined on exactly this: a gate on every merge to hold a naming convention, a handle on every future
+  migration bullet to hold a mark whose information is present either way, and a check that would be right at
+  one moment and wrong the rest of the time. Consistency here is what keeps the governance share falling.
+
+  **Four — prefer strengthening existing stock to adding stock, but only where the rate is favourable.** Where
+  it is not, make the obligation part of the act that creates the debt rather than a campaign against the
+  standing set. A citation is cheap and its mutation is not, so the rule is that citing carries the mutation —
+  chasing the numerator loses to stopping the denominator.
+
+  *The guard this needs, stated with it:* a queue that only ever shrinks by declining can hide decay. What
+  stops that is that every decline carries its measurement and a reopening condition written as a **property**
+  rather than as availability — *the accessor leaves the adopter surface*, not *someone finds time*.
+  *(Accepted 2026-09-03.)*
+
 - **Accepted: 繩墨 and 勘合 are formations of the law, not a relocation of it.** The 0.5.0 window added two
   crate boundaries to `shengmo::law::constitution()` under a commit body reading *the law itself did not change:
   the regenerated projection differs by exactly three lines, all of them the preamble's own self-reference*.
