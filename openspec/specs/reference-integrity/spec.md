@@ -101,9 +101,8 @@ source; absence of any prerequisite SHALL fail loudly rather than read as clean.
 - **WHEN** a required governance document, every tracked workspace member, or every inspectable source is absent
 - **THEN** the reaction fails, naming the missing prerequisite instead of reporting clean. **The reaction is
   the gate — the whole test target — not each direction inside it.** A prerequisite may therefore be held by
-  a sibling direction rather than by the resolution walk calling it, and two independent reviews read this
-  line as requiring the second before it said so. What the requirement forbids is the gate reporting clean
-  over absent evidence; how the directions divide that work between them is not a claim this makes
+  a sibling direction rather than by the resolution walk calling it. What the requirement forbids is the gate
+  reporting clean over absent evidence; how the directions divide that work between them is not a claim this makes
 
 #### Scenario: An untracked manifest cannot create a workspace member
 

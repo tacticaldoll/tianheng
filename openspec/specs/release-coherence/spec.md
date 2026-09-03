@@ -114,14 +114,11 @@ different things.
   state reserved for a key that is not there — and the gates then said *workspace version is missing or
   malformed*, and *declares no `[package]` name*, about manifests that declare both
 - **AND** every one of these answers comes from a **parsed document**, so a key's spelling is the parser's
-  question and not this repository's. What this requirement asked for through four review rounds was that
-  *decoded* be a property of the whole answer rather than of its first segment, and each round moved that
-  boundary one segment right and left the next raw: the heading decoded while the key did not, then the key
-  while one recogniser compared whole lines, then the head while the tail was joined raw, then the one
-  spelling no line-oriented reader can represent at all. Measured under cargo 1.96.0, those rounds
-  successively refused `version."workspace" = true`, `version.'workspace' = true`,
+  question and not this repository's: *decoded* is a property of the whole answer rather than of its first
+  segment. Line-oriented or partial decoding risks refusing valid Cargo syntax; measured under cargo 1.96.0,
+  an unparsed reader refuses `version."workspace" = true`, `version.'workspace' = true`,
   `version."\u0077orkspace" = true`, `version = { "workspace" = true }` and `[package.version]` with
-  `workspace = true` — every one of which inherits — and read `xuanji."path" = "xuanji"` as a dependency with
+  `workspace = true` — every one of which inherits — and reads `xuanji."path" = "xuanji"` as a dependency with
   no path, which is the **false negative** recorded below. A parser answers all of them without a clause
   each, which is why the hand-rolled readers are gone rather than extended
 - **AND** the read is scoped to the table cargo scopes it to. `version.workspace` is honoured under
@@ -578,11 +575,9 @@ A name SHALL be recognised as a **word** — a maximal run of path characters, r
 path, basename or derived directory. That is exact matching of a lexical token rather than substring
 matching: a sentence
 merely containing the characters cannot match, because the run is delimited by the first character a path
-cannot hold. The rule was first written to compare whole **backticked spans**, and adversarial review
-reproduced three false negatives against that reading, every one a shape this repository's own changelog
-already uses — a span carrying anything besides the bare path, a double-backtick span, and an inline span
-wrapped across a source line. Reading words closes all three and reaches a markdown link target the span
-reading never could.
+cannot hold. Comparing whole **backticked spans** alone introduces false negatives against ordinary Markdown
+shapes — a span carrying content besides the bare path, a double-backtick span, or an inline span wrapped across
+a source line. Reading words closes all three and reaches markdown link targets directly.
 
 This sits on the **decidable** side of the line this capability already draws for itself: a path citation
 is a reference, and reference resolution over `CHANGELOG.md` is already mechanical. Whether an entry's

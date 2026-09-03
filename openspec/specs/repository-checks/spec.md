@@ -1993,9 +1993,7 @@ well. **It did not**: the classification reads a check's conclusion and nothing 
 the workflow in exactly that one sentence. A claim about the world needs something holding it; a claim about
 what to do next does not, and buys the same thing.
 
-Removing it ends a class rather than closing an instance. A reader was built to hold that sentence, and seven
-review rounds found five positions in it — two failing open — each of which was a hole in something
-load-bearing only because the sentence was load-bearing. The reader SHALL be kept as a **convenience** and
+Removing it ends a class rather than closing an instance. The reader SHALL be kept as a **convenience** and
 stated as one: it decides **when** an operator learns a job may now skip, not **whether**, since a skipping
 job reports `SKIPPED` and the wrapper refuses regardless. Its remaining blind spots SHALL be
 recorded at that severity rather than as false negatives — **per mechanism, since the five keys reach the
