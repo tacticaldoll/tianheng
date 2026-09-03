@@ -1494,13 +1494,11 @@ both regions run the identical rule. The rule now has one owner and the divergen
 - **PINNED-BY** `a_shell_marker_inside_quotes_is_cut_from_the_region`
 
 **A command a tracked document hands a reader SHALL name a target that exists.** The obligation above is
-about the commands a *wrapper* runs; this is the same claim reaching the audience that cannot debug it. The
-instance: `COOKBOOK.md` told an adopter to run the examples suite under the `tianheng` package, where that
-target lives in `shengmo`, so cargo answered that no test target of that name exists in that package — it
-arrived in the `0.5.0` window when the shell suite migrated, while `AGENTS.md` and `BACKLOG.md` both carried
-the correct package. The set of targets SHALL be **produced** by `cargo metadata`, never modelled by mapping a package and a
+about the commands a *wrapper* runs; this is the same claim reaching the audience that cannot debug it. Where
+documentation instructs a reader to run a test target under a specific package, cargo fails if the target
+resides in another workspace package. The set of targets SHALL be **produced** by `cargo metadata`, never modelled by mapping a package and a
 target name onto a path under that crate's `tests/` directory: that mapping reimplements cargo's target
-resolution in string form, which this repository has already shipped a false negative from doing.
+resolution in string form, which risks shipping a false negative.
 
 The corpus is tracked Markdown. A Rust source carries these pairs as **fixture input** — a parser direction
 plants a package-and-target pair as text — and admitting them would report a test asserting its own parser as a broken
