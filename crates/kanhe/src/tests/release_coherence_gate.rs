@@ -231,7 +231,7 @@ const ESCAPED_J: &str = "\\u006A";
 /// An escaped path is decoded and compared, where it used to be refused.
 ///
 /// **This direction asserted a refusal until a real parser replaced the hand-rolled reader.** Cargo decodes a
-/// TOML escape in a value — measured — so `cr` + [`ESCAPED_A`] + `tes/xuanji` is the directory
+/// TOML escape in a value — measured — so `cr` + [`ESCAPED_X`] + `tes/xuanji` is the directory
 /// `crxtes/xuanji`, and the old reader could only say it did not know. The parser decodes it, so the path is
 /// compared against the member's own directory like any other: it names somewhere else, which is a violation
 /// that says where the member actually is.
@@ -271,7 +271,7 @@ fn an_escaped_path_is_refused_and_an_ordinary_sibling_does_not_cover_for_it() {
 /// **This direction asserted a refusal until a real parser replaced the hand-rolled reader.**
 /// `release-coherence` requires a renamed dependency to be resolved by its `package` identity, and measured on
 /// cargo 1.96.0 a `package` of `xuan` + [`ESCAPED_J`] + `i` reads as `xuanji`. The old reader compared the
-/// undecoded source, found no family crate, and — after `quoted_value` learned to refuse a backslash —
+/// undecoded source, found no family crate, and — once its value reader refused a backslash —
 /// stopped in front of it. The parser decodes it, so the entry is matched against the family and its stale
 /// `0.0.1` is judged.
 ///

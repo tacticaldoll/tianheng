@@ -1905,7 +1905,7 @@ fn a_trailing_comment_on_the_version_line_still_reads_the_version() {
 /// A value this reader cannot read is not a value that is absent.
 ///
 /// Reporting an unreadable value as *missing or malformed* sends an operator to look for a version key that
-/// is sitting right there — the same conflation `Quoted` was introduced to end one reader over.
+/// is sitting right there — the same conflation every reader in this crate keeps a distinct state to end.
 ///
 /// **This WHEN moved when a real parser replaced the hand-rolled reader.** It was a single-quoted literal,
 /// valid TOML the old reader declined; the parser takes it, so that shape now reports the version it declares
@@ -2126,8 +2126,8 @@ fn a_glued_comment_cannot_supply_an_internal_version_pin() {
 ///
 /// Recorded because the entry claiming this conversion's benefit named the wrong one: it said
 /// `name = "kanhe" # the repository checks` had been answering `Unreadable`. It had not.
-/// `quoted_value`, the reader of the time, took the text between the first pair of quotes and discarded
-/// what followed, so a trailing comment there was always read correctly. The claim was refuted by a reviewer and is replaced by
+/// The reader of the time took the text between the first pair of quotes and discarded what followed, so a
+/// trailing comment there was always read correctly. The claim was refuted by a reviewer and is replaced by
 /// the direction the measurement actually supports.
 #[test]
 fn a_package_heading_with_a_trailing_comment_still_opens_the_table() {
@@ -3646,8 +3646,9 @@ fn a_crate_manifest_declaring_no_package_name_stops_the_example_check() {
 
 /// And a package name this reader cannot take is not an absent one.
 ///
-/// Single-quoted TOML strings are legal and this reader does not read them — a limit of the reader rather
-/// than a fact about the manifest, which is the distinction `Quoted` exists to keep.
+/// A value that is no string at all — an integer, an array, a table — is a limit of the reader rather than
+/// a fact about the manifest, and the two are different operator actions: one is a value to correct, the
+/// other a key to add. A *quoting* is not this condition; the parser reads a literal string as cargo does.
 ///
 /// Negative run: with the arm replaced by a `continue`, the fixture passed.
 #[test]
