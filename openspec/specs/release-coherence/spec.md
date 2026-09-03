@@ -362,11 +362,14 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 
 #### Scenario: An internal dependency this reader cannot resolve is not one it may skip
 
-- **WHEN** the root manifest declares an internal dependency whose `path` or `version` is not a
-  double-quoted string, or declares more than one of either key
-- **THEN** the check refuses as a cannot-judge saying which key and which of the two it met. An unreadable
-  **path** is the one that cannot be answered by skipping the entry, because the entry names a family crate
-  and whether members inherit *this workspace's* copy of it is what could not be read
+- **WHEN** the root manifest declares an internal dependency whose `path` or `version` is **not a string at
+  all** — an integer, an array, a table
+- **THEN** the check refuses as a cannot-judge saying which key it met, quoting the value as written. An
+  unreadable **path** is the one that cannot be answered by skipping the entry, because the entry names a
+  family crate and whether members inherit *this workspace's* copy of it is what could not be read
+- **AND** a *quoting* is not this condition. A basic or literal string is a string to the parser, as it is to
+  cargo, so `path = 'xuanji'` is read; and one key declared twice is a document the parser refuses whole,
+  reported as an unparseable manifest rather than as an unreadable key, which is what cargo does with it
 - **PINNED-BY** `a_single_quoted_path_or_version_is_read_and_a_non_string_is_not`
 - **PINNED-BY** `a_duplicate_key_in_one_dependency_is_a_manifest_cargo_refuses`
 
@@ -405,12 +408,11 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 
 #### Scenario: A dependency identity the reader cannot read is not one it can
 
-- **WHEN** an example declares a dependency whose `package` value is not a double-quoted string, or declares
-  more than one `package` key for one dependency
-- **THEN** the check refuses as a cannot-judge saying which of the two it met. Which crate a dependency
-  names is `Named`, `Unreadable` or `Several` — the distinction its sibling `version` field already carried,
-  where an identity held as a string with the empty string for both failures reported *several* as
-  *unreadable*, and read a literal `package = ""` as both
+- **WHEN** an example declares a dependency whose `package` value is **not a string at all**
+- **THEN** the check refuses as a cannot-judge. Which crate a dependency names is `Named` or `Unreadable`,
+  and no third state: a `package` key declared twice is a document the parser refuses whole, so *several* is
+  not a state this reader can be in. Holding the identity as a string with the empty string standing for
+  failure is what made two different facts one answer, and a distinct state is what separates them
 - **PINNED-BY** `an_example_whose_package_value_is_unreadable_is_not_judged`
 - **PINNED-BY** `an_example_declaring_several_package_keys_is_not_judged`
 
