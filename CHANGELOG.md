@@ -58,6 +58,15 @@ them.
   match — an identity normalised to suit a sentence. A Markdown sentence ends in one period, so one is what
   comes off, and only where the name as written matches nothing.
 
+- **A member's directory is taken from its manifest path component-wise.** Both readers built a `"{root}/"`
+  string and stripped it as text, and cargo reports **native** paths — so on a host whose separator is not
+  `/` no member sits under the prefix and every one reaches the refusal for describing a different tree.
+  `Path::strip_prefix` compares component by component, which is the rule the sibling reader for a
+  dependency's `path` already carries as a requirement: a rule enforced at one site and not its neighbour is
+  a rule about the site. The identity is joined back with `/` deliberately — it is compared against git's
+  paths and cited in this repository's own prose, both of which spell a separator that way whatever the host
+  does.
+
 - **Two specifications disagreed about a TOML escape, and the implementation followed the other one.**
   `repository-checks` says the value reads as cargo reads it; `release-coherence` still required a
   cannot-judge, with an `AND` clause arguing why refusing was the better of two answers. The parser decodes,

@@ -31,6 +31,27 @@ fn workspace_root() -> Option<PathBuf> {
     )
 }
 
+/// `manifest` with `root` removed **component-wise**, spelled with `/` whatever the host uses.
+///
+/// The comparison below is against the gate's own repository-relative manifest paths, so this keeps the file
+/// name and only removes the root. Removing it as text was the defect: cargo reports native paths, so on a
+/// host whose separator is not `/` no member sits under a `"{root}/"` string and the whole set empties.
+trait RelativeToRoot {
+    fn relative_to(&self, root: &std::path::Path) -> String;
+}
+
+impl RelativeToRoot for str {
+    fn relative_to(&self, root: &std::path::Path) -> String {
+        std::path::Path::new(self)
+            .strip_prefix(root)
+            .expect("`--no-deps` lists members, which sit under the root cargo reported")
+            .components()
+            .map(|part| part.as_os_str().to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join("/")
+    }
+}
+
 #[test]
 fn cargos_members_and_the_walked_directories_are_one_set() {
     // The marker is read by `workspace::locate` through `marker_set()`, which is the one place it is
@@ -45,11 +66,13 @@ fn cargos_members_and_the_walked_directories_are_one_set() {
     // derivation the machinery reader records having already got wrong.
     let metadata = kanhe::release_coherence_gate::cargo_metadata(&root)
         .expect("cargo describes the workspace this check runs in");
-    let prefix = format!(
-        "{}/",
+    // Compared through components, as the gate this direction stands beside does: cargo reports native
+    // paths, and stripping a `"{root}/"` string leaves every member outside the prefix on a host whose
+    // separator is not `/`. The identity is joined back with `/` because that is how git spells one.
+    let cargo_root = std::path::Path::new(
         metadata["workspace_root"]
             .as_str()
-            .expect("cargo reports the root of the tree it just described")
+            .expect("cargo reports the root of the tree it just described"),
     );
     let declared: BTreeSet<String> = metadata["packages"]
         .as_array()
@@ -59,9 +82,7 @@ fn cargos_members_and_the_walked_directories_are_one_set() {
             package["manifest_path"]
                 .as_str()
                 .expect("every member carries its own manifest path")
-                .strip_prefix(&prefix)
-                .expect("`--no-deps` lists members, which sit under the root cargo reported")
-                .to_string()
+                .relative_to(cargo_root)
         })
         .collect();
 
