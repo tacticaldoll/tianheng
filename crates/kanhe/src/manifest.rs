@@ -36,7 +36,10 @@ pub enum WorkspaceVersion {
     Declared(String),
     /// No `[workspace.package]` table, or no `version` key inside it.
     Absent,
-    /// A `version` this reader cannot read — a value not in double quotes — quoted as written.
+    /// A `version` this reader cannot read — a value that is **not a string at all**, quoted as written.
+    ///
+    /// Not *not in double quotes*: a literal string is a string to the parser, as it is to cargo, so
+    /// `version = '0.5.0'` is read. What reaches here is an integer, an array, a table.
     Unreadable(String),
 }
 
