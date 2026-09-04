@@ -560,11 +560,12 @@ consumer for an undemonstrated deduplication.
   draft got wrong was not the second part; it was reaching it by asserting that the first part did not exist.
 
   **Part one was run against the sample this entry names, and it is not the cheap half — measured
-  2026-09-02.** Across every tracked spec: 371 requirements, and before this change 297 carried no citation
-  anywhere under them. `PINNED-BY` attaches to a scenario and never to a requirement, so *uncited
-  requirement* means one with no citation under any of its scenarios; the figure is not a handful whose
-  reaction someone forgot to name. In `repository-checks` — 38 requirements, 14 of them uncited — six were
-  citable and are cited, with sixteen citations each verified by reading the test against the scenario's
+  2026-09-02.** `PINNED-BY` attaches to a scenario and never to a requirement, so an *uncited requirement* is
+  one with no citation under any of its scenarios — and across every tracked spec the **majority** are that,
+  not a handful whose reaction someone forgot to name. The magnitudes are not copied here for the reason this
+  entry gives below: `bound_register` prints the register's size on every clean run, and a figure written into
+  this sentence is a second copy that can disagree with it. In `repository-checks`, six of the uncited
+  requirements were citable and are cited, each citation verified by reading the test against the scenario's
   `THEN` rather than matched by name. A planted citation naming nothing fails
   `every_pinning_citation_resolves_to_one_registered_test`, so they are held rather than decoration.
 
@@ -818,7 +819,12 @@ consumer for an undemonstrated deduplication.
   *That question was asked and it does not discriminate.* Every direction in `kanhe` builds a synthetic
   fixture — that is the method — so the answer is all of them. A second discriminator was tried, *which sites
   no release note names*, and it measures how release notes are written rather than whether a site earns its
-  place: 135 of 140, of which **70 are cannot-judge**, a reader declining to answer where it cannot see.
+  place: nearly every site is named by no release note. **And the discriminator dies on the kind rather than
+  on the count:** many of those sites are cannot-judge, a reader declining to answer where it cannot see, and
+  retiring one of those trades a refusal for a silent skip. No proportion is written here — the register
+  records each site's identity and not its kind, so a share would be a figure nothing re-derives, which is the
+  defect the pair originally in this sentence demonstrated by going stale against the register inside the
+  same window.
   Retiring one of those trades a refusal for a silent skip, which is the direction the Core Contract forbids.
   So there is no retirement list, and producing one would have meant defending a cut the measurement does not
   support.
