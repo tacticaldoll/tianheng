@@ -525,8 +525,27 @@ fn release_spine(
     // `hermetic_git::run` trims trailing whitespace from git's output, so the committed text arrives without
     // its final newline while `read` keeps one. Measured: every snapshot direction in the corpus failed on
     // that difference alone before the two sides were compared on the same footing.
-    let unmodified = git(repo, &["show", "HEAD:CHANGELOG.md"])
-        .is_ok_and(|committed| committed.trim_end() == changelog.trim_end());
+    let unmodified = match crate::hermetic_git::run_exact(repo, &[], &["show", "HEAD:CHANGELOG.md"])
+    {
+        Ok(committed) => committed == changelog,
+        // git ran and said no: the path is not in HEAD, and no release commit is missing its changelog — so
+        // this is *not a snapshot* rather than a refusal, which is the one cause the reasoning here covers.
+        Err(crate::hermetic_git::Failure::Exit { .. }) => false,
+        // The other two causes are not that fact. git failing to start, or answering in bytes no `String`
+        // holds, leaves **whether the worktree matches HEAD unread** — and reading that as *modified* picks a
+        // state out of a hat. One `is_ok_and` collapsed all three, and the third only came into existence
+        // when the runner learned to refuse bytes rather than replace them: a convenience predicate that was
+        // narrow when written silently widened underneath it.
+        Err(other) => {
+            return Err(cannot_judge_at(
+                "release-coherence#changelog-in-head-unreadable",
+                format!(
+                    "git could not answer what `CHANGELOG.md` holds at HEAD ({other}), so whether the \
+                     worktree still matches the release commit was never read"
+                ),
+            ));
+        }
+    };
     let state = if head == release_commit && unmodified {
         if version != release_version {
             return Err(violation_at(

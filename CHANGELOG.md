@@ -58,6 +58,19 @@ them.
   match — an identity normalised to suit a sentence. A Markdown sentence ends in one period, so one is what
   comes off, and only where the name as written matches nothing.
 
+- **A changelog git cannot answer for is no longer read as a modified worktree.** One `is_ok_and` collapsed
+  three causes into *not a snapshot*: the path missing from `HEAD`, which is the only one that means it; git
+  failing to start; and git answering in bytes no `String` holds. The third came into existence when the
+  runner learned to refuse those bytes rather than replace them — a predicate that was narrow when written
+  widened underneath it. Each cause is answered separately now, and the two that leave the comparison unmade
+  refuse rather than picking a state.
+
+- **A checkout edited only in its trailing whitespace is edited.** The comparison trimmed both sides, so a
+  worktree differing from the release commit by a newline read as unmodified and the gate answered *snapshot*
+  over a tree that is not the one released. The trim was never a judgement about content: it compensated for
+  the git runner trimming its own output. Reading git's answer exactly removes the compensation and the
+  residue with it.
+
 - **The one squash-message exception names both endpoints, because the contract does.** It is the
   **release-branch-to-`main`** squash. Taking only the destination left it reachable from any branch: a
   `fix/…` pull request onto `main` whose subject read `release: X.Y.Z` claimed a release branch's exception.
