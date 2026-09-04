@@ -2980,7 +2980,33 @@ fn a_case_alias_of_a_member_directory_is_a_stated_bound() {
     );
 }
 
-/// What `CHANGELOG.md` holds at HEAD, when git cannot answer it, is not *the worktree is modified*.
+/// A release commit whose own tree carries no `CHANGELOG.md` is not a modified checkout.
+///
+/// `git show HEAD:…` exits `128` for a path that is not in HEAD **and** for a tree it cannot read, so one
+/// `Err` arm had to mean one thing for both — and meaning *not a snapshot* let a release commit that shipped
+/// without the document its release is narrated in pass on the worktree's copy alone. Presence is asked by
+/// `ls-tree`, whose exit status answers it, and absence at the exact release commit is its own violation.
+///
+/// Negative run: with presence folded back into the content read, this classifies as development and the
+/// gate answers over a `CHANGELOG.md` no reader of that commit can reach.
+#[test]
+fn a_release_commit_carrying_no_changelog_is_refused() {
+    let root = scratch("release-commit-no-changelog");
+    let fixture = build_fixture(&root, "release-commit-no-changelog", "0.2.0");
+    std::fs::remove_file(fixture.repo.join("CHANGELOG.md")).expect("the fixture wrote one");
+    std::fs::write(fixture.repo.join("NOTES.md"), "prepared\n").expect("write");
+    commit(&fixture.repo, "release: 0.2.0");
+    // A readable changelog in the worktree, which is what made the absence invisible.
+    development_changelog(&fixture.repo, "0.2.0", true);
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    refusal::expect(
+        "release-coherence#release-commit-carries-no-changelog",
+        &verdict.expect_err("a release commit narrates its release, or it is not one"),
+    );
+}
+
+/// What `CHANGELOG.md` holds at HEAD, when git cannot answer its blob, is not *the worktree is modified*.
 ///
 /// One `is_ok_and` collapsed three causes into `false`: the path is not in HEAD — which no release commit is,
 /// and the only one that means *not a snapshot* — git failing to start, and git answering in bytes no
@@ -3014,8 +3040,10 @@ fn a_changelog_git_cannot_read_at_head_is_not_a_modified_worktree() {
     let verdict = judge(&fixture.repo);
     let _ = std::fs::remove_dir_all(&root);
     refusal::expect(
-        "release-coherence#changelog-in-head-unreadable",
-        &verdict.expect_err("git could not answer, so the comparison was never made"),
+        "release-coherence#changelog-blob-unreadable",
+        &verdict.expect_err(
+            "git could not read the blob its own tree named, so the comparison was never made",
+        ),
     );
 }
 

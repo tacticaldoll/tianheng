@@ -48,6 +48,17 @@ pub fn unheld() -> Vec<Unheld> {
     };
     vec![
         tool(
+            "release-coherence#changelog-in-head-unreadable",
+            "presence is asked by `ls-tree HEAD -- CHANGELOG.md`, which exits non-zero only where git \
+             cannot read HEAD's **tree** — and the judgement resolves HEAD and the release commit before \
+             it, through reads that fail first on any object store broken enough to reach this one. \
+             Measured: a fixture whose `.git/index` is corrupt leaves tree reads working, which is why the \
+             content read moved off `status` in the first place, and a fixture whose objects are gone \
+             fails at `rev-parse`. The blob half of the same question **is** observed, by \
+             `a_changelog_git_cannot_read_at_head_is_not_a_modified_worktree`, because a tree can name a \
+             blob git will not hand over",
+        ),
+        tool(
             "publish-source-integrity#release-tag-unreadable",
             "measured, not assumed: every ref-store perturbation a fixture can build answers `1`, which is this read's ANSWER — an unreadable `refs/tags` and a `refs/tags` replaced by a file both exit `1`, and in that state `rev-parse HEAD` fails first at `128`, so the judgement never reaches this arm. The classifier itself IS observed, against a directory that is no repository; what no fixture can build is a repository whose earlier reads succeed and whose tag read declines",
         ),

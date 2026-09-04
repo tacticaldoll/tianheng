@@ -8,9 +8,15 @@ A site that no direction holds is **declared unheld**, with why, an owner and a 
 
 Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.rs`. **Do not edit by hand** — regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_register`. A stale projection fails that gate.
 
-**16 of 139 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
+**17 of 141 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
 
 ## Declared unheld
+
+### `release-coherence#changelog-in-head-unreadable`
+
+- because presence is asked by `ls-tree HEAD -- CHANGELOG.md`, which exits non-zero only where git cannot read HEAD's **tree** — and the judgement resolves HEAD and the release commit before it, through reads that fail first on any object store broken enough to reach this one. Measured: a fixture whose `.git/index` is corrupt leaves tree reads working, which is why the content read moved off `status` in the first place, and a fixture whose objects are gone fails at `rev-parse`. The blob half of the same question **is** observed, by `a_changelog_git_cannot_read_at_head_is_not_a_modified_worktree`, because a tree can name a blob git will not hand over
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
 
 ### `publish-source-integrity#release-tag-unreadable`
 
@@ -260,7 +266,7 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
-### `release-coherence#changelog-in-head-unreadable`
+### `release-coherence#changelog-blob-unreadable`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
@@ -466,6 +472,11 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
 ### `release-coherence#no-tracked-file-for-any-member`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
+
+### `release-coherence#release-commit-carries-no-changelog`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`

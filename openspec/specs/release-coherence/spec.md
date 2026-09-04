@@ -68,6 +68,21 @@ time, warning windows, or hosted-CI-only variables.
   development made it report a missing `[Unreleased]` entry instead of the lockfile it could not read
 - **PINNED-BY** `editing_at_a_release_snapshot_is_development`
 
+#### Scenario: A release commit whose own tree carries no changelog
+
+- **WHEN** `HEAD` is the exact `release: X.Y.Z` commit and its tree names no `CHANGELOG.md`, while the
+  worktree carries a readable one
+- **THEN** the check refuses as a violation: the release it names is narrated nowhere a reader of that commit
+  can reach, and the worktree's copy is not that commit's
+- **AND** absence anywhere else is unremarkable — a tree from before the file existed — so the two are
+  separated by **where** the commit is, not by a read failing
+- **AND** presence SHALL be asked by a command whose exit status answers it. `git show HEAD:<path>` exits the
+  same status for a path that is not in the tree and for a tree it cannot read, so one arm has to mean one
+  thing for both; `ls-tree` answers presence with an empty listing and reserves its non-zero status for the
+  tree it could not read
+- **PINNED-BY** `a_release_commit_carrying_no_changelog_is_refused`
+- **PINNED-BY** `a_changelog_git_cannot_read_at_head_is_not_a_modified_worktree`
+
 #### Scenario: Shallow or absent history fails loud
 
 - **WHEN** no exact release commit is observable in the available git history
