@@ -274,7 +274,7 @@ trigger** instead, with the test that trigger would use where it is decidable. T
 day this was written and cost a sentence each.
 
 This is a bar on the **rate**, not the stock. The stock is not what grew: retiring rules once leaves the
-mechanism that produced them, and this window's own reviews recorded that mechanism — every reaction it built
+mechanism that produced them, and the 0.5.1 window's own reviews recorded that mechanism — every reaction it built
 had a defect found in the next round, three of three.
 
 **This rule has no repository check, and that is stated rather than left to be discovered.** Its text branch
@@ -416,7 +416,7 @@ previously go and read working code. Its directions are held against written fix
 count in a live document, which is what makes them independent of the rule above.
 
 **And it is not subjectless, which printing the state is how anyone found out.** The claim that the tree
-states no census was made twice in this window and was wrong both times, because the sweep that produced it
+states no census was made twice in the 0.5.0 window and was wrong both times, because the sweep that produced it
 looked for one declared phrasing and skipped the record locations. The sweep now says on every
 clean run how many documents state one, and the answer is a **generated projection** whose figure the renderer
 computes. That is the one place a figure belongs — produced, not typed — and this reaction is what makes
