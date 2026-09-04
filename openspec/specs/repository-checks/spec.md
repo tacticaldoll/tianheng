@@ -1030,13 +1030,18 @@ diagnostics they carry, but they SHALL decide nothing the default refusal would 
 
 #### Scenario: The one message exception is identified by where the squash lands
 
-- **WHEN** a squash message's subject is `release: X.Y.Z` and its body is empty, on a pull request whose base
-  is not `main` **or** whose head is not a release branch
-- **THEN** the gate refuses the empty body. The exception is the **release-branch-to-`main`** squash, which
-  names **both** endpoints: a work branch onto `main` carrying that subject is not it, and naming one endpoint
-  of a two-endpoint contract narrows the door without closing it. A subject is not an identity either, which
-  is what deciding on it alone got wrong first — this repository refuses recognition by a bare marker
-  wherever the position is what the rule is about
+- **WHEN** a squash message's subject is `release: X.Y.Z` and its body is empty, and any part of the triple
+  is not that squash — the base is not `main`, the head is not `release/X.Y.Z`, or the head's version is not
+  the subject's
+- **THEN** the gate refuses the empty body. `AGENTS.md` fixes the role as `release/X.Y.Z` against a subject
+  reading `release: X.Y.Z`, so the exception is **one version across three positions**, which is what makes
+  them an identity rather than three shapes that happen to co-occur. A `release/` prefix admits
+  `release/not-a-version`, and admits `release/0.4.0` carrying `release: 0.5.0` — a branch whose whole
+  purpose is one version, squashing a message about another
+- **AND** each narrower reading of this clause admitted the next case: the subject alone admitted any
+  branch, the subject and the destination admitted any source, and the destination with a prefix admitted a
+  branch that is not the role. A partial marker standing for a full identity is the shape, and the repair is
+  the identity rather than one more marker
 - **AND** a base the wrapper cannot read stops it before the gate and the merge, because not knowing where a
   squash lands is not the same fact as knowing it lands somewhere ordinary — a wrapper that guessed would
   decide the exception by default
