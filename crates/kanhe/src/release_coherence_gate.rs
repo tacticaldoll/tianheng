@@ -889,6 +889,11 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
                 "repository root {} has no git history: {stderr}",
                 repo.display()
             ),
+            crate::hermetic_git::Failure::Unreadable(why) => format!(
+                "git answered about {} in bytes this reader cannot represent ({why}), so whether it has a \
+                 history was answered and not read",
+                repo.display()
+            ),
         })
     })?;
 

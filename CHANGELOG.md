@@ -33,6 +33,19 @@ them.
 
 ### Self-governance
 
+- **git answering in bytes no `String` holds is refused, never replaced.** The shared git runner decoded
+  stdout with `from_utf8_lossy`, and what it mostly carries is **paths**: `ls-files -z` avoids git's own
+  quoting and promises nothing about encoding, so a tracked path that is not UTF-8 arrived as a different path
+  than the one on disk and every comparison downstream was made against that. The reaction model carries a
+  path-identity rule for the opposite property — two paths differing only in undecodable bytes keep two
+  identities — so a reader here that collapses them contradicts it.
+
+  The runner now separates *git failed* from *git answered and this reader cannot represent the answer*, and
+  every caller answers the new state rather than inheriting one: the compiler named all five. stderr stays
+  lossy, deliberately — it is a sentence for an operator, not a value anything compares. The direction builds
+  a filename of one invalid byte in a real repository; its negative run returns the replacement character
+  where the repository's byte was.
+
 - **An example manifest that is there and is not a regular file is no longer read as absent.** `is_file()`
   answered both with one `false`, so a directory named `Cargo.toml` — or any path that exists and is not a
   regular file — read as *this example declares none*, and the remaining readable examples satisfied the
