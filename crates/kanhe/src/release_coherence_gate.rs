@@ -525,31 +525,62 @@ fn release_spine(
     // enumeration fail, and a `status` here intercepted it — measured, that direction stopped reaching its
     // own site. `git show HEAD:…` reads the tree, so the same corrupt index leaves it working, also measured.
     //
-    // A read that fails means `CHANGELOG.md` is not in HEAD, which no release commit is — so the answer is
-    // *not a snapshot* rather than a refusal. A root carrying no changelog is refused earlier, by the reader
-    // that owns that question.
     // `hermetic_git::run` trims trailing whitespace from git's output, so the committed text arrives without
     // its final newline while `read` keeps one. Measured: every snapshot direction in the corpus failed on
-    // that difference alone before the two sides were compared on the same footing.
-    let unmodified = match crate::hermetic_git::run_exact(repo, &[], &["show", "HEAD:CHANGELOG.md"])
-    {
-        Ok(committed) => committed == changelog,
-        // git ran and said no: the path is not in HEAD, and no release commit is missing its changelog — so
-        // this is *not a snapshot* rather than a refusal, which is the one cause the reasoning here covers.
-        Err(crate::hermetic_git::Failure::Exit { .. }) => false,
-        // The other two causes are not that fact. git failing to start, or answering in bytes no `String`
-        // holds, leaves **whether the worktree matches HEAD unread** — and reading that as *modified* picks a
-        // state out of a hat. One `is_ok_and` collapsed all three, and the third only came into existence
-        // when the runner learned to refuse bytes rather than replace them: a convenience predicate that was
-        // narrow when written silently widened underneath it.
-        Err(other) => {
-            return Err(cannot_judge_at(
+    // that difference alone before the two sides were compared on the same footing, which is why the exact
+    // read is used here.
+    //
+    // **Presence is asked first, by a command whose exit status answers it.** `git show HEAD:…` exits `128`
+    // for a path that is not in HEAD *and* for a tree it cannot read, so a single `Err` arm had to choose one
+    // meaning for both — and choosing *not a snapshot* classified a broken object store as the next cycle.
+    // Measured on this machine's git: `ls-tree HEAD -- <path>` exits `0` with an empty listing when the path
+    // is absent, `0` with a line when it is there, and `128` only when the tree cannot be read. The question
+    // decides the command, which is what the sibling tag-presence reader already does for the same shape.
+    // **Presence is asked first, by a command whose exit status answers it.** `git show HEAD:…` exits `128`
+    // for a path that is not in HEAD *and* for a tree it cannot read, so a single `Err` arm had to choose one
+    // meaning for both — and choosing *not a snapshot* classified a broken object store as the next cycle.
+    // Measured on this machine's git: `ls-tree HEAD -- <path>` exits `0` with an empty listing when the path
+    // is absent, `0` with a line when it is there, and `128` only when the tree cannot be read. The question
+    // decides the command, which is what the sibling tag-presence reader already does for the same shape.
+    let listed = crate::hermetic_git::run(repo, &[], &["ls-tree", "HEAD", "--", "CHANGELOG.md"])
+        .map_err(|err| {
+            cannot_judge_at(
                 "release-coherence#changelog-in-head-unreadable",
                 format!(
-                    "git could not answer what `CHANGELOG.md` holds at HEAD ({other}), so whether the \
+                    "git could not answer what HEAD's tree holds for `CHANGELOG.md` ({err}), so whether the \
                      worktree still matches the release commit was never read"
                 ),
+            )
+        })?;
+    // **A release commit that carries no changelog is its own fact, not a modified checkout.** Absence at
+    // any other commit is unremarkable — a tree from before the file existed. At the exact `release: X.Y.Z`
+    // commit it means the release shipped without the document it is narrated in, and reading that as *the
+    // next cycle has begun* let it pass on the worktree's copy alone.
+    let unmodified = if listed.trim().is_empty() {
+        if head == release_commit {
+            return Err(violation_at(
+                "release-coherence#release-commit-carries-no-changelog",
+                format!(
+                    "the release commit for {release_version} carries no `CHANGELOG.md` in its own tree, so \
+                     the release it names is narrated nowhere a reader of that commit can reach"
+                ),
             ));
+        }
+        false
+    } else {
+        match crate::hermetic_git::run_exact(repo, &[], &["show", "HEAD:CHANGELOG.md"]) {
+            Ok(committed) => committed == changelog,
+            // The path is listed in HEAD's tree, so a failure here is git declining to read a blob it just
+            // named — a fact about the object store, never about the worktree.
+            Err(other) => {
+                return Err(cannot_judge_at(
+                    "release-coherence#changelog-blob-unreadable",
+                    format!(
+                        "HEAD's tree names `CHANGELOG.md` and git could not read it ({other}), so whether \
+                         the worktree still matches the release commit was never read"
+                    ),
+                ));
+            }
         }
     };
     let state = if head == release_commit && unmodified {

@@ -58,6 +58,14 @@ them.
   match — an identity normalised to suit a sentence. A Markdown sentence ends in one period, so one is what
   comes off, and only where the name as written matches nothing.
 
+- **A release commit whose own tree carries no changelog is refused, where it read as the next cycle.**
+  `git show HEAD:<path>` exits the same status for a path the tree does not name and for a tree git cannot
+  read, so one arm had to mean one thing for both — and meaning *the worktree differs* let a release commit
+  that shipped without the document its release is narrated in pass on the worktree's copy alone. Presence is
+  asked by `ls-tree`, whose exit status answers it: an empty listing for absent, non-zero only for a tree it
+  could not read. Absence anywhere but the release commit stays unremarkable, and the two facts are separated
+  by where the commit is rather than by a read failing.
+
 - **A member's directory is taken from its manifest path component-wise.** Both readers built a `"{root}/"`
   string and stripped it as text, and cargo reports **native** paths — so on a host whose separator is not
   `/` no member sits under the prefix and every one reaches the refusal for describing a different tree.
