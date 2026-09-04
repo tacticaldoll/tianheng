@@ -1803,7 +1803,7 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
             "cargo metadata reported no workspace_root, so no member directory can be resolved",
         ));
     };
-    let prefix = format!("{root}/");
+    let root = Path::new(root);
     let mut machinery: Vec<String> = Vec::new();
     let mut published: BTreeSet<String> = BTreeSet::new();
     let mut enumerated = 0usize;
@@ -1828,9 +1828,26 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
                 "a package in cargo metadata carries no manifest_path, so its directory cannot be resolved",
             ));
         };
-        let Some(directory) = manifest
-            .strip_prefix(&prefix)
-            .and_then(|rest| rest.strip_suffix("Cargo.toml"))
+        // **Compared through components, because a separator is not a character here.** This stripped
+        // `"{root}/"` from the manifest as **text**, and cargo reports native paths — so on a host where
+        // that separator is `\` no member sits under the prefix and every one of them reaches the refusal
+        // below. `Path::strip_prefix` compares component by component, which is the rule the sibling reader
+        // for a dependency's `path` already states as a requirement; a rule enforced at one site and not its
+        // neighbour is a rule about the site.
+        //
+        // The identity is joined back with `/` deliberately: it is compared against git's paths and cited in
+        // this repository's own prose, both of which spell a separator that way whatever the host does.
+        let manifest_path = Path::new(manifest);
+        let Some(directory) = manifest_path
+            .strip_prefix(root)
+            .ok()
+            .and_then(Path::parent)
+            .map(|dir| {
+                dir.components()
+                    .map(|part| part.as_os_str().to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
         else {
             // `--no-deps` lists workspace members only, so every manifest sits under the root cargo reported
             // alongside them. One that does not is this gate's two sources describing different trees, which
@@ -1838,9 +1855,15 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
             return Err(cannot_judge_at(
                 "release-coherence#member-manifest-outside-workspace-root",
                 format!(
-                    "member manifest {manifest} is not under the workspace root {root} cargo reported for it"
+                    "member manifest {manifest} is not under the workspace root {} cargo reported for it",
+                    root.display()
                 ),
             ));
+        };
+        let directory = if directory.is_empty() {
+            String::new()
+        } else {
+            format!("{directory}/")
         };
         let unpublished = package["publish"].as_array().is_some_and(|r| r.is_empty());
         if unpublished {
@@ -1852,7 +1875,7 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
         // `adopter_cited_machinery` cannot recognise a record citing that file, a false negative in the
         // release gate. Latent today (no tracked path needs quoting) and the sibling capability already
         // raises the class to a SHALL, which is why it is closed rather than declared.
-        let listing = git(repo, &["ls-files", "-z", directory]).map_err(|err| {
+        let listing = git(repo, &["ls-files", "-z", &directory]).map_err(|err| {
             cannot_judge_at(
                 "release-coherence#directory-listing-unreadable",
                 format!("could not enumerate {directory}: {err}"),
@@ -1883,9 +1906,10 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
         return Err(cannot_judge_at(
             "release-coherence#no-tracked-file-for-any-member",
             format!(
-                "no tracked file was found for any of the {} workspace members under {root}, so cargo and git \
+                "no tracked file was found for any of the {} workspace members under {}, so cargo and git \
              are describing different trees",
-                metadata["packages"].as_array().map_or(0, Vec::len)
+                metadata["packages"].as_array().map_or(0, Vec::len),
+                root.display()
             ),
         ));
     }
