@@ -1028,6 +1028,20 @@ has reach `cargo publish` with the wrapper exiting `0`. A sentence saying *a gua
 guard catching neither* decides nothing while arguments walk past it. Refusing arms MAY remain for the
 diagnostics they carry, but they SHALL decide nothing the default refusal would not.
 
+#### Scenario: The one message exception is identified by where the squash lands
+
+- **WHEN** a squash message's subject is `release: X.Y.Z` and its body is empty, on a pull request whose base
+  is not `main`
+- **THEN** the gate refuses the empty body. The exception is the **release-branch-to-`main`** squash, and a
+  subject is not a destination: deciding it on the subject alone makes the exception's identity a spelling
+  any branch can write, which is what this repository refuses wherever it recognises something by a bare
+  marker rather than by its position
+- **AND** a base the wrapper cannot read stops it before the gate and the merge, because not knowing where a
+  squash lands is not the same fact as knowing it lands somewhere ordinary — a wrapper that guessed would
+  decide the exception by default
+- **PINNED-BY** `the_release_snapshot_may_carry_the_empty_body_the_ritual_requires`
+- **PINNED-BY** `an_unreadable_base_stops_before_the_gate_and_merge`
+
 #### Scenario: An argument the wrapper does not name
 
 - **WHEN** a sanctioned wrapper is given any argument outside its admitted set, in any spelling

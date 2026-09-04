@@ -136,6 +136,15 @@ argv=$*
 printf '%s\n' "${argv//$'\n'/\\n}" >> "$FAKE_GH_LOG"
 if [[ $1 == repo && $2 == view ]]; then
     printf '%s\n' 'tacticaldoll/tianheng'
+elif [[ $1 == pr && $2 == view && $* == *"--json baseRefName"* ]]; then
+    if [[ $FAKE_GH_MODE == unreadable-base ]]; then
+        printf 'gh: cannot read the base branch\n' >&2
+        exit 1
+    fi
+    # The base the squash lands on. The gate takes it as evidence because `AGENTS.md` states the one message
+    # exception as the release-branch-to-`main` squash, and a subject is not a destination. These fixtures
+    # merge onto a release branch, which is what an ordinary squash does.
+    printf '%s\n' "${FAKE_GH_BASE:-release/0.0.0}"
 elif [[ $1 == pr && $2 == view && $* == *"--json title"* ]]; then
     # The wrapper reads the title TWICE: once as evidence for the gate, once after it, so the subject it is
     # about to record is still the title. Answering the same string both times is what left the second read
@@ -223,7 +232,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
+    subjects | invalid-number | unreadable-head | unreadable-base | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -888,6 +897,41 @@ fn the_merge_is_pinned_to_the_head_the_gate_read() {
         head_at < commits_at,
         "the head must be read BEFORE the commit set, or the pin fails open; gh log was:\n{}",
         run.gh_log
+    );
+}
+
+/// A base that cannot be read stops before the gate and the merge.
+///
+/// The one message exception is the release-branch-to-`main` squash, so the base is evidence the gate judges
+/// by and not a convenience. Not knowing where a squash lands is not the same fact as knowing it lands
+/// somewhere ordinary: a wrapper that guessed would decide the exception by default, which is the direction
+/// the subject-only reading already got wrong.
+///
+/// Negative run: with the base's acquisition unguarded, the wrapper carried an empty value into the gate and
+/// the gate read it as a base that is not `main` — a verdict reached on a value nobody supplied.
+#[test]
+fn an_unreadable_base_stops_before_the_gate_and_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "unreadable-base", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "an unreadable base must stop the wrapper; got {:?} with stderr {:?}",
+        run.status.code(),
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("one message exception"),
+        "the refusal must say what the base decides, got {:?}",
+        run.stderr
+    );
+    assert!(
+        run.cargo_log.is_empty() && !run.gh_log.lines().any(|line| line.starts_with("pr merge")),
+        "neither the gate nor the merge may be reached:\ngh:\n{}\ncargo:\n{}",
+        run.gh_log,
+        run.cargo_log
     );
 }
 
