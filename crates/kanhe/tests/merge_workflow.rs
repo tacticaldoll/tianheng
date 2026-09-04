@@ -136,6 +136,13 @@ argv=$*
 printf '%s\n' "${argv//$'\n'/\\n}" >> "$FAKE_GH_LOG"
 if [[ $1 == repo && $2 == view ]]; then
     printf '%s\n' 'tacticaldoll/tianheng'
+elif [[ $1 == pr && $2 == view && $* == *"--json headRefName"* ]]; then
+    # The branch the squash comes from. The contract names both endpoints, so the gate takes both.
+    if [[ $FAKE_GH_MODE == unreadable-head-branch ]]; then
+        printf 'gh: cannot read the head branch\n' >&2
+        exit 1
+    fi
+    printf '%s\n' "${FAKE_GH_HEAD_BRANCH:-fix/some-repair}"
 elif [[ $1 == pr && $2 == view && $* == *"--json baseRefName"* ]]; then
     if [[ $FAKE_GH_MODE == unreadable-base ]]; then
         printf 'gh: cannot read the base branch\n' >&2
@@ -232,7 +239,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head | unreadable-base | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
+    subjects | invalid-number | unreadable-head | unreadable-base | unreadable-head-branch | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -897,6 +904,31 @@ fn the_merge_is_pinned_to_the_head_the_gate_read() {
         head_at < commits_at,
         "the head must be read BEFORE the commit set, or the pin fails open; gh log was:\n{}",
         run.gh_log
+    );
+}
+
+/// A head branch that cannot be read stops before the gate and the merge.
+///
+/// The exception names the release-branch-to-`main` squash, so the branch a squash comes from is evidence
+/// too. Not knowing it is not the same fact as knowing it is ordinary.
+#[test]
+fn an_unreadable_head_branch_stops_before_the_gate_and_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "unreadable-head-branch", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "an unreadable head branch must stop the wrapper; got {:?} with stderr {:?}",
+        run.status.code(),
+        run.stderr
+    );
+    assert!(
+        run.cargo_log.is_empty() && !run.gh_log.lines().any(|line| line.starts_with("pr merge")),
+        "neither the gate nor the merge may be reached:\ngh:\n{}\ncargo:\n{}",
+        run.gh_log,
+        run.cargo_log
     );
 }
 
