@@ -3200,6 +3200,35 @@ fn a_member_inheriting_through_a_sub_table_heading_is_read_as_inheriting() {
     );
 }
 
+/// An example manifest that is there and is not a regular file is not one that is absent.
+///
+/// `is_file()` answered both with one `false`, so a directory named `Cargo.toml` — or any path that exists
+/// and is not a regular file — read as *this example declares none*, and the remaining readable examples
+/// satisfied the counters below it. That is the silent-skip direction this whole loop already refuses for a
+/// manifest it cannot read; absence was the one door left open.
+///
+/// Negative run: with the read restored to `is_file()`, the fixture passes — the example is skipped, the
+/// other examples carry the count, and the gate reports clean over a path it never opened.
+#[test]
+fn an_example_manifest_that_is_not_a_regular_file_is_not_an_absent_one() {
+    let root = scratch("example-manifest-not-a-file");
+    let fixture = build_fixture(&root, "example-manifest-not-a-file", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    std::fs::remove_file(&manifest).expect("the fixture writes this manifest");
+    std::fs::create_dir(&manifest).expect("a directory may take its place");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: put a directory where a manifest was");
+    refusal::expect(
+        "release-coherence#example-manifest-not-a-readable-file",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "is not one this check can read",
+        ),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A member manifest the parser cannot read is not judged, and the refusal names which member.
 ///
 /// **A site of its own rather than the one `declared_dependencies` already carries.** Both refuse the same

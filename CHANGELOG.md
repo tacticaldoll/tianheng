@@ -33,6 +33,18 @@ them.
 
 ### Self-governance
 
+- **An example manifest that is there and is not a regular file is no longer read as absent.** `is_file()`
+  answered both with one `false`, so a directory named `Cargo.toml` — or any path that exists and is not a
+  regular file — read as *this example declares none*, and the remaining readable examples satisfied the
+  counters that follow. Asking for the metadata separates them, in one construction whose message carries
+  which it met. The subject is now stated too: an example is a **directory**, and `examples/` holds files of
+  its own, so an entry that is not a directory holds no example rather than an unreadable one.
+
+- **A path is compared as written before any punctuation comes off it.** The machinery-name reader stripped
+  **every** trailing dot from a token, so a path legitimately ending in one was rewritten before it could
+  match — an identity normalised to suit a sentence. A Markdown sentence ends in one period, so one is what
+  comes off, and only where the name as written matches nothing.
+
 - **The one squash-message exception is identified by where the squash lands, not only by what it says.**
   `AGENTS.md` states it as the **release-branch-to-`main`** squash; the gate decided it on the subject alone,
   so a message reading `release: X.Y.Z` with an empty body claimed the exception on any base. The law was

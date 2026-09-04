@@ -1362,11 +1362,38 @@ pub(crate) fn require_example_pins(
 
     let dirs = entries_of(&repo.join("examples"))?;
     for dir in dirs {
+        // An example is a **directory**, and `examples/` holds files of its own — a README among them. The
+        // entry that is not a directory holds no example, which is a different fact from a directory whose
+        // manifest cannot be read, and it is the one this loop may pass over.
+        if !dir.is_dir() {
+            continue;
+        }
         let manifest = dir.join("Cargo.toml");
         // Absent is not unreadable. Skipping both alike let the remaining readable examples satisfy the
         // counters below, so the judgement reported clean over the very manifest it could not read.
-        if !manifest.is_file() {
-            continue;
+        //
+        // `is_file()` answered both with one `false`: a directory named `Cargo.toml`, or a path that exists
+        // and is not a regular file, read as *no example here*. Asking for the metadata separates them —
+        // `NotFound` is the absence this loop may skip, and anything else is a fact to report.
+        //
+        // One construction, and the message carries which of the two it met: the register holds a site
+        // identity to exactly one branch, so two arms reaching two calls would be one identity vouching for a
+        // branch no direction reached.
+        let present = match std::fs::metadata(&manifest) {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) => Err(err.to_string()),
+            Ok(found) if found.is_file() => Ok(()),
+            Ok(_) => Err("it is there and is not a regular file".to_string()),
+        };
+        if let Err(why) = present {
+            return Err(cannot_judge_at(
+                "release-coherence#example-manifest-not-a-readable-file",
+                format!(
+                    "the example manifest {} is not one this check can read — {why}, which is not the same \
+                     fact as an example that declares none",
+                    manifest.display()
+                ),
+            ));
         }
         let text = std::fs::read_to_string(&manifest).map_err(|err| {
             cannot_judge_at(
@@ -1969,7 +1996,16 @@ fn adopter_cited_machinery(
             for run in line
                 .split(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '/' | '-')))
             {
-                let token = run.strip_prefix("./").unwrap_or(run).trim_end_matches('.');
+                // The token is compared as written before any punctuation is taken off it. `trim_end_matches`
+                // stripped **every** trailing dot, so a path legitimately ending in one was rewritten before
+                // it could match — identity normalised to suit a sentence. A Markdown sentence ends in one
+                // period, so one is what comes off, and only where the name as written matches nothing.
+                let written = run.strip_prefix("./").unwrap_or(run);
+                let token = if names.contains(written) {
+                    written
+                } else {
+                    written.strip_suffix('.').unwrap_or(written)
+                };
                 if token.is_empty() {
                     continue;
                 }
