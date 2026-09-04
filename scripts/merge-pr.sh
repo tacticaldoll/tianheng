@@ -344,6 +344,12 @@ fi
 title=$(gh pr view "$pr_number" --repo "$repository" --json title --jq .title) || cannot_judge \
     "cannot read pull request $pr_number's title, so whether the subject is that title cannot be decided"
 : "${subject:=$title}"
+# The base the squash lands on. `AGENTS.md` states the one message exception as the release-branch-to-`main`
+# squash, and a subject is not a destination — deciding it on the subject alone made the exception's identity a
+# spelling any branch could write. The gate takes the base as evidence, exactly as it takes the title.
+base=$(gh pr view "$pr_number" --repo "$repository" --json baseRefName --jq .baseRefName) || cannot_judge \
+    "cannot read pull request $pr_number's base branch, so whether this squash is the one message exception \
+cannot be decided"
 # The head the gate is about to read its evidence from, captured BEFORE the commit set — the order is the guard.
 #
 # What this closes: the gate judges the body against the pull request's commit subjects as they are while it
@@ -601,6 +607,7 @@ gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
     TIANHENG_MERGE_TITLE=$title \
     TIANHENG_MERGE_COMMITS=$commits \
     TIANHENG_MERGE_BODY=$body \
+    TIANHENG_MERGE_BASE=$base \
     cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test merge_message \
     -- --exact the_squash_message_is_the_pull_request_it_records 2>&1) || {
     printf '%s\n' "$gate_output" >&2

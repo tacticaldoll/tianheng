@@ -33,6 +33,16 @@ them.
 
 ### Self-governance
 
+- **The one squash-message exception is identified by where the squash lands, not only by what it says.**
+  `AGENTS.md` states it as the **release-branch-to-`main`** squash; the gate decided it on the subject alone,
+  so a message reading `release: X.Y.Z` with an empty body claimed the exception on any base. The law was
+  branch-scoped and the reaction was not.
+
+  The gate now takes the base as evidence, exactly as it takes the title, and the wrapper supplies it from the
+  pull request. A base it cannot read stops it before the gate and the merge: not knowing where a squash lands
+  is not the same fact as knowing it lands somewhere ordinary, and a wrapper that guessed would decide the
+  exception by default. Both directions carry their negative run.
+
 - **A pinning citation now arrives with its mutation, or with the reason it has none, in the same change.**
   A `PINNED-BY` is held to its name resolving to one registered test; whether the test would fail if the
   behaviour it defends changed is decided only where a mutation is declared, and the biting check reports the

@@ -207,10 +207,17 @@ fn is_a_bare_commit_list(body: &str, commits: &[String]) -> bool {
 /// Exactly `release: X.Y.Z` with a well-formed version, because the exception is for that act and not for a
 /// subject that merely begins with the word: the release-history reader in `release_coherence_gate` refuses a
 /// malformed `release:` subject for the same reason, and the two would disagree about the same line otherwise.
-fn is_release_snapshot(subject: &str) -> bool {
-    subject
-        .strip_prefix("release: ")
-        .is_some_and(|rest| crate::manifest::semver(rest).is_some())
+/// The one message exception, identified by **where the squash lands** as well as by what it says.
+///
+/// `AGENTS.md` states it as the *release-branch-to-`main`* squash, and a subject is not a destination: a
+/// message reading `release: 0.0.0` on any other base is an ordinary squash claiming the exception's shape.
+/// Deciding on the subject alone made the exception's identity a spelling, which is what this repository
+/// refuses everywhere it recognises something by a bare marker rather than by its position.
+fn is_release_snapshot(subject: &str, base: &str) -> bool {
+    base.trim() == "main"
+        && subject
+            .strip_prefix("release: ")
+            .is_some_and(|rest| crate::manifest::semver(rest).is_some())
 }
 
 /// Judge a proposed squash message against the pull request it would record.
@@ -223,6 +230,7 @@ pub fn judge(
     body: &str,
     title: &str,
     commits: &[String],
+    base: &str,
 ) -> Result<String, Refusal> {
     if title.trim().is_empty() {
         return Err(cannot_judge_at(
@@ -254,7 +262,7 @@ pub fn judge(
     // The same sole exception: `release: X.Y.Z` is not a Conventional Commit subject and `AGENTS.md` says so
     // — *the release-branch-to-`main` squash is the sole message exception*. This rule refused it too, so the
     // gate encoded every rule of the ritual except the one the ritual itself names.
-    if !is_conventional(subject) && !is_release_snapshot(subject) {
+    if !is_conventional(subject) && !is_release_snapshot(subject, base) {
         return Err(violation_at(
             "repository-checks#squash-subject-is-not-conventional",
             format!(
@@ -296,7 +304,7 @@ pub fn judge(
     // The exception is what lets that merge go *through* the wrapper, which is strictly more observation
     // than it had: the subject shape, the attribution marks and the title match are all still judged. An
     // empty body stays a violation for every other subject.
-    if body.trim().is_empty() && !is_release_snapshot(subject) {
+    if body.trim().is_empty() && !is_release_snapshot(subject, base) {
         return Err(violation_at(
             "repository-checks#squash-body-is-empty",
             "the squash body is empty; a commit body carries why the change exists and what contract it \

@@ -33,6 +33,9 @@ fn commits() -> Vec<String> {
 
 const OK_BODY: &str = "Why this exists and what contract it preserves.\n";
 
+/// An ordinary squash lands on a release branch; `main` is what the one exception requires.
+const DEV_BASE: &str = "release/0.0.0";
+
 /// A refusal from `site`, of `kind`, saying `needle`.
 ///
 /// **The site, and not only the message.** A needle is a phrase inside a rendered message: it cannot tell a
@@ -40,7 +43,7 @@ const OK_BODY: &str = "Why this exists and what contract it preserves.\n";
 /// replaces with a citation the run compares. The needle stays because what the operator is told is the
 /// whole of what a refusal delivers, and the site says which branch told them.
 fn refuse(subject: &str, body: &str, title: &str, kind: Kind, needle: &str) -> Refusal {
-    let refusal = judge(subject, body, title, &commits())
+    let refusal = judge(subject, body, title, &commits(), DEV_BASE)
         .expect_err(&format!("expected a refusal containing {needle:?}"));
     assert_eq!(refusal.kind, kind, "{}", refusal.message);
     assert!(
@@ -94,21 +97,26 @@ fn the_supplied_message() -> Verdict {
     // incomplete set, which is unjudgeable rather than untrue. An empty value that *was* supplied keeps its
     // own meaning: the gate answers an empty title and an empty commit list as cannot-judge and an empty body
     // as a violation, and those are its verdicts to reach.
-    let (body, title, commits) = match (
+    let (body, title, commits, base) = match (
         supplied::from_env("TIANHENG_MERGE_BODY"),
         supplied::from_env("TIANHENG_MERGE_TITLE"),
         supplied::from_env("TIANHENG_MERGE_COMMITS"),
+        supplied::from_env("TIANHENG_MERGE_BASE"),
     ) {
-        (Supplied::Value(body), Supplied::Value(title), Supplied::Value(commits)) => {
-            (body, title, commits)
-        }
-        (body, title, commits) => {
+        (
+            Supplied::Value(body),
+            Supplied::Value(title),
+            Supplied::Value(commits),
+            Supplied::Value(base),
+        ) => (body, title, commits, base),
+        (body, title, commits, base) => {
             let mut unsupplied = Vec::new();
             let mut unreadable = Vec::new();
             for (name, state) in [
                 ("TIANHENG_MERGE_BODY", body),
                 ("TIANHENG_MERGE_TITLE", title),
                 ("TIANHENG_MERGE_COMMITS", commits),
+                ("TIANHENG_MERGE_BASE", base),
             ] {
                 match state {
                     Supplied::Value(_) => {}
@@ -137,7 +145,7 @@ fn the_supplied_message() -> Verdict {
         .filter(|line| !line.trim().is_empty())
         .map(str::to_string)
         .collect();
-    match judge(&subject, &body, &title, &supplied) {
+    match judge(&subject, &body, &title, &supplied, &base) {
         Ok(report) => Verdict::Clean(report),
         Err(refusal) => Verdict::Refused(refusal),
     }
@@ -148,7 +156,7 @@ fn the_supplied_message() -> Verdict {
 /// The whole shape, accepted — so every refusal below is about the thing it names.
 #[test]
 fn a_subject_that_is_its_title_with_a_body_is_accepted() {
-    let verdict = judge(OK_SUBJECT, OK_BODY, OK_SUBJECT, &commits());
+    let verdict = judge(OK_SUBJECT, OK_BODY, OK_SUBJECT, &commits(), DEV_BASE);
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
@@ -250,7 +258,7 @@ fn a_breaking_subject_with_no_migration_footer_is_a_violation() {
         &refusal,
     );
     let with_footer = format!("{OK_BODY}\nBREAKING CHANGE: adopters regenerate their baseline.\n");
-    assert!(judge(subject, &with_footer, subject, &commits()).is_ok());
+    assert!(judge(subject, &with_footer, subject, &commits(), DEV_BASE).is_ok());
 }
 
 /// A line that *is* an attribution mark is refused, whatever its case.
@@ -351,7 +359,7 @@ fn a_sentence_naming_an_attribution_mark_is_not_carrying_one() {
     ] {
         let body = format!("{OK_BODY}\n{line}\n");
         assert!(
-            judge(OK_SUBJECT, &body, OK_SUBJECT, &commits()).is_ok(),
+            judge(OK_SUBJECT, &body, OK_SUBJECT, &commits(), DEV_BASE).is_ok(),
             "naming a mark in prose must not be refused: {line}"
         );
     }
@@ -361,7 +369,7 @@ fn a_sentence_naming_an_attribution_mark_is_not_carrying_one() {
 #[test]
 fn a_bang_in_the_summary_is_not_a_breaking_marker() {
     let subject = "fix(tianheng): preserve bang! in summaries";
-    let verdict = judge(subject, OK_BODY, subject, &commits());
+    let verdict = judge(subject, OK_BODY, subject, &commits(), DEV_BASE);
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
@@ -373,6 +381,7 @@ fn a_bullet_body_that_is_not_the_commit_subjects_is_accepted() {
         "- Why: the contract this preserves.\n- Contract: what it must not break.\n",
         OK_SUBJECT,
         &["feat(x): one".to_string(), "fix(y): another".to_string()],
+        DEV_BASE,
     );
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
@@ -381,7 +390,7 @@ fn a_bullet_body_that_is_not_the_commit_subjects_is_accepted() {
 /// false refusal reading them removes.
 #[test]
 fn a_body_judged_without_the_commit_subjects_cannot_be_judged() {
-    let refusal = judge(OK_SUBJECT, "- a bullet\n", OK_SUBJECT, &[])
+    let refusal = judge(OK_SUBJECT, "- a bullet\n", OK_SUBJECT, &[], DEV_BASE)
         .expect_err("no commit subjects is a refusal to judge, not a fallback");
     refusal::expect("repository-checks#squash-commits-unavailable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge);
@@ -425,8 +434,21 @@ fn the_release_snapshot_may_carry_the_empty_body_the_ritual_requires() {
         "",
         "release: 0.5.0",
         &["chore: x".to_string()],
+        "main",
     )
     .expect("the release snapshot's body is required to be empty, and the ritual says so");
+
+    // **The exception is where the squash lands, not only what it says.** `AGENTS.md` states it as the
+    // release-branch-to-`main` squash, so the same message onto any other base is an ordinary squash
+    // claiming the exception's shape — and an empty body is a violation there.
+    gate::judge(
+        "release: 0.5.0",
+        "",
+        "release: 0.5.0",
+        &["chore: x".to_string()],
+        DEV_BASE,
+    )
+    .expect_err("the exception is the release-branch-to-main squash, and this base is not main");
 
     // **The exception is for that act, not for the word.** A malformed version is refused, and by the
     // conventional-subject rule rather than the empty-body one — `release: not-a-version` is neither a
@@ -476,13 +498,14 @@ fn a_body_that_is_a_bare_commit_list_is_a_violation() {
 #[test]
 fn a_merge_made_outside_the_wrapper_is_not_observed() {
     // What the check does hold: a message handed to it.
-    assert!(judge(OK_SUBJECT, OK_BODY, OK_SUBJECT, &commits()).is_ok());
+    assert!(judge(OK_SUBJECT, OK_BODY, OK_SUBJECT, &commits(), DEV_BASE).is_ok());
     assert!(
         judge(
             &format!("{OK_SUBJECT} (#1)"),
             OK_BODY,
             OK_SUBJECT,
-            &commits()
+            &commits(),
+            DEV_BASE
         )
         .is_err()
     );
@@ -490,7 +513,7 @@ fn a_merge_made_outside_the_wrapper_is_not_observed() {
     // What it cannot: a merge that never hands it one. There is no input to this function representing a
     // merge made elsewhere, which is the bound — the judgement is over a message, and a browser supplies
     // none. Reaching further would mean observing GitHub's server, not this repository.
-    let observed_without_a_message = judge("", "", "", &commits());
+    let observed_without_a_message = judge("", "", "", &commits(), DEV_BASE);
     assert_eq!(
         observed_without_a_message.err().map(|r| r.kind),
         Some(Kind::CannotJudge),
@@ -650,6 +673,7 @@ fn gate_over_channel(subject: &std::ffi::OsStr, channel: Option<&Path>) -> (bool
     .env("TIANHENG_MERGE_TITLE", OK_SUBJECT)
     .env("TIANHENG_MERGE_BODY", OK_BODY)
     .env("TIANHENG_MERGE_COMMITS", commits().join("\n"))
+    .env("TIANHENG_MERGE_BASE", DEV_BASE)
     .output()
     .expect("re-run this binary's gate direction in a child process");
 
@@ -818,7 +842,7 @@ fn a_longer_word_that_starts_like_a_mark_is_not_carrying_it() {
     ] {
         let body = format!("{OK_BODY}\n{admitted}\n");
         assert!(
-            judge(OK_SUBJECT, &body, OK_SUBJECT, &commits()).is_ok(),
+            judge(OK_SUBJECT, &body, OK_SUBJECT, &commits(), DEV_BASE).is_ok(),
             "a line beginning with a longer word that merely starts like a mark carries no attribution, and \
              refusing it is the false refusal this requirement forbids: {admitted:?}"
         );
@@ -832,7 +856,7 @@ fn a_longer_word_that_starts_like_a_mark_is_not_carrying_it() {
     ] {
         let body = format!("{OK_BODY}\n{refused}\n");
         assert!(
-            judge(OK_SUBJECT, &body, OK_SUBJECT, &commits()).is_err(),
+            judge(OK_SUBJECT, &body, OK_SUBJECT, &commits(), DEV_BASE).is_err(),
             "the mark itself must still be refused, or the boundary rule has narrowed the gate rather than \
              bounding it: {refused:?}"
         );
