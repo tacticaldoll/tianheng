@@ -490,6 +490,32 @@ fn the_release_snapshot_may_carry_the_empty_body_the_ritual_requires() {
     )
     .expect_err("a work branch onto main is not the release-branch-to-main squash");
 
+    // **The role is `release/X.Y.Z`, and a prefix is not that role.** A branch named `release/` and anything
+    // is not the one branch whose whole purpose is one version.
+    gate::judge(
+        "release: 0.5.0",
+        "",
+        "release: 0.5.0",
+        &["chore: x".to_string()],
+        "main",
+        "release/not-a-version",
+    )
+    .expect_err("`release/` and anything is not the fixed role `release/X.Y.Z`");
+
+    // **And one version across the three, which is what makes them an identity.** A release branch squashing
+    // a message about a different release is two claims, and the exception is for neither.
+    gate::judge(
+        "release: 0.5.0",
+        "",
+        "release: 0.5.0",
+        &["chore: x".to_string()],
+        "main",
+        "release/0.4.0",
+    )
+    .expect_err(
+        "the branch's version and the subject's are the same version or this is not that squash",
+    );
+
     // **The exception is where the squash lands, not only what it says.** `AGENTS.md` states it as the
     // release-branch-to-`main` squash, so the same message onto any other base is an ordinary squash
     // claiming the exception's shape — and an empty body is a violation there.

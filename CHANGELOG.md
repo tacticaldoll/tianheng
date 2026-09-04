@@ -107,6 +107,14 @@ them.
   the git runner trimming its own output. Reading git's answer exactly removes the compensation and the
   residue with it.
 
+- **The one squash-message exception is one version across three positions.** `AGENTS.md` fixes the branch's
+  role as `release/X.Y.Z` against a subject reading `release: X.Y.Z`. A `release/` **prefix** admitted
+  `release/not-a-version`, and admitted `release/0.4.0` carrying `release: 0.5.0` — a branch whose whole
+  purpose is one version, squashing a message about another. The gate now requires the role and the equality,
+  and each of the three narrower readings this clause has had is recorded beside it: the subject alone
+  admitted any branch, the subject and the destination admitted any source, the destination and a prefix
+  admitted a branch that is not the role.
+
 - **The one squash-message exception names both endpoints, because the contract does.** It is the
   **release-branch-to-`main`** squash. Taking only the destination left it reachable from any branch: a
   `fix/…` pull request onto `main` whose subject read `release: X.Y.Z` claimed a release branch's exception.

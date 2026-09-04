@@ -209,18 +209,28 @@ fn is_a_bare_commit_list(body: &str, commits: &[String]) -> bool {
 /// malformed `release:` subject for the same reason, and the two would disagree about the same line otherwise.
 /// The one message exception, identified by the squash it **is** rather than by what it says.
 ///
-/// `AGENTS.md` states it as the *release-branch-to-`main`* squash. That names **both** endpoints, and taking
-/// only the destination left the exception reachable from any branch: a `fix/…` pull request onto `main`
-/// whose subject reads `release: 0.0.0` claimed a release branch's exception. Naming one endpoint of a
-/// two-endpoint contract is the same defect as naming none — it narrows the door without closing it.
+/// `AGENTS.md` states it as the *release-branch-to-`main`* squash, and fixes the branch's role as
+/// `release/X.Y.Z` against a subject reading `release: X.Y.Z` — **one** version across the three, which is
+/// what makes them an identity rather than three shapes that happen to co-occur.
 ///
-/// A subject is not an identity either, which is what deciding on it alone got wrong first.
+/// Three readings of this clause were each the narrowest thing that answered the finding in front of them,
+/// and each left the next one open: the **subject** alone, admitting any branch; the subject and the
+/// **destination**, admitting any source; the destination and a `release/` **prefix**, admitting
+/// `release/not-a-version` and admitting `release/0.4.0` carrying `release: 0.5.0` — a branch whose whole
+/// purpose is one version, squashing a message about another. What the contract named all along is the
+/// triple with its equality.
 fn is_release_snapshot(subject: &str, base: &str, head: &str) -> bool {
-    base.trim() == "main"
-        && head.trim().starts_with("release/")
-        && subject
-            .strip_prefix("release: ")
-            .is_some_and(|rest| crate::manifest::semver(rest).is_some())
+    let Some(said) = subject.strip_prefix("release: ") else {
+        return false;
+    };
+    let Some(branch) = head.trim().strip_prefix("release/") else {
+        return false;
+    };
+    // The role is `release/X.Y.Z` and the subject is `release: X.Y.Z` — **one** `X.Y.Z`, which is what
+    // makes the triple an identity rather than three shapes that happen to co-occur. A prefix admitted
+    // `release/not-a-version`, and admitted `release/0.4.0` carrying `release: 0.5.0`: a branch whose whole
+    // purpose is one version, squashing a message about another.
+    base.trim() == "main" && branch == said && crate::manifest::semver(said).is_some()
 }
 
 /// Judge a proposed squash message against the pull request it would record.
