@@ -1993,25 +1993,6 @@ consumer for an undemonstrated deduplication.
   this file ships in no crate. *Authority:* this entry, and `AGENTS.md`'s *A repair loop is a diagnosis, not
   a schedule*, which sorts a round's findings and says nothing about the status of a repair a round proposed.
 
-- **WATCH: the release gate's readers are slash-path-oriented, so a platform where cargo reports `\` is
-  refused rather than judged.** *Class:* WATCH. *Observed pressure:* an external review of the `0.5.1` window
-  read `machinery_names` building its prefix as `format!("{root}/")` and stripping it from each
-  `manifest_path` as text, and `member_enumeration` repeating the pattern. Cargo reports native paths, so on
-  Windows no member manifest would sit under the prefix. *Observation source:* that review, and the reading of
-  the else-branch it did not take. *Current reaction or bound:* none declared, and a bound is the wrong
-  carrier — nothing under-reacts here. The unmatched prefix reaches
-  `cannot_judge_at("release-coherence#member-manifest-outside-workspace-root")`, so the gate **refuses
-  loudly**, which is the direction this family prefers and the opposite of the silent skip the review inferred.
-  *Risk:* an operator on a platform this repository does not run gets a refusal naming the workspace root
-  rather than a judgement — a portability limit with a diagnostic, not a wrong verdict. Bounded by the eight
-  CI jobs all being `ubuntu-latest` and by `kanhe` shipping in no package, so no adopter meets it.
-  *Promotion trigger:* this repository's own suite running on a platform where cargo reports a native
-  separator, or a contributor reporting the refusal. *Why not repaired now:* the repair is `Path` component
-  work ending in an explicit slash-joined identity, which is the shape `xingbiao` already owns for the
-  product — so the honest form is to reach for that owner rather than to hand-roll a second normalizer here,
-  and reaching for it is a change with a subject rather than a patch. *Version class:* patch; the gate ships
-  in no package. *Authority:* `release-coherence`.
-
 - **WATCH: the release gate acquires and decides in one unit, and the review found it where isolation was
   needed.** *Class:* WATCH. *Observed pressure:* an external review of the `0.5.1` window filed three findings
   against one shape — `require_internal_pins`, `require_example_pins` and `machinery_names` each run cargo,
@@ -3792,6 +3773,36 @@ that also holds a closed READY-PATCH record.
   two share the argument if not the dependency. *Version class:* patch; `kanhe` is `publish = false` and the reader is a test.
   *Deferred here rather than done* on the same ground as the wrapper extraction: a dependency is not added at
   a release cut, and the reader is currently correct on every shape a fixture can construct.
+
+- ~~**WATCH: the release gate's readers are slash-path-oriented, so a platform where cargo reports `\` is
+  refused rather than judged.**~~ **CLOSED**, see below. *Class:* WATCH. *Observed pressure:* an external review of the `0.5.1` window
+  read `machinery_names` building its prefix as `format!("{root}/")` and stripping it from each
+  `manifest_path` as text, and `member_enumeration` repeating the pattern. Cargo reports native paths, so on
+  Windows no member manifest would sit under the prefix. *Observation source:* that review, and the reading of
+  the else-branch it did not take. *Current reaction or bound:* none declared, and a bound is the wrong
+  carrier — nothing under-reacts here. The unmatched prefix reaches
+  `cannot_judge_at("release-coherence#member-manifest-outside-workspace-root")`, so the gate **refuses
+  loudly**, which is the direction this family prefers and the opposite of the silent skip the review inferred.
+  *Risk:* an operator on a platform this repository does not run gets a refusal naming the workspace root
+  rather than a judgement — a portability limit with a diagnostic, not a wrong verdict. Bounded by the eight
+  CI jobs all being `ubuntu-latest` and by `kanhe` shipping in no package, so no adopter meets it.
+  *Promotion trigger:* this repository's own suite running on a platform where cargo reports a native
+  separator, or a contributor reporting the refusal. *Why not repaired now:* the repair is `Path` component
+  work ending in an explicit slash-joined identity, which is the shape `xingbiao` already owns for the
+  product — so the honest form is to reach for that owner rather than to hand-roll a second normalizer here,
+  and reaching for it is a change with a subject rather than a patch. *Version class:* patch; the gate ships
+  in no package. *Authority:* `release-coherence`.
+
+  **CLOSED** by `fix(kanhe): a member's directory is stripped component-wise, not as text`. Both readers take
+  the member's directory from its manifest path through `Path::strip_prefix`, and the identity is joined back
+  with `/` because git's paths and this repository's prose spell one that way whatever the host does. The
+  entry is kept for two corrections it earned. **Its severity reading was right and its conclusion was
+  wrong**: the unmatched prefix does reach a cannot-judge and does refuse loudly, so nothing was ever
+  mis-judged — and a loud refusal on every member of a workspace is still a gate that cannot run. **And the
+  repair did not need the crate that owns canonical path identity**, which this entry named as its reason to
+  defer: that edge would cross `kanhe`'s allowlist from `src` and need the amendment ritual, while the
+  component comparison is `std` and is what the sibling reader already does. Deferring to an owner is right
+  when the owner is reachable, and naming one that is not is how a repair stays filed longer than it costs.
 
 
 ## Version horizons
