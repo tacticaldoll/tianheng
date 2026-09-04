@@ -350,6 +350,11 @@ title=$(gh pr view "$pr_number" --repo "$repository" --json title --jq .title) |
 base=$(gh pr view "$pr_number" --repo "$repository" --json baseRefName --jq .baseRefName) || cannot_judge \
     "cannot read pull request $pr_number's base branch, so whether this squash is the one message exception \
 cannot be decided"
+# And the branch it comes from. The contract names **both** endpoints — the release-branch-to-`main` squash —
+# and taking only the destination left the exception reachable from any branch onto `main`.
+head_branch=$(gh pr view "$pr_number" --repo "$repository" --json headRefName --jq .headRefName) || cannot_judge \
+    "cannot read pull request $pr_number's head branch, so whether this squash is the one message exception \
+cannot be decided"
 # The head the gate is about to read its evidence from, captured BEFORE the commit set — the order is the guard.
 #
 # What this closes: the gate judges the body against the pull request's commit subjects as they are while it
@@ -608,6 +613,7 @@ gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
     TIANHENG_MERGE_COMMITS=$commits \
     TIANHENG_MERGE_BODY=$body \
     TIANHENG_MERGE_BASE=$base \
+    TIANHENG_MERGE_HEAD=$head_branch \
     cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test merge_message \
     -- --exact the_squash_message_is_the_pull_request_it_records 2>&1) || {
     printf '%s\n' "$gate_output" >&2

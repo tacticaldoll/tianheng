@@ -16,6 +16,7 @@ fn a_violation() -> Refusal {
         "not a conventional subject",
         &["feat(x): one".to_string()],
         "release/0.0.0",
+        "fix/some-repair",
     )
     .expect_err("a subject that is not a Conventional Commit is a violation")
 }

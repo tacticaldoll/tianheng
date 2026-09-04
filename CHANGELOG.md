@@ -58,6 +58,13 @@ them.
   match — an identity normalised to suit a sentence. A Markdown sentence ends in one period, so one is what
   comes off, and only where the name as written matches nothing.
 
+- **The one squash-message exception names both endpoints, because the contract does.** It is the
+  **release-branch-to-`main`** squash. Taking only the destination left it reachable from any branch: a
+  `fix/…` pull request onto `main` whose subject read `release: X.Y.Z` claimed a release branch's exception.
+  Naming one endpoint of a two-endpoint contract narrows the door without closing it. The gate takes the head
+  branch as evidence beside the base, and a head it cannot read stops the wrapper before the gate and the
+  merge.
+
 - **The one squash-message exception is identified by where the squash lands, not only by what it says.**
   `AGENTS.md` states it as the **release-branch-to-`main`** squash; the gate decided it on the subject alone,
   so a message reading `release: X.Y.Z` with an empty body claimed the exception on any base. The law was
