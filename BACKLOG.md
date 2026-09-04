@@ -774,7 +774,7 @@ consumer for an undemonstrated deduplication.
   the next window's figure is derived rather than recalled. *Current reaction or bound:* none, and none is
   proposed — a ratio is not a property a reaction can hold without deciding what counts as product, which is
   a judgement over intent. This entry is the instrument and the record of one reading. *Risk:* the window's
-  own evidence is that each repair produced the next round's finding — *every reaction built in this window
+  own evidence is that each repair produced the next round's finding — *every reaction built in the 0.5.1 window
   had a defect found in the next round, three of three* — so a system that generates work proportional to
   itself will keep spending the budget on itself unless the figure is looked at. **The instrument undercounts, measured 2026-09-03 at the end of the `0.5.1` window, and the
   correction reverses its verdict.** Its classifier calls a change *governance* only when it touches
@@ -798,7 +798,7 @@ consumer for an undemonstrated deduplication.
   ```
 
   *And this correction lands in the 69%*, which is the shape of the problem rather than an aside: every act of
-  pruning governance stock in this window — a reader layer deleted, deferred entries closed or reclassified, a
+  pruning governance stock in the 0.5.1 window — a reader layer deleted, deferred entries closed or reclassified, a
   queue halved — was itself recorded in a governance document, and the recording is counted where the pruning
   is not. What the corrected figure asks for is not a better classifier. It is a window in which something an
   adopter receives moves.
@@ -826,7 +826,7 @@ consumer for an undemonstrated deduplication.
   *Where the reducible weight actually is, measured:* tests are 26,568 of `kanhe`'s 37,229 lines, and beside
   them stand 98 declared bounds and the WATCH queue itself. None of that shrinks by retiring refusal sites.
 
-  *What was done instead.* Retiring rules addresses the **stock**; this window's own reviews recorded a
+  *What was done instead.* Retiring rules addresses the **stock**; the 0.5.1 window's own reviews recorded a
   mechanism producing more — every reaction built had a defect found in the next round, three of three. A bar
   on the **rate** is in `AGENTS.md` beside the carrier taxonomy, which until now answered which binding a
   carrier admits and never whether the claim earns one: a cannot-judge needs no instance, a violation needs a
@@ -1321,7 +1321,7 @@ consumer for an undemonstrated deduplication.
   under this defect, never shrink, so the failure direction is a false positive. *Risk:* a gate refusing a
   crate that cannot in fact reach the constant. Low, and loud. **Re-evaluated 2026-08-31, and one of the two premises above is now false.** The members *do* declare
   non-path dependencies — `serde_json` in seven of the eight, `syn` in 渾儀, and `toml_edit` in 勘合 since
-  this window's self-law amendment — so *the eight declare no registry dependency at all* no longer holds,
+  the 0.5.1 window's self-law amendment — so *the eight declare no registry dependency at all* no longer holds,
   and the allowlist it cites has grown with it. What keeps the spurious-edge input absent is not their
   absence but that **no such name matches any member's directory basename**, which is the property the
   trigger actually turns on and the one this entry should have rested on. The other premise still holds: the
@@ -1612,7 +1612,7 @@ consumer for an undemonstrated deduplication.
   proposal is present there is no independent declaration to compare against — reading the set from the
   touched spec paths is near-tautological, since touching a spec is naming its capability. *Promotion
   trigger:* a requirement found filed under the wrong capability. **Not fired** (evaluated 2026-08-31; the filing join
-  passes, and the scenarios this window rewrote stayed under the capabilities that already held them).
+  passes, and the scenarios the 0.5.1 window rewrote stayed under the capabilities that already held them).
   *Version class:* patch; repository-internal, shipping in no crate. *Authority:* `capability-subjects`, and
   `PROJECT.md`'s adoption-mode decision.
 
@@ -1769,7 +1769,7 @@ consumer for an undemonstrated deduplication.
   *Promotion trigger:* an entry of this shape carrying a claim an adopter could **act on** — a version, a
   migration step, a behaviour change — rather than a description of internals. That is a property of one
   entry and decidable by reading it, unlike a threshold on a population nothing counts. **Not fired** (evaluated
-  2026-08-31; no entry written this window carries a claim an adopter could act on): every
+  2026-08-31; no entry written the 0.5.1 window carries a claim an adopter could act on): every
   instance found so far describes this repository's own machinery and asks nothing of a reader. *Version class:* patch; a
   document and a `scripts/` reaction of this repository. *Authority:* `release-coherence`. *Shape:* closing it
   needs a judgement over the entry's **subject** rather than its references, which is the prose detector
@@ -1927,7 +1927,7 @@ consumer for an undemonstrated deduplication.
   triggers being read by a person against the tree — which is how all four were found, and also why three
   windows passed before they were. *Promotion trigger:* a fifth instance, or a trigger found to have fired
   unnoticed for a whole window. *Why not a rule that triggers name their corpus:* it would be a rule about
-  how prose is written with no reaction behind it, and the bar this window set is that a rule needs a
+  how prose is written with no reaction behind it, and the bar the 0.5.1 window set is that a rule needs a
   reachable instance — this has four, so the rule is earned, but its instrument is not, and the honest form
   is prose with the reason stated. *Version class:* patch; this file ships in no crate. *Authority:* this
   entry, and `AGENTS.md`'s *Bind a claim to its measurement*, whose three bindings this is the trigger-shaped
@@ -2185,9 +2185,26 @@ consumer for an undemonstrated deduplication.
   `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound`; the two
   unanchored phrases are anchored to `0.5.0`. *Risk:* a phrase written here goes stale when its window
   closes and nothing says so, which is what the rule exists to prevent — bounded by this file being read by
-  a person against the tree rather than executed. *Next trigger:* a way to tell a pointer from a span that
+  a person against the tree rather than executed. **The class recurred ten times in the 0.5.1 window, and the count is what changes the argument.** The
+  `0.5.0` window closed the unanchored pointers to zero; re-measured at the end of `0.5.1`, `BACKLOG.md`
+  carried ten and `AGENTS.md` one, every one of them written by the hand that had just repaired the class
+  elsewhere. Nothing observed it, which is this bound, working as declared.
+
+  *And the disposition of all thirteen occurrences is sharper than the earlier sweep suggested.* That sweep
+  reported that most of what a widened reaction would see is not an offence. Counted this time: one is
+  `AGENTS.md`'s own row **declaring** the phrases, two sit in the closed reproduction records this file
+  already treats as a record corpus — one of those anchored by naming its release in the same clause — and
+  **ten were offences**. The exemptions are positional, not semantic: a table row and a declared section,
+  both of which a corpus rule can name without reading a sentence.
+
+  *Next trigger:* a way to tell a pointer from a span that
   does not read the sentence — a declared syntax for anchoring, say, so the reaction judges a form rather
-  than a meaning. *Authority:* engine. *Compatibility:* patch; the reaction is repository machinery and
+  than a meaning. **What the count above opens instead is the corpus.** The Rust-side reaction already
+  refuses these four phrases and its repair is deterministic — name the release — which is the property
+  `AGENTS.md` now requires of a check over authored text: a refusal whose repair the author can apply without
+  judging meaning. So the phrase is not the undecidable half; the corpus is, and the corpus is a list of
+  paths. Widening it to non-record Markdown, minus the declaring row and the record sections, is a decision
+  rather than a discovery, and it is put here with its measurement rather than taken. *Authority:* engine. *Compatibility:* patch; the reaction is repository machinery and
   ships in no package.
 
   **Witness-only, sorted 2026-09-01.** No sweep decides this: the trigger is a *declared syntax for
@@ -2302,7 +2319,7 @@ consumer for an undemonstrated deduplication.
   *Risk:* a check lands in the wrong member and the two identities blur again, which is the failure the
   split was built to end. *Next trigger:* a third member, or a check whose placement two readers disagree
   about. **Not fired** (evaluated 2026-08-31; `publish = false` still names exactly 勘合 and 繩墨, and no
-  check's placement was disputed this window). *Authority:* engine. *Compatibility:* none — neither member ships.
+  check's placement was disputed the 0.5.1 window). *Authority:* engine. *Compatibility:* none — neither member ships.
   - **A `#[path]`-shared test module's `allow(dead_code)` cannot distinguish "used by no binary" from "used by
     some".** *Observed pressure:* `crates/tianheng/tests/support/` is compiled fresh into each `*_conformance.rs`
     binary, so an item only some callers use is genuinely dead in the others — which is why the blanket
