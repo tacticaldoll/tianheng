@@ -239,7 +239,7 @@ const ESCAPED_J: &str = "\\u006A";
 /// The ordinary sibling stays: without it the vacuity floor would refuse for its own reason, which is not
 /// this one.
 #[test]
-fn an_escaped_path_is_refused_and_an_ordinary_sibling_does_not_cover_for_it() {
+fn an_escaped_path_is_decoded_and_compared_and_an_ordinary_sibling_does_not_cover_for_it() {
     // **The escape decodes, so where it sits decides which check answers.** Before the parser both rows were
     // one refusal — *this reader cannot decode the path* — and the difference between them was invisible.
     for (path, site) in [

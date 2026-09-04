@@ -784,30 +784,31 @@ its own. A slug shared between two sites excuses whichever one was looked at.
 - **WHEN** iterating an enumerated directory fails part-way
 - **THEN** the judgement refuses rather than continuing over the entries it did receive
 
-#### Scenario: A value cargo decodes and this reader does not
+#### Scenario: A value cargo decodes
 
-The scenarios above reach a **file** that cannot be read. This reaches a **value**, which is where the
-requirement was not being met: a quoted value carrying a TOML escape was answered as one this reader could
-read, and the undecoded source then decided a comparison.
+The scenarios above reach a **file** that cannot be read. This reaches a **value**, and a value carrying an
+escape is one cargo reads — so this reader reads it the same way rather than answering about the source it
+was written in.
 
 - **WHEN** a `path`, a `package` or a `version` is written as a TOML basic string carrying an escape — legal
   TOML, which cargo decodes — and an ordinary sibling entry keeps the vacuity counters non-zero
-- **THEN** the judgement refuses as a cannot-judge, rather than comparing the undecoded source, failing to
-  match a `crates/` prefix or a family crate, and passing the entry over with its stale pin unchecked
-- **AND** refusing is a choice between two answers this reader can now give, not the only one it has. A table
-  **heading** carrying the same escape is decoded, because `manifest::decoded` exists — the reason first
-  written for refusing values was *no decoder, and hand-rolling a TOML grammar is a filed backlog entry*, and
-  half of that expired the moment a heading needed one. What separates them: a key decides *which table or
-  which key this is*, so misreading one drops a whole table's contents with nothing said, while a value is the
-  thing being judged and refusing it stops the judgement in front of an operator with nothing skipped
-- **PINNED-BY** `an_escaped_path_is_refused_and_an_ordinary_sibling_does_not_cover_for_it`
+- **THEN** the value is **decoded and judged as the value cargo resolves**, so where it sits decides which
+  answer it earns: a path that decodes to somewhere other than the member's own directory is a violation
+  naming where the member actually is, and one that decodes to that directory leaves its stale pin as the
+  thing left to refuse
+- **AND** refusing the value is no longer one of the answers. It was, for as long as the reader had no
+  decoder — the reason written then was *no decoder, and hand-rolling a TOML grammar is a filed backlog
+  entry*, and a parser is what ended both halves. Refusing a value the tooling reads would report a fact
+  about this reader as a fact about the manifest
+- **PINNED-BY** `an_escaped_path_is_decoded_and_compared_and_an_ordinary_sibling_does_not_cover_for_it`
 
 #### Scenario: An escaped renamed package
 
 - **WHEN** a renamed dependency's `package` carries an escape, beside an ordinary family dependency **in the
   same example manifest** — which is the configuration the guards cannot see, because `requirements_here` is
   counted per example and an escaped entry alone in its own example leaves that counter at zero
-- **THEN** the judgement refuses, rather than reading the entry as naming no family crate at all
+- **THEN** the escape is decoded, so the entry **names its crate** and its pin is judged like any other —
+  rather than being read as naming no family crate at all, which is what comparing the undecoded source did
 - **PINNED-BY** `an_escaped_renamed_package_names_its_crate_and_its_pin_is_judged`
 
 ### Requirement: A release section is dated on the day its release commit was made

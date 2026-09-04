@@ -2520,7 +2520,7 @@ third scenario's, one layer up.
   true of a hand-rolled reader and is the reason there is no longer one. A path written `cr\u0078tes/xuanji`
   is now compared as `crxtes/xuanji`, and a `package` written `xuan\u006ai` is matched against the family as
   `xuanji`
-- **PINNED-BY** `an_escaped_path_is_refused_and_an_ordinary_sibling_does_not_cover_for_it`
+- **PINNED-BY** `an_escaped_path_is_decoded_and_compared_and_an_ordinary_sibling_does_not_cover_for_it`
 - **PINNED-BY** `an_escaped_renamed_package_names_its_crate_and_its_pin_is_judged`
 
 #### Scenario: The interpreter support window reads its declaration through it

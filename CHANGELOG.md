@@ -58,6 +58,13 @@ them.
   match — an identity normalised to suit a sentence. A Markdown sentence ends in one period, so one is what
   comes off, and only where the name as written matches nothing.
 
+- **Two specifications disagreed about a TOML escape, and the implementation followed the other one.**
+  `repository-checks` says the value reads as cargo reads it; `release-coherence` still required a
+  cannot-judge, with an `AND` clause arguing why refusing was the better of two answers. The parser decodes,
+  so the second was false — and **both of its scenarios were cited by tests whose names say the opposite**,
+  one of which also disagreed with its own first doc line. The scenarios state what happens, and the test is
+  renamed to what it asserts.
+
 - **Three unreadable-value states said *not in double quotes*, and one also said *declared twice*.** The
   parser reads a literal string as cargo does, and a key declared twice is a document it refuses whole — so
   both shapes name conditions that no longer reach those states, in the type documentation a maintainer reads
