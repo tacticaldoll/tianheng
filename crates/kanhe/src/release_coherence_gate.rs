@@ -77,7 +77,7 @@ const DEPENDENCY_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-
 /// [`crate::selection::the_only`] is deliberately not used here, for the reason `manifest.rs` records for its
 /// own reader: it reports none and several as one refusal, and here they are different facts — an absent pin
 /// is the legal `{ path = "…" }` form, and two are a table this reader may not choose from.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Declared {
     /// The value as written.
     Value(String),
@@ -118,7 +118,10 @@ pub(crate) enum Declared {
 enum Package {
     /// The crate this dependency names: its `package` value, or its own key where it declares none.
     Named(String),
-    /// A `package` value this reader cannot read — a value not in double quotes.
+    /// A `package` value this reader cannot read — a value that is **not a string at all**.
+    ///
+    /// Not *not in double quotes*, and not *declared twice*: a literal string is read, and a key declared
+    /// twice is a document the parser refuses whole, which never reaches this reader.
     Unreadable,
 }
 
@@ -281,12 +284,7 @@ pub(crate) fn declared_dependencies(
 /// when a local `version` sits in the same inline table -- so the catalog is *the* answer rather than one of
 /// two. Cargo also refuses a manifest that inherits what its catalog does not declare, which is why
 /// [`Offered::Missing`] is a refusal rather than a fallback.
-fn offered(text: &str, wanted: &str) -> Offered {
-    // A catalog the parser refuses names nothing this reader can resolve. `Missing` is already the answer for
-    // *no catalog entry names it*, and its own doc says the shape is a manifest cargo refuses to parse.
-    let Ok(catalog) = declared_dependencies(text, Subject::Offers) else {
-        return Offered::Missing;
-    };
+fn offered(catalog: &[Dependency], wanted: &str) -> Offered {
     for Dependency {
         key,
         package,
@@ -295,12 +293,12 @@ fn offered(text: &str, wanted: &str) -> Offered {
     } in catalog
     {
         match package {
-            Package::Named(named) if named == wanted => return Offered::Pin(pin),
+            Package::Named(named) if named == wanted => return Offered::Pin(pin.clone()),
             Package::Named(_) => {}
             // An entry whose identity cannot be read might be the one being inherited. *Might be* is not an
             // answer, and skipping it is how a stale pin would reach a release through the catalog.
             Package::Unreadable => {
-                return Offered::Unresolvable(key);
+                return Offered::Unresolvable(key.clone());
             }
         }
     }
@@ -313,7 +311,12 @@ enum Offered {
     /// The catalog declares it, with this requirement -- which may itself be absent, unreadable or several,
     /// and is then answered by the same arms a locally declared one is.
     Pin(Declared),
-    /// No catalog entry names it. A manifest cargo refuses to parse.
+    /// No catalog entry names it.
+    ///
+    /// One fact, since this reader is handed a catalog that is already parsed: a manifest the parser refuses
+    /// never reaches here, because the caller met that refusal before it had a catalog to search. The state
+    /// carried both for as long as the search did its own parsing, and *no entry names it* and *the document
+    /// is not a manifest* are different things to tell an operator.
     Missing,
     /// The catalog carries an entry whose identity this reader cannot resolve, quoted by its key.
     Unresolvable(String),
@@ -348,7 +351,10 @@ pub enum PackageName {
     Named(String),
     /// No `[package]` table, or no `name` key inside it.
     Absent,
-    /// A `name` this reader cannot read: a value not in double quotes, or more than one key in `[package]`.
+    /// A `name` this reader cannot read: a value that is **not a string at all**.
+    ///
+    /// Neither of the two shapes this once also carried reaches it. A literal string is read, and a `name`
+    /// declared twice is a document the parser refuses whole rather than a key with two answers.
     Unreadable(String),
 }
 
@@ -1440,6 +1446,11 @@ pub(crate) fn require_example_pins(
             .expect("a `read_dir` entry always has a file name")
             .to_string_lossy()
             .into_owned();
+        // The catalog this example's inherited pins resolve against, read **once** for the whole manifest.
+        // Resolving inside the loop parsed the same document per inherited dependency, and gave the search a
+        // parse failure to answer — a fact its `Missing` state then carried alongside *no entry names it*.
+        // Parsed here, the refusal belongs to the caller that met it and the search answers one question.
+        let catalog = declared_dependencies(&text, Subject::Offers)?;
         // Executed text, for the reason `require_internal_pins` records: a commented-out family pin
         // would otherwise be read as a declared one.
         for Dependency {
@@ -1467,7 +1478,7 @@ pub(crate) fn require_example_pins(
             // whose pin is held exactly was refused for having none. Cargo holds it to the catalog's
             // requirement, measured; the catalog is read here and its pin is judged as if written inline.
             let pin = match pin {
-                Declared::Inherited => match offered(&text, &package) {
+                Declared::Inherited => match offered(&catalog, &package) {
                     Offered::Pin(offered) => offered,
                     Offered::Missing => {
                         return Err(cannot_judge_at(

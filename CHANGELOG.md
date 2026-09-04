@@ -58,6 +58,18 @@ them.
   match — an identity normalised to suit a sentence. A Markdown sentence ends in one period, so one is what
   comes off, and only where the name as written matches nothing.
 
+- **Three unreadable-value states said *not in double quotes*, and one also said *declared twice*.** The
+  parser reads a literal string as cargo does, and a key declared twice is a document it refuses whole — so
+  both shapes name conditions that no longer reach those states, in the type documentation a maintainer reads
+  before the specification. Each now says *not a string at all*, and says what it is **not**, so the old
+  reading cannot be re-derived from the new sentence.
+
+- **A catalog search is handed a parsed catalog, so its *nothing names it* state carries one fact.** It
+  parsed the manifest itself, once per inherited dependency, and mapped the parse failure onto the state
+  meaning *no entry names it* — two facts under one name, and different things to tell an operator. The
+  catalog is parsed once for the manifest now, the refusal belongs to the caller that meets it, and the
+  repeated parse goes with it.
+
 - **A changelog git cannot answer for is no longer read as a modified worktree.** One `is_ok_and` collapsed
   three causes into *not a snapshot*: the path missing from `HEAD`, which is the only one that means it; git
   failing to start; and git answering in bytes no `String` holds. The third came into existence when the
