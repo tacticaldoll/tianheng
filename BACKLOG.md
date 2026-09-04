@@ -1987,6 +1987,44 @@ consumer for an undemonstrated deduplication.
   this file ships in no crate. *Authority:* this entry, and `AGENTS.md`'s *A repair loop is a diagnosis, not
   a schedule*, which sorts a round's findings and says nothing about the status of a repair a round proposed.
 
+- **WATCH: the release gate's readers are slash-path-oriented, so a platform where cargo reports `\` is
+  refused rather than judged.** *Class:* WATCH. *Observed pressure:* an external review of the `0.5.1` window
+  read `machinery_names` building its prefix as `format!("{root}/")` and stripping it from each
+  `manifest_path` as text, and `member_enumeration` repeating the pattern. Cargo reports native paths, so on
+  Windows no member manifest would sit under the prefix. *Observation source:* that review, and the reading of
+  the else-branch it did not take. *Current reaction or bound:* none declared, and a bound is the wrong
+  carrier — nothing under-reacts here. The unmatched prefix reaches
+  `cannot_judge_at("release-coherence#member-manifest-outside-workspace-root")`, so the gate **refuses
+  loudly**, which is the direction this family prefers and the opposite of the silent skip the review inferred.
+  *Risk:* an operator on a platform this repository does not run gets a refusal naming the workspace root
+  rather than a judgement — a portability limit with a diagnostic, not a wrong verdict. Bounded by the eight
+  CI jobs all being `ubuntu-latest` and by `kanhe` shipping in no package, so no adopter meets it.
+  *Promotion trigger:* this repository's own suite running on a platform where cargo reports a native
+  separator, or a contributor reporting the refusal. *Why not repaired now:* the repair is `Path` component
+  work ending in an explicit slash-joined identity, which is the shape `xingbiao` already owns for the
+  product — so the honest form is to reach for that owner rather than to hand-roll a second normalizer here,
+  and reaching for it is a change with a subject rather than a patch. *Version class:* patch; the gate ships
+  in no package. *Authority:* `release-coherence`.
+
+- **WATCH: the release gate acquires and decides in one unit, and the review found it where isolation was
+  needed.** *Class:* WATCH. *Observed pressure:* an external review of the `0.5.1` window filed three findings
+  against one shape — `require_internal_pins`, `require_example_pins` and `machinery_names` each run cargo,
+  read the filesystem, enumerate through git, parse TOML, and then decide policy inside the same function;
+  and one manifest is parsed several times over, once for the package name and again for the version
+  surfaces, once per side of the internal-pin comparison, and again per inherited dependency. *Observation
+  source:* that review, and the two repairs made in the same round that the mixing made harder than they
+  should have been — a path-separator assumption and a lossy byte decode, both of which had to be reasoned
+  about through the acquisition rather than exercised against a pure derivation. *Current reaction or bound:*
+  none; the gate's directions reach it end to end, which is what makes each of them expensive and none of them
+  a unit. *Risk:* a policy nobody can exercise without a repository, a cargo and a git — so every question
+  about normalization, encoding or ordering is answered by reading rather than by running, which is the state
+  the two findings above came out of. *Promotion trigger:* a third finding whose isolation the mixing blocks,
+  or a change to any of the three functions that needs a new fixture to ask a question about a pure
+  derivation. *Shape:* acquire once into a typed manifest context and derive from it — the same split the
+  observer protocol already draws between reading the workspace and judging it, applied one level down. What
+  it is **not** is a decomposition by size: splitting a long function that still acquires and decides moves
+  the mixing rather than ending it. *Version class:* patch; repository-internal. *Authority:* this entry.
+
 - **WATCH: a gate that is its own test is outside the refusal register.** *Observed pressure:* several
   gates are implemented under `crates/kanhe/tests`, where the judgement and the directions over it share a
   file; their refusals carry no site identity, because *which direction observes this branch* has no answer
