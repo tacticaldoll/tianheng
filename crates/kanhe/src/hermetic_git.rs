@@ -184,6 +184,36 @@ const REPOSITORY_SELECTORS: [&str; 3] = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_
 /// `release_coherence_gate`, `&["-c", "core.excludesFile=/dev/null"]` for `publish_source_gate`, which stated
 /// per command what [`hermetic`] now states for every caller. The flag is kept there rather than dropped: it
 /// is the narrower statement, it costs nothing, and the measurement that earned it is recorded beside it.
+/// [`run`] without the trailing-whitespace trim, for a caller comparing **content** rather than reading a
+/// value.
+///
+/// Most callers read one line — a sha, a ref, a status — and the trim is what makes those comparable. A
+/// caller comparing a committed file against a working one needs the bytes git gave: trimming both sides
+/// makes a worktree edited only in its trailing whitespace read as unmodified, which is a different tree
+/// reported as the same one.
+pub fn run_exact(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure> {
+    let out = hermetic("git")
+        .args(flags)
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .map_err(|err| Failure::Spawn(format!("cannot run git {args:?}: {err}")))?;
+    if out.status.success() {
+        String::from_utf8(out.stdout).map_err(|err| {
+            Failure::Unreadable(format!(
+                "git {args:?} answered bytes this reader cannot represent as text — {err}"
+            ))
+        })
+    } else {
+        Err(Failure::Exit {
+            code: out.status.code(),
+            stderr: String::from_utf8_lossy(&out.stderr).trim_end().to_string(),
+        })
+    }
+}
+
+/// [`run_exact`] with git's trailing whitespace trimmed off, which is what a caller reading a **value**
+/// wants: a sha, a ref name, a status line.
 pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure> {
     let out = hermetic("git")
         .args(flags)

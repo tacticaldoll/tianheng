@@ -2980,6 +2980,81 @@ fn a_case_alias_of_a_member_directory_is_a_stated_bound() {
     );
 }
 
+/// What `CHANGELOG.md` holds at HEAD, when git cannot answer it, is not *the worktree is modified*.
+///
+/// One `is_ok_and` collapsed three causes into `false`: the path is not in HEAD — which no release commit is,
+/// and the only one that means *not a snapshot* — git failing to start, and git answering in bytes no
+/// `String` holds. The third only came into existence when the runner learned to refuse those bytes rather
+/// than replace them, so a predicate that was narrow when it was written silently widened underneath it.
+///
+/// The fixture commits a changelog that is not UTF-8 and leaves a readable one in the worktree, so the file
+/// the gate reads is fine and the blob behind it is not.
+///
+/// Negative run: with the three causes collapsed again, this answers a state instead of refusing.
+#[test]
+#[cfg(unix)]
+fn a_changelog_git_cannot_read_at_head_is_not_a_modified_worktree() {
+    use std::io::Write;
+
+    let root = scratch("changelog-head-bytes");
+    let fixture = build_fixture(&root, "changelog-head-bytes", "0.2.0");
+    let path = fixture.repo.join("CHANGELOG.md");
+
+    let mut invalid = std::fs::File::create(&path).expect("write the committed changelog");
+    invalid
+        .write_all(b"# Changelog\n\n\xff\n")
+        .expect("bytes that are not UTF-8");
+    drop(invalid);
+    commit(&fixture.repo, "chore: commit a changelog that is not text");
+
+    // The worktree's copy is readable, so the gate's own read of the file succeeds and only the blob behind
+    // it cannot be represented.
+    release_changelog(&fixture.repo, "0.2.0", "0.1.0");
+
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    refusal::expect(
+        "release-coherence#changelog-in-head-unreadable",
+        &verdict.expect_err("git could not answer, so the comparison was never made"),
+    );
+}
+
+/// A checkout edited only in its trailing whitespace is edited.
+///
+/// The comparison trimmed both sides, so a worktree differing from the release commit by a newline alone
+/// read as **unmodified** and the gate answered *snapshot* over a tree that is not the one released. The trim
+/// was not a judgement about content: it compensated for the git runner trimming its own output, which made
+/// the committed text arrive without the final newline the file on disk keeps. Reading git's answer exactly
+/// removes the compensation and the residue with it.
+///
+/// Negative run: with both sides trimmed again, this reports `snapshot: 0.2.0` — a release state claimed for
+/// a modified tree.
+#[test]
+fn a_checkout_edited_only_in_trailing_whitespace_is_not_a_snapshot() {
+    let root = scratch("snapshot-whitespace");
+    let fixture = build_fixture(&root, "snapshot-whitespace", "0.2.0");
+    release_changelog(&fixture.repo, "0.2.0", "0.1.0");
+    std::fs::write(fixture.repo.join("NOTES.md"), "prepared\n").expect("write");
+    commit(&fixture.repo, "release: 0.2.0");
+
+    let path = fixture.repo.join("CHANGELOG.md");
+    let released = std::fs::read_to_string(&path).expect("read the committed changelog");
+    std::fs::write(&path, format!("{released}\n"))
+        .expect("write one more newline and nothing else");
+
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+
+    // **A development-only rule firing is what proves the state moved.** The tree carries no `[Unreleased]`
+    // narrative, which a snapshot does not owe and development does — so this refusal cannot be reached from
+    // the snapshot branch at all, and reaching it says the whitespace edit was seen.
+    let refusal =
+        verdict.expect_err("the tree is development now, and development owes a narrative");
+    crate::refusal::expect(
+        "release-coherence#unreleased-has-no-adopter-narrative",
+        &refusal,
+    );
+}
 /// Editing at a release snapshot is development, not a snapshot with a dirty tree.
 ///
 /// **The state was read from the commit while everything else read the worktree.** `release_spine` decided
