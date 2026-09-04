@@ -458,3 +458,51 @@ fn the_builder_writes_the_config_count_and_takes_index_zero() {
         "naming the setting without neutralising it would leave the XDG default in force"
     );
 }
+
+/// git answering in bytes no `String` holds is refused, never replaced.
+///
+/// **Measured rather than reasoned about.** A tracked path that is not UTF-8 is legal on Unix, and
+/// `ls-files -z` promises only that git will not quote it — the bytes are the repository's. Decoding them
+/// lossily replaced each undecodable byte with U+FFFD, so this reader compared a path the repository does not
+/// hold, silently. `xingbiao::path_identity` exists for the opposite property, and a reader here that
+/// collapses two such paths into one contradicts the product's own rule.
+///
+/// The fixture builds exactly that: a filename of one invalid byte, added to a real repository, then read
+/// back. What the runner owes is a refusal naming the fact, not a value.
+///
+/// Negative run: with the decode restored to `from_utf8_lossy`, this returns `Ok` carrying U+FFFD — a
+/// verdict reached over a path that is not the one on disk.
+#[test]
+#[cfg(unix)]
+fn git_output_that_is_not_utf8_is_refused_rather_than_replaced() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let root = std::env::temp_dir().join(format!("kanhe-git-bytes-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("create the fixture root");
+    for args in [
+        &["init", "-q", "."][..],
+        &["config", "user.email", "fixture@example.invalid"][..],
+        &["config", "user.name", "fixture"][..],
+    ] {
+        crate::hermetic_git::run(&root, &[], args).expect("the fixture repository is built");
+    }
+
+    // One byte that is not valid UTF-8, as a whole filename.
+    let name = std::ffi::OsStr::from_bytes(&[0xFF]);
+    std::fs::write(root.join(name), b"x").expect("a path may be bytes on unix");
+    crate::hermetic_git::run(&root, &[], &["add", "-A"]).expect("git stages what is there");
+
+    let read = crate::hermetic_git::run(&root, &[], &["ls-files", "-z"]);
+    let _ = std::fs::remove_dir_all(&root);
+
+    match read {
+        Err(crate::hermetic_git::Failure::Unreadable(why)) => assert!(
+            why.contains("cannot represent"),
+            "the refusal must name what it could not do, got {why:?}"
+        ),
+        other => panic!(
+            "git answered bytes no `String` holds; a replaced path is not the repository's: {other:?}"
+        ),
+    }
+}

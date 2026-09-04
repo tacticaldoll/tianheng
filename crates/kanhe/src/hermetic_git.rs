@@ -192,7 +192,25 @@ pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure
         .output()
         .map_err(|err| Failure::Spawn(format!("cannot run git {args:?}: {err}")))?;
     if out.status.success() {
-        Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
+        // **Refused, never mangled.** `from_utf8_lossy` replaces each undecodable byte with U+FFFD, and what
+        // this runner mostly carries is **paths**: `ls-files -z` avoids git's own quoting and promises
+        // nothing about encoding, so a tracked path that is not UTF-8 arrived here as a different path than
+        // the one on disk, and every comparison downstream was made against that. `xingbiao::path_identity`
+        // exists for the opposite property — two paths differing only in undecodable bytes keep two
+        // identities — so a reader in this repository that silently collapses them contradicts the product's
+        // own rule. A verdict is not owed on an input this reader cannot represent; saying so is.
+        //
+        // stderr below stays lossy, deliberately: it is a sentence for an operator, not a value anything
+        // compares.
+        String::from_utf8(out.stdout)
+            .map(|text| text.trim_end().to_string())
+            .map_err(|err| {
+                Failure::Unreadable(format!(
+                    "git {args:?} answered bytes this reader cannot represent as text — {err}; a path that \
+                     is not UTF-8 keeps its own identity, and reporting a replaced one would compare \
+                     something the repository does not hold"
+                ))
+            })
     } else {
         Err(Failure::Exit {
             code: out.status.code(),
@@ -297,6 +315,12 @@ pub fn commit(repo: &Path, subject: &str) {
 /// unchanged by the split; a caller that wants to tell the two apart now can.
 #[derive(Debug)]
 pub enum Failure {
+    /// git ran, succeeded, and answered bytes this reader cannot represent as text.
+    ///
+    /// Separate from [`Failure::Exit`] because git did not fail: the command answered, and the answer is one
+    /// no `String` holds without changing it. Folding the two would report a working repository as a broken
+    /// command, and folding this into success would compare a path against a replaced copy of itself.
+    Unreadable(String),
     /// The process could not be started: git is absent, or `repo` is not a directory this process can enter.
     Spawn(String),
     /// git ran and exited non-zero. Carries its status and its stderr.
@@ -320,7 +344,7 @@ pub enum Failure {
 impl std::fmt::Display for Failure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Failure::Spawn(why) => write!(f, "{why}"),
+            Failure::Spawn(why) | Failure::Unreadable(why) => write!(f, "{why}"),
             Failure::Exit { stderr, .. } => write!(f, "{stderr}"),
         }
     }
