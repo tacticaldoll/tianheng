@@ -117,6 +117,39 @@ them.
 
 ### Semantic and runtime
 
+- **BREAKING** — **A raw-identifier spelling of a path remap is the same remap, and 渾儀 alone read it as a
+  different one.** `r#` changes an identifier's lexical spelling and not the name it spells, so `r#path`
+  names the built-in `path` attribute and `r#cfg_attr` names `cfg_attr`. Measured under rustc 1.96.0,
+  edition 2021, `--crate-type lib`: `#[cfg_attr(unix, r#path = "imp_unix.rs")] pub mod plat;` compiles with
+  only `imp_unix.rs` on disk, the nested `#[cfg_attr(unix, r#cfg_attr(target_os = "linux", path =
+  "imp_linux.rs"))]` compiles with only `imp_linux.rs`, and with a conventional `plat.rs` present **as well**
+  it is the remapped file rustc compiles.
+
+  圭表 and 漏刻 each say this in their own byte scanners, in nearly the same words — *a raw identifier is ONE
+  segment*. 渾儀 reads its attribute names through `syn`, whose `Path::is_ident` compares the ident as
+  written: proc-macro2's `PartialEq<str>` requires the compared string to carry `r#` when the ident is raw,
+  so `r#path` was not `path` to it. The crate already had `strip_raw` and already applied it to module
+  identifiers; it was never applied to attribute names.
+
+  **Two outcomes, and only one of them was loud.** With no conventional file, 渾儀 exited `2` on source
+  rustc compiles cleanly. With a conventional file present beside the remap, it governed *that* file — one
+  the build does not contain — reported **clean**, and left the file the build does contain unobserved. A
+  false negative produced by a spelling of the governed code, which is what *no spelling, alias, re-export,
+  `cfg` arm, or macro form escapes observation* forbids.
+
+  `module-boundary` gains both scenarios, each pinned, each with its declared mutation.
+  `cfg_attr_path_only_module_conformance` gains three directions: the two spellings, and the conventional
+  file standing beside the remap.
+
+  **Why breaking:** an adopter whose source spells a remap with `r#` has a 渾儀 baseline that no longer
+  describes their tree — the reaction is additive, the baseline is not, and regenerating it is work they did
+  not choose.
+
+  **What is deliberately not changed:** `r#cfg` in a bare `#[cfg]` position. All three dimensions miss that
+  spelling equally today, and closing it in one alone would create the divergence this change removes. The
+  direction is also the safe one — a missed bare `#[cfg]` withholds the absent-file tolerance, so it refuses
+  where it might have passed.
+
 - **A path-QUALIFIED look-alike reopened the same hole, twice.** Group kind was decided by the last
   identifier before a `(`, and `foo::cfg_attr(a, path = "bogus")` ends in that word while being somebody
   else's attribute — so applied-meta scanning resumed inside it and the false coverage came back through a

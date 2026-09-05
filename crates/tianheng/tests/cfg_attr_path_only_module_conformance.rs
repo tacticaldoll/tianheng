@@ -363,3 +363,114 @@ fn all_three_dimensions_agree_a_conditional_remap_on_an_inline_mod_relocates_its
         "漏刻: the undeclared-seam probe beneath a conditional inline-mod base must react"
     );
 }
+
+/// A **raw-identifier** spelling of the remap is the same remap to all three dimensions.
+///
+/// `r#` changes an identifier's lexical spelling and not the name it spells, so `r#path` names the built-in
+/// `path` attribute and `r#cfg_attr` names `cfg_attr`. Measured against rustc 1.96.0, edition 2021,
+/// `--crate-type lib`: `#[cfg_attr(unix, r#path = "imp_unix.rs")] pub mod plat;` compiles with only
+/// `imp_unix.rs` on disk, and the nested `#[cfg_attr(unix, r#cfg_attr(target_os = "linux", path =
+/// "imp_linux.rs"))]` compiles with only `imp_linux.rs`.
+///
+/// 圭表 and 漏刻 each say so in their own byte scanners, in nearly the same words — *a raw identifier is ONE
+/// segment*. 渾儀 reads its attribute names through `syn`, whose `Path::is_ident` compares the ident as
+/// written: proc-macro2's `PartialEq<str>` requires the compared string to carry `r#` when the ident is raw,
+/// so `r#path` was not `path` to it and the remap was invisible. The crate had `strip_raw` already and
+/// applied it to module identifiers, not to attribute names.
+#[test]
+fn all_three_dimensions_read_a_raw_identifier_spelling_of_a_cfg_attr_path() {
+    let package = "cfg-attr-path-only-raw-ident";
+    let lib = format!(
+        "{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}#[cfg_attr(unix, r#path = \"imp_unix.rs\")]\npub mod imp;\n"
+    );
+    let fixture = fixture(package, &lib, &[("imp_unix.rs", IMP_VIOLATIONS)]);
+
+    assert_eq!(
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "圭表: `r#path` names the built-in `path`, so the remapped module's forbidden `use` must react"
+    );
+    assert_eq!(
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "渾儀: `r#path` names the built-in `path`, so the remapped module's forbidden exposure must react"
+    );
+    assert_eq!(
+        louke_exit(fixture.lib(), SEAM, REASON),
+        1,
+        "漏刻: `r#path` names the built-in `path`, so the remapped module's undeclared seam must react"
+    );
+}
+
+/// The same, one nesting level in: a raw-identifier `cfg_attr` **wrapping** the remap.
+///
+/// The outer attribute is spelled plainly, so this is the applied-meta position all three readers descend
+/// into — and the segment they have to recognise there is `r#cfg_attr`. 圭表's own scanner records having
+/// been measured on exactly this spelling while closing a qualified look-alike; this asserts the three
+/// agree about it rather than each recording it alone.
+#[test]
+fn all_three_dimensions_read_a_raw_identifier_cfg_attr_wrapping_a_path() {
+    let package = "cfg-attr-path-only-raw-nested";
+    let lib = format!(
+        "{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}\
+         #[cfg_attr(unix, r#cfg_attr(not(target_os = \"none\"), path = \"imp_unix.rs\"))]\n\
+         pub mod imp;\n"
+    );
+    let fixture = fixture(package, &lib, &[("imp_unix.rs", IMP_VIOLATIONS)]);
+
+    assert_eq!(
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "圭表: a raw-identifier `cfg_attr` is the built-in, so its applied `path` must be read"
+    );
+    assert_eq!(
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "渾儀: a raw-identifier `cfg_attr` is the built-in, so its applied `path` must be read"
+    );
+    assert_eq!(
+        louke_exit(fixture.lib(), SEAM, REASON),
+        1,
+        "漏刻: a raw-identifier `cfg_attr` is the built-in, so its applied `path` must be read"
+    );
+}
+
+/// The half the Core Contract forbids: a conventional file **beside** the raw-identifier remap.
+///
+/// `all_three_dimensions_read_a_raw_identifier_spelling_of_a_cfg_attr_path` and its nested sibling leave
+/// 渾儀 exiting `2` on source rustc compiles, which is loud. This one is
+/// the silent shape. `imp.rs` exists and is clean; the remap names `imp_unix.rs`, which carries every
+/// violation. Measured against rustc 1.96.0: with both present it is the **remapped** file rustc compiles.
+///
+/// A reader that misses the remap therefore governs `imp.rs` — a file the build does not contain — reports
+/// clean, and leaves whatever the build does contain unobserved. That is a false negative in the one
+/// dimension, produced by a spelling of the governed code, which is what *no spelling, alias, re-export,
+/// `cfg` arm, or macro form escapes observation* forbids.
+#[test]
+fn a_conventional_file_beside_a_raw_identifier_remap_does_not_hide_the_remapped_one() {
+    let package = "cfg-attr-path-raw-ident-beside-conventional";
+    let lib = format!(
+        "{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}#[cfg_attr(unix, r#path = \"imp_unix.rs\")]\npub mod imp;\n"
+    );
+    let fixture = fixture(
+        package,
+        &lib,
+        &[("imp_unix.rs", IMP_VIOLATIONS), ("imp.rs", IMP_STUB)],
+    );
+
+    assert_eq!(
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "圭表: the clean conventional file does not hide the remapped one's forbidden `use`"
+    );
+    assert_eq!(
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "渾儀: the clean conventional file does not hide the remapped one's forbidden exposure"
+    );
+    assert_eq!(
+        louke_exit(fixture.lib(), SEAM, REASON),
+        1,
+        "漏刻: the clean conventional file does not hide the remapped one's undeclared seam"
+    );
+}
