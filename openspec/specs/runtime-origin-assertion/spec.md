@@ -357,9 +357,26 @@ SHALL be extracted and unioned the same way. Absence SHALL be tolerated only whe
 `cfg_attr` target NOR the conventional file resolves anywhere, and the declaration carries no other
 cfg-conditional gate (a bare `#[cfg]` or transparent-arm membership) — that combination is a
 genuinely broken reference on every configuration, so it SHALL still fail loud. A doubly-**nested**
-`#[cfg_attr(a, cfg_attr(b, path = "…"))]` SHALL be resolved the same way as a single-level one: the
-scanner locates the `path` value anywhere within the outer attribute's argument span rather than parsing
-nesting structure, so nesting depth does not change whether it is found.
+`#[cfg_attr(a, cfg_attr(b, path = "…"))]` SHALL be resolved the same way as a single-level one, so nesting
+depth does not change whether an applied target is found.
+
+**Only an APPLIED meta is a target, and a `path` in a predicate position SHALL NOT be one.** The scanner
+locating a value *anywhere within the outer argument span* was the shape this requirement described, and it
+made two predicate positions into module targets: a `path` before a `cfg_attr`'s own first comma, and a
+`path` anywhere inside a compound predicate such as `all(…)`. Both are cfg keys — `#[cfg_attr(path =
+"bogus", path = "real.rs")] mod plat;` is legal source whatever flags are set — and reading one scans a
+file rustc does not compile, so a probe inside it counted as coverage and the audit reported clean over a
+seam nothing probes on any real build. A group is an applied-meta position only where its `(` follows the
+identifier `cfg_attr`; every other parenthesised group carries none.
+
+#### Scenario: A `path` in a predicate position is not a module target
+
+- **WHEN** a declaration carries `#[cfg_attr(path = "bogus", path = "real.rs")]`, or
+  `#[cfg_attr(all(unix, path = "bogus"), path = "real.rs")]`, and `bogus` exists and holds a probe
+- **THEN** only `real.rs` is read, so the probe in `bogus` is not coverage and a declared seam with no
+  other probe reacts. A predicate names a configuration, never a file to observe
+- **PINNED-BY** `a_cfg_attr_predicate_is_not_an_applied_module_target`
+- **PINNED-BY** `a_path_inside_a_compound_predicate_is_still_a_predicate`
 
 The identical union SHALL apply to a `cfg_attr`-wrapped `#[path]` on an **inline** `mod name { ... }`
 (a body, not a `;`-terminated declaration), where it governs the **base directory** `name`'s own

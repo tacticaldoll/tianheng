@@ -353,6 +353,50 @@ fn a_cfg_attr_predicate_is_not_an_applied_module_target() {
     );
 }
 
+/// A `path` inside a COMPOUND predicate is still a predicate.
+///
+/// **The first repair tracked a predicate phase per parenthesised group, and `all(…)` is one.** So
+/// `#[cfg_attr(all(unix, path = "bogus"), path = "real.rs")]` set the phase past `all`'s own comma and
+/// collected `bogus` as an applied target — the same false clean the flat case produced, one nesting level
+/// in. A comma inside `all(…)`, `any(…)` or `not(…)` belongs to the predicate grammar and says nothing
+/// about the surrounding `cfg_attr`'s phase.
+///
+/// A group is an applied-meta position only where its `(` follows the identifier `cfg_attr`. Anything else
+/// — a compound predicate, or another attribute taking a `path` argument of its own — carries no module
+/// target.
+///
+/// Negative run, with ONLY the group-kind half reverted — the phase half kept, which is the state the
+/// previous repair left:
+///
+/// ```text
+/// assertion `left == right` failed: a `path` inside `all(…)` is a cfg key, not a module target: Clean(Subject { declared: 1, reached: 1 })
+///   left: 0
+///  right: 1
+/// ```
+///
+/// Clean, on the strength of a probe in the predicate's file. Reverting only that half is what shows the
+/// two are separate: the flat case's direction stays green throughout.
+#[test]
+fn a_path_inside_a_compound_predicate_is_still_a_predicate() {
+    let tb = TempBase::new("compound-predicate");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(all(unix, path = \"bogus\"), path = \"real.rs\")]\nmod plat;",
+    );
+    tb.source("bogus", "fn live() { assert_boundary!(\"plat-seam\", o); }");
+    tb.source("real.rs", "fn live() {}");
+
+    let outcome = tb.audit(
+        &[boundary("plat-seam", Severity::Enforce)],
+        std::slice::from_ref(&root),
+    );
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "a `path` inside `all(…)` is a cfg key, not a module target: {outcome:?}"
+    );
+}
+
 /// A path component that is not a directory is an ABSENCE, not something this reader could not read.
 ///
 /// **`NotFound` is not the only absence**, and the sibling direction's repair took it for the only one.
