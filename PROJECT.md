@@ -98,11 +98,13 @@ false negative, and only the reaction can foreclose it.
   `Outcome`, with the JSON serialization intrinsic to those types. `serde_json`-only; carries no observation
   engine, and depends on no workspace member — every dimension sits above it.
 - **`xingbiao` (星表) — the workspace-data substrate.** The star-table: the shared,
-  `serde_json`-only reader of `cargo metadata` (`cargo_metadata` / `find_package` /
-  `crate_root_file`), sitting below every dimension like 璇璣 and depending on no workspace
-  member. It is *not* 璇璣 — it does IO (it spawns cargo) and observes — but a substrate beneath
-  the dimensions, so the static and semantic dimensions read the workspace through **one** source
-  of truth, not two hand-copied twins that drift apart (the v0.1.6 SSOT extraction — see Decisions).
+  `serde_json`-only reader of what the workspace tree **is** — `cargo metadata`, path identity, and
+  whether a path is absent or merely unreadable — sitting below every dimension like 璇璣 and depending
+  on no workspace member. It is *not* 璇璣 — it does IO (it spawns cargo) and observes — but a substrate
+  beneath the dimensions, so **all three** read the workspace through **one** source of truth, not
+  hand-copied twins that drift apart (the v0.1.6 SSOT extraction — see Decisions). 漏刻 reaches it
+  through its CI-only `audit` face, which the runtime-identity decision below already records. What
+  belongs here is a criterion rather than a list, because the charter has widened twice: see Decisions.
 - **`guibiao` (圭表) — the static observation core.** The gnomon: it reads the cast
   shadow — imports, dependencies, and inline symbol-path calls (the clock-free
   `must_not_call_inline` confinement). The dependency-light static engine, derived from

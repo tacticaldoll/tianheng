@@ -493,6 +493,40 @@ them.
 
 ### Self-governance
 
+- **The sweep continued over the rest of the live entries, and `PROJECT.md` was refuted by its own next
+  decision.** Three more findings, each a claim rather than a reaction — nothing behaved differently, which is
+  why nothing caught them.
+
+  *A trigger fired on a document contradicting itself.* `PROJECT.md`'s `xingbiao` description read *the
+  static and semantic dimensions read the workspace through one source of truth* — two dimensions, where
+  all three carry it. **The falsifier was on the same page**: `PROJECT.md`'s own runtime-identity decision
+  records the cargo feature 漏刻 reaches it through. The first repair proved the point by restating the
+  membership from the manifests, and `law_restatement` refused it — the dependency rules are declared and
+  `AGENTS.self-law.md` renders them, so the entry cites the projection and keeps only the half no projection
+  carries, which is that one of the three arrives through a feature rather than unconditionally. A guard
+  caught a repair for the defect the repair was about. It was found by re-reading the file after
+  `xingbiao`'s module doc was corrected for the identical omission earlier in this window — one carrier
+  repaired and this one not swept, which is the retirement-sweep class whose corpus is *every tracked live
+  file*. The parenthesised list of three exports went with it: enumerating three functions of a substrate
+  that now holds path identity and the filesystem-answer policy is the same defect one level down.
+
+  *A governance figure was recorded over an unfinished window.* The ratio entry's numbers were taken at 42 of
+  this window's 100 landed changes. Re-derived with the command the entry carries: the classifier as written
+  answers `34/100`, by carrier `100/100`, and **`21/100` touched a published crate's `src/`** — above
+  `0.5.0`'s 18%, where the reading at 42 had none, because the window's second half is where the lexical
+  false-negative closures landed and those are product. The entry's own observation source says the figure is
+  run *after the release was cut*; a mid-window reading in the same sentence shape is a figure attached to an
+  incomplete corpus, and nothing disagreed with it because nobody re-ran it. Both readings are kept, each
+  stating its count.
+
+  *And the trigger-corpus entry fired on both halves at once.* It watches for *a trigger found to have fired
+  unnoticed for a whole window* — the positional-reference trigger fired four times across this window and
+  surfaced only when the triggers were read on purpose — and for *a fifth instance* of a trigger written over
+  a set narrower than the residue it guards, which the swept-versus-witnessed entry supplied. Its four
+  original instances were each found by a reader who happened to hold both halves; these two were found by
+  asking every trigger the question at once, so **what is reachable is the occasion rather than an
+  instrument**. The re-decision is the steward's.
+
 - **A promotion-trigger sweep of the entries this window touched, and the sweep this window already ran had
   moved a measurement off its own corpus.** `BACKLOG.md` asks every live entry for a promotion trigger, and a
   trigger nobody re-reads after the work that would fire it is a decision surface stating a stale answer. Eight
