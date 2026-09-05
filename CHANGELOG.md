@@ -390,8 +390,8 @@ them.
 
 - **The TOML parse refusal had five copies and a helper whose doc said there were two.** `toml_edit` renders
   an error over several lines and a refusal message is one, so every reader flattened it — four by hand and
-  two through a helper whose own doc read *both parse sites flatten it the same way, so the rule is written
-  once*, in a file carrying four of them. A claim about the code, wrong while the code was right. One owner
+  two through a helper whose own doc claimed the file held **two** such sites while it held four. A claim
+  about the code, wrong while the code was right. One owner
   now holds the flatten and the sentence; each caller keeps its own state or constructor, which is what
   differs. Deleting the helper is what enumerated its callers: a count of them said two, and the compiler named a
   third.
@@ -430,7 +430,7 @@ them.
   conformance repair rather than hygiene; no specification text changes.
 
 - **The head-branch re-read's own carriers, swept by the rule the same window widened.** The re-read landed
-  and the summary comment above it still said *the title and the base*; the shared positive control was still
+  and the summary comment over it still named **two** of the three inputs it now re-reads; the shared positive control was still
   named `an_unchanged_title_still_reaches_the_merge` while controlling three guards, and that title-only name
   was carried by `PINNED-BY` into the head-branch scenario as its evidence; the bound's rationale still said
   declaring it per input would be *two records*, a count the set had already outgrown; and the backlog said
@@ -578,9 +578,9 @@ them.
   entries were evaluated against the 99 landed changes — chosen by whether this window plausibly touched them,
   which is stated because it is **not** the whole live set.
 
-  *A rename rewrote a base inside a measurement.* The branch-name entry's evidence read *measured over all 22
-  pull requests merged into `release/0.6.0`* and named one instance,
-  `test-kanhe-a-fixture-sha-that-resolves-nowhere`. That instance is not in that set. GitHub retargets a
+  *A rename rewrote a base inside a measurement.* The branch-name entry's evidence was a count of merged pull
+  requests addressed by the branch they landed on, and it named one instance —
+  `test-kanhe-a-fixture-sha-that-resolves-nowhere` — which that branch's merge records do not contain. GitHub retargets a
   renamed branch's **open** pull requests and leaves a **merged** one's recorded base alone, so a branch this
   window renamed left the figure attached to a set that does not contain its own evidence. The rename's own
   sweep did it, one window after the commit that wrote the figure — whose subject is *a trigger is a
