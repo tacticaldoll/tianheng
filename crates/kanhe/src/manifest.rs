@@ -49,8 +49,10 @@ pub enum WorkspaceVersion {
 /// any other, closes the scan rather than contributing — see this module's header for why the publish
 /// gate's former fallback is gone.
 ///
-/// **Read from the shared region, not from raw lines.** `repository-checks` requires a check deciding a
-/// property over executed text to take its corpus from [`crate::region`], and this reader did not. Both
+/// **Read from the parsed document, not from raw lines.** `repository-checks` requires a check deciding a
+/// property over executed text to take its corpus from the executed text rather than from the file's bytes;
+/// a real parser answers that by construction, which is what replaced the region read this doc used to
+/// name. Both
 /// directions were live and both were false refusals over legal TOML: `[workspace.package] # …` failed the
 /// heading equality, then matched `starts_with('[')` and *closed* the table before it opened, so the version
 /// read as absent; and `version = "0.5.0" # bumped` carried its comment into the value, which then parsed as
@@ -68,13 +70,7 @@ pub fn workspace_version(text: &str) -> WorkspaceVersion {
         // `version` reports the position on line one and names the key and *duplicate key* on later lines,
         // so truncating loses exactly the two facts an operator needs.
         Err(err) => {
-            return WorkspaceVersion::Unreadable(format!(
-                "a manifest this parser cannot read — {}",
-                err.to_string()
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ));
+            return WorkspaceVersion::Unreadable(manifest_unreadable(&err));
         }
     };
     let Some(version) = doc
@@ -114,6 +110,35 @@ pub const VERSION_ABSENT: &str = "workspace version is missing or malformed: <mi
 /// parameter rather than a second copy of the sentence.
 pub fn version_unreadable(what: &str, tail: &str) -> String {
     format!("Cargo.toml declares a workspace version this check cannot read ({what}), so {tail}")
+}
+
+/// A `toml_edit` parse error on ONE line, which is what a refusal message is.
+///
+/// `toml_edit` renders its errors over several lines with a caret rule under the offending span. The whole
+/// error is collapsed rather than truncated to its first line: measured, a duplicate key reports the
+/// position on line one and names the key and *duplicate key* on later lines, so a first-line truncation
+/// loses exactly the two facts an operator needs.
+///
+/// **It was written out by hand at every site that needed it**, and a helper existed for two of them whose
+/// own doc said *both parse sites flatten it the same way, so the rule is written once* — in a file that
+/// had four. A claim about the code, wrong while the code was right. This is the one owner.
+pub fn parse_error_on_one_line(err: &toml_edit::TomlError) -> String {
+    err.to_string()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// What every reader here says for a manifest the TOML parser refuses.
+///
+/// Cargo refuses a manifest it cannot parse, so a reader answering anything *about* one would speak for a
+/// file cargo will not read at all. Each caller keeps its own state or constructor — the sentence is what
+/// had four copies.
+pub fn manifest_unreadable(err: &toml_edit::TomlError) -> String {
+    format!(
+        "a manifest this parser cannot read — {}",
+        parse_error_on_one_line(err)
+    )
 }
 
 /// What both gates say for a version that is present, readable, and not a semantic version.
@@ -198,13 +223,7 @@ pub fn publishable(text: &str) -> Publishable {
         // Cargo refuses a manifest it cannot parse — a key declared twice among them — so a reader answering
         // *publishable* from one would speak for a file cargo will not read at all.
         Err(err) => {
-            return Publishable::Unreadable(format!(
-                "a manifest this parser cannot read — {}",
-                err.to_string()
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ));
+            return Publishable::Unreadable(manifest_unreadable(&err));
         }
     };
     let Some(declared) = doc

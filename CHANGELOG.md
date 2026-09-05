@@ -24,6 +24,20 @@ them.
 
 ### Documentation
 
+- **The TOML parse refusal had five copies and a helper whose doc said there were two.** `toml_edit` renders
+  an error over several lines and a refusal message is one, so every reader flattened it — four by hand and
+  two through a helper whose own doc read *both parse sites flatten it the same way, so the rule is written
+  once*, in a file carrying four of them. A claim about the code, wrong while the code was right. One owner
+  now holds the flatten and the sentence; each caller keeps its own state or constructor, which is what
+  differs. Deleting the helper is what enumerated the callers: the compiler named a fifth site that a count
+  of them had missed.
+
+  Two annexed doc comments moved with it — the paragraph describing `declared_dependencies` had been sitting
+  above the helper, and `DEPENDENCY_KINDS`'s one-line doc above the enum before it. And `workspace_version`'s
+  doc claimed it read *from the shared region* while its body parses with `toml_edit` and its module imports
+  no region: the region read it names was replaced by a parser, which answers the same requirement by
+  construction.
+
 - **The twin came back inside the module that exists to end twins, and it had already drifted.**
   `hermetic_git::run` and `run_exact` were the same eight statements with one `.map` inserted — the
   `Failure::Spawn` literal and the `Failure::Exit` construction character-identical, the two
