@@ -517,6 +517,30 @@ them.
   governance file may narrate its own reclassification, because choosing it alone is the shape this sweep
   kept finding wrong.
 
+- **`BACKLOG.md`'s promotion triggers are read against the window before the cut, and that is a step someone
+  performs rather than a thing built.** A live entry names what would promote it and nothing evaluated that,
+  which this file already recorded from the inside: an entry whose trigger had fired on **both** halves sat
+  unchanged through a full round of review *because nothing evaluates a promotion trigger*. Read on purpose,
+  fifteen entries produced eight defects sitting behind triggers already written — including one entry whose
+  figure was three times too small and one document refuted by its own next decision.
+
+  **The reachable half is the occasion, not an instrument.** Deciding whether a trigger's set is its
+  residue's set means knowing what the entry meant, which is the judgement-over-text this repository has
+  measured and rejected three times. So `AGENTS.md`'s release ritual now carries the reading, next to the
+  rule that the dated section's date is the last edit before the cut — a discipline nobody is asked for
+  being one nobody does.
+
+  **Two rules make the hour worth spending, and both constrain the verdict rather than the entry.** An
+  evaluation records what it **checked**, because a bare *Not fired* cannot be told from nobody having
+  looked. And a verdict no sweep could have reached **says so** instead of carrying a date: measured, an
+  entry read `Not fired, swept` over an observable its own lifecycle destroys before the squash, and a dated
+  verdict reads as *settled* where the honest word is *unobserved*.
+
+  Per-entry labels sorting triggers into swept and witnessed were the other candidate and are **declined**,
+  on the objection the entry proposing them had already recorded against itself: a field on sixty entries is
+  a form to maintain. Two sentences reach the same failure at the point where it happens and cost nothing to
+  keep.
+
 - **The sweep's third pass, and the sweep wrote an instance of the class it was measuring.** Four more
   entries evaluated. The one that matters is the relative-anchor bound, whose corpus command was re-run: it
   answers three live offences against ten at the previous reading, and **one of the three had been written

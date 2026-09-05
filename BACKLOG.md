@@ -2039,82 +2039,6 @@ consumer for an undemonstrated deduplication.
   the over-count can be produced. The old trigger said *this repository's own source*, and so stood
   satisfied nine times over while the residue it watches had never occurred. *Authority:* engine. *Compatibility:* patch; the checks ship in no crate.
 
-- **WATCH: a promotion trigger is a predicate, and nothing holds one to the corpus of the thing it
-  watches.** *Class:* WATCH. *Observed pressure:* the 2026-09-01 sweep of this file's unevaluated triggers,
-  which set out to date them and instead found three written over a set wider or narrower than the residue
-  they guard, in both directions. *The branch-name entry* named two shapes and the drift arrived through a
-  third, so its trigger could not fire on the instance that occurred. *The constructor-shadowing entry* said
-  *this repository's own source* where the reader reads `crates/kanhe/src`, so it stood satisfied nine times
-  over with the residue unrealised. *The Definition-of-Done entry* said *coverage* where it meant *naming*,
-  and stood satisfied twice over by steps that are in the list. All three are rewritten in place. *Observation
-  source:* that sweep, and one instance this file had already recorded on its own — the title-race entry
-  notes a tracker whose trigger, *an act reaching either without the wrapper*, can never fire for a race
-  reached only by going **through** it. That fourth instance is what makes this a class rather than three
-  slips: it was found in the same way, one entry at a time, by a reader who happened to hold both halves.
-  *Current reaction or bound:* none, and none is available. Deciding whether a trigger's set is the residue's
-  set means knowing what the entry means, which is intent rather than shape — the judgement-over-text class
-  this repository has measured and rejected. *Risk:* a WATCH entry reads as armed and is not. That is worse
-  than an unarmed entry that says so, because the file's whole discipline is that a filed class is answered
-  rather than forgotten, and a trigger nobody can trip converts filing into forgetting. Bounded by the
-  triggers being read by a person against the tree — which is how all four were found, and also why three
-  windows passed before they were. *Promotion trigger:* a fifth instance, or a trigger found to have fired
-  unnoticed for a whole window. **BOTH HALVES FIRED 2026-09-06, in one sweep.**
-
-  *A trigger fired unnoticed for a whole window.* The positional-reference entry's trigger — *a positional
-  reference appearing again after this sweep* — fired **four times** across the 0.6.0 window's 100 landed
-  changes, and one of the four already pointed at the wrong entry. Nothing surfaced it until the triggers
-  were read against the window on purpose. That is the exact shape this half was written to catch, and what
-  it caught is that reading them is an act somebody has to schedule.
-
-  *And a fifth instance.* The entry sorting triggers into swept and witnessed named only the direction where
-  a witness-only one turns out cheap, leaving it unable to fire on a swept verdict that no sweep could have
-  reached — a trigger narrower than the residue it guards, which is this entry's own class. It is widened,
-  and the widening's first instance was standing when it landed.
-
-  Two independent instances in one reading raises what the entry can conclude: the four originals were found
-  *one at a time by a reader who happened to hold both halves*, and these two were found by asking the
-  question of every trigger at once. **The reachable half is therefore the occasion rather than the
-  instrument** — a per-window sweep is a thing a person can be asked for, where a rule that triggers name
-  their corpus still needs the judgement-over-text this file has rejected. The re-decision is the steward's. *Why not a rule that triggers name their corpus:* it would be a rule about
-  how prose is written with no reaction behind it, and the bar the `0.6.0` window set is that a rule needs a
-  reachable instance — this has four, so the rule is earned, but its instrument is not, and the honest form
-  is prose with the reason stated. *Version class:* patch; this file ships in no crate. *Authority:* this
-  entry, and `AGENTS.md`'s *Bind a claim to its measurement*, whose three bindings this is the trigger-shaped
-  case of.
-
-- **WATCH: half this file's promotion triggers can be swept for and half can only be witnessed, and nothing
-  says which.** *Class:* WATCH. *Observed pressure:* the 2026-09-01 sweep, which set out to give every
-  unevaluated trigger a dated state and found that they are not one instrument. Most turn on a property of
-  the tree, of the installed toolchain, or of this repository's own merged history, and anyone can decide
-  them by running something — those now carry a verdict and what was checked. The rest turn on an occurrence
-  that leaves no trace to sweep for: a review round choosing the wrong binding, a window in which a class
-  costs a review round, a count finding after the disposal rule, a third instance of a shape only a reader
-  recognises, an input two people failed to construct, a harness someone would have to design, a syntax
-  someone would have to declare, and an audit that is a window's work. *Observation source:* that sweep, and
-  the shape of what it could and could not answer. *Current reaction or bound:* none. *Risk:* the two kinds
-  read identically, so a witness-only trigger looks armed while nothing will ever trip it — the entry is
-  filed, the class is answered on paper, and the observation it needs is one that has to be written down by
-  whoever is present at the moment it happens, which is exactly what does not happen when the entry reads as
-  already handled. Bounded, and this is the useful half: several of these entries already say in their own
-  text that what they ask for is a record made at the time, so the discipline exists and only the label is
-  missing. *Promotion trigger, widened 2026-09-06 to the second direction:* a trigger sorted into either
-  kind found to belong to the other — a witness-only one trippable all along by something anyone could have
-  run, **or** one carrying a swept verdict that no sweep could have reached. Either would mean the two kinds
-  were sorted wrong, not that the sorting is worthless.
-
-  **It fires on the widening's own instance, and the re-decision is the steward's.** *The OpenSpec capability
-  lifecycle is retained and has never been exercised* carried `Not fired, swept 2026-09-01` over an
-  observable the lifecycle's own step 5 destroys — so a verdict was written in the register of the kind that
-  can be swept, for a trigger belonging to the kind that can only be witnessed. The trigger as first written
-  could not have caught it: it named the direction in which a witness-only trigger turns out to be cheap, and
-  this is the direction in which a swept one turns out to be impossible. That is the more dangerous half,
-  because a dated verdict reads as **settled** rather than as waiting, which is a stronger claim than the
-  *looks armed* this entry's own *Risk* paragraph budgeted for. *Why not a field on every entry:* a new field is a form to maintain, and the property is
-  already legible from the trigger's own sentence once someone has asked the question of it. What was
-  missing was the question, and it is asked here. *Version class:* patch; this file ships in no crate.
-  *Authority:* this entry, and the trigger-corpus entry above, of which this is the other half — that one
-  asks whether a trigger's set is the residue's set, and this one asks whether anyone can ever evaluate it.
-
 - **WATCH: a `Shape` clause is a hypothesis, and this file records no difference between one that has been
   run and one that has not.** *Class:* WATCH. *Observed pressure:* three `READY-PATCH` entries were taken to
   the tree in the `0.6.0` window and none of their proposed shapes survived contact — **and the three failed in
@@ -2852,6 +2776,86 @@ consumer for an undemonstrated deduplication.
   - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
 ### Closed — reproduction records (0.4.0 onward)
+
+- ~~**WATCH: a promotion trigger is a predicate, and nothing holds one to the corpus of the thing it
+  watches.**~~ **CLOSED — adopted.** *Class:* WATCH. *Observed pressure:* the 2026-09-01 sweep of this file's unevaluated triggers,
+  which set out to date them and instead found three written over a set wider or narrower than the residue
+  they guard, in both directions. *The branch-name entry* named two shapes and the drift arrived through a
+  third, so its trigger could not fire on the instance that occurred. *The constructor-shadowing entry* said
+  *this repository's own source* where the reader reads `crates/kanhe/src`, so it stood satisfied nine times
+  over with the residue unrealised. *The Definition-of-Done entry* said *coverage* where it meant *naming*,
+  and stood satisfied twice over by steps that are in the list. All three are rewritten in place. *Observation
+  source:* that sweep, and one instance this file had already recorded on its own — the title-race entry
+  notes a tracker whose trigger, *an act reaching either without the wrapper*, can never fire for a race
+  reached only by going **through** it. That fourth instance is what makes this a class rather than three
+  slips: it was found in the same way, one entry at a time, by a reader who happened to hold both halves.
+  *Current reaction or bound:* none, and none is available. Deciding whether a trigger's set is the residue's
+  set means knowing what the entry means, which is intent rather than shape — the judgement-over-text class
+  this repository has measured and rejected. *Risk:* a WATCH entry reads as armed and is not. That is worse
+  than an unarmed entry that says so, because the file's whole discipline is that a filed class is answered
+  rather than forgotten, and a trigger nobody can trip converts filing into forgetting. Bounded by the
+  triggers being read by a person against the tree — which is how all four were found, and also why three
+  windows passed before they were. *Promotion trigger:* a fifth instance, or a trigger found to have fired
+  unnoticed for a whole window. **BOTH HALVES FIRED 2026-09-06, in one sweep.**
+
+  *A trigger fired unnoticed for a whole window.* The positional-reference entry's trigger — *a positional
+  reference appearing again after this sweep* — fired **four times** across the 0.6.0 window's 100 landed
+  changes, and one of the four already pointed at the wrong entry. Nothing surfaced it until the triggers
+  were read against the window on purpose. That is the exact shape this half was written to catch, and what
+  it caught is that reading them is an act somebody has to schedule.
+
+  *And a fifth instance.* The entry sorting triggers into swept and witnessed named only the direction where
+  a witness-only one turns out cheap, leaving it unable to fire on a swept verdict that no sweep could have
+  reached — a trigger narrower than the residue it guards, which is this entry's own class. It is widened,
+  and the widening's first instance was standing when it landed.
+
+  Two independent instances in one reading raises what the entry can conclude: the four originals were found
+  *one at a time by a reader who happened to hold both halves*, and these two were found by asking the
+  question of every trigger at once. **The reachable half is therefore the occasion rather than the
+  instrument** — a per-window sweep is a thing a person can be asked for, where a rule that triggers name
+  their corpus still needs the judgement-over-text this file has rejected. The re-decision is the steward's. *Why not a rule that triggers name their corpus:* it would be a rule about
+  how prose is written with no reaction behind it, and the bar the `0.6.0` window set is that a rule needs a
+  reachable instance — this has four, so the rule is earned, but its instrument is not, and the honest form
+  is prose with the reason stated. *Version class:* patch; this file ships in no crate. *Authority:* this
+  entry, and `AGENTS.md`'s *Bind a claim to its measurement*, whose three bindings this is the trigger-shaped
+  case of.
+
+  **Adopted as an occasion, not an instrument.** `AGENTS.md`'s *Branching and release* now holds that `BACKLOG.md`'s promotion triggers are read against the window before the cut. What decided it was the reading itself: fifteen entries produced eight defects sitting behind triggers already written, and the two instances that fired this entry were found by asking every trigger at once rather than one at a time by a reader who happened to hold both halves. No rule that triggers name their corpus is adopted — that still needs the judgement-over-text this file has rejected three times.
+
+- ~~**WATCH: half this file's promotion triggers can be swept for and half can only be witnessed, and nothing
+  says which.**~~ **CLOSED — adopted.** *Class:* WATCH. *Observed pressure:* the 2026-09-01 sweep, which set out to give every
+  unevaluated trigger a dated state and found that they are not one instrument. Most turn on a property of
+  the tree, of the installed toolchain, or of this repository's own merged history, and anyone can decide
+  them by running something — those now carry a verdict and what was checked. The rest turn on an occurrence
+  that leaves no trace to sweep for: a review round choosing the wrong binding, a window in which a class
+  costs a review round, a count finding after the disposal rule, a third instance of a shape only a reader
+  recognises, an input two people failed to construct, a harness someone would have to design, a syntax
+  someone would have to declare, and an audit that is a window's work. *Observation source:* that sweep, and
+  the shape of what it could and could not answer. *Current reaction or bound:* none. *Risk:* the two kinds
+  read identically, so a witness-only trigger looks armed while nothing will ever trip it — the entry is
+  filed, the class is answered on paper, and the observation it needs is one that has to be written down by
+  whoever is present at the moment it happens, which is exactly what does not happen when the entry reads as
+  already handled. Bounded, and this is the useful half: several of these entries already say in their own
+  text that what they ask for is a record made at the time, so the discipline exists and only the label is
+  missing. *Promotion trigger, widened 2026-09-06 to the second direction:* a trigger sorted into either
+  kind found to belong to the other — a witness-only one trippable all along by something anyone could have
+  run, **or** one carrying a swept verdict that no sweep could have reached. Either would mean the two kinds
+  were sorted wrong, not that the sorting is worthless.
+
+  **It fires on the widening's own instance, and the re-decision is the steward's.** *The OpenSpec capability
+  lifecycle is retained and has never been exercised* carried `Not fired, swept 2026-09-01` over an
+  observable the lifecycle's own step 5 destroys — so a verdict was written in the register of the kind that
+  can be swept, for a trigger belonging to the kind that can only be witnessed. The trigger as first written
+  could not have caught it: it named the direction in which a witness-only trigger turns out to be cheap, and
+  this is the direction in which a swept one turns out to be impossible. That is the more dangerous half,
+  because a dated verdict reads as **settled** rather than as waiting, which is a stronger claim than the
+  *looks armed* this entry's own *Risk* paragraph budgeted for. *Why not a field on every entry:* a new field is a form to maintain, and the property is
+  already legible from the trigger's own sentence once someone has asked the question of it. What was
+  missing was the question, and it is asked here. *Version class:* patch; this file ships in no crate.
+  *Authority:* this entry, and the trigger-corpus entry above, of which this is the other half — that one
+  asks whether a trigger's set is the residue's set, and this one asks whether anyone can ever evaluate it.
+
+  **Adopted in a narrower form than it proposed.** Per-entry labels sorting triggers into swept and witnessed are **declined** on this entry's own objection — a field on sixty entries is a form to maintain. What `AGENTS.md` takes instead constrains the **verdict** rather than the trigger: an evaluation records what it checked, and one no sweep could have reached says so rather than carrying a date. That reaches the failure this entry measured — a dated `Not fired, swept` over an observable the lifecycle destroys, reading as settled where the honest word is unobserved — at the point where it happens, and costs nothing to maintain.
 
 - ~~**WATCH: `AGENTS.md`'s OpenSpec lifecycle section describes a process with no instances.**~~ **DECIDED —
   the lifecycle is retained.** The trigger was *a human call about intent*, and the steward made it on

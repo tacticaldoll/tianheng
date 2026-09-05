@@ -825,6 +825,22 @@ rather than a claim, so preparation may leave it stale for as long as it lasts; 
 cutting without touching it. Write it on the day the `release: X.Y.Z` commit is made, immediately before
 making it.
 
+**`BACKLOG.md`'s promotion triggers are read against the window before the cut.** A live entry names what
+would promote it, and nothing evaluates that — measured, an entry whose trigger had fired on **both** halves
+sat unchanged through a full round of review, and a per-window reading of fifteen entries then found eight
+defects that had been sitting behind triggers already written. The reachable half is the **occasion**, not
+an instrument: deciding whether a trigger's set is its residue's set means knowing what the entry meant,
+which is the judgement-over-text this repository has measured and rejected. So this is a step someone
+performs, listed here because a discipline nobody is asked for is one nobody does.
+
+Two rules make the reading worth the hour. **A trigger evaluation records what it checked**, not only what
+it concluded — a bare *Not fired* is indistinguishable from nobody having looked. And **a verdict no sweep
+could have reached says so** rather than carrying a date: measured, an entry read `Not fired, swept` over
+an observable its own lifecycle destroys before the squash, and a dated verdict reads as **settled** where
+the honest word is *unobserved*. That is the whole of it; per-entry labels sorting triggers into swept and
+witnessed were considered and declined, because a field on sixty entries is a form to maintain and these
+two sentences reach the same failure at the point where it actually happens.
+
 A branching pattern is not an observable architectural fact, so the drift law keeps it out of the
 constitution: it is a convention for humans and agents rather than a Tianheng boundary.
 
