@@ -460,6 +460,49 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
+- **A version this repository never released is written into tracked prose, and nothing resolves it.**
+  *Class:* READY-PATCH — the pressure is measured and the correction touches no published surface. *Observed
+  pressure:* release class is decided from what a window's changes **do**, so a window's number is not
+  knowable until its cut; a number written into prose beforehand becomes a pointer to nothing the moment the
+  class moves. **It has moved three times.** Measured 2026-09-06 over every `X.Y.Z` literal in tracked live
+  Markdown outside `CHANGELOG.md` and `docs/history/`: `0.3.1`, `0.4.1` and `0.5.1` each appear, and none of
+  the three has a dated changelog section or a tag. The trend is the wrong way — 15 occurrences, then 4,
+  then 30. *Observation source:* the promotion-trigger sweep, which reached it sideways: a rename had
+  rewritten `release/0.5.1` to `release/0.6.0` **inside a measurement over merged pull requests**, and GitHub
+  does not retarget a merged pull request's base, so the figure came to name a set not containing its own
+  evidence. That is the sharp end of the class; the other 23 sites merely resolved to nothing.
+
+  *Current reaction or bound:* prose only, as of this window — `AGENTS.md`'s carrier taxonomy now carries the
+  row, and the 24 live occurrences are repaired to name the version each window shipped as. Nothing reacts.
+  *Risk:* the class is **structural rather than accidental**, which is what makes prose alone the weaker
+  half: reclassifying upward is this repository's SemVer honesty working correctly, so windows will keep
+  being renumbered and every window's prose will keep being written before its number is earned.
+
+  *Promotion trigger:* fired at filing, by its own measurement — three instances, and the third produced a
+  false figure rather than only a dead pointer. *Version class:* patch; no crate is touched. *Authority:*
+  `repository-checks`, and `AGENTS.md`'s carrier taxonomy row.
+
+  **Shape, and it is decidable — which is unusual for this file's prose classes.** A version literal in
+  tracked live Markdown that is **below the workspace version** and has neither a `## [X.Y.Z]` dated section
+  nor a `vX.Y.Z` tag names a version that never existed and never will. No judgement over meaning is needed:
+  a number above the workspace version is a plan, a number with a section or a tag is a release, and what is
+  left is neither. **After this window the number survives in exactly three places — this entry,
+  `AGENTS.md`'s taxonomy row, and the changelog entry recording the repair — all three of which *declare*
+  the class**, which is the same positional exemption the relative-phrase bound already grants
+  `AGENTS.md`'s own row. Nothing else in the tree names it, `docs/history/` included. So the exemption is a
+  declaration, decidable by where a line sits, and not a judgement about what it means.
+
+  Its negative run is this file's own state before the repair: the check must report the 24 sites, and the
+  measurement it would have reported alongside them is gone rather than exempted — **which is the part worth
+  keeping.** That figure was defended as an observation, on the ground that a query's argument is part of what
+  it measured. It is; the observation was simply the wrong one. Re-addressed from `--base release/0.5.1` to
+  the window's own commit range, the same question answers **103 pull requests and three offences** where the
+  branch-addressed corpus answered 22 and one. A dead name is not only unresolvable — this one was holding a
+  figure three times too small, and preserving it as an observation would have preserved that.
+
+  **What is left is choosing whether the declaring exemption is worded as a section, a file, or a marker**,
+  which is a check's design and not more evidence.
+
 - **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
   register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
   in a worktree left the suite green and the register clean. `crates/kanhe/tests/pin_bites.rs` closes that for the citations
@@ -473,7 +516,7 @@ consumer for an undemonstrated deduplication.
   standing set was costed and declined on its rate — `pin_bites` reports the uncovered part on every clean
   run, and the citation set grows faster than mutations can be authored, so chasing the numerator loses to
   stopping the denominator. `AGENTS.md` now requires a citation to arrive with its mutation or with the reason
-  it has none, in the same change. The debt this entry already carries from the 0.5.1 window is answered
+  it has none, in the same change. The debt this entry already carries from the `0.6.0` window is answered
   collectively rather than per-citation, above: six requirements gained citations, none declared a mutation,
   and the reason is recorded where the economics are. What remains is
   coverage, which grows one considered record at a time. That last claim was false while the tree under test
@@ -610,7 +653,7 @@ consumer for an undemonstrated deduplication.
   three unpinned bounds in `crates/kanhe/src/bounds.rs`, each tracking to the sibling entry — so stating them
   again here would be the *saying it twice held it nowhere* failure this file records for its own governance
   section. What is **not** declared anywhere is the higher fact above, that the requirement-to-test pairing is
-  intent rather than shape; it stays prose with its reason, under the bar the 0.5.1 window set — a cannot-judge
+  intent rather than shape; it stays prose with its reason, under the bar the `0.6.0` window set — a cannot-judge
   not a rule and needs no instance.
 
   *Reopening:* the derived binding of part two, or biting coverage becoming the rule rather than the
@@ -748,7 +791,7 @@ consumer for an undemonstrated deduplication.
 
   **Swept 2026-09-01: not fired, and the instance this entry was written against is gone.** The uncaught
   one — `crates/kanhe/tests/merge_workflow.rs` carrying a commit of this tree as an opaque fixture token —
-  was repaired inside the 0.5.1 window by `test(kanhe): the merge fixture's head resolves nowhere`; the token is
+  was repaired inside the `0.6.0` window by `test(kanhe): the merge fixture's head resolves nowhere`; the token is
   now a synthetic value that resolves in no clone. So the *second instance* this trigger counts has no first
   standing behind it. Re-run over every 40-hex literal in tracked content: the ones that resolve as objects
   of this repository all sit in `docs/history/published-artifact-provenance.md`, a record, which is exempt
@@ -787,9 +830,9 @@ consumer for an undemonstrated deduplication.
   the next window's figure is derived rather than recalled. *Current reaction or bound:* none, and none is
   proposed — a ratio is not a property a reaction can hold without deciding what counts as product, which is
   a judgement over intent. This entry is the instrument and the record of one reading. *Risk:* the window's
-  own evidence is that each repair produced the next round's finding — *every reaction built in the 0.5.1 window
+  own evidence is that each repair produced the next round's finding — *every reaction built in the `0.6.0` window
   had a defect found in the next round, three of three* — so a system that generates work proportional to
-  itself will keep spending the budget on itself unless the figure is looked at. **The instrument undercounts, measured 2026-09-03 at the end of the `0.5.1` window, and the
+  itself will keep spending the budget on itself unless the figure is looked at. **The instrument undercounts, measured 2026-09-03 later in the `0.6.0` window, and the
   correction reverses its verdict.** Its classifier calls a change *governance* only when it touches
   `crates/{kanhe,shengmo}`. Governance here is also carried by `BACKLOG.md`, `AGENTS.md`, `PROJECT.md`,
   `CHANGELOG.md`, `openspec/specs/**`, `docs/**` and `.github/**` — so a window spent almost entirely on those
@@ -826,7 +869,7 @@ consumer for an undemonstrated deduplication.
   ```
 
   *And this correction lands in the 69%*, which is the shape of the problem rather than an aside: every act of
-  pruning governance stock in the 0.5.1 window — a reader layer deleted, deferred entries closed or reclassified, a
+  pruning governance stock in the `0.6.0` window — a reader layer deleted, deferred entries closed or reclassified, a
   queue halved — was itself recorded in a governance document, and the recording is counted where the pruning
   is not. What the corrected figure asks for is not a better classifier. It is a window in which something an
   adopter receives moves.
@@ -859,7 +902,7 @@ consumer for an undemonstrated deduplication.
   *Where the reducible weight actually is, measured:* tests are 26,568 of `kanhe`'s 37,229 lines, and beside
   them stand 98 declared bounds and the WATCH queue itself. None of that shrinks by retiring refusal sites.
 
-  *What was done instead.* Retiring rules addresses the **stock**; the 0.5.1 window's own reviews recorded a
+  *What was done instead.* Retiring rules addresses the **stock**; the `0.6.0` window's own reviews recorded a
   mechanism producing more — every reaction built had a defect found in the next round, three of three. A bar
   on the **rate** is in `AGENTS.md` beside the carrier taxonomy, which until now answered which binding a
   carrier admits and never whether the claim earns one: a cannot-judge needs no instance, a violation needs a
@@ -1112,23 +1155,35 @@ consumer for an undemonstrated deduplication.
   exists to prevent. *Promotion trigger, rewritten 2026-09-01 over the corpus it watches:* a merged pull request whose head
   branch does not parse as `<type>/<scope>-<slug>` with `<type>` in the admitted set, or whose parsed type
   differs from its squash subject's, or a second retired role accumulating. **So rewritten it fires, on the
-  0.5.1 window's own work.** Measured by
-  `gh pr list --state merged --base release/0.5.1 --limit 300 --json headRefName,title` over all 22 pull
-  requests that had merged into `release/0.5.1` when this was written: 21 branches
-  parse and every one of those agrees with its squash subject's type, and one carries no `/` at all
-  (`test-kanhe-a-fixture-sha-that-resolves-nowhere`), so it declares no type for a subject to disagree with.
+  `0.6.0` window's own work.** Measured 2026-09-06 over the window's own commit range, which resolves from
+  any clone, rather than over a branch name, which does not:
 
-  **The base this names is `release/0.5.1` deliberately, and restoring it is a repair.** The branch was
-  renamed to `release/0.6.0` and the rename's sweep rewrote the name here too — but GitHub does not retarget
-  a **merged** pull request's recorded base, so re-running the command above against `release/0.6.0` answers
-  over a different set: measured 2026-09-06, `--base release/0.5.1` returns **87** and `--base release/0.6.0`
-  returns **12**, and `test-kanhe-a-fixture-sha-that-resolves-nowhere` — the one instance this sentence names
-  — is in the first. The sentence had come to name a corpus that does not contain its own evidence. The ref
-  `release/0.5.1` no longer exists, and the merge records naming it still do; that is what makes the base a
-  fact about the observation rather than a label to keep current, and a sweep cannot tell the two apart.
-  The figure is carried by its command from here on, so the next rewrite of a name inside it disagrees with a
-  re-run instead of passing silently. The commit that wrote this measurement is titled *a trigger is a
-  predicate, and nothing holds one to its corpus*.
+  ```bash
+  # Every pull request whose squash reached this window, addressed by the RANGE. A `--base` filter names a
+  # branch, and a branch is renameable — measured, that is how this figure was lost once.
+  git log v0.5.0..release/0.6.0 --format='%H' | while read h; do
+    gh api "repos/:owner/:repo/commits/$h/pulls" --jq '.[]|[.head.ref,.title]|@tsv'
+  done | sort -u | awk -F'\t' '
+    { split($1,b,"/"); split($2,s,/[(:]/)
+      if (index($1,"/")==0)  print "NO-TYPE   " $1
+      else if (b[1]!=s[1])   print "DISAGREE  " $1 " -> " $2 }'
+  ```
+
+  **103 pull requests, three offences.** `test-kanhe-a-fixture-sha-that-resolves-nowhere` carries no `/` at
+  all, so it declares no type for a subject to disagree with; `fix/tianheng-the-usage-block-has-one-owner`
+  landed as `docs(tianheng): …`; and `gov/spec-prose-discipline` declares a type that is **not in the
+  admitted set** and landed as `docs(agents): …`. The last two are the disagreement this naming rule exists
+  to prevent, and `gov` is a second retired role — the third clause of the trigger, which had never been
+  seen to fire.
+
+  **The figure was three times smaller while it was addressed by a branch name.** It read *22 pull requests
+  merged into `release/0.5.1`*, that branch was renamed, and GitHub does not retarget a **merged** pull
+  request's recorded base — so the sentence came to name a set not containing its own evidence, and a repair
+  that merely restored the old name kept a corpus that had been the wrong one from the start. A branch is
+  renameable and a version that never shipped resolves through nothing; the commit range is neither. The
+  command is carried here so the next reading disagrees with a re-run instead of passing silently. The commit
+  that first wrote this measurement is titled *a trigger is a predicate, and nothing holds one to its
+  corpus*, and the corpus it named was a branch.
 
   The old trigger could not fire on it: this entry's own *Observed pressure* had already counted seven
   slash-less branches in `0.5.0`, so the shape was known when the trigger was written, and the trigger was
@@ -1144,7 +1199,7 @@ consumer for an undemonstrated deduplication.
   **The trigger fired and the decision was taken rather than deferred again: the gate is declined.** Two
   reasons, and the second is the load-bearing one. First, the cost this entry itself measures is bounded —
   a branch name reaches no artifact, no adopter and no published crate, and the one drifted branch in the
-  `0.5.1` window landed a squash whose own subject was well-formed, so nothing downstream carried the fault.
+  `0.6.0` window landed a squash whose own subject was well-formed, so nothing downstream carried the fault.
   Second, the repair is a **new gate on the merge ritual**, and this repository's standing goal for the
   window is that its governance-only share of landed work must fall. Closing a bounded prose-level gap by
   adding a reaction that runs in front of every merge moves that number the wrong way, and it does so to
@@ -1272,13 +1327,13 @@ consumer for an undemonstrated deduplication.
   and the class it belongs to is one this repository declares: *an entry that still describes the retired
   mechanism in the present tense is exactly as stale as one naming a retired term*. *Promotion trigger:* a
   third live instance, or a convention that makes the exemption decidable. **The trigger fired on
-  2026-09-01, and two of the three instances were made by the 0.5.1 window that swept for them.** Re-run over every
+  2026-09-01, and two of the three instances were made by the `0.6.0` window that swept for them.** Re-run over every
   tracked Markdown file outside `CHANGELOG.md` and `docs/history/`: 433 backticked `snake_case` tokens, 13 resolving to nothing, of which eleven are the
   legitimate forms this entry already names — past-tense (*since removed*, *was one*, *has never existed*),
   a spec's own hypothetical (`foo_thing`, `some_instant`), an anti-pattern named from outside this tree
   (`freeze_methods`, which `git log -S` shows was never in it), and one sitting under a closing paragraph
   that names the surviving test. The two that are not: `is_bare_key`, present-tense at this file's own
-  line, deleted by the 0.5.1 window's `refactor(kanhe): the dependency grammar is parsed`; and
+  line, deleted by the `0.6.0` window's `refactor(kanhe): the dependency grammar is parsed`; and
   `imports_and_rest`, pointing into a file that still exists after the reader moved to `syn`. Both are
   repaired here, and a third of the same class was found outside the Markdown corpus — a live doc comment
   in `crates/kanhe/tests/release_coherence.rs` describing `quoted_value` in the present tense, deleted by
@@ -1376,7 +1431,7 @@ consumer for an undemonstrated deduplication.
   under this defect, never shrink, so the failure direction is a false positive. *Risk:* a gate refusing a
   crate that cannot in fact reach the constant. Low, and loud. **Re-evaluated 2026-08-31, and one of the two premises above is now false.** The members *do* declare
   non-path dependencies — `serde_json` in seven of the eight, `syn` in 渾儀, and `toml_edit` in 勘合 since
-  the 0.5.1 window's self-law amendment — so *the eight declare no registry dependency at all* no longer holds,
+  the `0.6.0` window's self-law amendment — so *the eight declare no registry dependency at all* no longer holds,
   and the allowlist it cites has grown with it. What keeps the spurious-edge input absent is not their
   absence but that **no such name matches any member's directory basename**, which is the property the
   trigger actually turns on and the one this entry should have rested on. The other premise still holds: the
@@ -1678,7 +1733,7 @@ consumer for an undemonstrated deduplication.
   proposal is present there is no independent declaration to compare against — reading the set from the
   touched spec paths is near-tautological, since touching a spec is naming its capability. *Promotion
   trigger:* a requirement found filed under the wrong capability. **Not fired** (evaluated 2026-08-31; the filing join
-  passes, and the scenarios the 0.5.1 window rewrote stayed under the capabilities that already held them).
+  passes, and the scenarios the `0.6.0` window rewrote stayed under the capabilities that already held them).
   *Version class:* patch; repository-internal, shipping in no crate. *Authority:* `capability-subjects`, and
   `PROJECT.md`'s adoption-mode decision.
 
@@ -1846,7 +1901,7 @@ consumer for an undemonstrated deduplication.
   *Promotion trigger:* an entry of this shape carrying a claim an adopter could **act on** — a version, a
   migration step, a behaviour change — rather than a description of internals. That is a property of one
   entry and decidable by reading it, unlike a threshold on a population nothing counts. **Not fired** (evaluated
-  2026-08-31; no entry written the 0.5.1 window carries a claim an adopter could act on): every
+  2026-08-31; no entry written the `0.6.0` window carries a claim an adopter could act on): every
   instance found so far describes this repository's own machinery and asks nothing of a reader. *Version class:* patch; a
   document and a `scripts/` reaction of this repository. *Authority:* `release-coherence`. *Shape:* closing it
   needs a judgement over the entry's **subject** rather than its references, which is the prose detector
@@ -2021,7 +2076,7 @@ consumer for an undemonstrated deduplication.
   question of every trigger at once. **The reachable half is therefore the occasion rather than the
   instrument** — a per-window sweep is a thing a person can be asked for, where a rule that triggers name
   their corpus still needs the judgement-over-text this file has rejected. The re-decision is the steward's. *Why not a rule that triggers name their corpus:* it would be a rule about
-  how prose is written with no reaction behind it, and the bar the 0.5.1 window set is that a rule needs a
+  how prose is written with no reaction behind it, and the bar the `0.6.0` window set is that a rule needs a
   reachable instance — this has four, so the rule is earned, but its instrument is not, and the honest form
   is prose with the reason stated. *Version class:* patch; this file ships in no crate. *Authority:* this
   entry, and `AGENTS.md`'s *Bind a claim to its measurement*, whose three bindings this is the trigger-shaped
@@ -2062,7 +2117,7 @@ consumer for an undemonstrated deduplication.
 
 - **WATCH: a `Shape` clause is a hypothesis, and this file records no difference between one that has been
   run and one that has not.** *Class:* WATCH. *Observed pressure:* three `READY-PATCH` entries were taken to
-  the tree in the 0.5.1 window and none of their proposed shapes survived contact — **and the three failed in
+  the tree in the `0.6.0` window and none of their proposed shapes survived contact — **and the three failed in
   three different ways, which is the finding rather than an aggregate**. *The citation half* of the
   un-reacted-`SHALL` entry proposed extending an existing pointer, and the pointer turned out to be held only
   to its name resolving: the instrument holds less than the entry assumed. *The prose-claim entry* proposed a
@@ -2092,7 +2147,7 @@ consumer for an undemonstrated deduplication.
   a schedule*, which sorts a round's findings and says nothing about the status of a repair a round proposed.
 
 - **WATCH: the release gate acquires and decides in one unit, and the review found it where isolation was
-  needed.** *Class:* WATCH. *Observed pressure:* an external review of the `0.5.1` window filed three findings
+  needed.** *Class:* WATCH. *Observed pressure:* an external review of the `0.6.0` window filed three findings
   against one shape — `require_internal_pins`, `require_example_pins` and `machinery_names` each run cargo,
   read the filesystem, enumerate through git, parse TOML, and then decide policy inside the same function;
   and one manifest is parsed several times over, once for the package name and again for the version
@@ -2122,7 +2177,7 @@ consumer for an undemonstrated deduplication.
   every other. *Authority:* engine. *Compatibility:* patch; the checks ship in no crate.
 
   **Not fired, swept 2026-09-01.** No judgement moved out of a test file into the register's corpus — the
-  refusal sites in `crates/kanhe/src` fell rather than rose across the 0.5.1 window, as the parser conversions
+  refusal sites in `crates/kanhe/src` fell rather than rose across the `0.6.0` window, as the parser conversions
   deleted hand-rolled readers.
 
 - **WATCH: a promotion trigger is evaluated by whoever next reads the entry.** *Class:* WATCH. *Observed
@@ -2270,8 +2325,8 @@ consumer for an undemonstrated deduplication.
   `reference-integrity/a-relative-phrase-in-non-record-markdown-is-not-observed-a-stated-bound`; the two
   unanchored phrases are anchored to `0.5.0`. *Risk:* a phrase written here goes stale when its window
   closes and nothing says so, which is what the rule exists to prevent — bounded by this file being read by
-  a person against the tree rather than executed. **The class recurred ten times in the 0.5.1 window, and the count is what changes the argument.** The
-  `0.5.0` window closed the unanchored pointers to zero; re-measured at the end of `0.5.1`, `BACKLOG.md`
+  a person against the tree rather than executed. **The class recurred ten times in the `0.6.0` window, and the count is what changes the argument.** The
+  `0.5.0` window closed the unanchored pointers to zero; re-measured later in `0.6.0`, `BACKLOG.md`
   carried ten and `AGENTS.md` one, every one of them written by the hand that had just repaired the class
   elsewhere. Nothing observed it, which is this bound, working as declared.
 
@@ -2527,7 +2582,7 @@ consumer for an undemonstrated deduplication.
   *Risk:* a check lands in the wrong member and the two identities blur again, which is the failure the
   split was built to end. *Next trigger:* a third member, or a check whose placement two readers disagree
   about. **Not fired** (evaluated 2026-08-31; `publish = false` still names exactly 勘合 and 繩墨, and no
-  check's placement was disputed the 0.5.1 window). *Authority:* engine. *Compatibility:* none — neither member ships.
+  check's placement was disputed in the `0.6.0` window). *Authority:* engine. *Compatibility:* none — neither member ships.
   - **A `#[path]`-shared test module's `allow(dead_code)` cannot distinguish "used by no binary" from "used by
     some".** *Observed pressure:* `crates/tianheng/tests/support/` is compiled fresh into each `*_conformance.rs`
     binary, so an item only some callers use is genuinely dead in the others — which is why the blanket
@@ -4007,7 +4062,7 @@ that also holds a closed READY-PATCH record.
   a release cut, and the reader is currently correct on every shape a fixture can construct.
 
 - ~~**WATCH: the release gate's readers are slash-path-oriented, so a platform where cargo reports `\` is
-  refused rather than judged.**~~ **CLOSED**, see below. *Class:* WATCH. *Observed pressure:* an external review of the `0.5.1` window
+  refused rather than judged.**~~ **CLOSED**, see below. *Class:* WATCH. *Observed pressure:* an external review of the `0.6.0` window
   read `machinery_names` building its prefix as `format!("{root}/")` and stripping it from each
   `manifest_path` as text, and `member_enumeration` repeating the pattern. Cargo reports native paths, so on
   Windows no member manifest would sit under the prefix. *Observation source:* that review, and the reading of

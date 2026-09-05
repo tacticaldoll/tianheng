@@ -120,6 +120,7 @@ Applied to the shapes a review is likely to file:
 | a review round number, a pull request number | provenance |
 | a rejected alternative with no measurement | provenance |
 | **a relative anchor — `this window`, `the previous round`, or a `path.rs:120` into this tree** | neither: it names a moving reference, so it is stale the moment the window closes or a line is inserted above it — and unlike a retired term, **nothing goes red**. Anchor it to the moment, or name the item (a function, a scenario, a direction) instead of its position. Measured when this was written: the tree held no such reference, and the only `path:line` in it was a **reaction's own output** — a gate saying where it found an offence, which is the one place the shape is right and the reason this is a rule and not a check |
+| **a version this repository never released, named bare** | neither, and it is a different fault from a relative anchor: `this window` names a *moving* reference, while `0.5.1` names one that **never came to rest**. Release class is decided from what a window's changes do, so a window's number is not knowable until its cut, and one written into prose beforehand becomes a pointer to nothing when the class moves. Measured 2026-09-06, three have: `0.3.1`, `0.4.1` and `0.5.1`, none of which has a dated section or a tag. **Name a window by the version it shipped as.** Where the unearned number must appear — a branch a measurement was taken over, or the reclassification itself — the same sentence says what it became or that it never shipped, which is the form the `0.4.1` sites already use and the reason they read correctly today |
 | **a commit object of this repository, anywhere in tracked content** | neither. `main` carries one commit per release, so a development commit is unreachable from a fresh clone **by construction** — measured in the `0.5.0` window: a real commit of this tree, cited in a test fixture, is contained in no branch and resolves only in a clone that happens to still hold it. A release commit does resolve, and its version tag is the better name. A sha1 also exists only *after* the act it records, so a committed copy is late by construction as well as unreachable. **A third party's object is not this row**: an action pinned as `owner/action@<sha>` is correct supply-chain practice, and the same criterion excludes it without a list — that sha does not resolve here. **In live prose this has a reaction**; in **code** and in **record documents** it does not, and those are where the two instances found so far sat. Anchor to the release window, or to the tag |
 | **a branch a guard has already made unreachable** | neither. A reaction closes the **decidable** part — `str::split` and `str::rsplit` always yield an item, so a fallback on one is dead — and stops there: `xs.max()` or `entry.file_name()` are always-`Some` only on a non-empty producer, which takes the surrounding code rather than the line, so widening the reader would refuse live sites. The rest is this row |
 | **a hosting serial in live text** | neither, and this one deliberately has **no** reaction. A reader over text cannot decide it: the bare shape *is* the fixture for the squash-serial check, and inside one clause a cue and a numeric value are told apart only by meaning. One was built, needed three declared bounds to say what it could not decide, caught nothing, and was withdrawn — a narrow instrument defending a wide rule is worse than the rule alone |
@@ -274,7 +275,7 @@ trigger** instead, with the test that trigger would use where it is decidable. T
 day this was written and cost a sentence each.
 
 This is a bar on the **rate**, not the stock. The stock is not what grew: retiring rules once leaves the
-mechanism that produced them, and the 0.5.1 window's own reviews recorded that mechanism — every reaction it built
+mechanism that produced them, and the `0.6.0` window's own reviews recorded that mechanism — every reaction it built
 had a defect found in the next round, three of three.
 
 **This rule has no repository check, and that is stated rather than left to be discovered.** Its text branch
@@ -672,7 +673,7 @@ time the tree does.
 
 **And the carriers are not only prose, which is the half the correction above still left narrow.** *Every live
 document* reads as the files a narration sits in, so a sweep written from it looks in `CHANGELOG.md`,
-`BACKLOG.md`, `PROJECT.md` and the specs — and measured across the `0.5.1` window, that is not where the
+`BACKLOG.md`, `PROJECT.md` and the specs — and measured across the `0.6.0` window, that is not where the
 residue was. A superseded claim survived in a **test function name**, in the **doc comments** beside two
 directions, in an **inline comment** in a shell script, in a **scenario heading**, and in the `PINNED-BY`
 names under it. One test file carried a `///` stating the opposite of the assertions twelve lines below it,

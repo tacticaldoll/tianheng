@@ -209,7 +209,7 @@ govern-by-reaction, never a thing the tool wields.
 
 Record significant decisions here (the *why*; specs and code carry the *what*).
 
-- **How deferred work is chosen, written down because deriving it cost a round trip.** The `0.5.1` window took
+- **How deferred work is chosen, written down because deriving it cost a round trip.** The `0.6.0` window took
   the deferred queue's entries to the tree one at a time, and the ordering that produced value was not the one
   a reader of the queue would guess. Four rules, in priority order:
 
