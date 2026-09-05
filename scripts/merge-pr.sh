@@ -633,8 +633,8 @@ require_a_verdict
 require_ci_green
 require_changed_files
 
-# The title and the base are re-read, because each is the OTHER END OF A RELATION rather than a value being
-# recorded.
+# The title, the base and the head branch are re-read, because each is the OTHER END OF A RELATION rather
+# than a value being recorded.
 #
 # The wrapper's judged inputs divide by that one question, and the division is the criterion rather than a
 # tally: an input the merge RECORDS travels as the value the gate saw, and an input the merge is JUDGED

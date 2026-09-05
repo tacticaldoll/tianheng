@@ -1733,7 +1733,7 @@ so both are judged and both are re-read.
 - **WHEN** the pull request's title differs between the wrapper's evidence read and its post-gate re-read
 - **THEN** the wrapper stops before `gh pr merge`, exits `2`, and names both titles
 - **PINNED-BY** `a_title_edited_while_the_gate_ran_stops_before_the_merge`
-- **PINNED-BY** `an_unchanged_title_still_reaches_the_merge`
+- **PINNED-BY** `an_unmoved_pull_request_still_reaches_the_merge`
 
 #### Scenario: A base edited while the gate ran
 
@@ -1743,7 +1743,7 @@ so both are judged and both are re-read.
 - **AND** a re-read that cannot be performed is its own cannot-judge: not knowing where the squash lands is a
   different fact from knowing it moved
 - **PINNED-BY** `a_base_changed_while_the_gate_ran_stops_before_the_merge`
-- **PINNED-BY** `an_unchanged_title_still_reaches_the_merge`
+- **PINNED-BY** `an_unmoved_pull_request_still_reaches_the_merge`
 
 #### Scenario: A head branch renamed while the gate ran
 
@@ -1755,7 +1755,7 @@ so both are judged and both are re-read.
   front where the head is not a release branch, so what this closes is a verdict about an origin the merge
   will not have rather than a false negative
 - **PINNED-BY** `a_head_branch_renamed_while_the_gate_ran_stops_before_the_merge`
-- **PINNED-BY** `an_unchanged_title_still_reaches_the_merge`
+- **PINNED-BY** `an_unmoved_pull_request_still_reaches_the_merge`
 
 #### Scenario: An input edited inside its own post-gate re-read — a stated bound
 
@@ -1768,7 +1768,9 @@ so both are judged and both are re-read.
   `cargo test` to one API call rather than closing it. Closing it needs a server-decided precondition this tool does not offer
 - **AND** this is one bound rather than one per input. The stop is a property of a **client-side re-read** —
   it cannot be atomic with the act it precedes — so it is reached through whichever inputs are re-read, and
-  declaring it once per input would be two records of one fact that must then agree
+  declaring it per input would be one record of one fact for each, which must then all agree. The count is
+  deliberately not written: the set has grown once already, and a bound stated over a number goes stale the
+  next time it does
 - **UNPINNED** `BACKLOG.md` — *the re-read races the wrapper can only narrow*
 
 ### Requirement: The squash-message gate SHALL refuse a shape by what it is, not by what it resembles

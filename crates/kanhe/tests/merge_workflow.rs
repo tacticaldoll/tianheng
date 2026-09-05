@@ -1325,13 +1325,15 @@ fn a_head_branch_renamed_while_the_gate_ran_stops_before_the_merge() {
     );
 }
 
-/// The control: an unchanged title still reaches the merge.
+/// The control: a pull request none of whose re-read inputs moved still reaches the merge.
 ///
-/// Without it the direction above is satisfied by a wrapper that refuses every run, and the re-read would be
-/// indistinguishable from a stop-everything guard. It is the control for the base re-read too: both guards
-/// sit on the same path, so a wrapper refusing every run would satisfy either one alone.
+/// Without it every direction above is satisfied by a wrapper that refuses every run, and a re-read would be
+/// indistinguishable from a stop-everything guard. It is the control for all three — title, base and head
+/// branch — because they sit on one path, so a wrapper refusing everything would satisfy any one of them
+/// alone. It was named for the title while the title was the only one, and the name is what a `PINNED-BY`
+/// carries into three scenarios: an identifier is a claim with no room for a caveat.
 #[test]
-fn an_unchanged_title_still_reaches_the_merge() {
+fn an_unmoved_pull_request_still_reaches_the_merge() {
     let Some(root) = workspace_root() else {
         return;
     };
