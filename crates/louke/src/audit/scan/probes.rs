@@ -496,6 +496,27 @@ pub(crate) fn collect_scope_modules(
     Ok(())
 }
 
+/// Whether a `metadata` failure means the target IS NOT THERE, as against this reader not finding out.
+///
+/// **`NotFound` is not the only absence, and taking it for the only one made a false refusal.** Measured:
+/// with `src/gated` a plain file, `fs::metadata("src/gated/mod.rs")` answers `NotADirectory`, not
+/// `NotFound` — a path component that is not a directory cannot have children, so the target cannot exist.
+/// Routing that to the loud channel refused a `#[cfg]`-gated declaration over a tree rustc compiles
+/// cleanly, which is the same class this reader's own separation of absent from unreadable exists to close,
+/// committed one change after closing it elsewhere.
+///
+/// The criterion, so a later kind is placed rather than guessed: an error saying **this path cannot name
+/// anything** is an absence; one saying **this reader could not find out** is not. `FilesystemLoop` stays
+/// on the loud side deliberately — a cycle is a thing this reader could not resolve, and
+/// [`read_dir_entries_sorted`] already fails safe on the same shape, so the two readers in this file agree.
+/// Kinds beyond the two measured are left where they are rather than sorted on a guess.
+fn is_absence(kind: std::io::ErrorKind) -> bool {
+    matches!(
+        kind,
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+    )
+}
+
 /// Whether `path` is a regular file, or why this reader could not tell.
 ///
 /// **`is_file()` answers `false` for two different facts**, and one of them is not an absence. Measured on
@@ -512,7 +533,7 @@ pub(crate) fn collect_scope_modules(
 fn is_regular_file(path: &Path) -> Result<bool, String> {
     match std::fs::metadata(path) {
         Ok(found) => Ok(found.is_file()),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(err) if is_absence(err.kind()) => Ok(false),
         Err(err) => Err(format!(
             "cannot read '{}' to decide whether it backs a module — {err}; an unreadable target is not an \
              absent one, and tolerating it would leave whatever it holds unaudited",
@@ -526,7 +547,7 @@ fn is_regular_file(path: &Path) -> Result<bool, String> {
 fn is_directory(path: &Path) -> Result<bool, String> {
     match std::fs::metadata(path) {
         Ok(found) => Ok(found.is_dir()),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(err) if is_absence(err.kind()) => Ok(false),
         Err(err) => Err(format!(
             "cannot read '{}' to decide whether it holds a module's children — {err}; an unreadable \
              directory is not an absent one",

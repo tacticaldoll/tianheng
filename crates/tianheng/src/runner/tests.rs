@@ -1066,9 +1066,17 @@ fn list_document_covers_every_populated_dimension() {
 }
 
 /// The Markdown projection must carry a section for **every** dimension the JSON document emits
-/// (`constitution-projection`'s "no less than the JSON" guarantee). This reaction replaces a
-/// hand-maintained capability enumeration — so a capability added to `list_document` without a
-/// `list_markdown` section fails CI here rather than silently under-projecting.
+/// (`constitution-projection`'s "no less than the JSON" guarantee), for the dimensions THIS FIXTURE
+/// POPULATES.
+///
+/// **That qualifier is the guard's real extent and it used to be missing.** `append_array` writes no key
+/// for an empty dimension, so a dimension added to `list_document` and not added to the fixture emits no
+/// key, the emitted set is unchanged, and the set equality passes. That is exactly how
+/// `unsafe_confinement_boundaries` went unseen. So the fixture is what carries coverage here and the set
+/// equality is what reports a gap between it and the table — a capability wired into `list_document` alone
+/// reaches neither. This direction's own summary read *a capability added to `list_document` without a
+/// `list_markdown` section fails CI here*, without the qualifier — wider than what any corpus taken from
+/// the fixture can hold.
 ///
 /// **The parity half was a count, and a count agreed with itself.** `unsafe_confinement_boundaries` was
 /// in neither the enumerated table nor the fixture, so the fixture's document carried nine keys and the

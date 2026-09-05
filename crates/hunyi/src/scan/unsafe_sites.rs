@@ -109,12 +109,10 @@ fn canonical_unsafe_owner(
                     resolve_path_all(&tp.path, uses, module, BareFallback::CurrentModule);
                 candidates.sort();
                 candidates.dedup();
+                // Several candidates, never none: `resolve_path_all` with this fallback always yields
+                // at least one, so the empty case a first repair branched on could not be reached.
                 let [base] = candidates.as_slice() else {
-                    return Err(if candidates.is_empty() {
-                        OwnerUnnameable::Unresolved
-                    } else {
-                        OwnerUnnameable::AmbiguousAlias
-                    });
+                    return Err(OwnerUnnameable::AmbiguousAlias);
                 };
                 let args =
                     render_last_segment_args(&tp.path).ok_or(OwnerUnnameable::Unrenderable)?;
@@ -168,7 +166,11 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
                     let why = *why;
                     self.unsupported("method owner", why);
                 }
-                _ => self.unsupported("method owner", OwnerUnnameable::Unrenderable),
+                // What remains is a trait impl whose TRAIT did not render, with a nameable owner —
+                // not a fact about the self type, so it takes the trait sentence. Handing it an
+                // `OwnerUnnameable` said the owner's syntax has no supported rendering about an owner
+                // that renders perfectly, which is the defect this cause exists to close.
+                _ => self.unsupported_trait("method owner's trait"),
             }
         }
         visit::visit_impl_item_fn(self, node);
@@ -184,7 +186,7 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
                     owner: owner.clone(),
                     name,
                 }),
-                None => self.unsupported("trait-method owner", OwnerUnnameable::Unresolved),
+                None => self.unsupported_trait("trait-method owner"),
             }
         }
         visit::visit_trait_item_fn(self, node);

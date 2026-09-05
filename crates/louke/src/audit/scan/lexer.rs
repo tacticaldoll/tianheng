@@ -325,8 +325,15 @@ pub(crate) fn mod_preamble_attrs(
                     // tolerance is additive, via `cfg_attr_paths` below, not this flag).
                     b"cfg" => attrs.cfg = true,
                     // `#[cfg_attr(<pred>, …, path = "…")]`: extract EVERY `path = "…"` value from
-                    // WITHIN this attribute's own argument list (skipping the leading predicate,
-                    // which is never itself an identifier spelled `path`).
+                    // WITHIN this attribute's own argument list.
+                    //
+                    // The reader does not skip the leading predicate — it scans the whole span, and a
+                    // comment here said it skipped one "which is never itself an identifier spelled
+                    // `path`". A predicate CAN be spelled that way: `cfg_attr(path = "x", …)` needs
+                    // only `--cfg path="x"`, and this collects it. 渾儀's parser skips the predicate at
+                    // each level and does not. The two therefore disagree on a shape neither can be
+                    // shown to meet in a real tree, which is recorded here rather than closed by
+                    // widening this scanner into a nesting parser.
                     //
                     // Two axes, and only one of them was covered. A module may carry more than one
                     // SEPARATE `cfg_attr`-wrapped `#[path]`, one per platform predicate — this arm

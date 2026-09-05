@@ -84,9 +84,10 @@ pub(crate) fn is_anchor_absent_from_unit(err: &str, canonical_absence: &str) -> 
 ///
 /// **The policy had two halves and only one of them lived here.** [`is_anchor_absent_from_unit`] decided
 /// what an absence means; what to *do* about it — govern where the anchor is, refuse only where it is
-/// nowhere — was written out at each of the seven boundary checkers, head and tail identical in all seven
-/// and differing only in the body between them. Seven copies of one policy are seven chances for it to
-/// mean seven things, and the half that decides is the half that was already shared.
+/// nowhere — was written out at every boundary checker, head and tail identical in all of them and
+/// differing only in the body between. A copy per checker is a chance per checker for the policy to mean
+/// something else, and the half that decides was the half already shared. The count is deliberately not
+/// written: it is the callers of this function, and it changes when a boundary is added.
 ///
 /// A package's crate roots are separate compilation units — same `crate` module path, separate module
 /// graph — so each is evaluated on its own and the unit is carried into each finding's identity. An
