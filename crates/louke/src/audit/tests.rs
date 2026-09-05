@@ -427,8 +427,8 @@ fn a_path_inside_a_compound_predicate_is_still_a_predicate() {
 
 /// A path-QUALIFIED look-alike is not the built-in `cfg_attr`, however the qualification is spelled.
 ///
-/// **Rust has more than one way to write an identifier, and the qualification survives all of them.** The
-/// three inputs are one invariant read three ways, so they sit in one table rather than three directions:
+/// **Rust has more than one way to write an identifier, and the qualification survives all of them.** These
+/// inputs are one invariant read several ways, so they sit in one table rather than a direction each:
 ///
 /// - `foo::cfg_attr` — the segment's own text matches the built-in; what excludes it is the `::` before it.
 /// - `foo::/**/cfg_attr` — a comment is trivia and does not change what a path IS.
