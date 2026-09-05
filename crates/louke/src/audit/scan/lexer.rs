@@ -492,8 +492,20 @@ pub(crate) fn path_meta_values(
             _ => {}
         }
         if is_ident_byte(bytes[i]) && (i == start || !is_ident_byte(bytes[i - 1])) {
-            let name_start = i;
-            let mut name_end = i;
+            // **A raw identifier is ONE path segment, not three scanner events.** `r#cfg_attr` names the
+            // same identifier as `cfg_attr` — the prefix escapes a keyword and says nothing else — so a
+            // reader that saw `r`, then `#`, then `cfg_attr` cleared the qualification twice and read
+            // `foo::r#cfg_attr` as unqualified. The prefix is consumed with the segment it belongs to, and
+            // the name compared is what it escapes. This file already draws the same distinction for a
+            // macro name; the reader below did not.
+            let mut name_start = i;
+            if bytes[i] == b'r' && bytes.get(i + 1) == Some(&b'#') {
+                let after = i + 2;
+                if after < paren_close && is_ident_byte(bytes[after]) {
+                    name_start = after;
+                }
+            }
+            let mut name_end = name_start;
             while name_end < paren_close && is_ident_byte(bytes[name_end]) {
                 name_end += 1;
             }

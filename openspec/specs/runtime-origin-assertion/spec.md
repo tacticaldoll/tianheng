@@ -388,11 +388,15 @@ a third spelling. A comment between the separator and the segment is trivia and 
 
 #### Scenario: A qualified look-alike is not the built-in attribute
 
-- **WHEN** a declaration carries `#[cfg_attr(any(), foo::cfg_attr(a, path = "bogus"), path = "real.rs")]`,
-  with or without a comment between `::` and `cfg_attr`, and `bogus` exists and holds a probe
+- **WHEN** a declaration carries `#[cfg_attr(any(), foo::cfg_attr(a, path = "bogus"), path = "real.rs")]`
+  in any spelling of the qualification — plain, with a comment between `::` and the segment, or with the
+  segment written as the raw identifier `r#cfg_attr` — and `bogus` exists and holds a probe
 - **THEN** only `real.rs` is read, so the probe in `bogus` is not coverage and a declared seam with no
   other probe reacts
+- **AND** an **unqualified** `r#cfg_attr` IS the built-in, since a raw identifier names the identifier it
+  escapes: the narrowing SHALL NOT cost a genuine nested group its applied metas
 - **PINNED-BY** `a_path_qualified_look_alike_is_not_cfg_attr`
+- **PINNED-BY** `an_unqualified_raw_cfg_attr_is_still_the_built_in`
 
 The identical union SHALL apply to a `cfg_attr`-wrapped `#[path]` on an **inline** `mod name { ... }`
 (a body, not a `;`-terminated declaration), where it governs the **base directory** `name`'s own

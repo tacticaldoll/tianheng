@@ -73,10 +73,21 @@ them.
   whitespace, and `foo::/**/cfg_attr` stopped that scan at the comment's `/`: the same over-read, a spelling
   later. Measured, before each: `Clean(Subject { declared: 2, reached: 1 })`.
 
+  A third spelling followed: `foo::r#cfg_attr`, where a raw identifier became three scanner events — `r`,
+  `#`, `cfg_attr` — and cleared the qualification twice. A raw identifier is ONE segment naming the same
+  identifier it escapes, so the prefix is consumed with the segment and the name compared is what it
+  escapes. The control matters as much: an **unqualified** `r#cfg_attr` IS the built-in, so the narrowing
+  must not cost a genuine nested group its applied metas.
+
   The built-in is the **single-segment** path, and whether a segment is reached through `::` is a fact about
   the token before it — tracked forward past trivia, because a comment is trivia and must not change what a
   path IS. `runtime-origin-assertion` gains the clause and the pin, since the reaction moved and the
-  requirement had said nothing about qualified attribute paths at all.
+  requirement had said nothing about qualified attribute paths at all. All three spellings are one
+  direction now, because replacing one with another is how the second was lost while the third was closed.
+
+  **Five review rounds, one scanner, five spellings.** `BACKLOG.md` carries that as a shape rather than as
+  five entries: what a sixth would decide is whether this reader's corpus can be enumerated, not which
+  shape comes next.
 
   Two carriers of the previous repair went with it: the call-site comment still said the reader searches
   *anywhere in the argument span rather than parsing nesting structure*, which is the shape that read
