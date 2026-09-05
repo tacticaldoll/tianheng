@@ -24,6 +24,18 @@ them.
 
 ### Documentation
 
+- **The `list` projection's coverage guard was blind to a dimension, and a typed count agreed with it.**
+  The guard says a capability added to `list_document` without a `list_markdown` section fails CI rather
+  than silently under-projecting. `unsafe_confinement_boundaries` was in neither its enumerated table nor
+  its fixture, so it was never looked at — and the parity half compared the **fixture's** document against
+  a literal `9`. The fixture is what decides that document's keys, so the number and the document could
+  only ever agree on the one input incapable of exposing the gap, while `list_document` had emitted that
+  dimension the whole time. Measured: with `list_markdown`'s unsafe row deleted — a real under-projection —
+  the guard passed. The fixture now populates all ten dimensions and parity is **set equality**, which
+  names which member is missing where a count cannot. `constitution-projection`'s scenario requires the
+  fixture to declare "one boundary of every semantic capability the JSON document can emit", so this is a
+  conformance repair rather than hygiene; no specification text changes.
+
 - **The head-branch re-read's own carriers, swept by the rule the same window widened.** The re-read landed
   and the summary comment above it still said *the title and the base*; the shared positive control was still
   named `an_unchanged_title_still_reaches_the_merge` while controlling three guards, and that title-only name
