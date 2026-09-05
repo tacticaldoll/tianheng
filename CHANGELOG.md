@@ -480,6 +480,20 @@ them.
 
 ### Self-governance
 
+- **The branch written to tolerate a member sitting at the workspace root could not carry one.** A root
+  declaring `[workspace]` and `[package]` together is a shape cargo accepts — measured on cargo 1.96.0, it
+  reports that member's `manifest_path` as the root's own `Cargo.toml` — so the member's directory strips to
+  nothing. The empty string was then handed to `git ls-files` as a pathspec, and git refuses one:
+  `fatal: empty string is not a valid pathspec. please use . instead if you meant to match all paths`. The
+  branch reached the directory-unreadable refusal with an empty subject, saying `could not enumerate : `.
+
+  `.` is what git suggests and is not what this check means. The machinery set is *the tracked files under a
+  member the workspace does not publish*, and for a member that is the root, `.` is every tracked file in the
+  repository — every other member's source included. So the shape is refused rather than tolerated, in the
+  words `manifest`'s own reader already uses of a single-crate root: not a shape this check judges, and
+  saying so beats guessing. `machinery_names` is `pub(crate)` for the direction that meets it, which is
+  narrower than the `pub` its neighbour already carries for the same reason.
+
 - **A path that is not UTF-8 kept its own identity at one end of a comparison and not at the other.**
   `hermetic_git` refuses git output it cannot decode, in so many words — *a path that is not UTF-8 keeps its
   own identity, and reporting a replaced one would compare something the repository does not hold*. The

@@ -603,3 +603,48 @@ fn a_crate_directory_that_is_not_utf8_is_refused_by_the_walk() {
 
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A workspace whose root is also a member is refused, not passed on as an empty pathspec.
+///
+/// **The shape is cargo's, not this reader's.** A root declaring `[workspace]` and `[package]` together is
+/// accepted — measured on cargo 1.96.0, which reports that member's `manifest_path` as the root's own
+/// `Cargo.toml` — so the directory strips to nothing. What the previous branch did with nothing was hand it
+/// to `git ls-files` as a pathspec, and git refuses one: *empty string is not a valid pathspec*. The branch
+/// written for this state reached the directory-unreadable refusal with an empty subject.
+///
+/// Negative run: with the branch restored to `String::new()`, this fails on the site — it meets
+/// `release-coherence#directory-listing-unreadable` carrying `could not enumerate : ` and git's own
+/// `fatal: empty string is not a valid pathspec. please use . instead if you meant to match all paths`.
+/// The fixture is a real repository for exactly that reason: without one, git fails earlier on *not a git
+/// repository* and the run reads as decisive about a state it never reached.
+#[test]
+fn a_member_that_is_the_workspace_root_is_not_an_empty_pathspec() {
+    let root = std::env::temp_dir().join(format!("kanhe-root-member-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("the scratch root is writable");
+    std::fs::create_dir_all(root.join("src")).expect("the source directory is writable");
+    std::fs::write(
+        root.join("Cargo.toml"),
+        "[workspace]\nmembers = []\n\n[package]\nname = \"rootpkg\"\nversion = \"0.0.0\"\n\
+         edition = \"2021\"\npublish = false\n",
+    )
+    .expect("the root manifest is writable");
+    std::fs::write(root.join("src").join("lib.rs"), "pub fn f() {}\n")
+        .expect("the crate root is writable");
+    // A real repository, so the pathspec is what git objects to rather than the absence of a repository.
+    for args in [
+        &["init", "-q", "."][..],
+        &["config", "user.email", "fixture@example.invalid"][..],
+        &["config", "user.name", "fixture"][..],
+        &["add", "-A"][..],
+        &["commit", "-q", "-m", "fixture"][..],
+    ] {
+        crate::hermetic_git::run(&root, &[], args).expect("the fixture repository is built");
+    }
+
+    let refusal = super::super::release_coherence_gate::machinery_names(&root)
+        .expect_err("a member sitting at the root is a shape this check does not judge");
+    crate::refusal::expect("release-coherence#member-is-the-workspace-root", &refusal);
+
+    let _ = std::fs::remove_dir_all(&root);
+}
