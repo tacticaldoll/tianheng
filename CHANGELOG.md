@@ -73,32 +73,19 @@ them.
 
 ### Release
 
-- **This release line is `0.6.0`, and its branch was renamed to say so.** The window carries `**BREAKING**`
+- **This release line is `0.6.0`, decided from what the window's changes do.** It carries `**BREAKING**`
   markings — false-negative closures, a rule-key identity change, a module-resolution widening — and this
-  repository's rule past `0.1.0` is that breaking earns a **minor**. What decides the number is that any
-  such marking is present, so the classes are named and the tally is left to whatever enumerates them. `AGENTS.md` also
-  holds that a branch name encodes the exact target version, so `release/0.5.1` was a name disagreeing with
-  its own contents, on the one surface an operator consults to know what is being cut.
+  repository's rule past `0.1.0` is that breaking earns a **minor**. What decides the number is that any such
+  marking is present, so the classes are named and the tally is left to whatever enumerates them. The line was
+  opened as a patch and reclassified when the markings were read against it; the working number it carried
+  before that is not recorded here, because a version this project never released names nothing an adopter
+  can resolve, and this document is the adopter-facing projection.
 
   **Nothing mechanical said so, which is why it is written here.** `release_coherence` compares version
   literals to each other — `Cargo.toml`, the dated changelog heading, the lock — and never to the change
   class the entries declare, so the release would have passed every gate and shipped a patch requiring
-  baseline regeneration. It was found by an independent review reading the markings against the branch name.
-
-  Git history shows pull requests merged into `release/0.5.1`: that is the same branch under its former
-  name, renamed in place through GitHub rather than recreated, so every **commit** still resolves. Its
-  tracked references were updated with it — the count is what a sweep prints, not what this paragraph
-  claims. **The workspace version is untouched at `0.5.0`** — it moves at release preparation, not here.
-
-  **What the rename does not move, and what that cost.** GitHub retargets the open pull requests on a
-  renamed branch and leaves a **merged** one's recorded base as it was: measured 2026-09-06, 87 merged pull
-  requests still record `release/0.5.1` as their base and 12 record `release/0.6.0`, against a ref
-  `release/0.5.1` that no longer exists. So a sweep rewriting that name through tracked prose is right
-  wherever the name is a label and wrong wherever it is part of an **observation** — and it was wrong once:
-  a `BACKLOG.md` measurement over merged pull requests had its base rewritten, leaving a figure attached to a
-  set that does not contain the instance the sentence names. Repaired by restoring the base that was measured
-  and carrying the command beside the figure. The two cases are not mechanically separable, which is why the
-  remaining prose references to *the 0.5.1 window* are left for a reader rather than swept.
+  baseline regeneration. It was found by an independent review reading the markings against what the window
+  had built.
 
 ### Migration
 
@@ -508,9 +495,19 @@ them.
 
   The repair is the form this repository already had right: the four `0.4.1` sites all name what the window
   became in the same clause, and read correctly today because of it. The 24 unanchored sites now name the
-  version each window shipped as; the five inside the merged-pull-request measurement keep `release/0.5.1`,
-  because there the name is the value the query takes and the sentence beside it says the ref is gone.
-  `AGENTS.md`'s carrier taxonomy carries the row.
+  version each window shipped as, and the number itself is gone from every live document but the two that
+  **declare** the class. `AGENTS.md`'s carrier taxonomy carries the row.
+
+  **The last holdout was a measurement, and keeping the name there was wrong for a reason better than
+  tidiness.** That figure was addressed by `--base release/0.5.1`, defended on the ground that a query's
+  argument is part of its observation. It is — but the observation was the wrong one: a branch is renameable
+  and a version that never shipped resolves through nothing, so the corpus was fragile from the start.
+  Re-addressed to the window's commit range, which resolves from any clone, the same question answers **103
+  pull requests and three offences** where the branch-addressed corpus answered 22 and one. The two it had
+  never seen are `fix/tianheng-…` landing as `docs(tianheng): …` and `gov/spec-prose-discipline`, whose type
+  is not in the admitted set — the type disagreement the naming rule exists to prevent, and a second retired
+  role, which is a clause of that entry's trigger never before seen to fire. **The dead name was not only
+  unresolvable; it was holding a figure three times too small.**
 
   **A reaction is reachable here, which is unusual for this file's prose classes and is why it is filed
   rather than waved at.** A version literal below the workspace version with neither a dated section nor a
@@ -584,14 +581,12 @@ them.
   *A rename rewrote a base inside a measurement.* The branch-name entry's evidence read *measured over all 22
   pull requests merged into `release/0.6.0`* and named one instance,
   `test-kanhe-a-fixture-sha-that-resolves-nowhere`. That instance is not in that set. GitHub retargets a
-  renamed branch's **open** pull requests and leaves a **merged** one's recorded base alone, so measured
-  2026-09-06: `--base release/0.5.1` returns 87, `--base release/0.6.0` returns 12, and the named instance is
-  in the first — against a ref that no longer exists. The rename's own sweep did it, one window after the
-  commit that wrote the figure, whose subject is *a trigger is a predicate, and nothing holds one to its
-  corpus*. **A branch name is a label in most prose and part of the observation inside a measurement, and
-  nothing separates the two mechanically** — so the base is restored, the figure now carries the command that
-  produces it, and the remaining prose references to *the 0.5.1 window* are deliberately left for a reader
-  rather than swept, because sweeping them is the move that caused this.
+  renamed branch's **open** pull requests and leaves a **merged** one's recorded base alone, so a branch this
+  window renamed left the figure attached to a set that does not contain its own evidence. The rename's own
+  sweep did it, one window after the commit that wrote the figure — whose subject is *a trigger is a
+  predicate, and nothing holds one to its corpus*, and whose corpus was a branch. The figure is re-addressed
+  to the window's commit range and carries the command that produces it; *A version this repository never
+  released was written into its own governance* records what that re-addressing then found.
 
   *A trigger fired.* *A positional reference appearing again after this sweep* — whose own control was the
   0.5.0 sweep — fired four times in this section. Read out, two resolve, one is ambiguous, and
@@ -903,7 +898,7 @@ them.
   it. Negative run: mapped to *does not inherit*, it answered `Violation` where `CannotJudge` was expected.
 
   The spec scenario carrying this requirement described **which reader owns the question**, and that prose
-  had gone stale before this change — the readers it named were migrated earlier in the 0.5.1 window. It now
+  had gone stale before this change — the readers it named were migrated earlier in the `0.6.0` window. It now
   states the behaviour and keeps the measurements, which is one fewer hand-maintained structural claim.
 
 - **Six more promotion triggers evaluated, and one entry's evidence had gone false under this window's own
@@ -991,7 +986,7 @@ them.
   **release branch's own history**, never against `main`, which squashes a whole window into one commit. The
   same range on `main` answers `0/1`, which is what the first re-run returned.
 
-  **First reading: 8/17 (47%)** for `0.5.1` so far against `0.5.0`'s 52%, with `crates/kanhe` down from
+  **First reading: 8/17 (47%)** for `0.6.0` so far against `0.5.0`'s 52%, with `crates/kanhe` down from
   37,154 lines to 36,460 — the first window in which it has shrunk. Neither number carries much yet, and the
   entry says so: seventeen changes is a sample two differently-classified commits would move ten points, and
   nearly all of them are one hand working on governance, so it measures who was working more than whether the

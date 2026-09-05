@@ -486,14 +486,22 @@ consumer for an undemonstrated deduplication.
   tracked live Markdown that is **below the workspace version** and has neither a `## [X.Y.Z]` dated section
   nor a `vX.Y.Z` tag names a version that never existed and never will. No judgement over meaning is needed:
   a number above the workspace version is a plan, a number with a section or a tag is a release, and what is
-  left is neither. The one exemption is the anchoring form the `0.4.1` sites already use and the pull-request
-  measurement above now uses — the same paragraph naming an earned version — which is positional and
-  decidable rather than semantic. Its negative run is the state of this file before this window: the check
-  must report the 24 repaired sites and not the five inside that measurement.
+  left is neither. **After this window the number survives in exactly three places — this entry,
+  `AGENTS.md`'s taxonomy row, and the changelog entry recording the repair — all three of which *declare*
+  the class**, which is the same positional exemption the relative-phrase bound already grants
+  `AGENTS.md`'s own row. Nothing else in the tree names it, `docs/history/` included. So the exemption is a
+  declaration, decidable by where a line sits, and not a judgement about what it means.
 
-  **What is left is a design decision, not more evidence**, and it is deliberately not taken here: the
-  exemption boundary decides whether a governance file may narrate its own reclassification, and choosing it
-  alone is the shape this sweep kept finding wrong.
+  Its negative run is this file's own state before the repair: the check must report the 24 sites, and the
+  measurement it would have reported alongside them is gone rather than exempted — **which is the part worth
+  keeping.** That figure was defended as an observation, on the ground that a query's argument is part of what
+  it measured. It is; the observation was simply the wrong one. Re-addressed from `--base release/0.5.1` to
+  the window's own commit range, the same question answers **103 pull requests and three offences** where the
+  branch-addressed corpus answered 22 and one. A dead name is not only unresolvable — this one was holding a
+  figure three times too small, and preserving it as an observation would have preserved that.
+
+  **What is left is choosing whether the declaring exemption is worded as a section, a file, or a marker**,
+  which is a check's design and not more evidence.
 
 - **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
   register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
@@ -1147,23 +1155,35 @@ consumer for an undemonstrated deduplication.
   exists to prevent. *Promotion trigger, rewritten 2026-09-01 over the corpus it watches:* a merged pull request whose head
   branch does not parse as `<type>/<scope>-<slug>` with `<type>` in the admitted set, or whose parsed type
   differs from its squash subject's, or a second retired role accumulating. **So rewritten it fires, on the
-  `0.6.0` window's own work.** Measured by
-  `gh pr list --state merged --base release/0.5.1 --limit 300 --json headRefName,title` over all 22 pull
-  requests that had merged into `release/0.5.1` when this was written: 21 branches
-  parse and every one of those agrees with its squash subject's type, and one carries no `/` at all
-  (`test-kanhe-a-fixture-sha-that-resolves-nowhere`), so it declares no type for a subject to disagree with.
+  `0.6.0` window's own work.** Measured 2026-09-06 over the window's own commit range, which resolves from
+  any clone, rather than over a branch name, which does not:
 
-  **The base this names is `release/0.5.1` deliberately, and restoring it is a repair.** The branch was
-  renamed to `release/0.6.0` and the rename's sweep rewrote the name here too — but GitHub does not retarget
-  a **merged** pull request's recorded base, so re-running the command above against `release/0.6.0` answers
-  over a different set: measured 2026-09-06, `--base release/0.5.1` returns **87** and `--base release/0.6.0`
-  returns **12**, and `test-kanhe-a-fixture-sha-that-resolves-nowhere` — the one instance this sentence names
-  — is in the first. The sentence had come to name a corpus that does not contain its own evidence. The ref
-  `release/0.5.1` no longer exists, and the merge records naming it still do; that is what makes the base a
-  fact about the observation rather than a label to keep current, and a sweep cannot tell the two apart.
-  The figure is carried by its command from here on, so the next rewrite of a name inside it disagrees with a
-  re-run instead of passing silently. The commit that wrote this measurement is titled *a trigger is a
-  predicate, and nothing holds one to its corpus*.
+  ```bash
+  # Every pull request whose squash reached this window, addressed by the RANGE. A `--base` filter names a
+  # branch, and a branch is renameable — measured, that is how this figure was lost once.
+  git log v0.5.0..release/0.6.0 --format='%H' | while read h; do
+    gh api "repos/:owner/:repo/commits/$h/pulls" --jq '.[]|[.head.ref,.title]|@tsv'
+  done | sort -u | awk -F'\t' '
+    { split($1,b,"/"); split($2,s,/[(:]/)
+      if (index($1,"/")==0)  print "NO-TYPE   " $1
+      else if (b[1]!=s[1])   print "DISAGREE  " $1 " -> " $2 }'
+  ```
+
+  **103 pull requests, three offences.** `test-kanhe-a-fixture-sha-that-resolves-nowhere` carries no `/` at
+  all, so it declares no type for a subject to disagree with; `fix/tianheng-the-usage-block-has-one-owner`
+  landed as `docs(tianheng): …`; and `gov/spec-prose-discipline` declares a type that is **not in the
+  admitted set** and landed as `docs(agents): …`. The last two are the disagreement this naming rule exists
+  to prevent, and `gov` is a second retired role — the third clause of the trigger, which had never been
+  seen to fire.
+
+  **The figure was three times smaller while it was addressed by a branch name.** It read *22 pull requests
+  merged into `release/0.5.1`*, that branch was renamed, and GitHub does not retarget a **merged** pull
+  request's recorded base — so the sentence came to name a set not containing its own evidence, and a repair
+  that merely restored the old name kept a corpus that had been the wrong one from the start. A branch is
+  renameable and a version that never shipped resolves through nothing; the commit range is neither. The
+  command is carried here so the next reading disagrees with a re-run instead of passing silently. The commit
+  that first wrote this measurement is titled *a trigger is a predicate, and nothing holds one to its
+  corpus*, and the corpus it named was a branch.
 
   The old trigger could not fire on it: this entry's own *Observed pressure* had already counted seven
   slash-less branches in `0.5.0`, so the shape was known when the trigger was written, and the trigger was
