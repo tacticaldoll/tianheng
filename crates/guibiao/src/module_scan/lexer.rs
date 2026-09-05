@@ -548,10 +548,10 @@ pub(super) enum UseStatementScan {
 }
 
 /// Classify what follows a keyword-confirmed `use` at `bytes[i]` (see [`keyword_starts_at`]).
-/// Shared by `use_statements` (symbol_scan.rs, flat glob detection) and `use_trees_with_modules`
-/// (use_scan.rs's inline-module-aware walk) — the one place both interpret "what is a `use`
-/// statement's body" identically; each still owns its own surrounding loop, since their
-/// module/brace tracking around this scan genuinely differs.
+/// Shared by `use_statements` and `pub_use_statements` (symbol_scan.rs, flat glob detection and the
+/// re-export closure's feed) and `use_trees_with_modules` (use_scan.rs's inline-module-aware walk) — the
+/// one place all three interpret "what is a `use` statement's body" identically; each still owns its own
+/// surrounding loop, since their module/brace and visibility tracking around this scan genuinely differ.
 pub(super) fn scan_use_statement(bytes: &[u8], source: &str, i: usize) -> UseStatementScan {
     let start = i + 3;
     // A precise-capturing bound `-> impl Trait + use<'a, T>` (stable Rust) puts a `use` token
