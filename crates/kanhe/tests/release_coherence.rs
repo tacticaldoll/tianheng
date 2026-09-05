@@ -3486,26 +3486,33 @@ fn two_workspace_keys_in_one_dependency_are_not_one_inheritance() {
 
 /// A catalog entry whose identity this reader cannot resolve stops the inheriting example.
 ///
-/// The entry might be the one being inherited, and *might be* is not an answer — skipping it is how a stale
-/// pin would reach a release through the catalog rather than through the dependency. A quoted key is the
-/// cheapest spelling of an unresolvable identity, and it is the same one the sibling
-/// `a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped` refuses one level out.
+/// The entry being taken names a crate this reader cannot read, and *might be a family crate* is not an
+/// answer — passing it over is how a stale pin would reach a release through the catalog rather than through
+/// the dependency.
+///
+/// **This WHEN moved twice.** It was first written with the catalog entry under a quoted key,
+/// `"xuanji" = "0.2"`, which the old hand-rolled reader could not decode and a real parser resolves; what
+/// still cannot be resolved is an entry whose `package` is no string. It moved again when the catalog lookup
+/// became a lookup: the entry was written under `alias` while the dependency inherited `xuanji`, and the
+/// search that scanned every entry for a resolved identity refused on an entry **no dependency here takes**.
+/// The entry the dependency actually takes is the subject, so it is the one written unreadable.
+/// `an_unrelated_unresolvable_catalog_entry_does_not_mask_a_stale_pin` holds the other side of that move.
 #[test]
 fn a_catalog_entry_whose_identity_is_unresolvable_stops_the_inheriting_example() {
     let root = scratch("catalog-unresolvable");
     let fixture = build_fixture(&root, "catalog-unresolvable", "0.2.0");
     std::fs::write(
         fixture.repo.join("examples/adopter/Cargo.toml"),
-        // **This WHEN moved when a real parser replaced the hand-rolled reader.** The catalog entry was
-        // written under a quoted key, `"xuanji" = "0.2"`, which the old reader could not decode and the
-        // parser resolves. What still cannot be resolved is an entry whose `package` is no string.
         "[workspace]\n[package]\nname = \"adopter\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
-         [workspace.dependencies]\nalias = { package = 5, version = \"0.2\" }\n\n\
+         [workspace.dependencies]\nxuanji = { package = 5, version = \"0.2\" }\n\n\
          [dependencies]\nxuanji = { workspace = true }\n",
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
-    commit(&fixture.repo, "chore: a catalog entry under a quoted key");
+    commit(
+        &fixture.repo,
+        "chore: the entry taken names no readable crate",
+    );
     let refusal = refuse(
         &fixture.repo,
         Kind::CannotJudge,
@@ -3515,6 +3522,44 @@ fn a_catalog_entry_whose_identity_is_unresolvable_stops_the_inheriting_example()
         "release-coherence#example-catalog-entry-unresolvable",
         &refusal,
     );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// An unresolvable catalog entry nothing here takes does not mask a stale pin that is taken.
+///
+/// **This is the half a narrowing has to pin, and it is a strengthening rather than a relaxation.** While the
+/// catalog was searched by resolved identity, one unreadable entry anywhere in the table refused the whole
+/// example — so a catalog carrying both an unreadable entry and a stale family pin answered *cannot judge*
+/// about the unreadable one and never reached the stale one. That is the false negative the Core Contract
+/// forbids, reached through a refusal rather than through a pass: the operator is told the manifest cannot be
+/// judged, repairs the unreadable entry, and the stale pin is what ships.
+///
+/// Negative run against the identity-searching reader:
+///
+/// ```text
+/// assertion `left == right` failed: example adopter requires xuanji from the workspace catalog, whose
+/// entry alias names a crate this check cannot resolve, so what holds it cannot be decided
+///   left: CannotJudge
+///  right: Violation
+/// ```
+///
+/// The stale `0.0.1` is not named anywhere in it, because it was never read.
+#[test]
+fn an_unrelated_unresolvable_catalog_entry_does_not_mask_a_stale_pin() {
+    let root = scratch("catalog-unrelated-unresolvable");
+    let fixture = build_fixture(&root, "catalog-unrelated-unresolvable", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("examples/adopter/Cargo.toml"),
+        "[workspace]\n[package]\nname = \"adopter\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
+         [workspace.dependencies]\nalias = { package = 5, version = \"9.9.9\" }\n\
+         xuanji = \"0.0.1\"\n\n\
+         [dependencies]\nxuanji = { workspace = true }\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: a stale offer beside an unread one");
+    let refusal = refuse(&fixture.repo, Kind::Violation, "0.0.1");
+    refusal::expect("release-coherence#example-pin-disagrees", &refusal);
     let _ = std::fs::remove_dir_all(&root);
 }
 

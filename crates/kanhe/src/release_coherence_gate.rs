@@ -275,7 +275,15 @@ pub(crate) fn declared_dependencies(
     Ok(found)
 }
 
-/// What the catalog in `text` offers for `wanted`, for a dependency that took the offer.
+/// What the catalog in this manifest offers under `key`, for a dependency that took the offer.
+///
+/// **The lookup is the dependency's key against a catalog key, and the crate comes from the entry.**
+/// Measured under cargo 1.96.0: a catalog offering `alias = { package = "realdep", version = "0.0.1" }`
+/// beside a dependency spelling `alias = { workspace = true }` resolves to `realdep` at `^0.0.1` under the
+/// rename `alias`. Cargo refuses both shapes that would make the dependency's own key an identity --
+/// `package` written beside `workspace = true`, and inheritance spelled under the crate's name rather than
+/// the catalog's key -- so there is one lookup and it is by key. Searching by resolved identity asked a
+/// question cargo never asks, and matched no entry at all for every crate the catalog renames.
 ///
 /// **The catalog is in the same manifest, because every example in this repository is its own workspace
 /// root.** The root manifest's own comment says so and `exclude` enforces it, so a dependency spelling
@@ -284,41 +292,39 @@ pub(crate) fn declared_dependencies(
 /// when a local `version` sits in the same inline table -- so the catalog is *the* answer rather than one of
 /// two. Cargo also refuses a manifest that inherits what its catalog does not declare, which is why
 /// [`Offered::Missing`] is a refusal rather than a fallback.
-fn offered(catalog: &[Dependency], wanted: &str) -> Offered {
-    for Dependency {
-        key,
-        package,
-        pin,
-        path: _,
-    } in catalog
-    {
-        match package {
-            Package::Named(named) if named == wanted => return Offered::Pin(pin.clone()),
-            Package::Named(_) => {}
-            // An entry whose identity cannot be read might be the one being inherited. *Might be* is not an
-            // answer, and skipping it is how a stale pin would reach a release through the catalog.
-            Package::Unreadable => {
-                return Offered::Unresolvable(key.clone());
-            }
+fn offered(catalog: &[Dependency], key: &str) -> Offered {
+    for entry in catalog {
+        if entry.key != key {
+            continue;
         }
+        return match &entry.package {
+            Package::Named(named) => Offered::Entry {
+                package: named.clone(),
+                pin: entry.pin.clone(),
+            },
+            // The entry being taken names a crate this reader cannot read. *Might be a family crate* is not
+            // an answer, and passing it over is how a stale pin would reach a release through the catalog.
+            Package::Unreadable => Offered::Unresolvable(entry.key.clone()),
+        };
     }
     Offered::Missing
 }
 
-/// What a catalog offers for one crate.
+/// What a catalog offers under one key.
 #[derive(Debug)]
 enum Offered {
-    /// The catalog declares it, with this requirement -- which may itself be absent, unreadable or several,
-    /// and is then answered by the same arms a locally declared one is.
-    Pin(Declared),
-    /// No catalog entry names it.
+    /// The catalog declares an entry there: the crate it names, and the requirement it carries -- which may
+    /// itself be absent, unreadable or take an offer of its own, and is then answered by the same arms a
+    /// locally declared one is.
+    Entry { package: String, pin: Declared },
+    /// No catalog entry is written under that key.
     ///
     /// One fact, since this reader is handed a catalog that is already parsed: a manifest the parser refuses
     /// never reaches here, because the caller met that refusal before it had a catalog to search. The state
-    /// carried both for as long as the search did its own parsing, and *no entry names it* and *the document
-    /// is not a manifest* are different things to tell an operator.
+    /// carried both for as long as the search did its own parsing, and *nothing is written there* and *the
+    /// document is not a manifest* are different things to tell an operator.
     Missing,
-    /// The catalog carries an entry whose identity this reader cannot resolve, quoted by its key.
+    /// The entry written under that key names a crate this reader cannot resolve, quoted by its key.
     Unresolvable(String),
 }
 
@@ -1496,44 +1502,68 @@ pub(crate) fn require_example_pins(
             // reader resolved identity because an example carries no path, and the sibling selected on path
             // and called the asymmetry earned; a family crate the catalog offers *without* a path is what
             // that cost. One question, one reader.
-            let package = dependency_identity(package, &key, &format!("example {name}"))?;
-            if !family.contains(&package) {
-                continue;
-            }
-            // The entry is already known to name a family crate, so every way of failing to read its pin is
-            // answered on its own terms. Collapsing them was the defect: an ABSENT `version` — legal, since
-            // a path-only dependency declares none — was reported as one this reader could not read.
-            // **The offer is resolved before the arms below, so every way of failing to read a pin keeps one
-            // home.** A dependency taking `workspace = true` declares no `version` of its own, and the reader
-            // filed that as `Absent` -- the state meaning *nothing holds this to a version* -- so an example
-            // whose pin is held exactly was refused for having none. Cargo holds it to the catalog's
+            // **A dependency that takes the offer is resolved before it is identified, because its key is a
+            // lookup key rather than a name.** The identity rule above holds for a dependency that declares
+            // itself; cargo applies neither half of it to one spelling `workspace = true`. Measured under
+            // cargo 1.96.0, it refuses `package` written beside `workspace = true`, and refuses inheritance
+            // spelled under the crate's name rather than the catalog's key -- so the only lookup is the
+            // dependency's key against a catalog key, and the crate is whatever that entry names. Deciding
+            // membership on the local key first passed over every dependency the catalog renames, and a
+            // stale pin behind one reached a release as clean: the example was then reported as declaring no
+            // family requirement, which is a different fact about a different manifest.
+            //
+            // The offer is resolved before the pin arms below, so every way of failing to read a pin keeps
+            // one home. A dependency taking `workspace = true` declares no `version` of its own, and the
+            // reader filed that as `Absent` -- the state meaning *nothing holds this to a version* -- so an
+            // example whose pin is held exactly was refused for having none. Cargo holds it to the catalog's
             // requirement, measured; the catalog is read here and its pin is judged as if written inline.
-            let pin = match pin {
-                Declared::Inherited => match offered(&catalog, &package) {
-                    Offered::Pin(offered) => offered,
-                    Offered::Missing => {
-                        return Err(cannot_judge_at(
-                            "release-coherence#example-inherits-what-no-catalog-offers",
-                            format!(
-                                "example {name} requires {package} from the workspace catalog, and no \
-                             `[workspace.dependencies]` entry beside it names that crate, so what holds it \
-                             cannot be decided"
-                            ),
-                        ));
-                    }
+            let (package, pin) = match pin {
+                Declared::Inherited => match offered(&catalog, &key) {
+                    Offered::Entry { package, pin } => (package, pin),
+                    // Answered before membership, not after it: the entry taken names a crate this reader
+                    // cannot read, so whether it is a family crate is exactly what cannot be decided.
                     Offered::Unresolvable(entry) => {
                         return Err(cannot_judge_at(
                             "release-coherence#example-catalog-entry-unresolvable",
                             format!(
-                                "example {name} requires {package} from the workspace catalog, whose entry \
-                             {entry} names a crate this check cannot resolve, so what holds it cannot be \
-                             decided"
+                                "example {name} takes the workspace catalog's offer under `{key}`, whose \
+                             entry {entry} names a crate this check cannot resolve, so what holds it cannot \
+                             be decided"
+                            ),
+                        ));
+                    }
+                    // Nothing is written under that key, so the catalog renames nothing here and the local
+                    // key is the only identity there is. Where it names no family crate this dependency is
+                    // not this check's subject -- the same answer one declaring itself would get.
+                    Offered::Missing => {
+                        let package =
+                            dependency_identity(package, &key, &format!("example {name}"))?;
+                        if !family.contains(&package) {
+                            continue;
+                        }
+                        return Err(cannot_judge_at(
+                            "release-coherence#example-inherits-what-no-catalog-offers",
+                            format!(
+                                "example {name} requires {package} from the workspace catalog, and no \
+                             `[workspace.dependencies]` entry beside it is written under `{key}`, so what \
+                             holds it cannot be decided"
                             ),
                         ));
                     }
                 },
-                declared => declared,
+                // **Which crate a dependency names is its `package` field where it has one, and its key only
+                // otherwise** — asked of [`dependency_identity`], which the root's pin reader asks too. This
+                // reader resolved identity because an example carries no path, and the sibling selected on
+                // path and called the asymmetry earned; a family crate the catalog offers *without* a path
+                // is what that cost. One question, one reader.
+                declared => (
+                    dependency_identity(package, &key, &format!("example {name}"))?,
+                    declared,
+                ),
             };
+            if !family.contains(&package) {
+                continue;
+            }
             let pin = match pin {
                 Declared::Value(pin) => pin,
                 Declared::Absent => {
