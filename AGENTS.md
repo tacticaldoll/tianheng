@@ -878,8 +878,18 @@ same rule; this list is a corpus with a name, and the record of how often that w
 **`git add` any file the change CREATED before running these.** The tree-wide gates take their path list from
 `git ls-files` and their content from disk, so the two halves see different things — measured, both
 directions: a **new** file that has not been added is invisible and its offences are not reported, while a
-**tracked** file modified and left unstaged is read as it stands on disk and is judged normally. Staging is
-enough; committing is not required.
+**tracked** file modified and left unstaged is read as it stands on disk and is judged normally.
+
+**Staging is enough for a gate whose content comes from disk, and not for one whose corpus is `HEAD`.** That
+sentence used to end here at *committing is not required*, and it was false of a gate this file's own list
+runs. `pin_bites` reads both halves of its subject through `git show HEAD:…` — the declared-mutation records
+and the source each mutation perturbs — so an uncommitted record is no record, and the direction reports
+green over an **empty set**. Measured in the `0.6.0` window: two mutations added and staged, `pin_bites`
+green locally, and both CI's Definition of Done and the MSRV job red on the same tree once it was committed.
+The criterion is the read, not the gate: `git show HEAD:` and `ls-tree HEAD` are what to look for, and
+`git grep -nE '"HEAD:|ls-tree", "HEAD' -- crates/kanhe` is the search. It finds one other, and that one is
+not this case — `release_coherence` compares HEAD's `CHANGELOG.md` against the worktree's, so the difference
+between them is its subject rather than a blind spot.
 
 The failure mode is a full pass that means less than it looks. Measured in the 0.4.0 window: one change's
 Definition of Done ran green over a file it had never opened, and the next round's suite failed on that same
