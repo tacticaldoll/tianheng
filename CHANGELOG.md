@@ -22,6 +22,41 @@ them.
 
 ## [Unreleased]
 
+### Semantic and runtime
+
+- **BREAKING** — **Every `path` in one `cfg_attr` span is read, where two dimensions took the first.**
+  Measured against rustc (edition 2021, `--crate-type lib`), this compiles cleanly on Linux with only
+  `linux.rs` on disk and neither `mac.rs` nor `plat.rs` present:
+
+  ```rust
+  #[cfg_attr(unix, cfg_attr(target_os = "macos", path = "mac.rs"),
+                   cfg_attr(target_os = "linux", path = "linux.rs"))]
+  pub mod plat;
+  ```
+
+  渾儀 and 漏刻 each answered `mac.rs` and stopped. With no conventional file behind the declaration
+  that resolves to nothing, so both reported the module unresolvable — **exit 2 over valid code**,
+  measured at `left: 2, right: 1` for each, run separately. With a conventional file present they
+  governed it and never looked at the rest.
+
+  圭表 already unioned every `path =` across nested groups, so this was one shape on which the three
+  dimensions disagreed. The union has two axes — several `cfg_attr` attributes each carrying one
+  `path`, and one attribute carrying several — and 渾儀's own doc records the first axis being repaired
+  after a `find_map` *silently dropped every candidate but the first-declared*. A second `find_map` one
+  level in did the same thing, and the repair had stopped there.
+
+  The conformance suite's stacked direction covers two ATTRIBUTES with one `path` each, which a
+  first-only reader passes: each span holds exactly one.
+  `all_three_dimensions_read_every_path_nested_in_one_cfg_attr` is the axis it did not have, with the
+  violating target declared **second** on purpose.
+
+  **Why this earns a minor rather than a patch, decided from what the change does rather than from its
+  shape.** An adopter stuck at exit 2 is merely unblocked, which costs them nothing. But where a
+  conventional file exists beside such a declaration, the additional targets were previously unseen and
+  are now governed: a tree that was green can report new violations, and its recorded baseline no
+  longer describes it. That is depth reacting by default, and *"the defect was ours" does not spare
+  them the work*.
+
 ### Documentation
 
 - **The per-unit fan-out policy had two halves and only one of them had a home.** `is_anchor_absent_from_unit`

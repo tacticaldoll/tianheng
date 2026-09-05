@@ -118,6 +118,49 @@ fn all_three_dimensions_govern_a_stacked_cfg_attr_path_only_module() {
     );
 }
 
+/// Two `path` remaps NESTED INSIDE ONE `cfg_attr`, with the violating target declared SECOND.
+///
+/// **The sibling direction above stacks two ATTRIBUTES, one `path` each, and that is a different
+/// axis.** A reader taking only the first `path` in a span still passes it, because each span holds
+/// exactly one. Measured against rustc (edition 2021, `--crate-type lib`) this declaration compiles
+/// cleanly on Linux with only the second target on disk and neither the first nor a plain `imp.rs`
+/// present, so a dimension answering the first alone resolves nothing: with no conventional file to
+/// fall back to it reports the declaration unresolvable — exit 2 over valid code — and with one it
+/// governs the wrong file and the probe goes unseen.
+///
+/// 圭表 already unioned every `path =` across nested groups. 渾儀 and 漏刻 each took the first, so
+/// this shape is where the three parted, and the violating target is declared second on purpose:
+/// first-declared would pass on a reader that never looks past it.
+#[test]
+fn all_three_dimensions_read_every_path_nested_in_one_cfg_attr() {
+    let package = "cfg-attr-path-only-nested";
+    let lib = format!(
+        "{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}\
+         #[cfg_attr(unix, cfg_attr(target_os = \"none\", path = \"imp_never.rs\"), \
+         cfg_attr(not(target_os = \"none\"), path = \"imp_here.rs\"))]\n\
+         pub mod imp;\n"
+    );
+    // Only the SECOND target exists, as rustc admits: the first names a target this build has no
+    // file for, and the declaration still compiles.
+    let fixture = fixture(package, &lib, &[("imp_here.rs", IMP_VIOLATIONS)]);
+
+    assert_eq!(
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "圭表: the second `path` nested in one cfg_attr must be read"
+    );
+    assert_eq!(
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "渾儀: the second `path` nested in one cfg_attr must be read"
+    );
+    assert_eq!(
+        louke_exit(fixture.lib(), SEAM, REASON),
+        1,
+        "漏刻: the second `path` nested in one cfg_attr must be read"
+    );
+}
+
 /// Control: a SINGLE, non-stacked `cfg_attr(path)`-only remap, same absence of a plain file. The
 /// fix (and this ledger) is not specific to the stacked shape.
 #[test]

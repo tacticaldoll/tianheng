@@ -324,26 +324,32 @@ pub(crate) fn mod_preamble_attrs(
                     // tolerance, so a `cfg_attr` sighting must never grant it (its own absence
                     // tolerance is additive, via `cfg_attr_paths` below, not this flag).
                     b"cfg" => attrs.cfg = true,
-                    // `#[cfg_attr(<pred>, …, path = "…")]`: extract the `path = "…"` value from
+                    // `#[cfg_attr(<pred>, …, path = "…")]`: extract EVERY `path = "…"` value from
                     // WITHIN this attribute's own argument list (skipping the leading predicate,
-                    // which is never itself an identifier spelled `path`), if one is present. A
-                    // module may carry more than one SEPARATE `cfg_attr`-wrapped `#[path]` (one per
-                    // platform predicate); this arm fires once per occurrence of the outer loop, so
-                    // every one is collected. `find_path_meta_value` searches linearly for `path`
-                    // anywhere in the argument span rather than parsing nesting structure, so a
-                    // doubly- (or deeper-) nested `#[cfg_attr(a, cfg_attr(b, path = "…"))]` resolves
-                    // the same way a single-level one does — measured directly
-                    // (`a_doubly_nested_cfg_attr_path_is_followed_the_same_as_a_single_nesting`), not
-                    // the undetected residual an earlier comment here claimed.
+                    // which is never itself an identifier spelled `path`).
+                    //
+                    // Two axes, and only one of them was covered. A module may carry more than one
+                    // SEPARATE `cfg_attr`-wrapped `#[path]`, one per platform predicate — this arm
+                    // fires once per occurrence of the outer loop, so every one is collected. But ONE
+                    // such attribute may also carry several, nested under one predicate, and reading
+                    // the first alone made the rest invisible. [`path_meta_values`] records what that
+                    // cost, measured against rustc.
+                    //
+                    // The reader searches linearly for `path` anywhere in the argument span rather
+                    // than parsing nesting structure, so a doubly- (or deeper-) nested
+                    // `#[cfg_attr(a, cfg_attr(b, path = "…"))]` resolves the same way a single-level
+                    // one does — measured directly
+                    // (`a_doubly_nested_cfg_attr_path_is_followed_the_same_as_a_single_nesting`).
                     b"cfg_attr" => {
                         let paren_open = skip_preamble_trivia(bytes, name_end, mod_index);
                         if bytes.get(paren_open) == Some(&b'(') {
                             let paren_close = paren_group_end(bytes, paren_open, mod_index);
-                            if let Some(rel) =
-                                find_path_meta_value(bytes, paren_open + 1, paren_close, mod_index)
-                            {
-                                attrs.cfg_attr_paths.push(rel);
-                            }
+                            attrs.cfg_attr_paths.extend(path_meta_values(
+                                bytes,
+                                paren_open + 1,
+                                paren_close,
+                                mod_index,
+                            ));
                         }
                     }
                     _ => {}
@@ -365,17 +371,35 @@ pub(crate) fn paren_group_end(bytes: &[u8], open: usize, limit: usize) -> usize 
     delimiter_group_end(bytes, open, limit, b'(', b')')
 }
 
-/// The value of a `path = "…"` name-value meta somewhere in `[start, paren_close)` (the interior of
-/// a `cfg_attr`'s own argument list, bounded separately by `mod_index` for `read_path_string`'s own
-/// trivia skip) — `None` if no such meta is present. Scans identifier-by-identifier rather than a
-/// raw substring search, so a predicate that merely contains the text (`target_os = "path_os"`,
-/// a doc comment) is never mistaken for the applied `path` meta.
-pub(crate) fn find_path_meta_value(
+/// **Every** `path = "…"` name-value meta in `[start, paren_close)` — the interior of a `cfg_attr`'s
+/// own argument list, bounded separately by `mod_index` for `read_path_string`'s own trivia skip — in
+/// the textual order they appear. Empty if none is present.
+///
+/// Scans identifier-by-identifier rather than by a raw substring search, so a predicate that merely
+/// contains the text (`target_os = "path_os"`, a doc comment) is never mistaken for the applied `path`
+/// meta.
+///
+/// **It returned only the first, and one attribute may carry several.** Measured against rustc
+/// (edition 2021, `--crate-type lib`), this compiles cleanly on Linux with only `linux.rs` on disk and
+/// neither `mac.rs` nor `plat.rs` present:
+///
+/// ```text
+/// #[cfg_attr(unix, cfg_attr(target_os = "macos", path = "mac.rs"),
+///                  cfg_attr(target_os = "linux", path = "linux.rs"))]
+/// pub mod plat;
+/// ```
+///
+/// Reading the first alone answered `mac.rs`, which resolves to nothing, so a module with no
+/// conventional file behind it reported *cannot resolve reachable module* — **exit 2 over valid code**.
+/// The union is not a hypothesis here: 圭表 already collects every `path =` across nested groups, so
+/// answering the first was the one dimension of the three disagreeing about a shape rustc accepts.
+pub(crate) fn path_meta_values(
     bytes: &[u8],
     start: usize,
     paren_close: usize,
     mod_index: usize,
-) -> Option<String> {
+) -> Vec<String> {
+    let mut found = Vec::new();
     let mut i = start;
     while i < paren_close {
         if let Some(next) = skip_literal_or_comment(bytes, i) {
@@ -391,7 +415,7 @@ pub(crate) fn find_path_meta_value(
             if &bytes[name_start..name_end] == b"path" {
                 let eq = skip_preamble_trivia(bytes, name_end, paren_close);
                 if bytes.get(eq) == Some(&b'=') {
-                    return read_path_string(bytes, eq + 1, mod_index);
+                    found.extend(read_path_string(bytes, eq + 1, mod_index));
                 }
             }
             i = name_end;
@@ -399,7 +423,7 @@ pub(crate) fn find_path_meta_value(
         }
         i += 1;
     }
-    None
+    found
 }
 
 /// Advance past whitespace, comments, and string/char literals to the next significant byte
