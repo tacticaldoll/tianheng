@@ -24,6 +24,13 @@ them.
 
 ### Documentation
 
+- **The CLI usage block was restated in a module doc, and the copy had drifted.** `main.rs` carried the
+  invocation shapes beside the ones `usage()` prints, and the runner rejected `--disallow-stale` while the
+  copy did not name it — the same flag and the same direction as the instance `BACKLOG.md` records for
+  `list`'s requirement, which was closed by deriving the set rather than by correcting the prose. A doc
+  comment cannot derive anything, so the copy is deleted and its owner named. What stays is what only that
+  file says: what the binary is, and what its exit codes mean.
+
 - **The governable-crate-root predicate was spelled twice in one module.** `crate_root_files` and
   `member_root_files` each carried the same `LIBRARY_KINDS`-or-`bin` filter over the same `src_path` read,
   so admitting a target kind would have moved one and not the other. `member_root_files` is now the
