@@ -22,6 +22,30 @@ them.
 
 ## [Unreleased]
 
+### Governance
+
+- **`xingbiao`'s charter says what it carries, and states the criterion instead of a list.** Its module doc
+  enumerated the path-identity primitives it holds *beside* the metadata reader — an enumeration that stopped
+  covering the module when the filesystem-answer policy was added to it this window, for the ordinary reason
+  a list goes stale. It also said it sits beneath the static and semantic dimensions, while the runtime
+  dimension's CI face has depended on it since before that.
+
+  The widening was not wrong and it was not declared, which is the defect. It went in because three
+  dimensions needed one answer — a reason that decides nothing on its own, since it is equally the reason for
+  a consolidation this repository refuses elsewhere. **The criterion now written down is what separates
+  them:** a fact belongs there when every dimension must agree on it before observing AND it is a fact about
+  the tree rather than a reading of what the tree contains. What is there, as against what it says.
+
+  That line refuses something concrete, which is why it is worth having: an interpretation of source is a
+  dimension's own observation. `cargo metadata` says which file is a crate root; what the tokens in that
+  file mean belongs to whichever dimension is asking — so the lexical-boundary question `BACKLOG.md` carries
+  cannot be answered by putting a tokenizer here, and that is now a reading of the charter rather than a
+  matter of taste.
+
+  **Nothing reacted to any of this.** The self-law constrains what `xingbiao` may depend on and says nothing
+  about what it may become, so a charter widening is prose against prose. `PROJECT.md`'s decision states the
+  criterion for the same reason.
+
 ### Static
 
 - **BREAKING** — **圭表 requires the built-in `cfg_attr`'s exact path, where it matched the bare
