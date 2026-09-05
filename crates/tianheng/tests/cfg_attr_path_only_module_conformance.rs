@@ -474,3 +474,80 @@ fn a_conventional_file_beside_a_raw_identifier_remap_does_not_hide_the_remapped_
         "漏刻: the clean conventional file does not hide the remapped one's undeclared seam"
     );
 }
+
+/// An **unconditional** raw-identifier remap, at the attribute's own name position.
+///
+/// The raw-identifier directions elsewhere in this file put the spelling inside a `cfg_attr`'s argument
+/// list, where both byte scanners already consumed the prefix with its segment. The attribute's **own**
+/// name is a second position, and none of the three read it: 圭表 matched `path` against the bytes after
+/// `[`, 漏刻 lexed the name with an identifier reader that stops at `#`, and 渾儀 compared through `syn`,
+/// whose `Path::is_ident` compares the ident as written.
+///
+/// Measured against rustc 1.96.0, edition 2021, `--crate-type lib`: `#[r#path = "imp_unix.rs"] pub mod
+/// imp;` compiles with only `imp_unix.rs` on disk, and with a conventional `imp.rs` present as well it is
+/// the remapped file that is compiled. A reader missing it governs `imp.rs` — a file the build does not
+/// contain — and reports clean over the one it does.
+#[test]
+fn all_three_dimensions_read_an_unconditional_raw_identifier_path_remap() {
+    let package = "raw-ident-unconditional-remap";
+    let lib =
+        format!("{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}#[r#path = \"imp_unix.rs\"]\npub mod imp;\n");
+    let fixture = fixture(
+        package,
+        &lib,
+        &[("imp_unix.rs", IMP_VIOLATIONS), ("imp.rs", IMP_STUB)],
+    );
+
+    assert_eq!(
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "圭表: `#[r#path]` is the built-in remap, so the remapped file's forbidden `use` must react"
+    );
+    assert_eq!(
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "渾儀: `#[r#path]` is the built-in remap, so the remapped file's forbidden exposure must react"
+    );
+    assert_eq!(
+        louke_exit(fixture.lib(), SEAM, REASON),
+        1,
+        "漏刻: `#[r#path]` is the built-in remap, so the remapped file's undeclared seam must react"
+    );
+}
+
+/// A raw-identifier **bare `cfg`** grants the same absent-file tolerance the plain spelling does.
+///
+/// `#[r#cfg(pred)]` is the built-in `cfg`, so a false predicate removes the `mod` item outright and the
+/// backing file is legitimately absent — measured against rustc 1.96.0, edition 2021, `--crate-type lib`:
+/// `#[r#cfg(target_os = "none")] pub mod gone;` compiles with no `gone.rs` anywhere, exactly as the plain
+/// spelling does. All three dimensions withheld the tolerance for the raw spelling, so all three reported a
+/// missing-file constitution error over source that compiles. Consistently wrong is still wrong, and it is
+/// the one direction of this class that costs a **refusal** rather than a miss.
+///
+/// The boundary targets `crate::keep`, a module that exists and is clean, so what this asserts is the
+/// **scan** reaching a verdict at all. Targeting `gone` would be a boundary on a module the build does not
+/// contain, which is a constitution error on its own terms and would pass for the wrong reason.
+#[test]
+fn all_three_dimensions_tolerate_an_absent_file_behind_a_raw_identifier_cfg() {
+    let package = "raw-ident-bare-cfg";
+    let lib = format!(
+        "{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}#[r#cfg(target_os = \"none\")]\npub mod gone;\npub mod keep;\n"
+    );
+    let fixture = fixture(package, &lib, &[("keep.rs", IMP_STUB)]);
+
+    assert_eq!(
+        guibiao_exit(package, fixture.manifest(), "crate::keep", REASON),
+        0,
+        "圭表: `#[r#cfg]` removes the item, so its absent backing file is not a constitution error"
+    );
+    assert_eq!(
+        hunyi_exit(package, fixture.manifest(), "crate::keep", REASON),
+        0,
+        "渾儀: `#[r#cfg]` removes the item, so its absent backing file is not a constitution error"
+    );
+    assert_eq!(
+        louke_exit(fixture.lib(), SEAM, REASON),
+        0,
+        "漏刻: `#[r#cfg]` removes the item, so its absent backing file is not a constitution error"
+    );
+}

@@ -303,7 +303,22 @@ pub(crate) fn mod_preamble_attrs(
             }
             if bytes.get(open) == Some(&b'[') {
                 // The attribute's meta name is the first identifier inside the brackets.
-                let name_start = skip_preamble_trivia(bytes, open + 1, mod_index);
+                //
+                // **A raw identifier is ONE segment**, here as much as inside a `cfg_attr`'s argument list,
+                // where `path_meta_values` already consumes the prefix with the segment it belongs to. `r#`
+                // changes a lexical spelling and not the name it spells, so `#[r#path = "…"]` IS the
+                // built-in remap and `#[r#cfg(…)]` IS the built-in `cfg` that removes the item — measured
+                // against rustc 1.96.0, edition 2021, `--crate-type lib`: the first compiles the remapped
+                // file even with the conventional one present, and the second leaves an absent backing file
+                // legal. Read as written, `r#path` lexed as the identifier `r` and matched no arm at all.
+                let mut name_start = skip_preamble_trivia(bytes, open + 1, mod_index);
+                if bytes[name_start..].starts_with(b"r#")
+                    && bytes
+                        .get(name_start + 2)
+                        .is_some_and(|byte| is_ident_byte(*byte))
+                {
+                    name_start += 2;
+                }
                 let mut name_end = name_start;
                 while name_end < mod_index && is_ident_byte(bytes[name_end]) {
                     name_end += 1;

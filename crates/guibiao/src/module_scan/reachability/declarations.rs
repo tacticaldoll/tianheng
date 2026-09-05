@@ -337,6 +337,17 @@ fn attr_prefix_path_kind(bytes: &[u8]) -> PathAttrKind {
         while i < bytes.len() && bytes[i].is_ascii_whitespace() {
             i += 1;
         }
+        // **A raw identifier is ONE segment**, at the attribute's own name position as much as inside a
+        // `cfg_attr`'s argument list, where `cfg_attr_group_path_eqs` already consumes the prefix with the
+        // segment it belongs to. `r#` changes a lexical spelling and not the name it spells, so `#[r#path =
+        // "…"]` IS the built-in remap — measured against rustc 1.96.0, edition 2021, `--crate-type lib`,
+        // which compiles the remapped file for it even with the conventional file present. Reading the name
+        // as written left this scanner governing a file the build does not contain.
+        if bytes[i..].starts_with(b"r#")
+            && bytes.get(i + 2).is_some_and(|byte| is_ident_byte(*byte))
+        {
+            i += 2;
+        }
         if bytes[i..].starts_with(b"path")
             && bytes.get(i + 4).is_none_or(|byte| !is_ident_byte(*byte))
         {
@@ -521,6 +532,17 @@ fn attr_prefix_has_bare_cfg(bytes: &[u8]) -> bool {
         i += 1;
         while i < bytes.len() && bytes[i].is_ascii_whitespace() {
             i += 1;
+        }
+        // **A raw identifier is ONE segment**, at the attribute's own name position as much as inside a
+        // `cfg_attr`'s argument list, where `cfg_attr_group_path_eqs` already consumes the prefix with the
+        // segment it belongs to. `r#` changes a lexical spelling and not the name it spells, so `#[r#path =
+        // "…"]` IS the built-in remap — measured against rustc 1.96.0, edition 2021, `--crate-type lib`,
+        // which compiles the remapped file for it even with the conventional file present. Reading the name
+        // as written left this scanner governing a file the build does not contain.
+        if bytes[i..].starts_with(b"r#")
+            && bytes.get(i + 2).is_some_and(|byte| is_ident_byte(*byte))
+        {
+            i += 2;
         }
         // The byte immediately after `cfg` must not continue the identifier (excludes `cfg_attr`,
         // whose next byte is `_`).
