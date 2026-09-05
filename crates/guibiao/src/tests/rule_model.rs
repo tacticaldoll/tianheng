@@ -156,6 +156,50 @@ pub(super) fn rule_set_order_is_canonical_and_presentation_is_not_identity() {
         module: "crate::type".to_string(),
     };
     assert_eq!(raw.key(), plain.key());
+
+    // Negative runs, each taken alone because the first assertion to fail hides the rest:
+    //
+    //   allowed: "[\"crate::r#type\"]"  vs  "[\"crate::type\"]"
+    //   crate:   "r#gen"                vs  "gen"
+    //
+    // **Every arm carrying a module path, not the two that happened to be written first.** Evaluation
+    // canonicalizes on both sides — `module_check` maps `canonical_module_path` over an allowlist so a
+    // boundary may be written in either form and still match, and it folds the confined crate the same
+    // way — while these two key arms compared the spelling as given. A declaration rewritten from
+    // `r#type` to `type` is a pure rename to a reader and to the evaluator, and it moved the identity
+    // every recorded violation is filed under, which is the defect class the trait-impl-locality entry
+    // in `BACKLOG.md` closed by re-keying.
+    let raw_allow = ModuleRule::RestrictImportsTo {
+        allowed: vec!["crate::r#type".to_string()],
+    };
+    let plain_allow = ModuleRule::RestrictImportsTo {
+        allowed: vec!["crate::type".to_string()],
+    };
+    assert_eq!(
+        raw_allow.key(),
+        plain_allow.key(),
+        "an allowlist entry's raw-identifier spelling is not its identity, and evaluation already says so"
+    );
+
+    let raw_only = ModuleRule::MustOnlyBeImportedBy {
+        allowed: vec!["crate::r#type".to_string()],
+    };
+    let plain_only = ModuleRule::MustOnlyBeImportedBy {
+        allowed: vec!["crate::type".to_string()],
+    };
+    assert_eq!(raw_only.key(), plain_only.key());
+
+    let raw_crate = ModuleRule::ConfineExternalCrate {
+        crate_name: "r#gen".to_string(),
+    };
+    let plain_crate = ModuleRule::ConfineExternalCrate {
+        crate_name: "gen".to_string(),
+    };
+    assert_eq!(
+        raw_crate.key(),
+        plain_crate.key(),
+        "`package_name_to_import_ident` folds `-` to `_` and nothing else, so the raw prefix survived it"
+    );
 }
 
 #[test]

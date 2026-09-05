@@ -314,6 +314,18 @@ The system SHALL treat a raw identifier (`r#name`) and its plain form (`name`) a
 - **WHEN** a crate declares `mod r#type;` (resolving to `src/type.rs`), that file imports `use crate::r#mod::Thing;`, and a boundary governs `crate::type` forbidding `crate::mod`
 - **THEN** the module `crate::type` is found (not an unknown-module constitution error) and the import `crate::mod::Thing` is observed as a violation, the raw and plain forms having been canonicalized to one identity
 
+**One identity means the recorded one too, not only the matched one.** A rule's key is what a baseline files
+a violation under, so a boundary whose declaration is rewritten between the two spellings SHALL keep its key:
+matching them while keying them apart makes a pure rename move every recorded finding, which is work an
+adopter did not choose and cannot see the reason for. The canonicalization SHALL therefore reach every rule
+field carrying a module path — the governed path, an allowlist's entries, and a confined crate name alike.
+
+#### Scenario: A boundary rewritten between the two spellings keeps its recorded identity
+
+- **WHEN** a boundary's declared module, allowlist entry, or confined crate name is rewritten from `r#name`
+  to `name`, or the reverse
+- **THEN** the rule key is unchanged, so a recorded baseline still describes the tree
+
 ### Requirement: Imports are attributed to their enclosing inline module
 
 The system SHALL attribute each `use` declaration to the module that lexically encloses it, including an inline `mod name { … }` submodule, rather than to the containing file's module. A `self`/`super` path SHALL be resolved against that enclosing module, and a bare first segment inside an inline submodule SHALL be treated as external even when the file itself is the crate root, matching how the compiler resolves it. A `mod name;` declaration with no inline body does not enclose any `use` and SHALL NOT change attribution.

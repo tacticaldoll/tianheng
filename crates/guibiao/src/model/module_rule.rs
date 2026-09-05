@@ -210,9 +210,15 @@ impl ModuleRule {
                 "tianheng.rule/guibiao/must-only-be-imported-by",
                 [("allowed", canonical_module_set(allowed))],
             ),
+            // `package_name_to_import_ident` folds `-` to `_` and nothing else, so a raw-identifier
+            // prefix survived it and `r#gen` keyed apart from `gen`. Evaluation folds both, at
+            // `module_check`'s `package_name_to_import_ident(&canonical_module_path(crate_name))`.
             ModuleRule::ConfineExternalCrate { crate_name } => RuleKey::of(
                 "tianheng.rule/guibiao/confine-external-crate",
-                [("crate", package_name_to_import_ident(crate_name))],
+                [(
+                    "crate",
+                    package_name_to_import_ident(&canonical_module_path(crate_name)),
+                )],
             ),
             ModuleRule::ConfineInlineSymbolPath {
                 prefix,
