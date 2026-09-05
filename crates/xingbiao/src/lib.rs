@@ -354,6 +354,59 @@ pub fn audit_corpus_and_anchor(manifest_path: &Path) -> Result<(Vec<PathBuf>, Pa
     Ok((roots, anchor))
 }
 
+/// Whether a `metadata` failure means the target IS NOT THERE, as against this reader not finding out.
+///
+/// **`Path::is_file` answers `false` for both, and the three dimensions each collapsed them.** A
+/// `#[cfg]`-gated or `cfg_attr`-remapped declaration is allowed to have an absent target — that is the
+/// tolerance a cfg-blind walker owes a conditional module — so a target this reader merely could not stat
+/// was swallowed by that tolerance, with whatever the subtree holds going unobserved. That is the false
+/// negative the Core Contract forbids, and it stood in 圭表, 渾儀 and 漏刻 alike.
+///
+/// **The criterion, so a later error kind is placed rather than guessed.** An error saying *this path
+/// cannot name anything* is an absence; one saying *this reader could not find out* is not. Measured as
+/// uid 1000: a directory at mode `000` holding `mod.rs` gives `is_file` false with kind `PermissionDenied`
+/// — this reader could not find out. With a plain file where a module directory would be, the kind is
+/// `NotADirectory` — a component that is not a directory cannot have children, so the target cannot exist.
+///
+/// `FilesystemLoop` is deliberately NOT an absence: a cycle is a thing this reader could not resolve, and
+/// a walker that tolerates it silently would drop whatever the cycle hides. Kinds beyond the two measured
+/// are left on the loud side rather than sorted on a guess.
+///
+/// It lives here because all three dimensions ask it and none may ask another: the substrate is where a
+/// question they share is answered once, the way `canonicalize_or_fail` already is.
+pub fn is_absence(kind: std::io::ErrorKind) -> bool {
+    matches!(
+        kind,
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+    )
+}
+
+/// Whether `path` is a regular file, or why this reader could not tell — see [`is_absence`].
+pub fn is_regular_file(path: &Path) -> Result<bool, String> {
+    match std::fs::metadata(path) {
+        Ok(found) => Ok(found.is_file()),
+        Err(err) if is_absence(err.kind()) => Ok(false),
+        Err(err) => Err(format!(
+            "cannot read '{}' to decide whether it backs a module — {err}; an unreadable target is not \
+             an absent one, and tolerating it would leave whatever it holds unobserved",
+            path.display()
+        )),
+    }
+}
+
+/// Whether `path` is a directory, or why this reader could not tell — [`is_regular_file`]'s sibling.
+pub fn is_directory(path: &Path) -> Result<bool, String> {
+    match std::fs::metadata(path) {
+        Ok(found) => Ok(found.is_dir()),
+        Err(err) if is_absence(err.kind()) => Ok(false),
+        Err(err) => Err(format!(
+            "cannot read '{}' to decide whether it holds a module's children — {err}; an unreadable \
+             directory is not an absent one",
+            path.display()
+        )),
+    }
+}
+
 /// Claim `path` as a directory this process created, refusing to adopt one that already exists.
 ///
 /// **Fixture infrastructure, deliberately withheld from the API contract.** It is `pub` because test targets

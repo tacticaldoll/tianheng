@@ -207,7 +207,7 @@ fn push_inline_mod_branches(
     flat_items: &[FlatItem],
     seg: &str,
     next_branches: &mut Vec<Branch>,
-) {
+) -> Result<(), String> {
     for flat in flat_items {
         if let syn::Item::Mod(module_item) = &flat.item {
             if strip_raw(&module_item.ident.to_string()) != *seg {
@@ -228,26 +228,36 @@ fn push_inline_mod_branches(
             // bound: not following it made 渾儀 exit 2 on source that compiles cleanly, while its own
             // FILE-form resolution followed the same conditional attribute.
             let conventional = branch.child_dir.join(seg);
-            let bases: Vec<std::path::PathBuf> =
-                match direct_path_value(&module_item.attrs).map(|rel| branch.path_base.join(rel)) {
-                    Some(relocated) => vec![relocated],
-                    None => {
-                        let mut present: Vec<std::path::PathBuf> =
-                            cfg_attr_path_values(&module_item.attrs)
-                                .into_iter()
-                                .map(|rel| branch.path_base.join(rel))
-                                .chain(std::iter::once(conventional.clone()))
-                                .filter(|base| base.is_dir())
-                                .collect();
-                        present.sort();
-                        present.dedup();
-                        if present.is_empty() {
-                            vec![conventional]
-                        } else {
-                            present
+            let bases: Vec<std::path::PathBuf> = match direct_path_value(&module_item.attrs)
+                .map(|rel| branch.path_base.join(rel))
+            {
+                Some(relocated) => vec![relocated],
+                None => {
+                    let present: Vec<std::path::PathBuf> = cfg_attr_path_values(&module_item.attrs)
+                        .into_iter()
+                        .map(|rel| branch.path_base.join(rel))
+                        .chain(std::iter::once(conventional.clone()))
+                        .collect();
+                    // An unreadable base is not an absent one, and dropping it silently takes
+                    // its whole subtree. `xingbiao` owns the criterion for all three dimensions.
+                    let mut present: Vec<PathBuf> = {
+                        let mut kept = Vec::new();
+                        for base in present {
+                            if xingbiao::is_directory(&base)? {
+                                kept.push(base);
+                            }
                         }
+                        kept
+                    };
+                    present.sort();
+                    present.dedup();
+                    if present.is_empty() {
+                        vec![conventional]
+                    } else {
+                        present
                     }
-                };
+                }
+            };
             for inline_dir in bases {
                 next_branches.push(Branch {
                     items: inner.clone(),
@@ -258,6 +268,7 @@ fn push_inline_mod_branches(
             }
         }
     }
+    Ok(())
 }
 
 /// Resolve EVERY file-form `mod seg;` declaration for `branch` — ALWAYS attempted, not only when
@@ -312,7 +323,7 @@ fn push_file_form_branches(
             // the plain, non-`#[path]` case below, where they differ for a flat `seg.rs`).
             if let Some(rel) = direct_path_value(&module_item.attrs) {
                 let file = branch.path_base.join(&rel);
-                if !file.is_file() {
+                if !xingbiao::is_regular_file(&file)? {
                     // A BARE `#[cfg(pred)]` co-occurring with this unconditional `#[path]`
                     // (e.g. `#[cfg(windows)] #[path = "windows_impl.rs"] mod imp;`) removes
                     // the whole item, `#[path]` included, when `pred` is false — rustc never
@@ -348,7 +359,7 @@ fn push_file_form_branches(
             let mut has_backing_source = false;
             for rel in &cfg_attr_targets {
                 let file = branch.path_base.join(rel);
-                if file.is_file() {
+                if xingbiao::is_regular_file(&file)? {
                     has_backing_source = true;
                     if xingbiao::try_visit(&mut seen_files, &file)? {
                         let parsed = read_parse(&file)?;
@@ -371,7 +382,7 @@ fn push_file_form_branches(
             // FIRST and is never tolerated: no predicate value makes two files compile as one
             // module, so unlike an absence it cannot be a legitimate configuration — the same
             // ordering 圭表 and 漏刻 each independently apply to this shape.
-            let file = match locate_module_file(&branch.child_dir, seg) {
+            let file = match locate_module_file(&branch.child_dir, seg)? {
                 ModuleFile::One(file) => file,
                 ModuleFile::Ambiguous { flat, nested } => {
                     // `seg`, not `module`: the ambiguous declaration may be an ANCESTOR of the
@@ -435,7 +446,7 @@ fn descend(
         // shape. Each flattened item carries whether it came from an arm, which the absence
         // tolerance below consults exactly like a bare `#[cfg]` on the declaration itself.
         let flat_items = flatten_transparent_macros(&branch.items);
-        push_inline_mod_branches(branch, &flat_items, seg, &mut next_branches);
+        push_inline_mod_branches(branch, &flat_items, seg, &mut next_branches)?;
         push_file_form_branches(
             branch,
             &flat_items,
@@ -468,14 +479,17 @@ pub(crate) enum ModuleFile {
     Ambiguous { flat: PathBuf, nested: PathBuf },
 }
 
-pub(crate) fn locate_module_file(child_dir: &Path, seg: &str) -> ModuleFile {
+pub(crate) fn locate_module_file(child_dir: &Path, seg: &str) -> Result<ModuleFile, String> {
     let flat = child_dir.join(format!("{seg}.rs"));
     let nested = child_dir.join(seg).join("mod.rs");
-    match (flat.is_file(), nested.is_file()) {
-        (true, true) => ModuleFile::Ambiguous { flat, nested },
-        (true, false) => ModuleFile::One(flat),
-        (false, true) => ModuleFile::One(nested),
-        (false, false) => ModuleFile::Absent,
+    match (
+        xingbiao::is_regular_file(&flat)?,
+        xingbiao::is_regular_file(&nested)?,
+    ) {
+        (true, true) => Ok(ModuleFile::Ambiguous { flat, nested }),
+        (true, false) => Ok(ModuleFile::One(flat)),
+        (false, true) => Ok(ModuleFile::One(nested)),
+        (false, false) => Ok(ModuleFile::Absent),
     }
 }
 

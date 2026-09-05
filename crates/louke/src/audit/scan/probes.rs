@@ -496,65 +496,10 @@ pub(crate) fn collect_scope_modules(
     Ok(())
 }
 
-/// Whether a `metadata` failure means the target IS NOT THERE, as against this reader not finding out.
-///
-/// **`NotFound` is not the only absence, and taking it for the only one made a false refusal.** Measured:
-/// with `src/gated` a plain file, `fs::metadata("src/gated/mod.rs")` answers `NotADirectory`, not
-/// `NotFound` — a path component that is not a directory cannot have children, so the target cannot exist.
-/// Routing that to the loud channel refused a `#[cfg]`-gated declaration over a tree rustc compiles
-/// cleanly, which is the same class this reader's own separation of absent from unreadable exists to close,
-/// committed one change after closing it elsewhere.
-///
-/// The criterion, so a later kind is placed rather than guessed: an error saying **this path cannot name
-/// anything** is an absence; one saying **this reader could not find out** is not. `FilesystemLoop` stays
-/// on the loud side deliberately — a cycle is a thing this reader could not resolve, and
-/// [`read_dir_entries_sorted`] already fails safe on the same shape, so the two readers in this file agree.
-/// Kinds beyond the two measured are left where they are rather than sorted on a guess.
-fn is_absence(kind: std::io::ErrorKind) -> bool {
-    matches!(
-        kind,
-        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
-    )
-}
-
-/// Whether `path` is a regular file, or why this reader could not tell.
-///
-/// **`is_file()` answers `false` for two different facts**, and one of them is not an absence. Measured on
-/// this machine as uid 1000: a directory at mode `000` containing `mod.rs` gives
-/// `Path::is_file("gated/mod.rs") == false` with `fs::metadata(..).err().kind() == PermissionDenied`, while
-/// `Path::is_dir("gated") == true`. Read through `is_file()` alone, that target is *absent* — and an absent
-/// target is what a `#[cfg]`-gated or `cfg_if!`-arm declaration is allowed to have, so the whole subtree
-/// behind it was tolerated and never audited. A probe inside it is a probe nobody looked for, which is the
-/// false negative the Core Contract forbids.
-///
-/// The three states were already here: `Ok(Some(..))`, `Ok(None)` and `Err` are what the resolvers return,
-/// and the fix is the routing rather than a new type — *unreadable* belongs on the channel that fails loud,
-/// beside the ambiguity it already carries, not on the one a caller is allowed to tolerate.
-fn is_regular_file(path: &Path) -> Result<bool, String> {
-    match std::fs::metadata(path) {
-        Ok(found) => Ok(found.is_file()),
-        Err(err) if is_absence(err.kind()) => Ok(false),
-        Err(err) => Err(format!(
-            "cannot read '{}' to decide whether it backs a module — {err}; an unreadable target is not an \
-             absent one, and tolerating it would leave whatever it holds unaudited",
-            path.display()
-        )),
-    }
-}
-
-/// Whether `path` is a directory, or why this reader could not tell — [`is_regular_file`]'s sibling, for
-/// the same reason and with the same routing.
-fn is_directory(path: &Path) -> Result<bool, String> {
-    match std::fs::metadata(path) {
-        Ok(found) => Ok(found.is_dir()),
-        Err(err) if is_absence(err.kind()) => Ok(false),
-        Err(err) => Err(format!(
-            "cannot read '{}' to decide whether it holds a module's children — {err}; an unreadable \
-             directory is not an absent one",
-            path.display()
-        )),
-    }
-}
+/// The two readers that separate an absent target from one this reader could not stat live in
+/// [`xingbiao`], because 圭表 and 渾儀 ask the same question and none of the three may ask another. This
+/// module's own copies were the first of the three to exist; the substrate is where the answer belongs.
+use xingbiao::{is_directory, is_regular_file};
 
 /// Resolve a `mod name;` to its conventional file and the base directory for its own children:
 /// `Ok(Some(..))` for `<base>/name.rs` or `<base>/name/mod.rs`, `Ok(None)` when neither exists (the

@@ -36,8 +36,8 @@ them.
   baseline. They are now one: run `tianheng check --write-baseline <file>` wherever a baseline is kept and
   re-apply any `owner` / `tracker` annotations. A declaration carrying no `r#` anywhere is unaffected —
   every key is byte-identical.
-- **Make every module target readable, or expect exit `2` naming it.** A module file or directory the audit
-  cannot open is no longer tolerated as an absent one. Where a `#[cfg]`-gated declaration sat over an
+- **Make every module target readable, or expect exit `2` naming it.** A module file or directory that any
+  of the three dimensions cannot open is no longer tolerated as an absent one. Where a `#[cfg]`-gated declaration sat over an
   unreadable subtree, the audit previously reported the seam inside it as unprobed — or passed clean where
   that seam was probed elsewhere — and now refuses, naming the path and the reason. Fix the permission, or
   exclude the path from the audited roots.
@@ -46,6 +46,30 @@ them.
   accepts; it now resolves, and no baseline existed to move.
 
 ### Semantic and runtime
+
+- **BREAKING** — **One owner decides what a failed `metadata` means, and all three dimensions ask it.**
+  `Path::is_file` answers `false` both for a target that is not there and for one this reader could not
+  stat, and the `#[cfg]` tolerance is what an ABSENCE is owed — so an unreadable subtree was swallowed by
+  it, with whatever it holds going unobserved. 圭表, 渾儀 and 漏刻 each carried the collapse, at twelve
+  reads between them.
+
+  `xingbiao::is_absence` carries the criterion and `is_regular_file` / `is_directory` carry the reads. It
+  lives in the substrate because all three ask the same question and none may ask another — the same
+  reason `canonicalize_or_fail` is there. The criterion, not a list: an error saying *this path cannot name
+  anything* is an absence; one saying *this reader could not find out* is not. `FilesystemLoop` is
+  deliberately loud.
+
+  Measured, 渾儀 with only its own reader reverted: `left: 0, right: 2` — clean, over a subtree it could
+  not open. 漏刻's two directions hold its half.
+
+  **圭表's arm has no falsifier, and that is declared rather than implied.** Measured on the same fixture it
+  exits `2` before and after — loud for a reason this change does not touch — so an assertion over it would
+  pass either way. Its repair travels on symmetry with the two that were seen to fail; the change can only
+  convert a silent tolerance into a loud refusal, never the reverse, so what is unknown is whether that arm
+  was reachable at all rather than whether the repair is safe. `BACKLOG.md` carries the search.
+
+  **Why a minor:** a tree with an unreadable module subtree was green and now exits `2`, in two more
+  dimensions than the entry below already said.
 
 - **The claims that repair made about its own work, corrected where the code refuses them.** An independent
   adversarial review of this window found four defects in changes that had already merged, three of them
@@ -115,8 +139,7 @@ them.
   **Why a minor:** an adopter whose declaration carries `r#` anywhere has a baseline that no longer
   describes their tree. One carrying none is unaffected — every key is byte-identical.
 
-- **BREAKING** — **A module target this reader cannot read is refused, never tolerated as an absent one —
-  in 漏刻 only.**
+- **BREAKING** — **A module target this reader cannot read is refused, never tolerated as an absent one.**
   `is_file()` answers `false` for two different facts. Measured as uid 1000: a directory at mode `000`
   holding `mod.rs` gives `Path::is_file("gated/mod.rs") == false` with
   `fs::metadata(..).err().kind() == PermissionDenied`, while `Path::is_dir("gated") == true`. Read through
@@ -137,12 +160,7 @@ them.
   exits `2`. That is work the adopter did not choose, and *"the defect was ours" does not spare them
   the work*.
 
-  **What this does NOT reach, stated rather than left to be found.** The same `is_file()` collapse stands in
-  渾儀 (`module_resolve.rs`, `scan/items.rs`) and 圭表 (`reachability/walk.rs`, whose `!flat.is_file() &&
-  !nested.is_file()` arm is the identical cfg-gated tolerance this repaired). One of three dimensions moved,
-  in a window whose own cfg_attr entry argues the three must agree about module resolution. `BACKLOG.md`
-  carries the remainder with its measurement; it is not closed here because each dimension needs its own
-  falsifier and the repair is behaviour, not prose.
+  **All three dimensions take it now**, through one owner in the substrate — see the entry below.
 
 - **BREAKING** — **Every `path` in one `cfg_attr` span is read, where two dimensions took the first.**
   Measured against rustc (edition 2021, `--crate-type lib`), this compiles cleanly on Linux with only

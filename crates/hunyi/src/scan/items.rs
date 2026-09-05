@@ -281,7 +281,7 @@ fn resolve_direct_path_child(
         }
         None => {
             let file = file_dir.join(rel);
-            if !file.is_file() {
+            if !xingbiao::is_regular_file(&file)? {
                 // An unconditional `#[path]` target must exist (rustc errors otherwise), so an
                 // absent one is a genuine broken reference: fail loud (exit 2), never a silent
                 // skip. A `cfg_attr`-wrapped `#[path]` is the union `resolve_conventional_child`
@@ -370,12 +370,21 @@ fn resolve_conventional_child(
         // FILE-form arm below already followed the same attribute; 圭表 and 漏刻 state the same rule
         // for the identical shape (三儀 ⊥ 三儀: the same rule, hand-written per dimension).
         Some((_, inner)) => {
-            let mut bases: Vec<PathBuf> = cfg_attr_targets
+            let bases: Vec<PathBuf> = cfg_attr_targets
                 .iter()
                 .map(|rel| file_dir.join(rel))
                 .chain(std::iter::once(sub_dir.clone()))
-                .filter(|base| base.is_dir())
                 .collect();
+            // An unreadable base is not an absent one; dropping it takes its subtree with it.
+            let mut bases: Vec<PathBuf> = {
+                let mut kept = Vec::new();
+                for base in bases {
+                    if xingbiao::is_directory(&base)? {
+                        kept.push(base);
+                    }
+                }
+                kept
+            };
             bases.sort();
             bases.dedup();
             if bases.is_empty() {
@@ -403,7 +412,7 @@ fn resolve_conventional_child(
             // observation cannot know which one this build actually compiles.
             for rel in &cfg_attr_targets {
                 let file = file_dir.join(rel);
-                if file.is_file() {
+                if xingbiao::is_regular_file(&file)? {
                     has_backing_source = true;
                     if let Some((items, canon)) = load_child_file(
                         &file,
@@ -428,7 +437,7 @@ fn resolve_conventional_child(
                     }
                 }
             }
-            match locate_module_file(child_dir, name) {
+            match locate_module_file(child_dir, name)? {
                 ModuleFile::One(file) => {
                     // A file already on the current descent path (an ANCESTOR, by canonical
                     // symlink-resolved path) is a genuine module cycle — a symlinked directory or a

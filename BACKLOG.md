@@ -460,29 +460,6 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **READY-PATCH: the `is_file()` absence/unreadable collapse stands in 渾儀 and 圭表.** *Observed pressure:*
-  `is_file()` answers `false` both for a target that is not there and for one this reader could not stat, and
-  a `#[cfg]`-gated declaration tolerates an absence — so an unreadable subtree is swallowed and whatever it
-  holds goes unobserved, which is the false negative the Core Contract forbids. 漏刻's copy was repaired by
-  separating the two facts and routing *unreadable* to the channel that fails loud. *Observation source:*
-  measured as uid 1000 — a directory at mode `000` holding `mod.rs` gives `is_file` false with
-  `metadata` kind `PermissionDenied`; and with a plain file where a module directory would be, the kind is
-  `NotADirectory`, which is an absence and not an unreadability. The sites are
-  `crates/hunyi/src/module_resolve.rs`, `crates/hunyi/src/scan/items.rs`, and
-  `crates/guibiao/src/module_scan/reachability/walk.rs`, whose `!flat.is_file() && !nested.is_file()` arm is
-  the identical cfg-gated tolerance. *Current reaction or bound:* none in either dimension; 漏刻's is pinned
-  by `a_module_target_this_reader_cannot_read_is_not_an_absent_one` and
-  `a_component_that_is_not_a_directory_is_an_absence`. *Risk:* a probe, an import, or an exposure inside an
-  unreadable subtree is never observed, and the run reports clean. *Next trigger:* this entry is the trigger
-  — it is ready, and what it costs is one falsifier per dimension plus the absence criterion 漏刻 now
-  records, not new policy. *Authority:* engine. *Compatibility:* **minor**, by the same argument the 漏刻
-  repair carries: a tree that was green over an unreadable subtree exits `2`.
-
-  **Why it was not closed in the window that found it.** Each dimension needs its own falsifier and its own
-  reading of what its tolerance means, and the window that found it had already produced four defects of
-  exactly the kind that come from moving fast at the end of one. Filed with the measurement so the next
-  round starts from evidence rather than from a re-derivation.
-
 - **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
   register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
   in a worktree left the suite green and the register clean. `crates/kanhe/tests/pin_bites.rs` closes that for the citations
@@ -2287,6 +2264,23 @@ consumer for an undemonstrated deduplication.
   Read line by line instead, the pipelines across the tracked files this repository runs shell in end in
   `jq`, which reads to EOF, and in the one `head` and the one `grep` the reaction already names. No stage
   reads a value through some other program that exits early.
+
+- **WATCH: no fixture separates 圭表's two states for an unreadable module target.** *Observed pressure:*
+  the `is_file()` absence/unreadable collapse was repaired in all three dimensions by routing every read
+  through `xingbiao::is_regular_file` / `is_directory`, which carry the criterion. 渾儀's repair was seen to
+  fail — measured, `left: 0 right: 2` with only its reader reverted, clean over a subtree it could not open
+  — and 漏刻's has two directions of its own. **圭表's has none.** *Observation source:* measured on a
+  `#[cfg]`-gated `pub mod imp;` whose `imp/` is mode `000`, with the boundary governing a sibling that
+  resolves either way: 圭表 exits `2` **before and after**, loud for a reason this change does not touch, so
+  an assertion over it would pass either way and say nothing. A first attempt pointed the boundary at the
+  unreadable module itself and passed both ways for a second wrong reason — an unknown boundary target is a
+  constitution error. *Current reaction or bound:* the repair travels on symmetry with the two that were
+  seen to fail; `a_module_target_that_cannot_be_read_is_not_tolerated_as_absent` states the gap where a
+  reader meets it. *Risk:* bounded — the change can only convert a silent tolerance into a loud refusal,
+  never the reverse, so an unfalsified repair here cannot hide anything. What is unknown is whether 圭表's
+  arm was reachable at all. *Next trigger:* a fixture that separates the two states, or a reading that shows
+  the arm unreachable — either closes this. *Authority:* engine. *Compatibility:* patch; nothing an adopter
+  takes changes on the strength of this entry alone.
 
 - **WATCH: the re-read races the wrapper can only narrow.** *Observed pressure:* the merge wrapper pins what
   the merge **records** by construction — the body travels as the value the gate judged, and the commit set
