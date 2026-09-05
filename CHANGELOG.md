@@ -480,6 +480,31 @@ them.
 
 ### Self-governance
 
+- **A path below the root had three spellings, and the two that had to agree did not.** Turning an absolute
+  path cargo reports into the repository-relative identity git uses was written out at three sites.
+  `machinery_names` and the member-enumeration comparison both stripped the root component-wise and joined
+  the result with `/`; `workspace_manifests` stripped it with `Path::strip_prefix` too but spelled the answer
+  with `Path::display`, the host's own separator — and on a failed strip carried the **absolute** path
+  forward through `unwrap_or`, as though it were relative.
+
+  The second of those is the side the comparison reads. Both sets are compared as strings, so wherever the
+  host's separator is not `/` they share no member at all and the direction reports every member as both
+  unwalked and undeclared. It is latent — this repository's CI is `ubuntu-latest` throughout — and its own
+  comment claimed the opposite, saying it compared *through components, as the gate this direction stands
+  beside does*. That sentence was true of one side.
+
+  `kanhe::repository_path` is now the one owner: the component-wise strip, the `/` join, and a `RepositoryPath`
+  whose `Outside` variant every consumer has to answer. The absolute-path fallback is gone, and where the
+  answer cannot be reached by construction — the walk joins its manifests onto the very root it strips — the
+  site is registered and declared unheld beside the sibling that already records the same shape for the
+  answer cargo gives.
+
+  Its failure matrix carries the two arms a host with a `/` separator can still observe: a path outside the
+  root, whose negative run returns `Below("/elsewhere/kanhe/Cargo.toml")` — an absolute path presented as one
+  below the root — and a root that is a text prefix of a sibling (`/r/crates` against `/r/crates-extra`),
+  whose negative run returns `Below("-extra/kanhe/Cargo.toml")`. The separator half is unobservable here and
+  is said so rather than counted as covered.
+
 - **A version this repository never released was written into its own governance, three times.** The sweep
   had been treating this as 24 stale references to *the 0.5.1 window*. It is one class, and a different fault
   from the relative anchor beside it in `AGENTS.md`'s table: `this window` names a **moving** reference,

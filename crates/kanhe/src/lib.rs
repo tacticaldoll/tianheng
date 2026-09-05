@@ -55,6 +55,7 @@ pub mod refusal;
 pub mod refusal_bounds;
 pub mod region;
 pub mod release_coherence_gate;
+pub mod repository_path;
 pub mod restatement;
 pub mod sections;
 pub mod selection;

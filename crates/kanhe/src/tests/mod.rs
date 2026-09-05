@@ -12,6 +12,7 @@ mod publish_source_gate;
 mod reading;
 mod record;
 mod release_coherence_gate;
+mod repository_path;
 mod restatement;
 mod sections;
 mod selection;

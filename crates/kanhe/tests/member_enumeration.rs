@@ -31,24 +31,20 @@ fn workspace_root() -> Option<PathBuf> {
     )
 }
 
-/// `manifest` with `root` removed **component-wise**, spelled with `/` whatever the host uses.
+/// `manifest` with `root` removed, spelled the way the gate this direction compares against spells it.
 ///
-/// The comparison below is against the gate's own repository-relative manifest paths, so this keeps the file
-/// name and only removes the root. Removing it as text was the defect: cargo reports native paths, so on a
-/// host whose separator is not `/` no member sits under a `"{root}/"` string and the whole set empties.
-trait RelativeToRoot {
-    fn relative_to(&self, root: &std::path::Path) -> String;
-}
-
-impl RelativeToRoot for str {
-    fn relative_to(&self, root: &std::path::Path) -> String {
-        std::path::Path::new(self)
-            .strip_prefix(root)
-            .expect("`--no-deps` lists members, which sit under the root cargo reported")
-            .components()
-            .map(|part| part.as_os_str().to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join("/")
+/// **Taken through the one owner rather than restated.** This file's first draft wrote the strip and the
+/// `/` join out again, which made it a third spelling of the identity — and the side it compares against
+/// was the one that disagreed. Two readers of one question is the shape this comparison exists to catch;
+/// writing a third here would have been it again, one level up.
+fn relative_to(manifest: &str, root: &std::path::Path) -> String {
+    match kanhe::repository_path::repository_path(root, std::path::Path::new(manifest)) {
+        kanhe::repository_path::RepositoryPath::Below(path) => path,
+        kanhe::repository_path::RepositoryPath::Outside => panic!(
+            "cargo reported member manifest {manifest} outside the workspace root {} it reported \
+             alongside it, so the two enumerations describe different trees",
+            root.display()
+        ),
     }
 }
 
@@ -66,9 +62,10 @@ fn cargos_members_and_the_walked_directories_are_one_set() {
     // derivation the machinery reader records having already got wrong.
     let metadata = kanhe::release_coherence_gate::cargo_metadata(&root)
         .expect("cargo describes the workspace this check runs in");
-    // Compared through components, as the gate this direction stands beside does: cargo reports native
-    // paths, and stripping a `"{root}/"` string leaves every member outside the prefix on a host whose
-    // separator is not `/`. The identity is joined back with `/` because that is how git spells one.
+    // Both sides spell the identity through `kanhe::repository_path`, which is what makes them comparable
+    // at all: they are compared as strings, so a difference in how each renders a separator is a difference
+    // in every member. That was live — this side joined components with `/` while the gate's own walk used
+    // `Path::display`, the host's separator — and it is why the spelling has an owner.
     let cargo_root = std::path::Path::new(
         metadata["workspace_root"]
             .as_str()
@@ -79,10 +76,12 @@ fn cargos_members_and_the_walked_directories_are_one_set() {
         .expect("cargo reports an array of packages")
         .iter()
         .map(|package| {
-            package["manifest_path"]
-                .as_str()
-                .expect("every member carries its own manifest path")
-                .relative_to(cargo_root)
+            relative_to(
+                package["manifest_path"]
+                    .as_str()
+                    .expect("every member carries its own manifest path"),
+                cargo_root,
+            )
         })
         .collect();
 
