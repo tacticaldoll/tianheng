@@ -85,6 +85,59 @@ const EXAMPLES: [Example; 7] = [
     },
 ];
 
+/// One isolated quality gate an example must pass.
+///
+/// **The two properties beside `head` were decided by comparing `label` against a literal**, twelve and
+/// sixteen lines from where the label was written, in one expression. So `label` was at once the sentence
+/// an operator reads and the dispatch key for whether warnings fail the build — and renaming it in the
+/// table, which reads as a wording change, silently dropped `-D warnings`: clippy would still run, still
+/// exit `0`, and the gate would go green having stopped reacting. That is the shape the suite's own module
+/// doc names, one level up: *checking that an example merely builds says nothing about either — the
+/// reaction it demonstrates could be gone entirely.*
+///
+/// Declared, the label decides nothing, so a rename is a rename.
+///
+/// Negative run, against the tuple form with `"clippy"` renamed to `"lint"` in the table and the dispatch
+/// left comparing against `"clippy"` — which is what that edit does:
+///
+/// ```text
+/// test every_example_passes_its_isolated_quality_gates ... ok
+/// test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out
+/// ```
+///
+/// Green, with `-D warnings` gone from every example's clippy run. Nothing else in the tree references
+/// these labels, so nothing would have said so.
+struct Gate {
+    /// Names the gate in the assertion message, and nothing else.
+    label: &'static str,
+    head: &'static [&'static str],
+    /// Whether warnings must fail the build. `-D warnings` is the whole point of the clippy gate.
+    denies_warnings: bool,
+    /// Whether the example's family patch arguments apply. `fmt` reads the source and resolves nothing.
+    takes_the_family_patch: bool,
+}
+
+const GATES: [Gate; 3] = [
+    Gate {
+        label: "fmt",
+        head: &["fmt", "--all", "--check"],
+        denies_warnings: false,
+        takes_the_family_patch: false,
+    },
+    Gate {
+        label: "clippy",
+        head: &["clippy", "--all-targets"],
+        denies_warnings: true,
+        takes_the_family_patch: true,
+    },
+    Gate {
+        label: "doc",
+        head: &["doc", "--no-deps"],
+        denies_warnings: false,
+        takes_the_family_patch: true,
+    },
+];
+
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
@@ -227,27 +280,25 @@ fn every_example_passes_its_isolated_quality_gates() {
     for example in &EXAMPLES {
         let dir = root.join("examples").join(example.name);
         let patch = patch_args(&root, example.family);
-        for (label, head) in [
-            ("fmt", vec!["fmt", "--all", "--check"]),
-            ("clippy", vec!["clippy", "--all-targets"]),
-            ("doc", vec!["doc", "--no-deps"]),
-        ] {
-            let tail: Vec<&str> = if label == "clippy" {
-                vec!["--", "-D", "warnings"]
+        for gate in &GATES {
+            let tail: &[&str] = if gate.denies_warnings {
+                &["--", "-D", "warnings"]
             } else {
-                vec![]
+                &[]
             };
-            let args = if label == "fmt" {
-                argv(&head, &[], &tail)
+            let none: [String; 0] = [];
+            let args = if gate.takes_the_family_patch {
+                argv(gate.head, &patch, tail)
             } else {
-                argv(&head, &patch, &tail)
+                argv(gate.head, &none, tail)
             };
             let (code, output) = cargo(&dir, &args);
             assert_eq!(
                 code,
                 Some(0),
-                "{}: isolated {label} fails:\n{output}",
-                example.name
+                "{}: isolated {} fails:\n{output}",
+                example.name,
+                gate.label
             );
         }
     }

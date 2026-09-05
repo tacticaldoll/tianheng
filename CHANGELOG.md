@@ -24,6 +24,15 @@ them.
 
 ### Documentation
 
+- **A gate's label was also its dispatch key, so renaming it would have dropped `-D warnings` in silence.**
+  The examples suite decided two independent properties — whether warnings fail the build, and whether the
+  family patch applies — by comparing a label against a literal written twelve and sixteen lines away in the
+  same expression. Measured: renaming `"clippy"` to `"lint"` in the table, which reads as a wording change,
+  leaves clippy running without `-D warnings` and the suite green. Nothing in the tree references those
+  labels, so nothing would have said so — in the suite whose own module doc says *the reaction it
+  demonstrates could be gone entirely*. The gates are a declared struct now; the label names the gate in an
+  assertion message and decides nothing.
+
 - **The CLI usage block was restated in a module doc, and the copy had drifted.** `main.rs` carried the
   invocation shapes beside the ones `usage()` prints, and the runner rejected `--disallow-stale` while the
   copy did not name it — the same flag and the same direction as the instance `BACKLOG.md` records for
