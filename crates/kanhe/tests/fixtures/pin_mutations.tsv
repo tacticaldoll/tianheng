@@ -14,3 +14,5 @@ a_trait_object_on_a_continuation_line_is_not_recognized	crates/kanhe/tests/obser
 the_derived_origin_honors_its_stated_shape_bounds	crates/louke/src/dsl.rs	    let head = match type_path.find('<') {\n        Some(open) => &type_path[..open],\n        None => type_path,\n    };	    let head = type_path;
 a_comment_naming_every_member_for_another_reason_is_refused	crates/kanhe/src/restatement.rs	    !allowlist.is_empty() && allowlist.iter().all(|member| names(block, member))	    !allowlist.is_empty() && allowlist.iter().any(|member| names(block, member))
 a_doc_example_of_the_dependency_dsl_is_refused	crates/kanhe/src/restatement.rs	    line.contains("restrict_dependencies_to(")	    line.contains("restrict_dependencies_to(guibiao")
+all_three_dimensions_read_a_raw_identifier_spelling_of_a_cfg_attr_path	crates/hunyi/src/syn_util.rs	    path.get_ident()\n        .is_some_and(|ident| strip_raw(&ident.to_string()) == name)	    path.is_ident(name)
+a_conventional_file_beside_a_raw_identifier_remap_does_not_hide_the_remapped_one	crates/hunyi/src/syn_util.rs	    path.get_ident()\n        .is_some_and(|ident| strip_raw(&ident.to_string()) == name)	    path.is_ident(name)

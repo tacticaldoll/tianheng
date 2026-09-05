@@ -434,6 +434,18 @@ A plain `mod name;` declaration SHALL resolve to exactly one conventional source
 - **WHEN** a crate declares `#[cfg_attr(unix, path = "unix_child.rs")] #[cfg_attr(not(unix), path = "other_child.rs")] mod child;`, BOTH `unix_child.rs` and `other_child.rs` exist on disk, and neither `src/child.rs` nor `src/child/mod.rs` exists
 - **THEN** the system skips the plain-file requirement rather than erroring, and both `unix_child.rs` and `other_child.rs` are governed under `crate::child` — the shape every real rustc build compiles through exactly one of the two mutually-exhaustive targets, never through a conventional file this declaration never needs
 
+#### Scenario: A raw-identifier spelling of a path remap is the same remap
+
+- **WHEN** a crate declares `#[cfg_attr(unix, r#path = "imp_unix.rs")] mod imp;`, or the nested `#[cfg_attr(unix, r#cfg_attr(not(target_os = "none"), path = "imp_unix.rs"))] mod imp;`, and `imp_unix.rs` exists on disk
+- **THEN** every dimension reads `imp_unix.rs` as the remapped target, because `r#` changes an identifier's lexical spelling and not the name it spells — measured under rustc 1.96.0, edition 2021, `--crate-type lib`, both declarations compile with only `imp_unix.rs` present, and with a conventional `imp.rs` present as well it is the remapped file rustc compiles
+- **PINNED-BY** `all_three_dimensions_read_a_raw_identifier_spelling_of_a_cfg_attr_path`
+
+#### Scenario: A conventional file beside a raw-identifier remap does not hide the remapped one
+
+- **WHEN** a crate declares `#[cfg_attr(unix, r#path = "imp_unix.rs")] mod imp;` with a clean `src/imp.rs` present and every violation in `imp_unix.rs`
+- **THEN** the violation in `imp_unix.rs` is reported, because governing the conventional file alone reports clean over the file the build actually contains — a false negative produced by a spelling of the governed code, which the Core Contract's non-bypassability forbids
+- **PINNED-BY** `a_conventional_file_beside_a_raw_identifier_remap_does_not_hide_the_remapped_one`
+
 #### Scenario: An unresolved cfg_attr(path) candidate alone does not tolerate a missing conventional file
 
 - **WHEN** a crate declares `#[cfg_attr(windows, path = "windows_only.rs")] mod child;`, `windows_only.rs` does NOT exist on disk, and neither `src/child.rs` nor `src/child/mod.rs` exists either
