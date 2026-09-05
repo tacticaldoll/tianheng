@@ -1863,7 +1863,10 @@ fn section_shape(sections: &[Section]) -> Shape {
 /// entry for naming a published crate's own source, which is the opposite of this check's purpose. A full
 /// path is unambiguous and always enters; a basename is a convenience that has to earn its place, and the
 /// same rule governs the ancestor directories the enumeration derives — `crates/` leads to both sides.
-fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
+/// `pub(crate)` for its failure matrix, which reaches it from a sibling module — the narrowest widening
+/// that lets a direction meet this reader's own refusals, and narrower than the `pub` its neighbour
+/// `workspace_manifests` already carries for the same reason.
+pub(crate) fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
     let metadata = cargo_metadata(repo)?;
     // **The prefix comes from cargo, not from the caller's path.** `manifest_path` is canonical, while the
     // live call site passes `PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")`, which renders with its
@@ -1947,11 +1950,31 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
                 ));
             }
         };
-        let directory = if directory.is_empty() {
-            String::new()
-        } else {
-            format!("{directory}/")
-        };
+        // **A member sitting AT the root is refused, because the branch that used to tolerate it could
+        // not carry it anywhere.** A root declaring `[workspace]` and `[package]` together is a shape
+        // cargo accepts — measured on cargo 1.96.0, it reports that member's `manifest_path` as the root's
+        // own `Cargo.toml` — and the directory then strips to nothing. The empty string was passed on as a
+        // pathspec, and git refuses one: *empty string is not a valid pathspec. please use . instead if you
+        // meant to match all paths*. So the branch written to handle this state reached the
+        // directory-unreadable refusal with an empty subject, saying `could not enumerate : …`.
+        //
+        // `.` is what git suggests and is not what this gate means. The machinery set is *the tracked files
+        // under a member the workspace does not publish*, and for a member that is the root, `.` is every
+        // tracked file in the repository — every other member's source included. Tolerating the shape would
+        // hand this check a set it cannot be right about, so it says the shape is not one it judges instead,
+        // exactly as `manifest`'s reader says of a single-crate root: a root this gate was not written to
+        // judge, and saying so beats guessing.
+        if directory.is_empty() {
+            return Err(cannot_judge_at(
+                "release-coherence#member-is-the-workspace-root",
+                format!(
+                    "member manifest {manifest} is the workspace root's own, so this member's directory is \
+                     the whole repository and its machinery set would be every tracked file in it; a \
+                     workspace whose root is also a member is not the shape this check judges"
+                ),
+            ));
+        }
+        let directory = format!("{directory}/");
         let unpublished = package["publish"].as_array().is_some_and(|r| r.is_empty());
         if unpublished {
             unpublished_members.push(directory.trim_end_matches('/').to_string());
