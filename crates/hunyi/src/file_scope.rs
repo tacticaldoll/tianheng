@@ -5,7 +5,7 @@
 //! per-branch file for a whole-crate-scan one) — never re-resolved afterward from a module string,
 //! which misattributes a finding whenever two `#[cfg]`-split branches share one module path.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
@@ -77,4 +77,45 @@ pub(crate) fn resolve_crate_units<'m>(
 /// be governable would silently pass over source the system could not read.
 pub(crate) fn is_anchor_absent_from_unit(err: &str, canonical_absence: &str) -> bool {
     err == canonical_absence
+}
+
+/// Evaluate `per_unit` over every compilation unit of a package, deferring an anchor that is absent from
+/// one unit but present in another.
+///
+/// **The policy had two halves and only one of them lived here.** [`is_anchor_absent_from_unit`] decided
+/// what an absence means; what to *do* about it — govern where the anchor is, refuse only where it is
+/// nowhere — was written out at each of the seven boundary checkers, head and tail identical in all seven
+/// and differing only in the body between them. Seven copies of one policy are seven chances for it to
+/// mean seven things, and the half that decides is the half that was already shared.
+///
+/// A package's crate roots are separate compilation units — same `crate` module path, separate module
+/// graph — so each is evaluated on its own and the unit is carried into each finding's identity. An
+/// anchor absent from one unit is not absent from the boundary: it is deferred, and refused only if no
+/// unit governed it. The FIRST such reason is the one kept, so the refusal names a unit rather than the
+/// last one tried.
+pub(crate) fn over_each_unit<F>(
+    units: &[CompilationUnit],
+    canonical_absence: &str,
+    mut per_unit: F,
+) -> Result<(), String>
+where
+    F: FnMut(&Path, &Path, &str) -> Result<(), String>,
+{
+    let mut governed_somewhere = false;
+    let mut deferred: Option<String> = None;
+    for (root_file, src_dir, unit) in units {
+        match per_unit(root_file, src_dir.as_path(), unit.as_str()) {
+            Ok(()) => governed_somewhere = true,
+            Err(reason) if is_anchor_absent_from_unit(&reason, canonical_absence) => {
+                if deferred.is_none() {
+                    deferred = Some(reason);
+                }
+            }
+            Err(reason) => return Err(reason),
+        }
+    }
+    match deferred {
+        Some(reason) if !governed_somewhere => Err(reason),
+        _ => Ok(()),
+    }
 }
