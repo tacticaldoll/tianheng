@@ -218,6 +218,67 @@ fn a_quoted_dependency_key_names_its_crate_and_its_pin_is_judged() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// A family crate the catalog renames is resolved through the catalog, and its stale pin is judged.
+///
+/// **An inherited dependency's key is a lookup key, never an identity.** Measured under cargo 1.96.0: a
+/// catalog offering `alias = { package = "realdep", version = "0.0.1", path = "dep" }` beside a dependency
+/// spelling `alias = { workspace = true }` resolves to `name=realdep, req=^0.0.1, rename=alias`. Cargo
+/// refuses both of the shapes that would make the key an identity — `package` written beside
+/// `workspace = true`, and a dependency inheriting under the crate's name rather than the catalog's key —
+/// so the lookup is the dependency key against the catalog key, always.
+///
+/// The second example is load-bearing rather than decoration, for the reason its sibling above records: with
+/// only the renamed one present the per-example counter reaches zero and the vacuity guard refuses for its
+/// own reason, which is not this one. Asserting the site rather than the refusal is what tells them apart.
+#[test]
+fn a_family_crate_the_catalog_renames_is_resolved_through_it() {
+    let root = std::env::temp_dir().join(format!("kanhe-catalog-rename-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("the scratch root is writable");
+
+    let write = |dir: &str, body: &str| {
+        let at = root.join("examples").join(dir);
+        std::fs::create_dir_all(&at).expect("the example directory is writable");
+        std::fs::write(at.join("Cargo.toml"), body).expect("the example manifest is writable");
+    };
+    // The catalog renames `xuanji` to `alias` and pins it stale; the dependency takes that offer by its key.
+    write(
+        "renamed",
+        "[package]\nname = \"ex-renamed\"\n\n[workspace.dependencies]\n\
+         alias = { package = \"xuanji\", version = \"0.0.1\" }\n\n\
+         [dependencies]\nalias = { workspace = true }\n",
+    );
+    write(
+        "bare",
+        "[package]\nname = \"ex-bare\"\n\n[dependencies]\nxuanji = \"0.5.0\"\n",
+    );
+
+    let manifests = [(
+        "crates/xuanji/Cargo.toml".to_string(),
+        "[package]\nname = \"xuanji\"\n".to_string(),
+    )];
+
+    let members = super::super::release_coherence_gate::family_members(&manifests)
+        .expect("these manifests each name their package");
+    let refusal =
+        super::super::release_coherence_gate::require_example_pins(&root, &members, "0.5.0")
+            .expect_err("the catalog names xuanji, so the stale pin it offers is judged");
+    crate::refusal::expect("release-coherence#example-pin-disagrees", &refusal);
+    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("xuanji"),
+        "the crate the catalog names is what the refusal names, got: {}",
+        refusal.message
+    );
+    assert!(
+        refusal.message.contains("0.0.1"),
+        "the stale requirement is what the refusal names, got: {}",
+        refusal.message
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// The TOML escape for `x`, built rather than typed.
 ///
 /// **Typed into a literal it silently becomes the decoded value**, and that is measured rather than feared:

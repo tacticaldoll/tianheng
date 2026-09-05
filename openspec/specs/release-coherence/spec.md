@@ -417,8 +417,13 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 - **WHEN** an example requires a family crate under another key — `alias = { package = "xuanji", version =
   "0.0.1" }`, the rename form cargo admits — and that version does not satisfy the workspace version
 - **THEN** the check fails naming the package **and** the key it was given, rather than passing over an
-  entry whose key matches no family crate. Which crate a dependency names is its `package` field where it
-  has one, and its key only otherwise
+  entry whose key matches no family crate. Which crate a dependency **that declares itself** names is its
+  `package` field where it has one, and its key only otherwise
+- **AND** that rule is scoped to a dependency declaring itself, because cargo scopes it there. A dependency
+  taking the workspace offer is resolved by the scenario below instead: measured under cargo 1.96.0, cargo
+  refuses `package` written beside `workspace = true`, and refuses inheritance spelled under the crate's name
+  rather than the catalog's key, so neither half of this rule is a question cargo asks of one. Reading the
+  local key as an identity there passed over every dependency the catalog renames
 - **PINNED-BY** `a_renamed_family_dependency_is_resolved_by_its_package_field`
 
 #### Scenario: A dependency identity the reader cannot read is not one it can
@@ -487,21 +492,35 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 #### Scenario: An example taking the offer in its own catalog is held to what the catalog offers
 
 - **WHEN** an example declares a family crate with `workspace = true` — inline, as a dotted key, or as a
-  `workspace = true` line in a detailed table — beside a `[workspace.dependencies]` entry naming that crate
+  `workspace = true` line in a detailed table — beside a `[workspace.dependencies]` entry written under that
+  same key
 - **THEN** the requirement judged is the **catalog's**, not absent. Every example in this repository is its own
   workspace root, so the catalog is in the same manifest; measured, cargo resolves all three spellings to the
   catalog's requirement, and resolves to it even when a local `version` sits in the same inline table — so the
   catalog is the answer rather than one of two. A stale catalog is therefore a stale pin, and a catalog at the
   workspace version or its minor series passes
-- **AND** where the catalog beside it names no such crate, or names it through an identity this reader cannot
-  resolve, or offers a requirement that itself takes the offer, the check refuses as a cannot-judge saying
-  which of the three it met. Each is a manifest `cargo metadata` refuses to parse, and a refusal that stops in
-  front of an operator is the answer for a file nothing builds — never a pin read past
+- **AND** the dependency's key is a **lookup key** into the catalog and never an identity, so the crate judged
+  is the one the catalog's entry names and the family question is asked of that crate. Measured under cargo
+  1.96.0: `alias = { package = "realdep", version = "0.0.1", path = "dep" }` beside `alias = { workspace =
+  true }` resolves to `realdep` at `^0.0.1` under the rename `alias`. Deciding family membership on the local
+  key before resolving the catalog passed over every crate the catalog renames, and the example was then
+  reported as declaring no family requirement — a different fact about a different manifest, while the stale
+  requirement went unread
+- **AND** where the catalog beside it has no entry under that key, or the entry there names a crate this
+  reader cannot resolve, or that entry offers a requirement itself taking the offer, the check refuses as a
+  cannot-judge saying which of the three it met. Each is a manifest `cargo metadata` refuses to parse, and a
+  refusal that stops in front of an operator is the answer for a file nothing builds — never a pin read past
+- **AND** an unresolvable entry the example takes **no** offer under is not one of those three. Refusing on
+  any unreadable entry anywhere in the table answered *cannot judge* about an entry nothing here takes, while
+  a stale pin the example did take went unread behind it — the false negative reached through a refusal
+  rather than through a pass, since the operator repairs what the refusal names and ships what it hid
 - **AND** the root's own catalog is a different subject: the manifest that *declares* the catalog cannot
   inherit from it, so a pin there taking the offer is refused as undecidable rather than reported absent
 - **PINNED-BY** `an_example_inheriting_from_its_own_catalog_is_held_to_the_catalog_version`
 - **PINNED-BY** `an_example_inheriting_what_no_catalog_offers_is_not_judged`
 - **PINNED-BY** `a_catalog_entry_whose_identity_is_unresolvable_stops_the_inheriting_example`
+- **PINNED-BY** `an_unrelated_unresolvable_catalog_entry_does_not_mask_a_stale_pin`
+- **PINNED-BY** `a_family_crate_the_catalog_renames_is_resolved_through_it`
 - **PINNED-BY** `a_catalog_entry_that_itself_inherits_is_named_rather_than_followed`
 - **PINNED-BY** `an_internal_pin_taking_the_workspace_offer_is_refused`
 
