@@ -54,6 +54,41 @@ them.
 
 ### Self-governance
 
+- **The base the squash lands on is re-read after the gate, as the title already was.** The wrapper's judged
+  inputs divide by one question — what the merge **records** travels as the value the gate saw, what the merge
+  is **judged against** has to still hold when the merge happens — and the base had been filed on the wrong
+  side of it, exactly as the title once was. `gh pr merge` takes no base of its own and lands wherever the
+  pull request points at merge time, so a base edited during the gate left an approved empty-body release
+  message landing on a destination nothing judged, and carried the one message exception to a squash that is
+  not one. The negative run reaches `pr merge` and exits `0`.
+
+  The **head branch** is deliberately not re-read: GitHub offers no way to change an existing pull request's
+  head and `--match-head-commit` already pins the head object, so a guard for it could be made to refuse only
+  against the fixture and never against the tool. The declared bound is **widened rather than duplicated** —
+  the stop is a property of a client-side re-read not being atomic with the act it precedes, reached through
+  whichever inputs are re-read, and one stop declared twice is two records that must then agree. Its backlog
+  entry's own trigger named this arrival: *another judged input that can only be re-read would make this a
+  shape rather than an instance*.
+
+  One sentence said the wrapper *judges three inputs* — written when it judged three, and left standing when
+  the base and head branch were added to the gate in this same window. It stood in four places at once: the
+  wrapper, the direction exercising it, and the requirement, twice. Replaced by the criterion, which does not
+  go stale as the set grows.
+
+- **A family crate the workspace catalog renames is judged, where the local key alone decided membership.**
+  An inherited dependency's key is a **lookup key** into the catalog, never a name: measured under cargo
+  1.96.0, `alias = { package = "realdep", version = "0.0.1" }` beside `alias = { workspace = true }` resolves
+  to `realdep` at `^0.0.1`, and cargo refuses both shapes that would make the local key an identity. Asking
+  the identity question first passed the entry over, and the example was then reported as declaring no family
+  requirement — a different fact about a different manifest, while the stale requirement went unread. Where a
+  sibling example keeps the per-example counter non-zero, that is a false negative in front of the release.
+
+  The catalog search moved with it. Matching entries by resolved identity refused on **any** unreadable entry
+  in the table, so a catalog carrying both an unreadable entry and a stale family pin answered cannot-judge
+  about the entry nothing took while the pin the example did take went unread behind it — the same false
+  negative reached through a refusal rather than a pass. One fixture had been passing on that over-breadth
+  rather than on its own subject: it wrote the unreadable entry under a key nothing inherited.
+
 - **git answering in bytes no `String` holds is refused, never replaced.** The shared git runner decoded
   stdout with `from_utf8_lossy`, and what it mostly carries is **paths**: `ls-files -z` avoids git's own
   quoting and promises nothing about encoding, so a tracked path that is not UTF-8 arrived as a different path

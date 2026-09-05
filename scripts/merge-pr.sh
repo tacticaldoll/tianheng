@@ -633,15 +633,26 @@ require_a_verdict
 require_ci_green
 require_changed_files
 
-# The title is re-read, because it is the OTHER END OF A RELATION rather than a value being recorded.
+# The title and the base are re-read, because each is the OTHER END OF A RELATION rather than a value being
+# recorded.
 #
-# This wrapper judges three inputs and treated them two ways, each with a reason of its own. The body travels
-# as the VALUE the gate judged, so a rewrite between the two cannot reach the record. The commit set is one
-# end of `body == their concatenation`, so a push in between makes the judged relation false and
-# `--match-head-commit` refuses. `subject == title` is a relation too — and the title was captured once and
-# never looked at again, so an edit during the gate left the merge recording a subject that is no longer the
-# title, which is the disagreement the rule exists to prevent. Sorted by the wrapper's own criterion, it was
-# filed on the wrong side.
+# The wrapper's judged inputs divide by that one question, and the division is the criterion rather than a
+# tally: an input the merge RECORDS travels as the value the gate saw, and an input the merge is JUDGED
+# AGAINST has to still hold when the merge happens. The body is recorded, so it travels as a value and a
+# rewrite between the two cannot reach the record. The commit set is one end of `body == their
+# concatenation`, so a push in between makes the judged relation false and `--match-head-commit` refuses.
+#
+# `subject == title` is a relation, and so is the release exception's `base` — `gh pr merge` takes no base of
+# its own and lands wherever the pull request points at merge time, so a base edited after the gate ran
+# leaves an approved empty-body release message landing on a destination nothing judged, and carries the
+# exception to a squash that is not one. Both were captured once and never looked at again. Sorted by the
+# wrapper's own criterion, both were filed on the wrong side; the title was moved first and the base was left
+# behind by the same reading that moved it.
+#
+# The HEAD BRANCH is the exception, and deliberately so. It is the exception's other endpoint, but GitHub
+# offers no way to change an existing pull request's head, and `--match-head-commit` already pins the head
+# object. A re-read of it could be made to refuse only against a fixture, never against the tool — a guard
+# nothing has been seen to refuse, which `AGENTS.md` does not count as a guard.
 #
 # **This narrows the window; it does not close it, and the difference is the point.** `--match-head-commit`
 # is decided by the server, atomically. `gh` offers no `--match-title`, so a client-side re-read shrinks the
@@ -661,6 +672,18 @@ if [[ $title_now != "$title" ]]; then
     cannot_judge "the pull request's title changed while the gate ran. It judged \"$title\", the title is \
 now \"$title_now\", so the verdict in hand is about a title that no longer exists rather than about a \
 subject that disagrees. Re-run this wrapper and it will judge the title that exists now"
+fi
+
+# The base, on the same terms and for the same reason. A read failing here is a cannot-judge on its own: not
+# knowing where the squash lands is not the same fact as knowing it moved.
+base_now=$(gh pr view "$pr_number" --repo "$repository" --json baseRefName --jq .baseRefName) || cannot_judge \
+    "cannot re-read pull request $pr_number's base branch after the gate, so whether this squash is still \
+the one the gate judged cannot be decided"
+if [[ $base_now != "$base" ]]; then
+    cannot_judge "the pull request's base branch changed while the gate ran. It judged a squash onto \
+\"$base\", the base is now \"$base_now\", so the verdict in hand is about a destination this merge will not \
+use — and the one message exception is named by where the squash lands, not by how its subject reads. \
+Re-run this wrapper and it will judge the base that exists now"
 fi
 
 # Removed here, not left to the trap. An EXIT trap does not run when `exec` replaces the shell image —

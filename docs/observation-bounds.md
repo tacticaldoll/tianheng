@@ -431,11 +431,11 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
 
-### `repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound`
+### `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound`
 
-> nothing observes it, and the merge records the subject the gate approved against a title that has since moved. The wrapper judges three inputs and pins two of them by construction — the body travels as the value the gate judged, and the commit set is pinned through `--match-head-commit`, which GitHub decides atomically. `gh` offers no `--match-title`, so the third can only be re-read, which shrinks the exposure from a whole `cargo test` to one API call rather than closing it. Closing it needs a server-decided precondition this tool does not offer
+> nothing observes it, and the merge proceeds against the value the gate approved. What the merge records is pinned by construction — the body travels as the value the gate judged, and the commit set through `--match-head-commit`, which GitHub decides atomically. `gh` offers no equivalent for either the title or the base, so both can only be re-read, which shrinks the exposure from a whole `cargo test` to one API call rather than closing it. Closing it needs a server-decided precondition this tool does not offer
 
-- **unpinned**, tracked by: `BACKLOG.md` — *the title race the wrapper can only narrow*
+- **unpinned**, tracked by: `BACKLOG.md` — *the re-read races the wrapper can only narrow*
 
 ### `repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound`
 
