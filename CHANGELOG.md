@@ -54,6 +54,39 @@ them.
 
 ### Self-governance
 
+- **The head branch is re-read too, and the premise that excused it was false.** It was left out of the
+  post-gate re-reads on the ground that GitHub offers no way to change an existing pull request's head, so a
+  guard could only ever refuse against a fixture — which is not a guard. An independent review refuted it:
+  GitHub cannot **repoint** an open pull request, but renaming a branch retargets the pull requests on it, so
+  `headRefName` moves while `headRefOid` does not and `--match-head-commit` pins the object without observing
+  the name. A `release/X.Y.Z` -> `main` squash approved with an empty body, whose head branch is then renamed,
+  lands that body from a branch that is no longer a release branch. The exception can only be **lost** this
+  way and never gained, so it is not a false negative — but an omission defended by a false premise is worse
+  than the omission, and the negative run was constructible all along.
+
+- **Claims this window made about its own work, corrected where the code refuses them.** An independent
+  adversarial review of the three changes above found each of these, and each is a claim rather than a
+  behaviour — nothing reacted differently, which is why nothing caught them.
+
+  *The load-bearing measurement was mis-attributed.* Five sites and a commit body said cargo **refuses** a
+  `package` written beside `workspace = true`. It does not: measured, cargo accepts it, warns
+  `unused manifest key: dependencies.alias.package`, ignores the local value and resolves the catalog's crate
+  anyway. The probe that produced the original claim had moved two variables at once — it renamed the catalog
+  key *and* added the `package`, so the refusal it observed was the key mismatch. The conclusion is unchanged
+  and the correct measurement argues for it more strongly, but a specification clause is *reproducible now or
+  not at all*, and re-running that one refuted it.
+
+  *A sweep claimed a corpus it had not swept*, and *two test doc comments stated a false reason for their own
+  fixture* — both tests pass with the second example deleted, because the per-example counter is incremented
+  before the pin is compared, so the vacuity guard they named is unreachable. One of the two was new, having
+  copied the reason from its sibling rather than checking it.
+
+  *A negative run's record was composed rather than pasted*, losing the `left`/`right` pair that is the
+  evidence, while its sibling in the same window was verbatim. *A five-line paragraph was left duplicated*
+  inside one function, the first copy describing a statement the same change had deleted. And *`offered`'s
+  doc comment said `Offered::Missing` is a refusal rather than a fallback*, which held until the commit
+  carrying that sentence made it one.
+
 - **The base the squash lands on is re-read after the gate, as the title already was.** The wrapper's judged
   inputs divide by one question — what the merge **records** travels as the value the gate saw, what the merge
   is **judged against** has to still hold when the merge happens — and the base had been filed on the wrong
@@ -71,14 +104,24 @@ them.
   shape rather than an instance*.
 
   One sentence said the wrapper *judges three inputs* — written when it judged three, and left standing when
-  the base and head branch were added to the gate in this same window. It stood in four places at once: the
-  wrapper, the direction exercising it, and the requirement, twice. Replaced by the criterion, which does not
-  go stale as the set grows.
+  the base and head branch were added to the gate in this same window. Replaced by the criterion, which does
+  not go stale as the set grows.
+
+  **The first repair of it claimed a corpus it had not swept**, saying the wording stood in four places and
+  naming them. An independent review then found the same claim alive in nine more, two of them a `///` saying
+  *four judged inputs* directly above a function that supplies six, and one of them in the wrapper itself
+  sixty-six lines below the block that repair had rewritten to remove exactly this count. Every live site is
+  now converted — the corpus is tracked `.rs`, `.md` and `.sh`, excluding `CHANGELOG.md` and `docs/`, the
+  record carrier and the generated projections. The surviving hits there are dated entries and this
+  paragraph's own italicised quotation of the retired wording, which is what a finished conversion looks
+  like rather than an unfinished one.
 
 - **A family crate the workspace catalog renames is judged, where the local key alone decided membership.**
   An inherited dependency's key is a **lookup key** into the catalog, never a name: measured under cargo
   1.96.0, `alias = { package = "realdep", version = "0.0.1" }` beside `alias = { workspace = true }` resolves
-  to `realdep` at `^0.0.1`, and cargo refuses both shapes that would make the local key an identity. Asking
+  to `realdep` at `^0.0.1`; a `package` written beside `workspace = true` is accepted and **ignored** with an
+  `unused manifest key` warning, and inheriting under the crate's name rather than the catalog's key is
+  refused outright — so neither shape makes the local key an identity. Asking
   the identity question first passed the entry over, and the example was then reported as declaring no family
   requirement — a different fact about a different manifest, while the stale requirement went unread. Where a
   sibling example keeps the per-example counter non-zero, that is a false negative in front of the release.

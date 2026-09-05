@@ -5,15 +5,16 @@
 //! absent-versus-unreadable collapse this crate draws everywhere else: `WorkspaceVersion`,
 //! `PackageName`, `Declared`, `Package`, `Tracked`, `Failure` and `Site` all carry it inside `src`.
 //!
-//! **It was drawn for three of one gate's four inputs and not the fourth**, and the fourth was the one whose
+//! **It was drawn for every judged input of one gate but one**, and the one left out was the one whose
 //! absence means *no merge is being made*. So a subject the wrapper supplied as bytes the gate could not read
 //! took the arm that returns clean, the run exited `0`, `require_one_pass` saw `1 passed`, and
 //! `exec gh pr merge` recorded a subject no judgement had read — the one outcome the Core Contract forbids,
 //! in front of a record that cannot be amended. Two spellings of one rule is what let the repair that closed
-//! the other three stop one line short of it.
+//! the others stop one line short of it.
 //!
-//! One reader, one typed result, and consumers that match exhaustively: a fourth input cannot now be added
-//! under a different rule, because there is no second rule to add it under.
+//! One reader, one typed result, and consumers that match exhaustively: a further input cannot now be added
+//! under a different rule, because there is no second rule to add it under. The set has grown since, which is
+//! the property that matters here rather than its size.
 
 use std::ffi::OsString;
 

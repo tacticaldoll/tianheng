@@ -70,10 +70,10 @@ fn the_squash_message_is_the_pull_request_it_records() {
 
 /// The verdict over the message `scripts/merge-pr.sh` supplied, as a value.
 fn the_supplied_message() -> Verdict {
-    // **One reader for all four judged inputs.** `kanhe::supplied` answers *absent*, *the value*, and *set
+    // **One reader for every judged input.** `kanhe::supplied` answers *absent*, *the value*, and *set
     // to bytes this gate cannot read* as three states, and every input here goes through it.
     //
-    // Three of the four already did. The fourth — the subject, whose absence means **no merge is being
+    // Every one but the subject already did. That one — whose absence means **no merge is being
     // made** — was read with `env::var`, which answers *not set* and *not UTF-8* with one `Err`. The wrapper
     // takes the subject from `argv`, where arbitrary bytes are expressible, so a subject it did supply took
     // the arm that returns clean: the run exited `0`, `require_one_pass` saw `1 passed`, and
@@ -720,9 +720,9 @@ fn two_admitted_type_anchors_cannot_be_read() {
 
 // --- the harness boundary, driven as the wrapper drives it -------------------------------------------------
 
-/// The gate re-run in a child process with the four judged inputs supplied, and the class it reported.
+/// The gate re-run in a child process with every judged input supplied, and the class it reported.
 ///
-/// **A direction over the harness cannot read the harness's own environment.** The four inputs arrive as
+/// **A direction over the harness cannot read the harness's own environment.** The inputs arrive as
 /// process environment, a parallel test run shares one, and `set_var` mutates it for every sibling — so the
 /// only way to give this gate an input is to be a different process. The test binary re-executes itself with
 /// `--exact`, which is the same selection `scripts/merge-pr.sh` uses and therefore the same code path.
@@ -784,7 +784,7 @@ static SUBJECT_PROBE: std::sync::atomic::AtomicUsize = std::sync::atomic::Atomic
 /// judgement ever read — the one direction the Core Contract forbids, in front of a record that cannot be
 /// amended.
 ///
-/// The control below is what makes this a measurement rather than a coincidence: the same four inputs with a
+/// The control below is what makes this a measurement rather than a coincidence: the same inputs with a
 /// readable subject reach a verdict, so the child is exercising the gate and the two runs differ **only** in
 /// the subject's bytes.
 #[test]

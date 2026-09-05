@@ -830,8 +830,8 @@ correcting the commit afterwards decouples the two. This is the local half of th
 makes remotely: a pull request that moved is refused, and an input that moved on disk is never read a second
 time.
 
-The obligation is stated over the whole set because three of the four inputs already satisfied it while the
-fourth did not, and nothing said they were one set: the subject travelled as a value, the repository was
+The obligation is stated over the whole set because every other judged input already satisfied it while the
+body did not, and nothing said they were one set: the subject travelled as a value, the repository was
 resolved once and named on every call, the head was captured before the commit set and supplied as
 `--match-head-commit`, and the live commit subjects were pinned through that head — while the body was handed
 over as the path it had been read from. The wrapper's own allowlist already refuses a **caller's** body flag
@@ -1721,10 +1721,12 @@ landing on a destination nothing judged — and carries the one message exceptio
 The class is cannot-judge rather than violation in both cases, because the gate did not find the input wrong:
 it found it right, against something that no longer exists.
 
-The **head branch** SHALL NOT be re-read, and the asymmetry is deliberate rather than an omission. It is the
-exception's other endpoint, but GitHub offers no way to change an existing pull request's head and
-`--match-head-commit` already pins the head object, so a guard for it could be made to refuse only against a
-fixture and never against the tool. A guard nothing has been seen to refuse is not one.
+The **head branch** is re-read on the same terms, and an earlier version of this requirement excused it on a
+premise that does not hold. It said GitHub offers no way to change an existing pull request's head, so a guard
+could only ever refuse against a fixture. GitHub cannot **repoint** an open pull request at a different head,
+but renaming a branch retargets the pull requests on it: `headRefName` moves while `headRefOid` does not, so
+`--match-head-commit` pins the object and observes nothing about the name. The exception names both endpoints,
+so both are judged and both are re-read.
 
 #### Scenario: A title edited while the gate ran
 
@@ -1743,15 +1745,27 @@ fixture and never against the tool. A guard nothing has been seen to refuse is n
 - **PINNED-BY** `a_base_changed_while_the_gate_ran_stops_before_the_merge`
 - **PINNED-BY** `an_unchanged_title_still_reaches_the_merge`
 
+#### Scenario: A head branch renamed while the gate ran
+
+- **WHEN** the pull request's head branch differs between the wrapper's evidence read and its post-gate
+  re-read — which a branch rename produces, since renaming retargets the pull requests on a branch while the
+  head object it points at is unchanged
+- **THEN** the wrapper stops before `gh pr merge`, exits `2`, and names both branches
+- **AND** the exception can only be **lost** this way and never gained: the gate refuses an empty body up
+  front where the head is not a release branch, so what this closes is a verdict about an origin the merge
+  will not have rather than a false negative
+- **PINNED-BY** `a_head_branch_renamed_while_the_gate_ran_stops_before_the_merge`
+- **PINNED-BY** `an_unchanged_title_still_reaches_the_merge`
+
 #### Scenario: An input edited inside its own post-gate re-read — a stated bound
 
-- **WHEN** the pull request's title or base branch changes between the wrapper's post-gate re-read of it and
-  `gh pr merge`
+- **WHEN** the pull request's title, base branch or head branch changes between the wrapper's post-gate
+  re-read of it and `gh pr merge`
 - **THEN** nothing observes it, and the merge proceeds against the value the gate approved. What the merge
   records is pinned by construction — the body travels as the value the gate judged, and the commit set
-  through `--match-head-commit`, which GitHub decides atomically. `gh` offers no equivalent for either the
-  title or the base, so both can only be re-read, which shrinks the exposure from a whole `cargo test` to one
-  API call rather than closing it. Closing it needs a server-decided precondition this tool does not offer
+  through `--match-head-commit`, which GitHub decides atomically. `gh` offers no equivalent for the title,
+  the base or the head branch's name, so each can only be re-read, which shrinks the exposure from a whole
+  `cargo test` to one API call rather than closing it. Closing it needs a server-decided precondition this tool does not offer
 - **AND** this is one bound rather than one per input. The stop is a property of a **client-side re-read** —
   it cannot be atomic with the act it precedes — so it is reached through whichever inputs are re-read, and
   declaring it once per input would be two records of one fact that must then agree

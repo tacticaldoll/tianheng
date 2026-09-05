@@ -273,9 +273,10 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 - **THEN** the key is decoded and the pin behind it judged, rather than the entry being passed over or
   stopped in front of. A key's spelling is the parser's question: measured, `"serde_json" = "1"` resolves to a
   dependency named `serde_json`, so `"xuanji" = "0.0.1"` is a real family requirement at a stale version and
-  the check names it. Passing such an entry over is what let a stale pin reach a release as clean while the
-  aggregate requirement counter stayed non-zero on the strength of the other examples — the same false
-  negative as a renamed dependency, through a second door
+  the check names it. Passing such an entry over lets a stale pin reach a release as clean wherever another
+  family requirement in the same example satisfies the non-vacuity floor — the same false negative as a
+  renamed dependency, through a second door. The floor was once aggregate across every example and is now
+  per-example, which narrows how far one entry's silence carries without closing it
 - **AND** refusing it was the answer available to a reader that could not decode the key, and is no longer
   the answer available to one that can. A cannot-judge says *this reader cannot decide*, so it is a claim
   about the reader; where the reader decides, saying otherwise stops an operator in front of a manifest cargo
@@ -287,7 +288,7 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 - **WHEN** an example declares a family crate inside a table whose heading spells its name with a TOML escape —
   `[target.<triple>."\u0064ependencies"]` or `["dep\u0065ndencies"]`, which cargo decodes and reads as a
   dependencies table — at a version the workspace version does not satisfy, beside an ordinary family
-  dependency keeping the aggregate requirement counter non-zero
+  dependency in the same example keeping its non-vacuity floor satisfied
 - **THEN** the check reads that table's entries as pins and fails naming the crate, rather than classifying the
   heading as some other table and passing every entry inside it over
 - **AND** the escapes are **decoded** rather than answered as undecidable. Measured against cargo: it reads
@@ -428,9 +429,11 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   `package` field where it has one, and its key only otherwise
 - **AND** that rule is scoped to a dependency declaring itself, because cargo scopes it there. A dependency
   taking the workspace offer is resolved by the scenario below instead: measured under cargo 1.96.0, cargo
-  refuses `package` written beside `workspace = true`, and refuses inheritance spelled under the crate's name
-  rather than the catalog's key, so neither half of this rule is a question cargo asks of one. Reading the
-  local key as an identity there passed over every dependency the catalog renames
+  **accepts and ignores** a `package` written beside `workspace = true` — warning `unused manifest key:
+  dependencies.alias.package` while the catalog's crate resolves anyway — and refuses inheritance spelled
+  under the crate's name rather than the catalog's key. Neither half of this rule is a question cargo asks of
+  one: the first is asked and discarded, the second never reached. Reading the local key as an identity there
+  passed over every dependency the catalog renames
 - **PINNED-BY** `a_renamed_family_dependency_is_resolved_by_its_package_field`
 
 #### Scenario: A dependency identity the reader cannot read is not one it can

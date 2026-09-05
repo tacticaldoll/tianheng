@@ -142,7 +142,16 @@ elif [[ $1 == pr && $2 == view && $* == *"--json headRefName"* ]]; then
         printf 'gh: cannot read the head branch\n' >&2
         exit 1
     fi
-    printf '%s\n' "${FAKE_GH_HEAD_BRANCH:-fix/some-repair}"
+    # Read twice, like the title and the base. Renaming a branch retargets the pull requests on it, so
+    # `headRefName` moves while `headRefOid` does not -- and `--match-head-commit` is satisfied either way.
+    calls=$(cat "$FAKE_HEAD_BRANCH_CALLS" 2>/dev/null || printf '0')
+    calls=$((calls + 1))
+    printf '%s' "$calls" > "$FAKE_HEAD_BRANCH_CALLS"
+    if [[ $FAKE_GH_MODE == head-branch-moved ]] && ((calls >= 2)); then
+        printf '%s\n' 'renamed/after-the-gate'
+    else
+        printf '%s\n' "${FAKE_GH_HEAD_BRANCH:-fix/some-repair}"
+    fi
 elif [[ $1 == pr && $2 == view && $* == *"--json baseRefName"* ]]; then
     if [[ $FAKE_GH_MODE == unreadable-base ]]; then
         printf 'gh: cannot read the base branch\n' >&2
@@ -250,7 +259,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head | unreadable-base | unreadable-head-branch | unreadable-body | body-moved | title-moved | base-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
+    subjects | invalid-number | unreadable-head | unreadable-base | unreadable-head-branch | unreadable-body | body-moved | title-moved | base-moved | head-branch-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -335,6 +344,7 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
         .env("FAKE_COMMITS", &commits)
         .env("FAKE_TITLE_CALLS", scratch.join("title-calls"))
         .env("FAKE_BASE_CALLS", scratch.join("base-calls"))
+        .env("FAKE_HEAD_BRANCH_CALLS", scratch.join("head-branch-calls"))
         .env("TMPDIR", &tmp);
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
@@ -1135,9 +1145,9 @@ fn no_temporary_file_survives_the_wrapper() {
 /// file and is the defect wearing the fix's clothes. So the controlled `gh` resolves its body the way the real
 /// tool does and records what would be written, and this reads that.
 ///
-/// Three of the four judged inputs already held this property — the subject travels as a value, the repository
-/// is resolved once, the head is pinned with `--match-head-commit` and the commit set through it — and nothing
-/// said they were one set, which is how the fourth sat here through the rounds that built this wrapper.
+/// Every other judged input already held this property — the subject travels as a value, the repository is
+/// resolved once, the head is pinned with `--match-head-commit` and the commit set through it — and nothing
+/// said they were one set, which is how the body sat here through the rounds that built this wrapper.
 #[test]
 fn the_merge_records_the_body_the_gate_judged_not_the_file_it_came_from() {
     let Some(root) = workspace_root() else {
@@ -1234,12 +1244,16 @@ fn a_title_edited_while_the_gate_ran_stops_before_the_merge() {
 /// Negative run, before the post-gate base re-read existed:
 ///
 /// ```text
-/// thread 'a_base_changed_while_the_gate_ran_stops_before_the_merge' panicked:
-/// a moved base is a cannot-judge, not a disagreement; got Some(0) with stderr ""
+/// assertion `left == right` failed: a moved base is a cannot-judge, not a disagreement; got Some(0) with stderr ""
+///   left: Some(0)
+///  right: Some(2)
 /// ```
 ///
 /// Exit `0`: the wrapper reached `pr merge` and completed, recording the message it had approved for the
-/// old base.
+/// old base. The panic's own header is left out rather than quoted, because it carries a pid and a line
+/// number of this file — a reference that moves whenever anything above it does, which is the one thing a
+/// pasted record must not acquire. The first version of this block was composed from the intention instead
+/// of pasted, and lost the `left`/`right` pair that is the actual evidence.
 #[test]
 fn a_base_changed_while_the_gate_ran_stops_before_the_merge() {
     let Some(root) = workspace_root() else {
@@ -1256,6 +1270,52 @@ fn a_base_changed_while_the_gate_ran_stops_before_the_merge() {
     assert!(
         run.stderr.contains("release/0.0.0") && run.stderr.contains("main"),
         "the refusal must name both bases so an operator can see what moved, got {:?}",
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.lines().any(|line| line.starts_with("pr merge")),
+        "the merge must not be reached, got {:?}",
+        run.gh_log
+    );
+}
+
+/// A head branch renamed while the gate ran stops the wrapper, as a cannot-judge.
+///
+/// **This direction exists because the argument for not having it was wrong.** The exclusion was written as
+/// *GitHub offers no way to change an existing pull request's head*, so a guard could only ever refuse
+/// against a fixture — which `AGENTS.md` does not count as a guard. GitHub cannot **repoint** an open pull
+/// request at a different head, but renaming a branch retargets the pull requests on it: `headRefName` moves
+/// while `headRefOid` does not, so `--match-head-commit` pins the object and observes nothing about the name.
+///
+/// What the name decides is the one message exception, which names both endpoints. A
+/// `release/X.Y.Z` -> `main` squash approved with an empty body, whose head branch is then renamed, lands
+/// that empty body from a branch that is no longer a release branch. The exception can only be **lost** this
+/// way and never gained — the gate refuses an empty body up front when the head is not `release/X.Y.Z` — so
+/// this is not a false negative; it is a verdict about an origin the merge will not have.
+///
+/// Negative run, before this re-read existed:
+///
+/// ```text
+/// assertion `left == right` failed: a renamed head branch is a cannot-judge, not a disagreement; got Some(0) with stderr ""
+///   left: Some(0)
+///  right: Some(2)
+/// ```
+#[test]
+fn a_head_branch_renamed_while_the_gate_ran_stops_before_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "head-branch-moved", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a renamed head branch is a cannot-judge, not a disagreement; got {:?} with stderr {:?}",
+        run.status.code(),
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("fix/some-repair") && run.stderr.contains("renamed/after-the-gate"),
+        "the refusal must name both branches so an operator can see what moved, got {:?}",
         run.stderr
     );
     assert!(
