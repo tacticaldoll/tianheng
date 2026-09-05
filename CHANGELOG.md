@@ -22,6 +22,18 @@ them.
 
 ## [Unreleased]
 
+### Migration
+
+- **Regenerate any recorded baseline if a module in your tree carries more than one `path` inside a single
+  `cfg_attr` attribute, beside a conventional file.** Those extra targets were not read before and are read
+  now, so a tree that was green may report new findings: run `tianheng check --write-baseline <file>`
+  wherever a baseline is kept, and re-apply any `owner` / `tracker` annotations onto the newly observed
+  facts. `#[cfg_attr(unix, cfg_attr(a, path = "x.rs"), cfg_attr(b, path = "y.rs"))]` is the shape; several
+  SEPARATE `cfg_attr` attributes carrying one `path` each were already unioned and are unaffected.
+- **Nothing to do if such a declaration previously stopped the run.** Where no conventional file backed it,
+  the check reported the module unresolvable and exited `2`. That was a false refusal over code rustc
+  accepts; it now resolves, and no baseline existed to move.
+
 ### Semantic and runtime
 
 - **BREAKING** — **Every `path` in one `cfg_attr` span is read, where two dimensions took the first.**
