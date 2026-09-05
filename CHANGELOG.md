@@ -117,6 +117,33 @@ them.
 
 ### Semantic and runtime
 
+- **BREAKING** — **The attribute's own name position takes a raw identifier too, and closing it in one
+  dimension is how the second position was found.** The repair below reached the spelling inside a
+  `cfg_attr`'s argument list, where both byte scanners already consumed the `r#` prefix with its segment.
+  The attribute's **own** name is a separate position and none of the three read it: 圭表 matched `path`
+  against the bytes after `[`, 漏刻 lexed the name with an identifier reader that stops at `#`, and 渾儀
+  compared through `syn`. Fixing 渾儀 alone therefore turned a shared miss into a disagreement, which is the
+  thing the cross-dimension ledger exists to prevent — found by re-reading the repair rather than by running
+  anything.
+
+  Measured under rustc 1.96.0, edition 2021, `--crate-type lib`: `#[r#path = "imp_unix.rs"] pub mod imp;`
+  compiles with only `imp_unix.rs` on disk, and with a conventional `imp.rs` present as well it is the
+  remapped file that is compiled. Perturbed one dimension at a time, each of the three answered `0` — clean
+  over a file the build does not contain, while the file it does contain went unobserved.
+
+  **And the same spelling on a bare `cfg` costs a refusal rather than a miss.** `#[r#cfg(target_os = "none")]
+  pub mod gone;` compiles with no `gone.rs` anywhere, because `r#cfg` is the built-in `cfg` and a false
+  predicate removes the item. All three withheld that tolerance from the raw spelling and reported a
+  missing-file constitution error over source that compiles — consistently, which made it invisible to a
+  ledger that only asks whether the three agree.
+
+  `module-boundary` gains both scenarios, each pinned. Neither carries a declared mutation, for the reason
+  `pin_bites` states: a declared mutation is a claim about a **bound's** defence, and these are ordinary
+  scenarios rather than declared observation bounds.
+
+  **Why breaking:** an adopter whose source spells an attribute name with a raw identifier has 圭表 and 漏刻
+  baselines that no longer describe their tree, for the remap half; the `cfg` half only removes refusals.
+
 - **BREAKING** — **A raw-identifier spelling of a path remap is the same remap, and 渾儀 alone read it as a
   different one.** `r#` changes an identifier's lexical spelling and not the name it spells, so `r#path`
   names the built-in `path` attribute and `r#cfg_attr` names `cfg_attr`. Measured under rustc 1.96.0,

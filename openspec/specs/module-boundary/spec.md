@@ -434,6 +434,18 @@ A plain `mod name;` declaration SHALL resolve to exactly one conventional source
 - **WHEN** a crate declares `#[cfg_attr(unix, path = "unix_child.rs")] #[cfg_attr(not(unix), path = "other_child.rs")] mod child;`, BOTH `unix_child.rs` and `other_child.rs` exist on disk, and neither `src/child.rs` nor `src/child/mod.rs` exists
 - **THEN** the system skips the plain-file requirement rather than erroring, and both `unix_child.rs` and `other_child.rs` are governed under `crate::child` — the shape every real rustc build compiles through exactly one of the two mutually-exhaustive targets, never through a conventional file this declaration never needs
 
+#### Scenario: A raw-identifier attribute name is the built-in it spells
+
+- **WHEN** a crate declares `#[r#path = "imp_unix.rs"] mod imp;`, with `imp_unix.rs` on disk and a conventional `src/imp.rs` present as well
+- **THEN** every dimension reads `imp_unix.rs`, because the attribute's own name position takes a raw identifier exactly as a `cfg_attr`'s argument list does — measured under rustc 1.96.0, edition 2021, `--crate-type lib`, the declaration compiles with only `imp_unix.rs` present, and with both present it is the remapped file that is compiled
+- **PINNED-BY** `all_three_dimensions_read_an_unconditional_raw_identifier_path_remap`
+
+#### Scenario: A raw-identifier bare cfg grants the absent-file tolerance
+
+- **WHEN** a crate declares `#[r#cfg(target_os = "none")] mod gone;` with no `gone.rs` anywhere
+- **THEN** no dimension reports the missing-file constitution error, because `r#cfg` is the built-in `cfg` and a false predicate removes the `mod` item outright — measured under rustc 1.96.0, edition 2021, `--crate-type lib`, the declaration compiles with no backing file, exactly as the plain spelling does
+- **PINNED-BY** `all_three_dimensions_tolerate_an_absent_file_behind_a_raw_identifier_cfg`
+
 #### Scenario: A raw-identifier spelling of a path remap is the same remap
 
 - **WHEN** a crate declares `#[cfg_attr(unix, r#path = "imp_unix.rs")] mod imp;`, or the nested `#[cfg_attr(unix, r#cfg_attr(not(target_os = "none"), path = "imp_unix.rs"))] mod imp;`, and `imp_unix.rs` exists on disk

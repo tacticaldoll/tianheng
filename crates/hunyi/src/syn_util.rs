@@ -68,7 +68,9 @@ pub(crate) fn direct_path_value(attrs: &[syn::Attribute]) -> Option<String> {
 /// 漏刻's CI-audit scanner independently hand-rolls the identical bare-`cfg`-only distinction for
 /// the same reason (`louke::audit::scan::mod_preamble_attrs`).
 pub(crate) fn has_cfg_attr(attrs: &[syn::Attribute]) -> bool {
-    attrs.iter().any(|attr| attr.path().is_ident("cfg"))
+    attrs
+        .iter()
+        .any(|attr| is_builtin_attribute(attr.path(), "cfg"))
 }
 
 /// The one macro whose body this dimension reads as ordinary code: `cfg_if!`. See
@@ -443,7 +445,7 @@ fn bare_cfg_negates(attrs_a: &[syn::Attribute], attrs_b: &[syn::Attribute]) -> b
 fn sole_bare_cfg_predicate(attrs: &[syn::Attribute]) -> Option<syn::Meta> {
     let cfg_attrs: Vec<&syn::Attribute> = attrs
         .iter()
-        .filter(|attr| attr.path().is_ident("cfg"))
+        .filter(|attr| is_builtin_attribute(attr.path(), "cfg"))
         .collect();
     match cfg_attrs.as_slice() {
         [one] => one.parse_args::<syn::Meta>().ok(),
