@@ -425,16 +425,25 @@ fn a_path_inside_a_compound_predicate_is_still_a_predicate() {
     );
 }
 
-/// A path-QUALIFIED look-alike is not the built-in `cfg_attr`.
+/// A path-QUALIFIED look-alike is not the built-in `cfg_attr`, however the qualification is spelled.
 ///
-/// **Group kind was inferred from the last identifier alone.** `foo::cfg_attr(a, path = "bogus")` ends in
-/// the identifier `cfg_attr`, so a scanner matching that one segment reopened applied-meta scanning inside
-/// an attribute that is not `cfg_attr` at all — restoring the same false coverage through a different
-/// spelling. The built-in is the single-segment path; anything reached through `::` is somebody else's
-/// attribute and carries no module target.
+/// **Group kind was inferred from an identifier, and Rust has more than one way to write one.** Each
+/// spelling below defeated a different repair, and each was the same false coverage arriving again:
 ///
-/// Negative run, against the last-identifier test and again against the look-behind that replaced it —
-/// the same result from two different readers, which is what makes this the third spelling of one hole:
+/// - `foo::cfg_attr` — the last identifier matched, so a scanner testing only that reopened scanning.
+/// - `foo::/**/cfg_attr` — a look-behind over whitespace stopped at the comment's `/` and read the segment
+///   as unqualified. A comment is trivia and must not change what a path IS.
+/// - `foo::r#cfg_attr` — a raw identifier is ONE segment, and a reader seeing `r`, then `#`, then
+///   `cfg_attr` cleared the qualification twice.
+///
+/// They are one hole, so they are one direction: replacing a spelling rather than adding it is how the
+/// second was lost while the third was closed.
+///
+/// The control is the point of the whole thing. An **unqualified** `r#cfg_attr` names the built-in — the
+/// prefix escapes a keyword and says nothing else — so narrowing must not cost a genuine nested group its
+/// applied metas.
+///
+/// Negative run, identical against each reader the spelling above it defeated:
 ///
 /// ```text
 /// assertion `left == right` failed: a qualified look-alike carries no module target: Clean(Subject { declared: 2, reached: 1 })
@@ -445,36 +454,71 @@ fn a_path_inside_a_compound_predicate_is_still_a_predicate() {
 /// Clean, on the strength of a probe in a file no build compiles.
 #[test]
 fn a_path_qualified_look_alike_is_not_cfg_attr() {
-    let tb = TempBase::new("qualified-look-alike");
+    for (label, inner) in [
+        ("plain", "foo::cfg_attr(a, path = \"bogus\")"),
+        (
+            "comment-separated",
+            "foo::/**/cfg_attr(a, path = \"bogus\")",
+        ),
+        ("raw identifier", "foo::r#cfg_attr(a, path = \"bogus\")"),
+    ] {
+        let tb = TempBase::new(&format!("look-alike-{}", label.replace(' ', "-")));
+        let root = tb.source(
+            "lib.rs",
+            &format!("#[cfg_attr(any(), {inner}, path = \"real.rs\")]\nmod plat;"),
+        );
+        tb.source("bogus", "fn live() { assert_boundary!(\"plat-seam\", o); }");
+        tb.source(
+            "real.rs",
+            "fn live() { assert_boundary!(\"real-seam\", o); }",
+        );
+
+        let outcome = tb.audit(
+            &[
+                boundary("plat-seam", Severity::Enforce),
+                boundary("real-seam", Severity::Enforce),
+            ],
+            std::slice::from_ref(&root),
+        );
+        let reported = format!("{outcome:?}");
+        assert_eq!(
+            outcome.exit_code(),
+            1,
+            "{label}: a qualified look-alike carries no module target: {reported}"
+        );
+        assert!(
+            reported.contains("plat-seam") && !reported.contains("real-seam"),
+            "{label}: the look-alike's file is not read and the applied target is: {reported}"
+        );
+    }
+}
+
+/// The control: an UNQUALIFIED raw identifier is the built-in, so the narrowing costs nothing.
+///
+/// `r#cfg_attr` names the same identifier as `cfg_attr`; the prefix escapes a keyword and says nothing
+/// about qualification. Without this, a repair that refused every `r#` segment would pass the direction
+/// above while silently dropping a genuine nested group's applied metas — the false negative the
+/// narrowing exists to close, arriving from the other side.
+#[test]
+fn an_unqualified_raw_cfg_attr_is_still_the_built_in() {
+    let tb = TempBase::new("raw-unqualified");
     let root = tb.source(
         "lib.rs",
-        // A comment between `::` and the identifier is trivia, and must not change what the path IS.
-        // A look-behind over whitespace alone stopped at the comment's `/` and read the segment as
-        // unqualified, which restored the same false coverage through a third spelling.
-        "#[cfg_attr(any(), foo::/**/cfg_attr(a, path = \"bogus\"), path = \"real.rs\")]\nmod plat;",
+        "#[cfg_attr(any(), r#cfg_attr(a, path = \"real.rs\"))]\nmod plat;",
     );
-    tb.source("bogus", "fn live() { assert_boundary!(\"plat-seam\", o); }");
     tb.source(
         "real.rs",
         "fn live() { assert_boundary!(\"real-seam\", o); }",
     );
 
     let outcome = tb.audit(
-        &[
-            boundary("plat-seam", Severity::Enforce),
-            boundary("real-seam", Severity::Enforce),
-        ],
+        &[boundary("real-seam", Severity::Enforce)],
         std::slice::from_ref(&root),
     );
-    let reported = format!("{outcome:?}");
     assert_eq!(
         outcome.exit_code(),
-        1,
-        "a qualified look-alike carries no module target: {reported}"
-    );
-    assert!(
-        reported.contains("plat-seam") && !reported.contains("real-seam"),
-        "the look-alike's file is not read and the applied target is: {reported}"
+        0,
+        "an unqualified `r#cfg_attr` is the built-in, so its applied target is read: {outcome:?}"
     );
 }
 
