@@ -24,6 +24,16 @@ them.
 
 ### Documentation
 
+- **The third reader of a `use` statement's body now shares the one home the other two do.**
+  `lexer::scan_use_statement` declares itself *the one place both interpret what is a `use` statement's body
+  identically* — and `pub_use_statements` re-spelled it, so it carried neither the shared guard nor the
+  shared shape. The guard matters where a `use` is followed by `<`: that is a precise-capturing bound and
+  not an import, and scanning to the next `;` there swallows the following real `use`. The extraction that
+  made the reader shared converged two sites and walked past the third, which is the extraction-corpus class
+  this repository already records. It is unreachable from this site — `pub` cannot precede a type bound —
+  and is now answered rather than assumed, so the loop owns no arm the shared reader does not. What
+  genuinely differs, the `pub` and visibility-qualifier walk, is what the function keeps.
+
 - **The workspace-isolation check decided a TOML question on raw lines, and its own doc said otherwise.**
   Its reader walked `manifest.lines()` while its doc read *a line of its own, because `[workspace]` inside a
   string or after a `#` is not a table* — and it got both of the cases that sentence names wrong. Measured,
