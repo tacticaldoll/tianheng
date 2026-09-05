@@ -492,13 +492,12 @@ pub(crate) fn path_meta_values(
             _ => {}
         }
         if is_ident_byte(bytes[i]) && (i == start || !is_ident_byte(bytes[i - 1])) {
-            // **A raw identifier is ONE path segment, not three scanner events.** `r#` changes an
-            // identifier's lexical spelling and not its name, so `r#cfg_attr` names `cfg_attr` — it is not
-            // escaping a keyword here, since `cfg_attr` is not one, and the form is admitted for any
-            // identifier. A reader that saw `r`, then `#`, then `cfg_attr` cleared the qualification twice
-            // and read `foo::r#cfg_attr` as unqualified. The prefix is consumed with the segment it
-            // belongs to, and the name compared is the one it spells. This file already draws the same
-            // distinction for a macro name; the reader below did not.
+            // **A raw identifier is ONE path segment.** `r#` changes an identifier's lexical spelling and
+            // not its name, so `r#cfg_attr` names `cfg_attr`; it is not escaping a keyword, since
+            // `cfg_attr` is not one, and the form is admitted for any identifier. The prefix is therefore
+            // consumed with the segment it belongs to, and the name compared is the one it spells —
+            // taking `r`, `#` and `cfg_attr` for separate events would clear the qualification a
+            // path separator had set.
             let mut name_start = i;
             if bytes[i] == b'r' && bytes.get(i + 1) == Some(&b'#') {
                 let after = i + 2;

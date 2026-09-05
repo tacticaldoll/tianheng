@@ -2275,14 +2275,20 @@ consumer for an undemonstrated deduplication.
   reader before it answered `Clean` over such a file —
   `a_cfg_attr_predicate_is_not_an_applied_module_target`,
   `a_path_inside_a_compound_predicate_is_still_a_predicate`,
-  `a_path_qualified_look_alike_is_not_cfg_attr` over three qualification spellings,
+  `a_path_qualified_look_alike_is_not_cfg_attr` over the pinned qualification spellings,
   `an_unqualified_raw_cfg_attr_is_still_the_built_in`, and
   `a_doubly_nested_cfg_attr_path_is_followed_the_same_as_a_single_nesting`. What each shows is not that a
   repair happened but that the property is decidable and was decided wrongly from bytes.
 
   *What this is not:* an argument for a parser. 漏刻's prod face is std-light by a recorded decision;
-  taking `syn` here is the amendment `PROJECT.md` refuses for 圭表 for the same reason, and 圭表 answers
-  this same question with a byte scanner correctly. *Risk:* a wrong answer is a false clean — the Core
+  taking `syn` here is the amendment `PROJECT.md` refuses for 圭表 for the same reason. **This entry said
+  圭表 answers the same question with a byte scanner correctly, and that was written without measuring it.**
+  Measured since: 圭表's own collector carried the qualified-path family — over
+  `(any(), foo::cfg_attr(a, path = "bogus"), path = "real.rs")` it yielded two positions where one is
+  right, and the raw spelling the same — while its `depth == 1` guard happened to close the compound
+  predicate that defeated 漏刻. Neither reader is the correct one: each hand-rolls the same lexical
+  decisions and each misses a different subset, which is the pressure this entry records rather than a
+  property of either. *Risk:* a wrong answer is a false clean — the Core
   Contract's forbidden bug — reachable only through a declaration an adopter writes deliberately, which is
   why every shape so far was found by reading rather than reported from the field. *Next trigger:* a
   Rust-valid spelling of any of those four properties that the pinned corpus does not already contain. What

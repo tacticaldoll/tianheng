@@ -22,6 +22,29 @@ them.
 
 ## [Unreleased]
 
+### Static
+
+- **BREAKING** — **圭表 requires the built-in `cfg_attr`'s exact path, where it matched the bare
+  identifier.** `foo::cfg_attr(a, path = "bogus")` ends in the same word while being somebody else's
+  attribute, so the collector descended into it and took `bogus` as a module remap. Measured over the span
+  `(any(), foo::cfg_attr(a, path = "bogus"), path = "real.rs")`: two positions where one is right, and the
+  raw spelling `foo::r#cfg_attr` the same. A module rustc never reads was then scanned, and any violation
+  found there reported over source the governed tree does not have.
+
+  The qualification is decided by the token before the segment, and `r#` changes a lexical spelling
+  without changing a name, so one segment stays one. The control holds the other side: an unqualified
+  nested `cfg_attr`, raw-spelled or not, keeps its applied metas.
+
+  **This was found by measuring a claim rather than by a report.** An entry in `BACKLOG.md` said 圭表
+  answers this question correctly and was written without measuring it; 漏刻's equivalent repairs made
+  that claim worth checking, and it was false. What 圭表 does close, by a `depth == 1` guard, is the
+  compound predicate that defeated 漏刻 — so neither reader was the correct one, and each hand-rolling of
+  the same lexical decisions missed a different subset.
+
+  **Why a minor:** this **removes** findings rather than adding them. A recorded baseline holding a
+  violation from a target no longer read no longer describes the adopter's tree, and `--disallow-stale`
+  reports it. Regenerating is work they did not choose.
+
 ### Release
 
 - **This release line is `0.6.0`, and its branch was renamed to say so.** The window carries `**BREAKING**`
@@ -55,6 +78,11 @@ them.
   baseline. They are now one: run `tianheng check --write-baseline <file>` wherever a baseline is kept and
   re-apply any `owner` / `tracker` annotations. A declaration carrying no `r#` anywhere is unaffected —
   every key is byte-identical.
+- **Regenerate any recorded baseline if a module in your tree is remapped through an attribute whose path
+  merely ENDS in `cfg_attr` — `foo::cfg_attr(…, path = "…")`.** That target was read and is not any more, so
+  a baseline entry recorded from it describes a file the governed tree does not have. Run
+  `tianheng check --write-baseline <file>` wherever a baseline is kept. A declaration using the built-in
+  `cfg_attr` unqualified, raw-spelled or not, is unaffected.
 - **Make every module target readable, or expect exit `2` naming it.** A module file or directory that any
   of the three dimensions cannot open is no longer tolerated as an absent one. Where a `#[cfg]`-gated declaration sat over an
   unreadable subtree, the audit previously reported the seam inside it as unprobed — or passed clean where
@@ -127,7 +155,8 @@ them.
 
   **The comment that recorded the disagreement and left it open was wrong three times**: the shape needs no
   special build to appear in a tree, reading it is not harmless, and closing it does not need a nesting
-  parser — 圭表 does it with a byte scanner. Left open on the strength of that comment, in the same window
+  parser — 圭表 does the same kind of scanning without one, though not, it turns out, without the same
+  holes. Left open on the strength of that comment, in the same window
   that wrote it.
 
   Two carriers of the earlier title/base/head widening also survived its sweep: a positive control whose
