@@ -22,6 +22,24 @@ them.
 
 ## [Unreleased]
 
+### Release
+
+- **This release line is `0.6.0`, and its branch was renamed to say so.** The window carries four
+  `**BREAKING**` markings — two false-negative closures, a rule-key identity change, and a module-resolution
+  widening — and this repository's rule past `0.1.0` is that breaking earns a **minor**. `AGENTS.md` also
+  holds that a branch name encodes the exact target version, so `release/0.5.1` was a name disagreeing with
+  its own contents, on the one surface an operator consults to know what is being cut.
+
+  **Nothing mechanical said so, which is why it is written here.** `release_coherence` compares version
+  literals to each other — `Cargo.toml`, the dated changelog heading, the lock — and never to the change
+  class the entries declare, so the release would have passed every gate and shipped a patch requiring
+  baseline regeneration. It was found by an independent review reading the markings against the branch name.
+
+  Git history shows twenty-odd pull requests merged into `release/0.5.1`: that is the same branch under its
+  former name, renamed in place through GitHub rather than recreated, so every merge record still resolves.
+  The nine tracked references to it were updated with it. **The workspace version is untouched at `0.5.0`**
+  — it moves at release preparation, not here.
+
 ### Migration
 
 - **Regenerate any recorded baseline if a module in your tree carries more than one `path` inside a single
@@ -1024,7 +1042,7 @@ them.
   on the release commit, an author writes the `[Unreleased]` entry that development **requires**, and it is
   judged in snapshot state, where `[Unreleased]` must be **empty**. Two real rules, no tree satisfying both,
   and the only escape is to commit — which is the act that moves `head`. Measured on this repository:
-  `release/0.5.1`'s first change could not pass the Definition of Done until it was committed, and passed
+  `release/0.6.0`'s first change could not pass the Definition of Done until it was committed, and passed
   immediately afterwards unaltered.
 
   A snapshot is a **checkout**, not a commit. The state now also asks whether the `CHANGELOG.md` being judged
@@ -1049,7 +1067,7 @@ them.
   those two sources: sitting on the release commit, an author writes the `[Unreleased]` entry that
   **development requires**, and it is judged in **snapshot**, where `[Unreleased]` must be **empty**. Two real
   rules, and the only escape is to commit — the act that moves `HEAD`. Measured on this repository:
-  `release/0.5.1`'s first change could not pass the Definition of Done until it was committed, and passed
+  `release/0.6.0`'s first change could not pass the Definition of Done until it was committed, and passed
   immediately afterwards unaltered.
 
   The state now reads the same source the reaction judges. What it does **not** do is report the conflict as a

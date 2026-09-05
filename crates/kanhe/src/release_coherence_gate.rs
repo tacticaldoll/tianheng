@@ -501,7 +501,7 @@ fn release_spine(
     // the COMMIT — while every other reader in this gate judges the worktree, which `read` takes with
     // `std::fs::read_to_string`. Two sources, one answer, and the first edit of the next cycle falls between
     // them: at the release commit, writing the `[Unreleased]` entry that `Development` **requires** is judged
-    // in `Snapshot`, where `[Unreleased]` must be **empty**. Measured on `release/0.5.1`'s first change — the
+    // in `Snapshot`, where `[Unreleased]` must be **empty**. Measured on `release/0.6.0`'s first change — the
     // tree could not be made to pass until it was committed, because committing is what moved `head`.
     //
     // **The CHANGELOG is what carries the cycle, so it is what decides.** A first attempt asked whether

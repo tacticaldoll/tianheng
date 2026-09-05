@@ -3092,7 +3092,7 @@ fn a_checkout_edited_only_in_trailing_whitespace_is_not_a_snapshot() {
 /// judged in `Snapshot`, where `[Unreleased]` must be **empty**. Two rules, both real, and no tree satisfies
 /// them at once — the author's only way out is to commit, which is what moves `head`.
 ///
-/// Measured on this repository: `release/0.5.1`'s first change could not pass the Definition of Done until it
+/// Measured on this repository: `release/0.6.0`'s first change could not pass the Definition of Done until it
 /// was committed, and passed immediately afterwards with nothing else altered.
 ///
 /// A release snapshot is an unmodified **checkout** of one. This writes the entry without committing and

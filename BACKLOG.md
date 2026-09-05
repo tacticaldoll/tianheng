@@ -781,7 +781,7 @@ consumer for an undemonstrated deduplication.
   correction reverses its verdict.** Its classifier calls a change *governance* only when it touches
   `crates/{kanhe,shengmo}`. Governance here is also carried by `BACKLOG.md`, `AGENTS.md`, `PROJECT.md`,
   `CHANGELOG.md`, `openspec/specs/**`, `docs/**` and `.github/**` — so a window spent almost entirely on those
-  reads as a **fall**. Over `v0.5.0..release/0.5.1` the classifier as written answers `13/42 (30%)` against
+  reads as a **fall**. Over `v0.5.0..release/0.6.0` the classifier as written answers `13/42 (30%)` against
   `0.5.0`'s 52%; classified by carrier it answers **42/42 (100%)**, of which `29/42 (69%)` touched no code at
   all, and **0/42 touched any published crate's `src/`** where `0.5.0` had 18%. The share did not fall: the
   work moved into a category the classifier ignores, which is the corpus defect this file records under its
@@ -1080,7 +1080,7 @@ consumer for an undemonstrated deduplication.
   exists to prevent. *Promotion trigger, rewritten 2026-09-01 over the corpus it watches:* a merged pull request whose head
   branch does not parse as `<type>/<scope>-<slug>` with `<type>` in the admitted set, or whose parsed type
   differs from its squash subject's, or a second retired role accumulating. **So rewritten it fires, on the
-  0.5.1 window's own work.** Measured over all 22 pull requests merged into `release/0.5.1`: 21 branches
+  0.5.1 window's own work.** Measured over all 22 pull requests merged into `release/0.6.0`: 21 branches
   parse and every one of those agrees with its squash subject's type, and one carries no `/` at all
   (`test-kanhe-a-fixture-sha-that-resolves-nowhere`), so it declares no type for a subject to disagree with.
   The old trigger could not fire on it: this entry's own *Observed pressure* had already counted seven
@@ -1149,7 +1149,7 @@ consumer for an undemonstrated deduplication.
   worktree-building `pin_bites`. Filed rather than done because this repository's own rule is evidence before
   promotion, and the evidence measured zero.
 
-  **Not fired, swept 2026-09-01.** Every commit on `release/0.5.1` resolves to a merged pull request, checked
+  **Not fired, swept 2026-09-01.** Every commit on `release/0.6.0` resolves to a merged pull request, checked
   the same way as the `0.4.0` measurement — each commit's hash against the merge commit of every merged pull
   request. The structural gap is unchanged; the evidence still measures zero.
 
@@ -2629,7 +2629,7 @@ consumer for an undemonstrated deduplication.
 
 - ~~**`0.5.0`'s row in the published-artifact provenance record cannot be written until after it is
   published, and the branch that could carry it is archived first.**~~ **BUILT** — the trigger fired when
-  `0.5.0` reached crates.io on 2026-08-28, and the row was written on `release/0.5.1`, the first branch able
+  `0.5.0` reached crates.io on 2026-08-28, and the row was written on `release/0.6.0`, the first branch able
   to carry it. Measured rather than predicted: all six tarballs pulled from `static.crates.io` and their
   `.cargo_vcs_info.json` read, one distinct sha1 across the six, and it is the commit `v0.5.0` names — so the
   verdict is *agrees with the tag*. The sha1 itself is written in the record, where a commit object is

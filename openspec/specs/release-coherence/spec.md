@@ -56,7 +56,7 @@ time, warning windows, or hosted-CI-only variables.
   state read from `HEAD` alone put the two out of step. Snapshot requires `[Unreleased]` to be **empty** while
   development **requires an entry in it**, so at that moment no tree satisfied the state it was judged in, and
   the only escape was to commit — which is the act that moves `HEAD`. Measured on this repository's own
-  `release/0.5.1`: its first change could not pass the Definition of Done until it was committed, and passed
+  `release/0.6.0`: its first change could not pass the Definition of Done until it was committed, and passed
   immediately afterwards unaltered
 - **AND** the comparison SHALL be against the **committed tree** rather than the index. A first spelling asked
   `git status`, which reads the index and so intercepted a corrupt-index fixture that another guard uses to
