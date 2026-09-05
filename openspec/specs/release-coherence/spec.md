@@ -16,7 +16,8 @@ surfaces, lock snapshot, and adopter-facing changelog coherent without time-base
 ### Requirement: Repository state determines the release phase
 
 The repository SHALL classify its release phase solely from the latest exact `release: X.Y.Z`
-commit in git history, the position of `HEAD`, and the current workspace version. A later commit at
+commit in git history, the position of `HEAD`, the current workspace version, and whether the
+`CHANGELOG.md` being judged is still the one that commit carries. A later commit at
 the same version SHALL be development; a strictly newer numeric `X.Y.Z` current version SHALL be
 release-ready; and the exact latest release commit SHALL be a release snapshot. A current version
 older than the latest release, or missing or malformed release history, SHALL fail as an observable
@@ -42,8 +43,45 @@ time, warning windows, or hosted-CI-only variables.
 
 #### Scenario: The release commit is a snapshot
 
-- **WHEN** `HEAD` is the latest exact `release: X.Y.Z` commit
+- **WHEN** `HEAD` is the latest exact `release: X.Y.Z` commit **and** the `CHANGELOG.md` being judged is the
+  one that commit carries
 - **THEN** the repository is checked as a release snapshot for `X.Y.Z`
+
+#### Scenario: Editing at the release commit is the next cycle
+
+- **WHEN** `HEAD` is the latest exact release commit and `CHANGELOG.md` has been edited away from it — the
+  first `[Unreleased]` entry of a new cycle, written before anything is committed
+- **THEN** the repository is checked as **development**, not as a snapshot with a modified tree. The state is
+  read from the same source every other reader takes its content from: this reaction reads the worktree, so a
+  state read from `HEAD` alone put the two out of step. Snapshot requires `[Unreleased]` to be **empty** while
+  development **requires an entry in it**, so at that moment no tree satisfied the state it was judged in, and
+  the only escape was to commit — which is the act that moves `HEAD`. Measured on this repository's own
+  `release/0.6.0`: its first change could not pass the Definition of Done until it was committed, and passed
+  immediately afterwards unaltered
+- **AND** the comparison SHALL be against the **committed tree** rather than the index. A first spelling asked
+  `git status`, which reads the index and so intercepted a corrupt-index fixture that another guard uses to
+  reach its own refusal — measured, that guard stopped reaching it. `git show HEAD:…` reads the object
+  database and leaves the same corruption to the reader that owns it
+- **AND** the changelog is the carrier because it is what this specification's own development requirement
+  names. A wider rule — any modified tracked file — was measured wrong: a release checkout whose `Cargo.lock`
+  has been replaced by a directory is a **broken release checkout**, not a new cycle, and classifying it as
+  development made it report a missing `[Unreleased]` entry instead of the lockfile it could not read
+- **PINNED-BY** `editing_at_a_release_snapshot_is_development`
+
+#### Scenario: A release commit whose own tree carries no changelog
+
+- **WHEN** `HEAD` is the exact `release: X.Y.Z` commit and its tree names no `CHANGELOG.md`, while the
+  worktree carries a readable one
+- **THEN** the check refuses as a violation: the release it names is narrated nowhere a reader of that commit
+  can reach, and the worktree's copy is not that commit's
+- **AND** absence anywhere else is unremarkable — a tree from before the file existed — so the two are
+  separated by **where** the commit is, not by a read failing
+- **AND** presence SHALL be asked by a command whose exit status answers it. `git show HEAD:<path>` exits the
+  same status for a path that is not in the tree and for a tree it cannot read, so one arm has to mean one
+  thing for both; `ls-tree` answers presence with an empty listing and reserves its non-zero status for the
+  tree it could not read
+- **PINNED-BY** `a_release_commit_carrying_no_changelog_is_refused`
+- **PINNED-BY** `a_changelog_git_cannot_read_at_head_is_not_a_modified_worktree`
 
 #### Scenario: Shallow or absent history fails loud
 
@@ -61,9 +99,10 @@ text, and the same reader serves `publish-source-integrity`, so both refusals mo
 
 The same holds of the **key**, and it did not: the heading side of that reader decoded while the key side
 compared raw text, so spellings cargo accepts answered *absent*. The scenario below records what was
-measured. A value the reader cannot read — a single-quoted or literal string, which cargo accepts and this
-reader does not take — names a different operator action from a missing key: one is a key to add, the other a spelling
-this check has never met. Each refusal SHALL name the value as written, and SHALL say which judgement it
+measured. A value the reader cannot read names a different operator action from a missing key: one is a key to add,
+the other a value this check cannot take. **A single-quoted or literal string is legal TOML cargo accepts, so
+it is read rather than refused.** What is unreadable is a `version` that is not a string at all, and a
+manifest the parser cannot read, which is one cargo cannot read either. Each refusal SHALL name the value as written, and SHALL say which judgement it
 blocked rather than only which fact was unreadable, because the two gates sharing the reader cannot decide
 different things.
 
@@ -79,7 +118,7 @@ different things.
 - **THEN** the check refuses as a cannot-judge, quoting the value as written and naming what it could not
   decide — never as a version that is absent
 
-#### Scenario: A key spelling cargo accepts, and a table cargo writes as a value
+#### Scenario: A key spelling cargo accepts, however its table is composed
 
 - **WHEN** the key is written in a spelling cargo accepts and this reader's heading side already decoded —
   `"version" = "0.5.0"`, `'version' = "0.5.0"`, or the same spellings of `[package]`'s `name`
@@ -87,31 +126,27 @@ different things.
   `version.workspace = true`: each resolves the member at `0.5.0`, and `[package]` with `"name" = "m"` names
   `m`. The heading side decoded and the key side matched raw text, so each answered *the key is absent* — the
   state reserved for a key that is not there — and the gates then said *workspace version is missing or
-  malformed*, and *declares no `[package]` name*, about manifests that declare both. **Every reader asking
-  whether a line assigns a named key asks one reader** — the workspace version, the package name, and
-  publishability — rather than each deciding it over raw text
-- **AND** the dependency reader and the lock reader ask a different question and are not that reader's: they
-  ask *which* key a line assigns, with the key unknown, where this one is asked about a key it is given.
-  A first statement of this requirement said *one reader owns the question for every table body*, which was
-  wider than the code by those two; the general form that would unify them is filed with its trigger rather
-  than asserted here
-- **AND** a **dotted** head naming the sought key assigns a field of it rather than the key —
-  `version.workspace = true`, the line every member of this workspace writes — so the reader reports **which
-  field**, with every segment of the tail decoded. A reader wanting the key's own value refuses on it, because
-  taking `true` as a version would not be visible; a reader asking about that named field compares the field's
-  name. A dotted head naming any other key is another key's business, since refusing on those would refuse
-  every member manifest in the tree
-- **AND** *decoded* is a property of the whole answer, not of its first segment. Three review rounds each moved
-  that boundary one segment right and left the next raw: the heading decoded while the key did not, then the
-  key while one recogniser compared whole lines, then the head while the tail was joined raw. Measured under
-  cargo 1.96.0, the last of those refused `version."workspace" = true`, `version.'workspace' = true`,
-  `version."\u0077orkspace" = true` and `version = { "workspace" = true }` — all four inherit — and read
-  `xuanji."path" = "xuanji"` as a dependency with no path, which is the **false negative** recorded below
+  malformed*, and *declares no `[package]` name*, about manifests that declare both
+- **AND** every one of these answers comes from a **parsed document**, so a key's spelling is the parser's
+  question and not this repository's: *decoded* is a property of the whole answer rather than of its first
+  segment. Line-oriented or partial decoding risks refusing valid Cargo syntax; measured under cargo 1.96.0,
+  an unparsed reader refuses `version."workspace" = true`, `version.'workspace' = true`,
+  `version."\u0077orkspace" = true`, `version = { "workspace" = true }` and `[package.version]` with
+  `workspace = true` — every one of which inherits — and reads `xuanji."path" = "xuanji"` as a dependency with
+  no path, which is the **false negative** recorded below. A parser answers all of them without a clause
+  each, which is why the hand-rolled readers are gone rather than extended
+- **AND** the read is scoped to the table cargo scopes it to. `version.workspace` is honoured under
+  `[package]` and nowhere else, and the line-walking reader took such an assignment in any table; narrowing
+  to `[package]` is the answer agreeing with cargo rather than a tightening of this requirement
 - **AND** where the table is written as a **value** inside its parent — `[workspace]` with
-  `package.version = "0.5.0"`, or with `package = { version = "0.5.0" }`, both of which cargo resolves — the
-  check refuses naming the line. Composing a table out of a dotted key path or an inline table is structure
-  this reader does not build; refusing names what it met, where reporting absence names a declaration nobody
-  made
+  `package.version = "0.5.0"`, with `package = { version = "0.5.0" }`, or with `package."version" = "0.5.0"`
+  — the value is read as the declared workspace version, because a parser builds the table those spellings
+  compose and that is what cargo builds too. Measured under cargo 1.96.0, all three resolve a member at
+  `0.5.0`. Refusing them was a false refusal over legal Cargo syntax rather than a bound worth declaring: the
+  hand-rolled reader could not compose the table, and *this reader does not build that structure* was a fact
+  about the reader, not about the manifest. A `package`-headed key that cannot carry the version — `[workspace]`
+  with `package.authors = ["a"]` — leaves the version **absent**, which is the fact about a workspace that
+  declares none
 - **AND** a dependency whose classification the reader could not read is **refused, not treated as external**.
   Which crate a dependency names decides whether it is internal; one whose path could not be read names a
   family crate whose source is undecided, and *might be this workspace's* is not an answer. Measured: `xuanji."path" = "xuanji"` beside `xuanji.version = "0.5"` is a path
@@ -119,10 +154,23 @@ different things.
   internal check's subject in silence while one correct pin elsewhere satisfied its non-vacuity floor, and the
   release reported clean. That is the aggregate-counter shape the per-example check records having fixed, in its
   sibling
-- **PINNED-BY** `a_key_spelling_cargo_accepts_is_read_and_a_table_written_as_a_value_is_refused`
+- **PINNED-BY** `a_key_spelling_cargo_accepts_is_read_however_its_table_is_composed`
 - **PINNED-BY** `a_stale_internal_pin_behind_a_quoted_tail_is_refused`
 - **PINNED-BY** `every_inherit_spelling_cargo_honours_is_read_as_inheriting`
+- **PINNED-BY** `a_member_inheriting_through_a_sub_table_heading_is_read_as_inheriting`
 - **PINNED-BY** `a_member_whose_package_name_is_quoted_is_read_under_that_name`
+
+#### Scenario: A member manifest the parser cannot read
+
+- **WHEN** a workspace member's manifest is not a document the parser accepts — a duplicate key, say, which
+  cargo also refuses
+- **THEN** the check refuses as a cannot-judge naming **which** member, rather than reporting that the member
+  does not inherit the workspace version. A manifest nobody can read declares nothing either way, and the
+  reader runs once per member, so an operator told only that a manifest is unreadable would have to find it
+- **AND** the refusal carries an identity of its own rather than the one the dependency reader already
+  registers for the same condition. The register compares identities, so a second construction of a held one
+  would report this branch as observed by a direction that never reaches it
+- **PINNED-BY** `a_member_manifest_the_parser_cannot_read_is_not_judged`
 
 ### Requirement: Development carries adopter-facing release narrative
 
@@ -218,25 +266,29 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   equals nor is the minor series of
 - **THEN** the coherence check fails and names the example, the crate, and the version found
 
-#### Scenario: A dependency key this reader cannot decode
+#### Scenario: A dependency key cargo decodes names its crate
 
 - **WHEN** an example declares a family crate under a key that is not a bare TOML key — `"xuanji" = "0.0.1"`,
   which cargo decodes to a dependency named `xuanji` — and no `package` value names the crate explicitly
-- **THEN** the check refuses as a cannot-judge naming the key it could not decode, rather than passing the
-  entry over. A key whose decoded value is not its text names some crate and this reader cannot say which, so
-  it can neither be matched against the family nor skipped: skipping it is what let a stale pin reach a
-  release as clean, while the aggregate requirement counter stayed non-zero on the strength of the other
-  examples. It is the same false negative as a renamed dependency, through a second door, and the identity
-  rule that closed the first — a dependency names the crate its `package` field names, and its key only
-  otherwise — is where the key's own spelling has to be judged
-- **PINNED-BY** `a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped`
+- **THEN** the key is decoded and the pin behind it judged, rather than the entry being passed over or
+  stopped in front of. A key's spelling is the parser's question: measured, `"serde_json" = "1"` resolves to a
+  dependency named `serde_json`, so `"xuanji" = "0.0.1"` is a real family requirement at a stale version and
+  the check names it. Passing such an entry over lets a stale pin reach a release as clean wherever another
+  family requirement in the same example satisfies the non-vacuity floor — the same false negative as a
+  renamed dependency, through a second door. The floor was once aggregate across every example and is now
+  per-example, which narrows how far one entry's silence carries without closing it
+- **AND** refusing it was the answer available to a reader that could not decode the key, and is no longer
+  the answer available to one that can. A cannot-judge says *this reader cannot decide*, so it is a claim
+  about the reader; where the reader decides, saying otherwise stops an operator in front of a manifest cargo
+  reads without difficulty
+- **PINNED-BY** `a_quoted_dependency_key_names_its_crate_and_its_pin_is_judged`
 
 #### Scenario: A dependency table whose heading cargo decodes
 
 - **WHEN** an example declares a family crate inside a table whose heading spells its name with a TOML escape —
   `[target.<triple>."\u0064ependencies"]` or `["dep\u0065ndencies"]`, which cargo decodes and reads as a
   dependencies table — at a version the workspace version does not satisfy, beside an ordinary family
-  dependency keeping the aggregate requirement counter non-zero
+  dependency in the same example keeping its non-vacuity floor satisfied
 - **THEN** the check reads that table's entries as pins and fails naming the crate, rather than classifying the
   heading as some other table and passing every entry inside it over
 - **AND** the escapes are **decoded** rather than answered as undecidable. Measured against cargo: it reads
@@ -333,13 +385,16 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 
 #### Scenario: An internal dependency this reader cannot resolve is not one it may skip
 
-- **WHEN** the root manifest declares an internal dependency whose `path` or `version` is not a
-  double-quoted string, or declares more than one of either key
-- **THEN** the check refuses as a cannot-judge saying which key and which of the two it met. An unreadable
-  **path** is the one that cannot be answered by skipping the entry, because the entry names a family crate
-  and whether members inherit *this workspace's* copy of it is what could not be read
-- **PINNED-BY** `a_path_or_a_version_this_reader_cannot_read_is_a_cannot_judge`
-- **PINNED-BY** `several_paths_or_several_versions_in_one_dependency_are_not_chosen_between`
+- **WHEN** the root manifest declares an internal dependency whose `path` or `version` is **not a string at
+  all** — an integer, an array, a table
+- **THEN** the check refuses as a cannot-judge saying which key it met, quoting the value as written. An
+  unreadable **path** is the one that cannot be answered by skipping the entry, because the entry names a
+  family crate and whether members inherit *this workspace's* copy of it is what could not be read
+- **AND** a *quoting* is not this condition. A basic or literal string is a string to the parser, as it is to
+  cargo, so `path = 'xuanji'` is read; and one key declared twice is a document the parser refuses whole,
+  reported as an unparseable manifest rather than as an unreadable key, which is what cargo does with it
+- **PINNED-BY** `a_single_quoted_path_or_version_is_read_and_a_non_string_is_not`
+- **PINNED-BY** `a_duplicate_key_in_one_dependency_is_a_manifest_cargo_refuses`
 
 #### Scenario: A key outside a dependency table is not a dependency
 
@@ -370,18 +425,24 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 - **WHEN** an example requires a family crate under another key — `alias = { package = "xuanji", version =
   "0.0.1" }`, the rename form cargo admits — and that version does not satisfy the workspace version
 - **THEN** the check fails naming the package **and** the key it was given, rather than passing over an
-  entry whose key matches no family crate. Which crate a dependency names is its `package` field where it
-  has one, and its key only otherwise
+  entry whose key matches no family crate. Which crate a dependency **that declares itself** names is its
+  `package` field where it has one, and its key only otherwise
+- **AND** that rule is scoped to a dependency declaring itself, because cargo scopes it there. A dependency
+  taking the workspace offer is resolved by the scenario below instead: measured under cargo 1.96.0, cargo
+  **accepts and ignores** a `package` written beside `workspace = true` — warning `unused manifest key:
+  dependencies.alias.package` while the catalog's crate resolves anyway — and refuses inheritance spelled
+  under the crate's name rather than the catalog's key. Neither half of this rule is a question cargo asks of
+  one: the first is asked and discarded, the second never reached. Reading the local key as an identity there
+  passed over every dependency the catalog renames
 - **PINNED-BY** `a_renamed_family_dependency_is_resolved_by_its_package_field`
 
 #### Scenario: A dependency identity the reader cannot read is not one it can
 
-- **WHEN** an example declares a dependency whose `package` value is not a double-quoted string, or declares
-  more than one `package` key for one dependency
-- **THEN** the check refuses as a cannot-judge saying which of the two it met. Which crate a dependency
-  names is `Named`, `Unreadable` or `Several` — the distinction its sibling `version` field already carried,
-  where an identity held as a string with the empty string for both failures reported *several* as
-  *unreadable*, and read a literal `package = ""` as both
+- **WHEN** an example declares a dependency whose `package` value is **not a string at all**
+- **THEN** the check refuses as a cannot-judge. Which crate a dependency names is `Named` or `Unreadable`,
+  and no third state: a `package` key declared twice is a document the parser refuses whole, so *several* is
+  not a state this reader can be in. Holding the identity as a string with the empty string standing for
+  failure is what made two different facts one answer, and a distinct state is what separates them
 - **PINNED-BY** `an_example_whose_package_value_is_unreadable_is_not_judged`
 - **PINNED-BY** `an_example_declaring_several_package_keys_is_not_judged`
 
@@ -416,14 +477,16 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   offered to members, is still read where the subject is the repository's own pins
 - **PINNED-BY** `a_workspace_table_is_not_a_dependency_of_the_package_carrying_it`
 
-#### Scenario: A value that is not a string does not borrow the next one
+#### Scenario: A value that is not a string
 
-- **WHEN** a dependency's `package` or `version` value is not a double-quoted string while a later key on
-  the same line is — `alias = { package = xuanji, version = "0.2.0" }`
-- **THEN** the value reads as unreadable. The quote SHALL open the value; taking the first pair of quotes
-  anywhere in the text answered one key with the next key's string, which made the unreadable state
-  reachable only when nothing else on the line was quoted
-- **PINNED-BY** `a_value_that_is_not_a_string_does_not_borrow_the_next_one`
+- **WHEN** a dependency's `package`, `version` or `path` is a value that is not a string — `path = 5`, an
+  inline table, an array
+- **THEN** that field reads as unreadable, and the dependency is refused rather than judged on the fields
+  around it
+- **AND** a bare word borrowing the next key's quotes — `alias = { package = xuanji, … }` — is not a
+  manifest at all: a parser refuses the document, as cargo does with it, so this reader never reaches the
+  question
+- **PINNED-BY** `a_single_quoted_path_or_version_is_read_and_a_non_string_is_not`
 
 #### Scenario: An example requires a family crate with no version at all
 
@@ -439,21 +502,35 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
 #### Scenario: An example taking the offer in its own catalog is held to what the catalog offers
 
 - **WHEN** an example declares a family crate with `workspace = true` — inline, as a dotted key, or as a
-  `workspace = true` line in a detailed table — beside a `[workspace.dependencies]` entry naming that crate
+  `workspace = true` line in a detailed table — beside a `[workspace.dependencies]` entry written under that
+  same key
 - **THEN** the requirement judged is the **catalog's**, not absent. Every example in this repository is its own
   workspace root, so the catalog is in the same manifest; measured, cargo resolves all three spellings to the
   catalog's requirement, and resolves to it even when a local `version` sits in the same inline table — so the
   catalog is the answer rather than one of two. A stale catalog is therefore a stale pin, and a catalog at the
   workspace version or its minor series passes
-- **AND** where the catalog beside it names no such crate, or names it through an identity this reader cannot
-  resolve, or offers a requirement that itself takes the offer, the check refuses as a cannot-judge saying
-  which of the three it met. Each is a manifest `cargo metadata` refuses to parse, and a refusal that stops in
-  front of an operator is the answer for a file nothing builds — never a pin read past
+- **AND** the dependency's key is a **lookup key** into the catalog and never an identity, so the crate judged
+  is the one the catalog's entry names and the family question is asked of that crate. Measured under cargo
+  1.96.0: `alias = { package = "realdep", version = "0.0.1", path = "dep" }` beside `alias = { workspace =
+  true }` resolves to `realdep` at `^0.0.1` under the rename `alias`. Deciding family membership on the local
+  key before resolving the catalog passed over every crate the catalog renames, and the example was then
+  reported as declaring no family requirement — a different fact about a different manifest, while the stale
+  requirement went unread
+- **AND** where the catalog beside it has no entry under that key, or the entry there names a crate this
+  reader cannot resolve, or that entry offers a requirement itself taking the offer, the check refuses as a
+  cannot-judge saying which of the three it met. Each is a manifest `cargo metadata` refuses to parse, and a
+  refusal that stops in front of an operator is the answer for a file nothing builds — never a pin read past
+- **AND** an unresolvable entry the example takes **no** offer under is not one of those three. Refusing on
+  any unreadable entry anywhere in the table answered *cannot judge* about an entry nothing here takes, while
+  a stale pin the example did take went unread behind it — the false negative reached through a refusal
+  rather than through a pass, since the operator repairs what the refusal names and ships what it hid
 - **AND** the root's own catalog is a different subject: the manifest that *declares* the catalog cannot
   inherit from it, so a pin there taking the offer is refused as undecidable rather than reported absent
 - **PINNED-BY** `an_example_inheriting_from_its_own_catalog_is_held_to_the_catalog_version`
 - **PINNED-BY** `an_example_inheriting_what_no_catalog_offers_is_not_judged`
 - **PINNED-BY** `a_catalog_entry_whose_identity_is_unresolvable_stops_the_inheriting_example`
+- **PINNED-BY** `an_unrelated_unresolvable_catalog_entry_does_not_mask_a_stale_pin`
+- **PINNED-BY** `a_family_crate_the_catalog_renames_is_resolved_through_it`
 - **PINNED-BY** `a_catalog_entry_that_itself_inherits_is_named_rather_than_followed`
 - **PINNED-BY** `an_internal_pin_taking_the_workspace_offer_is_refused`
 
@@ -523,12 +600,10 @@ would refuse the development case the exemption exists for.
 
 `CHANGELOG.md` is the adopter's document. It carries nine kinds of heading — `### Added`, `### Changed`,
 `### Fixed`, `### Migration`, `### Documentation`, `### Removed`, `### Compatibility`,
-`### Compatibility evidence` and `### Self-governance` — and every one of the first eight is an adopter's vocabulary. It offered none that was
-not, so every
-change to this repository's own governance machinery has been written into one of them. Measured **before this rule existed**, in the window that introduced it: twenty entries named it, spread
-across four adopter headings, for a directory that ships in **zero** packages. That figure is a record of a
-past state rather than a census — no reaction produces it now, the section it counted has been collapsed, and
-holding a record to today's enumeration would demand the record change every time the tree does.
+`### Compatibility evidence` and `### Self-governance` — and every one of the first eight is an adopter's vocabulary.
+Without a distinct heading, changes to repository-internal governance machinery risked being filed under adopter
+headings for a directory that ships in **zero** packages. The `### Self-governance` heading provides an explicit
+home for that machinery.
 
 The `[Unreleased]` section SHALL be permitted a `### Self-governance` heading,
 under which naming that machinery is what belongs; a heading is adopter-facing when it is any `### `
@@ -544,11 +619,9 @@ A name SHALL be recognised as a **word** — a maximal run of path characters, r
 path, basename or derived directory. That is exact matching of a lexical token rather than substring
 matching: a sentence
 merely containing the characters cannot match, because the run is delimited by the first character a path
-cannot hold. The rule was first written to compare whole **backticked spans**, and adversarial review
-reproduced three false negatives against that reading, every one a shape this repository's own changelog
-already uses — a span carrying anything besides the bare path, a double-backtick span, and an inline span
-wrapped across a source line. Reading words closes all three and reaches a markdown link target the span
-reading never could.
+cannot hold. Comparing whole **backticked spans** alone introduces false negatives against ordinary Markdown
+shapes — a span carrying content besides the bare path, a double-backtick span, or an inline span wrapped across
+a source line. Reading words closes all three and reaches markdown link targets directly.
 
 This sits on the **decidable** side of the line this capability already draws for itself: a path citation
 is a reference, and reference resolution over `CHANGELOG.md` is already mechanical. Whether an entry's
@@ -583,11 +656,9 @@ enforces it is the leak. If a fact matters to an adopter, state the fact.
 - **THEN** the reaction fails in every one of those, because the word is the unit rather than the span
 
 The machinery set SHALL be **produced from the workspace manifests**: every tracked path under a member the
-workspace does not publish, plus `scripts/`. It SHALL NOT be a location. The set was `git ls-files scripts/`,
-which was right while the machinery *was* fourteen shell gates and stopped being right in the window that
-deleted them and moved it into unpublished crates — leaving `scripts/` naming two wrappers, and this
-requirement's own scenario naming a path the enumeration could not resolve. `publish = false` is the same
-criterion the refusal states, read from the build rather than from a path.
+workspace does not publish, plus `scripts/`. It SHALL NOT be a location: defining the set by a single directory
+risks missing machinery that lives across unpublished workspace members or scripts. `publish = false` is the
+criterion the refusal states, read from the build rather than from a hardcoded path.
 
 A **basename**, and an ancestor directory the enumeration derives, SHALL enter the set only where it names
 machinery alone. Measured when the corpus widened: 78 machinery paths against 182 published ones, with five
@@ -757,31 +828,32 @@ its own. A slug shared between two sites excuses whichever one was looked at.
 - **WHEN** iterating an enumerated directory fails part-way
 - **THEN** the judgement refuses rather than continuing over the entries it did receive
 
-#### Scenario: A value cargo decodes and this reader does not
+#### Scenario: A value cargo decodes
 
-The scenarios above reach a **file** that cannot be read. This reaches a **value**, which is where the
-requirement was not being met: a quoted value carrying a TOML escape was answered as one this reader could
-read, and the undecoded source then decided a comparison.
+The scenarios above reach a **file** that cannot be read. This reaches a **value**, and a value carrying an
+escape is one cargo reads — so this reader reads it the same way rather than answering about the source it
+was written in.
 
 - **WHEN** a `path`, a `package` or a `version` is written as a TOML basic string carrying an escape — legal
   TOML, which cargo decodes — and an ordinary sibling entry keeps the vacuity counters non-zero
-- **THEN** the judgement refuses as a cannot-judge, rather than comparing the undecoded source, failing to
-  match a `crates/` prefix or a family crate, and passing the entry over with its stale pin unchecked
-- **AND** refusing is a choice between two answers this reader can now give, not the only one it has. A table
-  **heading** carrying the same escape is decoded, because `manifest::decoded` exists — the reason first
-  written for refusing values was *no decoder, and hand-rolling a TOML grammar is a filed backlog entry*, and
-  half of that expired the moment a heading needed one. What separates them: a key decides *which table or
-  which key this is*, so misreading one drops a whole table's contents with nothing said, while a value is the
-  thing being judged and refusing it stops the judgement in front of an operator with nothing skipped
-- **PINNED-BY** `an_escaped_path_is_refused_and_an_ordinary_sibling_does_not_cover_for_it`
+- **THEN** the value is **decoded and judged as the value cargo resolves**, so where it sits decides which
+  answer it earns: a path that decodes to somewhere other than the member's own directory is a violation
+  naming where the member actually is, and one that decodes to that directory leaves its stale pin as the
+  thing left to refuse
+- **AND** refusing the value is no longer one of the answers. It was, for as long as the reader had no
+  decoder — the reason written then was *no decoder, and hand-rolling a TOML grammar is a filed backlog
+  entry*, and a parser is what ended both halves. Refusing a value the tooling reads would report a fact
+  about this reader as a fact about the manifest
+- **PINNED-BY** `an_escaped_path_is_decoded_and_compared_and_an_ordinary_sibling_does_not_cover_for_it`
 
 #### Scenario: An escaped renamed package
 
 - **WHEN** a renamed dependency's `package` carries an escape, beside an ordinary family dependency **in the
   same example manifest** — which is the configuration the guards cannot see, because `requirements_here` is
   counted per example and an escaped entry alone in its own example leaves that counter at zero
-- **THEN** the judgement refuses, rather than reading the entry as naming no family crate at all
-- **PINNED-BY** `an_escaped_renamed_package_is_refused_and_an_ordinary_sibling_does_not_cover_for_it`
+- **THEN** the escape is decoded, so the entry **names its crate** and its pin is judged like any other —
+  rather than being read as naming no family crate at all, which is what comparing the undecoded source did
+- **PINNED-BY** `an_escaped_renamed_package_names_its_crate_and_its_pin_is_judged`
 
 ### Requirement: A release section is dated on the day its release commit was made
 

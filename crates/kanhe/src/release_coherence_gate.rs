@@ -18,7 +18,7 @@ use crate::sections::Section;
 
 use crate::hermetic_git::fixture as run;
 pub use crate::hermetic_git::hermetic;
-use crate::manifest::{Quoted, WorkspaceVersion, quoted_value, semver, workspace_version};
+use crate::manifest::{WorkspaceVersion, semver, workspace_version};
 
 fn git(repo: &Path, args: &[&str]) -> Result<String, crate::hermetic_git::Failure> {
     crate::hermetic_git::run(repo, &[], args)
@@ -33,175 +33,6 @@ fn read(repo: &Path, rel: &str) -> Result<String, Refusal> {
     })
 }
 
-/// Every value assigned to `key` inside a dependency's value text, recognised as a **table key** rather than
-/// as a substring, in the order written.
-///
-/// **The candidates are a value first, so the caller answers *how many*.** `split("version").nth(1)` read the
-/// first occurrence of the bare word on the whole line — the dependency's own name and its path included — so
-/// `version-utils = { path = "crates/version-utils", version = "0.5.0" }` answered about the wrong span and
-/// produced *has no version pin* in front of the release gate. That is the lossy-selection class
-/// [`crate::selection`] exists for, in the file that predates it.
-///
-/// A key stands alone: what precedes it is a table delimiter or whitespace, and what follows is `=` after
-/// optional space. Both halves are required — the first alone still admits `/version`, the second alone still
-/// admits a key ending in `version`.
-pub(crate) fn inline_assignments(value: &str, key: &str) -> Vec<Quoted> {
-    assignments(value, key)
-        .into_iter()
-        .map(quoted_value)
-        .collect()
-}
-
-/// The raw text assigned to `key` wherever it stands alone in `value`, in order.
-///
-/// [`inline_assignments`] is this with [`quoted_value`] over it. The split exists because one assignment this
-/// reader needs is **not** a string: `workspace = true` carries a boolean, and reading it as a quoted value
-/// answers *unreadable* for the one spelling that is correct. Two scanners for one grammar is the shape this
-/// file exists to close, so the scan stayed here and only the interpretation moved out.
-/// Whether an inline table carries a field whose key this reader cannot decode.
-///
-/// The cut and the decode are `manifest`'s; what is local is the question — a caller reading one named key
-/// cannot see the fields it did not ask about, and one of those may be the reason the manifest does not parse.
-fn undecodable_field(value: &str) -> bool {
-    inline_fields(value).into_iter().any(|field| {
-        match crate::manifest::assignment(field) {
-            crate::manifest::Assignment::KeyUnreadable
-            | crate::manifest::Assignment::FieldUnreadable { .. } => true,
-            // Structure beneath a field this reader judges — `{ version = "1", version.extra = true }` — is
-            // the same shape cargo refuses, in the inline spelling.
-            crate::manifest::Assignment::Field { ref name, .. } => Field::of(name).is_some(),
-            crate::manifest::Assignment::Key { .. } | crate::manifest::Assignment::None => false,
-        }
-    })
-}
-
-/// The fields an inline table assigns, cut at the commas outside strings.
-///
-/// **Two adjacent functions opened with these five lines byte-for-byte**, both answering *what are this
-/// table's fields* — and a change to one (a nested table, a trailing comma, a value that is an array rather
-/// than a table) would have left the other reading a different grammar. That is the two-implementations
-/// shape this file has spent five review rounds closing, and it was reintroduced by the fix for a false
-/// negative. A caller that is handed something other than an inline table gets the text back as one field,
-/// which is what the bare-value spellings need.
-fn inline_fields(value: &str) -> Vec<&str> {
-    let inner = value.trim();
-    let inner = inner
-        .strip_prefix('{')
-        .and_then(|inner| inner.strip_suffix('}'))
-        .unwrap_or(inner);
-    crate::manifest::split_outside(inner, ',')
-}
-
-fn assignments<'a>(value: &'a str, key: &str) -> Vec<&'a str> {
-    // **The inner keys are cut and decoded, where this used to position a raw substring search.** It looked
-    // for the key's letters with a delimiter in front and the position outside a string — which is not a
-    // narrow match but an *exclusion*: a quoted inner key can never be found, because its letters sit inside
-    // the quotes. Measured under cargo 1.96.0, `version = { "workspace" = true }` inherits, and this reader
-    // could not see that key at all, so the member was refused for not inheriting. The fields are split at
-    // the commas outside strings and each is asked of `manifest::assignment`, so an inner key is decoded
-    // exactly as a table-body key is — one reader for both, which is what closed the same asymmetry twice
-    // before.
-    //
-    // An array value carrying commas — `features = ["a", "b"]` — is cut across them, and each piece then
-    // fails to be an assignment to `key`. That is why the split is safe without understanding arrays: a
-    // fragment answers `None` or another key, never this one.
-    inline_fields(value)
-        .into_iter()
-        .filter_map(|field| match crate::manifest::assigned(field, key) {
-            crate::manifest::Assigned::Value(value) => Some(value),
-            crate::manifest::Assigned::Field { .. }
-            | crate::manifest::Assigned::Other
-            | crate::manifest::Assigned::Unreadable => None,
-        })
-        .collect()
-}
-
-/// Whether this dependency takes its requirement from the workspace catalog.
-///
-/// **`workspace = true` is the only spelling cargo accepts, and it wins over a local `version`.** Measured:
-/// `{ workspace = true, version = "2" }` beside a catalog offering `1.0` reports `^1.0` — the catalog answers,
-/// not the local key — and `workspace = false` is refused outright with *`workspace` cannot be false*. So a
-/// `workspace` assignment that is not `true` is in a manifest nothing builds, and the pin it carries is
-/// reported unreadable rather than read past.
-fn inheritance<'a>(offers: impl IntoIterator<Item = &'a str>) -> Inheritance {
-    let offers: Vec<&str> = offers.into_iter().collect();
-    // **One `workspace` key, whose value is `true`, and the cardinality is half of that.** `all` over the
-    // values answered *inherits* for `{ workspace = true, workspace = true }` too -- duplicate keys, which
-    // TOML itself rejects and cargo refuses to parse, read as one valid declaration. A review found it: the
-    // predicate preserved the values and discarded how many there were, which is the same shape as a
-    // `Several` state existing for `version` and `path` and not for this. Two of them is malformed rather
-    // than emphatic, and malformed is not this reader's to choose from.
-    match offers.as_slice() {
-        [] => Inheritance::Declared,
-        [offer] if offer_value(offer) == "true" => Inheritance::FromCatalog,
-        _ => Inheritance::Unreadable,
-    }
-}
-
-/// One assignment's value, ended where the value ends.
-///
-/// The scan hands back everything after the `=`, which inside an inline table runs on to the next field or to
-/// the closing brace: `{ workspace = true }` yields ` true }`. A quoted value is delimited by its own quotes,
-/// so [`quoted_value`] never needed this; a boolean is delimited by the table around it.
-fn offer_value(text: &str) -> &str {
-    text.split(['}', ','])
-        .next()
-        .expect("`str::split` yields at least one field")
-        .trim()
-}
-
-/// One dependency's requirement: the catalog's where it takes the offer, and its own otherwise.
-///
-/// Every spelling of a dependency -- bare or inline, dotted, and a detailed table -- reaches this
-/// with whatever `workspace` assignments they carry, so the offer cannot be recognised in one spelling and
-/// missed in another. That divergence is what this file's history is made of.
-fn requirement<'a>(
-    offers: impl IntoIterator<Item = &'a str>,
-    versions: Vec<Quoted>,
-    written: &str,
-) -> Declared {
-    match inheritance(offers) {
-        Inheritance::Declared => Declared::of(versions, written),
-        Inheritance::FromCatalog => Declared::Inherited,
-        Inheritance::Unreadable => Declared::Unreadable(written.trim().to_string()),
-    }
-}
-
-/// Where a dependency's requirement comes from.
-enum Inheritance {
-    /// This dependency declares its own requirement.
-    Declared,
-    /// It takes the one the workspace catalog offers.
-    FromCatalog,
-    /// It carries a `workspace` value cargo does not accept.
-    Unreadable,
-}
-
-/// Which dependency table a heading opens, if any.
-///
-/// **The reader used to look at no heading at all**, which cost it both directions at once. A
-/// `[dependencies.alias]` table declares one dependency across its own lines, and none of those lines is a
-/// `<family-crate> = …` entry, so the whole declaration — renamed or not — was invisible. And a `[features]`
-/// key spelled after a family crate was read as a version requirement, because nothing said which tables hold
-/// dependencies.
-///
-/// A context cargo writes in front of a dependency table is dropped before the heading is classified, so
-/// `[target.<triple>.dependencies]`, its `.NAME` form, and `[target.'cfg(…)'.…]` are all read like any other.
-/// A cfg expression carrying a **dot** is read too, and used not to be: the heading arrives as segments, so
-/// the expression is one key whatever it contains and there is no dot for the context step to land inside.
-/// That was the last of a wider declared bound this reader carried; [`dependency_table`] records how it was
-/// retired.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Table {
-    /// `[dependencies]` and its dev/build siblings: each line names one dependency.
-    Entries,
-    /// `[dependencies.NAME]`: the whole table is one dependency, named by its heading.
-    One(String),
-    /// Any other table. Not a source of dependencies, so nothing in it is read as one.
-    Other,
-}
-
-/// The kinds of table whose entries are dependency declarations.
 /// Which tables a caller means by *a dependency*, because this reader's consumers do not all mean the same
 /// thing by it.
 ///
@@ -217,7 +48,7 @@ enum Table {
 /// forget to read -- the shape two reviews found in this same reader one round earlier, in an `escaped` flag
 /// that only two of its consumers consulted.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Subject {
+pub(crate) enum Subject {
     /// What this package itself depends on: its own dependency tables and their target-specific variants.
     ///
     /// A catalog is excluded, because a table offering a version to members is not this package requiring it.
@@ -232,115 +63,8 @@ enum Subject {
     Offers,
 }
 
-/// Which field of a dependency record a key names.
-///
-/// **One classifier, because the set was written twice and used at one of three sites.** A `const` listed the
-/// judged keys for the dotted-subfield guard while the record builder matched the same names again in a
-/// `match`, so adding a field to one and not the other reopens the silent path — and the guard itself reached
-/// only one of the three spellings a dependency can be written in. Naming the field once, and asking for it
-/// wherever a key is met, is what makes those the same question.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Field {
-    Package,
-    Version,
-    Path,
-    Workspace,
-}
-
-impl Field {
-    /// The field `name` names, or `None` where it names none this reader judges.
-    fn of(name: &str) -> Option<Self> {
-        match name {
-            "package" => Some(Field::Package),
-            "version" => Some(Field::Version),
-            "path" => Some(Field::Path),
-            "workspace" => Some(Field::Workspace),
-            _ => None,
-        }
-    }
-}
-
+/// The kinds of table whose entries are dependency declarations.
 const DEPENDENCY_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
-
-/// Which dependency table `heading` opens, if any.
-///
-/// **The admitted forms are written out, because they are a small grammar and not a set of prefixes.** A
-/// heading arrives as its keys, so which of them open a dependency table is a question about key sequences:
-/// each kind alone or with a name after it, and each of those again behind a `target.<selector>` — every one
-/// put to `cargo metadata`, which reads a dependency of the expected kind and target from each.
-/// `[workspace.dependencies]`, alone or with a name, is admitted to one [`Subject`] only: it is a catalog,
-/// and a catalog is no dependency of the package whose manifest carries it.
-///
-/// Two readers died on the way here. The context was first stepped past by `strip_prefix("target.")` and
-/// `split_once('.')` over the joined name, which put the cut inside any cfg expression carrying a dot; the
-/// repair for *that* was to notice a quote surviving the join and refuse, and the bound it left behind said a
-/// pin under such a target went unobserved. Holding the heading as segments left no dot to land inside — the
-/// selector is one key whatever it contains — and the bound was retired,
-/// `a_pin_under_a_cfg_target_carrying_a_dot_is_read` being what retired it. What replaced the split was a
-/// walk that dropped a leading `workspace` and then, independently, a leading `target`, and that composed two
-/// contexts cargo never composes; the grammar below is what replaced *that*.
-///
-/// **`undecodable` is deliberately not consulted here, and that is a bounded residue rather than an
-/// oversight.** Two reviews named it: the field is read by `manifest::workspace_version` and
-/// `manifest::publishable`, whose answers turn on a table being *absent*, and not here -- so a heading this
-/// reader cannot name classifies as `Table::Other` and its entries go unread, with an ordinary dependency
-/// table beside it holding the aggregate guard above zero. What bounds it is what is left undecodable once
-/// escapes are decoded: an escape cargo itself rejects, measured -- `["\q"]` and `["\uD800"]` both make
-/// `cargo metadata` fail. A manifest carrying one reaches no build, no packaging step and no publish, and the
-/// examples it would sit in are compiled by the *Examples dogfood* check in the same run.
-fn dependency_table(heading: &str, subject: Subject) -> Table {
-    // **Through the shared reader, because this compared raw text and the equality it needed was measured
-    // elsewhere.** `[ dependencies ]` and `["dependencies"]` are the dependency table to cargo, and stripping
-    // the brackets without trimming or unquoting left both as `Table::Other` — a whole dependency table
-    // silently unclassified, which the aggregate guard downstream could not see.
-    let Some(heading) = crate::manifest::table_heading(heading) else {
-        return Table::Other;
-    };
-    // An array of tables is not a dependency table, whatever it is called.
-    if heading.array {
-        return Table::Other;
-    }
-    // **The context is a grammar, not a set of prefixes that may be stripped one after another.** Stripping
-    // `workspace` and then `target` independently accepted `[workspace.dev-dependencies]` and
-    // `[workspace.target.<triple>.dependencies]`, which cargo gives no dependency meaning at all: measured, a
-    // member writing `serde = { workspace = true }` against either fails to load, because inheritance reads
-    // `[workspace.dependencies]` and nothing else. Reading a pin out of one of those and refusing the release
-    // over it is the false-refusal direction, and this reader carried it from before the segments were
-    // segments -- the old prefix walk had the same shape. Each admitted form is now written out, and the
-    // forms cargo does not admit fall to the last arm because nothing spells them.
-    //
-    // The forms cargo does not admit were measured too, as the shape they take rather than as an argument: a
-    // member writing `serde = { workspace = true }` against `[workspace.dev-dependencies]` or
-    // `[workspace.target.<triple>.dependencies]` fails to load, because inheritance reads
-    // `[workspace.dependencies]` and nothing else.
-    let keys: Vec<&str> = heading.segments().iter().map(String::as_str).collect();
-    match (subject, keys.as_slice()) {
-        (Subject::Requires, [kind]) if DEPENDENCY_KINDS.contains(kind) => Table::Entries,
-        (Subject::Requires, [kind, named])
-            if DEPENDENCY_KINDS.contains(kind) && !named.is_empty() =>
-        {
-            Table::One((*named).to_string())
-        }
-        // Only `dependencies` is inheritable; `[workspace.dev-dependencies]` is an unused key to cargo. And
-        // only a caller asking what this manifest *pins* wants it: it is no dependency of the package it
-        // sits in.
-        (Subject::Offers, ["workspace", "dependencies"]) => Table::Entries,
-        (Subject::Offers, ["workspace", "dependencies", named]) if !named.is_empty() => {
-            Table::One((*named).to_string())
-        }
-        // `[target.<selector>.…]`, where the selector is one key -- a triple or a cfg expression, whatever it
-        // contains, because a heading held as segments has no dot for this step to land inside.
-        (Subject::Requires, ["target", _selector, kind]) if DEPENDENCY_KINDS.contains(kind) => {
-            Table::Entries
-        }
-        (Subject::Requires, ["target", _selector, kind, named])
-            if DEPENDENCY_KINDS.contains(kind) && !named.is_empty() =>
-        {
-            Table::One((*named).to_string())
-        }
-        _ => Table::Other,
-    }
-}
 
 /// What a dependency declares as its version requirement, or why this reader could not tell.
 ///
@@ -353,36 +77,26 @@ fn dependency_table(heading: &str, subject: Subject) -> Table {
 /// [`crate::selection::the_only`] is deliberately not used here, for the reason `manifest.rs` records for its
 /// own reader: it reports none and several as one refusal, and here they are different facts — an absent pin
 /// is the legal `{ path = "…" }` form, and two are a table this reader may not choose from.
-#[derive(Debug, PartialEq, Eq)]
-enum Declared {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Declared {
     /// The value as written.
     Value(String),
     /// The key is absent. Legal for both of this reader's keys: a path-only dependency declares no
     /// `version`, and a registry dependency declares no `path`.
     Absent,
-    /// A value this reader cannot read — one not in double quotes — quoted as written.
+    /// A value this reader will not take as a string — quoted as written.
+    ///
+    /// **Not *not in double quotes*, which is what this said while the reader was hand-rolled.** The parser
+    /// reads a literal-quoted string as readily as a basic one, so what reaches here is a value that is no
+    /// string at all — an integer, an array, a table — which is the condition
+    /// `a_single_quoted_path_or_version_is_read_and_a_non_string_is_not` observes from both sides.
     Unreadable(String),
-    /// More than one such key in one dependency. Malformed, and not this reader's to choose from.
-    Several(usize),
     /// The requirement is the one the workspace catalog offers, taken with `workspace = true`.
     ///
     /// Only a *pin* is ever this: a `path` is not inheritable in the spelling this reader meets. Resolved
     /// against the catalog in the same manifest by [`offered`], because every example in this repository is
     /// its own workspace root -- the root manifest says so, and `exclude` keeps them out of this workspace.
     Inherited,
-}
-
-impl Declared {
-    fn of(mut values: Vec<Quoted>, written: &str) -> Self {
-        match values.len() {
-            0 => Declared::Absent,
-            1 => match values.pop() {
-                Some(Quoted::Value(version)) => Declared::Value(version),
-                _ => Declared::Unreadable(written.trim().to_string()),
-            },
-            several => Declared::Several(several),
-        }
-    }
 }
 
 /// Which crate a dependency names, or why this reader cannot say.
@@ -404,465 +118,207 @@ impl Declared {
 enum Package {
     /// The crate this dependency names: its `package` value, or its own key where it declares none.
     Named(String),
-    /// A `package` value this reader cannot read — a value not in double quotes.
+    /// A `package` value this reader cannot read — a value that is **not a string at all**.
+    ///
+    /// Not *not in double quotes*, and not *declared twice*: a literal string is read, and a key declared
+    /// twice is a document the parser refuses whole, which never reaches this reader.
     Unreadable,
-    /// More than one `package` key in one dependency. Malformed, and not this reader's to choose from.
-    Several(usize),
-    /// A **field** of this dependency has a key this reader cannot decode, so which crate it names is
-    /// undecided — whatever its own `package` key or its own spelling says.
-    ///
-    /// **A separate state because the diagnostic is the point.** Reusing `Unreadable` made the gate say *a
-    /// `package` value this check cannot read* about `alias = { version = "0.2", "\q" = "xuanji" }`, which
-    /// declares no `package` key at all — sending an operator to look for a key that is not there. That is the
-    /// misdirection this crate's own three-state readers exist to prevent, and every other pair of facts in
-    /// this crate is typed apart rather than folded.
-    FieldUnreadable,
-    /// The dependency's own key is not a bare TOML key, so its spelling is not the package name — quoted as
-    /// written.
-    ///
-    /// **The same false negative as a rename, through a second door.** Where a dependency declares no
-    /// `package`, its key *is* the identity — and the key was taken as the raw text between the line's start
-    /// and its `=`. TOML admits a quoted key, and cargo decodes it: measured, `"serde_json" = "1"` resolves
-    /// to a dependency named `serde_json`. So `"xuanji" = "0.0.1"` is a real family requirement whose raw
-    /// spelling matches no family member, and the entry was skipped by the same `continue` the sibling
-    /// `Named` arm's own comment already describes for `alias = { package = "xuanji", … }`.
-    ///
-    /// Refused rather than decoded, and **the reason written here first has since expired**: it was *decoding
-    /// is TOML string parsing, which `BACKLOG.md` files as its own entry*, and `manifest::decoded` landed in
-    /// the same window for table headings. What holds instead is that this is not the same question.
-    /// [`is_bare_key`] asks *is this one bare key*; `manifest::unquoted` asks *what does this key spell*, and
-    /// substituting the second for the first would take `xuanji.version` -- a dotted key, two keys to TOML --
-    /// as a package named `xuanji.version`, matching no family crate and skipped in silence. Composing them
-    /// so that only a single quoted segment decodes is more code than this arm, for a refusal that is
-    /// *visible*: a cannot-judge stops the gate in front of an operator, where the heading case that
-    /// justified the decoder was a silent false negative. Measured before writing and still true: no tracked
-    /// manifest carries a non-bare dependency key, so this refuses nothing the tree has.
-    KeyUnreadable(String),
-}
-
-/// Whether `key` is a bare TOML key — the only spelling this reader takes as a package name.
-///
-/// TOML's bare keys are ASCII letters, digits, `_` and `-`. Anything else — a quoted key, a dotted key, a
-/// key carrying whitespace — is a spelling whose decoded value is not its text, and this reader does not
-/// decode. It is asked of the dependency's own key rather than of a value, which is why it is not
-/// [`inline_assignments`]'s key recogniser: that one asks whether `version` *opens an assignment* inside an
-/// inline table, a different question about a different key.
-fn is_bare_key(key: &str) -> bool {
-    !key.is_empty()
-        && key
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-}
-
-impl Package {
-    /// The identity `values` names for a dependency written under `key`.
-    ///
-    /// One function rather than the two arms that stood in `declared_dependencies` — the inline form and the
-    /// detailed table each resolved this themselves, byte-identical, which is the shape that lets two
-    /// readers of one rule disagree. That sharing is what gives the key rule below one home too.
-    fn of(mut values: Vec<Quoted>, key: &str) -> Self {
-        match values.len() {
-            // No `package`, so the KEY is the identity — and only a bare key's text is its name.
-            0 if is_bare_key(key) => Package::Named(key.to_string()),
-            0 => Package::KeyUnreadable(key.to_string()),
-            1 => match values.pop() {
-                Some(Quoted::Value(name)) => Package::Named(name),
-                _ => Package::Unreadable,
-            },
-            several => Package::Several(several),
-        }
-    }
 }
 
 /// One dependency a manifest declares: the key it is written under, the package it names, and its pin.
-struct Dependency {
+pub(crate) struct Dependency {
     key: String,
     package: Package,
-    pin: Declared,
+    pub(crate) pin: Declared,
     path: Declared,
 }
 
-/// A detailed dependency table being read: one dependency spread over its own lines.
+/// One field of a dependency's table, as a [`Declared`].
 ///
-/// A named struct rather than a tuple because every field is a `Vec<Quoted>` or a `String`, and a reader
-/// arriving at `pending.2` has to count to know which key it holds.
-struct Detailed {
-    key: String,
-    packages: Vec<Quoted>,
-    versions: Vec<Quoted>,
-    paths: Vec<Quoted>,
-    /// The raw text of every `workspace` assignment, which is a boolean rather than a string.
-    offers: Vec<String>,
-    /// A tail this reader could not decode was met, so which crate this names is undecided.
-    field_unreadable: bool,
-    written: String,
+/// Absent, a string, or a value this reader will not take as one. Two states a hand-rolled reader also
+/// carried are gone: a key it could not decode, because the parser decodes every spelling cargo decodes; and
+/// the same key twice, because that is a document cargo itself refuses, so it never reaches here.
+fn declared_field(table: &dyn toml_edit::TableLike, name: &str) -> Declared {
+    match table.get(name) {
+        None => Declared::Absent,
+        Some(value) => match value.as_str() {
+            Some(text) => Declared::Value(text.to_string()),
+            None => Declared::Unreadable(value.to_string().trim().to_string()),
+        },
+    }
 }
 
-/// Every dependency `text` declares, in both forms cargo admits.
+/// One dependency, however its author spelled it.
 ///
-/// The inline form (`alias = { package = "xuanji", version = "0.5" }`, or a bare `xuanji = "0.5"`) and the
-/// detailed table (`[dependencies.alias]` with its own `package` and `version` lines) are one grammar to a
-/// reader that tracks the heading, and [`inline_assignments`] recognises a key the same way in both: at a
-/// line's start, or after a table delimiter inside a value.
-fn declared_dependencies(text: &str, subject: Subject) -> Vec<Dependency> {
+/// **The spellings are one thing to a parser, and telling them apart by hand is what this reader kept being
+/// repaired for.** `xuanji = "0.5"`, `xuanji = { version = "0.5" }`, `xuanji.version = "0.5"` and
+/// `[dependencies.xuanji]` with `version` on its own line are the same entry to cargo. The hand-rolled reader
+/// filed the dotted form as two dependencies, read a quoted tail as no path, and could not tell a key named
+/// `version.extra` from structure beneath `version` — each a false negative in front of `cargo publish`, and
+/// each answered here by asking the document instead of the line.
+fn dependency_of(key: &str, item: &toml_edit::Item) -> Dependency {
+    // `xuanji = "0.5"`: the whole entry is the requirement, and the key is the crate.
+    if let Some(version) = item.as_str() {
+        return Dependency {
+            key: key.to_string(),
+            package: Package::Named(key.to_string()),
+            pin: Declared::Value(version.to_string()),
+            path: Declared::Absent,
+        };
+    }
+    let Some(table) = item.as_table_like() else {
+        // Neither a string nor a table — `xuanji = 5`. What it requires and where it points are both
+        // undecided, and answering that for each keeps a caller asking either question from reading past it.
+        let written = item.to_string().trim().to_string();
+        return Dependency {
+            key: key.to_string(),
+            package: Package::Named(key.to_string()),
+            pin: Declared::Unreadable(written.clone()),
+            path: Declared::Unreadable(written),
+        };
+    };
+    let package = match table.get("package") {
+        None => Package::Named(key.to_string()),
+        Some(renamed) => match renamed.as_str() {
+            Some(name) => Package::Named(name.to_string()),
+            None => Package::Unreadable,
+        },
+    };
+    // `workspace = true`, in every spelling of the two keys: the catalog holds this one, so it declares no
+    // requirement of its own. Anything else under that key is not the offer being taken.
+    let inherits = table
+        .get("workspace")
+        .and_then(toml_edit::Item::as_bool)
+        .unwrap_or(false);
+    Dependency {
+        key: key.to_string(),
+        package,
+        pin: if inherits {
+            Declared::Inherited
+        } else {
+            declared_field(table, "version")
+        },
+        path: declared_field(table, "path"),
+    }
+}
+
+/// Every dependency `subject` admits, read from the parsed document.
+///
+/// **Which tables, asked of the tree rather than of a heading's text.** A heading was matched segment by
+/// segment against every admitted form — `[dependencies]`, `[dependencies.NAME]`, `[target.<sel>.<kind>]`
+/// and their `[workspace.dependencies]` counterparts — and a detailed table's fields were then collected
+/// across lines and filed when the *next* heading proved the table over. Walking the document removes both:
+/// `[dependencies.xuanji]` and `xuanji = { … }` are one entry in one table, and there is no boundary to find.
+///
+/// **A manifest the parser refuses is refused here, not reported as declaring nothing.** Returning empty was
+/// the first shape and the corpus refused it: a duplicate key inside one dependency reached a caller's
+/// vacuity floor, which then said *found no dependency on a family crate* — a sentence about the declaration
+/// form over a file cargo will not read at all. That is the misdirection this crate's typed readers exist to
+/// prevent, so the refusal carries the parse error instead.
+pub(crate) fn declared_dependencies(
+    text: &str,
+    subject: Subject,
+) -> Result<Vec<Dependency>, Refusal> {
+    let doc = text.parse::<toml_edit::DocumentMut>().map_err(|err| {
+        cannot_judge_at(
+            "release-coherence#manifest-unparseable",
+            crate::manifest::manifest_unreadable(&err),
+        )
+    })?;
     let mut found = Vec::new();
-    // **A detailed table is one dependency spread over its own lines, and that is now what it is.** This
-    // walked the manifest with a `Table` cursor and a `pending: Option<Detailed>` flushed at the next
-    // heading — the `Option` existed for exactly one reason, that a `[dependencies.NAME]` table's fields
-    // arrive across lines and the record could only be filed once the *next* heading proved the table over.
-    // With each table carrying its own body, `Detailed` is a local built and filed inside one iteration, so
-    // there is no half-built record to hold and no boundary to remember to flush at.
-    let tables = crate::sections::cut(
-        crate::region::Source::of(text).toml().numbered_lines(),
-        // The heading reader answers *is this a heading* itself; asking first made its `None` arm dead.
-        |line| crate::manifest::table_heading(line).map(|_| dependency_table(line.trim(), subject)),
-    );
-    for table in &tables {
-        match &table.name {
-            Table::Entries => {
-                // **A dotted key is one dependency spread over its own lines, which is what the detailed
-                // table already is.** `xuanji.path = "crates/xuanji"` with `xuanji.version = "0.5.0"` beneath
-                // it is the form a maintainer reaches for — `version.workspace = true` is that spelling in
-                // every member's `[package]` table — and reading the two lines as two dependencies is what let
-                // a stale pin through: the `path` line carried a path and no version, the `version` line a
-                // version and no path, and `require_internal_pins` selected on **path** then, so neither
-                // was internal to it. Measured before this repair: four correct inline siblings plus a stale
-                // dotted pair answered `Ok(())`, where the same staleness written inline is a violation.
-                //
-                // **Grouped by head key, not repaired per line.** Filing each dotted line as its own record
-                // was tried and refused itself: it reports `xuanji.path is pinned to crates/xuanji; expected
-                // 0.5.0` — a false refusal of a manifest cargo reads correctly, with the path read as the
-                // requirement. That is a defect in its own right, though the Core Contract's *one forbidden
-                // bug* is the other direction — a real violation that silently passes — so the head key is
-                // the record and the tail names the field.
-                //
-                // Only `path`, `version` and `package` are read from a tail. Every other dotted key —
-                // `features`, `default-features`, `optional` — is ignored exactly as its inline counterpart
-                // is, because nothing here judges them.
-                let mut dotted: BTreeMap<String, Detailed> = BTreeMap::new();
-                for (_, line) in &table.body {
-                    let trimmed = line.trim();
-                    let Some((key, rest)) = trimmed.split_once('=') else {
-                        continue;
-                    };
-                    let key = key.trim();
-                    let inline = rest.trim_start().starts_with('{');
-                    if !inline {
-                        // **Through the shared reader, because this split the key on the first raw dot.** A
-                        // quoted tail then read with its quotes: measured under cargo 1.96.0,
-                        // `xuanji."path" = "xuanji"` beside `xuanji.version = "0.5"` is a **path** dependency
-                        // with requirement `^0.5`, and this answered *no path* — so `require_internal_pins`
-                        // read it as external and skipped it, and a non-exact internal pin passed the release
-                        // gate. That is a false negative in front of `cargo publish`, where a version is
-                        // yankable and never replaceable, and it is the direction this repository orders above
-                        // every other. A review found it in the third round of one asymmetry: the heading
-                        // decoded, then the key, then the head — and the tail was still raw.
-                        let assignment = crate::manifest::assignment(trimmed);
-                        if let crate::manifest::Assignment::Field { name, tail, value } =
-                            &assignment
-                        {
-                            let head = name.as_str();
-                            let (tail, rest) = (tail.as_slice(), *value);
-                            // **The entry is created before the tail is judged, and that ordering is the
-                            // point rather than an oversight.** A review read it as manufacturing a
-                            // dependency the manifest does not declare, since `xuanji.features = [...]`
-                            // with no other line reaches this and inserts a record carrying nothing. Moving
-                            // the insert after the `match` was measured against the sibling spelling and is
-                            // wrong: `xuanji = { features = [...] }` yields exactly the same record, because
-                            // the inline reader takes its key before it reads any field. Skipping here would
-                            // make one spelling of one manifest answer `1` and the other `0` — two readers
-                            // of one fact reaching different verdicts, which is the class this whole file
-                            // exists to close. What declares a dependency is the KEY; the fields say what
-                            // kind it is, and this reader judges three of them. The equivalence is held by
-                            // `an_unjudged_dotted_tail_declares_as_its_inline_spelling_does` rather than left to
-                            // this comment, which is an integration direction because the difference is
-                            // only visible through a consumer: with the insert deferred, an example
-                            // requiring a family crate through such a tail reports `ok release coherence`
-                            // where it must refuse.
-                            let entry =
-                                dotted.entry(head.to_string()).or_insert_with(|| Detailed {
-                                    key: head.to_string(),
-                                    packages: Vec::new(),
-                                    versions: Vec::new(),
-                                    paths: Vec::new(),
-                                    offers: Vec::new(),
-                                    field_unreadable: false,
-                                    written: String::new(),
-                                });
-                            // A tail of one segment names the field; a longer one is **structure beneath**
-                            // it, which cargo refuses — `xuanji.version.extra = true` fails with *cannot
-                            // extend value of type string with a dotted key*, measured. The two are asked of
-                            // the **segments**, because a first version of this split a joined tail back
-                            // apart and so refused `xuanji."version.extra" = true` — one key whose name
-                            // carries a dot, which cargo accepts and builds.
-                            // An empty tail is not constructible — `assignment` returns `Key` for it — and
-                            // the arm answers in the safe direction anyway, so a later change that makes one
-                            // reachable refuses rather than skips the line.
-                            let (head, deeper) = match tail.split_first() {
-                                Some((head, rest)) => (Field::of(head), !rest.is_empty()),
-                                None => (None, true),
-                            };
-                            match (head, deeper) {
-                                (Some(_), true) => {
-                                    entry.field_unreadable = true;
-                                    entry.paths.push(Quoted::Unreadable);
-                                    entry.versions.push(Quoted::Unreadable);
-                                }
-                                (Some(Field::Path), false) => entry.paths.push(quoted_value(rest)),
-                                (Some(Field::Version), false) => {
-                                    entry.versions.push(quoted_value(rest))
-                                }
-                                (Some(Field::Package), false) => {
-                                    entry.packages.push(quoted_value(rest))
-                                }
-                                // `xuanji.workspace = true` is the dotted spelling of taking the offer.
-                                (Some(Field::Workspace), false) => {
-                                    entry.offers.push(rest.to_string())
-                                }
-                                (None, _) => continue,
-                            }
-                            entry.written.push_str(trimmed);
-                            entry.written.push(' ');
-                            continue;
-                        }
-                        if let crate::manifest::Assignment::FieldUnreadable { name } = &assignment {
-                            // **The head decoded and a tail did not, so this is a field of a named
-                            // dependency.** Filed under that name with the field state, where folding it into
-                            // the key case reported *a dependency under the key `alias."\q" = "xuanji"`* —
-                            // the whole line quoted as its own key, for a problem that is a field.
-                            let entry = dotted.entry(name.clone()).or_insert_with(|| Detailed {
-                                key: name.clone(),
-                                packages: Vec::new(),
-                                versions: Vec::new(),
-                                paths: Vec::new(),
-                                offers: Vec::new(),
-                                field_unreadable: false,
-                                written: String::new(),
-                            });
-                            entry.field_unreadable = true;
-                            entry.paths.push(Quoted::Unreadable);
-                            entry.versions.push(Quoted::Unreadable);
-                            entry.written.push_str(trimmed);
-                            entry.written.push(' ');
-                            continue;
-                        }
-                        if matches!(assignment, crate::manifest::Assignment::KeyUnreadable) {
-                            // A key or tail this reader cannot decode belongs to some dependency and names
-                            // some field of it. Both are unknown, so the fields it could have carried are
-                            // reported unreadable rather than left absent: a dependency whose path is
-                            // *absent* is external and skipped, which is how the shape above reached a
-                            // release, and *unreadable* stops in front of an operator instead.
-                            let entry =
-                                dotted
-                                    .entry(trimmed.to_string())
-                                    .or_insert_with(|| Detailed {
-                                        key: trimmed.to_string(),
-                                        packages: Vec::new(),
-                                        versions: Vec::new(),
-                                        paths: Vec::new(),
-                                        offers: Vec::new(),
-                                        field_unreadable: false,
-                                        written: trimmed.to_string(),
-                                    });
-                            entry.paths.push(Quoted::Unreadable);
-                            entry.versions.push(Quoted::Unreadable);
-                            continue;
+    let mut take = |item: Option<&toml_edit::Item>| {
+        if let Some(table) = item.and_then(toml_edit::Item::as_table_like) {
+            for (key, entry) in table.iter() {
+                found.push(dependency_of(key, entry));
+            }
+        }
+    };
+    match subject {
+        Subject::Requires => {
+            for kind in DEPENDENCY_KINDS {
+                take(doc.get(kind));
+            }
+            // `[target.<selector>.<kind>]`, where the selector is one key — a triple or a cfg expression,
+            // whatever it contains, because a parsed table has no dot for this step to land inside.
+            if let Some(targets) = doc.get("target").and_then(toml_edit::Item::as_table_like) {
+                for (_selector, target) in targets.iter() {
+                    if let Some(target) = target.as_table_like() {
+                        for kind in DEPENDENCY_KINDS {
+                            take(target.get(kind));
                         }
                     }
-                    // **One undecodable field makes the whole entry unread, identity included.** The first
-                    // repair reported the *version* and the *path* unreadable and left `package` to fall back
-                    // to the key — so `alias = { version = "0.2", "\q" = "xuanji" }` was a dependency named
-                    // `alias`, which the consumer skips as non-family **before** it reads the pin, and another
-                    // valid family dependency satisfied the per-example counter: a clean release over a
-                    // manifest `cargo metadata` refuses to parse. A review found it, and found that the
-                    // direction written for the first repair used a family crate as the outer key, which is
-                    // exactly the shape that masks this path.
-                    //
-                    // The state is computed once and consulted by all three views, rather than each scanning
-                    // the table for itself.
-                    let undecodable = inline && undecodable_field(rest);
-                    let package = if undecodable {
-                        Package::FieldUnreadable
-                    } else {
-                        Package::of(inline_assignments(rest, "package"), key)
-                    };
-                    // A bare `xuanji = "0.5"` carries its requirement as the value itself; an inline table
-                    // carries it under a `version` key.
-                    let versions = if inline {
-                        inline_assignments(rest, "version")
-                    } else {
-                        vec![quoted_value(rest)]
-                    };
-                    // A bare `xuanji = "0.5"` declares no path at all; an inline table carries one under a
-                    // `path` key, and a dotted key under its own `.path` line — handled above, where the head
-                    // key holds the record.
-                    let paths = if inline {
-                        inline_assignments(rest, "path")
-                    } else {
-                        Vec::new()
-                    };
-                    // **An inner key this reader cannot decode is not an absent one.** `assignments` answers
-                    // with the values it could attribute, so a `filter_map` over it erased the undecodable
-                    // state `manifest::assignment` had already computed: measured,
-                    // `serde = { version = "1.0", "\q" = true }` kept the readable version and dropped the
-                    // rest, reporting a clean pin over a manifest `cargo metadata` refuses to parse. The
-                    // examples check builds every example and would fail on such a file in the same run — but
-                    // a compensating control in another gate is not this gate answering, and the Core
-                    // Contract's one forbidden bug is a real violation that silently passes.
-                    let (versions, paths) = if undecodable {
-                        (vec![Quoted::Unreadable], vec![Quoted::Unreadable])
-                    } else {
-                        (versions, paths)
-                    };
-                    found.push(Dependency {
-                        key: key.to_string(),
-                        package,
-                        pin: requirement(assignments(rest, "workspace"), versions, rest),
-                        path: Declared::of(paths, rest),
-                    });
-                }
-                for (_, detailed) in dotted {
-                    found.push(Dependency {
-                        package: if detailed.field_unreadable {
-                            Package::FieldUnreadable
-                        } else {
-                            Package::of(detailed.packages, &detailed.key)
-                        },
-                        pin: requirement(
-                            detailed.offers.iter().map(String::as_str),
-                            detailed.versions,
-                            &detailed.written,
-                        ),
-                        path: Declared::of(detailed.paths, &detailed.written),
-                        key: detailed.key,
-                    });
                 }
             }
-            Table::One(name) => {
-                let mut detailed = Detailed {
-                    key: name.clone(),
-                    packages: Vec::new(),
-                    versions: Vec::new(),
-                    paths: Vec::new(),
-                    offers: Vec::new(),
-                    field_unreadable: false,
-                    written: String::new(),
-                };
-                // **This body is read through the one reader too, and a field it cannot decode marks the
-                // record.** It scanned the line once per watched key and kept whatever each scan attributed,
-                // so a key it could not decode was filtered out four times over: `[dependencies.alias]`
-                // carrying `package = "xuanji"`, `version = "0.5"` and `"\q" = true` produced a readable
-                // identity and a readable pin, and a manifest `cargo metadata` refuses to parse reported a
-                // clean release. That is the same false negative the inline and dotted spellings each had,
-                // at the third producer of one record — a review found it after the other two were closed.
-                for (_, line) in &table.body {
-                    let trimmed = line.trim();
-                    match crate::manifest::assignment(trimmed) {
-                        crate::manifest::Assignment::Key { name, value } => {
-                            match Field::of(&name) {
-                                Some(Field::Package) => detailed.packages.push(quoted_value(value)),
-                                Some(Field::Version) => detailed.versions.push(quoted_value(value)),
-                                Some(Field::Path) => detailed.paths.push(quoted_value(value)),
-                                // `workspace = true` is a boolean, kept raw for `inheritance`.
-                                Some(Field::Workspace) => detailed.offers.push(value.to_string()),
-                                None => {}
-                            }
-                        }
-                        // **A dotted key whose head is one this reader judges is structure beneath a value,
-                        // and cargo refuses it.** Measured: `[dependencies.alias]` carrying `version = "1.0"`
-                        // and `version.extra = true` fails with *cannot extend value of type string with a
-                        // dotted key*, and discarding it as unrelated kept the readable pin — the same
-                        // false-clean class this branch was repaired for, one spelling in. A dotted head
-                        // naming anything else stays another key's business.
-                        crate::manifest::Assignment::Field { name, .. }
-                            if Field::of(&name).is_some() =>
-                        {
-                            detailed.field_unreadable = true;
-                        }
-                        crate::manifest::Assignment::Field { .. }
-                        | crate::manifest::Assignment::None => {}
-                        crate::manifest::Assignment::KeyUnreadable
-                        | crate::manifest::Assignment::FieldUnreadable { .. } => {
-                            detailed.field_unreadable = true;
-                        }
-                    }
-                    if !trimmed.is_empty() {
-                        detailed.written.push_str(trimmed);
-                        detailed.written.push(' ');
-                    }
-                }
-                let unreadable = detailed.field_unreadable;
-                found.push(Dependency {
-                    package: if unreadable {
-                        Package::FieldUnreadable
-                    } else {
-                        Package::of(detailed.packages, &detailed.key)
-                    },
-                    pin: if unreadable {
-                        Declared::Unreadable(detailed.written.trim().to_string())
-                    } else {
-                        requirement(
-                            detailed.offers.iter().map(String::as_str),
-                            detailed.versions,
-                            &detailed.written,
-                        )
-                    },
-                    path: if unreadable {
-                        Declared::Unreadable(detailed.written.trim().to_string())
-                    } else {
-                        Declared::of(detailed.paths, &detailed.written)
-                    },
-                    key: detailed.key,
-                });
-            }
-            Table::Other => {}
+        }
+        // Only `dependencies` is inheritable; `[workspace.dev-dependencies]` is an unused key to cargo, and
+        // only a caller asking what this manifest pins wants it at all.
+        Subject::Offers => {
+            take(
+                doc.get("workspace")
+                    .and_then(toml_edit::Item::as_table_like)
+                    .and_then(|workspace| workspace.get("dependencies")),
+            );
         }
     }
-    found
+    Ok(found)
 }
 
-/// What the catalog in `text` offers for `wanted`, for a dependency that took the offer.
+/// What the catalog in this manifest offers under `key`, for a dependency that took the offer.
+///
+/// **The lookup is the dependency's key against a catalog key, and the crate comes from the entry.**
+/// Measured under cargo 1.96.0: a catalog offering `alias = { package = "realdep", version = "0.0.1" }`
+/// beside a dependency spelling `alias = { workspace = true }` resolves to `realdep` at `^0.0.1` under the
+/// rename `alias`. Neither shape that would make the dependency's own key an identity survives the same
+/// measurement: a `package` written beside `workspace = true` is **accepted and ignored** -- cargo warns
+/// `unused manifest key: dependencies.alias.package`, resolves `realdep` from the catalog anyway, and builds
+/// -- and inheritance spelled under the crate's name rather than the catalog's key is refused outright,
+/// `dependency.realdep was not found in workspace.dependencies`. So there is one lookup, it is by key, and
+/// the crate is the catalog entry's even where the dependency names another. Searching by resolved identity
+/// asked a question cargo never asks, and matched no entry at all for every crate the catalog renames.
 ///
 /// **The catalog is in the same manifest, because every example in this repository is its own workspace
 /// root.** The root manifest's own comment says so and `exclude` enforces it, so a dependency spelling
 /// `workspace = true` resolves against `[workspace.dependencies]` beside it. Measured: cargo resolves the
 /// inline, dotted and detailed spellings of the offer to the catalog's requirement, and it resolves it even
 /// when a local `version` sits in the same inline table -- so the catalog is *the* answer rather than one of
-/// two. Cargo also refuses a manifest that inherits what its catalog does not declare, which is why
-/// [`Offered::Missing`] is a refusal rather than a fallback.
-fn offered(text: &str, wanted: &str) -> Offered {
-    for Dependency {
-        key,
-        package,
-        pin,
-        path: _,
-    } in declared_dependencies(text, Subject::Offers)
-    {
-        match package {
-            Package::Named(named) if named == wanted => return Offered::Pin(pin),
-            Package::Named(_) => {}
-            // An entry whose identity cannot be read might be the one being inherited. *Might be* is not an
-            // answer, and skipping it is how a stale pin would reach a release through the catalog.
-            Package::Unreadable
-            | Package::Several(_)
-            | Package::KeyUnreadable(_)
-            | Package::FieldUnreadable => {
-                return Offered::Unresolvable(key);
-            }
+/// two. Cargo refuses a manifest that inherits what its catalog does not declare, so [`Offered::Missing`]
+/// describes a manifest nothing builds -- but what to do about it depends on whether the local key names a
+/// family crate, so it is answered by the **caller** rather than here. This sentence said `Missing` *is a
+/// refusal rather than a fallback*, which held while this search was reached only for a crate already known
+/// to be in the family, and stopped holding when the search moved in front of that question.
+fn offered(catalog: &[Dependency], key: &str) -> Offered {
+    for entry in catalog {
+        if entry.key != key {
+            continue;
         }
+        return match &entry.package {
+            Package::Named(named) => Offered::Entry {
+                package: named.clone(),
+                pin: entry.pin.clone(),
+            },
+            // The entry being taken names a crate this reader cannot read. *Might be a family crate* is not
+            // an answer, and passing it over is how a stale pin would reach a release through the catalog.
+            Package::Unreadable => Offered::Unresolvable(entry.key.clone()),
+        };
     }
     Offered::Missing
 }
 
-/// What a catalog offers for one crate.
+/// What a catalog offers under one key.
 #[derive(Debug)]
 enum Offered {
-    /// The catalog declares it, with this requirement -- which may itself be absent, unreadable or several,
-    /// and is then answered by the same arms a locally declared one is.
-    Pin(Declared),
-    /// No catalog entry names it. A manifest cargo refuses to parse.
+    /// The catalog declares an entry there: the crate it names, and the requirement it carries -- which may
+    /// itself be absent, unreadable or take an offer of its own, and is then answered by the same arms a
+    /// locally declared one is.
+    Entry { package: String, pin: Declared },
+    /// No catalog entry is written under that key.
+    ///
+    /// One fact, since this reader is handed a catalog that is already parsed: a manifest the parser refuses
+    /// never reaches here, because the caller met that refusal before it had a catalog to search. The state
+    /// carried both for as long as the search did its own parsing, and *nothing is written there* and *the
+    /// document is not a manifest* are different things to tell an operator.
     Missing,
-    /// The catalog carries an entry whose identity this reader cannot resolve, quoted by its key.
+    /// The entry written under that key names a crate this reader cannot resolve, quoted by its key.
     Unresolvable(String),
 }
 
@@ -895,7 +351,10 @@ pub enum PackageName {
     Named(String),
     /// No `[package]` table, or no `name` key inside it.
     Absent,
-    /// A `name` this reader cannot read: a value not in double quotes, or more than one key in `[package]`.
+    /// A `name` this reader cannot read: a value that is **not a string at all**.
+    ///
+    /// Neither of the two shapes this once also carried reaches it. A literal string is read, and a `name`
+    /// declared twice is a document the parser refuses whole rather than a key with two answers.
     Unreadable(String),
 }
 
@@ -913,53 +372,27 @@ pub enum PackageName {
 /// while two `name` keys in one means it is malformed. The consumer needs to tell them apart, so the
 /// return carries the distinction instead of collapsing it.
 pub fn package_name(manifest: &str) -> PackageName {
-    // Executed manifest text. Raw lines were safe against a commented-out `name` only by accident — a
-    // `#`-led line matched no key — and not safe at all against a comment on the **table
-    // heading**: `[package] # the repository checks` fails `trimmed == "[package]"`, so the table never
-    // opens, no `name` is found, and `require_example_pins` answers `cannot_judge` over a legal manifest.
-    // Held by `a_package_heading_with_a_trailing_comment_still_opens_the_table`, run against raw lines.
-    //
-    // A first version of this comment claimed the benefit was at the `name` **value** —
-    // `name = "kanhe" # …` supposedly reaching `quoted_value` as `Unreadable`. It never did:
-    // `quoted_value` takes the text between the first pair of quotes and discards what follows. The claim
-    // was refuted by a reviewer, and stating a benefit a reader could have checked against the function ten
-    // lines up is the cheaper half of the discipline the previous commit wrote down.
-    let source = crate::region::Source::of(manifest);
-    // The cut owns the table boundary. `in_package` was a boolean walked by hand here, in
-    // `require_lock_versions`, and once more as a `Table` cursor in `declared_dependencies` — three copies of
-    // *a heading opens, the next heading closes*, which is the one thing all three shared. `is_table` says
-    // which lines are headings and this predicate says which heading matters; `[package.metadata.docs.rs]` is
-    // a different table and names no package.
-    let tables = crate::sections::cut(source.toml().numbered_lines(), |line| {
-        crate::manifest::table_heading(line).map(|heading| heading.names("package"))
-    });
-    let names: Vec<Result<&str, String>> = tables
-        .iter()
-        .filter(|table| table.name)
-        .flat_map(|table| table.body.iter())
-        // **Through the shared key reader, because this matched the key's raw text.** `[package]` with
-        // `"name" = "kanhe"` is the package's name to cargo — measured — and answering `Absent` for it made
-        // this say *declares no `[package]` name* about a manifest that declares one, and made the sibling
-        // caller fall back to the directory, comparing a member under the wrong identity.
-        .filter_map(|(_, line)| match crate::manifest::assigned(line, "name") {
-            crate::manifest::Assigned::Value(value) => Some(Ok(value.trim())),
-            crate::manifest::Assigned::Other => None,
-            crate::manifest::Assigned::Field { .. } | crate::manifest::Assigned::Unreadable => {
-                Some(Err(line.trim().to_string()))
-            }
-        })
-        .collect();
-    let names: Vec<&str> = match names.into_iter().collect::<Result<Vec<&str>, String>>() {
-        Ok(names) => names,
-        Err(written) => return PackageName::Unreadable(written),
+    let doc = match manifest.parse::<toml_edit::DocumentMut>() {
+        Ok(doc) => doc,
+        // A manifest cargo cannot parse declares no name to be reported absent, and answering `Absent` would
+        // send an operator to add a key that may already be there. The whole error, collapsed: a duplicate
+        // key reports its position on the first line and names the key on later ones.
+        Err(err) => {
+            return PackageName::Unreadable(crate::manifest::manifest_unreadable(&err));
+        }
     };
-    match names.len() {
-        0 => PackageName::Absent,
-        1 => match quoted_value(names[0]) {
-            Quoted::Value(name) => PackageName::Named(name),
-            Quoted::Unreadable => PackageName::Unreadable(names[0].to_string()),
-        },
-        several => PackageName::Unreadable(format!("{several} `name` keys in `[package]`")),
+    let Some(name) = doc
+        .get("package")
+        .and_then(toml_edit::Item::as_table_like)
+        .and_then(|package| package.get("name"))
+    else {
+        return PackageName::Absent;
+    };
+    match name.as_str() {
+        Some(named) => PackageName::Named(named.to_string()),
+        // What remains unreadable is a `name` that is not a string: an inheritance spelling, an inline table,
+        // an array. The old reader also answered this for a single-quoted string, which cargo accepts.
+        None => PackageName::Unreadable(name.to_string().trim().to_string()),
     }
 }
 
@@ -1009,6 +442,7 @@ fn release_spine(
     repo: &Path,
     version: &str,
     version_parts: (u64, u64, u64),
+    changelog: &str,
 ) -> Result<Spine, Refusal> {
     // `%ad` with `--date=short`, because the dated release section's value is held against the release
     // commit's own date and reading it here costs nothing — the log that answers "which commit" answers
@@ -1063,7 +497,87 @@ fn release_spine(
     let head =
         head.expect("the log line that produced a release commit also produced HEAD's own commit");
 
-    let state = if head == release_commit {
+    // **A snapshot is a checkout, not a commit.** This asked `head == release_commit` alone — a fact about
+    // the COMMIT — while every other reader in this gate judges the worktree, which `read` takes with
+    // `std::fs::read_to_string`. Two sources, one answer, and the first edit of the next cycle falls between
+    // them: at the release commit, writing the `[Unreleased]` entry that `Development` **requires** is judged
+    // in `Snapshot`, where `[Unreleased]` must be **empty**. Measured on `release/0.6.0`'s first change — the
+    // tree could not be made to pass until it was committed, because committing is what moved `head`.
+    //
+    // **The CHANGELOG is what carries the cycle, so it is what decides.** A first attempt asked whether
+    // *anything* tracked was modified, and two existing directions refuted it: a fixture whose `Cargo.lock`
+    // has been replaced by a directory is a **broken release checkout**, not the next cycle beginning, and
+    // classifying it as `Development` made it refuse for a missing `[Unreleased]` entry before it could
+    // report the lockfile it cannot read. The directions were right and the wider rule was wrong.
+    //
+    // What distinguishes the two states is exactly what this repository's own requirement names: *active
+    // development SHALL retain the current released version and at least one changelog list item under
+    // `[Unreleased]`*. Writing that item is how a cycle begins, and it is a change to this file. Untracked
+    // files are excluded — this gate reads named tracked paths, so a file it never opens decides nothing.
+    // **Read from the object database, not the index.** `git status` was the first spelling and it took a
+    // WHEN that belonged to another guard: an existing direction corrupts `.git/index` to make the machinery
+    // enumeration fail, and a `status` here intercepted it — measured, that direction stopped reaching its
+    // own site. `git show HEAD:…` reads the tree, so the same corrupt index leaves it working, also measured.
+    //
+    // `hermetic_git::run` trims trailing whitespace from git's output, so the committed text arrives without
+    // its final newline while `read` keeps one. Measured: every snapshot direction in the corpus failed on
+    // that difference alone before the two sides were compared on the same footing, which is why the exact
+    // read is used here.
+    //
+    // **Presence is asked first, by a command whose exit status answers it.** `git show HEAD:…` exits `128`
+    // for a path that is not in HEAD *and* for a tree it cannot read, so a single `Err` arm had to choose one
+    // meaning for both — and choosing *not a snapshot* classified a broken object store as the next cycle.
+    // Measured on this machine's git: `ls-tree HEAD -- <path>` exits `0` with an empty listing when the path
+    // is absent, `0` with a line when it is there, and `128` only when the tree cannot be read. The question
+    // decides the command, which is what the sibling tag-presence reader already does for the same shape.
+    // **Presence is asked first, by a command whose exit status answers it.** `git show HEAD:…` exits `128`
+    // for a path that is not in HEAD *and* for a tree it cannot read, so a single `Err` arm had to choose one
+    // meaning for both — and choosing *not a snapshot* classified a broken object store as the next cycle.
+    // Measured on this machine's git: `ls-tree HEAD -- <path>` exits `0` with an empty listing when the path
+    // is absent, `0` with a line when it is there, and `128` only when the tree cannot be read. The question
+    // decides the command, which is what the sibling tag-presence reader already does for the same shape.
+    let listed = crate::hermetic_git::run(repo, &[], &["ls-tree", "HEAD", "--", "CHANGELOG.md"])
+        .map_err(|err| {
+            cannot_judge_at(
+                "release-coherence#changelog-in-head-unreadable",
+                format!(
+                    "git could not answer what HEAD's tree holds for `CHANGELOG.md` ({err}), so whether the \
+                     worktree still matches the release commit was never read"
+                ),
+            )
+        })?;
+    // **A release commit that carries no changelog is its own fact, not a modified checkout.** Absence at
+    // any other commit is unremarkable — a tree from before the file existed. At the exact `release: X.Y.Z`
+    // commit it means the release shipped without the document it is narrated in, and reading that as *the
+    // next cycle has begun* let it pass on the worktree's copy alone.
+    let unmodified = if listed.trim().is_empty() {
+        if head == release_commit {
+            return Err(violation_at(
+                "release-coherence#release-commit-carries-no-changelog",
+                format!(
+                    "the release commit for {release_version} carries no `CHANGELOG.md` in its own tree, so \
+                     the release it names is narrated nowhere a reader of that commit can reach"
+                ),
+            ));
+        }
+        false
+    } else {
+        match crate::hermetic_git::run_exact(repo, &[], &["show", "HEAD:CHANGELOG.md"]) {
+            Ok(committed) => committed == changelog,
+            // The path is listed in HEAD's tree, so a failure here is git declining to read a blob it just
+            // named — a fact about the object store, never about the worktree.
+            Err(other) => {
+                return Err(cannot_judge_at(
+                    "release-coherence#changelog-blob-unreadable",
+                    format!(
+                        "HEAD's tree names `CHANGELOG.md` and git could not read it ({other}), so whether \
+                         the worktree still matches the release commit was never read"
+                    ),
+                ));
+            }
+        }
+    };
+    let state = if head == release_commit && unmodified {
         if version != release_version {
             return Err(violation_at(
                 "release-coherence#release-snapshot-version-disagrees",
@@ -1125,48 +639,43 @@ fn require_version_surfaces(
             PackageName::Named(name) => name,
             PackageName::Absent | PackageName::Unreadable(_) => path.clone(),
         };
-        // This reader held its own `split('#')` — the last hand-rolled cut over TOML text outside `region`.
-        // Measured, because an earlier wording called it "a fourth spelling of one language's rule": four
-        // `split('#')`-shaped sites existed, but the other three read a Markdown heading, a shell command
-        // and a URL fragment, so they are not this rule and never were.
+        // **One expression over a parsed document, where a line-oriented reader spent four rounds.** Each
+        // round moved the boundary of *decoded* one segment right and each closed real false refusals:
+        // measured under cargo 1.96.0, all of `version.workspace = true`, `version = { workspace = true }`,
+        // `"version".workspace = true`, `'version'.workspace = true`, the quoted and escaped spellings of
+        // the tail, and the quoted inner key inherit — and a raw-text recogniser took one of them.
         //
-        // It was kept out of `region` while `toml()` cut at a token
-        // start, because converting it then would have refused `version.workspace = true#c`, which is a
-        // legal comment on a line that still inherits. `toml()` now tracks strings and cuts where TOML cuts,
-        // so the exception has nothing left to protect and the hand-rolled rule is gone with it.
+        // The fourth round is the one that ended the approach rather than extending it: a member may inherit
+        // through a **sub-table heading**, `[package.version]` with `workspace = true`, which cargo resolves
+        // — measured in a scratch workspace — and which a reader asking each line *does this assign
+        // `version`* cannot represent at all, because a heading assigns nothing. There was no segment left to
+        // move.
         //
-        // Both directions run through `judge`: `an_inherit_line_with_a_glued_comment_still_inherits` and
-        // `a_member_whose_only_inherit_line_is_commented_out_is_refused`.
-        // **Through the shared key reader, because string equality recognised one spelling of four.** Measured
-        // under cargo 1.96.0, each inherits `0.5.0`: `version.workspace = true`,
-        // `version = { workspace = true }`, `"version".workspace = true` and `'version'.workspace = true`. The
-        // whitespace-stripped equality took only the first, and the other three reached
-        // `member-does-not-inherit-workspace-version` — a `violation_at`, exit 1, over a manifest cargo reads.
-        // A false refusal is a defect and this is one; what the Core Contract names as *the one forbidden
-        // bug* is the other direction — a real violation that silently passes. The window's own repair two
-        // hundred lines up is what made the asymmetry worth naming: the key side
-        // decodes now, so a recogniser comparing raw text is the odd one out.
+        // The parser also makes the read `[package]`-scoped, which the line walk was not: it took an
+        // assignment in any table. Cargo honours `version.workspace` under `[package]` and nowhere else, so
+        // narrowing is the answer agreeing with cargo, not a tightening.
         //
-        // Two shapes inherit, and `manifest::assigned` tells them apart: a **dotted** head naming `version`
-        // assigns a field of it, and this asks whether that field is `workspace`; or a `version` whose value
-        // is an inline table carries the offer inside it. Both comparisons are of **decoded names** — the
-        // tail's segments and the inline table's inner keys — which they were not when this comment was first
-        // written, and a review refused four more spellings on that account. `manifest::assignment` is where
-        // *decoded* became a property of the whole answer rather than of its first segment.
-        let inherits = crate::region::Source::of(text.as_str())
-            .toml()
-            .lines()
-            .any(|line| match crate::manifest::assigned(line, "version") {
-                // `version.workspace = true`, in any spelling of the two keys.
-                crate::manifest::Assigned::Field { tail, value } => {
-                    tail == ["workspace"] && value.trim() == "true"
-                }
-                // `version = { workspace = true }`: the offer sits inside the value.
-                crate::manifest::Assigned::Value(value) => assignments(value, "workspace")
-                    .into_iter()
-                    .any(|offer| offer_value(offer) == "true"),
-                crate::manifest::Assigned::Other | crate::manifest::Assigned::Unreadable => false,
-            });
+        // Directions: `every_inherit_spelling_cargo_honours_is_read_as_inheriting`,
+        // `a_member_inheriting_through_a_sub_table_heading_is_read_as_inheriting`,
+        // `an_inherit_line_with_a_glued_comment_still_inherits` — `true#c` is legal TOML and the parser
+        // takes it — and `a_member_whose_only_inherit_line_is_commented_out_is_refused`.
+        let doc = text.parse::<toml_edit::DocumentMut>().map_err(|err| {
+            cannot_judge_at(
+                "release-coherence#member-manifest-unparseable",
+                format!(
+                    "{name}: a member manifest this parser cannot read — {}",
+                    crate::manifest::parse_error_on_one_line(&err)
+                ),
+            )
+        })?;
+        let inherits = doc
+            .get("package")
+            .and_then(toml_edit::Item::as_table_like)
+            .and_then(|package| package.get("version"))
+            .and_then(toml_edit::Item::as_table_like)
+            .and_then(|version| version.get("workspace"))
+            .and_then(toml_edit::Item::as_bool)
+            .unwrap_or(false);
         if !inherits {
             return Err(violation_at(
                 "release-coherence#member-does-not-inherit-workspace-version",
@@ -1430,6 +939,11 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
                 "repository root {} has no git history: {stderr}",
                 repo.display()
             ),
+            crate::hermetic_git::Failure::Unreadable(why) => format!(
+                "git answered about {} in bytes this reader cannot represent ({why}), so whether it has a \
+                 history was answered and not read",
+                repo.display()
+            ),
         })
     })?;
 
@@ -1463,6 +977,7 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
         ));
     };
     let changelog = read(repo, "CHANGELOG.md")?;
+    let changelog_text = changelog.clone();
     // Cut **once**, and hand the value down. Four walks in this file each carried their own section cursor
     // over the same predicate; `sections::cut` owns the boundary question and `section_of` the naming one,
     // which is the split `section_of`'s own doc asks for. Over a `Prose` region, so a fenced `## [` heading
@@ -1474,7 +989,7 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     // The phases, in the order a reader meets a refusal in. **The order is observable**: a repository with
     // two problems is refused for whichever phase reaches its own first, and the failure matrix asserts the
     // message. So these are a sequence rather than a set, and moving one moves what gets reported.
-    let spine = release_spine(repo, &version, version_parts)?;
+    let spine = release_spine(repo, &version, version_parts, &changelog_text)?;
     let members = require_version_surfaces(repo, &root_manifest, &version)?;
     require_changelog_state(
         repo,
@@ -1523,7 +1038,13 @@ fn entries_of(dir: &Path) -> Result<Vec<PathBuf>, Refusal> {
     Ok(paths)
 }
 
-fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal> {
+/// Every member manifest this gate reaches, as `(repository-relative path, text)`.
+///
+/// The set is the directories under `crates/` that carry a `Cargo.toml`, which is a **layout** premise:
+/// cargo's own answer is `[workspace] members`. The two agree in this repository today, and
+/// `crates/kanhe/tests/member_enumeration.rs` is what asks them rather than assuming it — public for that
+/// reader, so the comparison uses this walk rather than restating it and becoming a third enumerator.
+pub fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal> {
     let crates = repo.join("crates");
     let mut out = Vec::new();
     let dirs = entries_of(&crates)?;
@@ -1536,14 +1057,46 @@ fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal> {
                     format!("could not read {manifest:?}: {err}"),
                 )
             })?;
-            out.push((
-                manifest
-                    .strip_prefix(repo)
-                    .unwrap_or(&manifest)
-                    .display()
-                    .to_string(),
-                text,
-            ));
+            // **Spelled by the one owner, because this is the side `member_enumeration` compares
+            // against.** This read `strip_prefix(repo).unwrap_or(&manifest).display()`, which is the
+            // host's own separator and, on a failed strip, the absolute path carried forward as if it
+            // were relative. The comparison's other side joins components with `/`, so the two sets
+            // shared no member wherever that separator is not `/` — and the reader that stands beside
+            // this one records the identical defect at its own site.
+            match crate::repository_path::repository_path(repo, &manifest) {
+                crate::repository_path::RepositoryPath::Below(path) => out.push((path, text)),
+                // The manifest is built from `repo` a few lines above, so the strip cannot fail for the
+                // input this walk produces. It is answered rather than assumed away because the answer
+                // is what the type asks for, and a reader that cannot say where a file sits must not
+                // report it as sitting anywhere.
+                crate::repository_path::RepositoryPath::Outside => {
+                    return Err(cannot_judge_at(
+                        "release-coherence#crate-manifest-outside-repository",
+                        format!(
+                            "crate manifest {} is not under the repository root {} it was walked from",
+                            manifest.display(),
+                            repo.display()
+                        ),
+                    ));
+                }
+                // **This is the arm a filesystem walk can actually reach.** The path comes from
+                // `read_dir`, so its components are the bytes the operating system holds rather than a
+                // string a parser already validated: a crate directory whose name is not UTF-8 is legal
+                // on Unix, and spelling it lossily would hand every reader downstream a name that
+                // resolves to nothing — and collapse two distinct names onto one spelling.
+                crate::repository_path::RepositoryPath::NotUtf8(component) => {
+                    return Err(cannot_judge_at(
+                        "release-coherence#crate-directory-not-utf8",
+                        format!(
+                            "the crate directory holding {} carries a component this reader cannot \
+                             represent as text — {component}; a path that is not UTF-8 keeps its own \
+                             identity, and reporting a replaced one would name a file this repository \
+                             does not hold",
+                            manifest.display()
+                        ),
+                    ));
+                }
+            }
         }
     }
     if out.is_empty() {
@@ -1578,28 +1131,6 @@ fn dependency_identity(package: Package, key: &str, whose: &str) -> Result<Strin
                  names cannot be decided"
             ),
         )),
-        Package::FieldUnreadable => Err(cannot_judge_at(
-            "release-coherence#dependency-field-unreadable",
-            format!(
-                "{whose} declares `{key}` with a field whose key this check cannot decode, so what it \
-                 declares cannot be decided"
-            ),
-        )),
-        Package::Several(several) => Err(cannot_judge_at(
-            "release-coherence#dependency-declares-several-packages",
-            format!(
-                "{whose} declares {several} `package` keys for `{key}`, so which crate it names is not this \
-                 reader's to choose"
-            ),
-        )),
-        Package::KeyUnreadable(written) => Err(cannot_judge_at(
-            "release-coherence#dependency-key-unreadable",
-            format!(
-                "{whose} declares a dependency under the key {written}, which is not a bare TOML key — cargo \
-                 decodes such a key and this check does not, so which crate it names cannot be decided. Write \
-                 it bare, or give it an explicit `package = \"…\"`"
-            ),
-        )),
     }
 }
 
@@ -1627,9 +1158,9 @@ pub(crate) fn require_internal_pins(
         package,
         pin,
         path,
-    } in declared_dependencies(root_manifest, Subject::Requires)
+    } in declared_dependencies(root_manifest, Subject::Requires)?
         .into_iter()
-        .chain(declared_dependencies(root_manifest, Subject::Offers))
+        .chain(declared_dependencies(root_manifest, Subject::Offers)?)
     {
         // **Which crate this names decides membership; where it points is then a requirement.** The selection
         // was the dependency's `path`, and an earlier note here called the asymmetry with
@@ -1715,15 +1246,6 @@ pub(crate) fn require_internal_pins(
                     ),
                 ));
             }
-            Declared::Several(several) => {
-                return Err(cannot_judge_at(
-                    "release-coherence#dependency-declares-several-paths",
-                    format!(
-                        "dependency {key} declares {several} `path` keys, so where it points is not this \
-                     reader's to choose"
-                    ),
-                ));
-            }
         }
         match pin {
             Declared::Value(pin) if pin == version => {}
@@ -1758,15 +1280,6 @@ pub(crate) fn require_internal_pins(
                     format!(
                         "internal dependency {key} declares a version this check cannot read ({written}), so \
                      whether it names the workspace version cannot be decided"
-                    ),
-                ));
-            }
-            Declared::Several(several) => {
-                return Err(cannot_judge_at(
-                    "release-coherence#internal-pin-several",
-                    format!(
-                        "internal dependency {key} declares {several} `version` keys, so which one it names is \
-                     not this reader's to choose"
                     ),
                 ));
             }
@@ -1936,11 +1449,38 @@ pub(crate) fn require_example_pins(
 
     let dirs = entries_of(&repo.join("examples"))?;
     for dir in dirs {
+        // An example is a **directory**, and `examples/` holds files of its own — a README among them. The
+        // entry that is not a directory holds no example, which is a different fact from a directory whose
+        // manifest cannot be read, and it is the one this loop may pass over.
+        if !dir.is_dir() {
+            continue;
+        }
         let manifest = dir.join("Cargo.toml");
         // Absent is not unreadable. Skipping both alike let the remaining readable examples satisfy the
         // counters below, so the judgement reported clean over the very manifest it could not read.
-        if !manifest.is_file() {
-            continue;
+        //
+        // `is_file()` answered both with one `false`: a directory named `Cargo.toml`, or a path that exists
+        // and is not a regular file, read as *no example here*. Asking for the metadata separates them —
+        // `NotFound` is the absence this loop may skip, and anything else is a fact to report.
+        //
+        // One construction, and the message carries which of the two it met: the register holds a site
+        // identity to exactly one branch, so two arms reaching two calls would be one identity vouching for a
+        // branch no direction reached.
+        let present = match std::fs::metadata(&manifest) {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) => Err(err.to_string()),
+            Ok(found) if found.is_file() => Ok(()),
+            Ok(_) => Err("it is there and is not a regular file".to_string()),
+        };
+        if let Err(why) = present {
+            return Err(cannot_judge_at(
+                "release-coherence#example-manifest-not-a-readable-file",
+                format!(
+                    "the example manifest {} is not one this check can read — {why}, which is not the same \
+                     fact as an example that declares none",
+                    manifest.display()
+                ),
+            ));
         }
         let text = std::fs::read_to_string(&manifest).map_err(|err| {
             cannot_judge_at(
@@ -1963,6 +1503,11 @@ pub(crate) fn require_example_pins(
             .expect("a `read_dir` entry always has a file name")
             .to_string_lossy()
             .into_owned();
+        // The catalog this example's inherited pins resolve against, read **once** for the whole manifest.
+        // Resolving inside the loop parsed the same document per inherited dependency, and gave the search a
+        // parse failure to answer — a fact its `Missing` state then carried alongside *no entry names it*.
+        // Parsed here, the refusal belongs to the caller that met it and the search answers one question.
+        let catalog = declared_dependencies(&text, Subject::Offers)?;
         // Executed text, for the reason `require_internal_pins` records: a commented-out family pin
         // would otherwise be read as a declared one.
         for Dependency {
@@ -1970,51 +1515,71 @@ pub(crate) fn require_example_pins(
             package,
             pin,
             path: _,
-        } in declared_dependencies(&text, Subject::Requires)
+        } in declared_dependencies(&text, Subject::Requires)?
         {
-            // **Which crate a dependency names is its `package` field where it has one, and its key only
-            // otherwise** — asked of [`dependency_identity`], which the root's pin reader asks too. This
-            // reader resolved identity because an example carries no path, and the sibling selected on path
-            // and called the asymmetry earned; a family crate the catalog offers *without* a path is what
-            // that cost. One question, one reader.
-            let package = dependency_identity(package, &key, &format!("example {name}"))?;
-            if !family.contains(&package) {
-                continue;
-            }
-            // The entry is already known to name a family crate, so every way of failing to read its pin is
-            // answered on its own terms. Collapsing them was the defect: an ABSENT `version` — legal, since
-            // a path-only dependency declares none — was reported as one this reader could not read.
-            // **The offer is resolved before the arms below, so every way of failing to read a pin keeps one
-            // home.** A dependency taking `workspace = true` declares no `version` of its own, and the reader
-            // filed that as `Absent` -- the state meaning *nothing holds this to a version* -- so an example
-            // whose pin is held exactly was refused for having none. Cargo holds it to the catalog's
+            // **A dependency that takes the offer is resolved before it is identified, because its key is a
+            // lookup key rather than a name.** The identity rule above holds for a dependency that declares
+            // itself; cargo applies neither half of it to one spelling `workspace = true`. Measured under
+            // cargo 1.96.0, a `package` beside `workspace = true` is accepted and ignored with an
+            // `unused manifest key` warning, and inheritance spelled under the crate's name rather than the
+            // catalog's key is refused outright -- so the only lookup is the
+            // dependency's key against a catalog key, and the crate is whatever that entry names. Deciding
+            // membership on the local key first passed over every dependency the catalog renames, and a
+            // stale pin behind one reached a release as clean: the example was then reported as declaring no
+            // family requirement, which is a different fact about a different manifest.
+            //
+            // The offer is resolved before the pin arms below, so every way of failing to read a pin keeps
+            // one home. A dependency taking `workspace = true` declares no `version` of its own, and the
+            // reader filed that as `Absent` -- the state meaning *nothing holds this to a version* -- so an
+            // example whose pin is held exactly was refused for having none. Cargo holds it to the catalog's
             // requirement, measured; the catalog is read here and its pin is judged as if written inline.
-            let pin = match pin {
-                Declared::Inherited => match offered(&text, &package) {
-                    Offered::Pin(offered) => offered,
-                    Offered::Missing => {
-                        return Err(cannot_judge_at(
-                            "release-coherence#example-inherits-what-no-catalog-offers",
-                            format!(
-                                "example {name} requires {package} from the workspace catalog, and no \
-                             `[workspace.dependencies]` entry beside it names that crate, so what holds it \
-                             cannot be decided"
-                            ),
-                        ));
-                    }
+            let (package, pin) = match pin {
+                Declared::Inherited => match offered(&catalog, &key) {
+                    Offered::Entry { package, pin } => (package, pin),
+                    // Answered before membership, not after it: the entry taken names a crate this reader
+                    // cannot read, so whether it is a family crate is exactly what cannot be decided.
                     Offered::Unresolvable(entry) => {
                         return Err(cannot_judge_at(
                             "release-coherence#example-catalog-entry-unresolvable",
                             format!(
-                                "example {name} requires {package} from the workspace catalog, whose entry \
-                             {entry} names a crate this check cannot resolve, so what holds it cannot be \
-                             decided"
+                                "example {name} takes the workspace catalog's offer under `{key}`, whose \
+                             entry {entry} names a crate this check cannot resolve, so what holds it cannot \
+                             be decided"
+                            ),
+                        ));
+                    }
+                    // Nothing is written under that key, so the catalog renames nothing here and the local
+                    // key is the only identity there is. Where it names no family crate this dependency is
+                    // not this check's subject -- the same answer one declaring itself would get.
+                    Offered::Missing => {
+                        let package =
+                            dependency_identity(package, &key, &format!("example {name}"))?;
+                        if !family.contains(&package) {
+                            continue;
+                        }
+                        return Err(cannot_judge_at(
+                            "release-coherence#example-inherits-what-no-catalog-offers",
+                            format!(
+                                "example {name} requires {package} from the workspace catalog, and no \
+                             `[workspace.dependencies]` entry beside it is written under `{key}`, so what \
+                             holds it cannot be decided"
                             ),
                         ));
                     }
                 },
-                declared => declared,
+                // **Which crate a dependency names is its `package` field where it has one, and its key only
+                // otherwise** — asked of [`dependency_identity`], which the root's pin reader asks too. This
+                // reader resolved identity because an example carries no path, and the sibling selected on
+                // path and called the asymmetry earned; a family crate the catalog offers *without* a path
+                // is what that cost. One question, one reader.
+                declared => (
+                    dependency_identity(package, &key, &format!("example {name}"))?,
+                    declared,
+                ),
             };
+            if !family.contains(&package) {
+                continue;
+            }
             let pin = match pin {
                 Declared::Value(pin) => pin,
                 Declared::Absent => {
@@ -2032,15 +1597,6 @@ pub(crate) fn require_example_pins(
                         format!(
                             "example {name} requires {package} with a version this check cannot read \
                          ({written}), so whether it satisfies the workspace version cannot be decided"
-                        ),
-                    ));
-                }
-                Declared::Several(several) => {
-                    return Err(cannot_judge_at(
-                        "release-coherence#example-declares-several-pins",
-                        format!(
-                            "example {name} declares {several} `version` keys for {package}, so which one it \
-                         requires is not this reader's to choose"
                         ),
                     ));
                 }
@@ -2114,121 +1670,62 @@ pub(crate) fn require_example_pins(
 /// spent the window removing; the dead branches were what it looked like from inside.
 fn require_lock_versions(repo: &Path, members: &[Member], version: &str) -> Result<(), Refusal> {
     let lock = read(repo, "Cargo.lock")?;
-    // **Every entry under a name, and whether each carries a `source`.** A single-valued map keyed on the
-    // name kept the first entry and dropped the rest, which is only right while no name appears twice — and
-    // two entries under one name is ordinary in a lock file, either as two versions of one crate or as a
-    // workspace member sharing a name with something from a registry. Nothing here stated that premise, and
-    // `source` is what tells the two apart: a workspace member has none, everything fetched has one.
+    let doc = lock.parse::<toml_edit::DocumentMut>().map_err(|err| {
+        cannot_judge_at(
+            "release-coherence#lock-unreadable",
+            format!(
+                "Cargo.lock is not a lock file this parser can read — {}",
+                crate::manifest::parse_error_on_one_line(&err)
+            ),
+        )
+    })?;
+
+    // **Every entry under a name, and whether each carries a `source`.** Two entries under one name is
+    // ordinary in a lock, either as two versions of one crate or as a workspace member sharing a name with
+    // something from a registry, so a single-valued map keyed on the name would keep whichever came first.
+    // `source` is what tells them apart: a workspace member has none, everything fetched has one.
+    //
+    // **The block boundary comes from the parser now.** It was the literal string `[[package]]` and an
+    // ordering premise beneath it — `source` is written after `version` in cargo's own output, so filing an
+    // entry early recorded every one as source-less. An array of tables has neither question: each element
+    // *is* one entry, and the order its keys were written in is not a fact this reader has to know.
     let mut entries: BTreeMap<String, Vec<(String, bool)>> = BTreeMap::new();
-    // **A block's fields are the block's by construction, where they were the block's by a boundary rule.**
-    // This walked the lock with `name`, `version_of` and `sourced` as function-level state and a `close`
-    // closure called on *every* table header — because `[[patch.unused]]`, written whenever a `[patch]`
-    // section exists, carries its own `name`, `version` and `source`, and read as ordinary content it
-    // overwrote the block above. That rule was correct and it was a *rule*: drop the call on the foreign
-    // header and the fields bleed again.
-    //
-    // The cut gives each `[[package]]` its own body, so the three values are per-block locals and a foreign
-    // table's keys are not reachable from here at all. Filing still happens after the body rather than when
-    // the version is read — `source` is written after `version` in cargo's own output, and filing early would
-    // record every entry as source-less — but *after the body* is where the block ends now, rather than where
-    // the next header happens to be.
-    //
-    // The header stays an exact `[[package]]` rather than sharing the manifest readers' tolerance for
-    // `[ package ]`: cargo generates this file and writes one spelling, so admitting others here would be a
-    // tolerance no measurement asked for.
-    //
-    // **Every entry under a name, and whether each carries a `source`.** A single-valued map keyed on the
-    // name kept the first entry and dropped the rest, which is only right while no name appears twice — and
-    // two entries under one name is ordinary in a lock, either as two versions of one crate or as a workspace
-    // member sharing a name with something from a registry. `source` tells the two apart: a workspace member
-    // has none, everything fetched has one.
-    let blocks = crate::sections::cut(
-        crate::region::Source::of(lock.as_str())
-            .toml()
-            .numbered_lines(),
-        // Through the shared reader, which is what makes the array-of-tables shape a question rather than a
-        // literal: this was the fifth place deciding which table a heading names, and the only one whose
-        // subject was an array.
-        |line| crate::manifest::table_heading(line).map(|heading| heading.names_array("package")),
-    );
-    for block in blocks.iter().filter(|block| block.name) {
-        let mut name = String::new();
-        let mut version_of: Option<String> = None;
-        let mut sourced = false;
-        for (_, line) in &block.body {
-            let trimmed = line.trim();
-            // **The key is identified exactly, and `=` is decided once.** Each arm used to ask
-            // `starts_with(..) && contains('=')` and then split again with an `unwrap_or_default()` the
-            // `contains` had already made unreachable — two decisions about the same character and a default
-            // nothing could reach. A prefix is also not a key: `versionx = 1` would have entered the version
-            // arm, and cargo treats a key it does not know as unused.
-            // **Through the one reader, which is what removes the ordering premise below.** This split the
-            // line and picked out the keys it cared about, accumulating as it went — the shape the three
-            // dependency producers were converted away from, and the last of its kind in this file. It is
-            // what let `"version" if !name.is_empty()` be written: an unstated requirement that `name`
-            // appear *before* `version` inside a `[[package]]` block. Measured, a block writing them in the
-            // other order dropped the version and reached *Cargo.lock is missing workspace package xuanji*,
-            // exit 1, about a lock recording it two lines apart. Cargo writes `name` first, so no lock it
-            // writes fires this — but nothing said so, and an undeclared stop is a defect rather than
-            // governed policy.
-            //
-            // A key carrying an escape cargo itself rejects is in a file cargo could not have written, and a
-            // lock file is written by cargo alone — so that arm is the shape's, not an instance's.
-            let (key, value) = match crate::manifest::assignment(trimmed) {
-                crate::manifest::Assignment::Key { name, value } => (name, value),
-                crate::manifest::Assignment::Field { .. }
-                | crate::manifest::Assignment::KeyUnreadable
-                | crate::manifest::Assignment::FieldUnreadable { .. }
-                | crate::manifest::Assignment::None => continue,
-            };
-            match key.as_str() {
-                "source" => sourced = true,
-                "name" => {
-                    // An unreadable name defaulted to the empty string, which the `!name.is_empty()` guard
-                    // below then read as *no package here* — so that entry's version never entered the map
-                    // and the workspace lookup reported it missing, or found a stale one under the previous
-                    // name.
-                    match quoted_value(value) {
-                        Quoted::Value(value) => name = value,
-                        Quoted::Unreadable => {
-                            return Err(cannot_judge_at(
-                                "release-coherence#lock-package-name-unreadable",
-                                format!(
-                                    "Cargo.lock carries a package name this check cannot read ({}), so the \
-                                     versions it records cannot be compared",
-                                    trimmed
-                                ),
-                            ));
-                        }
-                    }
-                }
-                // **Unguarded, and the block-level test below decides whether anything is recorded.** The
-                // guard here required a name already read, which is the ordering premise. A top-level
-                // `version = 4` sits outside every `[[package]]` block and is dropped by the block filter,
-                // not by this arm — measured against a lock carrying that line.
-                "version" => match quoted_value(value) {
-                    Quoted::Value(value) => {
-                        version_of = Some(value);
-                    }
-                    Quoted::Unreadable => {
-                        return Err(cannot_judge_at(
-                            "release-coherence#lock-version-unreadable",
-                            format!(
-                                "Cargo.lock records a version for {name} that this check cannot read ({}), \
-                                 so whether it matches the workspace cannot be decided",
-                                trimmed
-                            ),
-                        ));
-                    }
-                },
-                _ => {}
-            }
-        }
-        if !name.is_empty() {
-            if let Some(found) = version_of {
-                entries.entry(name).or_default().push((found, sourced));
-            }
-        }
+    for entry in doc
+        .get("package")
+        .and_then(toml_edit::Item::as_array_of_tables)
+        .into_iter()
+        .flatten()
+    {
+        let Some(name) = entry.get("name") else {
+            continue;
+        };
+        let Some(name) = name.as_str() else {
+            return Err(cannot_judge_at(
+                "release-coherence#lock-package-name-unreadable",
+                format!(
+                    "Cargo.lock carries a package name this check cannot read ({}), so the versions it \
+                     records cannot be compared",
+                    name.to_string().trim()
+                ),
+            ));
+        };
+        let Some(found) = entry.get("version") else {
+            continue;
+        };
+        let Some(found) = found.as_str() else {
+            return Err(cannot_judge_at(
+                "release-coherence#lock-version-unreadable",
+                format!(
+                    "Cargo.lock records a version for {name} that this check cannot read ({}), so whether \
+                     it matches the workspace cannot be decided",
+                    found.to_string().trim()
+                ),
+            ));
+        };
+        entries
+            .entry(name.to_string())
+            .or_default()
+            .push((found.to_string(), entry.get("source").is_some()));
     }
 
     for Member { name: package, .. } in members {
@@ -2366,11 +1863,14 @@ fn section_shape(sections: &[Section]) -> Shape {
 /// entry for naming a published crate's own source, which is the opposite of this check's purpose. A full
 /// path is unambiguous and always enters; a basename is a convenience that has to earn its place, and the
 /// same rule governs the ancestor directories the enumeration derives — `crates/` leads to both sides.
-fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
+/// `pub(crate)` for its failure matrix, which reaches it from a sibling module — the narrowest widening
+/// that lets a direction meet this reader's own refusals, and narrower than the `pub` its neighbour
+/// `workspace_manifests` already carries for the same reason.
+pub(crate) fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
     let metadata = cargo_metadata(repo)?;
     // **The prefix comes from cargo, not from the caller's path.** `manifest_path` is canonical, while the
     // live call site passes `PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")`, which renders with its
-    // `..` components intact — so stripping `repo.display()` failed for **all eight** members, machinery
+    // `..` components intact — so stripping `repo.display()` failed for **every** member, machinery
     // collapsed to the two `scripts/` files, `published` stayed empty, and two `continue`s made it silent.
     // `workspace_root` is cargo's own answer for the tree it just described, so the two strings cannot
     // disagree about spelling.
@@ -2380,7 +1880,7 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
             "cargo metadata reported no workspace_root, so no member directory can be resolved",
         ));
     };
-    let prefix = format!("{root}/");
+    let root = Path::new(root);
     let mut machinery: Vec<String> = Vec::new();
     let mut published: BTreeSet<String> = BTreeSet::new();
     let mut enumerated = 0usize;
@@ -2405,20 +1905,76 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
                 "a package in cargo metadata carries no manifest_path, so its directory cannot be resolved",
             ));
         };
-        let Some(directory) = manifest
-            .strip_prefix(&prefix)
-            .and_then(|rest| rest.strip_suffix("Cargo.toml"))
-        else {
+        // **Spelled by the one owner**, which is where the component-wise strip and the `/` join now live
+        // for every reader that asks this question — see [`crate::repository_path`] for what the three
+        // hand-written spellings cost. What is this site's own is the *directory*: the member's own
+        // `Cargo.toml` is what cargo reports, and the tracked files under it are what this gate enumerates.
+        // **Matched rather than pattern-bound**, because a `let … else` reads every answer that is not the
+        // one it wants as the one fact its `else` names. When the owner gained a third state this site
+        // absorbed it into *not under the workspace root*, which is a different repair in a different place
+        // — the shape the owner's own type exists to stop.
+        let manifest_path = Path::new(manifest);
+        let outside = || {
             // `--no-deps` lists workspace members only, so every manifest sits under the root cargo reported
             // alongside them. One that does not is this gate's two sources describing different trees, which
             // is a fact to report rather than a member to skip — skipping is what kept the collapse silent.
-            return Err(cannot_judge_at(
+            cannot_judge_at(
                 "release-coherence#member-manifest-outside-workspace-root",
                 format!(
-                    "member manifest {manifest} is not under the workspace root {root} cargo reported for it"
+                    "member manifest {manifest} is not under the workspace root {} cargo reported for it",
+                    root.display()
+                ),
+            )
+        };
+        let Some(spelled) = manifest_path
+            .parent()
+            .map(|dir| crate::repository_path::repository_path(root, dir))
+        else {
+            return Err(outside());
+        };
+        let directory = match spelled {
+            crate::repository_path::RepositoryPath::Below(directory) => directory,
+            crate::repository_path::RepositoryPath::Outside => return Err(outside()),
+            // `manifest` is a `&str` the JSON parser handed over, so its components are UTF-8 before this
+            // reader sees them and no path built from it can reach here. It is answered rather than folded
+            // into the arm above because the two are repaired in opposite directions, and because the fold
+            // is what this site had.
+            crate::repository_path::RepositoryPath::NotUtf8(component) => {
+                return Err(cannot_judge_at(
+                    "release-coherence#member-directory-not-utf8",
+                    format!(
+                        "member manifest {manifest} sits under a component this reader cannot represent as \
+                         text — {component}; a path that is not UTF-8 keeps its own identity, and judging a \
+                         replaced one would compare something the repository does not hold"
+                    ),
+                ));
+            }
+        };
+        // **A member sitting AT the root is refused, because the branch that used to tolerate it could
+        // not carry it anywhere.** A root declaring `[workspace]` and `[package]` together is a shape
+        // cargo accepts — measured on cargo 1.96.0, it reports that member's `manifest_path` as the root's
+        // own `Cargo.toml` — and the directory then strips to nothing. The empty string was passed on as a
+        // pathspec, and git refuses one: *empty string is not a valid pathspec. please use . instead if you
+        // meant to match all paths*. So the branch written to handle this state reached the
+        // directory-unreadable refusal with an empty subject, saying `could not enumerate : …`.
+        //
+        // `.` is what git suggests and is not what this gate means. The machinery set is *the tracked files
+        // under a member the workspace does not publish*, and for a member that is the root, `.` is every
+        // tracked file in the repository — every other member's source included. Tolerating the shape would
+        // hand this check a set it cannot be right about, so it says the shape is not one it judges instead,
+        // exactly as `manifest`'s reader says of a single-crate root: a root this gate was not written to
+        // judge, and saying so beats guessing.
+        if directory.is_empty() {
+            return Err(cannot_judge_at(
+                "release-coherence#member-is-the-workspace-root",
+                format!(
+                    "member manifest {manifest} is the workspace root's own, so this member's directory is \
+                     the whole repository and its machinery set would be every tracked file in it; a \
+                     workspace whose root is also a member is not the shape this check judges"
                 ),
             ));
-        };
+        }
+        let directory = format!("{directory}/");
         let unpublished = package["publish"].as_array().is_some_and(|r| r.is_empty());
         if unpublished {
             unpublished_members.push(directory.trim_end_matches('/').to_string());
@@ -2429,7 +1985,7 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
         // `adopter_cited_machinery` cannot recognise a record citing that file, a false negative in the
         // release gate. Latent today (no tracked path needs quoting) and the sibling capability already
         // raises the class to a SHALL, which is why it is closed rather than declared.
-        let listing = git(repo, &["ls-files", "-z", directory]).map_err(|err| {
+        let listing = git(repo, &["ls-files", "-z", &directory]).map_err(|err| {
             cannot_judge_at(
                 "release-coherence#directory-listing-unreadable",
                 format!("could not enumerate {directory}: {err}"),
@@ -2460,9 +2016,10 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
         return Err(cannot_judge_at(
             "release-coherence#no-tracked-file-for-any-member",
             format!(
-                "no tracked file was found for any of the {} workspace members under {root}, so cargo and git \
+                "no tracked file was found for any of the {} workspace members under {}, so cargo and git \
              are describing different trees",
-                metadata["packages"].as_array().map_or(0, Vec::len)
+                metadata["packages"].as_array().map_or(0, Vec::len),
+                root.display()
             ),
         ));
     }
@@ -2608,7 +2165,16 @@ fn adopter_cited_machinery(
             for run in line
                 .split(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '/' | '-')))
             {
-                let token = run.strip_prefix("./").unwrap_or(run).trim_end_matches('.');
+                // The token is compared as written before any punctuation is taken off it. `trim_end_matches`
+                // stripped **every** trailing dot, so a path legitimately ending in one was rewritten before
+                // it could match — identity normalised to suit a sentence. A Markdown sentence ends in one
+                // period, so one is what comes off, and only where the name as written matches nothing.
+                let written = run.strip_prefix("./").unwrap_or(run);
+                let token = if names.contains(written) {
+                    written
+                } else {
+                    written.strip_suffix('.').unwrap_or(written)
+                };
                 if token.is_empty() {
                     continue;
                 }

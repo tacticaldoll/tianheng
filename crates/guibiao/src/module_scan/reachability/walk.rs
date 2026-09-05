@@ -180,7 +180,9 @@ fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, Chil
                         read_path_string(loaded.text.as_bytes(), orig_eq + 1, loaded.text.len())
                     {
                         let candidate_target = loaded.path_base.join(&rel);
-                        if candidate_target.is_file() {
+                        // An unreadable target is not an absent one; registering neither would drop
+                        // this source and everything it reaches, in silence.
+                        if xingbiao::is_regular_file(&candidate_target)? {
                             resolved_conditional.push(ConditionalPathSource {
                                 relative: PathBuf::from(rel),
                                 base: loaded.path_base.clone(),
@@ -249,7 +251,7 @@ fn register_inline_sources(
     child_path: &str,
     bodies: Vec<InlineBody>,
     graph: &mut GraphSources,
-) {
+) -> Result<(), String> {
     let sources = graph.by_module.entry(child_path.to_string()).or_default();
     for body in bodies {
         let conventional = body.base.join(child);
@@ -257,13 +259,19 @@ fn register_inline_sources(
             Some(base) => vec![base.clone()],
             None if body.candidate_bases.is_empty() => vec![conventional],
             None => {
-                let mut present: Vec<PathBuf> = body
+                // Which candidate bases exist, refusing rather than dropping one this reader could
+                // not stat: a base filtered out here takes its whole subtree with it.
+                let mut present: Vec<PathBuf> = Vec::new();
+                for base in body
                     .candidate_bases
                     .iter()
                     .cloned()
                     .chain(std::iter::once(conventional.clone()))
-                    .filter(|base| base.is_dir())
-                    .collect();
+                {
+                    if xingbiao::is_directory(&base)? {
+                        present.push(base);
+                    }
+                }
                 present.sort();
                 present.dedup();
                 if present.is_empty() {
@@ -284,6 +292,7 @@ fn register_inline_sources(
             });
         }
     }
+    Ok(())
 }
 
 fn resolve_plain_sources(
@@ -305,7 +314,13 @@ fn resolve_plain_sources(
         } = plain_source;
         let flat = base.join(format!("{child}.rs"));
         let nested = base.join(child).join("mod.rs");
-        if flat.is_file() && nested.is_file() {
+        // An unreadable candidate is not an absent one: `is_file` answers `false` for both, and the
+        // cfg tolerance below is what an absence is owed, so a target this reader could not stat was
+        // swallowed with whatever its subtree holds. `xingbiao` owns the criterion for all three
+        // dimensions.
+        let flat_present = xingbiao::is_regular_file(&flat)?;
+        let nested_present = xingbiao::is_regular_file(&nested)?;
+        if flat_present && nested_present {
             return Err(format!(
                 "module '{child_path}' resolves to both '{}' and '{}' — a plain \
                  `mod {child}` must be backed by exactly one file",
@@ -313,7 +328,7 @@ fn resolve_plain_sources(
                 nested.display()
             ));
         }
-        if !flat.is_file() && !nested.is_file() {
+        if !flat_present && !nested_present {
             if is_cfg_conditional {
                 continue;
             }
@@ -324,8 +339,8 @@ fn resolve_plain_sources(
                 nested.display()
             ));
         }
-        for candidate in [flat, nested] {
-            if !candidate.is_file() {
+        for (candidate, present) in [(flat, flat_present), (nested, nested_present)] {
+            if !present {
                 continue;
             }
             let canon = xingbiao::canonicalize_or_fail(&candidate)?;
@@ -439,7 +454,7 @@ fn resolve_direct_paths(
             is_cfg_conditional,
         } = direct_source;
         let target = base.join(&relative);
-        if !target.is_file() {
+        if !xingbiao::is_regular_file(&target)? {
             if is_cfg_conditional {
                 continue;
             }
@@ -480,7 +495,7 @@ fn resolve_conditional_paths(
             ancestors: target_ancestors,
         } = conditional_source;
         let target = base.join(&relative);
-        if !target.is_file() {
+        if !xingbiao::is_regular_file(&target)? {
             continue;
         }
         register_remapped_source(
@@ -619,17 +634,15 @@ pub(crate) fn reachable_modules(
                 // opens no new file and is itself mod-rs-like either way, so `path_base` and
                 // `child_base` coincide for it; it simply carries forward whichever source
                 // declared it — its own ancestor set is already correct as-is.
-                register_inline_sources(&child, &child_path, bodies, &mut graph);
+                register_inline_sources(&child, &child_path, bodies, &mut graph)?;
             }
             // Whether at least one plain declaration for this child actually resolved to a real
             // file — NOT merely whether one was declared: a bare-`#[cfg]`-tolerated declaration
-            // (tolerated below) can now be declared yet resolve to nothing, and that must not count
-            // as "a real plain file exists" for the `inline_only` decision (a false
-            // negative found on this session's own round-2 adversarial review — an inline arm
-            // paired with an entirely-tolerated-away plain arm was wrongly excluded from
-            // `inline_only`, misreporting the self-describing `inline_module_target_error` as a
-            // generic `unknown_module_error`). Defaults to `false` (matching the original
-            // `!seen_plain_file` semantics) when no plain declaration exists at all.
+            // (tolerated below) can be declared yet resolve to nothing, and that must not count as
+            // "a real plain file exists" for the `inline_only` decision. An inline arm paired with
+            // an entirely-tolerated-away plain arm must still be recognized as `inline_only`
+            // (reporting `inline_module_target_error` rather than `unknown_module_error`). Defaults
+            // to `false` when no plain declaration exists at all.
             let plain_file_resolved = if seen_plain_file {
                 resolve_plain_sources(
                     &child,

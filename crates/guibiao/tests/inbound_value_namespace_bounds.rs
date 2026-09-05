@@ -1,9 +1,8 @@
 //! The inbound value-namespace reaction reacts to a **value binding** and to nothing else.
 //!
 //! `resolve_import_module` reads only the path, so `use m::foo;` where `m` declares both `mod foo` and
-//! `fn foo` resolves to the descendant `m::foo` and would miss that the import also reaches `m` — the
-//! false negative closed in the 0.5.0 window. That closure consults the value namespace, and these are the
-//! shapes it must NOT mistake for one. Each was a real false positive when this file was written.
+//! `fn foo` resolves to the descendant `m::foo` and would miss that the import also reaches `m`.
+//! That closure consults the value namespace, and these are the shapes it must NOT mistake for one.
 use guibiao::{Constitution, ModuleBoundary, Outcome, check};
 use std::path::{Path, PathBuf};
 

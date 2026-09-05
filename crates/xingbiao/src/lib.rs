@@ -1,14 +1,29 @@
-//! 星表 (xīngbiǎo) — the shared declared-workspace-data substrate.
+//! 星表 (xīngbiǎo) — the single reader of truth for **what the workspace tree IS**.
 //!
 //! Reads `cargo metadata --no-deps` and looks up packages and their crate-root source files:
 //! the tabulated catalog every observation dimension references before it observes. Spawns
-//! `cargo` and parses its JSON (`serde_json` + std only, no `syn`). Also carries the shared
-//! path-identity primitives ([`canonicalize_or_fail`], [`try_visit`]) a module-graph cycle/dedup
-//! guard needs — the same "single reader of truth" role, one file-identity notch finer than
-//! which file is a crate root.
+//! `cargo` and parses its JSON (`serde_json` + std only, no `syn`).
 //!
-//! Sits beneath static (圭表) and semantic (渾儀) dimensions as a single reader of truth,
-//! preventing twin-drift in target resolution across observation dimensions.
+//! **The criterion, because this charter has widened twice and an enumeration of what it holds goes
+//! stale.** A fact belongs here when every dimension must agree on it *before* observing, and it is a
+//! fact about the tree rather than a reading of what the tree contains. Which packages exist and where
+//! their roots are; whether two paths are one file; whether a path is there at all, and whether being
+//! unable to tell is the same answer as its absence. Each of those is asked by 圭表, 渾儀 and 漏刻
+//! alike, and a dimension answering it privately is how three readers came to disagree about one tree.
+//!
+//! **What the criterion refuses** is as load-bearing as what it admits: an interpretation of source is a
+//! dimension's own observation, not a fact about the tree. `cargo metadata` says which file is a crate
+//! root; what the tokens in that file mean is 圭表's or 渾儀's answer and belongs to whichever is
+//! asking. The line is between *what is there* and *what it says*.
+//!
+//! The widenings are named rather than left to be inferred: the path-identity primitives
+//! ([`canonicalize_or_fail`], [`try_visit`]) arrived for a module-graph cycle guard, and the
+//! filesystem-answer policy ([`is_absence`] and its readers) arrived after all three dimensions were
+//! measured collapsing *absent* into *unreadable* — each is one notch finer than the last, on the same
+//! question of what the tree holds.
+//!
+//! Sits beneath all three observation dimensions — static (圭表), semantic (渾儀) and runtime (漏刻,
+//! through its CI-only `audit` face) — preventing twin-drift in what they take the tree to be.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -60,8 +75,9 @@ pub fn find_package<'a>(metadata: &'a Value, package: &str) -> Option<&'a Value>
 }
 
 /// Whether a `cargo metadata` target's `kind` array contains `wanted` — the one-target shape
-/// check shared by [`crate_root_file`] (picking one library/bin target) and
-/// [`member_root_files`] (filtering every library/bin target across the workspace).
+/// check shared by [`crate_root_file`] (picking one library/bin target) and [`crate_root_files`]
+/// (every library/bin target of one package), through which [`member_root_files`] reaches it for the
+/// whole workspace.
 fn target_has_kind(target: &Value, wanted: &str) -> bool {
     target["kind"]
         .as_array()
@@ -118,10 +134,9 @@ pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
 /// which is which per platform. A component cannot contain `/` anywhere, so `/` in a label
 /// unambiguously means a component boundary.
 ///
-/// Without this, one commit produced `src/lib.rs` on Linux and `src\lib.rs` on Windows, and a baseline
-/// recorded by CI matched nothing for a Windows contributor — every entry re-firing as new. That is the
-/// checkout-dependence class the 0.4.0 window closed five times, along the one axis none of those five
-/// covered: not where the repository sits, but which platform read it.
+/// Canonical path separators ensure cross-platform baseline stability: without this, paths would
+/// produce `src/lib.rs` on Linux and `src\lib.rs` on Windows, causing a baseline recorded on one
+/// platform to match nothing on the other.
 ///
 /// **Bytes.** Every byte that is not part of a valid UTF-8 sequence is percent-escaped, and a literal
 /// `%` becomes `%25` so no escaped label can be spelled by an unescaped one. `Path::display()` is
@@ -299,24 +314,15 @@ pub fn member_src_dirs(metadata: &Value) -> Vec<PathBuf> {
 
 /// Every workspace member library, proc-macro, and binary crate-root source file reported by Cargo.
 pub fn member_root_files(metadata: &Value) -> Vec<PathBuf> {
+    // **Which targets have a governable crate root is [`crate_root_files`]'s question**, and it was
+    // spelled here a second time: the same `LIBRARY_KINDS`-or-`bin` filter over the same `src_path` read.
+    // One of the two would have moved without the other the next time a target kind was admitted. What is
+    // this function's own is the SCOPE — every package rather than one — and the ordering: `crate_root_files`
+    // dedups within a package by first appearance, and this sorts across packages so the corpus is
+    // deterministic whatever order cargo lists them in.
     let mut roots: Vec<PathBuf> = metadata["packages"]
         .as_array()
-        .map(|packages| {
-            packages
-                .iter()
-                .flat_map(|package| {
-                    package["targets"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .filter(|target| {
-                            LIBRARY_KINDS.iter().any(|k| target_has_kind(target, k))
-                                || target_has_kind(target, "bin")
-                        })
-                        .filter_map(|target| target["src_path"].as_str().map(PathBuf::from))
-                })
-                .collect()
-        })
+        .map(|packages| packages.iter().flat_map(crate_root_files).collect())
         .unwrap_or_default();
     roots.sort();
     roots.dedup();
@@ -361,6 +367,59 @@ pub fn audit_corpus_and_anchor(manifest_path: &Path) -> Result<(Vec<PathBuf>, Pa
         }
     };
     Ok((roots, anchor))
+}
+
+/// Whether a `metadata` failure means the target IS NOT THERE, as against this reader not finding out.
+///
+/// **`Path::is_file` answers `false` for both, and the three dimensions each collapsed them.** A
+/// `#[cfg]`-gated or `cfg_attr`-remapped declaration is allowed to have an absent target — that is the
+/// tolerance a cfg-blind walker owes a conditional module — so a target this reader merely could not stat
+/// was swallowed by that tolerance, with whatever the subtree holds going unobserved. That is the false
+/// negative the Core Contract forbids, and it stood in 圭表, 渾儀 and 漏刻 alike.
+///
+/// **The criterion, so a later error kind is placed rather than guessed.** An error saying *this path
+/// cannot name anything* is an absence; one saying *this reader could not find out* is not. Measured as
+/// uid 1000: a directory at mode `000` holding `mod.rs` gives `is_file` false with kind `PermissionDenied`
+/// — this reader could not find out. With a plain file where a module directory would be, the kind is
+/// `NotADirectory` — a component that is not a directory cannot have children, so the target cannot exist.
+///
+/// `FilesystemLoop` is deliberately NOT an absence: a cycle is a thing this reader could not resolve, and
+/// a walker that tolerates it silently would drop whatever the cycle hides. Kinds beyond the two measured
+/// are left on the loud side rather than sorted on a guess.
+///
+/// It lives here because all three dimensions ask it and none may ask another: the substrate is where a
+/// question they share is answered once, the way `canonicalize_or_fail` already is.
+pub fn is_absence(kind: std::io::ErrorKind) -> bool {
+    matches!(
+        kind,
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+    )
+}
+
+/// Whether `path` is a regular file, or why this reader could not tell — see [`is_absence`].
+pub fn is_regular_file(path: &Path) -> Result<bool, String> {
+    match std::fs::metadata(path) {
+        Ok(found) => Ok(found.is_file()),
+        Err(err) if is_absence(err.kind()) => Ok(false),
+        Err(err) => Err(format!(
+            "cannot read '{}' to decide whether it backs a module — {err}; an unreadable target is not \
+             an absent one, and tolerating it would leave whatever it holds unobserved",
+            path.display()
+        )),
+    }
+}
+
+/// Whether `path` is a directory, or why this reader could not tell — [`is_regular_file`]'s sibling.
+pub fn is_directory(path: &Path) -> Result<bool, String> {
+    match std::fs::metadata(path) {
+        Ok(found) => Ok(found.is_dir()),
+        Err(err) if is_absence(err.kind()) => Ok(false),
+        Err(err) => Err(format!(
+            "cannot read '{}' to decide whether it holds a module's children — {err}; an unreadable \
+             directory is not an absent one",
+            path.display()
+        )),
+    }
 }
 
 /// Claim `path` as a directory this process created, refusing to adopt one that already exists.

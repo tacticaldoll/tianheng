@@ -9,6 +9,7 @@ use super::{
 use crate::prelude::*;
 use guibiao::Subject;
 use serde_json::Value;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 /// A unique temp path, cleaned up (as a directory tree or a lone file, whichever this test
@@ -1065,10 +1066,41 @@ fn list_document_covers_every_populated_dimension() {
 }
 
 /// The Markdown projection must carry a section for **every** dimension the JSON document emits
-/// (`constitution-projection`'s "no less than the JSON" guarantee). This reaction replaces a
-/// hand-maintained capability enumeration — so a capability added to `list_document` without a `list_markdown` section fails
-/// CI here rather than silently under-projecting. The dimension set is enumerated in the test (a
-/// reaction), not in prose; the final parity count catches a *new* dimension nobody wired in.
+/// (`constitution-projection`'s "no less than the JSON" guarantee), for the dimensions THIS FIXTURE
+/// POPULATES.
+///
+/// **That qualifier is the guard's real extent and it used to be missing.** `append_array` writes no key
+/// for an empty dimension, so a dimension added to `list_document` and not added to the fixture emits no
+/// key, the emitted set is unchanged, and the set equality passes. That is exactly how
+/// `unsafe_confinement_boundaries` went unseen. So the fixture is what carries coverage here and the set
+/// equality is what reports a gap between it and the table — a capability wired into `list_document` alone
+/// reaches neither. This direction's own summary read *a capability added to `list_document` without a
+/// `list_markdown` section fails CI here*, without the qualifier — wider than what any corpus taken from
+/// the fixture can hold.
+///
+/// **The parity half was a count, and a count agreed with itself.** `unsafe_confinement_boundaries` was
+/// in neither the enumerated table nor the fixture, so the fixture's document carried nine keys and the
+/// literal said nine. The number is taken off the fixture, and the fixture is what decides the document's
+/// keys, so the two could only ever agree on the one input that could not expose the gap — while
+/// `list_document` has emitted that dimension the whole time. Set equality names *which* member is
+/// missing, which a count cannot.
+///
+/// Negative run, with `list_markdown`'s `unsafe_confinement_boundaries` row deleted — a real
+/// under-projection, exactly what this guard says it exists to catch. Against the counting version:
+///
+/// ```text
+/// test runner::tests::markdown_projection_covers_every_dimension_the_json_document_emits ... ok
+/// test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 95 filtered out
+/// ```
+///
+/// Against this one, the same perturbation:
+///
+/// ```text
+/// Markdown must carry a `## Unsafe-confinement boundaries` section for `unsafe_confinement_boundaries` — it under-projects:
+/// ```
+///
+/// The fixture widening is the repair; the set equality is what reports it. Neither alone is enough — the
+/// table and the fixture must both name a dimension before the emitted set can disagree with them.
 #[test]
 fn markdown_projection_covers_every_dimension_the_json_document_emits() {
     let full = Constitution::new("app")
@@ -1119,6 +1151,11 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
                 .must_not_expose_async_fn()
                 .because("the core seam is synchronous"),
         )
+        .unsafe_boundary(
+            UnsafeBoundary::in_crate("app")
+                .only_under(["crate::raw"])
+                .because("unsafe stays behind the audited adapter"),
+        )
         .runtime(
             RuntimeBoundary::at("domain-entry")
                 .only_origins(["app::domain"])
@@ -1130,7 +1167,7 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
 
     // Each known dimension: the fixture must populate it (a non-empty JSON array), and the
     // Markdown must carry its section — so the Markdown never carries less than the JSON.
-    for (key, heading) in [
+    const DIMENSIONS: [(&str, &str); 10] = [
         ("boundaries", "## Static boundaries"),
         ("semantic_boundaries", "## Semantic boundaries"),
         ("trait_impl_boundaries", "## Trait-impl-locality boundaries"),
@@ -1142,8 +1179,14 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
         ("dyn_trait_boundaries", "## Dyn-trait boundaries"),
         ("impl_trait_boundaries", "## Impl-trait boundaries"),
         ("async_exposure_boundaries", "## Async-exposure boundaries"),
+        (
+            "unsafe_confinement_boundaries",
+            "## Unsafe-confinement boundaries",
+        ),
         ("runtime_boundaries", "## Runtime boundaries"),
-    ] {
+    ];
+
+    for (key, heading) in DIMENSIONS {
         assert!(
             doc.get(key)
                 .and_then(Value::as_array)
@@ -1156,19 +1199,25 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
         );
     }
 
-    // Parity: no dimension the JSON emits is left unenumerated above. A NEW dimension added to
-    // `list_document` (and this fixture) that is not wired into `list_markdown` and listed here
-    // trips this count — the drift is CI-caught, never a silent under-projection.
-    let json_dimensions = doc
+    // Parity, as SET EQUALITY rather than as a count. A count compared the fixture's document with a
+    // typed number and agreed with itself: `unsafe_confinement_boundaries` was in neither the table
+    // above nor the fixture, so the document carried nine keys, the literal said nine, and the
+    // dimension this guard exists to cover was never looked at. A number cannot tell *which* member
+    // is missing, and the fixture is what decides the document's keys, so the two agreed by
+    // construction on the one input that could not expose the gap.
+    let emitted: BTreeSet<&str> = doc
         .as_object()
         .expect("list_document is a JSON object")
         .keys()
         .filter(|key| key.ends_with("boundaries"))
-        .count();
+        .map(String::as_str)
+        .collect();
+    let enumerated: BTreeSet<&str> = DIMENSIONS.iter().map(|(key, _)| *key).collect();
     assert_eq!(
-        json_dimensions, 9,
-        "list_document emits {json_dimensions} dimensions but this coverage guard enumerates 9; \
-             a new dimension must be wired into list_markdown's section table and added here"
+        emitted, enumerated,
+        "the dimensions `list_document` emitted and the dimensions this guard enumerates must be the \
+             same set; a new dimension must be wired into `list_markdown`'s section table, added to \
+             `DIMENSIONS` here, and populated by the fixture above"
     );
 }
 

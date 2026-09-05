@@ -14,7 +14,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-tianheng = "0.5"
-louke = "0.5"
+tianheng = "0.6"
+louke = "0.6"
 
 [workspace]

@@ -21,22 +21,20 @@ re-exports, and the owners SHALL be the tracked files under `examples/` and `cra
 type. The reaction SHALL fail in **both** directions: a published family no owner names, and an owned type
 the shell does not publish.
 
-**No inventory, and the requirement used to ask for one.** It named thirteen families in prose, anchored to
-the `0.2.x` surface. A literal beside an enumerator is the shape this repository removes on sight: a family
-added to the shell keeps its old answer in the list and nobody re-examines it, which is the failure the
-inventory was for. One derivation from the shell's own re-exports replaces it, and the version anchor goes
-with it — a derived set has no release to be anchored to.
+**No inventory.** A literal list beside an enumerator is the shape this repository removes on sight: a
+family added to the shell keeps its old answer in the list and nobody re-examines it, which is the failure an
+inventory is for. One derivation from the shell's own re-exports carries no such list, and no release to be
+anchored to either.
 
-Two of the thirteen were **profiles, not families**, and are not covered here.
+A **profile is not a family**, and is not covered here.
 `Constitution::sans_io_pure`'s own documentation states it is "a convenience over declaring the two
 boundaries by hand; it adds no new reaction", and `no_existential_leak` is the same shape. A profile is a
-bundle, so the boundaries it bundles cover it by construction; counting it as a family would have this
+bundle, so the boundaries it bundles cover it by construction; counting one as a family would have this
 reaction assert coverage of a reaction that does not exist.
 
-The requirement's third clause — that the self-governance suite dogfood `tianheng::testing::GovernanceTest` —
-is **dropped rather than fixed**. That harness executes clean-reaction, workspace-member-coverage and
-projection-freshness assertions; none of them is family coverage, so it was an unrelated obligation carried
-inside this requirement and satisfied by nothing.
+**The self-governance suite's use of `tianheng::testing::GovernanceTest` is no part of this requirement.**
+That harness executes clean-reaction, workspace-member-coverage and projection-freshness assertions; none of
+them is family coverage, so it is an unrelated obligation and belongs wherever it is held.
 
 What is **not** claimed: that an owner exercises its family well. This holds that a family is reachable from
 something an adopter can read and run, which is what makes a family losing its owner visible; whether the
@@ -143,14 +141,11 @@ complete successfully. The gate SHALL fail when an inventoried example has no fu
 when the driver claims an example name absent from the live inventory. This example-workspace
 inventory SHALL remain independent of the published boundary-family inventory.
 
-**What this requirement no longer says, and why.** It used to require three "focused matrix" commands to sit
-as one contiguous ordered sequence before a positive driver, with DoD coherence enforcing that source shape
-and the driver naming no matrix basename. Those were four separate shell scripts, and the shell-to-Rust
-migration consolidated them into one Rust test — `crates/shengmo/tests/examples_suite.rs` — which owns its
-ordering internally, checked by the compiler rather than by grepping one document for another's basenames.
-There is no longer a sequence of separate commands to order, and no separate driver that could recurse into a
-matrix. The decision was taken and recorded when the consolidation landed; it did not reach this file for two
-windows.
+**One suite owns its own ordering, so no ordering is stated here.**
+`crates/shengmo/tests/examples_suite.rs` owns the matrix ordering internally, checked by the compiler rather
+than by grepping one document for another's basenames. There is no sequence of separate commands for a
+requirement to order, and no separate driver that could recurse into a matrix — so this requirement states
+neither.
 
 **Nothing catches this class, and saying so is more honest than naming a guard that does not.** A first draft
 of this paragraph claimed the subject-resolution direction would have caught it. It would not:

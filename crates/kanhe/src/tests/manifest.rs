@@ -1,6 +1,5 @@
 use crate::manifest::{
-    Publishable, Quoted, WorkspaceVersion, is_semver, publishable, quoted_value, semver,
-    table_heading, workspace_version,
+    Publishable, WorkspaceVersion, is_semver, publishable, semver, workspace_version,
 };
 
 /// The two gates asked the same question about a version and answered differently.
@@ -74,135 +73,18 @@ fn a_comment_never_becomes_the_version_and_an_unreadable_value_is_not_an_absent_
         WorkspaceVersion::Declared("0.5.0".to_string()),
         "a trailing comment was carried into the value"
     );
+    // **This row asserted the opposite until a real parser replaced the hand-rolled one.** A single-quoted
+    // string is legal TOML that cargo accepts, and the reader not taking it was a limitation declared in the
+    // release-coherence spec. The parser takes it, so the limitation is gone rather than documented.
     assert_eq!(
         workspace_version("[workspace.package]\nversion = '0.5.0'\n"),
-        WorkspaceVersion::Unreadable("'0.5.0'".to_string()),
-        "a single-quoted value is legal TOML this reader does not take — not a key that is absent"
+        WorkspaceVersion::Declared("0.5.0".to_string()),
+        "a single-quoted value is legal TOML and cargo accepts it"
     );
     assert_eq!(
         workspace_version("[workspace.package]\n# version = \"9.9.9\"\n"),
         WorkspaceVersion::Absent,
         "a commented-out key declares nothing"
-    );
-}
-
-/// An unquoted value does not borrow the quoted one that follows it.
-///
-/// The reader took the first pair of double quotes anywhere in the text it was given, so a value that is not
-/// a string at all was answered with the *next* key's string. `Unreadable` is the state this type exists for,
-/// and it was reachable only when nothing else on the line was quoted.
-///
-/// Both halves, because either alone reads as the other's defect: the quote must open the value, and a value
-/// it does open is still read to its closing quote with whatever follows discarded.
-#[test]
-fn a_value_that_is_not_a_string_does_not_borrow_the_next_one() {
-    assert_eq!(
-        quoted_value(" xuanji, version = \"0.2.0\" }"),
-        Quoted::Unreadable,
-        "an unquoted value read the following key's string as its own"
-    );
-    assert_eq!(
-        quoted_value(" \"0.2.0\", package = \"xuanji\" }"),
-        Quoted::Value("0.2.0".to_string()),
-        "a value that does open with a quote is still read to its closing quote"
-    );
-}
-
-/// A TOML escape is a value this reader cannot read, not a value it can.
-///
-/// **Cargo decodes escapes and this reader decodes none**, so returning the raw source as a `Value` hands
-/// every consumer an identity, path or version that is not the one cargo resolves. Measured on cargo 1.96.0
-/// against a scratch workspace: `path = "crates/\u0078uanji"` resolves the member at `crates/xuanji`,
-/// `name = "xuan\u006Ai"` reads as `xuanji`, and `version = "0.\u0035.0"` reads as `0.5.0`.
-///
-/// What that cost: each consumer compares the undecoded text and takes a `continue` when the comparison
-/// fails, so an internal dependency or a renamed family crate stops being checked in silence — and the
-/// per-manifest vacuity guards cannot see it, because one escaped entry beside one ordinary one leaves their
-/// counters non-zero.
-///
-/// Every escape form TOML admits is given, not one representative: a reader that refused `\u` and admitted
-/// `\n` would read as covering the class while leaving it open.
-///
-/// **A key carrying the same escape is decoded, and that asymmetry is the point rather than a leftover.** A
-/// key decides *which table or which key this is*, so misreading one drops a whole table's contents in
-/// silence; a value is the thing being judged, so refusing it stops the judgement where someone sees it.
-/// `a_name_spelled_in_escapes_is_decoded_as_cargo_decodes_it` holds the other side.
-#[test]
-fn a_toml_escape_is_refused_rather_than_returned_undecoded() {
-    for written in [
-        r#" "crates/\u0078uanji""#,
-        r#" "xuan\u006Ai""#,
-        r#" "0.\u0035.0""#,
-        r#" "\U0001F600""#,
-        r#" "a\\b""#,
-        r#" "a\nb""#,
-        r#" "a\tb""#,
-        r#" "a\rb""#,
-        r#" "a\bb""#,
-        r#" "a\fb""#,
-    ] {
-        assert_eq!(
-            quoted_value(written),
-            Quoted::Unreadable,
-            "{written} carries an escape this reader does not decode, so it must refuse rather than answer \
-             with the source"
-        );
-    }
-
-    // An escaped quote is the narrower shape the same check missed: the split landed on it and answered a
-    // value ending in a backslash, which no manifest declares.
-    assert_eq!(
-        quoted_value(r#" "a\"b""#),
-        Quoted::Unreadable,
-        "an escaped quote must not be read as the closing one"
-    );
-
-    // Unescaped values are untouched, including a backslash OUTSIDE the string, which is not this value's.
-    assert_eq!(
-        quoted_value(" \"crates/xuanji\""),
-        Quoted::Value("crates/xuanji".to_string())
-    );
-    assert_eq!(
-        quoted_value(" \"0.5.0\", package = \"xuanji\" }"),
-        Quoted::Value("0.5.0".to_string())
-    );
-    assert_eq!(
-        quoted_value(" \"abc\" \\ trailing"),
-        Quoted::Value("abc".to_string()),
-        "a backslash after the closing quote is not part of the value"
-    );
-}
-
-/// A multiline basic string is refused rather than read as an empty value.
-///
-/// **Not an escape case, and that is why the backslash branch could not see it.** TOML admits `"""…"""`
-/// wherever it admits `"…"`, and cargo reads it: measured on cargo 1.96.0, `path = """crates/xuanji"""`
-/// resolves the member and `name = """xuanji"""` reads as `xuanji`. This reader stripped the opening quote,
-/// found the next one immediately, and answered `Value("")` — an empty path, an empty identity, an empty
-/// version — which every consumer compares and passes over. The same silence the escape branch closes,
-/// reached with no backslash in sight.
-#[test]
-fn a_multiline_basic_string_is_refused_rather_than_read_as_empty() {
-    for written in [
-        r#" """crates/xuanji""""#,
-        r#" """xuanji""""#,
-        r#" """0.5.0""""#,
-        r#" """""#,
-    ] {
-        assert_eq!(
-            quoted_value(written),
-            Quoted::Unreadable,
-            "{written} opens a multiline basic string this reader does not read, so it must refuse rather \
-             than answer with an empty value"
-        );
-    }
-
-    // An ordinary EMPTY single-line string is still a value, and is the shape the multiline guard must not
-    // reach: `""` is two quotes and a multiline opener is three.
-    assert_eq!(
-        quoted_value(" \"\", version = \"0.5.0\" }"),
-        Quoted::Value(String::new()),
-        "an empty single-line string is a value this reader can read"
     );
 }
 
@@ -255,6 +137,22 @@ fn every_publish_shape_cargo_honours_is_read_as_cargo_reads_it() {
         publishable(&package("publish = [   ]")),
         Publishable::No,
         "and however much it is spaced"
+    );
+
+    // **The key decoded, which the hand-rolled reader answered `Unreadable` for.** Measured against cargo,
+    // `"\u0070ublish" = false` reports `publish=[]` — the crate does not publish. The old answer was the safe
+    // one rather than the right one, and a reader that cannot decode a key cannot tell *might be publish*
+    // from *is publish*. Kept as a row because a negative run over the migration that made it readable
+    // otherwise breaks nothing: the improvement would be revertible in silence.
+    assert_eq!(
+        publishable(&package("\"\\u0070ublish\" = false")),
+        Publishable::No,
+        "cargo decodes this key to `publish`, measured, so the crate does not publish"
+    );
+    assert_eq!(
+        publishable(&package("publish.workspace = true")),
+        Publishable::Unreadable("workspace = true".to_string()),
+        "deferring to the workspace manifest is not a verdict this text carries"
     );
     assert_eq!(
         publishable(&package(r#"publish = [ "crates-io" ]"#)),
@@ -379,48 +277,6 @@ fn every_publish_shape_cargo_honours_is_read_as_cargo_reads_it() {
     );
 }
 
-/// A table heading needs both brackets, so an array's continuation line is not a table.
-///
-/// **The readers this predicate replaces each wrote `starts_with('[')`.** That also matches `  [1, 2],` — a
-/// multi-line array's continuation — which would close whatever table was open and drop every key after it.
-/// No manifest here writes that shape, so the over-inclusion was latent rather than live; requiring the
-/// closing bracket refuses it and costs a real heading nothing.
-///
-/// Given both ends of the boundary rather than one: the arrays that must **not** open a table, and the
-/// headings that must. A fixture holding only the first passes for a predicate that answers `false` always.
-///
-/// **Asked of the production reader.** This tested a second predicate that answered the same question, so the
-/// boundary it pinned and the boundary the gates used were two things that happened to agree.
-#[test]
-fn a_table_heading_needs_both_brackets() {
-    for heading in [
-        "[package]",
-        "[[package]]",
-        "[dependencies.serde_json]",
-        "  [workspace.dependencies]",
-        "[package] ",
-    ] {
-        assert!(
-            table_heading(heading).is_some(),
-            "`{heading}` opens a table and must be read as one"
-        );
-    }
-    for value in [
-        "  [1, 2],",
-        "include = [",
-        "  \"src/**/*.rs\",",
-        "]",
-        "features = [\"a\"]",
-        "",
-    ] {
-        assert!(
-            table_heading(value).is_none(),
-            "`{value}` is value text, not a heading; reading it as one closes the open table and drops \
-             every key after it"
-        );
-    }
-}
-
 /// Two `version` keys in `[workspace.package]` refuse, rather than the first one answering.
 ///
 /// **One of three readers over the same root manifest disagreed with the other two.** `publishable` states
@@ -438,8 +294,8 @@ fn two_workspace_version_keys_refuse_rather_than_the_first_answering() {
     let doubled = "[workspace.package]\nversion = \"0.5.0\"\nversion = \"0.6.0\"\n";
     match workspace_version(doubled) {
         WorkspaceVersion::Unreadable(what) => assert!(
-            what.contains('2') && what.contains("version"),
-            "the refusal says how many and which key: {what}"
+            what.contains("version") && what.contains("duplicate"),
+            "the refusal names the key and says it is duplicated: {what}"
         ),
         other => panic!(
             "two `version` keys must refuse rather than answer from the first; got {other:?}"
@@ -462,84 +318,7 @@ fn two_workspace_version_keys_refuse_rather_than_the_first_answering() {
     );
 }
 
-/// A quoted key carries its dots, and an array of tables is not the same table.
-///
-/// **Three claims about one reader, two of them refuted by running it.** A review read the shared heading
-/// reader as folding `["workspace.package"]` — one literal key in TOML, not the path `workspace` → `package` —
-/// into the path, and `["workspace.dependencies"]` into a real dependency table. Neither happens: splitting on
-/// every dot before unquoting leaves each half with an unmatched quote, so the name keeps them and matches
-/// nothing. The flattening is correct rather than merely safe, and this direction is what says so out loud.
-///
-/// **The fourth spelling arrived a round later: the separator itself, escaped.** `["workspace\u002Epackage"]`
-/// carries no literal dot, so it survived a split-on-dots as one piece and decoded into text the join could
-/// not tell from the path. Cargo reads it as one key -- measured, a `version` under it leaves the package
-/// version alone. Negative run for that row and for its sibling in
-/// `a_name_spelled_in_escapes_is_decoded_as_cargo_decodes_it`: with the segment comparison replaced by the
-/// joined-name compare it replaced, both fail, the second reporting `Declared("1")` where cargo declares
-/// nothing.
-///
-/// The third claim held: a flattened name folded `[[package]]` into `[package]`, and an array of tables is a
-/// different shape — the lock file's entries are exactly that, which is why the reader cutting them was still
-/// comparing literal text and stayed a fifth implementation of this question.
-#[test]
-fn a_quoted_key_carries_its_dots_and_an_array_is_not_a_table() {
-    use crate::manifest::table_heading;
-
-    // The spellings cargo folds together, folded.
-    for same in ["[package]", "[ package ]", "[\"package\"]", "['package']"] {
-        assert!(
-            table_heading(same).is_some_and(|h| h.names("package")),
-            "{same} names the package table"
-        );
-    }
-    assert!(
-        table_heading("[\"workspace\".\"package\"]").is_some_and(|h| h.names("workspace.package")),
-        "a quoted path is the path, because each segment's quotes close"
-    );
-
-    // The spellings TOML keeps apart, kept apart.
-    for literal in [
-        "[\"workspace.package\"]",
-        "['workspace.package']",
-        "[\"workspace.dependencies\"]",
-        // The dot itself spelled as an escape. Two reviews found this one: it carries no literal dot, so a
-        // reader that split before decoding saw one segment, decoded it to `workspace.package`, and joined
-        // it back into something indistinguishable from the path.
-        "[\"workspace\\u002Epackage\"]",
-    ] {
-        let heading = table_heading(literal).expect("a heading");
-        assert!(
-            !heading.names("workspace.package") && !heading.names("workspace.dependencies"),
-            "{literal} is one literal key and not a dotted path, got {heading:?}"
-        );
-    }
-
-    // An array of tables answers only to `is_array`, and the table form only to `is_table`.
-    let array = table_heading("[[package]]").expect("a heading");
-    assert!(array.names_array("package") && !array.names("package"));
-    let table = table_heading("[package]").expect("a heading");
-    assert!(table.names("package") && !table.names_array("package"));
-
-    // An unterminated quote is content, not a delimiter. The rest of the text becomes one segment that keeps
-    // its quote -- `unquoted` finds no closing delimiter to strip, so it hands the text back as it stands --
-    // and it names nothing because no caller asks for a path carrying a quote. Asserted rather than described:
-    // the reader's own prose first said the segment *failed* to unquote, which is not what happens.
-    let unterminated = table_heading("[\"a.b]").expect("a heading");
-    assert_eq!(
-        unterminated.segments(),
-        ["\"a.b"],
-        "the dot inside an open quote is not a separator"
-    );
-    assert!(
-        !unterminated.names("a.b") && !unterminated.names("\"a.b"),
-        "an unterminated quote names no table, including the text it carries"
-    );
-
-    // Not a heading at all.
-    assert_eq!(table_heading("name = \"x\""), None);
-}
-
-/// A key cargo accepts is read, and one it writes as a table value is refused rather than called absent.
+/// A key cargo accepts is read, however the table carrying it is composed.
 ///
 /// **Every row was put to `cargo metadata` first, through a member inheriting `version.workspace = true`.**
 /// Each of `"version" = "0.5.0"`, `'version' = "0.5.0"` and `["workspace".package]` resolves the member at
@@ -550,11 +329,13 @@ fn a_quoted_key_carries_its_dots_and_an_array_is_not_a_table() {
 /// *workspace version is missing or malformed* about a manifest that declares it plainly. A review found it in
 /// the last pass before the cut.
 ///
-/// The last two are refused rather than read: composing a table out of a dotted key path or an inline table is
-/// structure this reader does not build. Refusing names the line; reporting absence names nothing, and that
-/// difference is the whole of this type's third state.
+/// The parent-composed spellings are read the same way, because a parser builds the table they compose and so
+/// does cargo. Refusing them was a false refusal over legal Cargo syntax: *this reader does not build that
+/// structure* was a fact about the hand-rolled reader rather than about the manifest, and it did not survive
+/// the reader. `Unreadable` keeps its subject — a `version` declared twice, which is a count this reader can
+/// see and cargo refuses whole — and `Absent` keeps a `package` table that carries no version at all.
 #[test]
-fn a_key_spelling_cargo_accepts_is_read_and_a_table_written_as_a_value_is_refused() {
+fn a_key_spelling_cargo_accepts_is_read_however_its_table_is_composed() {
     for (label, manifest) in [
         (
             "quoted key",
@@ -596,9 +377,13 @@ fn a_key_spelling_cargo_accepts_is_read_and_a_table_written_as_a_value_is_refuse
             "[workspace]\npackage.\"version\" = \"0.5.0\"\n",
         ),
     ] {
-        assert!(
-            matches!(workspace_version(manifest), WorkspaceVersion::Unreadable(_)),
-            "{label}: this declares the table as a value, which is not the same fact as declaring nothing"
+        // **Measured against cargo, all three resolve at the declared version**, so refusing them was a
+        // false refusal over legal TOML rather than a bound worth declaring. A real parser builds the table
+        // these spellings compose, which is what cargo does.
+        assert_eq!(
+            workspace_version(manifest),
+            WorkspaceVersion::Declared("0.5.0".to_string()),
+            "{label}: cargo resolves this at 0.5.0, measured"
         );
     }
 

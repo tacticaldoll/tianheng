@@ -37,13 +37,11 @@ set **as arguments to the judgement**, so a fixture and the real workspace run t
 inputs. The required governance-document set SHALL NOT be narrowable at all — not by an option, not by the
 environment, not for a fixture.
 
-**This requirement was rewritten to describe what the port does.** It used to require the gate to *accept an
-explicit fixture-only governance-document set*, refused on the real workspace, with an unreadable or surplus
-input naming what could not be read — a CLI-shaped option the shell-era gate carried. The shell-to-Rust
-migration removed it and gave the fixtures a stronger shape instead: `offences_in` takes the corpus root, the
+**The fixtures reach the corpus by parameter, not by an option.** `offences_in` takes the corpus root, the
 tracked paths and the corpus as parameters, and `GOVERNANCE_DOCUMENTS` is a compile-time `const` no caller can
-reach. The three scenarios below replace three that described the option's behaviour, which nothing had
-implemented for two windows.
+reach. So there is no input for a caller to supply, and therefore no surplus or unreadable one for this
+requirement to refuse: the fixture shape is stronger than an option would be, because a test cannot reach the
+real workspace's set at all.
 
 The direction the old wording was protecting survives, and is stronger: a narrowing that cannot be expressed
 cannot be requested on the real workspace, so the refusal it demanded is unreachable by construction rather
@@ -83,12 +81,9 @@ file's lines are read, SHALL both derive from that one declaration. Outside acti
 gate SHALL inspect every classified format's prose, including Rust rustdoc forms. A Rust test source SHALL NOT be
 excluded wholesale; its admitted comment lines are judged through the same region rule as other Rust.
 
-**Two lists is the shape that failed.** An extension filter decided what to open while a marker rule decided
-which lines to read, so a format could sit in one and not the other — and shell did, for a whole window, while
-the marker rule had known `#` all along. The files that left unread are the sanctioned merge and publish
-wrappers, which cite the Rust gate they sequence *by path*, where a renamed test target is exactly what rots a
-citation; YAML, where this repository's own gate list is duplicated, was unread the same way. Adding one
-extension per discovery is the denylist shape the 0.5.0 window replaced twice elsewhere. A tracked script's shebang
+**Two lists is the shape that breaks.** An extension filter deciding what to open while a marker rule decides
+which lines to read risks formats sitting in one and not the other. Discovery by declared format classifies
+what to open and which comment syntax to read in one mapping, rather than accumulating extensions piecemeal. A tracked script's shebang
 SHALL NOT be a reference: it names an absolute path outside every prefix this gate recognizes. Before judging references it SHALL require the repository's
 governance-document surface, at least one tracked workspace member under `crates/`, and at least one inspected
 source; absence of any prerequisite SHALL fail loudly rather than read as clean.
@@ -104,9 +99,8 @@ source; absence of any prerequisite SHALL fail loudly rather than read as clean.
 - **WHEN** a required governance document, every tracked workspace member, or every inspectable source is absent
 - **THEN** the reaction fails, naming the missing prerequisite instead of reporting clean. **The reaction is
   the gate — the whole test target — not each direction inside it.** A prerequisite may therefore be held by
-  a sibling direction rather than by the resolution walk calling it, and two independent reviews read this
-  line as requiring the second before it said so. What the requirement forbids is the gate reporting clean
-  over absent evidence; how the directions divide that work between them is not a claim this makes
+  a sibling direction rather than by the resolution walk calling it. What the requirement forbids is the gate
+  reporting clean over absent evidence; how the directions divide that work between them is not a claim this makes
 
 #### Scenario: An untracked manifest cannot create a workspace member
 
@@ -189,10 +183,10 @@ end, and it left `.toml`, `.yml`, `Cargo.lock`, `CODEOWNERS` and `.gitignore` un
 covers every one of them. A format admitted to the corpus SHALL be swept for both properties or for neither.
 
 **The ladder this sits at the bottom of.** An intra-doc link is checked by the compiler; a path is checked by the
-sweep above; a path with a line number is checked by nothing; a position is not even a name. Measured on this
-repository, two such references were off by 86 and 98 lines, and the second was written after the first had been
-corrected — the criterion `scripts/publish.sh` states for itself, that a rule stated and then missed needs a
-check rather than another sentence.
+sweep above; a path with a line number is checked by nothing; a position is not even a name. It rots the
+moment anything above it moves, and the rot is invisible because the reference still resolves to *a* line —
+which is why a rule stated and then missed needs a check rather than another sentence, the criterion
+`scripts/publish.sh` states for itself.
 
 The corpus SHALL be comment lines, by the same rule that decides the sibling sweep's corpus, so a specimen
 written as a string literal sits on an executed line and cannot be read as a reference. That is a position rather
@@ -212,10 +206,8 @@ declined judgement. The ladder's own argument reaches it without help — a posi
 one in any tense, so a record citing a coordinate serves its reader no better than a live reference does. Naming
 the entry costs a clause and cannot rot.
 
-Measured before this was written: two existed, both in one `BACKLOG.md` clause, both correct when written and
-both since landed mid-paragraph in unrelated entries — one of them moved by the very window that repaired the
-source instances. After their repair the reaction holds an empty set, which is kept rather than pruned, by the
-same rule that keeps a recognizer asserting its own emptiness elsewhere here.
+Line numbers are moving coordinates that rot when adjacent content moves. The reaction holds an empty set,
+kept to ensure newly introduced coordinates are rejected immediately.
 
 #### Scenario: A coordinate in whole-document prose
 
@@ -364,10 +356,14 @@ being one. A floor this reader invents is a floor it misses every shorter citati
   digit, which names something other than a commit
 - **THEN** the reaction fails anyway. It decides by **shape**, and nothing in the tree distinguishes a value
   of that shape from a citation without resolving it against an object database
-- **AND** resolving was measured and declined: CI checks out one commit, so the objects a citation names are
-  absent there — the reader would answer clean over every citation, or refuse to judge the whole gate,
-  depending on which way its floor was written. A shape test that over-reacts on a value nobody writes is the
-  better trade, and measured over the live corpus no span of this shape names anything but a commit
+- **AND** resolving is declined because the verdict would then depend on the **object store** rather than on
+  the tracked text: jobs in this workflow that check out at the default depth answer clean over every
+  citation, so a reader placed in one of them — or a job whose full-history checkout is dropped for cost —
+  reports clean for a reason unrelated to the content. That is a false negative produced by configuration,
+  the one direction this family forbids. **Not** because the objects are absent under CI: the job that runs
+  this reader checks out with `fetch-depth: 0`, for a reason that job's own checkout block states. A shape
+  test that over-reacts on a value nobody writes is the better trade, and measured over the live corpus no
+  span of this shape names anything but a commit
 - **UNPINNED** `BACKLOG.md` — *a code span shaped like an object that names none*
 
 #### Scenario: A dated changelog section is a record, and an undated one is not
@@ -464,12 +460,10 @@ was deleted when it migrated to Rust.
 
 **The exemption SHALL be exactly this, and SHALL NOT extend to a document because of where it lives.**
 `docs/history/` was exempt as a whole directory, and the exemption was declared nowhere — not in this
-specification, not as a scenario, not as a bound. Measured, it hid exactly one reference: a present-tense
-pointer at a gate that had moved crates inside the `0.5.0` window, in the document the CHANGELOG advertises
-to adopters as the provenance authority for verifying published tarballs. Fourteen of that directory's
-fifteen path references already resolved. The facts a record must keep are shas, dates, versions and counts,
-and none of those is a path — so a record document is judged like any other, and only a dated section within
-one is not.
+specification, not as a scenario, not as a bound. Measured, it hid a present-tense pointer at a relocated gate
+in the provenance verification document. Fourteen of that directory's fifteen path references already resolved.
+The facts a record must keep are shas, dates, versions and counts, and none of those is a path — so a record
+document is judged like any other, and only a dated section within one is not.
 
 Both directions SHALL be held by one reaction. A reaction asserting only the silence is satisfied by a check
 that reads no CHANGELOG at all.

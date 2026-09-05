@@ -345,7 +345,16 @@ fn a_detailed_dependency_table_is_read_renamed_or_not() {
         let fixture = build_fixture(&root, "detailed", "0.2.0");
         let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
         let text = std::fs::read_to_string(&manifest).expect("read");
-        std::fs::write(&manifest, format!("{text}\n{table}")).expect("write");
+        // **The example's own inline entry goes, so the table under test is the only declaration of it.**
+        // Left in place, the plainly-named row declares `xuanji` twice and cargo refuses the manifest — the
+        // fixture stopped being about the detailed table at all. The hand-rolled reader read lines and never
+        // met the collision.
+        let without_inline = text.replace("xuanji = \"0.2\"", "");
+        assert_ne!(
+            without_inline, text,
+            "{label}: the example's inline entry must be the one this table replaces"
+        );
+        std::fs::write(&manifest, format!("{without_inline}\n{table}")).expect("write");
         development_changelog(&fixture.repo, "0.2.0", true);
         commit(&fixture.repo, "chore: a detailed dependency table");
         let verdict = judge(&fixture.repo);
@@ -652,6 +661,36 @@ fn an_example_pin_the_workspace_version_does_not_satisfy_is_a_violation() {
         "release-coherence#example-pin-disagrees",
         &refuse(&fixture.repo, Kind::Violation, "requires xuanji = \"0.9\""),
     );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A lock file this parser cannot read is a cannot-judge, not a missing package.
+///
+/// **A diagnosis this reader could not give before.** The hand-rolled walker found no `[[package]]` blocks in
+/// an unparseable lock and reported *Cargo.lock is missing workspace package xuanji* — a violation naming a
+/// package that may be sitting right there, in a file cargo cannot read either. Reading the document says
+/// which fact was met.
+///
+/// Negative run: with the parse failure folded into an empty entry set, this reports the missing-package
+/// violation instead.
+#[test]
+fn a_lock_file_this_parser_cannot_read_cannot_be_judged() {
+    let root = scratch("lock-unparseable");
+    let fixture = build_fixture(&root, "lock-unparseable", "0.2.0");
+    workspace_files(&fixture.repo, "0.2.1");
+    release_changelog(&fixture.repo, "0.2.1", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("Cargo.lock"),
+        "version = 4\n\n[[package]\nname = \"xuanji\"\n",
+    )
+    .expect("write");
+    commit(&fixture.repo, "chore: leave the lock unparseable");
+    let refusal = refuse(
+        &fixture.repo,
+        Kind::CannotJudge,
+        "not a lock file this parser can read",
+    );
+    refusal::expect("release-coherence#lock-unreadable", &refusal);
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -963,7 +1002,10 @@ fn a_package_name_this_reader_cannot_read_is_a_cannot_judge() {
     let fixture = build_fixture(&root, "unreadable-name", "0.2.0");
     std::fs::write(
         fixture.repo.join("crates/xuanji/Cargo.toml"),
-        "[package]\nname = 'xuanji'\nversion.workspace = true\nedition = \"2024\"\n",
+        // **This WHEN moved when a real parser replaced the hand-rolled reader.** It was `name = 'xuanji'` — a
+        // single-quoted string, legal TOML the old reader declined — and the parser takes it. What still
+        // reaches the site is a `name` that is not a string at all.
+        "[package]\nname = { workspace = true }\nversion.workspace = true\nedition = \"2024\"\n",
     )
     .expect("write");
     commit(&fixture.repo, "chore: quote the name the other way");
@@ -990,7 +1032,14 @@ fn a_lock_name_this_reader_cannot_read_is_a_cannot_judge() {
     release_changelog(&fixture.repo, "0.2.1", "0.2.0");
     let lock = fixture.repo.join("Cargo.lock");
     let text = std::fs::read_to_string(&lock).expect("read the fixture lock");
-    std::fs::write(&lock, text.replace("name = \"xuanji\"", "name = 'xuanji'")).expect("write");
+    // **This WHEN moved when a real parser replaced the hand-rolled walker.** It was `name = 'xuanji'` — a
+    // single-quoted string, legal TOML the old reader declined — and the parser takes it. What still reaches
+    // the site is a `name` that is not a string at all.
+    std::fs::write(
+        &lock,
+        text.replace("name = \"xuanji\"", "name = [\"xuanji\"]"),
+    )
+    .expect("write");
     commit(&fixture.repo, "chore: quote a lock name the other way");
     refusal::expect(
         "release-coherence#lock-package-name-unreadable",
@@ -1855,9 +1904,14 @@ fn a_trailing_comment_on_the_version_line_still_reads_the_version() {
 
 /// A value this reader cannot read is not a value that is absent.
 ///
-/// A single-quoted literal is valid TOML and is not a form this reader takes. Reporting it as *missing or
-/// malformed* sends an operator to look for a version key that is sitting right there, correctly spelled for
-/// cargo — the same conflation `Quoted` was introduced to end one reader over.
+/// Reporting an unreadable value as *missing or malformed* sends an operator to look for a version key that
+/// is sitting right there — the same conflation every reader in this crate keeps a distinct state to end.
+///
+/// **This WHEN moved when a real parser replaced the hand-rolled reader.** It was a single-quoted literal,
+/// valid TOML the old reader declined; the parser takes it, so that shape now reports the version it declares
+/// and the limitation is gone rather than declared. What still reaches this site is a value that is not a
+/// string at all — here the catalog declaring that it inherits, which is the table that declares the catalog
+/// inheriting from itself. The site is kept because its WHEN was rerun against the new reader.
 #[test]
 fn a_version_value_this_reader_cannot_read_is_not_one_that_is_absent() {
     let root = scratch("unreadable-version-value");
@@ -1865,7 +1919,7 @@ fn a_version_value_this_reader_cannot_read_is_not_one_that_is_absent() {
     initialised(&repo);
     std::fs::write(
         repo.join("Cargo.toml"),
-        "[workspace.package]\nversion = '0.4.0'\n",
+        "[workspace.package]\nversion = { workspace = true }\n",
     )
     .expect("write");
     std::fs::write(repo.join("CHANGELOG.md"), "# Changelog\n").expect("write");
@@ -2072,7 +2126,7 @@ fn a_glued_comment_cannot_supply_an_internal_version_pin() {
 ///
 /// Recorded because the entry claiming this conversion's benefit named the wrong one: it said
 /// `name = "kanhe" # the repository checks` had been answering `Unreadable`. It had not.
-/// `quoted_value` takes the text between the first pair of quotes and discards what follows, so a
+/// The reader of the time took the text between the first pair of quotes and discarded what followed, so a
 /// trailing comment there was always read correctly. The claim was refuted by a reviewer and is replaced by
 /// the direction the measurement actually supports.
 #[test]
@@ -2510,7 +2564,7 @@ fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
         let verdict = judge(&fixture.repo);
         let _ = std::fs::remove_dir_all(&root);
         let refusal = verdict.expect_err(&format!(
-            "{label}: a field this reader cannot decode is not a clean pin"
+            "{label}: a manifest cargo will not load is not a clean pin"
         ));
         assert_eq!(
             refusal.kind,
@@ -2523,11 +2577,11 @@ fn an_inline_field_that_cannot_be_decoded_is_not_a_clean_pin() {
         // `package` key at all, sending an operator to look for a key that is not there. A review read the
         // emitted diagnostic rather than the exit class and found it; every sibling direction here asserts
         // the site.
-        refusal::expect("release-coherence#dependency-field-unreadable", &refusal);
+        refusal::expect("release-coherence#manifest-unparseable", &refusal);
         assert!(
             refusal
                 .message
-                .contains("a field whose key this check cannot decode"),
+                .contains("a manifest this parser cannot read"),
             "{label}: the refusal names what it could not read: {}",
             refusal.message
         );
@@ -2666,7 +2720,14 @@ fn a_dependency_key_whose_name_carries_a_dot_is_one_key() {
     let text = std::fs::read_to_string(&manifest).expect("read");
     std::fs::write(
         &manifest,
-        format!("{text}xuanji.version = \"0.2\"\nxuanji.\"version.extra\" = true\n"),
+        // **The dotted form replaces the example's own entry rather than being appended beside it.** Appended,
+        // `xuanji` is already a string and `xuanji.version` cannot extend it — a document cargo refuses too,
+        // so the fixture stopped being about the thing it names. The hand-rolled reader never noticed because
+        // it read lines rather than a document.
+        text.replace(
+            "xuanji = \"0.2\"",
+            "xuanji.version = \"0.2\"\nxuanji.\"version.extra\" = true",
+        ),
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
@@ -2919,6 +2980,195 @@ fn a_case_alias_of_a_member_directory_is_a_stated_bound() {
     );
 }
 
+/// A release commit whose own tree carries no `CHANGELOG.md` is not a modified checkout.
+///
+/// `git show HEAD:…` exits `128` for a path that is not in HEAD **and** for a tree it cannot read, so one
+/// `Err` arm had to mean one thing for both — and meaning *not a snapshot* let a release commit that shipped
+/// without the document its release is narrated in pass on the worktree's copy alone. Presence is asked by
+/// `ls-tree`, whose exit status answers it, and absence at the exact release commit is its own violation.
+///
+/// Negative run: with presence folded back into the content read, this classifies as development and the
+/// gate answers over a `CHANGELOG.md` no reader of that commit can reach.
+#[test]
+fn a_release_commit_carrying_no_changelog_is_refused() {
+    let root = scratch("release-commit-no-changelog");
+    let fixture = build_fixture(&root, "release-commit-no-changelog", "0.2.0");
+    std::fs::remove_file(fixture.repo.join("CHANGELOG.md")).expect("the fixture wrote one");
+    std::fs::write(fixture.repo.join("NOTES.md"), "prepared\n").expect("write");
+    commit(&fixture.repo, "release: 0.2.0");
+    // A readable changelog in the worktree, which is what made the absence invisible.
+    development_changelog(&fixture.repo, "0.2.0", true);
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    refusal::expect(
+        "release-coherence#release-commit-carries-no-changelog",
+        &verdict.expect_err("a release commit narrates its release, or it is not one"),
+    );
+}
+
+/// What `CHANGELOG.md` holds at HEAD, when git cannot answer its blob, is not *the worktree is modified*.
+///
+/// One `is_ok_and` collapsed three causes into `false`: the path is not in HEAD — which no release commit is,
+/// and the only one that means *not a snapshot* — git failing to start, and git answering in bytes no
+/// `String` holds. The third only came into existence when the runner learned to refuse those bytes rather
+/// than replace them, so a predicate that was narrow when it was written silently widened underneath it.
+///
+/// The fixture commits a changelog that is not UTF-8 and leaves a readable one in the worktree, so the file
+/// the gate reads is fine and the blob behind it is not.
+///
+/// Negative run: with the three causes collapsed again, this answers a state instead of refusing.
+#[test]
+#[cfg(unix)]
+fn a_changelog_git_cannot_read_at_head_is_not_a_modified_worktree() {
+    use std::io::Write;
+
+    let root = scratch("changelog-head-bytes");
+    let fixture = build_fixture(&root, "changelog-head-bytes", "0.2.0");
+    let path = fixture.repo.join("CHANGELOG.md");
+
+    let mut invalid = std::fs::File::create(&path).expect("write the committed changelog");
+    invalid
+        .write_all(b"# Changelog\n\n\xff\n")
+        .expect("bytes that are not UTF-8");
+    drop(invalid);
+    commit(&fixture.repo, "chore: commit a changelog that is not text");
+
+    // The worktree's copy is readable, so the gate's own read of the file succeeds and only the blob behind
+    // it cannot be represented.
+    release_changelog(&fixture.repo, "0.2.0", "0.1.0");
+
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    refusal::expect(
+        "release-coherence#changelog-blob-unreadable",
+        &verdict.expect_err(
+            "git could not read the blob its own tree named, so the comparison was never made",
+        ),
+    );
+}
+
+/// A checkout edited only in its trailing whitespace is edited.
+///
+/// The comparison trimmed both sides, so a worktree differing from the release commit by a newline alone
+/// read as **unmodified** and the gate answered *snapshot* over a tree that is not the one released. The trim
+/// was not a judgement about content: it compensated for the git runner trimming its own output, which made
+/// the committed text arrive without the final newline the file on disk keeps. Reading git's answer exactly
+/// removes the compensation and the residue with it.
+///
+/// Negative run: with both sides trimmed again, this reports `snapshot: 0.2.0` — a release state claimed for
+/// a modified tree.
+#[test]
+fn a_checkout_edited_only_in_trailing_whitespace_is_not_a_snapshot() {
+    let root = scratch("snapshot-whitespace");
+    let fixture = build_fixture(&root, "snapshot-whitespace", "0.2.0");
+    release_changelog(&fixture.repo, "0.2.0", "0.1.0");
+    std::fs::write(fixture.repo.join("NOTES.md"), "prepared\n").expect("write");
+    commit(&fixture.repo, "release: 0.2.0");
+
+    let path = fixture.repo.join("CHANGELOG.md");
+    let released = std::fs::read_to_string(&path).expect("read the committed changelog");
+    std::fs::write(&path, format!("{released}\n"))
+        .expect("write one more newline and nothing else");
+
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+
+    // **A development-only rule firing is what proves the state moved.** The tree carries no `[Unreleased]`
+    // narrative, which a snapshot does not owe and development does — so this refusal cannot be reached from
+    // the snapshot branch at all, and reaching it says the whitespace edit was seen.
+    let refusal =
+        verdict.expect_err("the tree is development now, and development owes a narrative");
+    crate::refusal::expect(
+        "release-coherence#unreleased-has-no-adopter-narrative",
+        &refusal,
+    );
+}
+/// Editing at a release snapshot is development, not a snapshot with a dirty tree.
+///
+/// **The state was read from the commit while everything else read the worktree.** `release_spine` decided
+/// `Snapshot` on `head == release_commit` alone; every other reader takes its content through
+/// `std::fs::read_to_string`. The first change of a new cycle falls between those two sources: sitting on the
+/// release commit, the author writes the `[Unreleased]` entry that `Development` **requires**, and it is
+/// judged in `Snapshot`, where `[Unreleased]` must be **empty**. Two rules, both real, and no tree satisfies
+/// them at once — the author's only way out is to commit, which is what moves `head`.
+///
+/// Measured on this repository: `release/0.6.0`'s first change could not pass the Definition of Done until it
+/// was committed, and passed immediately afterwards with nothing else altered.
+///
+/// A release snapshot is an unmodified **checkout** of one. This writes the entry without committing and
+/// requires the answer an author can act on.
+///
+/// Negative run: with the state read from the commit alone, this refuses with *[Unreleased] must be empty in
+/// snapshot state*.
+#[test]
+fn editing_at_a_release_snapshot_is_development() {
+    let root = scratch("snapshot-edited");
+    let fixture = build_fixture(&root, "snapshot-edited", "0.2.0");
+    release_changelog(&fixture.repo, "0.2.0", "0.1.0");
+    // The release commit has to carry a change, as its sibling direction records; what it carries is beside
+    // the point.
+    std::fs::write(fixture.repo.join("NOTES.md"), "prepared\n").expect("write");
+    commit(&fixture.repo, "release: 0.2.0");
+    // The next cycle's first edit, uncommitted — `head` is still the release commit.
+    development_changelog(&fixture.repo, "0.2.0", true);
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let ok =
+        verdict.expect("an edited checkout of a release is the next cycle, not a dirty snapshot");
+    assert!(
+        ok.contains("development: 0.2.0"),
+        "the state follows the tree the gate reads, not the commit it sits on: {ok}"
+    );
+}
+
+/// A crate whose `[package]` name is a single-quoted string is read, not refused.
+///
+/// **The row a negative run demanded.** Migrating `package_name` to a real parser made this readable, and
+/// restoring the old double-quote-only rule broke nothing in the corpus — so the improvement was unguarded
+/// and could have been reverted in silence. Two directions had asserted the refusal; both had their WHEN
+/// moved to a `name` that is no string at all, which leaves nobody observing the new answer.
+///
+/// Measured under cargo 1.96.0: a single-quoted `name` is legal TOML that cargo resolves. Refusing it made
+/// `require_example_pins` answer *cannot judge* over a manifest cargo builds.
+///
+/// Negative run: with the double-quote-only rule restored, this row refuses instead of judging the pin.
+#[test]
+fn a_single_quoted_package_name_is_read() {
+    let root = scratch("single-quoted-name");
+    let fixture = build_fixture(&root, "single-quoted-name", "0.2.0");
+    // The member's own manifest, spelled the legal way this reader used to decline. A stale example pin sits
+    // beside it, so the verdict is about that pin being judged at all rather than about reading nothing.
+    std::fs::write(
+        fixture.repo.join("crates/xuanji/Cargo.toml"),
+        "[package]NLname = QQxuanjiQQNLversion.workspace = trueNLedition = QQ2024QQNL"
+            .replace("NL", "\n")
+            .replace("QQ", "'"),
+    )
+    .expect("write");
+    let example = fixture.repo.join("examples/adopter/Cargo.toml");
+    let text = std::fs::read_to_string(&example).expect("read");
+    std::fs::write(&example, {
+        let staled = text.replace("xuanji = \"0.2\"", "xuanji = \"0.0.1\"");
+        assert_ne!(staled, text, "the example's pin must actually be staled");
+        staled
+    })
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(
+        &fixture.repo,
+        "chore: name the package with a single-quoted string",
+    );
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("the stale example pin is judged, so the name was read");
+    assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
+    assert!(
+        refusal.message.contains("xuanji"),
+        "the crate was named, so its pin could be judged: {}",
+        refusal.message
+    );
+}
+
 /// A stale internal pin behind a quoted tail is refused, where it used to pass the gate.
 ///
 /// **The first false negative found in three rounds of review, and the one that mattered most.** The
@@ -3018,6 +3268,103 @@ fn every_inherit_spelling_cargo_honours_is_read_as_inheriting() {
     }
 }
 
+/// A member inheriting through a `[package.version]` sub-table heading is read as inheriting.
+///
+/// **The one inherit spelling a line-oriented reader cannot represent at all**, which is why it sits apart
+/// from the table of spellings above rather than as a row in it: the form is a *heading*, and substituting it
+/// for the inline line would put every `[package]` key after it inside the sub-table.
+///
+/// Measured under cargo 1.96.0 rather than reasoned: a scratch workspace whose member declares
+/// `[package.version]` with `workspace = true` and nothing else resolves at the catalog version, reported by
+/// `cargo metadata`. The three rounds `manifest::assignment` records are each the same defect one segment
+/// further right; this is the fourth, and the first found by measuring cargo instead of by reading a review.
+///
+/// Negative run: against the line-walking reader this was a violation —
+/// *workspace package xuanji must inherit version.workspace = true* — because the reader asks each line
+/// whether it assigns `version`, and a table heading assigns nothing, so no line answers.
+#[test]
+fn a_member_inheriting_through_a_sub_table_heading_is_read_as_inheriting() {
+    let root = scratch("inherit-sub-table");
+    let fixture = build_fixture(&root, "inherit-sub-table", "0.2.0");
+    let manifest = fixture.repo.join("crates/xuanji/Cargo.toml");
+    std::fs::write(
+        &manifest,
+        "[package]\nname = \"xuanji\"\nedition = \"2024\"\n\n[package.version]\nworkspace = true\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: inherit through a sub-table heading");
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        verdict.is_ok(),
+        "cargo resolves this member at the workspace version through this spelling: {:?}",
+        verdict.err()
+    );
+}
+
+/// An example manifest that is there and is not a regular file is not one that is absent.
+///
+/// `is_file()` answered both with one `false`, so a directory named `Cargo.toml` — or any path that exists
+/// and is not a regular file — read as *this example declares none*, and the remaining readable examples
+/// satisfied the counters below it. That is the silent-skip direction this whole loop already refuses for a
+/// manifest it cannot read; absence was the one door left open.
+///
+/// Negative run: with the read restored to `is_file()`, the fixture passes — the example is skipped, the
+/// other examples carry the count, and the gate reports clean over a path it never opened.
+#[test]
+fn an_example_manifest_that_is_not_a_regular_file_is_not_an_absent_one() {
+    let root = scratch("example-manifest-not-a-file");
+    let fixture = build_fixture(&root, "example-manifest-not-a-file", "0.2.0");
+    let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
+    std::fs::remove_file(&manifest).expect("the fixture writes this manifest");
+    std::fs::create_dir(&manifest).expect("a directory may take its place");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: put a directory where a manifest was");
+    refusal::expect(
+        "release-coherence#example-manifest-not-a-readable-file",
+        &refuse(
+            &fixture.repo,
+            Kind::CannotJudge,
+            "is not one this check can read",
+        ),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A member manifest the parser cannot read is not judged, and the refusal names which member.
+///
+/// **A site of its own rather than the one `declared_dependencies` already carries.** Both refuse the same
+/// condition, and reusing that identity would leave this branch reported as held by a direction that never
+/// reaches it — the register compares identities, so a second construction of a held one is invisible to it.
+///
+/// The message names the member because this reader runs per manifest: an operator told only *a manifest this
+/// parser cannot read* would have to find which of them.
+///
+/// Negative run, run rather than reasoned: with the parse failure mapped to *does not inherit*, this
+/// answered `Violation` where `CannotJudge` was expected, saying *workspace package
+/// crates/xuanji/Cargo.toml must inherit version.workspace = true* — the false refusal this migration
+/// exists to stop giving, and named by path because a manifest the parser cannot read has no readable
+/// package name either.
+#[test]
+fn a_member_manifest_the_parser_cannot_read_is_not_judged() {
+    let root = scratch("member-unparseable");
+    let fixture = build_fixture(&root, "member-unparseable", "0.2.0");
+    let manifest = fixture.repo.join("crates/xuanji/Cargo.toml");
+    std::fs::write(
+        &manifest,
+        "[package]\nname = \"xuanji\"\nname = \"xuanji\"\nversion.workspace = true\nedition = \"2024\"\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: write a member manifest twice over");
+    refusal::expect(
+        "release-coherence#member-manifest-unparseable",
+        &refuse(&fixture.repo, Kind::CannotJudge, "duplicate key"),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A member whose `[package]` name is spelled in quotes is read under that name, not the directory's.
 ///
 /// **Measured: `[package]` with `\"name\" = \"xuanji\"` names `xuanji` to `cargo metadata`.** The reader matched
@@ -3085,7 +3432,15 @@ fn assignment_shaped_text_inside_a_value_is_not_a_key() {
         let fixture = build_fixture(&root, "value-not-a-key", "0.2.0");
         let manifest = fixture.repo.join("examples/adopter/Cargo.toml");
         let text = std::fs::read_to_string(&manifest).expect("read");
-        std::fs::write(&manifest, format!("{text}{entry}\n")).expect("write");
+        // **Replaces the example's own entry rather than being appended beside it.** Appended, the manifest
+        // declares `xuanji` twice and cargo refuses it — so the fixture stopped being about the thing it
+        // names. The hand-rolled reader never noticed, because it read lines rather than a document.
+        let composed = text.replace("xuanji = \"0.2\"", entry);
+        assert_ne!(
+            composed, text,
+            "{label}: the entry must replace the example's own"
+        );
+        std::fs::write(&manifest, composed).expect("write");
         development_changelog(&fixture.repo, "0.2.0", true);
         commit(
             &fixture.repo,
@@ -3124,21 +3479,24 @@ fn two_workspace_keys_in_one_dependency_are_not_one_inheritance() {
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: two workspace keys in one dependency");
-    let refusal = refuse(
-        &fixture.repo,
-        Kind::CannotJudge,
-        "with a version this check cannot read",
-    );
-    refusal::expect("release-coherence#example-pin-unreadable", &refusal);
+    let refusal = refuse(&fixture.repo, Kind::CannotJudge, "duplicate key");
+    refusal::expect("release-coherence#manifest-unparseable", &refusal);
     let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A catalog entry whose identity this reader cannot resolve stops the inheriting example.
 ///
-/// The entry might be the one being inherited, and *might be* is not an answer — skipping it is how a stale
-/// pin would reach a release through the catalog rather than through the dependency. A quoted key is the
-/// cheapest spelling of an unresolvable identity, and it is the same one the sibling
-/// `a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped` refuses one level out.
+/// The entry being taken names a crate this reader cannot read, and *might be a family crate* is not an
+/// answer — passing it over is how a stale pin would reach a release through the catalog rather than through
+/// the dependency.
+///
+/// **This WHEN moved twice.** It was first written with the catalog entry under a quoted key,
+/// `"xuanji" = "0.2"`, which the old hand-rolled reader could not decode and a real parser resolves; what
+/// still cannot be resolved is an entry whose `package` is no string. It moved again when the catalog lookup
+/// became a lookup: the entry was written under `alias` while the dependency inherited `xuanji`, and the
+/// search that scanned every entry for a resolved identity refused on an entry **no dependency here takes**.
+/// The entry the dependency actually takes is the subject, so it is the one written unreadable.
+/// `an_unrelated_unresolvable_catalog_entry_does_not_mask_a_stale_pin` holds the other side of that move.
 #[test]
 fn a_catalog_entry_whose_identity_is_unresolvable_stops_the_inheriting_example() {
     let root = scratch("catalog-unresolvable");
@@ -3146,11 +3504,15 @@ fn a_catalog_entry_whose_identity_is_unresolvable_stops_the_inheriting_example()
     std::fs::write(
         fixture.repo.join("examples/adopter/Cargo.toml"),
         "[workspace]\n[package]\nname = \"adopter\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
-         [workspace.dependencies]\n\"xuanji\" = \"0.2\"\n\n[dependencies]\nxuanji = { workspace = true }\n",
+         [workspace.dependencies]\nxuanji = { package = 5, version = \"0.2\" }\n\n\
+         [dependencies]\nxuanji = { workspace = true }\n",
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
-    commit(&fixture.repo, "chore: a catalog entry under a quoted key");
+    commit(
+        &fixture.repo,
+        "chore: the entry taken names no readable crate",
+    );
     let refusal = refuse(
         &fixture.repo,
         Kind::CannotJudge,
@@ -3160,6 +3522,44 @@ fn a_catalog_entry_whose_identity_is_unresolvable_stops_the_inheriting_example()
         "release-coherence#example-catalog-entry-unresolvable",
         &refusal,
     );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// An unresolvable catalog entry nothing here takes does not mask a stale pin that is taken.
+///
+/// **This is the half a narrowing has to pin, and it is a strengthening rather than a relaxation.** While the
+/// catalog was searched by resolved identity, one unreadable entry anywhere in the table refused the whole
+/// example — so a catalog carrying both an unreadable entry and a stale family pin answered *cannot judge*
+/// about the unreadable one and never reached the stale one. That is the false negative the Core Contract
+/// forbids, reached through a refusal rather than through a pass: the operator is told the manifest cannot be
+/// judged, repairs the unreadable entry, and the stale pin is what ships.
+///
+/// Negative run against the identity-searching reader:
+///
+/// ```text
+/// assertion `left == right` failed: example adopter requires xuanji from the workspace catalog, whose
+/// entry alias names a crate this check cannot resolve, so what holds it cannot be decided
+///   left: CannotJudge
+///  right: Violation
+/// ```
+///
+/// The stale `0.0.1` is not named anywhere in it, because it was never read.
+#[test]
+fn an_unrelated_unresolvable_catalog_entry_does_not_mask_a_stale_pin() {
+    let root = scratch("catalog-unrelated-unresolvable");
+    let fixture = build_fixture(&root, "catalog-unrelated-unresolvable", "0.2.0");
+    std::fs::write(
+        fixture.repo.join("examples/adopter/Cargo.toml"),
+        "[workspace]\n[package]\nname = \"adopter\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n\
+         [workspace.dependencies]\nalias = { package = 5, version = \"9.9.9\" }\n\
+         xuanji = \"0.0.1\"\n\n\
+         [dependencies]\nxuanji = { workspace = true }\n",
+    )
+    .expect("write");
+    development_changelog(&fixture.repo, "0.2.0", true);
+    commit(&fixture.repo, "chore: a stale offer beside an unread one");
+    let refusal = refuse(&fixture.repo, Kind::Violation, "0.0.1");
+    refusal::expect("release-coherence#example-pin-disagrees", &refusal);
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -3205,7 +3605,10 @@ fn an_example_whose_package_value_is_unreadable_is_not_judged() {
     let text = std::fs::read_to_string(&manifest).expect("read");
     std::fs::write(
         &manifest,
-        format!("{text}alias = {{ package = xuanji, version = \"0.2.0\" }}\n"),
+        // **This WHEN moved when a real parser replaced the hand-rolled reader.** It was a bare word,
+        // `package = xuanji`, which is not TOML at all — the parser refuses the document, so the site this
+        // direction observes would go unobserved. A `package` that is a value but no string still reaches it.
+        format!("{text}alias = {{ package = 5, version = \"0.2.0\" }}\n"),
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
@@ -3243,12 +3646,8 @@ fn an_example_declaring_several_package_keys_is_not_judged() {
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: name two crates at once");
     refusal::expect(
-        "release-coherence#dependency-declares-several-packages",
-        &refuse(
-            &fixture.repo,
-            Kind::CannotJudge,
-            "declares 2 `package` keys",
-        ),
+        "release-coherence#manifest-unparseable",
+        &refuse(&fixture.repo, Kind::CannotJudge, "duplicate key"),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -3305,12 +3704,8 @@ fn an_example_declaring_several_version_keys_is_not_judged() {
     development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: require one crate at two versions");
     refusal::expect(
-        "release-coherence#example-declares-several-pins",
-        &refuse(
-            &fixture.repo,
-            Kind::CannotJudge,
-            "declares 2 `version` keys",
-        ),
+        "release-coherence#manifest-unparseable",
+        &refuse(&fixture.repo, Kind::CannotJudge, "duplicate key"),
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -3428,8 +3823,9 @@ fn a_crate_manifest_declaring_no_package_name_stops_the_example_check() {
 
 /// And a package name this reader cannot take is not an absent one.
 ///
-/// Single-quoted TOML strings are legal and this reader does not read them — a limit of the reader rather
-/// than a fact about the manifest, which is the distinction `Quoted` exists to keep.
+/// A value that is no string at all — an integer, an array, a table — is a limit of the reader rather than
+/// a fact about the manifest, and the two are different operator actions: one is a value to correct, the
+/// other a key to add. A *quoting* is not this condition; the parser reads a literal string as cargo does.
 ///
 /// Negative run: with the arm replaced by a `continue`, the fixture passed.
 #[test]
@@ -3438,7 +3834,10 @@ fn a_crate_package_name_this_reader_cannot_take_stops_the_example_check() {
     let fixture = build_fixture(&root, "crate-unreadable-name", "0.2.0");
     std::fs::write(
         fixture.repo.join("crates/xuanji/Cargo.toml"),
-        "[package]\nname = 'xuanji'\nversion.workspace = true\nedition = \"2024\"\n",
+        // **This WHEN moved when a real parser replaced the hand-rolled reader.** It was `name = 'xuanji'` — a
+        // single-quoted string, legal TOML the old reader declined — and the parser takes it. What still
+        // reaches the site is a `name` that is not a string at all.
+        "[package]\nname = { workspace = true }\nversion.workspace = true\nedition = \"2024\"\n",
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
@@ -3466,7 +3865,10 @@ fn an_example_pin_this_reader_cannot_take_is_not_one_that_satisfies() {
     let text = std::fs::read_to_string(&manifest).expect("read");
     std::fs::write(
         &manifest,
-        format!("{text}tianheng = {{ version = '0.2.0' }}\n"),
+        // **This WHEN moved when a real parser replaced the hand-rolled reader.** It was a single-quoted
+        // version, legal TOML the old reader declined; the parser takes it. What still cannot be taken as a
+        // requirement is a value that is no string.
+        format!("{text}tianheng = {{ version = 5 }}\n"),
     )
     .expect("write");
     development_changelog(&fixture.repo, "0.2.0", true);
@@ -3640,9 +4042,11 @@ fn a_lock_version_this_reader_cannot_take_stops_the_comparison() {
     let text = std::fs::read_to_string(&lock).expect("read");
     std::fs::write(
         &lock,
+        // The same moved WHEN: a single-quoted version is read now, so what stops the comparison is a
+        // version that is no string.
         text.replace(
             "name = \"xuanji\"\nversion = \"0.2.1\"",
-            "name = \"xuanji\"\nversion = '0.2.1'",
+            "name = \"xuanji\"\nversion = 3",
         ),
     )
     .expect("write");

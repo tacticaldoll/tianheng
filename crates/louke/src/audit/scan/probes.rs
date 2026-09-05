@@ -40,9 +40,7 @@ pub(crate) const DEFAULT_MARKERS: &[&str] = &["assert_boundary"];
 /// observing platform uses, and every byte preserved. `display()` is **lossy** — it replaces each
 /// undecodable byte with U+FFFD, so two source paths differing only in invalid-UTF-8 bytes would produce
 /// one label, one `UnauditableProbe` identity, and a baseline accepting the first would silently
-/// suppress the second's never-accepted violation. That is the injectivity class the 0.4.0 window closed at
-/// five other identity sites, and the same lossy-`display` lesson `write_baseline_atomically` applied to
-/// the temp path. An identity component must not lose information the observation had.
+/// suppress the second's violation. An identity component must not lose information the observation had.
 ///
 /// 漏刻 held that rule privately while 圭表 and 渾儀's compilation-unit label did not, which is how the two
 /// came to disagree about the same input; it is shared rather than copied so they cannot drift again.
@@ -284,7 +282,7 @@ pub(crate) fn inline_mod_bases(
     name: &str,
     child_base: &Path,
     file_dir: &Path,
-) -> Vec<(PathBuf, bool)> {
+) -> Result<Vec<(PathBuf, bool)>, String> {
     // The flag is "this base was reached through an ABSOLUTE `#[path]` literal", and it must ride with
     // the base rather than be recovered later. `Path::join` discards its receiver exactly when the
     // joinee is absolute, so an absolute literal makes the base itself absolute and the children
@@ -298,19 +296,19 @@ pub(crate) fn inline_mod_bases(
         None => {
             for rel in &attrs.cfg_attr_paths {
                 let candidate = file_dir.join(rel);
-                if candidate.is_dir() {
+                if is_directory(&candidate)? {
                     inline_bases.push((candidate, Path::new(rel).is_absolute()));
                 }
             }
             let conventional = child_base.join(name);
-            if inline_bases.is_empty() || conventional.is_dir() {
+            if inline_bases.is_empty() || is_directory(&conventional)? {
                 // A conventional base derives from the enclosing base; whether THAT was absolute-reached
                 // is the caller's `absolute_base`, ORed in at the recursion below.
                 inline_bases.push((conventional, false));
             }
         }
     }
-    inline_bases
+    Ok(inline_bases)
 }
 
 /// A recursion-depth cap for [`collect_scope_modules`]'s native-stack descent into nested
@@ -437,7 +435,7 @@ pub(crate) fn collect_scope_modules(
                     // — i.e. `inline_base` becomes the body's `file_dir` too, NOT the enclosing
                     // `file_dir`. (Threading the enclosing `file_dir` here dropped the inline
                     // component and read a same-named orphan — a false negative.)
-                    let inline_bases = inline_mod_bases(&attrs, name, child_base, file_dir);
+                    let inline_bases = inline_mod_bases(&attrs, name, child_base, file_dir)?;
                     for (inline_base, base_is_absolute) in &inline_bases {
                         collect_scope_modules(
                             bytes,
@@ -498,6 +496,11 @@ pub(crate) fn collect_scope_modules(
     Ok(())
 }
 
+/// The two readers that separate an absent target from one this reader could not stat live in
+/// [`xingbiao`], because 圭表 and 渾儀 ask the same question and none of the three may ask another. This
+/// module's own copies were the first of the three to exist; the substrate is where the answer belongs.
+use xingbiao::{is_directory, is_regular_file};
+
 /// Resolve a `mod name;` to its conventional file and the base directory for its own children:
 /// `Ok(Some(..))` for `<base>/name.rs` or `<base>/name/mod.rs`, `Ok(None)` when neither exists (the
 /// caller decides whether an absent file is a legitimate `#[cfg]`-gated skip or a hard error), and
@@ -508,7 +511,7 @@ pub(crate) fn resolve_external_module(
 ) -> Result<Option<(PathBuf, PathBuf)>, String> {
     let flat = base.join(format!("{name}.rs"));
     let nested = base.join(name).join("mod.rs");
-    let file = match (flat.is_file(), nested.is_file()) {
+    let file = match (is_regular_file(&flat)?, is_regular_file(&nested)?) {
         (true, false) => flat,
         (false, true) => nested,
         (true, true) => {
@@ -550,7 +553,7 @@ pub(crate) fn resolve_path_module(
     rel: &str,
 ) -> Result<Option<(PathBuf, PathBuf, bool)>, String> {
     let file = base.join(rel);
-    if !file.is_file() {
+    if !is_regular_file(&file)? {
         return Ok(None);
     }
     let next_base = file.parent().unwrap_or(base).to_path_buf();

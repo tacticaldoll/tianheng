@@ -632,10 +632,10 @@ to the register's bound count, and cannot be the only mention of a bound anywher
 
 **A bound id written bare SHALL resolve too, wherever tracked Rust or Markdown carries it.** The `(bound: …)`
 form is what *clears prose*; resolution belongs to the **id**, and an id is no less a reference for being
-written without the wrapper. Measured before this was proposed: three occurrences across the tree did not
-resolve, every one of them naming a bound that does exist under an id it does not have. They sat in the two
-places the bijection cannot look — a doc comment citing a bound, and a unit-test fixture constructing a
-`BoundDecl` that mirrors one, together with the assertion round-tripping it. Neither is a *declaration*, and
+written without the wrapper. A bare id that names a bound which exists under a different id resolves to
+nothing while every declaration side agrees, and it sits in the two places the bijection cannot look — a doc
+comment citing a bound, and a unit-test fixture constructing a `BoundDecl` that mirrors one, together with the
+assertion round-tripping it. Neither is a *declaration*, and
 the bijection compares the two declaration sides. The fixture is the sharper case: its pin name and its shape
 string both carried the full wording while its id carried an abbreviated one, so a declaration had drifted from
 itself inside a single constructor with nothing able to say so.

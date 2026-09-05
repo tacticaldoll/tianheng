@@ -7,6 +7,28 @@ use std::collections::{HashMap, HashSet};
 
 use crate::resolve::strip_raw;
 
+/// Whether `path` is the single-segment built-in attribute named `name`, **in either spelling**.
+///
+/// **`Path::is_ident` compares the ident as written.** proc-macro2's `PartialEq<str>` requires the
+/// compared string to carry `r#` when the ident is raw, so `r#path` is not equal to `"path"` for it and
+/// `r#cfg_attr` is not equal to `"cfg_attr"`. rustc reads the two spellings as one name: `r#` changes an
+/// identifier's lexical spelling and not the name it spells, which is what 圭表's and 漏刻's own byte
+/// scanners already say in so many words for the identical shape.
+///
+/// Measured against rustc 1.96.0, edition 2021, `--crate-type lib`:
+/// `#[cfg_attr(unix, r#path = "imp_unix.rs")] pub mod plat;` compiles with only `imp_unix.rs` on disk, and
+/// so does `#[cfg_attr(unix, r#cfg_attr(target_os = "linux", path = "imp_linux.rs"))]` with only
+/// `imp_linux.rs`. With **both** `plat.rs` and the remap target present it is the remapped file rustc
+/// compiles — so a reader that misses the remap governs a file the build does not contain, while whatever
+/// the build does contain goes unobserved.
+///
+/// Single-segment, like `is_ident`: the built-in is the unqualified path, so `foo::cfg_attr` is somebody
+/// else's attribute and `get_ident` declines it — the same narrowing both sibling dimensions state.
+pub(crate) fn is_builtin_attribute(path: &syn::Path, name: &str) -> bool {
+    path.get_ident()
+        .is_some_and(|ident| strip_raw(&ident.to_string()) == name)
+}
+
 /// The file path of an **unconditional** `#[path = "…"]` remap (the direct name-value form only),
 /// or `None`. This is the value both `crate::scan`'s whole-crate walks and
 /// `crate::module_resolve`'s targeted resolver *follow* to observe a relocated module's source
@@ -16,7 +38,7 @@ use crate::resolve::strip_raw;
 /// most one applied unconditional `#[path]`, so the first match is the value.
 pub(crate) fn direct_path_value(attrs: &[syn::Attribute]) -> Option<String> {
     attrs.iter().find_map(|attr| {
-        if !attr.path().is_ident("path") {
+        if !is_builtin_attribute(attr.path(), "path") {
             return None;
         }
         match &attr.meta {
@@ -41,12 +63,14 @@ pub(crate) fn direct_path_value(attrs: &[syn::Attribute]) -> Option<String> {
 /// real `rustc` build: `cfg_attr` never removes the `mod` item, so a missing file behind one with
 /// no `path` remap is a genuine E0583 in every configuration). Shared by both of this crate's
 /// module walkers (`scan::resolve_child_modules` and `module_resolve::descend`)
-/// so they agree on this policy rather than silently drifting — the 0.2.2 lesson. A `cfg_attr`
+/// so they agree on this policy consistently. A `cfg_attr`
 /// wrapping `path` specifically is a different, already-handled case ([`cfg_attr_path_values`]).
 /// 漏刻's CI-audit scanner independently hand-rolls the identical bare-`cfg`-only distinction for
 /// the same reason (`louke::audit::scan::mod_preamble_attrs`).
 pub(crate) fn has_cfg_attr(attrs: &[syn::Attribute]) -> bool {
-    attrs.iter().any(|attr| attr.path().is_ident("cfg"))
+    attrs
+        .iter()
+        .any(|attr| is_builtin_attribute(attr.path(), "cfg"))
 }
 
 /// The one macro whose body this dimension reads as ordinary code: `cfg_if!`. See
@@ -421,7 +445,7 @@ fn bare_cfg_negates(attrs_a: &[syn::Attribute], attrs_b: &[syn::Attribute]) -> b
 fn sole_bare_cfg_predicate(attrs: &[syn::Attribute]) -> Option<syn::Meta> {
     let cfg_attrs: Vec<&syn::Attribute> = attrs
         .iter()
-        .filter(|attr| attr.path().is_ident("cfg"))
+        .filter(|attr| is_builtin_attribute(attr.path(), "cfg"))
         .collect();
     match cfg_attrs.as_slice() {
         [one] => one.parse_args::<syn::Meta>().ok(),
@@ -514,22 +538,30 @@ fn cfg_attr_metas(input: syn::parse::ParseStream) -> syn::Result<MetaList> {
 pub(crate) fn cfg_attr_path_values(attrs: &[syn::Attribute]) -> Vec<String> {
     attrs
         .iter()
-        .filter(|attr| attr.path().is_ident("cfg_attr"))
+        .filter(|attr| is_builtin_attribute(attr.path(), "cfg_attr"))
         .filter_map(|attr| {
             attr.parse_args_with(cfg_attr_metas)
                 .ok()
-                .and_then(|metas| applied_metas_path_value(&metas))
+                .map(|metas| applied_metas_path_values(&metas))
         })
+        .flatten()
         .collect()
 }
 
-/// The **applied** metas of a `cfg_attr` (all but the first, which is the predicate): the value of
-/// a `path = "…"` name-value among them, or one nested inside a further `cfg_attr`.
-fn applied_metas_path_value(metas: &MetaList) -> Option<String> {
-    metas.iter().skip(1).find_map(meta_path_value)
+/// The **applied** metas of a `cfg_attr` (all but the first, which is the predicate): **every**
+/// `path = "…"` name-value among them, including those nested inside a further `cfg_attr`.
+///
+/// **The union has two axes and the earlier repair reached one.** [`cfg_attr_path_values`]'s own doc
+/// records a `find_map` that silently dropped every candidate but the first-declared, and it was
+/// corrected across ATTRIBUTES. Within one attribute a second `find_map` did the same thing, so
+/// `#[cfg_attr(unix, cfg_attr(target_os = "macos", path = "mac.rs"), cfg_attr(target_os = "linux",
+/// path = "linux.rs"))]` answered `mac.rs` and nothing else — measured against rustc, that declaration
+/// compiles on Linux with only `linux.rs` present.
+fn applied_metas_path_values(metas: &MetaList) -> Vec<String> {
+    metas.iter().skip(1).flat_map(meta_path_values).collect()
 }
 
-fn meta_path_value(meta: &syn::Meta) -> Option<String> {
+fn meta_path_values(meta: &syn::Meta) -> Vec<String> {
     match meta {
         syn::Meta::NameValue(syn::MetaNameValue {
             path,
@@ -539,12 +571,13 @@ fn meta_path_value(meta: &syn::Meta) -> Option<String> {
                     ..
                 }),
             ..
-        }) if path.is_ident("path") => Some(s.value()),
-        syn::Meta::List(list) if list.path.is_ident("cfg_attr") => list
+        }) if is_builtin_attribute(path, "path") => vec![s.value()],
+        syn::Meta::List(list) if is_builtin_attribute(&list.path, "cfg_attr") => list
             .parse_args_with(cfg_attr_metas)
             .ok()
-            .and_then(|metas| applied_metas_path_value(&metas)),
-        _ => None,
+            .map(|metas| applied_metas_path_values(&metas))
+            .unwrap_or_default(),
+        _ => Vec::new(),
     }
 }
 

@@ -148,10 +148,10 @@ pub fn constitution() -> Constitution {
         )
         .boundary(
             CrateBoundary::crate_("kanhe")
-                .restrict_dependencies_to(["shengmo", "tianheng", "serde_json"])
+                .restrict_dependencies_to(["shengmo", "tianheng", "serde_json", "toml_edit"])
                 .because(
-                    "勘合 depends on 繩墨, 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 \
-                     or 璇璣 can exist",
+                    "勘合 depends on 繩墨, 天衡, serde_json and toml_edit only: no edge to 圭表, \
+                     渾儀, 漏刻 or 璇璣 can exist",
                 ),
         )
         // The first *semantic* self-boundary: the family dogfoods its own `sans_io_pure` profile on
@@ -235,14 +235,10 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 /// The unique live dependency allowlist governing the shell.
 ///
-/// **One check over one condition.** The arity was asserted and then asserted again by an `expect` on the
-/// extraction — two guards, two messages, and only the first could ever fire, so the second stood over a state
-/// the arity assertion had already made unreachable. That is the defensive over-foolproofing of an impossible state the
-/// minimalism bound forbids, and the same shape the 0.5.0 window retired from the baseline writer's temp-file guard.
-///
-/// Converting into `[Boundary; 1]` makes the arity the **type's** obligation rather than a second reader's, so
-/// the extraction and the guard can no longer disagree — and the count is still available for the diagnostic,
-/// because the failed conversion hands the vector back.
+/// **One check over one condition.** Converting into `[Boundary; 1]` makes the arity the
+/// **type's** obligation rather than a second reader's, avoiding defensive over-foolproofing of
+/// an already unreachable state. The extraction and guard can no longer disagree — and the count
+/// is still available for the diagnostic, because the failed conversion hands the vector back.
 pub fn shell_dependency_boundary() -> Boundary {
     let shell_boundaries: Vec<Boundary> = constitution()
         .static_boundaries()

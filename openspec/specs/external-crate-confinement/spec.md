@@ -173,6 +173,11 @@ The system SHALL canonicalize raw identifiers (`r#name` → `name`) in both the 
 
 - **WHEN** the boundary confines `r#match` to `crate::ffi` and a file in `crate::service` declares `use r#match::Thing;` (equivalently `use match::…` where the source uses the raw form)
 - **THEN** the system emits a violation, the raw and plain forms of the crate name having been canonicalized to one identity
+- **AND** the rule's **key** is canonicalized with it. Folding a package name to its import identifier
+  replaces `-` with `_` and nothing else, so a raw prefix survives that fold: keying on it alone made
+  `r#match` and `match` two identities for one boundary, while the evaluation folded both and matched them.
+  A declaration rewritten between the spellings is a rename, and a rename SHALL NOT move what a baseline
+  files a violation under
 
 ### Requirement: The confinement projects like the other module rules
 

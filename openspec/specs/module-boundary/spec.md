@@ -314,6 +314,18 @@ The system SHALL treat a raw identifier (`r#name`) and its plain form (`name`) a
 - **WHEN** a crate declares `mod r#type;` (resolving to `src/type.rs`), that file imports `use crate::r#mod::Thing;`, and a boundary governs `crate::type` forbidding `crate::mod`
 - **THEN** the module `crate::type` is found (not an unknown-module constitution error) and the import `crate::mod::Thing` is observed as a violation, the raw and plain forms having been canonicalized to one identity
 
+**One identity means the recorded one too, not only the matched one.** A rule's key is what a baseline files
+a violation under, so a boundary whose declaration is rewritten between the two spellings SHALL keep its key:
+matching them while keying them apart makes a pure rename move every recorded finding, which is work an
+adopter did not choose and cannot see the reason for. The canonicalization SHALL therefore reach every rule
+field carrying a module path — the governed path, an allowlist's entries, and a confined crate name alike.
+
+#### Scenario: A boundary rewritten between the two spellings keeps its recorded identity
+
+- **WHEN** a boundary's declared module, allowlist entry, or confined crate name is rewritten from `r#name`
+  to `name`, or the reverse
+- **THEN** the rule key is unchanged, so a recorded baseline still describes the tree
+
 ### Requirement: Imports are attributed to their enclosing inline module
 
 The system SHALL attribute each `use` declaration to the module that lexically encloses it, including an inline `mod name { … }` submodule, rather than to the containing file's module. A `self`/`super` path SHALL be resolved against that enclosing module, and a bare first segment inside an inline submodule SHALL be treated as external even when the file itself is the crate root, matching how the compiler resolves it. A `mod name;` declaration with no inline body does not enclose any `use` and SHALL NOT change attribution.
@@ -421,6 +433,30 @@ A plain `mod name;` declaration SHALL resolve to exactly one conventional source
 
 - **WHEN** a crate declares `#[cfg_attr(unix, path = "unix_child.rs")] #[cfg_attr(not(unix), path = "other_child.rs")] mod child;`, BOTH `unix_child.rs` and `other_child.rs` exist on disk, and neither `src/child.rs` nor `src/child/mod.rs` exists
 - **THEN** the system skips the plain-file requirement rather than erroring, and both `unix_child.rs` and `other_child.rs` are governed under `crate::child` — the shape every real rustc build compiles through exactly one of the two mutually-exhaustive targets, never through a conventional file this declaration never needs
+
+#### Scenario: A raw-identifier attribute name is the built-in it spells
+
+- **WHEN** a crate declares `#[r#path = "imp_unix.rs"] mod imp;`, with `imp_unix.rs` on disk and a conventional `src/imp.rs` present as well
+- **THEN** every dimension reads `imp_unix.rs`, because the attribute's own name position takes a raw identifier exactly as a `cfg_attr`'s argument list does — measured under rustc 1.96.0, edition 2021, `--crate-type lib`, the declaration compiles with only `imp_unix.rs` present, and with both present it is the remapped file that is compiled
+- **PINNED-BY** `all_three_dimensions_read_an_unconditional_raw_identifier_path_remap`
+
+#### Scenario: A raw-identifier bare cfg grants the absent-file tolerance
+
+- **WHEN** a crate declares `#[r#cfg(target_os = "none")] mod gone;` with no `gone.rs` anywhere
+- **THEN** no dimension reports the missing-file constitution error, because `r#cfg` is the built-in `cfg` and a false predicate removes the `mod` item outright — measured under rustc 1.96.0, edition 2021, `--crate-type lib`, the declaration compiles with no backing file, exactly as the plain spelling does
+- **PINNED-BY** `all_three_dimensions_tolerate_an_absent_file_behind_a_raw_identifier_cfg`
+
+#### Scenario: A raw-identifier spelling of a path remap is the same remap
+
+- **WHEN** a crate declares `#[cfg_attr(unix, r#path = "imp_unix.rs")] mod imp;`, or the nested `#[cfg_attr(unix, r#cfg_attr(not(target_os = "none"), path = "imp_unix.rs"))] mod imp;`, and `imp_unix.rs` exists on disk
+- **THEN** every dimension reads `imp_unix.rs` as the remapped target, because `r#` changes an identifier's lexical spelling and not the name it spells — measured under rustc 1.96.0, edition 2021, `--crate-type lib`, both declarations compile with only `imp_unix.rs` present, and with a conventional `imp.rs` present as well it is the remapped file rustc compiles
+- **PINNED-BY** `all_three_dimensions_read_a_raw_identifier_spelling_of_a_cfg_attr_path`
+
+#### Scenario: A conventional file beside a raw-identifier remap does not hide the remapped one
+
+- **WHEN** a crate declares `#[cfg_attr(unix, r#path = "imp_unix.rs")] mod imp;` with a clean `src/imp.rs` present and every violation in `imp_unix.rs`
+- **THEN** the violation in `imp_unix.rs` is reported, because governing the conventional file alone reports clean over the file the build actually contains — a false negative produced by a spelling of the governed code, which the Core Contract's non-bypassability forbids
+- **PINNED-BY** `a_conventional_file_beside_a_raw_identifier_remap_does_not_hide_the_remapped_one`
 
 #### Scenario: An unresolved cfg_attr(path) candidate alone does not tolerate a missing conventional file
 

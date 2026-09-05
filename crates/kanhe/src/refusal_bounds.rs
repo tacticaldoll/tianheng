@@ -48,6 +48,17 @@ pub fn unheld() -> Vec<Unheld> {
     };
     vec![
         tool(
+            "release-coherence#changelog-in-head-unreadable",
+            "presence is asked by `ls-tree HEAD -- CHANGELOG.md`, which exits non-zero only where git \
+             cannot read HEAD's **tree** — and the judgement resolves HEAD and the release commit before \
+             it, through reads that fail first on any object store broken enough to reach this one. \
+             Measured: a fixture whose `.git/index` is corrupt leaves tree reads working, which is why the \
+             content read moved off `status` in the first place, and a fixture whose objects are gone \
+             fails at `rev-parse`. The blob half of the same question **is** observed, by \
+             `a_changelog_git_cannot_read_at_head_is_not_a_modified_worktree`, because a tree can name a \
+             blob git will not hand over",
+        ),
+        tool(
             "publish-source-integrity#release-tag-unreadable",
             "measured, not assumed: every ref-store perturbation a fixture can build answers `1`, which is this read's ANSWER — an unreadable `refs/tags` and a `refs/tags` replaced by a file both exit `1`, and in that state `rev-parse HEAD` fails first at `128`, so the judgement never reaches this arm. The classifier itself IS observed, against a directory that is no repository; what no fixture can build is a repository whose earlier reads succeed and whose tag read declines",
         ),
@@ -86,6 +97,21 @@ pub fn unheld() -> Vec<Unheld> {
             "release-coherence#member-manifest-outside-workspace-root",
             "cargo resolves member paths against the root it reports, so a member outside it is a \
              disagreement inside cargo rather than a shape a manifest can carry",
+        ),
+        tool(
+            "release-coherence#member-directory-not-utf8",
+            "the manifest this reader spells is a `&str` cargo's JSON handed over, so the parser made its \
+             components UTF-8 before this gate saw them and no path built from one can carry a byte the \
+             decode refuses — the same arm reached from a filesystem walk IS observed, by \
+             `a_crate_directory_that_is_not_utf8_is_refused_by_the_walk`, which is where the bytes are the \
+             operating system's rather than a parser's",
+        ),
+        tool(
+            "release-coherence#crate-manifest-outside-repository",
+            "the manifest is joined onto `repo` in the same loop that strips it, so a walk output sitting \
+             outside `repo` is this reader disagreeing with itself rather than a tree a fixture can build \
+             — the sibling `member-manifest-outside-workspace-root` above records the same shape for the \
+             answer cargo gives, where the join is cargo's rather than this walk's",
         ),
         tool(
             "release-coherence#scripts-not-enumerable",

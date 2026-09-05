@@ -132,8 +132,88 @@ pub(super) fn unrenderable_unsafe_owner_fails_loud_without_an_ordinal_identity()
         "pub struct Arr<const N: usize>;\npub const N: usize = 1;\nunsafe impl Send for Arr<{ N + 1 }> {}\n",
     )
     .unwrap_err();
-    assert!(error.contains("without a positional fallback"), "{error}");
+    // The refusal names WHAT was met, not only what is not invented: this self type carries a
+    // const-generic expression with no supported rendering, which is a different fact from a path that
+    // resolves nowhere and from a `#[cfg]`-collided alias, and all three used to reach one sentence.
+    assert!(
+        error.contains("its syntax has no supported rendering"),
+        "{error}"
+    );
+    assert!(
+        error.contains("no positional fallback is invented for it"),
+        "{error}"
+    );
     assert!(!error.contains("_#"), "{error}");
+}
+
+/// A trait that will not render does not make the OWNER unnameable.
+///
+/// **A repair that named causes handed the wrong one to this arm.** A trait impl whose trait path has no
+/// supported rendering, with a self type that renders perfectly, reached the owner refusal and was told
+/// *its syntax has no supported rendering* — about `crate::net::Foo`. That is the defect the cause exists
+/// to close, produced by the change that closed it.
+///
+/// Negative run, against that repair:
+///
+/// ```text
+/// cannot identify unsafe method owner in crate::net — its syntax has no supported rendering; no
+/// positional fallback is invented for it, …
+/// ```
+#[test]
+pub(super) fn a_trait_that_will_not_render_does_not_make_the_owner_unnameable() {
+    let error = unsafe_keys(
+        "unrenderable-trait",
+        "pub struct Foo;\npub const N: usize = 1;\n\
+         pub trait Tr<const M: usize> { unsafe fn m(); }\n\
+         impl Tr<{ N + 1 }> for Foo { unsafe fn m() {} }\n",
+    )
+    .unwrap_err();
+    assert!(
+        !error.contains("its syntax has no supported rendering"),
+        "the owner renders; the trait is what did not, got: {error}"
+    );
+    assert!(
+        error.contains("trait"),
+        "the refusal must name the trait as its subject, got: {error}"
+    );
+}
+
+/// A `#[cfg]`-collided alias names its OWN cause, not the one an unrenderable type has.
+///
+/// **Three facts reached one sentence.** An owner could not be named because its path resolved to no
+/// candidate, because two mutually-exclusive `#[cfg]` branches bound one alias to different types, or
+/// because its syntax has no supported rendering — and every one of them emitted *cannot identify … without
+/// a positional fallback*, which names the policy rather than what was met. The refusal is right in all
+/// three; the sentence sends an adopter to the wrong place in two of them, and there is nothing in the
+/// emitted text to grep for the one they have.
+///
+/// The verdict does not move: refusing was correct before and is correct now. What moves is whether the
+/// refusal can be acted on.
+///
+/// Negative run, before the cause was a named value:
+///
+/// ```text
+/// the refusal must name the collision it met, got: cannot identify unsafe impl self type in crate::net without a positional fallback
+/// ```
+///
+/// The collision is not mentioned at all — the sentence names what is not invented and stops there.
+#[test]
+pub(super) fn a_cfg_collided_alias_names_its_own_cause() {
+    let error = unsafe_keys(
+        "cfg-collided-alias",
+        "#[cfg(feature = \"x\")]\nuse crate::a::T as Alias;\n\
+         #[cfg(not(feature = \"x\"))]\nuse crate::b::T as Alias;\n\
+         unsafe impl Send for Alias {}\n",
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("bind that alias to different types"),
+        "the refusal must name the collision it met, got: {error}"
+    );
+    assert!(
+        !error.contains("no supported rendering"),
+        "an alias that renders perfectly must not be reported as unrenderable, got: {error}"
+    );
 }
 
 #[test]

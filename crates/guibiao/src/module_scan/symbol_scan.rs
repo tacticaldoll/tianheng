@@ -883,6 +883,14 @@ fn leading_path(expr: &str) -> String {
 
 /// The `pub use …` statement bodies (only `pub` re-exports feed the crate-wide closure; a private
 /// `use` is local to its file and already handled per-file by the use-map).
+///
+/// **The body is read by [`super::lexer::scan_use_statement`], which is the declared single home for that
+/// question.** This loop re-spelled it — `start = j + 3`, then `find(';')` — and so did not carry the
+/// guard that home has: a `use` followed by `<` is a precise-capturing bound rather than an import, and
+/// scanning to the next `;` there swallows the following real `use`. The extraction that made the reader
+/// shared converged two of the three sites and walked past this one, which is the twin-drift class this
+/// module's own siblings record. What differs here is the surrounding `pub` and visibility-qualifier
+/// walk, and that is what this function keeps.
 fn pub_use_statements(source: &str) -> Vec<String> {
     let bytes = source.as_bytes();
     let mut trees = Vec::new();
@@ -915,13 +923,22 @@ fn pub_use_statements(source: &str) -> Vec<String> {
                 }
             }
             if super::lexer::keyword_starts_at(bytes, j, b"use") {
-                let start = j + 3;
-                if let Some(rel) = source[start..].find(';') {
-                    trees.push(source[start..start + rel].trim().to_string());
-                    i = start + rel + 1;
-                    continue;
+                match super::lexer::scan_use_statement(bytes, source, j) {
+                    super::lexer::UseStatementScan::Statement { body, next } => {
+                        trees.push(body);
+                        i = next;
+                        continue;
+                    }
+                    super::lexer::UseStatementScan::NotAStatement { resume_at } => {
+                        // Unreachable from here — a precise-capturing `use<…>` is a type bound and
+                        // `pub` cannot precede one — but answered rather than assumed, so this loop
+                        // owns no arm the shared reader does not. `resume_at` is past `j`, so the
+                        // loop still advances.
+                        i = resume_at;
+                        continue;
+                    }
+                    super::lexer::UseStatementScan::Unterminated => break,
                 }
-                break;
             }
         }
         i += 1;

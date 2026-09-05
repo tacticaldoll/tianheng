@@ -337,7 +337,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound`
 
-> the reference is read as a construction, whichever it actually names. **This bound used to be wider.** The register's reader was text over Rust and not exhaustive over the language: a byte char literal, a raw string, or a closure whose parameter list spanned two lines could desynchronise a character-by-character scan entirely, producing a site the reader neither parsed nor counted as unparseable — invisible to both of its readings at once, which was the unsafe direction this bound named, since a missed citation fails loud while a missed construction reports clean over a site nothing holds. Reading this repository's own Rust with a real parser instead of scanning it closes that floor: every syntactically valid construction is seen by construction, not by an arm added the day a shape was found wrong. **What remains is not lexical.** Whether a bare reference names the constructor taken by value or a local variable that happens to share its spelling is not written down anywhere a parse tree carries — answering it needs name resolution, which a reader of syntax alone does not have
+> the reference is read as a construction, whichever it actually names. **The floor is name resolution and nothing narrower, and a real parser is what keeps it there.** A text scan over Rust is not exhaustive over the language: a byte char literal, a raw string, or a closure whose parameter list spans two lines desynchronises a character-by-character scan entirely, producing a site such a reader neither parses nor counts as unparseable — invisible to both of its readings at once, which is the unsafe direction, since a missed citation fails loud while a missed construction reports clean over a site nothing holds. Reading this repository's own Rust with a real parser closes that floor: every syntactically valid construction is seen by construction, not by an arm added the day a shape was found wrong. **What remains is not lexical.** Whether a bare reference names the constructor taken by value or a local variable that happens to share its spelling is not written down anywhere a parse tree carries — answering it needs name resolution, which a reader of syntax alone does not have
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a bare reference to a registered constructor's name cannot be told from a local variable sharing its spelling without name resolution*
 
@@ -431,11 +431,11 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **unpinned**, tracked by: `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
 
-### `repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound`
+### `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound`
 
-> nothing observes it, and the merge records the subject the gate approved against a title that has since moved. The wrapper judges three inputs and pins two of them by construction — the body travels as the value the gate judged, and the commit set is pinned through `--match-head-commit`, which GitHub decides atomically. `gh` offers no `--match-title`, so the third can only be re-read, which shrinks the exposure from a whole `cargo test` to one API call rather than closing it. Closing it needs a server-decided precondition this tool does not offer
+> nothing observes it, and the merge proceeds against the value the gate approved. What the merge records is pinned by construction — the body travels as the value the gate judged, and the commit set through `--match-head-commit`, which GitHub decides atomically. `gh` offers no equivalent for the title, the base or the head branch's name, so each can only be re-read, which shrinks the exposure from a whole `cargo test` to one API call rather than closing it. Closing it needs a server-decided precondition this tool does not offer
 
-- **unpinned**, tracked by: `BACKLOG.md` — *the title race the wrapper can only narrow*
+- **unpinned**, tracked by: `BACKLOG.md` — *the re-read races the wrapper can only narrow*
 
 ### `repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound`
 

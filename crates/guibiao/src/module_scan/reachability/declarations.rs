@@ -337,6 +337,17 @@ fn attr_prefix_path_kind(bytes: &[u8]) -> PathAttrKind {
         while i < bytes.len() && bytes[i].is_ascii_whitespace() {
             i += 1;
         }
+        // **A raw identifier is ONE segment**, at the attribute's own name position as much as inside a
+        // `cfg_attr`'s argument list, where `cfg_attr_group_path_eqs` already consumes the prefix with the
+        // segment it belongs to. `r#` changes a lexical spelling and not the name it spells, so `#[r#path =
+        // "…"]` IS the built-in remap — measured against rustc 1.96.0, edition 2021, `--crate-type lib`,
+        // which compiles the remapped file for it even with the conventional file present. Reading the name
+        // as written left this scanner governing a file the build does not contain.
+        if bytes[i..].starts_with(b"r#")
+            && bytes.get(i + 2).is_some_and(|byte| is_ident_byte(*byte))
+        {
+            i += 2;
+        }
         if bytes[i..].starts_with(b"path")
             && bytes.get(i + 4).is_none_or(|byte| !is_ident_byte(*byte))
         {
@@ -410,8 +421,19 @@ fn cfg_attr_group_path_eqs<'a>(
     i += 1;
     let mut depth = 1usize;
     let mut past_predicate = false;
+    // Whether the previous significant token was a path separator. The attribute admitting applied metas
+    // is the BUILT-IN `cfg_attr`, whose path is exactly that one segment: `foo::cfg_attr(a, path = "…")`
+    // ends in the same word while being somebody else's attribute, and descending into it reads a target
+    // no build compiles. Measured against this reader before the test existed: the span
+    // `(any(), foo::cfg_attr(a, path = "bogus"), path = "real.rs")` yielded two positions where one is
+    // right, and the raw spelling `foo::r#cfg_attr` yielded two as well.
+    let mut after_path_sep = false;
     while i < bytes.len() && depth > 0 {
         match bytes[i] {
+            b':' if bytes.get(i + 1) == Some(&b':') => {
+                after_path_sep = true;
+                i += 2;
+            }
             b'"' => {
                 i += 1;
                 while i < bytes.len() && bytes[i] != b'"' {
@@ -424,22 +446,37 @@ fn cfg_attr_group_path_eqs<'a>(
             }
             b'(' => {
                 depth += 1;
+                after_path_sep = false;
                 i += 1;
             }
             b')' => {
                 depth -= 1;
+                after_path_sep = false;
                 i += 1;
             }
             b',' if depth == 1 => {
                 past_predicate = true;
+                after_path_sep = false;
                 i += 1;
             }
             byte if depth == 1 && past_predicate && is_ident_byte(byte) => {
-                let start = i;
+                // A raw identifier is ONE segment: `r#` changes a lexical spelling and not a name, so
+                // `r#cfg_attr` names `cfg_attr`. Reading `r`, `#` and `cfg_attr` as separate events would
+                // clear a qualification the separator had set.
+                let mut start = i;
+                if bytes[i] == b'r' && bytes.get(i + 1) == Some(&b'#') {
+                    let after = i + 2;
+                    if after < bytes.len() && is_ident_byte(bytes[after]) {
+                        start = after;
+                    }
+                }
+                i = start;
                 while i < bytes.len() && is_ident_byte(bytes[i]) {
                     i += 1;
                 }
                 let ident = &bytes[start..i];
+                let qualified = after_path_sep;
+                after_path_sep = false;
                 if ident == b"path" {
                     let mut j = i;
                     while j < bytes.len() && bytes[j].is_ascii_whitespace() {
@@ -448,11 +485,16 @@ fn cfg_attr_group_path_eqs<'a>(
                     if bytes.get(j) == Some(&b'=') {
                         eqs.push(base_offset + j);
                     }
-                } else if ident == b"cfg_attr" {
+                } else if ident == b"cfg_attr" && !qualified {
                     pending.push((&bytes[i..], base_offset + i));
                 }
             }
-            _ => i += 1,
+            _ => {
+                if !bytes[i].is_ascii_whitespace() {
+                    after_path_sep = false;
+                }
+                i += 1;
+            }
         }
     }
 }
@@ -490,6 +532,17 @@ fn attr_prefix_has_bare_cfg(bytes: &[u8]) -> bool {
         i += 1;
         while i < bytes.len() && bytes[i].is_ascii_whitespace() {
             i += 1;
+        }
+        // **A raw identifier is ONE segment**, at the attribute's own name position as much as inside a
+        // `cfg_attr`'s argument list, where `cfg_attr_group_path_eqs` already consumes the prefix with the
+        // segment it belongs to. `r#` changes a lexical spelling and not the name it spells, so `#[r#path =
+        // "…"]` IS the built-in remap — measured against rustc 1.96.0, edition 2021, `--crate-type lib`,
+        // which compiles the remapped file for it even with the conventional file present. Reading the name
+        // as written left this scanner governing a file the build does not contain.
+        if bytes[i..].starts_with(b"r#")
+            && bytes.get(i + 2).is_some_and(|byte| is_ident_byte(*byte))
+        {
+            i += 2;
         }
         // The byte immediately after `cfg` must not continue the identifier (excludes `cfg_attr`,
         // whose next byte is `_`).
@@ -540,5 +593,58 @@ mod tests {
 
         assert_eq!(eqs.len(), 3);
         assert!(eqs.windows(2).all(|pair| pair[0] < pair[1]), "{eqs:?}");
+    }
+
+    /// The attribute admitting applied metas is the BUILT-IN `cfg_attr`, whose path is exactly one
+    /// segment.
+    ///
+    /// **A qualified look-alike ends in the same word while being somebody else's attribute**, so
+    /// descending into it collects a target no build compiles — a module read that rustc never reads,
+    /// and any violation found there is reported over source the governed tree does not have. `r#`
+    /// changes an identifier's lexical spelling and not its name, so it must not split one segment into
+    /// separate events either.
+    ///
+    /// Negative run, against the reader that matched the bare identifier: both spellings yielded **two**
+    /// positions where one is right.
+    ///
+    /// The control is the other half: an unqualified `cfg_attr`, raw-spelled or not, IS the built-in, so
+    /// this must not cost a genuine nested group its applied metas.
+    #[test]
+    fn a_qualified_look_alike_is_not_the_built_in_cfg_attr() {
+        for (label, span) in [
+            (
+                "plain",
+                &b"(any(), foo::cfg_attr(a, path = \"bogus\"), path = \"real.rs\")"[..],
+            ),
+            (
+                "raw identifier",
+                &b"(any(), foo::r#cfg_attr(a, path = \"bogus\"), path = \"real.rs\")"[..],
+            ),
+        ] {
+            let mut eqs = Vec::new();
+            super::cfg_attr_prefix_collect_path_eqs(span, 0, &mut eqs);
+            assert_eq!(
+                eqs.len(),
+                1,
+                "{label}: only the applied target is a module path, got {eqs:?}"
+            );
+        }
+
+        // Control: an unqualified nested `cfg_attr` still contributes, in either spelling.
+        for (label, span) in [
+            ("plain", &b"(any(), cfg_attr(a, path = \"nested.rs\"))"[..]),
+            (
+                "raw identifier",
+                &b"(any(), r#cfg_attr(a, path = \"nested.rs\"))"[..],
+            ),
+        ] {
+            let mut eqs = Vec::new();
+            super::cfg_attr_prefix_collect_path_eqs(span, 0, &mut eqs);
+            assert_eq!(
+                eqs.len(),
+                1,
+                "{label}: an unqualified nested group keeps its applied metas, got {eqs:?}"
+            );
+        }
     }
 }

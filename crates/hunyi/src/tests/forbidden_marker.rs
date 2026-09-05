@@ -314,9 +314,9 @@ pub(super) fn unrenderable_generic_marker_instantiations_fail_loud_without_posit
 
 #[test]
 pub(super) fn a_forbidden_marker_on_a_local_type_alias_reacts() {
-    // Round-2 fix (regression closed): a marker impl'd on a local type alias resolves through the
-    // alias closure to the underlying defined subtree type, so it still reacts — the round-1
-    // type-defs cross-check alone (aliases are not in type_defs) had silently dropped it.
+    // A marker impl'd on a local type alias resolves through the alias closure to the underlying
+    // defined subtree type, so it still reacts — type-defs cross-check alone (aliases are not in
+    // type_defs) would silently drop it.
     let out = marker_findings(
         "alias-self",
         &[
@@ -352,17 +352,11 @@ pub(super) fn a_forbidden_marker_on_a_local_type_alias_reacts() {
 
 #[test]
 pub(super) fn a_blanket_impls_own_generic_param_is_not_resolved_through_a_same_named_alias() {
-    // Round-9 finding: resolve_self_type (containment.rs) resolved a bare self type exactly like
-    // any other path reference, with no awareness that the identifier might be the impl's OWN
-    // declared generic type parameter rather than a nominal type. `impl<T> Marker for T {}` (a
-    // blanket impl — T is a parameter use, not a type) in a module that also happens to declare an
-    // unrelated `use ... as T` alias resolved the self type through that alias, fabricating a
-    // marker-acquisition finding on the aliased type even though the source never writes `impl
-    // Marker for` it at all. The sibling exposure collectors already shadow an impl's own generic
-    // params for every OTHER position (collect::exposure::type_param_names); the marker gate's self-type
-    // check lacked the identical shadowing. Fixed by threading each ImplSite's own
-    // `type_params` (impl<T, ..>'s declared names) into resolve_self_type, which now drops a bare
-    // self type matching one of them before any resolution is attempted.
+    // A blanket impl's declared generic parameter (`impl<T> Marker for T {}`) is a parameter use,
+    // not a nominal type. In a module that also happens to declare an unrelated `use ... as T`
+    // alias, the self type must not resolve through that alias (which would fabricate a finding).
+    // Threading each ImplSite's own `type_params` into resolve_self_type drops a bare self type
+    // matching one of them before resolution.
     let out = marker_findings(
         "blanket-impl-generic-param-shadow",
         &[
@@ -385,15 +379,9 @@ pub(super) fn a_blanket_impls_own_generic_param_is_not_resolved_through_a_same_n
 
 #[test]
 pub(super) fn a_blanket_impls_generic_param_is_shadowed_even_through_a_multi_segment_projection() {
-    // Round-10 finding: round 9's fix (resolve_self_type) only recognized a BARE single-segment
-    // self type as the impl's own generic parameter (via `Path::get_ident()`, which returns `None`
-    // for anything with more than one segment). `impl<T> Marker for T::Assoc {}` -- T::Assoc is a
-    // projection off the impl's own parameter, never a nominal type, exactly like the sibling
-    // exposure collector's own `is_shadowed_param_path` already treats `T::Item` -- was therefore
-    // never shadowed and still resolved the leading `T` through an unrelated same-named alias,
-    // fabricating a marker-acquisition finding one segment deeper than round 9 closed. Fixed by
-    // sharing `is_shadowed_param_path` (the leading-segment check, regardless of further segments)
-    // between the exposure collector and resolve_self_type instead of a narrower private copy.
+    // A multi-segment projection off an impl's generic parameter (`impl<T> Marker for T::Assoc {}`)
+    // is a projection off a parameter, never a nominal type. The leading `T` must remain shadowed
+    // even through further segments, sharing `is_shadowed_param_path` with the exposure collector.
     let out = marker_findings(
         "blanket-impl-multi-segment-generic-param-shadow",
         &[
@@ -417,17 +405,10 @@ pub(super) fn a_blanket_impls_generic_param_is_shadowed_even_through_a_multi_seg
 #[test]
 pub(super) fn a_qualified_path_self_type_off_the_impls_own_generic_param_is_not_resolved_through_an_alias()
  {
-    // Round-11 finding: `resolve_self_type` had no `qself.is_none()` guard at all, unlike its
-    // sibling `canonical_self_owner` (which excludes a qself'd self type from resolution
-    // entirely). A QUALIFIED-path self type (`<T>::Item`) stores its own dependent type (`T`, the
-    // impl's own generic parameter) in `qself.ty`, entirely OUTSIDE `path.segments` -- so
-    // `is_shadowed_param_path`, which only ever inspects `path`, can never see it. The trailing
-    // segments (`Item`) were resolved as an ordinary bare path instead, silently bypassing the
-    // round-9/10 shadow through a third syntactic vector. `impl<T: HasItem> Marker<T> for <T>::Item
-    // {}` is real, compiling Rust (the `Marker<T>` trait argument satisfies rustc's E0207
-    // unconstrained-type-parameter check). Fixed by dropping any qself'd self type before the
-    // shadow check even runs -- the same "not a placeable nominal path" treatment already given to
-    // every other non-resolvable self-type shape.
+    // A QUALIFIED-path self type (`<T>::Item`) stores its dependent type (`T`, the impl's generic
+    // parameter) in `qself.ty`, outside `path.segments`. The trailing segments (`Item`) must not
+    // resolve as an ordinary bare path through an unrelated alias. Any qself'd self type is
+    // dropped before the shadow check runs.
     let out = marker_findings(
         "qself-bracket-projection-shadow-gap",
         &[
@@ -471,7 +452,7 @@ pub(super) fn a_forbidden_marker_on_an_alias_to_a_foreign_type_is_clean() {
         out.is_empty(),
         "a marker on an alias to a foreign type (Vec<u8>/String) lands off the subtree — no finding: {out:?}"
     );
-    // Control: an alias to a real subtree struct still reacts (the round-2 behavior preserved).
+    // Control: an alias to a real subtree struct still reacts.
     let out = marker_findings(
         "local-alias-self-control",
         &[
@@ -780,10 +761,10 @@ pub(super) fn two_same_named_types_in_different_submodules_stay_distinct() {
 pub(super) fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_marker_finding()
 {
     // The forbidden-marker impl form shares resolve_child_modules/scan.impls with trait-impl-
-    // locality, so it has the identical round-6 duplication hazard: two mutually-exclusive
-    // #[cfg] arms declaring the same name resolving to one real file used to inflate one real
-    // marker acquisition into two findings. Keep the owner renderable so this test isolates cfg
-    // de-duplication; positional fallback rejection has its own reaction.
+    // locality: two mutually-exclusive #[cfg] arms declaring the same name resolving to one real
+    // file must not inflate one real marker acquisition into two findings. Keep the owner
+    // renderable so this test isolates cfg de-duplication; positional fallback rejection has its
+    // own reaction.
     let out = marker_findings(
         "cfg-dual-same-file",
         &[

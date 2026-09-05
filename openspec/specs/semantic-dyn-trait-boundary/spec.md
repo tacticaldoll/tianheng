@@ -192,7 +192,7 @@ shared violation identity `(target, rule_key, fact)` (the finding **seam-qualifi
 `{rendered shape} exposed by {seam}`, per the scenarios above); and the violation report
 identifies the governed anchor, the rule (`must not expose dyn`), the offending finding (the
 exposed trait-object, named where resolvable), and the boundary's reason. The AST observation SHALL
-remain in `hunyi` — the only crate permitted to depend on `syn` — and findings SHALL render
+remain in `hunyi` — the only **packaged** crate that depends on `syn` — and findings SHALL render
 via the existing hand-rolled path/type stringification, never `quote`/`syn`'s `printing`
 feature, so the `hunyi` dependency allowlist (`{serde_json, syn, xuanji}`) is untouched.
 

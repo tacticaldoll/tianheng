@@ -136,6 +136,42 @@ argv=$*
 printf '%s\n' "${argv//$'\n'/\\n}" >> "$FAKE_GH_LOG"
 if [[ $1 == repo && $2 == view ]]; then
     printf '%s\n' 'tacticaldoll/tianheng'
+elif [[ $1 == pr && $2 == view && $* == *"--json headRefName"* ]]; then
+    # The branch the squash comes from. The contract names both endpoints, so the gate takes both.
+    if [[ $FAKE_GH_MODE == unreadable-head-branch ]]; then
+        printf 'gh: cannot read the head branch\n' >&2
+        exit 1
+    fi
+    # Read twice, like the title and the base. Renaming a branch retargets the pull requests on it, so
+    # `headRefName` moves while `headRefOid` does not -- and `--match-head-commit` is satisfied either way.
+    calls=$(cat "$FAKE_HEAD_BRANCH_CALLS" 2>/dev/null || printf '0')
+    calls=$((calls + 1))
+    printf '%s' "$calls" > "$FAKE_HEAD_BRANCH_CALLS"
+    if [[ $FAKE_GH_MODE == head-branch-moved ]] && ((calls >= 2)); then
+        printf '%s\n' 'renamed/after-the-gate'
+    else
+        printf '%s\n' "${FAKE_GH_HEAD_BRANCH:-fix/some-repair}"
+    fi
+elif [[ $1 == pr && $2 == view && $* == *"--json baseRefName"* ]]; then
+    if [[ $FAKE_GH_MODE == unreadable-base ]]; then
+        printf 'gh: cannot read the base branch\n' >&2
+        exit 1
+    fi
+    # The base the squash lands on. The gate takes it as evidence because `AGENTS.md` states the one message
+    # exception as the release-branch-to-`main` squash, and a subject is not a destination. These fixtures
+    # merge onto a release branch, which is what an ordinary squash does.
+    #
+    # Read TWICE, for the same reason the title is: it is one end of a relation the gate judged, and a base
+    # edited between the two makes the verdict in hand a verdict about a destination the merge will not use.
+    # The counter lives on disk because "the second call" has to mean second across two separate processes.
+    calls=$(cat "$FAKE_BASE_CALLS" 2>/dev/null || printf '0')
+    calls=$((calls + 1))
+    printf '%s' "$calls" > "$FAKE_BASE_CALLS"
+    if [[ $FAKE_GH_MODE == base-moved ]] && ((calls >= 2)); then
+        printf '%s\n' 'main'
+    else
+        printf '%s\n' "${FAKE_GH_BASE:-release/0.0.0}"
+    fi
 elif [[ $1 == pr && $2 == view && $* == *"--json title"* ]]; then
     # The wrapper reads the title TWICE: once as evidence for the gate, once after it, so the subject it is
     # about to record is still the title. Answering the same string both times is what left the second read
@@ -207,7 +243,12 @@ elif [[ $1 == pr && $2 == view && $* == *"--json headRefOid"* ]]; then
     if [[ $FAKE_GH_MODE == unreadable-head ]]; then
         printf '%s\n' ''
     else
-        printf '%s\n' '81c9ef062fafee9fafe2ebfaacf68288f5554747'
+        # A head this fixture invents, and deliberately one that resolves to no object in **any** repository:
+        # the value here was a real commit of this tree until the 0.5.0 window, squashed away and reachable
+        # from no branch, so it resolved for whoever still held it and for nobody else. What the assertions
+        # below need is that the wrapper pins the head the evidence came from — an opaque token, whose one
+        # requirement is that a reader cannot mistake it for a reference.
+        printf '%s\n' 'feedfacedeadbeefcafebabe0123456789abcdef'
     fi
 elif [[ $1 == api ]]; then
     case $FAKE_GH_MODE in
@@ -218,7 +259,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
+    subjects | invalid-number | unreadable-head | unreadable-base | unreadable-head-branch | unreadable-body | body-moved | title-moved | base-moved | head-branch-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -302,6 +343,8 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
         .env("FAKE_CARGO_LOG", &cargo_log)
         .env("FAKE_COMMITS", &commits)
         .env("FAKE_TITLE_CALLS", scratch.join("title-calls"))
+        .env("FAKE_BASE_CALLS", scratch.join("base-calls"))
+        .env("FAKE_HEAD_BRANCH_CALLS", scratch.join("head-branch-calls"))
         .env("TMPDIR", &tmp);
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
@@ -865,7 +908,7 @@ fn the_merge_is_pinned_to_the_head_the_gate_read() {
         .find(|line| line.starts_with("pr merge"))
         .unwrap_or_else(|| panic!("the merge must be reached:\n{}", run.gh_log));
     assert!(
-        merge.contains("--match-head-commit 81c9ef062fafee9fafe2ebfaacf68288f5554747"),
+        merge.contains("--match-head-commit feedfacedeadbeefcafebabe0123456789abcdef"),
         "the merge must pin the head the evidence came from, got {merge}"
     );
 
@@ -883,6 +926,66 @@ fn the_merge_is_pinned_to_the_head_the_gate_read() {
         head_at < commits_at,
         "the head must be read BEFORE the commit set, or the pin fails open; gh log was:\n{}",
         run.gh_log
+    );
+}
+
+/// A head branch that cannot be read stops before the gate and the merge.
+///
+/// The exception names the release-branch-to-`main` squash, so the branch a squash comes from is evidence
+/// too. Not knowing it is not the same fact as knowing it is ordinary.
+#[test]
+fn an_unreadable_head_branch_stops_before_the_gate_and_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "unreadable-head-branch", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "an unreadable head branch must stop the wrapper; got {:?} with stderr {:?}",
+        run.status.code(),
+        run.stderr
+    );
+    assert!(
+        run.cargo_log.is_empty() && !run.gh_log.lines().any(|line| line.starts_with("pr merge")),
+        "neither the gate nor the merge may be reached:\ngh:\n{}\ncargo:\n{}",
+        run.gh_log,
+        run.cargo_log
+    );
+}
+
+/// A base that cannot be read stops before the gate and the merge.
+///
+/// The one message exception is the release-branch-to-`main` squash, so the base is evidence the gate judges
+/// by and not a convenience. Not knowing where a squash lands is not the same fact as knowing it lands
+/// somewhere ordinary: a wrapper that guessed would decide the exception by default, which is the direction
+/// the subject-only reading already got wrong.
+///
+/// Negative run: with the base's acquisition unguarded, the wrapper carried an empty value into the gate and
+/// the gate read it as a base that is not `main` — a verdict reached on a value nobody supplied.
+#[test]
+fn an_unreadable_base_stops_before_the_gate_and_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "unreadable-base", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "an unreadable base must stop the wrapper; got {:?} with stderr {:?}",
+        run.status.code(),
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("one message exception"),
+        "the refusal must say what the base decides, got {:?}",
+        run.stderr
+    );
+    assert!(
+        run.cargo_log.is_empty() && !run.gh_log.lines().any(|line| line.starts_with("pr merge")),
+        "neither the gate nor the merge may be reached:\ngh:\n{}\ncargo:\n{}",
+        run.gh_log,
+        run.cargo_log
     );
 }
 
@@ -1042,9 +1145,9 @@ fn no_temporary_file_survives_the_wrapper() {
 /// file and is the defect wearing the fix's clothes. So the controlled `gh` resolves its body the way the real
 /// tool does and records what would be written, and this reads that.
 ///
-/// Three of the four judged inputs already held this property — the subject travels as a value, the repository
-/// is resolved once, the head is pinned with `--match-head-commit` and the commit set through it — and nothing
-/// said they were one set, which is how the fourth sat here through the rounds that built this wrapper.
+/// Every other judged input already held this property — the subject travels as a value, the repository is
+/// resolved once, the head is pinned with `--match-head-commit` and the commit set through it — and nothing
+/// said they were one set, which is how the body sat here through the rounds that built this wrapper.
 #[test]
 fn the_merge_records_the_body_the_gate_judged_not_the_file_it_came_from() {
     let Some(root) = workspace_root() else {
@@ -1085,10 +1188,12 @@ fn the_merge_records_the_body_the_gate_judged_not_the_file_it_came_from() {
 
 /// A title edited while the gate ran stops the wrapper, as a cannot-judge.
 ///
-/// **The guard this exercises was shipped without one.** The wrapper judges three inputs and pins two of them
-/// by construction — the body travels as the value the gate judged, the commit set through
-/// `--match-head-commit` — and the third was captured once. Re-reading it closed that, and the controlled
-/// `gh` answered the same string on every call, so no direction could tell the guard from its absence.
+/// **The guard this exercises was shipped without one.** The wrapper pins what the merge records by
+/// construction — the body travels as the value the gate judged, the commit set through
+/// `--match-head-commit` — and what the merge is judged against has to be re-read instead. The title was
+/// captured once; re-reading it closed that, and the controlled `gh` answered the same string on every call,
+/// so no direction could tell the guard from its absence. `a_base_changed_while_the_gate_ran_stops_before_the_merge`
+/// is the same shape, found by reading this comment's own criterion against what the wrapper had grown.
 ///
 /// The class is a **cannot-judge**, not a disagreement: the gate did not find the subject wrong, it found it
 /// right against a title that no longer exists, so what the wrapper holds is a verdict about a vanished
@@ -1121,12 +1226,114 @@ fn a_title_edited_while_the_gate_ran_stops_before_the_merge() {
     );
 }
 
-/// The control: an unchanged title still reaches the merge.
+/// A base changed while the gate ran stops the wrapper, as a cannot-judge.
 ///
-/// Without it the direction above is satisfied by a wrapper that refuses every run, and the re-read would be
-/// indistinguishable from a stop-everything guard.
+/// **The base is the other end of the same relation the title is, and it was filed on the value side.** The
+/// one message exception is the release-branch-to-`main` squash, so admission to it is decided by the base
+/// and the head branch together — not by the subject, which is not a destination. The base is therefore
+/// evidence the gate judged, and `gh pr merge` takes no base of its own: it lands wherever the pull request
+/// points **at merge time**. A base edited after the gate ran leaves an approved empty-body release message
+/// landing on a destination that was never judged, and the reverse — a release triple approved, then
+/// re-pointed at a development branch — carries the exception to a squash that is not one.
+///
+/// The head branch is deliberately **not** re-read beside it. GitHub offers no way to change an existing pull
+/// request's head, and `--match-head-commit` already pins the head object; a guard for it could be made to
+/// fail only against this stub, never against the tool, so it would be a guard nothing has been seen to
+/// refuse.
+///
+/// Negative run, before the post-gate base re-read existed:
+///
+/// ```text
+/// assertion `left == right` failed: a moved base is a cannot-judge, not a disagreement; got Some(0) with stderr ""
+///   left: Some(0)
+///  right: Some(2)
+/// ```
+///
+/// Exit `0`: the wrapper reached `pr merge` and completed, recording the message it had approved for the
+/// old base. The panic's own header is left out rather than quoted, because it carries a pid and a line
+/// number of this file — a reference that moves whenever anything above it does, which is the one thing a
+/// pasted record must not acquire. The first version of this block was composed from the intention instead
+/// of pasted, and lost the `left`/`right` pair that is the actual evidence.
 #[test]
-fn an_unchanged_title_still_reaches_the_merge() {
+fn a_base_changed_while_the_gate_ran_stops_before_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "base-moved", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a moved base is a cannot-judge, not a disagreement; got {:?} with stderr {:?}",
+        run.status.code(),
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("release/0.0.0") && run.stderr.contains("main"),
+        "the refusal must name both bases so an operator can see what moved, got {:?}",
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.lines().any(|line| line.starts_with("pr merge")),
+        "the merge must not be reached, got {:?}",
+        run.gh_log
+    );
+}
+
+/// A head branch renamed while the gate ran stops the wrapper, as a cannot-judge.
+///
+/// **This direction exists because the argument for not having it was wrong.** The exclusion was written as
+/// *GitHub offers no way to change an existing pull request's head*, so a guard could only ever refuse
+/// against a fixture — which `AGENTS.md` does not count as a guard. GitHub cannot **repoint** an open pull
+/// request at a different head, but renaming a branch retargets the pull requests on it: `headRefName` moves
+/// while `headRefOid` does not, so `--match-head-commit` pins the object and observes nothing about the name.
+///
+/// What the name decides is the one message exception, which names both endpoints. A
+/// `release/X.Y.Z` -> `main` squash approved with an empty body, whose head branch is then renamed, lands
+/// that empty body from a branch that is no longer a release branch. The exception can only be **lost** this
+/// way and never gained — the gate refuses an empty body up front when the head is not `release/X.Y.Z` — so
+/// this is not a false negative; it is a verdict about an origin the merge will not have.
+///
+/// Negative run, before this re-read existed:
+///
+/// ```text
+/// assertion `left == right` failed: a renamed head branch is a cannot-judge, not a disagreement; got Some(0) with stderr ""
+///   left: Some(0)
+///  right: Some(2)
+/// ```
+#[test]
+fn a_head_branch_renamed_while_the_gate_ran_stops_before_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "head-branch-moved", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a renamed head branch is a cannot-judge, not a disagreement; got {:?} with stderr {:?}",
+        run.status.code(),
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("fix/some-repair") && run.stderr.contains("renamed/after-the-gate"),
+        "the refusal must name both branches so an operator can see what moved, got {:?}",
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.lines().any(|line| line.starts_with("pr merge")),
+        "the merge must not be reached, got {:?}",
+        run.gh_log
+    );
+}
+
+/// The control: a pull request none of whose re-read inputs moved still reaches the merge.
+///
+/// Without it every direction above is satisfied by a wrapper that refuses every run, and a re-read would be
+/// indistinguishable from a stop-everything guard. It is the control for all three — title, base and head
+/// branch — because they sit on one path, so a wrapper refusing everything would satisfy any one of them
+/// alone. It was named for the title while the title was the only one, and the name is what a `PINNED-BY`
+/// carries into three scenarios: an identifier is a claim with no room for a caveat.
+#[test]
+fn an_unmoved_pull_request_still_reaches_the_merge() {
     let Some(root) = workspace_root() else {
         return;
     };
@@ -1134,7 +1341,7 @@ fn an_unchanged_title_still_reaches_the_merge() {
     assert_eq!(
         run.status.code(),
         Some(0),
-        "an unchanged title must not be refused; stderr {:?}",
+        "a pull request none of whose re-read inputs moved must not be refused; stderr {:?}",
         run.stderr
     );
     assert!(

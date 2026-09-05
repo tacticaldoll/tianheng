@@ -98,11 +98,13 @@ false negative, and only the reaction can foreclose it.
   `Outcome`, with the JSON serialization intrinsic to those types. `serde_json`-only; carries no observation
   engine, and depends on no workspace member — every dimension sits above it.
 - **`xingbiao` (星表) — the workspace-data substrate.** The star-table: the shared,
-  `serde_json`-only reader of `cargo metadata` (`cargo_metadata` / `find_package` /
-  `crate_root_file`), sitting below every dimension like 璇璣 and depending on no workspace
-  member. It is *not* 璇璣 — it does IO (it spawns cargo) and observes — but a substrate beneath
-  the dimensions, so the static and semantic dimensions read the workspace through **one** source
-  of truth, not two hand-copied twins that drift apart (the v0.1.6 SSOT extraction — see Decisions).
+  `serde_json`-only reader of what the workspace tree **is** — `cargo metadata`, path identity, and
+  whether a path is absent or merely unreadable — sitting below every dimension like 璇璣 and depending
+  on no workspace member. It is *not* 璇璣 — it does IO (it spawns cargo) and observes — but a substrate
+  beneath the dimensions, so **all three** read the workspace through **one** source of truth, not
+  hand-copied twins that drift apart (the v0.1.6 SSOT extraction — see Decisions). 漏刻 reaches it
+  through its CI-only `audit` face, which the runtime-identity decision below already records. What
+  belongs here is a criterion rather than a list, because the charter has widened twice: see Decisions.
 - **`guibiao` (圭表) — the static observation core.** The gnomon: it reads the cast
   shadow — imports, dependencies, and inline symbol-path calls (the clock-free
   `must_not_call_inline` confinement). The dependency-light static engine, derived from
@@ -207,6 +209,34 @@ govern-by-reaction, never a thing the tool wields.
 
 Record significant decisions here (the *why*; specs and code carry the *what*).
 
+- **How deferred work is chosen, written down because deriving it cost a round trip.** The `0.6.0` window took
+  the deferred queue's entries to the tree one at a time, and the ordering that produced value was not the one
+  a reader of the queue would guess. Four rules, in priority order:
+
+  **One — prefer work that shrinks the queue over work that shrinks a gap.** An entry whose premises have
+  drifted charges every future reader: it reads as actionable, points at the wrong file, and invites someone to
+  re-design a question already settled. Closing it is free. Of the entries measured in that window, half had a
+  premise that had gone false or had never been true — one named a reader that had never read the grammar it was
+  filed about, and one proposed a change the tree had already declined in three carriers.
+
+  **Two — measure an entry's premises before costing its repair.** Not after. Every wasted proposal in that
+  window came from costing a `Shape` whose premises nobody had re-run.
+
+  **Three — never add a permanent authoring tax to close a bounded, visible failure.** Three entries were
+  declined on exactly this: a gate on every merge to hold a naming convention, a handle on every future
+  migration bullet to hold a mark whose information is present either way, and a check that would be right at
+  one moment and wrong the rest of the time. Consistency here is what keeps the governance share falling.
+
+  **Four — prefer strengthening existing stock to adding stock, but only where the rate is favourable.** Where
+  it is not, make the obligation part of the act that creates the debt rather than a campaign against the
+  standing set. A citation is cheap and its mutation is not, so the rule is that citing carries the mutation —
+  chasing the numerator loses to stopping the denominator.
+
+  *The guard this needs, stated with it:* a queue that only ever shrinks by declining can hide decay. What
+  stops that is that every decline carries its measurement and a reopening condition written as a **property**
+  rather than as availability — *the accessor leaves the adopter surface*, not *someone finds time*.
+  *(Accepted 2026-09-03.)*
+
 - **Accepted: 繩墨 and 勘合 are formations of the law, not a relocation of it.** The 0.5.0 window added two
   crate boundaries to `shengmo::law::constitution()` under a commit body reading *the law itself did not change:
   the regenerated projection differs by exactly three lines, all of them the preamble's own self-reference*.
@@ -298,7 +328,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   macro **name** is soundness, not caution: an arbitrary macro's nested blocks are not arms,
   and reading them as such invents items the macro may never emit.
   Adopting a real parser (`syn`) would resolve all of this for free but would break the
-  dependency-light core (the `serde_json`-only self-law); that is an amendment, not a
+  dependency-light core, whose self-law admits no external dependency besides `serde_json`; that is an amendment, not a
   silent trade. A boundary's governed *target* is file-based: an inline `mod name { … }`
   is reachable for import attribution but owns no file, so it cannot be a target — a
   boundary on one fails loud with a self-describing constitution error (exit 2), distinct
@@ -307,7 +337,18 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
 - **Module Resolution & Safety Key Disambiguation.** Keyed identity for *governance* (what to report a violation under) and keyed identity for *safety/resolution bookkeeping* (what counts as "the same thing open", or where a file's own children live) are separate keys. A fix must target the underlying shared model rather than a single reported instance (the 0.2.2 module resolution lesson).
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's.** Tianheng governs the declared per-target layer (manifest hygiene, declared imports); resolved whole-graph build-provenance belongs to `cargo-deny`.
 - **`xuanji` is an internal refactor (reaction model), `serde_json`-only.** Holds dimension-agnostic types (`Violation`, `Report`, `Baseline`, `Outcome`) beneath all dimensions without observation engines.
-- **`xingbiao` is the shared workspace-data substrate.** Cargo metadata reading logic is consolidated into `xingbiao` below the 三儀 to prevent twin-drift.
+- **`xingbiao` is the single reader of truth for what the workspace tree IS.** Cargo metadata reading was
+  the first thing consolidated there below the 三儀 to prevent twin-drift, and the charter has widened twice
+  since — path identity for a module-graph cycle guard, then the filesystem-answer policy separating an
+  absent path from one no reader could stat. Both were earned by the same failure: a dimension answering
+  privately, and three readers then disagreeing about one tree.
+
+  **So the decision is the criterion rather than the instance.** A fact belongs there when every dimension
+  must agree on it *before* observing AND it is a fact about the tree rather than a reading of what the tree
+  contains. What that refuses is the load-bearing half: an interpretation of source is a dimension's own
+  observation. `cargo metadata` says which file is a crate root; what the tokens in that file mean belongs
+  to whichever dimension is asking. The line is between *what is there* and *what it says*, and a widening
+  that cannot be argued across it is a new crate's job, not this one's.
 - **The semantic capability-admission test (the gate against lints).** A semantic capability is admissible in 渾儀 iff: (1) declarative-not-lint; (2) no essential gap on local-crate AST; (3) anchorable to a `syn`-resolvable element.
 - **Name resolution is a 渾儀-internal shared layer (`hunyi::resolve`).** `guibiao` (syn-free scanner) and `hunyi` (`syn` AST) retain separate resolution engines to maintain the syn quarantine.
 - **漏刻 (runtime) is identity-coherent.** Prod face (`assert_boundary!`) is std-light and fail-closed; CI face (`audit_probe_coverage`) is feature-gated behind `audit` (`xingbiao` dependency). The shipped default sink never panics on a broken stderr write, and never silently loses that failure either: it counts it (`dropped_sink_events`), a single infallible atomic add, so an adopter who never calls `set_sink` can still detect the loss from outside the process.

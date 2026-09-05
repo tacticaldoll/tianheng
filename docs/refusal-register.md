@@ -8,9 +8,15 @@ A site that no direction holds is **declared unheld**, with why, an owner and a 
 
 Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.rs`. **Do not edit by hand** — regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_register`. A stale projection fails that gate.
 
-**16 of 140 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
+**19 of 145 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
 
 ## Declared unheld
+
+### `release-coherence#changelog-in-head-unreadable`
+
+- because presence is asked by `ls-tree HEAD -- CHANGELOG.md`, which exits non-zero only where git cannot read HEAD's **tree** — and the judgement resolves HEAD and the release commit before it, through reads that fail first on any object store broken enough to reach this one. Measured: a fixture whose `.git/index` is corrupt leaves tree reads working, which is why the content read moved off `status` in the first place, and a fixture whose objects are gone fails at `rev-parse`. The blob half of the same question **is** observed, by `a_changelog_git_cannot_read_at_head_is_not_a_modified_worktree`, because a tree can name a blob git will not hand over
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
 
 ### `publish-source-integrity#release-tag-unreadable`
 
@@ -51,6 +57,18 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 ### `release-coherence#member-manifest-outside-workspace-root`
 
 - because cargo resolves member paths against the root it reports, so a member outside it is a disagreement inside cargo rather than a shape a manifest can carry
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `release-coherence#member-directory-not-utf8`
+
+- because the manifest this reader spells is a `&str` cargo's JSON handed over, so the parser made its components UTF-8 before this gate saw them and no path built from one can carry a byte the decode refuses — the same arm reached from a filesystem walk IS observed, by `a_crate_directory_that_is_not_utf8_is_refused_by_the_walk`, which is where the bytes are the operating system's rather than a parser's
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `release-coherence#crate-manifest-outside-repository`
+
+- because the manifest is joined onto `repo` in the same loop that strips it, so a walk output sitting outside `repo` is this reader disagreeing with itself rather than a tree a fixture can build — the sibling `member-manifest-outside-workspace-root` above records the same shape for the answer cargo gives, where the join is cargo's rather than this walk's
 - owner: Engine
 - tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
 
@@ -260,6 +278,11 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
+### `release-coherence#changelog-blob-unreadable`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
+
 ### `release-coherence#changelog-or-manifest-unreadable`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
@@ -269,6 +292,11 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
+
+### `release-coherence#crate-directory-not-utf8`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/src/tests/release_coherence_gate.rs`
 
 ### `release-coherence#crate-manifest-unreadable`
 
@@ -290,30 +318,10 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
-### `release-coherence#dependency-declares-several-packages`
-
-- produced in `crates/kanhe/src/release_coherence_gate.rs`
-- observed by `crates/kanhe/tests/release_coherence.rs`
-
-### `release-coherence#dependency-declares-several-paths`
-
-- produced in `crates/kanhe/src/release_coherence_gate.rs`
-- observed by `crates/kanhe/src/tests/release_coherence_gate.rs`
-
-### `release-coherence#dependency-field-unreadable`
-
-- produced in `crates/kanhe/src/release_coherence_gate.rs`
-- observed by `crates/kanhe/tests/release_coherence.rs`
-
-### `release-coherence#dependency-key-unreadable`
-
-- produced in `crates/kanhe/src/release_coherence_gate.rs`
-- observed by `crates/kanhe/src/tests/release_coherence_gate.rs`
-
 ### `release-coherence#dependency-package-value-unreadable`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
-- observed by `crates/kanhe/src/tests/release_coherence_gate.rs, crates/kanhe/tests/release_coherence.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
 
 ### `release-coherence#dependency-path-unreadable`
 
@@ -340,12 +348,12 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
-### `release-coherence#example-declares-several-pins`
+### `release-coherence#example-inherits-what-no-catalog-offers`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
-### `release-coherence#example-inherits-what-no-catalog-offers`
+### `release-coherence#example-manifest-not-a-readable-file`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
@@ -363,7 +371,7 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 ### `release-coherence#example-pin-disagrees`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
-- observed by `crates/kanhe/tests/release_coherence.rs`
+- observed by `crates/kanhe/src/tests/release_coherence_gate.rs, crates/kanhe/tests/release_coherence.rs`
 
 ### `release-coherence#example-pin-unreadable`
 
@@ -410,11 +418,6 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/src/tests/release_coherence_gate.rs`
 
-### `release-coherence#internal-pin-several`
-
-- produced in `crates/kanhe/src/release_coherence_gate.rs`
-- observed by `crates/kanhe/src/tests/release_coherence_gate.rs`
-
 ### `release-coherence#internal-pin-unreadable`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
@@ -440,12 +443,32 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
+### `release-coherence#lock-unreadable`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
+
 ### `release-coherence#lock-version-unreadable`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
+### `release-coherence#manifest-unparseable`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/src/tests/release_coherence_gate.rs, crates/kanhe/tests/release_coherence.rs`
+
 ### `release-coherence#member-does-not-inherit-workspace-version`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
+
+### `release-coherence#member-is-the-workspace-root`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/src/tests/release_coherence_gate.rs`
+
+### `release-coherence#member-manifest-unparseable`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
@@ -471,6 +494,11 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
 ### `release-coherence#no-tracked-file-for-any-member`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
+
+### `release-coherence#release-commit-carries-no-changelog`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`

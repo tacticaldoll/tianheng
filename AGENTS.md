@@ -71,17 +71,43 @@ themselves. The ordinals now have one owner; these three have names.
 
 Keep every reason **within the boundary's observable perimeter** — a reason must never assert structure the law does not react to (that is prose prescription, an open loop with no backstop). Forward voice, bounded to what reacts, minimal in reactions.
 
-## What earns a place in a doc comment
+## What earns a place in doc comments and specification prose
 
-A `///` or `//!` passage carries the item's contract. **The test is whether the passage carries an
-observation source or a falsifier for a claim the item makes.** Where it does, it stays and is load-bearing;
-where it is only *how the code got here*, it is provenance and belongs with the record.
+A `///` or `//!` passage, or an OpenSpec specification clause (`openspec/specs/*`), carries the item's
+contract. **The test is whether the passage carries an observation source or a falsifier for a claim the item makes.**
+Where it does, it stays and is load-bearing; where it is only *how the code or text got here*, it is provenance
+and belongs with the record.
 
 That distinction, and not a ban on past-tense verbs, is what separates the two. `Measured:
 bash -c 'printf a;#b' prints a, so bash opens a comment there` is the **observation source** for a declared
 over-inclusion — delete it and what remains is an assertion nothing can falsify, which is the defect class
-this file spends four rules closing. `fixed in round 6` is provenance: it names when, not what, and nothing
-downstream reads it.
+this file spends four rules closing. `fixed in round 6` or `two independent reviews read this as requiring X`
+is provenance: it names when or how a disagreement was resolved, not what reacts, and nothing downstream reads it.
+
+**A specification clause is a baseline, and a baseline is atemporal.** The test above is the doc-comment
+test: a `///` passage sits beside the code it describes, so its observation source is what makes *that code's*
+claim falsifiable at that site. A specification is the thing everything else is checked **against**, and
+history embedded in it drifts — it describes a tree state that moves while the clause does not. So over
+`openspec/specs/*` the test is sharper: **reproducible now, or not at all.** *Measured under cargo 1.96.0,
+these five spellings inherit* stays, because anyone can re-run it. *Twenty entries named it, spread across
+four adopter headings* goes, because the section it counted has been collapsed and nothing produces the
+figure. Where a mechanism is carried only by its history, restate the mechanism as a property: *a squash can
+carry a message over a tree byte-identical to its parent's while every other guard is satisfied*, never *this
+wrapper merged one*.
+
+**This is an appeal, and what makes it an appeal rather than a reaction is a property of the author, not of
+the rule.** A reaction is worth building when it is decidable **and** its refusal names a repair the author
+can apply without judging meaning. `doc_provenance` refuses `round[- ][0-9]+` and the repair is *delete the
+number*; the relative-anchor reader refuses four declared phrases and the repair is *name the release*. Both
+converge in one step. This vocabulary does not, measured while converting twenty-one sites: `used to` is
+ambiguous between *formerly* and *employed to* — `SHALL NOT be used to anticipate them` is legitimate and
+matches — and `was rewritten` occurs inside a quoted argument, where it is the subject of a sentence rather
+than an assertion. A matcher over those refuses text whose correct repair is sometimes deletion, sometimes
+retention and sometimes restructuring the paragraph, so an author cannot converge on it and writes to the
+checker instead of writing well. That inverts 潛移: the idiom is what gets imitated and the reaction is the
+backstop, never the audience. The unambiguous half — `Measured before`, `no longer says`, `used to be wider`,
+`the shape that failed` — would be reactable, and is deliberately left unbuilt, because the half that matters
+is the ambiguous one and this paragraph is the measurement that says so.
 
 Applied to the shapes a review is likely to file:
 
@@ -94,7 +120,9 @@ Applied to the shapes a review is likely to file:
 | a review round number, a pull request number | provenance |
 | a rejected alternative with no measurement | provenance |
 | **a relative anchor — `this window`, `the previous round`, or a `path.rs:120` into this tree** | neither: it names a moving reference, so it is stale the moment the window closes or a line is inserted above it — and unlike a retired term, **nothing goes red**. Anchor it to the moment, or name the item (a function, a scenario, a direction) instead of its position. Measured when this was written: the tree held no such reference, and the only `path:line` in it was a **reaction's own output** — a gate saying where it found an offence, which is the one place the shape is right and the reason this is a rule and not a check |
-| **a commit object in live text** | neither, and this one **has a reaction**: `main` carries one commit per release, so a development commit is unreachable from a fresh clone by construction. Anchor to the release window |
+| **a version this repository never released, named bare** | neither, and it is a different fault from a relative anchor: `this window` names a *moving* reference, while `0.5.1` names one that **never came to rest**. Release class is decided from what a window's changes do, so a window's number is not knowable until its cut, and one written into prose beforehand becomes a pointer to nothing when the class moves. Measured 2026-09-06, three have: `0.3.1`, `0.4.1` and `0.5.1`, none of which has a dated section or a tag. **Name a window by the version it shipped as.** Where the unearned number must appear — a branch a measurement was taken over, or the reclassification itself — the same sentence says what it became or that it never shipped, which is the form the `0.4.1` sites already use and the reason they read correctly today |
+| **in `CHANGELOG.md`, a quoted prior state of this repository's own prose that no release carried** | neither, by the mechanism the commit-object row below already names: `main` carries one snapshot per release, so a sentence written and corrected inside one window existed in **no** artifact an adopter has. Quoting a state that shipped is fine and often load-bearing — the test is `git grep -F "<the quote>" <last tag>`. State the defect instead: *its doc claimed two where the file held four* resolves from any clone; the sentence it claimed it with does not. This file's own header draws the line — the per-change **why** lives in the squashed commits and their pull requests, which is where an intra-window state is reachable. Measured 2026-09-06 over `## [0.6.0]`: of seven quoted prior states, four are present at `v0.5.0` and **three were not**, all three written and corrected inside the same window |
+| **a commit object of this repository, anywhere in tracked content** | neither. `main` carries one commit per release, so a development commit is unreachable from a fresh clone **by construction** — measured in the `0.5.0` window: a real commit of this tree, cited in a test fixture, is contained in no branch and resolves only in a clone that happens to still hold it. A release commit does resolve, and its version tag is the better name. A sha1 also exists only *after* the act it records, so a committed copy is late by construction as well as unreachable. **A third party's object is not this row**: an action pinned as `owner/action@<sha>` is correct supply-chain practice, and the same criterion excludes it without a list — that sha does not resolve here. **In live prose this has a reaction**; in **code** and in **record documents** it does not, and those are where the two instances found so far sat. Anchor to the release window, or to the tag |
 | **a branch a guard has already made unreachable** | neither. A reaction closes the **decidable** part — `str::split` and `str::rsplit` always yield an item, so a fallback on one is dead — and stops there: `xs.max()` or `entry.file_name()` are always-`Some` only on a non-empty producer, which takes the surrounding code rather than the line, so widening the reader would refuse live sites. The rest is this row |
 | **a hosting serial in live text** | neither, and this one deliberately has **no** reaction. A reader over text cannot decide it: the bare shape *is* the fixture for the squash-serial check, and inside one clause a cue and a numeric value are told apart only by meaning. One was built, needed three declared bounds to say what it could not decide, caught nothing, and was withdrawn — a narrow instrument defending a wide rule is worse than the rule alone |
 | **a whitespace run inside an emitted refusal message** | neither, and this one deliberately has **no** reaction. Measured across every `violation_at` / `cannot_judge_at` message in the tree — the corpus, not a count of it: after the two instances found by review were repaired — one in a refusal, one in a declared bound's reason, which a projection was carrying — the only remaining run is column alignment a reader wants (`subject:` above `title:   ` in one multi-line refusal). A universal rule would refuse that, and a rule with it allowlisted is two lists that must agree. The measurement had to be revised several times before it could see the known instance at all — a predicate returning zero over a corpus it cannot see into is indistinguishable from a clean one — which is the other half of why the rule is a rule and not a check. `CHANGELOG.md`'s dated entry carries the figures, where a measurement belongs |
@@ -179,7 +207,9 @@ edited in one pass, or they diverge in whichever direction was not looked at.
 request**: either name the existing reaction or repository check in the PR's `## Verification`, or
 add a new guard and record the required negative run. If a property cannot fail because the data
 model constructs it, state that construction in requirement prose rather than inventing a scenario.
-A scenario with neither form of evidence does not belong in a spec.
+A scenario with neither form of evidence does not belong in a spec. Requirement prose and scenarios
+state the forward contract and its evidence; historical review rounds, past defect narratives, and
+review debriefs belong in commit provenance and PR records, never in specification text.
 
 **Four repository checks already encode the lifecycle, which is how the paragraph this replaces was
 found to be false.** `reference_integrity` excludes a change directory from its corpus — a plan
@@ -226,6 +256,28 @@ the combination that would be a lie is unconstructible.
 binding available when the claim lives in a sentence. It stays stated on its own below because it is the branch
 with a working instrument and a measured cost, and because a general principle nobody can check is the shape
 this repository dissolves rather than keeps.
+
+**Whether a claim earns a binding at all is a separate question, and it was never asked here.** The three
+branches above answer *which* binding a carrier admits; none of them asks whether to bind. The 0.5.0 window
+answered it by default — build the reaction — and built `crates/kanhe` from nothing: 142 refusal call sites
+and 98 declared bounds, replacing 1,562 lines of shell with about 37,229 lines of Rust, while over half its
+landed changes touched that machinery and no published source. The bar below is what was missing.
+
+**A cannot-judge is not a rule, and needs no instance.** A reader declining to answer where it cannot see is
+never the forbidden direction — the alternative is a silent skip, which is. Add one wherever a reader can
+fail. Measured over the registered sites no release note names: **70 of them are exactly this**, and
+retiring any would trade a refusal for silence.
+
+**A violation is a rule, and a rule needs a reachable instance.** Not a fixture built to display the gap, and
+not a gap derived by reading the code: a shape a maintainer would plausibly write, demonstrated against the
+real toolchain. `xuanji."path" = "xuanji"` earned its reaction that way — cargo was measured accepting it,
+and the pin behind it reached the release gate. A gap that exists only in an argument gets **prose and a
+trigger** instead, with the test that trigger would use where it is decidable. Two rules took that form the
+day this was written and cost a sentence each.
+
+This is a bar on the **rate**, not the stock. The stock is not what grew: retiring rules once leaves the
+mechanism that produced them, and the `0.6.0` window's own reviews recorded that mechanism — every reaction it built
+had a defect found in the next round, three of three.
 
 **This rule has no repository check, and that is stated rather than left to be discovered.** Its text branch
 does — `crates/kanhe/tests/census.rs` holds every declared census — but the rule *above* that branch asks
@@ -366,7 +418,7 @@ previously go and read working code. Its directions are held against written fix
 count in a live document, which is what makes them independent of the rule above.
 
 **And it is not subjectless, which printing the state is how anyone found out.** The claim that the tree
-states no census was made twice in this window and was wrong both times, because the sweep that produced it
+states no census was made twice in the 0.5.0 window and was wrong both times, because the sweep that produced it
 looked for one declared phrasing and skipped the record locations. The sweep now says on every
 clean run how many documents state one, and the answer is a **generated projection** whose figure the renderer
 computes. That is the one place a figure belongs — produced, not typed — and this reaction is what makes
@@ -454,6 +506,17 @@ neither at the moment the two were compared, and was noticed only because a revi
 records is the comparison rather than a class still open. Filing counts as answering — a class with a measured
 cost and a recorded trigger is not the same as one nobody has priced — but silence does not. Say which of the
 two the change is doing.
+
+**A pinning citation arrives with its mutation, or with the reason it has none, in the same change.** A
+`PINNED-BY` is held to its name resolving to one registered test; whether that test would fail if the
+behaviour it defends changed is decided only where a mutation is declared for it, and `pin_bites` reports the
+size of the part it does not cover on every clean run. Citing is cheap and authoring a mutation is not, so a
+change that adds citations without mutations enlarges exactly the population that entry exists to report —
+measured here, when six requirements gained citations and not one of them declared a mutation. The obligation
+is the shape of the rule above: do it, or say why not, in the change that creates the debt. What it is **not**
+is a campaign to author mutations for the standing set — that was measured and declined, because the rate is
+against it: the citation set grows faster than mutations can be written, so the move that changes the
+trajectory is stopping the denominator rather than chasing the numerator.
 
 Measured, in the window that produced this rule: three consecutive repair rounds on one text reader, and across
 all three **not one finding was a new code defect**. Every one was a sentence describing what the reader does —
@@ -609,6 +672,25 @@ this file already names — a commit message, a dated `CHANGELOG.md` section, `d
 measurement of the moment it was taken, so holding one to `HEAD` would demand that the record change every
 time the tree does.
 
+**And the carriers are not only prose, which is the half the correction above still left narrow.** *Every live
+document* reads as the files a narration sits in, so a sweep written from it looks in `CHANGELOG.md`,
+`BACKLOG.md`, `PROJECT.md` and the specs — and measured across the `0.6.0` window, that is not where the
+residue was. A superseded claim survived in a **test function name**, in the **doc comments** beside two
+directions, in an **inline comment** in a shell script, in a **scenario heading**, and in the `PINNED-BY`
+names under it. One test file carried a `///` stating the opposite of the assertions twelve lines below it,
+and a review that read the specification alone reported that file as coherent code. A later repair in the
+same window claimed the corpus it had swept, named it, and was wrong: the same wording was still standing in
+more sites than the claim allowed, one of them a doc comment above the function that falsified it and one in
+the wrapper sixty-six lines below the block the repair had just rewritten.
+
+So the corpus is every **tracked live file**, and the seeds are the claim's wording **and** the identifiers
+that carry it — a test's name, a `PINNED-BY`, a scenario heading. The bound rule above already says this for
+its own subject (*run over the whole tree including `tests/`*), and it is the general case rather than a
+property of bounds: an identifier is a claim with no room for a caveat, so it is where a superseded one
+survives longest and reads most confidently. The repair idioms this rule names are `CHANGELOG.md`'s and
+`BACKLOG.md`'s because those are where a *narration* is annotated; a name is not annotated, it is changed,
+and the `PINNED-BY` that cites it changes in the same commit or the reference dangles.
+
 **An extraction's corpus is the pair of modules, not the function you came for.** Two extractions in
 `crates/kanhe` each closed a twin and each left a sibling behind, and both say so in their own headers:
 `hermetic_git`'s names a command builder that "lived twice, byte-identical, in `publish_source_gate` and
@@ -721,9 +803,12 @@ commit must never be amended or force-pushed away: the published artifact points
 permanently, so replacing it orphans the pointer just as surely as publishing from the wrong branch
 does. `0.2.2` was published from `main` correctly and then force-pushed away an hour later, which the
 publish-source gate cannot foresee — at publish time it would have passed — so this half stays a
-convention. What each published version actually records, and the two mechanisms that produced the
-disagreements, is inventoried in
-[`docs/history/published-artifact-provenance.md`](docs/history/published-artifact-provenance.md).
+convention. The two mechanisms that produced the disagreements, and the audit of every version published before this
+reaction existed, are in
+[`docs/history/published-artifact-provenance.md`](docs/history/published-artifact-provenance.md). That
+inventory is **closed**: a sha1 exists only after the upload that records it, the registry already holds it
+permanently, and a committed copy costs a branch and a release cycle to arrive one release late. What a
+published version records is asked of the tarball and the tag, by the command that record carries.
 
 `TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test release_coherence` is the release-state check. During development it
 requires an adopter-facing `[Unreleased]` entry and aligned workspace/internal dependency versions,
@@ -739,6 +824,22 @@ and nothing said so until the check was given that comparison. During preparatio
 rather than a claim, so preparation may leave it stale for as long as it lasts; what must not happen is
 cutting without touching it. Write it on the day the `release: X.Y.Z` commit is made, immediately before
 making it.
+
+**`BACKLOG.md`'s promotion triggers are read against the window before the cut.** A live entry names what
+would promote it, and nothing evaluates that — measured, an entry whose trigger had fired on **both** halves
+sat unchanged through a full round of review, and a per-window reading of fifteen entries then found eight
+defects that had been sitting behind triggers already written. The reachable half is the **occasion**, not
+an instrument: deciding whether a trigger's set is its residue's set means knowing what the entry meant,
+which is the judgement-over-text this repository has measured and rejected. So this is a step someone
+performs, listed here because a discipline nobody is asked for is one nobody does.
+
+Two rules make the reading worth the hour. **A trigger evaluation records what it checked**, not only what
+it concluded — a bare *Not fired* is indistinguishable from nobody having looked. And **a verdict no sweep
+could have reached says so** rather than carrying a date: measured, an entry read `Not fired, swept` over
+an observable its own lifecycle destroys before the squash, and a dated verdict reads as **settled** where
+the honest word is *unobserved*. That is the whole of it; per-entry labels sorting triggers into swept and
+witnessed were considered and declined, because a field on sixty entries is a form to maintain and these
+two sentences reach the same failure at the point where it actually happens.
 
 A branching pattern is not an observable architectural fact, so the drift law keeps it out of the
 constitution: it is a convention for humans and agents rather than a Tianheng boundary.
@@ -777,8 +878,18 @@ same rule; this list is a corpus with a name, and the record of how often that w
 **`git add` any file the change CREATED before running these.** The tree-wide gates take their path list from
 `git ls-files` and their content from disk, so the two halves see different things — measured, both
 directions: a **new** file that has not been added is invisible and its offences are not reported, while a
-**tracked** file modified and left unstaged is read as it stands on disk and is judged normally. Staging is
-enough; committing is not required.
+**tracked** file modified and left unstaged is read as it stands on disk and is judged normally.
+
+**Staging is enough for a gate whose content comes from disk, and not for one whose corpus is `HEAD`.** That
+sentence used to end here at *committing is not required*, and it was false of a gate this file's own list
+runs. `pin_bites` reads both halves of its subject through `git show HEAD:…` — the declared-mutation records
+and the source each mutation perturbs — so an uncommitted record is no record, and the direction reports
+green over an **empty set**. Measured in the `0.6.0` window: two mutations added and staged, `pin_bites`
+green locally, and both CI's Definition of Done and the MSRV job red on the same tree once it was committed.
+The criterion is the read, not the gate: `git show HEAD:` and `ls-tree HEAD` are what to look for, and
+`git grep -nE '"HEAD:|ls-tree", "HEAD' -- crates/kanhe` is the search. It finds one other, and that one is
+not this case — `release_coherence` compares HEAD's `CHANGELOG.md` against the worktree's, so the difference
+between them is its subject rather than a blind spot.
 
 The failure mode is a full pass that means less than it looks. Measured in the 0.4.0 window: one change's
 Definition of Done ran green over a file it had never opened, and the next round's suite failed on that same

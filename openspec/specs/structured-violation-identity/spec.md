@@ -242,8 +242,8 @@ No coordinate SHALL be positional — not scan order, item ordinal, traversal in
 position — and none SHALL be checkout-dependent, since either makes an identity that shifts without the
 observation changing.
 
-This derivation exists because the alternative was found not to work: every identity collision this
-system has had was a missing coordinate discovered one adversarial review at a time — a second crate
+This derivation exists because the alternative does not work: an identity collision is a missing
+coordinate, and the coordinates that go missing are not foreseeable — a second crate
 declaring the same boundary, a second module implementing the same owner, a second impl block bounding
 the same parameter, a second spelling of one trait, a second path differing only in undecodable bytes, a
 second crate root, and a second module importing the same forbidden path. Widening a fact's schema

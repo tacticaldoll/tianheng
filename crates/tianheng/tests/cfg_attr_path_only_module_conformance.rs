@@ -118,6 +118,49 @@ fn all_three_dimensions_govern_a_stacked_cfg_attr_path_only_module() {
     );
 }
 
+/// Two `path` remaps NESTED INSIDE ONE `cfg_attr`, with the violating target declared SECOND.
+///
+/// **The sibling direction above stacks two ATTRIBUTES, one `path` each, and that is a different
+/// axis.** A reader taking only the first `path` in a span still passes it, because each span holds
+/// exactly one. Measured against rustc (edition 2021, `--crate-type lib`) this declaration compiles
+/// cleanly on Linux with only the second target on disk and neither the first nor a plain `imp.rs`
+/// present, so a dimension answering the first alone resolves nothing: with no conventional file to
+/// fall back to it reports the declaration unresolvable — exit 2 over valid code — and with one it
+/// governs the wrong file and the probe goes unseen.
+///
+/// 圭表 already unioned every `path =` across nested groups. 渾儀 and 漏刻 each took the first, so
+/// this shape is where the three parted, and the violating target is declared second on purpose:
+/// first-declared would pass on a reader that never looks past it.
+#[test]
+fn all_three_dimensions_read_every_path_nested_in_one_cfg_attr() {
+    let package = "cfg-attr-path-only-nested";
+    let lib = format!(
+        "{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}\
+         #[cfg_attr(unix, cfg_attr(target_os = \"none\", path = \"imp_never.rs\"), \
+         cfg_attr(not(target_os = \"none\"), path = \"imp_here.rs\"))]\n\
+         pub mod imp;\n"
+    );
+    // Only the SECOND target exists, as rustc admits: the first names a target this build has no
+    // file for, and the declaration still compiles.
+    let fixture = fixture(package, &lib, &[("imp_here.rs", IMP_VIOLATIONS)]);
+
+    assert_eq!(
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "圭表: the second `path` nested in one cfg_attr must be read"
+    );
+    assert_eq!(
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "渾儀: the second `path` nested in one cfg_attr must be read"
+    );
+    assert_eq!(
+        louke_exit(fixture.lib(), SEAM, REASON),
+        1,
+        "漏刻: the second `path` nested in one cfg_attr must be read"
+    );
+}
+
 /// Control: a SINGLE, non-stacked `cfg_attr(path)`-only remap, same absence of a plain file. The
 /// fix (and this ledger) is not specific to the stacked shape.
 #[test]
@@ -201,6 +244,80 @@ fn all_three_dimensions_agree_every_candidate_absent_stays_a_scan_error() {
     );
 }
 
+/// 渾儀 refuses a module target it cannot READ, rather than tolerating it as absent.
+///
+/// **`is_file()` answers `false` for two different facts**, and the cfg tolerance is what an ABSENCE is
+/// owed — so a target this reader merely could not stat was swallowed by it, with whatever the subtree
+/// holds going unobserved. 漏刻 was repaired first; this is why the other two moved with it, since a
+/// window arguing the three must agree about module resolution cannot leave two of them disagreeing about
+/// what `false` means.
+///
+/// **The boundary governs a module that resolves either way, and that is the whole design of this
+/// fixture.** A first version pointed it at the unreadable module itself and passed before the repair as
+/// well as after: tolerating the module makes it unknown, an unknown boundary target is a constitution
+/// error, and the exit code is `2` for a reason that has nothing to do with reading. Measured — `guibiao=2
+/// hunyi=2` both before and after. Governing `crate::readable` instead makes the tolerated run **clean**,
+/// so the two states differ.
+///
+/// Measured as uid 1000, which is why this refuses to skip in silence under `TIANHENG_WORKSPACE_TESTS`:
+/// root bypasses mode bits entirely and would make it vacuous.
+///
+/// Negative run, with only 渾儀's reader reverted:
+///
+/// ```text
+/// assertion `left == right` failed: 渾儀: an unreadable target is not an absent one
+///   left: 0
+///  right: 2
+/// ```
+///
+/// Clean, over a subtree it could not open.
+///
+/// **圭表 is not asserted here, and that is a declared gap rather than an omission.** Its reader takes the
+/// same criterion, but measured on this fixture it exits `2` **before and after** — loud for a reason this
+/// change does not touch — so an assertion over it would pass either way and say nothing. No fixture has
+/// been found that separates the two states for 圭表, so its repair travels on symmetry with the two that
+/// were seen to fail, and `BACKLOG.md` carries the search. 漏刻's own directions hold its half.
+#[test]
+#[cfg(unix)]
+fn a_module_target_that_cannot_be_read_is_not_tolerated_as_absent() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let package = "cfg-attr-path-only-unreadable";
+    // `readable` is what the boundary governs and it holds nothing forbidden, so a run that tolerates the
+    // unreadable sibling is CLEAN. `imp` is cfg-gated — the arm that is owed a real absence.
+    let lib = format!(
+        "{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}pub mod readable {{ pub fn ok() {{}} }}\n\
+         #[cfg(feature = \"gated\")]\npub mod imp;\n"
+    );
+    let fixture = fixture(package, &lib, &[]);
+
+    let dir = fixture
+        .lib()
+        .parent()
+        .expect("the lib has a directory")
+        .join("imp");
+    std::fs::create_dir_all(&dir).expect("create the module directory");
+    std::fs::write(dir.join("mod.rs"), IMP_VIOLATIONS).expect("write the module file");
+    let restore = std::fs::metadata(&dir)
+        .expect("read the mode")
+        .permissions();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o000)).expect("restrict it");
+
+    let restricted = !dir.join("mod.rs").is_file();
+    let exits =
+        restricted.then(|| hunyi_exit(package, fixture.manifest(), "crate::readable", REASON));
+    std::fs::set_permissions(&dir, restore).expect("restore the mode");
+
+    let Some(hunyi) = exits else {
+        assert!(
+            std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+            "mode 000 did not restrict the target — running as root would make this direction vacuous"
+        );
+        return;
+    };
+    assert_eq!(hunyi, 2, "渾儀: an unreadable target is not an absent one");
+}
+
 /// The sibling shape: a `cfg_attr(path)` on an **inline** `mod x { … }`, naming the base directory
 /// the body's own file-form children resolve from. 圭表 followed only the *unconditional* `#[path]`
 /// form here and reported a missing-module constitution error on source that compiles cleanly, while
@@ -244,5 +361,193 @@ fn all_three_dimensions_agree_a_conditional_remap_on_an_inline_mod_relocates_its
         louke_exit(fixture.lib(), SEAM, REASON),
         1,
         "漏刻: the undeclared-seam probe beneath a conditional inline-mod base must react"
+    );
+}
+
+/// A **raw-identifier** spelling of the remap is the same remap to all three dimensions.
+///
+/// `r#` changes an identifier's lexical spelling and not the name it spells, so `r#path` names the built-in
+/// `path` attribute and `r#cfg_attr` names `cfg_attr`. Measured against rustc 1.96.0, edition 2021,
+/// `--crate-type lib`: `#[cfg_attr(unix, r#path = "imp_unix.rs")] pub mod plat;` compiles with only
+/// `imp_unix.rs` on disk, and the nested `#[cfg_attr(unix, r#cfg_attr(target_os = "linux", path =
+/// "imp_linux.rs"))]` compiles with only `imp_linux.rs`.
+///
+/// 圭表 and 漏刻 each say so in their own byte scanners, in nearly the same words — *a raw identifier is ONE
+/// segment*. 渾儀 reads its attribute names through `syn`, whose `Path::is_ident` compares the ident as
+/// written: proc-macro2's `PartialEq<str>` requires the compared string to carry `r#` when the ident is raw,
+/// so `r#path` was not `path` to it and the remap was invisible. The crate had `strip_raw` already and
+/// applied it to module identifiers, not to attribute names.
+#[test]
+fn all_three_dimensions_read_a_raw_identifier_spelling_of_a_cfg_attr_path() {
+    let package = "cfg-attr-path-only-raw-ident";
+    let lib = format!(
+        "{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}#[cfg_attr(unix, r#path = \"imp_unix.rs\")]\npub mod imp;\n"
+    );
+    let fixture = fixture(package, &lib, &[("imp_unix.rs", IMP_VIOLATIONS)]);
+
+    assert_eq!(
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "圭表: `r#path` names the built-in `path`, so the remapped module's forbidden `use` must react"
+    );
+    assert_eq!(
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "渾儀: `r#path` names the built-in `path`, so the remapped module's forbidden exposure must react"
+    );
+    assert_eq!(
+        louke_exit(fixture.lib(), SEAM, REASON),
+        1,
+        "漏刻: `r#path` names the built-in `path`, so the remapped module's undeclared seam must react"
+    );
+}
+
+/// The same, one nesting level in: a raw-identifier `cfg_attr` **wrapping** the remap.
+///
+/// The outer attribute is spelled plainly, so this is the applied-meta position all three readers descend
+/// into — and the segment they have to recognise there is `r#cfg_attr`. 圭表's own scanner records having
+/// been measured on exactly this spelling while closing a qualified look-alike; this asserts the three
+/// agree about it rather than each recording it alone.
+#[test]
+fn all_three_dimensions_read_a_raw_identifier_cfg_attr_wrapping_a_path() {
+    let package = "cfg-attr-path-only-raw-nested";
+    let lib = format!(
+        "{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}\
+         #[cfg_attr(unix, r#cfg_attr(not(target_os = \"none\"), path = \"imp_unix.rs\"))]\n\
+         pub mod imp;\n"
+    );
+    let fixture = fixture(package, &lib, &[("imp_unix.rs", IMP_VIOLATIONS)]);
+
+    assert_eq!(
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "圭表: a raw-identifier `cfg_attr` is the built-in, so its applied `path` must be read"
+    );
+    assert_eq!(
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "渾儀: a raw-identifier `cfg_attr` is the built-in, so its applied `path` must be read"
+    );
+    assert_eq!(
+        louke_exit(fixture.lib(), SEAM, REASON),
+        1,
+        "漏刻: a raw-identifier `cfg_attr` is the built-in, so its applied `path` must be read"
+    );
+}
+
+/// The half the Core Contract forbids: a conventional file **beside** the raw-identifier remap.
+///
+/// `all_three_dimensions_read_a_raw_identifier_spelling_of_a_cfg_attr_path` and its nested sibling leave
+/// 渾儀 exiting `2` on source rustc compiles, which is loud. This one is
+/// the silent shape. `imp.rs` exists and is clean; the remap names `imp_unix.rs`, which carries every
+/// violation. Measured against rustc 1.96.0: with both present it is the **remapped** file rustc compiles.
+///
+/// A reader that misses the remap therefore governs `imp.rs` — a file the build does not contain — reports
+/// clean, and leaves whatever the build does contain unobserved. That is a false negative in the one
+/// dimension, produced by a spelling of the governed code, which is what *no spelling, alias, re-export,
+/// `cfg` arm, or macro form escapes observation* forbids.
+#[test]
+fn a_conventional_file_beside_a_raw_identifier_remap_does_not_hide_the_remapped_one() {
+    let package = "cfg-attr-path-raw-ident-beside-conventional";
+    let lib = format!(
+        "{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}#[cfg_attr(unix, r#path = \"imp_unix.rs\")]\npub mod imp;\n"
+    );
+    let fixture = fixture(
+        package,
+        &lib,
+        &[("imp_unix.rs", IMP_VIOLATIONS), ("imp.rs", IMP_STUB)],
+    );
+
+    assert_eq!(
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "圭表: the clean conventional file does not hide the remapped one's forbidden `use`"
+    );
+    assert_eq!(
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "渾儀: the clean conventional file does not hide the remapped one's forbidden exposure"
+    );
+    assert_eq!(
+        louke_exit(fixture.lib(), SEAM, REASON),
+        1,
+        "漏刻: the clean conventional file does not hide the remapped one's undeclared seam"
+    );
+}
+
+/// An **unconditional** raw-identifier remap, at the attribute's own name position.
+///
+/// The raw-identifier directions elsewhere in this file put the spelling inside a `cfg_attr`'s argument
+/// list, where both byte scanners already consumed the prefix with its segment. The attribute's **own**
+/// name is a second position, and none of the three read it: 圭表 matched `path` against the bytes after
+/// `[`, 漏刻 lexed the name with an identifier reader that stops at `#`, and 渾儀 compared through `syn`,
+/// whose `Path::is_ident` compares the ident as written.
+///
+/// Measured against rustc 1.96.0, edition 2021, `--crate-type lib`: `#[r#path = "imp_unix.rs"] pub mod
+/// imp;` compiles with only `imp_unix.rs` on disk, and with a conventional `imp.rs` present as well it is
+/// the remapped file that is compiled. A reader missing it governs `imp.rs` — a file the build does not
+/// contain — and reports clean over the one it does.
+#[test]
+fn all_three_dimensions_read_an_unconditional_raw_identifier_path_remap() {
+    let package = "raw-ident-unconditional-remap";
+    let lib =
+        format!("{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}#[r#path = \"imp_unix.rs\"]\npub mod imp;\n");
+    let fixture = fixture(
+        package,
+        &lib,
+        &[("imp_unix.rs", IMP_VIOLATIONS), ("imp.rs", IMP_STUB)],
+    );
+
+    assert_eq!(
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "圭表: `#[r#path]` is the built-in remap, so the remapped file's forbidden `use` must react"
+    );
+    assert_eq!(
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
+        1,
+        "渾儀: `#[r#path]` is the built-in remap, so the remapped file's forbidden exposure must react"
+    );
+    assert_eq!(
+        louke_exit(fixture.lib(), SEAM, REASON),
+        1,
+        "漏刻: `#[r#path]` is the built-in remap, so the remapped file's undeclared seam must react"
+    );
+}
+
+/// A raw-identifier **bare `cfg`** grants the same absent-file tolerance the plain spelling does.
+///
+/// `#[r#cfg(pred)]` is the built-in `cfg`, so a false predicate removes the `mod` item outright and the
+/// backing file is legitimately absent — measured against rustc 1.96.0, edition 2021, `--crate-type lib`:
+/// `#[r#cfg(target_os = "none")] pub mod gone;` compiles with no `gone.rs` anywhere, exactly as the plain
+/// spelling does. All three dimensions withheld the tolerance for the raw spelling, so all three reported a
+/// missing-file constitution error over source that compiles. Consistently wrong is still wrong, and it is
+/// the one direction of this class that costs a **refusal** rather than a miss.
+///
+/// The boundary targets `crate::keep`, a module that exists and is clean, so what this asserts is the
+/// **scan** reaching a verdict at all. Targeting `gone` would be a boundary on a module the build does not
+/// contain, which is a constitution error on its own terms and would pass for the wrong reason.
+#[test]
+fn all_three_dimensions_tolerate_an_absent_file_behind_a_raw_identifier_cfg() {
+    let package = "raw-ident-bare-cfg";
+    let lib = format!(
+        "{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}#[r#cfg(target_os = \"none\")]\npub mod gone;\npub mod keep;\n"
+    );
+    let fixture = fixture(package, &lib, &[("keep.rs", IMP_STUB)]);
+
+    assert_eq!(
+        guibiao_exit(package, fixture.manifest(), "crate::keep", REASON),
+        0,
+        "圭表: `#[r#cfg]` removes the item, so its absent backing file is not a constitution error"
+    );
+    assert_eq!(
+        hunyi_exit(package, fixture.manifest(), "crate::keep", REASON),
+        0,
+        "渾儀: `#[r#cfg]` removes the item, so its absent backing file is not a constitution error"
+    );
+    assert_eq!(
+        louke_exit(fixture.lib(), SEAM, REASON),
+        0,
+        "漏刻: `#[r#cfg]` removes the item, so its absent backing file is not a constitution error"
     );
 }

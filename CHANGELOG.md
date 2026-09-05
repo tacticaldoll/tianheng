@@ -22,6 +22,1539 @@ them.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-06
+
+### Governance
+
+- **`xingbiao`'s charter says what it carries, and states the criterion instead of a list.** Its module doc
+  enumerated the path-identity primitives it holds *beside* the metadata reader — an enumeration that stopped
+  covering the module when the filesystem-answer policy was added to it this window, for the ordinary reason
+  a list goes stale. It also said it sits beneath the static and semantic dimensions, while the runtime
+  dimension's CI face has depended on it since before that.
+
+  The widening was not wrong and it was not declared, which is the defect. It went in because three
+  dimensions needed one answer — a reason that decides nothing on its own, since it is equally the reason for
+  a consolidation this repository refuses elsewhere. **The criterion now written down is what separates
+  them:** a fact belongs there when every dimension must agree on it before observing AND it is a fact about
+  the tree rather than a reading of what the tree contains. What is there, as against what it says.
+
+  That line refuses something concrete, which is why it is worth having: an interpretation of source is a
+  dimension's own observation. `cargo metadata` says which file is a crate root; what the tokens in that
+  file mean belongs to whichever dimension is asking — so the lexical-boundary question `BACKLOG.md` carries
+  cannot be answered by putting a tokenizer here, and that is now a reading of the charter rather than a
+  matter of taste.
+
+  **Nothing reacted to any of this.** The self-law constrains what `xingbiao` may depend on and says nothing
+  about what it may become, so a charter widening is prose against prose. `PROJECT.md`'s decision states the
+  criterion for the same reason.
+
+### Static
+
+- **BREAKING** — **圭表 requires the built-in `cfg_attr`'s exact path, where it matched the bare
+  identifier.** `foo::cfg_attr(a, path = "bogus")` ends in the same word while being somebody else's
+  attribute, so the collector descended into it and took `bogus` as a module remap. Measured over the span
+  `(any(), foo::cfg_attr(a, path = "bogus"), path = "real.rs")`: two positions where one is right, and the
+  raw spelling `foo::r#cfg_attr` the same. A module rustc never reads was then scanned, and any violation
+  found there reported over source the governed tree does not have.
+
+  The qualification is decided by the token before the segment, and `r#` changes a lexical spelling
+  without changing a name, so one segment stays one. The control holds the other side: an unqualified
+  nested `cfg_attr`, raw-spelled or not, keeps its applied metas.
+
+  **This was found by measuring a claim rather than by a report.** An entry in `BACKLOG.md` said 圭表
+  answers this question correctly and was written without measuring it; 漏刻's equivalent repairs made
+  that claim worth checking, and it was false. What 圭表 does close, by a `depth == 1` guard, is the
+  compound predicate that defeated 漏刻 — so neither reader was the correct one, and each hand-rolling of
+  the same lexical decisions missed a different subset.
+
+  **Why a minor:** this **removes** findings rather than adding them. A recorded baseline holding a
+  violation from a target no longer read no longer describes the adopter's tree, and `--disallow-stale`
+  reports it. Regenerating is work they did not choose.
+
+### Release
+
+- **This release line is `0.6.0`, decided from what the window's changes do.** It carries `**BREAKING**`
+  markings — false-negative closures, a rule-key identity change, a module-resolution widening — and this
+  repository's rule past `0.1.0` is that breaking earns a **minor**. What decides the number is that any such
+  marking is present, so the classes are named and the tally is left to whatever enumerates them. The line was
+  opened as a patch and reclassified when the markings were read against it; the working number it carried
+  before that is not recorded here, because a version this project never released names nothing an adopter
+  can resolve, and this document is the adopter-facing projection.
+
+  **Nothing mechanical said so, which is why it is written here.** `release_coherence` compares version
+  literals to each other — `Cargo.toml`, the dated changelog heading, the lock — and never to the change
+  class the entries declare, so the release would have passed every gate and shipped a patch requiring
+  baseline regeneration. It was found by an independent review reading the markings against what the window
+  had built.
+
+### Migration
+
+- **Regenerate any recorded baseline if a module in your tree carries more than one `path` inside a single
+  `cfg_attr` attribute, beside a conventional file.** Those extra targets were not read before and are read
+  now, so a tree that was green may report new findings: run `tianheng check --write-baseline <file>`
+  wherever a baseline is kept, and re-apply any `owner` / `tracker` annotations onto the newly observed
+  facts. `#[cfg_attr(unix, cfg_attr(a, path = "x.rs"), cfg_attr(b, path = "y.rs"))]` is the shape; several
+  SEPARATE `cfg_attr` attributes carrying one `path` each were already unioned and are unaffected.
+- **Regenerate any recorded baseline if a boundary declares a module path, allowlist entry, or confined
+  crate name with a raw identifier (`r#name`).** Those rules keyed on the spelling as written while the
+  evaluation folded it, so the two forms were one boundary to the matcher and two identities to the
+  baseline. They are now one: run `tianheng check --write-baseline <file>` wherever a baseline is kept and
+  re-apply any `owner` / `tracker` annotations. A declaration carrying no `r#` anywhere is unaffected —
+  every key is byte-identical.
+- **Regenerate any recorded baseline if a module in your tree is remapped through an attribute whose path
+  merely ENDS in `cfg_attr` — `foo::cfg_attr(…, path = "…")`.** That target was read and is not any more, so
+  a baseline entry recorded from it describes a file the governed tree does not have. Run
+  `tianheng check --write-baseline <file>` wherever a baseline is kept. A declaration using the built-in
+  `cfg_attr` unqualified, raw-spelled or not, is unaffected.
+- **Make every module target readable, or expect exit `2` naming it.** A module file or directory that any
+  of the three dimensions cannot open is no longer tolerated as an absent one. Where a `#[cfg]`-gated declaration sat over an
+  unreadable subtree, the audit previously reported the seam inside it as unprobed — or passed clean where
+  that seam was probed elsewhere — and now refuses, naming the path and the reason. Fix the permission, or
+  exclude the path from the audited roots.
+- **Nothing to do where a multi-`path` `cfg_attr` declaration previously stopped the run.** Where no conventional file backed it,
+  the check reported the module unresolvable and exited `2`. That was a false refusal over code rustc
+  accepts; it now resolves, and no baseline existed to move.
+
+### Semantic and runtime
+
+- **BREAKING** — **The attribute's own name position takes a raw identifier too, and closing it in one
+  dimension is how the second position was found.** The repair below reached the spelling inside a
+  `cfg_attr`'s argument list, where both byte scanners already consumed the `r#` prefix with its segment.
+  The attribute's **own** name is a separate position and none of the three read it: 圭表 matched `path`
+  against the bytes after `[`, 漏刻 lexed the name with an identifier reader that stops at `#`, and 渾儀
+  compared through `syn`. Fixing 渾儀 alone therefore turned a shared miss into a disagreement, which is the
+  thing the cross-dimension ledger exists to prevent — found by re-reading the repair rather than by running
+  anything.
+
+  Measured under rustc 1.96.0, edition 2021, `--crate-type lib`: `#[r#path = "imp_unix.rs"] pub mod imp;`
+  compiles with only `imp_unix.rs` on disk, and with a conventional `imp.rs` present as well it is the
+  remapped file that is compiled. Perturbed one dimension at a time, each of the three answered `0` — clean
+  over a file the build does not contain, while the file it does contain went unobserved.
+
+  **And the same spelling on a bare `cfg` costs a refusal rather than a miss.** `#[r#cfg(target_os = "none")]
+  pub mod gone;` compiles with no `gone.rs` anywhere, because `r#cfg` is the built-in `cfg` and a false
+  predicate removes the item. All three withheld that tolerance from the raw spelling and reported a
+  missing-file constitution error over source that compiles — consistently, which made it invisible to a
+  ledger that only asks whether the three agree.
+
+  `module-boundary` gains both scenarios, each pinned. Neither carries a declared mutation, for the reason
+  `pin_bites` states: a declared mutation is a claim about a **bound's** defence, and these are ordinary
+  scenarios rather than declared observation bounds.
+
+  **Why breaking:** an adopter whose source spells an attribute name with a raw identifier has 圭表 and 漏刻
+  baselines that no longer describe their tree, for the remap half; the `cfg` half only removes refusals.
+
+- **BREAKING** — **A raw-identifier spelling of a path remap is the same remap, and 渾儀 alone read it as a
+  different one.** `r#` changes an identifier's lexical spelling and not the name it spells, so `r#path`
+  names the built-in `path` attribute and `r#cfg_attr` names `cfg_attr`. Measured under rustc 1.96.0,
+  edition 2021, `--crate-type lib`: `#[cfg_attr(unix, r#path = "imp_unix.rs")] pub mod plat;` compiles with
+  only `imp_unix.rs` on disk, the nested `#[cfg_attr(unix, r#cfg_attr(target_os = "linux", path =
+  "imp_linux.rs"))]` compiles with only `imp_linux.rs`, and with a conventional `plat.rs` present **as well**
+  it is the remapped file rustc compiles.
+
+  圭表 and 漏刻 each say this in their own byte scanners, in nearly the same words — *a raw identifier is ONE
+  segment*. 渾儀 reads its attribute names through `syn`, whose `Path::is_ident` compares the ident as
+  written: proc-macro2's `PartialEq<str>` requires the compared string to carry `r#` when the ident is raw,
+  so `r#path` was not `path` to it. The crate already had `strip_raw` and already applied it to module
+  identifiers; it was never applied to attribute names.
+
+  **Two outcomes, and only one of them was loud.** With no conventional file, 渾儀 exited `2` on source
+  rustc compiles cleanly. With a conventional file present beside the remap, it governed *that* file — one
+  the build does not contain — reported **clean**, and left the file the build does contain unobserved. A
+  false negative produced by a spelling of the governed code, which is what *no spelling, alias, re-export,
+  `cfg` arm, or macro form escapes observation* forbids.
+
+  `module-boundary` gains both scenarios, each pinned, each with its declared mutation.
+  `cfg_attr_path_only_module_conformance` gains three directions: the two spellings, and the conventional
+  file standing beside the remap.
+
+  **Why breaking:** an adopter whose source spells a remap with `r#` has a 渾儀 baseline that no longer
+  describes their tree — the reaction is additive, the baseline is not, and regenerating it is work they did
+  not choose.
+
+  **What is deliberately not changed:** `r#cfg` in a bare `#[cfg]` position. All three dimensions miss that
+  spelling equally today, and closing it in one alone would create the divergence this change removes. The
+  direction is also the safe one — a missed bare `#[cfg]` withholds the absent-file tolerance, so it refuses
+  where it might have passed.
+
+- **A path-QUALIFIED look-alike reopened the same hole, twice.** Group kind was decided by the last
+  identifier before a `(`, and `foo::cfg_attr(a, path = "bogus")` ends in that word while being somebody
+  else's attribute — so applied-meta scanning resumed inside it and the false coverage came back through a
+  different spelling. The first repair asked whether the segment was qualified by looking **behind** it over
+  whitespace, and `foo::/**/cfg_attr` stopped that scan at the comment's `/`: the same over-read, a spelling
+  later. Measured, before each: `Clean(Subject { declared: 2, reached: 1 })`.
+
+  A third spelling followed: `foo::r#cfg_attr`, where a raw identifier became three scanner events — `r`,
+  `#`, `cfg_attr` — and cleared the qualification twice. A raw identifier is ONE segment, and `r#` changes
+  a lexical spelling without changing the name, so the prefix is consumed with its segment and the name
+  compared is the one it spells. The control matters as much: an **unqualified** `r#cfg_attr` IS the built-in, so the narrowing
+  must not cost a genuine nested group its applied metas.
+
+  The built-in is the **single-segment** path, and whether a segment is reached through `::` is a fact about
+  the token before it — tracked forward past trivia, because a comment is trivia and must not change what a
+  path IS. `runtime-origin-assertion` gains the clause and the pin, since the reaction moved and the
+  requirement had said nothing about qualified attribute paths at all. All three spellings are one
+  direction now, because replacing one with another is how the second was lost while the third was closed.
+
+  **The shape is filed rather than answered one spelling at a time.** Every property this reader's decision
+  rests on is lexical — where a predicate ends, whether a group is a `cfg_attr`'s, whether a segment is
+  qualified, what one identifier is — and each is answered from bytes. `BACKLOG.md` carries that with the
+  directions that pin the corpus as it stands: what a further Rust-valid spelling would decide is whether
+  the corpus can be enumerated, not which shape comes next.
+
+  Two carriers of the previous repair went with it: the call-site comment still said the reader searches
+  *anywhere in the argument span rather than parsing nesting structure*, which is the shape that read
+  predicates as targets, and the entry below still said one flag per open group closes it — true of the
+  repair before last, and half the rule since. Closing it took a phase **and** a kind, and each repair
+  carried one.
+
+- **A `path` inside a COMPOUND predicate was still read as a target.** The repair below tracked a predicate
+  phase per parenthesised group — and `all(…)` is one, with a comma of its own — so
+  `#[cfg_attr(all(unix, path = "bogus"), path = "real.rs")]` set the phase past `all`'s comma and collected
+  `bogus`. The same false clean, one nesting level in: measured,
+  `Clean(Subject { declared: 1, reached: 1 })` with only the group-kind half reverted.
+
+  A comma inside `all(…)`, `any(…)` or `not(…)` belongs to the predicate grammar and says nothing about the
+  surrounding `cfg_attr`. So a group is an applied-meta position only where its `(` follows the identifier
+  `cfg_attr` — which also excludes another attribute taking a `path` argument of its own. The phase alone
+  was half the rule; the kind is the other half.
+
+  `runtime-origin-assertion` required the shape that produced this — *the scanner locates the `path` value
+  anywhere within the outer attribute's argument span* — so the requirement is amended rather than the
+  reaction left disagreeing with it, and the two predicate positions are pinned by a scenario.
+
+- **A `cfg_attr` PREDICATE spelled `path` was read as an applied module target.** 漏刻's scanner walked the
+  whole argument span, so `#[cfg_attr(path = "bogus", path = "real.rs")] mod plat;` recorded **both**. That
+  declaration is legal source whatever cfg flags are set, and reading `bogus` scanned a file rustc does not
+  compile: a probe inside it counted as coverage, and the audit reported **clean** over a seam nothing
+  probes on any real build. Measured, before: `Clean(Subject { declared: 1, reached: 1 })`.
+
+  Closing it took two rules, and this repair carried one: a phase per open group, so a `path` before that
+  level's first comma is part of the condition and names nothing. The entry above carries the other — the
+  group's KIND — after a phase alone read a compound predicate's comma as a `cfg_attr`'s. 圭表 already
+  waits for the top-level comma and 渾儀 skips the predicate at each level, so this was the third dimension
+  disagreeing about which positions are applied targets, on the same shape the cfg_attr union found them
+  disagreeing about.
+
+  **The comment that recorded the disagreement and left it open was wrong three times**: the shape needs no
+  special build to appear in a tree, reading it is not harmless, and closing it does not need a nesting
+  parser — 圭表 does the same kind of scanning without one, though not, it turns out, without the same
+  holes. Left open on the strength of that comment, in the same window
+  that wrote it.
+
+  Two carriers of the earlier title/base/head widening also survived its sweep: a positive control whose
+  assertion still spoke of an unchanged title alone, and a tracker saying `gh` offers no precondition *for
+  either* where the set is three. The sweep that missed them named identifiers and prose; assertion
+  messages and cardinality words are the classes it did not carry.
+
+- **BREAKING** — **One owner decides what a failed `metadata` means, and all three dimensions ask it.**
+  `Path::is_file` answers `false` both for a target that is not there and for one this reader could not
+  stat, and the `#[cfg]` tolerance is what an ABSENCE is owed — so an unreadable subtree was swallowed by
+  it, with whatever it holds going unobserved. 圭表, 渾儀 and 漏刻 each carried the collapse, at twelve
+  reads between them.
+
+  `xingbiao::is_absence` carries the criterion and `is_regular_file` / `is_directory` carry the reads. It
+  lives in the substrate because all three ask the same question and none may ask another — the same
+  reason `canonicalize_or_fail` is there. The criterion, not a list: an error saying *this path cannot name
+  anything* is an absence; one saying *this reader could not find out* is not. `FilesystemLoop` is
+  deliberately loud.
+
+  Measured, 渾儀 with only its own reader reverted: `left: 0, right: 2` — clean, over a subtree it could
+  not open. 漏刻's two directions hold its half.
+
+  **圭表's arm has no falsifier, and that is declared rather than implied.** Measured on the same fixture it
+  exits `2` before and after — loud for a reason this change does not touch — so an assertion over it would
+  pass either way. Its repair travels on symmetry with the two that were seen to fail; the change can only
+  convert a silent tolerance into a loud refusal, never the reverse, so what is unknown is whether that arm
+  was reachable at all rather than whether the repair is safe. `BACKLOG.md` carries the search.
+
+  **Why a minor:** a tree with an unreadable module subtree was green and now exits `2`, in two more
+  dimensions than *A module target this reader cannot read is refused* already said.
+
+- **A repair of the absence class refused a tree rustc compiles, and three more defects rode in with it.**
+  An independent adversarial review of this window found four in changes that had already merged, three of
+  them self-inflicted by the two commits above and every one passing a green Definition of Done and eight
+  CI jobs. Only the last is a corrected claim; the first refuses source an adopter can legally write.
+
+  *`NotFound` was taken for the only absence.* Measured: with `src/gated` a plain file,
+  `fs::metadata("src/gated/mod.rs")` answers `NotADirectory` — the target cannot exist, so it is absent, and
+  routing it to the loud channel refused a `#[cfg]`-gated declaration over a tree rustc compiles cleanly.
+  That is the class the same window closed one change earlier. `is_absence` carries the criterion now: an
+  error saying *this path cannot name anything* is an absence, one saying *this reader could not find out*
+  is not. `FilesystemLoop` stays loud deliberately, matching `read_dir_entries_sorted`'s own policy.
+
+  *A three-arm distinction had two reachable arms.* `OwnerUnnameable::Unresolved` named a path resolving to
+  no candidate, which no producer can construct — `resolve_path_all` with the current-module fallback always
+  yields at least one. Measured: with that arm's clause replaced by a panic, the whole suite stays green.
+  A name with no reaction is what the drift law forbids, so it is gone, and *three arms rather than two,
+  deliberately* is withdrawn with it.
+
+  *And the causes reached the wrong refusals.* A trait impl whose **trait** would not render, with a self
+  type rendering perfectly, was told *its syntax has no supported rendering* about the owner — which is
+  exactly the defect the causes exist to close, produced by the change that closed it. Both trait refusals
+  take the trait sentence now.
+
+  The `list` projection guard's summary is narrowed to what a fixture-derived corpus can hold; a Migration
+  bullet's antecedent, a hand-written count of one live set, a false claim about a scanner skipping its
+  predicate, and two ordinals for one event are corrected with it.
+
+- **An owner that cannot be named says which of three things was met.** A self type is unnameable because
+  its path resolves to no candidate, because two mutually-exclusive `#[cfg]` branches bind one alias to
+  different types, or because its syntax has no supported rendering — and all three emitted
+  *cannot identify … without a positional fallback*, which names the **policy** rather than the fact. The
+  refusal is right in every case; the sentence sent an adopter to the wrong place in two of them, with
+  nothing in the emitted text to grep for the one they had. Measured, before: a `#[cfg]`-collided alias
+  reported `cannot identify unsafe impl self type in crate::net without a positional fallback`, not
+  mentioning the collision at all.
+
+  `OwnerUnnameable` carries the cause to the callers that refuse. Three arms rather than two, deliberately:
+  collapsing *unresolved* into *unrenderable* would say a path's syntax has no supported rendering about a
+  path that renders perfectly and simply resolves nowhere — a smaller instance of the defect this closes.
+  The collector's one refusal that is **not** about a self type, an impl whose trait could not be named,
+  keeps its own sentence.
+
+  `current_owner` gains the same distinction: `Ok` where the enclosing impl's self type could be named,
+  `Err` carrying why where it could not, and absent where there is no enclosing impl — three facts that had
+  two representations between them.
+
+  **Patch-class:** no verdict, exit code, finding identity or emitted document moves. Refusing was correct
+  before and is correct now; what changes is whether the refusal can be acted on.
+
+- **BREAKING** — **A rule's key canonicalizes every module path it carries, as its evaluation already did.**
+  `module_check` maps `canonical_module_path` over an allowlist so a boundary may be written with `r#name`
+  or `name` and match either way, and folds a confined crate the same way. Two key arms did not:
+  `canonical_module_set` sorted and deduped the spellings it was given without deciding which spellings are
+  one path, and `ConfineExternalCrate` keyed on `package_name_to_import_ident` alone, which replaces `-`
+  with `_` and nothing else — so a raw prefix survived it.
+
+  Measured, each taken alone because the first assertion to fail hides the rest:
+  `allowed: "[\"crate::r#type\"]"` against `"[\"crate::type\"]"`, and `crate: "r#gen"` against `"gen"`.
+  So a declaration rewritten between the two spellings — a rename to a reader and to the evaluator — moved
+  the identity every recorded violation is filed under. That is the class the trait-impl-locality entry in
+  `BACKLOG.md` closed by re-keying, in two arms it did not reach.
+
+  Both specifications already ended their canonicalization scenarios with *having been canonicalized to one
+  identity*, and both spoke only of **matching**. They now say the recorded identity too.
+
+  **Why a minor:** an adopter whose declaration carries `r#` anywhere has a baseline that no longer
+  describes their tree. One carrying none is unaffected — every key is byte-identical.
+
+- **BREAKING** — **A module target this reader cannot read is refused, never tolerated as an absent one.**
+  `is_file()` answers `false` for two different facts. Measured as uid 1000: a directory at mode `000`
+  holding `mod.rs` gives `Path::is_file("gated/mod.rs") == false` with
+  `fs::metadata(..).err().kind() == PermissionDenied`, while `Path::is_dir("gated") == true`. Read through
+  `is_file()` alone the target is *absent* — which is exactly what a `#[cfg]`-gated declaration is allowed
+  to have, so the whole subtree behind it was tolerated and never audited.
+
+  The visible half is worse than a silent skip. Measured: the audit exited **1** reporting
+  *declared seam 'gated' has no configured probe marker* — over a file that declares one. The probe is
+  there and the directory could not be opened, so an adopter is told their correct code violates, with a
+  cause that sends them to the wrong place. Where the same seam is probed elsewhere the verdict is `0`
+  instead and the subtree is simply unaudited.
+
+  The three states were already present: `Ok(Some(..))`, `Ok(None)` and `Err` are what the resolvers
+  return, so the repair is the **routing** rather than a new type — *unreadable* belongs on the channel
+  that fails loud, beside the ambiguity it already carries, not on the one a caller may tolerate.
+
+  **Why a minor:** a tree whose seams are probed elsewhere was green over an unreadable subtree and now
+  exits `2`. That is work the adopter did not choose, and *"the defect was ours" does not spare them
+  the work*.
+
+  **All three dimensions take it now**, through one owner in the substrate — see *One owner decides what a
+  failed `metadata` means*.
+
+- **BREAKING** — **Every `path` in one `cfg_attr` span is read, where two dimensions took the first.**
+  Measured against rustc (edition 2021, `--crate-type lib`), this compiles cleanly on Linux with only
+  `linux.rs` on disk and neither `mac.rs` nor `plat.rs` present:
+
+  ```rust
+  #[cfg_attr(unix, cfg_attr(target_os = "macos", path = "mac.rs"),
+                   cfg_attr(target_os = "linux", path = "linux.rs"))]
+  pub mod plat;
+  ```
+
+  渾儀 and 漏刻 each answered `mac.rs` and stopped. With no conventional file behind the declaration
+  that resolves to nothing, so both reported the module unresolvable — **exit 2 over valid code**,
+  measured at `left: 2, right: 1` for each, run separately. With a conventional file present they
+  governed it and never looked at the rest.
+
+  圭表 already unioned every `path =` across nested groups, so this was one shape on which the three
+  dimensions disagreed. The union has two axes — several `cfg_attr` attributes each carrying one
+  `path`, and one attribute carrying several — and 渾儀's own doc records the first axis being repaired
+  after a `find_map` *silently dropped every candidate but the first-declared*. A second `find_map` one
+  level in did the same thing, and the repair had stopped there.
+
+  The conformance suite's stacked direction covers two ATTRIBUTES with one `path` each, which a
+  first-only reader passes: each span holds exactly one.
+  `all_three_dimensions_read_every_path_nested_in_one_cfg_attr` is the axis it did not have, with the
+  violating target declared **second** on purpose.
+
+  **Why this earns a minor rather than a patch, decided from what the change does rather than from its
+  shape.** An adopter stuck at exit 2 is merely unblocked, which costs them nothing. But where a
+  conventional file exists beside such a declaration, the additional targets were previously unseen and
+  are now governed: a tree that was green can report new violations, and its recorded baseline no
+  longer describes it. That is depth reacting by default, and *"the defect was ours" does not spare
+  them the work*.
+
+### Documentation
+
+- **The per-unit fan-out policy had two halves and only one of them had a home.** `is_anchor_absent_from_unit`
+  decided what an absence *means*; what to *do* about it — govern where the anchor is, refuse only where it
+  is nowhere — was written out at each of the seven boundary checkers, head and tail identical in all seven
+  and differing only in the body between them. `over_each_unit` now holds it beside the half that already
+  lived there. What was genuinely per-boundary stays at its call site: `trait_impl`'s note that a governed
+  trait is as unit-varying as a governed module is why *that* boundary fans out at all, and is kept.
+
+- **A gate's label was also its dispatch key, so renaming it would have dropped `-D warnings` in silence.**
+  The examples suite decided two independent properties — whether warnings fail the build, and whether the
+  family patch applies — by comparing a label against a literal written twelve and sixteen lines away in the
+  same expression. Measured: renaming `"clippy"` to `"lint"` in the table, which reads as a wording change,
+  leaves clippy running without `-D warnings` and the suite green. Nothing in the tree references those
+  labels, so nothing would have said so — in the suite whose own module doc says *the reaction it
+  demonstrates could be gone entirely*. The gates are a declared struct now; the label names the gate in an
+  assertion message and decides nothing.
+
+- **The CLI usage block was restated in a module doc, and the copy had drifted.** `main.rs` carried the
+  invocation shapes beside the ones `usage()` prints, and the runner rejected `--disallow-stale` while the
+  copy did not name it — the same flag and the same direction as the instance `BACKLOG.md` records for
+  `list`'s requirement, which was closed by deriving the set rather than by correcting the prose. A doc
+  comment cannot derive anything, so the copy is deleted and its owner named. What stays is what only that
+  file says: what the binary is, and what its exit codes mean.
+
+- **The governable-crate-root predicate was spelled twice in one module.** `crate_root_files` and
+  `member_root_files` each carried the same `LIBRARY_KINDS`-or-`bin` filter over the same `src_path` read,
+  so admitting a target kind would have moved one and not the other. `member_root_files` is now the
+  per-package reader flat-mapped across the workspace; what stays its own is the scope and the ordering —
+  `crate_root_files` dedups within a package by first appearance, and this sorts across packages so the
+  corpus is deterministic whatever order cargo lists them in. `target_has_kind`'s doc named the pair it is
+  shared by and now names how each reaches it.
+
+- **The third reader of a `use` statement's body now shares the one home the other two do.**
+  `lexer::scan_use_statement` declares itself *the one place both interpret what is a `use` statement's body
+  identically* — and `pub_use_statements` re-spelled it, so it carried neither the shared guard nor the
+  shared shape. The guard matters where a `use` is followed by `<`: that is a precise-capturing bound and
+  not an import, and scanning to the next `;` there swallows the following real `use`. The extraction that
+  made the reader shared converged two sites and walked past the third, which is the extraction-corpus class
+  this repository already records. It is unreachable from this site — `pub` cannot precede a type bound —
+  and is now answered rather than assumed, so the loop owns no arm the shared reader does not. What
+  genuinely differs, the `pub` and visibility-qualifier walk, is what the function keeps.
+
+- **The workspace-isolation check decided a TOML question on raw lines, and its own doc said otherwise.**
+  Its reader walked `manifest.lines()` while its doc read *a line of its own, because `[workspace]` inside a
+  string or after a `#` is not a table* — and it got both of the cases that sentence names wrong. Measured,
+  each run alone against that reader: `[workspace]` on its own line inside a `"""` block read as a declared
+  root, and `[workspace] # root` read as no root at all. `repository-checks` states the corpus rule as a
+  SHALL over exactly this kind of reader, and the declared bound beside it explains why nothing reacted —
+  an absence is not a shape, so nothing can scan for a filter that was never written. It takes the executed
+  TOML region now, which crosses the multi-line string forms because a line is not a unit TOML respects.
+
+- **The TOML parse refusal had five copies and a helper whose doc said there were two.** `toml_edit` renders
+  an error over several lines and a refusal message is one, so every reader flattened it — four by hand and
+  two through a helper whose own doc claimed the file held **two** such sites while it held four. A claim
+  about the code, wrong while the code was right. One owner
+  now holds the flatten and the sentence; each caller keeps its own state or constructor, which is what
+  differs. Deleting the helper is what enumerated its callers: a count of them said two, and the compiler named a
+  third.
+
+  Two annexed doc comments moved with it — the paragraph describing `declared_dependencies` had been sitting
+  above the helper, and `DEPENDENCY_KINDS`'s one-line doc above the enum before it. And `workspace_version`'s
+  doc claimed it read *from the shared region* while its body parses with `toml_edit` and its module imports
+  no region: the region read it names was replaced by a parser, which answers the same requirement by
+  construction.
+
+- **The twin came back inside the module that exists to end twins, and it had already drifted.**
+  `hermetic_git::run` and `run_exact` were the same eight statements with one `.map` inserted — the
+  `Failure::Spawn` literal and the `Failure::Exit` construction character-identical, the two
+  `Failure::Unreadable` sentences **not**. One fact reached an operator two ways depending on which accessor
+  a caller reached for, and nothing compared them: the sentence occurs nowhere but its two constructions and
+  one doc line, so no direction could see the divergence. `run` is now the trim over `run_exact` and the
+  fuller sentence moved into the shared body rather than being dropped. A new direction holds that the two
+  answer an undecodable read **in the same words** — not that the words are any particular ones, which would
+  refuse an improvement to them.
+
+  A doc comment annexed onto the wrong item moved with it: the extraction history of `run` opened
+  `run_exact`'s doc, which the delegation would have made worse rather than better. The repository's own
+  relative-anchor sweep refused the first repair of it for writing *the paragraph below*, which names a
+  position rather than a thing.
+
+- **The `list` projection's coverage guard was blind to a dimension, and a typed count agreed with it.**
+  The guard says a capability added to `list_document` without a `list_markdown` section fails CI rather
+  than silently under-projecting. `unsafe_confinement_boundaries` was in neither its enumerated table nor
+  its fixture, so it was never looked at — and the parity half compared the **fixture's** document against
+  a literal `9`. The fixture is what decides that document's keys, so the number and the document could
+  only ever agree on the one input incapable of exposing the gap, while `list_document` had emitted that
+  dimension the whole time. Measured: with `list_markdown`'s unsafe row deleted — a real under-projection —
+  the guard passed. The fixture now populates all ten dimensions and parity is **set equality**, which
+  names which member is missing where a count cannot. `constitution-projection`'s scenario requires the
+  fixture to declare "one boundary of every semantic capability the JSON document can emit", so this is a
+  conformance repair rather than hygiene; no specification text changes.
+
+- **The head-branch re-read's own carriers, swept by the rule the same window widened.** The re-read landed
+  and the summary comment over it still named **two** of the three inputs it now re-reads; the shared positive control was still
+  named `an_unchanged_title_still_reaches_the_merge` while controlling three guards, and that title-only name
+  was carried by `PINNED-BY` into the head-branch scenario as its evidence; the bound's rationale still said
+  declaring it per input would be *two records*, a count the set had already outgrown; and the backlog said
+  `gh` offers no equivalent precondition for *either title or base*, omitting the endpoint just added and the
+  direction pinning it. The control is renamed for what it controls, and the rest state the criterion. Found
+  by an independent review, in the window whose own subject is that identifiers carry superseded claims
+  furthest — the rule was widened and then not applied to the change sitting beside it.
+
+- **The retirement sweep's corpus says where the residue actually was.** The rule read *every live document*
+  — corrected once already, from naming two files to naming the class — and that still reads as the files a
+  narration sits in. Measured across this window, a superseded claim survived in a test function name, in
+  doc comments beside two directions, in an inline comment in a shell script, in a scenario heading and in
+  the `PINNED-BY` names under it. One test file carried a `///` stating the opposite of the assertions twelve
+  lines below it, and a review reading the specification alone called that file coherent. The corpus is now
+  every tracked live **file**, and the seeds are the wording **and** the identifiers carrying it. No check is
+  added: this file already records a prose detector as designed, measured three times and rejected, and the
+  bound rule already said the same thing for its own subject — what was missing was that it is the general
+  case.
+
+- **A claim the parser migration superseded is corrected wherever it was still written down.** Replacing the
+  hand-rolled readers changed what this repository can decide, and the reaction moved while the carriers
+  stating the old answer did not. `release-coherence` still required a **cannot-judge** for a quoted
+  dependency key — `"xuanji" = "0.0.1"` — that the parser decodes and the cited pin judges, and still required
+  a **refusal** for `[workspace]` carrying `package.version` as a dotted key or an inline table, which the
+  reader returns as the declared version. Measured under cargo 1.96.0, every one of those spellings resolves,
+  so refusing them was a false refusal over legal Cargo syntax. A cannot-judge is a claim about the *reader*;
+  where the reader decides, saying otherwise stops an operator in front of a manifest cargo reads without
+  difficulty.
+
+  The residue was not only in the requirement. The pin held the superseded claim in its own **function name**
+  and in the last paragraph of its **doc comment**, twelve lines above assertions expecting the opposite and
+  an inline comment recording that the refusal had been false — a file disagreeing with itself, which a review
+  reading only the specification reported as coherent code. Sweeping for the retired test name then reached a
+  third carrier: a `BACKLOG.md` entry deferring this exact conversion, whose trigger had fired and whose open
+  paragraph named a function, a state and a direction that no longer exist. Annotated in that file's idiom
+  rather than rewritten.
+
+  The dated section below states the old behaviour and is left as it stands: a record is a measurement of the
+  moment it was taken.
+
+- **Provenance trimmed from the published crates' rustdoc.** Doc comments that named the window or the review
+  round a behaviour came from now state the behaviour itself: a canonical path label says why one separator
+  makes a baseline portable rather than which release found that out, and the cycle guards say they share one
+  canonicalize-failure policy rather than recounting how they once disagreed. **No documented guarantee, API,
+  outcome, identity shape or exit class moves** — every changed line in every published crate is a comment,
+  and the compiled behaviour is the `0.5.0` behaviour.
+
+### Self-governance
+
+- **The Definition of Done said staging is enough, and it is not for a gate whose corpus is `HEAD`.**
+  `AGENTS.md` told an operator to `git add` a created file and then, in the same paragraph, that *committing
+  is not required*. That is true of a gate taking its path list from `git ls-files` and its content from
+  disk, which is how the paragraph's own measurement was taken — and false of `pin_bites`, which reads both
+  halves of its subject through `git show HEAD:…`: the declared-mutation records, and the source each
+  mutation perturbs. An uncommitted record is no record, so the direction reports green over an **empty
+  set**.
+
+  Measured while landing the raw-identifier repair: two mutations added and staged, `pin_bites` green
+  locally, and both CI's Definition of Done and the MSRV job red on the same tree the moment it was
+  committed — `all_three_dimensions_read_a_raw_identifier_spelling_of_a_cfg_attr_path` *is cited but
+  resolves to no bound id*. The local pass was not merely weaker than CI's; it was a pass over nothing.
+
+  The paragraph now states the criterion — the read, not the gate — and names the search that finds them:
+  `git grep -nE '"HEAD:|ls-tree", "HEAD' -- crates/kanhe`. It returns one other pair of sites, and that one
+  is not this case: `release_coherence` compares HEAD's `CHANGELOG.md` against the worktree's, so the
+  difference is its subject rather than a blind spot. There is no reaction, for the reason the surrounding
+  paragraph already gives: in CI nothing is ever uncommitted, so a check would be vacuous exactly where it
+  runs.
+
+- **The branch written to tolerate a member sitting at the workspace root could not carry one.** A root
+  declaring `[workspace]` and `[package]` together is a shape cargo accepts — measured on cargo 1.96.0, it
+  reports that member's `manifest_path` as the root's own `Cargo.toml` — so the member's directory strips to
+  nothing. The empty string was then handed to `git ls-files` as a pathspec, and git refuses one:
+  `fatal: empty string is not a valid pathspec. please use . instead if you meant to match all paths`. The
+  branch reached the directory-unreadable refusal with an empty subject, saying `could not enumerate : `.
+
+  `.` is what git suggests and is not what this check means. The machinery set is *the tracked files under a
+  member the workspace does not publish*, and for a member that is the root, `.` is every tracked file in the
+  repository — every other member's source included. So the shape is refused rather than tolerated, in the
+  words `manifest`'s own reader already uses of a single-crate root: not a shape this check judges, and
+  saying so beats guessing. `machinery_names` is `pub(crate)` for the direction that meets it, which is
+  narrower than the `pub` its neighbour already carries for the same reason.
+
+- **A path that is not UTF-8 kept its own identity at one end of a comparison and not at the other.**
+  `hermetic_git` refuses git output it cannot decode, in so many words — *a path that is not UTF-8 keeps its
+  own identity, and reporting a replaced one would compare something the repository does not hold*. The
+  reader that spells this repository's own side of that comparison decoded lossily, so a component the
+  operating system holds as bytes came back as U+FFFD per byte: a name resolving to nothing, and two
+  distinct names collapsing onto one spelling.
+
+  **One of its three call sites can reach it, and stating which is half the repair.** `machinery_names` and
+  the member-enumeration comparison are handed `manifest_path` as a `&str` out of cargo's JSON, so the
+  parser has already made every component UTF-8 and no arm of the decode can fire for them — an earlier
+  reading of this defect claimed a silent false negative in the machinery set on exactly that path, and it
+  was wrong. `workspace_manifests` takes its paths from `read_dir`, where the bytes are the operating
+  system's, and a crate directory whose name is not UTF-8 is legal on Unix.
+
+  `RepositoryPath` gains a third state, so *not under the root* and *not spellable at all* stay apart —
+  two facts an operator repairs in opposite directions — and `machinery_names`' `let … else`, which had
+  folded the new state into the first of them, is a `match`. The walk's arm is held by
+  `a_crate_directory_that_is_not_utf8_is_refused_by_the_walk` against a real fixture directory; the
+  JSON-fed arm is declared unheld, naming the direction that observes the same shape where a walk feeds it.
+
+- **A path below the root had three spellings, and the two that had to agree did not.** Turning an absolute
+  path cargo reports into the repository-relative identity git uses was written out at three sites.
+  `machinery_names` and the member-enumeration comparison both stripped the root component-wise and joined
+  the result with `/`; `workspace_manifests` stripped it with `Path::strip_prefix` too but spelled the answer
+  with `Path::display`, the host's own separator — and on a failed strip carried the **absolute** path
+  forward through `unwrap_or`, as though it were relative.
+
+  The second of those is the side the comparison reads. Both sets are compared as strings, so wherever the
+  host's separator is not `/` they share no member at all and the direction reports every member as both
+  unwalked and undeclared. It is latent — this repository's CI is `ubuntu-latest` throughout — and its own
+  comment claimed the opposite, saying it compared *through components, as the gate this direction stands
+  beside does*. That sentence was true of one side.
+
+  `kanhe::repository_path` is now the one owner: the component-wise strip, the `/` join, and a `RepositoryPath`
+  whose `Outside` variant every consumer has to answer. The absolute-path fallback is gone, and where the
+  answer cannot be reached by construction — the walk joins its manifests onto the very root it strips — the
+  site is registered and declared unheld beside the sibling that already records the same shape for the
+  answer cargo gives.
+
+  Its failure matrix carries the two arms a host with a `/` separator can still observe: a path outside the
+  root, whose negative run returns `Below("/elsewhere/kanhe/Cargo.toml")` — an absolute path presented as one
+  below the root — and a root that is a text prefix of a sibling (`/r/crates` against `/r/crates-extra`),
+  whose negative run returns `Below("-extra/kanhe/Cargo.toml")`. The separator half is unobservable here and
+  is said so rather than counted as covered.
+
+- **A version this repository never released was written into its own governance, three times.** The sweep
+  had been treating this as 24 stale references to *the 0.5.1 window*. It is one class, and a different fault
+  from the relative anchor beside it in `AGENTS.md`'s table: `this window` names a **moving** reference,
+  while `0.5.1` names one that **never came to rest**. Release class is decided from what a window's changes
+  do, so a window's number is not knowable until its cut — and a number written into prose beforehand becomes
+  a pointer to nothing when the class moves.
+
+  **It has moved three times.** Measured over every `X.Y.Z` literal in tracked live Markdown outside
+  `CHANGELOG.md` and `docs/history/`: `0.3.1`, `0.4.1` and `0.5.1` each appear and none has a dated section
+  or a tag. The trend runs the wrong way — 15 occurrences, then 4, then 30 — and the reason it will continue
+  is that **reclassifying upward is this repository's SemVer honesty working correctly**, so windows will
+  keep being renumbered while their prose is written before the number is earned.
+
+  The repair is the form this repository already had right: the four `0.4.1` sites all name what the window
+  became in the same clause, and read correctly today because of it. The 24 unanchored sites now name the
+  version each window shipped as, and the number itself is gone from every live document but the two that
+  **declare** the class. `AGENTS.md`'s carrier taxonomy carries the row.
+
+  **The last holdout was a measurement, and keeping the name there was wrong for a reason better than
+  tidiness.** That figure was addressed by `--base release/0.5.1`, defended on the ground that a query's
+  argument is part of its observation. It is — but the observation was the wrong one: a branch is renameable
+  and a version that never shipped resolves through nothing, so the corpus was fragile from the start.
+  Re-addressed to the window's commit range, which resolves from any clone, the same question answers **103
+  pull requests and three offences** where the branch-addressed corpus answered 22 and one. The two it had
+  never seen are `fix/tianheng-…` landing as `docs(tianheng): …` and `gov/spec-prose-discipline`, whose type
+  is not in the admitted set — the type disagreement the naming rule exists to prevent, and a second retired
+  role, which is a clause of that entry's trigger never before seen to fire. **The dead name was not only
+  unresolvable; it was holding a figure three times too small.**
+
+  **A reaction is reachable here, which is unusual for this file's prose classes and is why it is filed
+  rather than waved at.** A version literal below the workspace version with neither a dated section nor a
+  tag is decidable with no judgement over meaning: above the workspace version is a plan, with a section or
+  tag is a release, and what is left is neither. The exemption — the same paragraph naming an earned version
+  — is positional. What is not taken is the design decision inside that exemption, which is whether a
+  governance file may narrate its own reclassification, because choosing it alone is the shape this sweep
+  kept finding wrong.
+
+- **The reading finished, and the last thing it found was a typed list inside the paragraph reasoning from
+  it.** The workflow-pin entry bounds its own risk by naming which actions run and under what permission —
+  *the actions are `actions/checkout` and `EmbarkStudios/cargo-deny-action`*, two, while the workflow pins
+  **three**. `actions/setup-node` arrived with the Node interpreter pin **this same entry narrates**, and the
+  enumeration its disposition rests on did not move with it. What actually bounds the risk is the permission
+  grant, which is a property of the workflow rather than of which actions it happens to name, so the entry
+  states that criterion and the count is left to whatever reads `uses:`. *A census is produced, never typed*
+  — inside an `ACCEPTED DEBT` whose acceptance was argued from the typed half.
+
+  Three negatives close the pass, each recording what it checked. *The scanner count is three, not four* —
+  measured by which files `starts_with` or `strip_prefix` the markers rather than which mention them, a
+  distinction worth the care because counting mentions answers seven. *No scratch-directory helper reached
+  the wildcard prelude*, so the fixture that would migrate on it still cannot. And *`gh` 2.46.0 offers no
+  new server-decided precondition* — `--match-head-commit` pins the head object, which the wrapper already
+  uses and which is not one of the three names its re-read races are about.
+
+- **The first reading under the new rule, and a `WATCH` moved because its proposal turned out to be already
+  running.** Four more entries evaluated, each recording what it checked rather than only what it concluded.
+
+  *A Shape that had been run without anyone noticing.* The entry watching `shengmo::workspace::MARKER`'s
+  out-of-reach literal copies proposes a comparison rather than a convergence — `kanhe` sees both the
+  constant and the text of the crates that cannot depend on it. Swept for its trigger, no mistype exists;
+  what does exist is a **second** constant of the same shape, `kanhe::verdict_channel::ENV`, whose
+  out-of-reach copies are the two shell wrappers — and whose copies are already **held**, by
+  `gate_exit_classes` asserting each wrapper's text against the constant. The trigger asked for a second
+  *unheld* constant and found a second *held* one, which answers a different and better question: the
+  proposal is not a hypothesis. The entry moves to `READY-PATCH` on this file's own definitions, `WATCH`
+  being for pressure without enough correctness evidence.
+
+  *And one trigger cannot fire yet, which is now something a verdict may say.* The prose-claim entry's
+  condition is a window **after** a `READY-PATCH` that has not landed, so no window has begun under the state
+  it measures from. It is recorded as **unevaluable** rather than *not fired* — the distinction the rule
+  adopted in this window requires, since a trigger whose precondition is unmet has neither been observed nor
+  passed.
+
+  Two clean negatives with their measurements: every tracked fixture corpus is still read by something
+  outside `fixtures/`, eight of eight; and the `bash <path>` sweep finds five occurrences, one live command
+  tracked executable and four that are a declaration, a fixture string, a constructed shell example and this
+  entry's own recorded instance.
+
+  *A guard caught the reading, for the class the reading was about.* The first draft of that last sentence
+  spelled the two untracked names out, and `reference_integrity` refused it — a reference to a path this
+  repository does not have. A sweep confirming that commands name targets which exist, writing a path that
+  does not. The repair is the one this window keeps arriving at: describe the thing, do not reproduce the
+  token that resolves to nothing.
+
+- **`BACKLOG.md`'s promotion triggers are read against the window before the cut, and that is a step someone
+  performs rather than a thing built.** A live entry names what would promote it and nothing evaluated that,
+  which this file already recorded from the inside: an entry whose trigger had fired on **both** halves sat
+  unchanged through a full round of review *because nothing evaluates a promotion trigger*. Read on purpose,
+  fifteen entries produced eight defects sitting behind triggers already written — including one entry whose
+  figure was three times too small and one document refuted by its own next decision.
+
+  **The reachable half is the occasion, not an instrument.** Deciding whether a trigger's set is its
+  residue's set means knowing what the entry meant, which is the judgement-over-text this repository has
+  measured and rejected three times. So `AGENTS.md`'s release ritual now carries the reading, next to the
+  rule that the dated section's date is the last edit before the cut — a discipline nobody is asked for
+  being one nobody does.
+
+  **Two rules make the hour worth spending, and both constrain the verdict rather than the entry.** An
+  evaluation records what it **checked**, because a bare *Not fired* cannot be told from nobody having
+  looked. And a verdict no sweep could have reached **says so** instead of carrying a date: measured, an
+  entry read `Not fired, swept` over an observable its own lifecycle destroys before the squash, and a dated
+  verdict reads as *settled* where the honest word is *unobserved*.
+
+  Per-entry labels sorting triggers into swept and witnessed were the other candidate and are **declined**,
+  on the objection the entry proposing them had already recorded against itself: a field on sixty entries is
+  a form to maintain. Two sentences reach the same failure at the point where it happens and cost nothing to
+  keep.
+
+- **The sweep's third pass, and the sweep wrote an instance of the class it was measuring.** Four more
+  entries evaluated. The one that matters is the relative-anchor bound, whose corpus command was re-run: it
+  answers three live offences against ten at the previous reading, and **one of the three had been written
+  minutes earlier by the sweep's own repair** — inside the paragraph whose subject is a figure attached to
+  the wrong corpus. All three are anchored to `0.6.0` now. The count falling is not the finding; *the class
+  is produced by the hand repairing it* was already recorded once and has now held for a second window
+  running, at an interval of minutes rather than days. Nothing observed any of it, which is what the declared
+  bound says will happen.
+
+  The other three are negatives with their measurements, recorded because a trigger nobody re-reads is a
+  stale answer whichever way it points. *Every commit on the release branch came through a pull request* —
+  101 of 101, asked of the API per commit rather than matched against a listing, which is the direction that
+  cannot miss one a listing's limit truncated. *The two irreversible-act wrappers have not diverged* —
+  `merge-pr.sh` grew 58 lines while `publish.sh` was untouched, which is the shape a divergence would arrive
+  in, and every named shared construct is still present in both with the structural ones matching in count;
+  the growth is the pull-request re-reads, which the publish side has no counterpart for. *And no stolen doc
+  changed what a reader did* — but that entry had moved its trigger off a count on the ground that it was
+  *a count nothing produces*, and this window produced two more instances of the class, both found by review
+  and repaired where they were made. The count is produced; what nothing produces is a reaction that
+  produces it, and the entry now says the second rather than the first.
+
+- **The sweep continued over the rest of the live entries, and `PROJECT.md` was refuted by its own next
+  decision.** Three more findings, each a claim rather than a reaction — nothing behaved differently, which is
+  why nothing caught them.
+
+  *A trigger fired on a document contradicting itself.* `PROJECT.md`'s `xingbiao` description read *the
+  static and semantic dimensions read the workspace through one source of truth* — two dimensions, where
+  all three carry it. **The falsifier was on the same page**: `PROJECT.md`'s own runtime-identity decision
+  records the cargo feature 漏刻 reaches it through. The first repair proved the point by restating the
+  membership from the manifests, and `law_restatement` refused it — the dependency rules are declared and
+  `AGENTS.self-law.md` renders them, so the entry cites the projection and keeps only the half no projection
+  carries, which is that one of the three arrives through a feature rather than unconditionally. A guard
+  caught a repair for the defect the repair was about. It was found by re-reading the file after
+  `xingbiao`'s module doc was corrected for the identical omission earlier in this window — one carrier
+  repaired and this one not swept, which is the retirement-sweep class whose corpus is *every tracked live
+  file*. The parenthesised list of three exports went with it: enumerating three functions of a substrate
+  that now holds path identity and the filesystem-answer policy is the same defect one level down.
+
+  *A governance figure was recorded over an unfinished window.* The ratio entry's numbers were taken at 42 of
+  this window's 100 landed changes. Re-derived with the command the entry carries: the classifier as written
+  answers `34/100`, by carrier `100/100`, and **`21/100` touched a published crate's `src/`** — above
+  `0.5.0`'s 18%, where the reading at 42 had none, because the window's second half is where the lexical
+  false-negative closures landed and those are product. The entry's own observation source says the figure is
+  run *after the release was cut*; a mid-window reading in the same sentence shape is a figure attached to an
+  incomplete corpus, and nothing disagreed with it because nobody re-ran it. Both readings are kept, each
+  stating its count.
+
+  *And the trigger-corpus entry fired on both halves at once.* It watches for *a trigger found to have fired
+  unnoticed for a whole window* — the positional-reference trigger fired four times across this window and
+  surfaced only when the triggers were read on purpose — and for *a fifth instance* of a trigger written over
+  a set narrower than the residue it guards, which the swept-versus-witnessed entry supplied. Its four
+  original instances were each found by a reader who happened to hold both halves; these two were found by
+  asking every trigger the question at once, so **what is reachable is the occasion rather than an
+  instrument**. The re-decision is the steward's.
+
+- **A promotion-trigger sweep of the entries this window touched, and the sweep this window already ran had
+  moved a measurement off its own corpus.** `BACKLOG.md` asks every live entry for a promotion trigger, and a
+  trigger nobody re-reads after the work that would fire it is a decision surface stating a stale answer. Eight
+  entries were evaluated against the 99 landed changes — chosen by whether this window plausibly touched them,
+  which is stated because it is **not** the whole live set.
+
+  *A rename rewrote a base inside a measurement.* The branch-name entry's evidence was a count of merged pull
+  requests addressed by the branch they landed on, and it named one instance —
+  `test-kanhe-a-fixture-sha-that-resolves-nowhere` — which that branch's merge records do not contain. GitHub retargets a
+  renamed branch's **open** pull requests and leaves a **merged** one's recorded base alone, so a branch this
+  window renamed left the figure attached to a set that does not contain its own evidence. The rename's own
+  sweep did it, one window after the commit that wrote the figure — whose subject is *a trigger is a
+  predicate, and nothing holds one to its corpus*, and whose corpus was a branch. The figure is re-addressed
+  to the window's commit range and carries the command that produces it; *A version this repository never
+  released was written into its own governance* records what that re-addressing then found.
+
+  *A trigger fired.* *A positional reference appearing again after this sweep* — whose own control was the
+  0.5.0 sweep — fired four times in this section. Read out, two resolve, one is ambiguous, and
+  `see the entry below` pointed at the wrong entry: the one it means was written later and, entries being
+  newest-first, landed **above** it. That is the entry's recorded mechanism, unobserved because a group
+  merge's verification compares the multiset of lines and is blind to whether an entry still points at what
+  it meant. Both are named rather than positioned now.
+
+  *And a verdict was written in the wrong register.* The OpenSpec-lifecycle entry carried
+  `Not fired, swept 2026-09-01` on the ground that `openspec/changes/**` is untouched — but step 5 of that
+  lifecycle is *strip the change directory before the squash*, and the squash collapses the branch that would
+  hold the propose commit. **Both observables are erased by the ritual they were read as observing**, so the
+  emptiness is what either state looks like and *whether the event has happened is decidable* was false. It
+  is a witness-only trigger, and a dated verdict made it read as settled rather than unobserved. The entry
+  that sorts triggers into swept and witnessed named only the direction where a witness-only one turns out
+  cheap; it is widened to the direction where a swept one turns out impossible, which is the more dangerous
+  half, and it fires on that instance. A malformed heading fragment splitting an entry from its own closing
+  note goes with them — it begins with a space, so the classification check that reads `### ` never saw it
+  while a reader meets it as a section break.
+
+  No reaction is proposed for any of this. What would decide whether a version name in a sentence is a label
+  or an observation is a judgement about meaning, which is the prose detector this file records as designed,
+  measured and rejected three times.
+
+- **The head branch is re-read too, and the premise that excused it was false.** It was left out of the
+  post-gate re-reads on the ground that GitHub offers no way to change an existing pull request's head, so a
+  guard could only ever refuse against a fixture — which is not a guard. An independent review refuted it:
+  GitHub cannot **repoint** an open pull request, but renaming a branch retargets the pull requests on it, so
+  `headRefName` moves while `headRefOid` does not and `--match-head-commit` pins the object without observing
+  the name. A `release/X.Y.Z` -> `main` squash approved with an empty body, whose head branch is then renamed,
+  lands that body from a branch that is no longer a release branch. The exception can only be **lost** this
+  way and never gained, so it is not a false negative — but an omission defended by a false premise is worse
+  than the omission, and the negative run was constructible all along.
+
+- **Claims this window made about its own work, corrected where the code refuses them.** An independent
+  adversarial review of the three changes above found each of these, and each is a claim rather than a
+  behaviour — nothing reacted differently, which is why nothing caught them.
+
+  *The load-bearing measurement was mis-attributed.* Five sites and a commit body said cargo **refuses** a
+  `package` written beside `workspace = true`. It does not: measured, cargo accepts it, warns
+  `unused manifest key: dependencies.alias.package`, ignores the local value and resolves the catalog's crate
+  anyway. The probe that produced the original claim had moved two variables at once — it renamed the catalog
+  key *and* added the `package`, so the refusal it observed was the key mismatch. The conclusion is unchanged
+  and the correct measurement argues for it more strongly, but a specification clause is *reproducible now or
+  not at all*, and re-running that one refuted it.
+
+  *A sweep claimed a corpus it had not swept*, and *two test doc comments stated a false reason for their own
+  fixture* — both tests pass with the second example deleted, because the per-example counter is incremented
+  before the pin is compared, so the vacuity guard they named is unreachable. One of the two was new, having
+  copied the reason from its sibling rather than checking it.
+
+  *A negative run's record was composed rather than pasted*, losing the `left`/`right` pair that is the
+  evidence, while its sibling in the same window was verbatim. *A five-line paragraph was left duplicated*
+  inside one function, the first copy describing a statement the same change had deleted. And *`offered`'s
+  doc comment said `Offered::Missing` is a refusal rather than a fallback*, which held until the commit
+  carrying that sentence made it one.
+
+- **The base the squash lands on is re-read after the gate, as the title already was.** The wrapper's judged
+  inputs divide by one question — what the merge **records** travels as the value the gate saw, what the merge
+  is **judged against** has to still hold when the merge happens — and the base had been filed on the wrong
+  side of it, exactly as the title once was. `gh pr merge` takes no base of its own and lands wherever the
+  pull request points at merge time, so a base edited during the gate left an approved empty-body release
+  message landing on a destination nothing judged, and carried the one message exception to a squash that is
+  not one. The negative run reaches `pr merge` and exits `0`.
+
+  The **head branch** is deliberately not re-read: GitHub offers no way to change an existing pull request's
+  head and `--match-head-commit` already pins the head object, so a guard for it could be made to refuse only
+  against the fixture and never against the tool. The declared bound is **widened rather than duplicated** —
+  the stop is a property of a client-side re-read not being atomic with the act it precedes, reached through
+  whichever inputs are re-read, and one stop declared twice is two records that must then agree. Its backlog
+  entry's own trigger named this arrival: *another judged input that can only be re-read would make this a
+  shape rather than an instance*.
+
+  One sentence said the wrapper *judges three inputs* — written when it judged three, and left standing when
+  the base and head branch were added to the gate in this same window. Replaced by the criterion, which does
+  not go stale as the set grows.
+
+  **The first repair of it claimed a corpus it had not swept**, saying the wording stood in four places and
+  naming them. An independent review then found the same claim alive in nine more, two of them a `///` saying
+  *four judged inputs* directly above a function that supplies six, and one of them in the wrapper itself
+  sixty-six lines below the block that repair had rewritten to remove exactly this count. Every live site is
+  now converted — the corpus is tracked `.rs`, `.md` and `.sh`, excluding `CHANGELOG.md` and `docs/`, the
+  record carrier and the generated projections. The surviving hits there are dated entries and this
+  paragraph's own italicised quotation of the retired wording, which is what a finished conversion looks
+  like rather than an unfinished one.
+
+- **A family crate the workspace catalog renames is judged, where the local key alone decided membership.**
+  An inherited dependency's key is a **lookup key** into the catalog, never a name: measured under cargo
+  1.96.0, `alias = { package = "realdep", version = "0.0.1" }` beside `alias = { workspace = true }` resolves
+  to `realdep` at `^0.0.1`; a `package` written beside `workspace = true` is accepted and **ignored** with an
+  `unused manifest key` warning, and inheriting under the crate's name rather than the catalog's key is
+  refused outright — so neither shape makes the local key an identity. Asking
+  the identity question first passed the entry over, and the example was then reported as declaring no family
+  requirement — a different fact about a different manifest, while the stale requirement went unread. Where a
+  sibling example keeps the per-example counter non-zero, that is a false negative in front of the release.
+
+  The catalog search moved with it. Matching entries by resolved identity refused on **any** unreadable entry
+  in the table, so a catalog carrying both an unreadable entry and a stale family pin answered cannot-judge
+  about the entry nothing took while the pin the example did take went unread behind it — the same false
+  negative reached through a refusal rather than a pass. One fixture had been passing on that over-breadth
+  rather than on its own subject: it wrote the unreadable entry under a key nothing inherited.
+
+- **git answering in bytes no `String` holds is refused, never replaced.** The shared git runner decoded
+  stdout with `from_utf8_lossy`, and what it mostly carries is **paths**: `ls-files -z` avoids git's own
+  quoting and promises nothing about encoding, so a tracked path that is not UTF-8 arrived as a different path
+  than the one on disk and every comparison downstream was made against that. The reaction model carries a
+  path-identity rule for the opposite property — two paths differing only in undecodable bytes keep two
+  identities — so a reader here that collapses them contradicts it.
+
+  The runner now separates *git failed* from *git answered and this reader cannot represent the answer*, and
+  every caller answers the new state rather than inheriting one: the compiler named all five. stderr stays
+  lossy, deliberately — it is a sentence for an operator, not a value anything compares. The direction builds
+  a filename of one invalid byte in a real repository; its negative run returns the replacement character
+  where the repository's byte was.
+
+- **An example manifest that is there and is not a regular file is no longer read as absent.** `is_file()`
+  answered both with one `false`, so a directory named `Cargo.toml` — or any path that exists and is not a
+  regular file — read as *this example declares none*, and the remaining readable examples satisfied the
+  counters that follow. Asking for the metadata separates them, in one construction whose message carries
+  which it met. The subject is now stated too: an example is a **directory**, and `examples/` holds files of
+  its own, so an entry that is not a directory holds no example rather than an unreadable one.
+
+- **A path is compared as written before any punctuation comes off it.** The machinery-name reader stripped
+  **every** trailing dot from a token, so a path legitimately ending in one was rewritten before it could
+  match — an identity normalised to suit a sentence. A Markdown sentence ends in one period, so one is what
+  comes off, and only where the name as written matches nothing.
+
+- **A release commit whose own tree carries no changelog is refused, where it read as the next cycle.**
+  `git show HEAD:<path>` exits the same status for a path the tree does not name and for a tree git cannot
+  read, so one arm had to mean one thing for both — and meaning *the worktree differs* let a release commit
+  that shipped without the document its release is narrated in pass on the worktree's copy alone. Presence is
+  asked by `ls-tree`, whose exit status answers it: an empty listing for absent, non-zero only for a tree it
+  could not read. Absence anywhere but the release commit stays unremarkable, and the two facts are separated
+  by where the commit is rather than by a read failing.
+
+- **A member's directory is taken from its manifest path component-wise.** Both readers built a `"{root}/"`
+  string and stripped it as text, and cargo reports **native** paths — so on a host whose separator is not
+  `/` no member sits under the prefix and every one reaches the refusal for describing a different tree.
+  `Path::strip_prefix` compares component by component, which is the rule the sibling reader for a
+  dependency's `path` already carries as a requirement: a rule enforced at one site and not its neighbour is
+  a rule about the site. The identity is joined back with `/` deliberately — it is compared against git's
+  paths and cited in this repository's own prose, both of which spell a separator that way whatever the host
+  does.
+
+- **Two specifications disagreed about a TOML escape, and the implementation followed the other one.**
+  `repository-checks` says the value reads as cargo reads it; `release-coherence` still required a
+  cannot-judge, with an `AND` clause arguing why refusing was the better of two answers. The parser decodes,
+  so the second was false — and **both of its scenarios were cited by tests whose names say the opposite**,
+  one of which also disagreed with its own first doc line. The scenarios state what happens, and the test is
+  renamed to what it asserts.
+
+- **Three unreadable-value states said *not in double quotes*, and one also said *declared twice*.** The
+  parser reads a literal string as cargo does, and a key declared twice is a document it refuses whole — so
+  both shapes name conditions that no longer reach those states, in the type documentation a maintainer reads
+  before the specification. Each now says *not a string at all*, and says what it is **not**, so the old
+  reading cannot be re-derived from the new sentence.
+
+- **A catalog search is handed a parsed catalog, so its *nothing names it* state carries one fact.** It
+  parsed the manifest itself, once per inherited dependency, and mapped the parse failure onto the state
+  meaning *no entry names it* — two facts under one name, and different things to tell an operator. The
+  catalog is parsed once for the manifest now, the refusal belongs to the caller that meets it, and the
+  repeated parse goes with it.
+
+- **A changelog git cannot answer for is no longer read as a modified worktree.** One `is_ok_and` collapsed
+  three causes into *not a snapshot*: the path missing from `HEAD`, which is the only one that means it; git
+  failing to start; and git answering in bytes no `String` holds. The third came into existence when the
+  runner learned to refuse those bytes rather than replace them — a predicate that was narrow when written
+  widened underneath it. Each cause is answered separately now, and the two that leave the comparison unmade
+  refuse rather than picking a state.
+
+- **A checkout edited only in its trailing whitespace is edited.** The comparison trimmed both sides, so a
+  worktree differing from the release commit by a newline read as unmodified and the gate answered *snapshot*
+  over a tree that is not the one released. The trim was never a judgement about content: it compensated for
+  the git runner trimming its own output. Reading git's answer exactly removes the compensation and the
+  residue with it.
+
+- **The one squash-message exception is one version across three positions.** `AGENTS.md` fixes the branch's
+  role as `release/X.Y.Z` against a subject reading `release: X.Y.Z`. A `release/` **prefix** admitted
+  `release/not-a-version`, and admitted `release/0.4.0` carrying `release: 0.5.0` — a branch whose whole
+  purpose is one version, squashing a message about another. The gate now requires the role and the equality,
+  and each of the three narrower readings this clause has had is recorded beside it: the subject alone
+  admitted any branch, the subject and the destination admitted any source, the destination and a prefix
+  admitted a branch that is not the role.
+
+- **The one squash-message exception names both endpoints, because the contract does.** It is the
+  **release-branch-to-`main`** squash. Taking only the destination left it reachable from any branch: a
+  `fix/…` pull request onto `main` whose subject read `release: X.Y.Z` claimed a release branch's exception.
+  Naming one endpoint of a two-endpoint contract narrows the door without closing it. The gate takes the head
+  branch as evidence beside the base, and a head it cannot read stops the wrapper before the gate and the
+  merge.
+
+- **The one squash-message exception is identified by where the squash lands, not only by what it says.**
+  `AGENTS.md` states it as the **release-branch-to-`main`** squash; the gate decided it on the subject alone,
+  so a message reading `release: X.Y.Z` with an empty body claimed the exception on any base. The law was
+  branch-scoped and the reaction was not.
+
+  The gate now takes the base as evidence, exactly as it takes the title, and the wrapper supplies it from the
+  pull request. A base it cannot read stops it before the gate and the merge: not knowing where a squash lands
+  is not the same fact as knowing it lands somewhere ordinary, and a wrapper that guessed would decide the
+  exception by default. Both directions carry their negative run.
+
+- **A pinning citation now arrives with its mutation, or with the reason it has none, in the same change.**
+  A `PINNED-BY` is held to its name resolving to one registered test; whether the test would fail if the
+  behaviour it defends changed is decided only where a mutation is declared, and the biting check reports the
+  uncovered part on every clean run. Citing is cheap and authoring a mutation is not, so a change that cites
+  without mutating enlarges the population that check exists to report — measured when six requirements gained
+  citations and none declared a mutation.
+
+  **What was declined is the campaign.** Authoring mutations for the standing citation set was costed on its
+  rate rather than its size: the set grows faster than mutations can be written, so chasing the numerator
+  loses to stopping the denominator. The obligation costs nothing now and changes the trajectory; the grind
+  costs a window and does not.
+
+- **Two normative clauses said the semantic dimension's crate is the only one permitted to depend on `syn`,
+  and it is not.** A `publish = false` member of this workspace names `syn` in `[dev-dependencies]`, which is
+  permitted — the dependency allowlists observe the normal table only, a specified default with its own
+  scenario — and the root manifest's own comment states that and names the occupant.
+  `semantic-signature-coupling`'s requirement and `semantic-dyn-trait-boundary`'s aside now say *the only
+  **packaged** crate that depends on `syn`*, the wording that manifest already reached. **No published
+  surface, guarantee or reaction moves**: the requirement's own scenarios were already narrower than its
+  prose — they assert that the static core does not acquire `syn` — so what changed is the sentence above
+  them and not what anything reacts to.
+
+- **The declared-set instrument for prose claims is not built, and the reason is measured rather than
+  deferred.** The backlog entry *A claim about this tree, written as prose, is held only where its author
+  declared it* proposed extending the census idiom: a declared phrase whose held value is a produced **set**,
+  so *only 渾儀 names syn* is compared against the enumerator that answers it. Its stated floor was that
+  coverage stays opt-in, declaring being an author's act.
+
+  That floor was measured, and it decides the shape. The two live instances found in this change are claims
+  their authors plainly believed — one of them a normative `SHALL` whose own scenarios were narrower than
+  its prose. **Nobody declares a sentence they think is true**, so a declaration-armed instrument holds the
+  claims someone already doubted and not the ones that go wrong.
+
+  What found them was a sweep of the absolute-quantifier vocabulary — *only*, *alone*, *the one place* —
+  within a line of a named enumerable subject. That is not the prose detector this repository has designed,
+  measured and rejected three times: it decides nothing and starts from a subject the tree enumerates rather
+  than from a sentence's meaning. It produces a review queue, which is the interim-instrument form already
+  stated for the corpus-narrowing class.
+
+- **Sixteen requirements-to-reaction citations added, and the half of the backlog entry that called itself
+  cheap turns out to have a third state.** The entry *Every normative SHALL either has a reaction or is a
+  declared bound* splits into extending the existing citation where a reaction exists (no capability needed)
+  and deriving the binding for the rest (a capability). The first half was run against the sample the entry
+  names.
+
+  Measured: across every tracked spec, 371 requirements, and 297 carried no citation anywhere under them.
+  `PINNED-BY` attaches to a scenario and never to a requirement, so the unit is a requirement with no
+  citation under any of its scenarios. In `repository-checks`, six of the fourteen uncited requirements were
+  citable and are cited, each pairing verified by reading the test against the scenario's `THEN` rather than
+  matched by name. A planted citation naming nothing fails
+  `every_pinning_citation_resolves_to_one_registered_test`, so the new ones are held.
+
+  *The eight that remain are not "a reaction nobody cited".* Three of them are **gate-only**: the reaction
+  asserts the clean tree while the requirement's `THEN` describes the refusal — `one_spelling` asserts that
+  no second spelling of a token exists, where the requirement says the check refuses *naming every site and
+  the constant that owns the token*, which nothing observes. One is a gate that **returns early where CI
+  runs it**, and says so in its own comment. One is **undefendable by construction**, telling a reader that a
+  projection is a view rather than an authority.
+
+  *One limit of the citation grammar, found by using it.* A defence defined in two **targets** of one crate
+  cannot be cited: the register refuses a name defined twice, and the recorded disambiguation is a crate
+  prefix, which answers two crates and not two targets. That scenario stays uncited rather than pointing at
+  half its defence.
+
+  *Extending this to the rest is declined, on what a citation is held to rather than on its size.* The
+  register decides that a citation's name resolves to exactly one registered test — proven by planting a name
+  that resolves to nothing — and nothing decides the **pairing**. `pin_bites` closes the neighbouring half
+  only where a mutation is declared, and even a biting pin ties its test to an author-chosen perturbation
+  rather than to the requirement. So extending part one to the remaining requirements would produce
+  hand-authored claims on the order of the requirement count, each held by name resolution — the drifting
+  artifact the entry's own second half refuses. The citations added are kept: they are correct, and a renamed
+  test turns them red.
+
+  *And a cost this entry owed its sibling.* None of the new citations declares a mutation, so each landed in
+  the part of the citation set `pin_bites` reports as uncovered on every clean run. Citing a pin is cheap and
+  authoring its mutation is not, so work that cites more pins enlarges *most pinning citations have never
+  been seen to fail* unless it authors the mutations too. That is booked in that entry rather than left in
+  the change that caused it.
+
+- **The workspace-version inherit question is parsed, and the hand-rolled TOML layer it was the last caller
+  of is deleted.** Net 130 insertions against 548 deletions, more than half of
+  `crates/kanhe/src/manifest.rs` among them, and no production code calls `region::Source::toml()` any more.
+
+  *The defect that ended the approach rather than extending it.* A member may inherit through a sub-table
+  heading — `[package.version]` with `workspace = true` — and cargo 1.96.0 resolves it, measured in a scratch
+  workspace whose `cargo metadata` reports the inherited version. The reader asked each **line** whether it
+  assigned `version`; a table heading assigns nothing, so no line answered and the member was refused for not
+  inheriting a version it does inherit. That is the fourth round of one defect, each earlier round having
+  moved the boundary of *decoded* one segment right — and the first found by measuring cargo rather than by
+  reading a review. There was no segment left to move: the spelling is a heading, and a line-oriented reader
+  cannot represent it at all.
+
+  One expression over a parsed document answers every spelling the three recorded rounds fixed one clause at
+  a time, and the sub-table form with them. With the inherit read migrated, `manifest::assignment`,
+  `assigned`, `Assignment`, `Assigned`, `table_heading`, `TableHeading`, `dotted`, `unquoted`,
+  `split_outside`, `outside_strings` and the escape decoder beneath them had no production caller left, along
+  with the gate's own `inline_fields`, `assignments` and `offer_value` — whose doc comment already said it
+  "survives for the one caller left". The compiler named each as it fell rather than a grep guessing.
+
+  *One behaviour narrowed, in the direction that agrees with cargo.* The line walk took a
+  `version.workspace` assignment in **any** table; cargo honours it under `[package]` and nowhere else, so
+  the parsed read is scoped there.
+
+  *One refusal gained an identity of its own.* A member manifest the parser cannot read is now a cannot-judge
+  naming which member, rather than a member reported as not inheriting. It is registered separately from the
+  dependency reader's site for the same condition, because the refusal register compares identities — a
+  second construction of a held one would report the new branch as observed by a direction that never reaches
+  it. Negative run: mapped to *does not inherit*, it answered `Violation` where `CannotJudge` was expected.
+
+  The spec scenario carrying this requirement described **which reader owns the question**, and that prose
+  had gone stale before this change — the readers it named were migrated earlier in the `0.6.0` window. It now
+  states the behaviour and keeps the measurements, which is one fewer hand-maintained structural claim.
+
+- **Six more promotion triggers evaluated, and one entry's evidence had gone false under this window's own
+  work.** None of the six had fired; the finding is in what one of them rested on.
+
+  *The one-spelling corpus reader* argued its safety from two premises. One still holds — the eight members'
+  directory basenames equal their package names, re-derived — and the other does not: *the eight declare no
+  registry dependency at all* is false. `serde_json` is declared by seven of them, `syn` by 渾儀, and
+  `toml_edit` by 勘合 since this window's self-law amendment, which is the entry's own evidence overtaken by
+  a change made two hundred lines away in the same document. What actually keeps the spurious edge absent is
+  that **no such name matches any member's directory basename** — the property the trigger turns on, and the
+  one the entry should have rested on from the start.
+
+  *The bounds-named heading reader* is still latent, and the annotation says how narrowly: no
+  `### Requirement:` heading carries a word ending in `bound`, which is the only corpus reaching it — but
+  `Inbound` and `Outbound` now appear in `#### Scenario:` headings, so the vocabulary is in the tree and a
+  rename away rather than hypothetical.
+
+  The other four are annotated with what was checked: two governance members and no third, both tracked
+  fixture corpora read, this repository's own commit objects absent outside the closed record, and the
+  citation reader green.
+
+- **The one merge the ritual cares about most was the one act the wrapper could not perform.** Sweeping the
+  promotion triggers turned up one that had fired, on `release: 0.5.0` itself: *a merge or publish made
+  outside the wrapper is not observed*. The release squash onto `main` was made with `gh pr merge` directly —
+  and not because anyone slipped past the gate. **The wrapper could not do it.**
+
+  `AGENTS.md` names that squash as the **sole message exception**: subject `release: X.Y.Z`, body deliberately
+  empty. The merge gate refused both — as a non-Conventional subject, and as an empty body. It encoded every
+  rule of the ritual except the one the ritual itself names, so the release snapshot had to go around it.
+  `0.4.0`'s release commit carries an empty body too, so this had been true of **every** release.
+
+  The gate learns that exception now, narrowly: exactly `release: X.Y.Z` with a well-formed version, which is
+  the same line the release-history reader accepts — a malformed one is still refused, and by the
+  conventional-subject rule rather than the empty-body one. An ordinary subject's empty body is still a
+  violation.
+
+  This is **more** observation, not a relaxation: the subject shape, the attribution marks and the title
+  match are all judged on that merge now, where before none of them were because the merge never reached the
+  gate at all. What remains of the entry is the half no repository can reach — a `cargo publish` run
+  directly, or a merge made in the browser.
+
+- **The OpenSpec lifecycle is retained, and the entry that asked read a rule as a claim about the tree.** The
+  trigger was *a human call about intent* and the steward made it: a new capability must go through OpenSpec,
+  so the section stays. The absence of instances is explained rather than unexplained — the recent windows
+  were patches and prose, and neither is a capability change.
+
+  The correction is the part worth keeping. The entry called the present-indicative *a capability change
+  moves through OpenSpec* "prose stating a fact about the tree that the tree contradicts", and counted zero
+  instances as the contradiction. **A rule is not falsified by having no instances; it is left
+  unexercised.** The evidence it gathered was real and its reading of that evidence was the error — the same
+  distinction this window wrote into `AGENTS.md`'s bar, where a rule needs a reachable instance to earn a
+  *reaction*, not to be true.
+
+  What survives is narrower than the entry and is filed as its own watch: the lifecycle is retained and has
+  never been run, so the first capability change is the first thing that will tell anyone whether it still
+  works. Half of it is already exercised — the sync-evidence rule is followed and the tracked
+  `archive/.gitkeep` is exactly as described — and rehearsing the rest would mean inventing a capability to
+  have one, when the lifecycle's whole subject is a change someone actually needs.
+
+- **The promotion-trigger sweep was run, which is the thing its own entry says nothing runs.** Seven `Not
+  fired` annotations carried evaluation dates of 2026-08-18/19 — **thirteen days and one shipped release**
+  stale — and it was the dates that made that visible, which is exactly what they were added for.
+
+  All seven were re-evaluated against the tree rather than re-dated. **None had fired.** Each now carries
+  what was checked beside its date, because a date alone asserts an evaluation without saying what it looked
+  at — the same shape as a figure without its instrument, one document over.
+
+  What the checks were: `openspec/changes/` unchanged across the whole window; `examples/` moved 32 times and
+  `sans-io-pure` still declares through the one profile with no bare boundary beside it; the capability
+  filing join passes and the scenarios rewritten this window stayed under the capabilities already holding
+  them; the sites named by the length entry were worked in heavily and **shrank**; `PROJECT.md` moved eight
+  times and its two decidable graph claims were re-derived true.
+
+  One is not a defect and is not mine to decide: the OpenSpec lifecycle entry's trigger is *a human call
+  about intent* — whether the lifecycle is being restored or acknowledged as abandoned — and it has now gone
+  unmade through a full release.
+
+- **The governance-ratio entry's own instrument was a pipeline with an ellipsis in it, and it was caught by
+  trying to run it.** `git log … | …` describes a measurement rather than being one — the same shape this
+  window removed from `AGENTS.md`'s census rule, filed by the same hand, in the entry whose entire purpose is
+  to make a figure re-derivable. The classifier is written out now.
+
+  Re-running it also found a second thing the entry had not said: the range must be taken against the
+  **release branch's own history**, never against `main`, which squashes a whole window into one commit. The
+  same range on `main` answers `0/1`, which is what the first re-run returned.
+
+  **First reading: 8/17 (47%)** for `0.6.0` so far against `0.5.0`'s 52%, with `crates/kanhe` down from
+  37,154 lines to 36,460 — the first window in which it has shrunk. Neither number carries much yet, and the
+  entry says so: seventeen changes is a sample two differently-classified commits would move ten points, and
+  nearly all of them are one hand working on governance, so it measures who was working more than whether the
+  bar changed anything.
+
+- **The dependency grammar is parsed, and the spellings cargo accepts are decided rather than refused.**
+  `declared_dependencies` asked a heading's text which table it opened, matched it segment by segment against
+  every admitted form, then collected a detailed table's fields across lines and filed the record when the
+  *next* heading proved the table over. It walks the document now: `[dependencies.xuanji]` and
+  `xuanji = { … }` are one entry in one table, and there is no boundary to find.
+
+  **Four states became unconstructible and six refusal sites retired with them**, because what they refused is
+  now either decided or refused by the parser. A quoted key names its crate, so `"xuanji" = "0.0.1"` is a
+  stale family requirement that is **judged**. An escaped path is decoded and compared against the member's
+  own directory. A `package` written `xuan\u006ai` is matched against the family as `xuanji`. And a key
+  declared twice is a document **cargo itself will not load**, so the honest answer is the parse error, which
+  names the key and its position rather than a count this reader had to keep.
+
+  **Two fixtures were themselves invalid TOML, which the hand-rolled reader tolerated.** Both appended a
+  second declaration of `xuanji` beside the example's own, and a line reader never met the collision. They
+  compose one declaration now, and assert that the edit landed — a fixture that stopped being about the thing
+  it names is the shape a reader of lines cannot see.
+
+  Ten integration directions moved with the reader, each to what a parser answers rather than by
+  substitution: three to the parse refusal, three to a value that is no string, two to a judgement where they
+  had asserted a refusal, and two to a fixture that composes correctly. Four unit directions were deleted with
+  their subject — they pinned a hand-rolled lexer — and one moved onto the new reader, keeping the property
+  that a value is not a key.
+
+  Negative runs: with a rename left unresolved, four directions bite; with a parse failure read as declaring
+  nothing, five.
+
+- **The `READY-PATCH` queue is dispositioned, and none of the five remaining closes by patching now.** That
+  is what the class says it means: it grades **evidence and compatibility, not how much design the correction
+  still needs**. Reading it as *small* or *next* is the misreading the class definition itself warns about,
+  and it is the misreading this pass started with.
+
+  - *The breaking-marker pairing* — the shape is decided (a named join with explicit handles), and
+    dispositioning it surfaced a collision the design has to answer: backfilling handles would rewrite
+    `[0.5.0]`'s **released** Migration bullets, which this repository refuses as a stated bound. Resolved by
+    holding the join over sections still being written; recorded in the entry. Its own trigger is a **second**
+    unmarked entry and one is observed, so it waits.
+  - *Pinning citations seen to fail* — ongoing, not closable: `pin_bites` prints 4 declared mutations covering
+    4 of 186 cited tests, and the entry states that authoring one is per-bound expert work. Adding one would
+    read as progress and close nothing.
+  - *The shell's semantic delegation* — closing it needs the semantic outcome to be unreachable except through
+    the observer, *a design step and not a call-site swap*, in the entry's own words. Tracked by a declared
+    unpinned bound.
+  - *Every normative SHALL reacted or bounded* — its trigger has fired **six times**, three of them in
+    requirements written by the window that was closing the class. The obvious instrument, a citation per
+    SHALL, is refused by this family's own rule against hand-maintained pointers on the order of the thing
+    counted.
+  - *A prose claim held only where declared* — two instances; the trigger is a third, and the instrument is
+    sketched as a sibling of `Census` holding a produced **set** rather than a figure.
+
+  The first draft of this entry spelled the breaking marker literally while describing it, and the reaction
+  refused the release for a section that marks a change and carries no migration — which is the declared
+  over-reaction that entry names in its own words: *the classifier reads the marker's presence rather than
+  its position*. The bound fired on prose about itself, and the entry is written without the token instead.
+
+- **Four of the manifest readers are parsed; the fifth is scoped rather than attempted again.**
+  `workspace_version`, `package_name`, `require_lock_versions` and `publishable` ask a real parser now.
+  `declared_dependencies` does not, and `BACKLOG.md` records why with the measurement from the attempt
+  rather than an estimate: **287 insertions against 1,168 deletions**, four enum variants made
+  unconstructible, six refusal sites retired, four unit directions deleted with their subject, two spec
+  scenarios rewritten, and ten integration directions each needing a judgement about the right new answer —
+  one of whose fixtures is itself invalid TOML the hand-rolled reader tolerated.
+
+  It does not split. The four variants die together the moment the reader stops constructing them, and
+  staging it by keeping the hand-rolled reader alongside the parser would be two readers of one question,
+  which is the defect being repaired.
+
+  The attempt is also recorded because of how it went wrong: a failure check that grepped for test names
+  could not see a test module that had **stopped compiling**, so several steps ran on a false green. The
+  check used since asks for a `test result` line per binary and treats a compile error as not green.
+
+- **The publication reader is parsed, and the key it could not decode is now decided rather than deferred.**
+  `publishable` walked its own table and asked a shared key reader whether a line assigned `publish`. A key
+  spelling it could not decode answered `Unreadable` — the safe answer, and not the right one: measured
+  against cargo, `"\u0070ublish" = false` reports `publish=[]`, so the crate does **not** publish. The parser
+  decodes the key and the verdict follows.
+
+  The negative run is the part worth keeping. With an undecoded key passed over, `publishable` answers
+  **`Yes`** for a crate cargo refuses to publish — which is what the old `Unreadable` was standing in front
+  of. Two rows now hold it: the decoded key, and `publish.workspace = true`, which defers to the workspace
+  manifest and is still no verdict this text carries.
+
+  `classify` went with it — the value classifier is what `as_bool` and `as_array` answer, so it became dead
+  code the moment the parse landed.
+
+- **The lock reader takes `[[package]]` from the parser, which removes an ordering premise it had to know.**
+  The block boundary was the literal string `[[package]]`, and beneath it sat a fact about cargo's output
+  order: `source` is written *after* `version`, so filing an entry before the body ended recorded every one
+  as source-less — and source is what tells a workspace member from a registry entry sharing its name. An
+  array of tables has neither question. Each element **is** one entry, and the order its keys were written in
+  is not something this reader has to know.
+
+  **A diagnosis it could not give before.** An unparseable lock produced no blocks, so the reader reported
+  *Cargo.lock is missing workspace package …* — a violation naming a package that may be sitting right there,
+  in a file cargo cannot read either. It is now a cannot-judge saying which fact was met, with its own
+  direction; the negative run that folds the parse failure into an empty document reports the old
+  misdiagnosis verbatim.
+
+  Two more sites had their WHEN moved by the same cause — both used a single-quoted value the parser now
+  takes — and what reaches them is a `name` or a `version` that is no string. One message drifted in the
+  rewrite and was restored to what it said before: a direction asserts it, and changing a refusal's words for
+  no reason is churn a reader has to re-learn.
+
+- **The second whole-document manifest reader is parsed rather than hand-split, and its improvement is
+  guarded because a negative run said it was not.** `package_name` now asks a real parser for
+  `[package].name`; 46 lines of hand-rolled table walking are gone.
+
+  The two directions that observed its unreadable state both used a **single-quoted** name — legal TOML that
+  cargo resolves and the old reader declined — so both had their WHEN moved to a `name` that is no string at
+  all, which is what still reaches the site. Then the negative run that restores the old double-quote-only
+  rule **broke nothing**: with both WHENs moved, nobody was left observing the new answer, and the
+  improvement could have been reverted in silence. A direction now judges a stale example pin behind a
+  single-quoted member name, and the same perturbation fails it.
+
+  That is the second time in this window a reader's *improvement* went unobserved while its *refusal* stayed
+  pinned. Moving a WHEN keeps the site honest; it does not carry the new answer, and nothing says so.
+
+- **The manifest grammar is parsed rather than hand-split, and the amendment that allows it was measured
+  before it was proposed.** `toml_edit` enters `kanhe`'s dependencies through the self-law amendment ritual —
+  the allowlist in `crates/shengmo/src/law.rs`, the regenerated `AGENTS.self-law.md`, and the boundary
+  declared verbatim in `self_law_amendment.rs`, all three of which must move together or the check refuses.
+
+  **The case, measured rather than argued.** Of the 0.5.0 window's 540 landed changes, 89 touched
+  `manifest.rs` or `release_coherence_gate.rs` and **69 of those 89 were typed `fix`** — one hand-rolled
+  grammar produced the largest run of repairs in the repository. Every shape those repairs were about was
+  then put to a real parser, which answered all of them: a dotted pin as one dependency rather than two, a
+  quoted tail as a path rather than none, a key literally named `version.extra` as one key, an escaped dot in
+  a heading not overwriting the real table, three inherit spellings as one answer, a comment glued to a value,
+  a commented-out pin, and `[lib]` before `[package]` not becoming the package name.
+
+  **`toml_edit` rather than `toml`, because both halves are needed.** The structure says which dependency
+  carries which field; the original spelling is required because `release-coherence` holds an internal pin to
+  equal the workspace version *as written*, and a normalising reader loses that. `cargo metadata` was weighed
+  and does not serve: it reports a requirement normalised to `^0.5.0`, and whether a member inherits its
+  version or hardcodes it is invisible in resolved data.
+
+  **Two declared limitations turn out to have been false refusals, and both are gone.** A single-quoted
+  version, and `[workspace]` with the table composed as `package.version`, `package = { version = … }` or
+  `package."version"` — measured under cargo 1.96.0, **all four resolve at the declared version**, and the
+  reader refused them. One of the two was written into this specification as a limitation the reader has.
+
+  **Two refusal sites kept their place by having their WHEN rerun**, which is the ritual this repository
+  states for retiring a bound: their old WHEN was the single-quoted value, and what reaches them now is a
+  `version` that is not a string at all — the catalog declaring that it inherits — plus a manifest the parser
+  cannot read, which is one cargo cannot read either. A duplicate `version` key is now answered by the parser,
+  which names the key and says *duplicate key*.
+
+  Scoped deliberately to `workspace_version`. The line-oriented readers (`assigned`, `assignment`,
+  `table_heading`) are reached from thirty-one call sites and each carries its own bound accounting; migrating
+  them is separate work, not a larger version of this change.
+
+- **`AGENTS.md`'s carrier taxonomy answers which binding a carrier admits and never whether the claim earns
+  one, and that missing question is what the 0.5.0 window answered by default.** It built `crates/kanhe` from
+  nothing — 142 refusal call sites, 98 declared bounds, about 37,229 lines of Rust replacing 1,562 lines of
+  shell — while over half its landed changes touched that machinery and no published source.
+
+  The bar now stated has two halves, and the split is measured rather than asserted. **A cannot-judge is not
+  a rule**: a reader declining to answer where it cannot see is never the forbidden direction, since the
+  alternative is a silent skip. **A violation is a rule and needs a reachable instance** — a shape a
+  maintainer would plausibly write, demonstrated against the real toolchain, not a fixture built to display
+  the gap and not a gap derived by reading the code. Otherwise it takes prose and a trigger, the form two
+  rules took the same day and which cost a sentence each.
+
+  **Two discriminators for retiring existing rules were tried and neither survives.** *Only ever fired on
+  fixtures* answers **all** of them, because every direction here builds a synthetic fixture — that is the
+  method. *Named by no release note* answers 135 of 140, and measures how release notes are written: **70 of
+  those are cannot-judge**, and retiring one trades a refusal for silence. So no retirement list is offered.
+  The reducible weight is elsewhere and was measured too — tests are 26,568 of the crate's 37,229 lines —
+  and none of it shrinks by retiring refusal sites.
+
+  The bar is on the **rate**, and that is the reason it is the answer rather than a cut. Retiring rules once
+  leaves the mechanism that produced them, and this window's reviews recorded it: every reaction built had a
+  defect found in the next round, three of three.
+
+- **A relative anchor was a vaguer restatement of a sentence three lines above it, so it is deleted rather
+  than dated.** The `InherentGenerics` entry closed its cross-module half and said exactly what closed it —
+  *the module role was added in the 0.4.0 window* — then described the remaining risk as *one step narrower
+  than when this entry was written*. That phrase names a moving reference for a narrowing the entry had
+  already named by its **item**, which is what `AGENTS.md`'s disposition table asks for. Nothing is lost by
+  removing it; giving it a date would have added a second, weaker carrier of one fact.
+
+  Found by a sweep run for a different repair and reported rather than folded into it, then done on its own.
+
+- **The workspace's members had two enumerators and nothing asked whether they agree.** `cargo` names its
+  members in `[workspace] members`; the release gate reaches them by walking `crates/*/Cargo.toml`. Both
+  answer *which crates are the family*, and the premise that they answer the same held by **layout** — which
+  is not something anyone declared.
+
+  The direction that matters is the false negative: a member declared outside `crates/` is invisible to the
+  walk, so it is held to no inherited version, enters no family the catalog's pins are judged against, and is
+  read in no lock. Its stale pin would reach `cargo publish` through a subject that never contained it — the
+  same shape as a family crate offered without a `path`, one layer up, in the **enumerator** rather than the
+  selector. Both directions are now asserted, the other being a crate cargo does not build held to this
+  workspace's version.
+
+  **Asked of this repository rather than inside the gate.** The gate's phases are a sequence whose order is
+  observable and whose failure matrix asserts which refusal a repository meets first; adding a
+  `cargo metadata` call to that sequence would move that order for every repository it judges. The premise is
+  about *this* workspace's layout, so the question is put to this workspace — and it goes through the gate's
+  own walker rather than restating it, since a third enumerator is the defect itself.
+
+  Negative runs, both measured: a member added at `tools/probe` is reported as unreached by the walk; a
+  manifest at `crates/stray` that `members` does not name is reported as held to a version cargo never builds
+  it at.
+
+- **A closed entry called a consequence *structural*, and that is how its premise escaped being examined.**
+  The `BACKLOG.md` record of the `0.5.0` provenance row reasoned that the row is an audit of the tarballs and
+  so cannot precede them, that the branch carrying it is archived at the release squash, and that `main` takes
+  nothing except through a release branch — therefore the one-cycle lag was **structural and remains**. Every
+  step below the premise was accurate.
+
+  The premise was that a commit sha1 is kept in this repository at all, and the entry never put that
+  question. Once it was put, the answer removed the lag instead of accommodating it. The entry now records
+  where it reasoned wrongly rather than only what it got right.
+
+- **The one instance the widened rule forbade is gone, and the tree now agrees with the rule.**
+  `crates/kanhe/tests/merge_workflow.rs` used a real commit of this tree as its fixture head — made and
+  squashed away inside the `0.5.0` window, contained in no branch, resolving only in a clone that still
+  happened to hold it. The fixture needs an **opaque token**, not a reference: what the assertions require is
+  that the wrapper pins the head its evidence came from. It now uses a value that resolves to no object in
+  any repository, and the stub says why the value is what it is.
+
+  Swept afterwards rather than assumed: every 40-hex literal in tracked content put to `git cat-file -t`.
+  Seven still resolve, and all seven are rows of `docs/history/published-artifact-provenance.md` — the record
+  the rule exempts, and one that is now closed, so the exemption has no way to grow.
+
+- **The rule against citing this repository's own commits covered live prose only, and one instance sat
+  outside it.** `AGENTS.md`'s disposition table said *a commit object in live text*; the reaction behind it
+  reads `.rs` as comments only, on the coherent ground that prose carries citations while code carries
+  values. `crates/kanhe/tests/merge_workflow.rs` carries one as an opaque fixture token — a real commit of this tree,
+  made and squashed away inside the `0.5.0` window, contained in **no branch**, which resolves only in a
+  clone that still happens to hold it. A reader cannot tell that from a reference, and neither can a fresh clone.
+
+  The row now reads *anywhere in tracked content*, and carries what makes the rule correct rather than merely
+  strict: a **third party's** object is not this shape. An action pinned as `owner/action@<sha>` is right, and
+  the same criterion excludes it without maintaining a list — that sha does not resolve here.
+
+  **Stated as prose with its reaction's reach named, which is a first-class form here.** The census rule
+  already declares that it has no repository check rather than leaving it to be discovered. `BACKLOG.md`
+  carries the upgrade path with a trigger of a second instance outside live prose, and the test it would use,
+  which is decidable today: `git cat-file -t` on every 40-hex literal decides whether it is an object of this
+  repository.
+
+  Not built now, and the reason is the measurement in this same section: over half of the last window's
+  landed work fed the machinery that judges this repository. One instance does not earn a reaction there —
+  but it does earn a sentence, and the difference between those two was the mistake in the first reading of
+  this question.
+
+- **The published-artifact inventory is closed: a commit sha1 does not belong in this repository.** Its
+  timing and its price are both wrong. The sha1 exists only *after* the upload that records it, so a
+  committed copy cannot be written before the act — and the branch that would carry it is archived at the
+  release squash, so it arrives one release behind the thing it describes. The price of writing forty
+  hexadecimal characters is a branch, a pull request, a full CI run and a squash merge; `0.5.0`'s row was
+  paid for exactly that way, one cycle late.
+
+  What it bought was a **second copy of a permanent record**. The document's own premise is that
+  `cargo publish` writes the sha1 into the tarball and a version can never be re-uploaded — the registry
+  holds it unalterably for as long as the crate exists. The committed copy is the only half that can go
+  stale.
+
+  The existing rows stay. They are a real audit of the era before the publish-source reaction existed, and
+  their *verdicts* — which disagreement, and which mechanism produced it — are judgements an audit
+  established rather than figures anyone can look up. What stops is the growth.
+
+  Nothing replaces the table because the question was always answerable without it: the record's command
+  asks the tarball and the tag directly, for any version, at any time. The section that carried it is
+  renamed from *Reproducing the audit* to what it actually is.
+
+  Stated rather than left to be discovered: the one mechanism the reaction **cannot** prevent is a release
+  snapshot force-pushed away after a clean publish, as `0.2.2` was an hour later. A row appended at publish
+  time never catches that — at publish time the gate has just passed — so per-release rows were never its
+  instrument. Re-running the audit later is.
+
+  `AGENTS.md`'s pointer is made consistent in the same change. The sentence in the dated `[0.5.0]` section
+  that calls the document an inventory of *every* published version is left alone: rewriting a dated section
+  to satisfy a rule written afterwards falsifies the record, which this repository holds as a stated bound.
+
+- **A release checkout being edited was judged as a release checkout, and no tree could satisfy the state it
+  was put in.** `State::Snapshot` was decided by `head == release_commit` alone — a fact about the
+  **commit** — while every other reader in the reaction takes its content from the worktree through
+  `std::fs::read_to_string`. The first change of a new cycle falls between those two sources: sitting on the
+  release commit, an author writes the `[Unreleased]` entry that **development requires**, and it is judged
+  in **snapshot**, where `[Unreleased]` must be **empty**. Two real rules, no tree satisfying both, and the
+  only escape is to commit — the act that moves `HEAD`. Measured on this repository: `release/0.6.0`'s first
+  change could not pass the Definition of Done until it was committed, and passed immediately afterwards
+  unaltered.
+
+  A snapshot is a **checkout**, not a commit. The state now also asks whether the `CHANGELOG.md` being judged
+  is still the one that commit carries, so the state and the content come from one source.
+
+  **Two wider spellings were tried and refuted by the corpus, which is the part worth keeping.** Asking
+  whether *anything* tracked was modified made a release checkout whose `Cargo.lock` had been replaced by a
+  directory classify as development — that is a broken release checkout, not a new cycle — so it reported a
+  missing `[Unreleased]` entry instead of the lockfile it could not read. And asking `git status` read the
+  **index**, which intercepted a corrupt-index fixture another guard uses to reach its own refusal: measured,
+  that guard stopped reaching it, taking a WHEN that was not this reader's. `git show HEAD:CHANGELOG.md`
+  takes the object database instead, and the same corruption is left to the reader that owns it. Both were
+  caught by existing directions rather than by review.
+
+  This repair made the reaction **quieter** and relaxed nothing: the failure it removes was a
+  **misclassification**, not a rule that was too strict. Downgrading the verdict would have kept the
+  misdiagnosis and lowered its volume, in the direction the Core Contract orders above every other.
+
+- **The 0.5.0 window spent more than half its landed work on the machinery that judges this repository.**
+  Measured over the window's own history, one landed change per squash: `284/540 (52%)` touched
+  `crates/kanhe` or `crates/shengmo` and no published crate's source; `100/540 (18%)` touched a published
+  source at all. Two reviewers separately recorded the other side of it — the published surface moved by two
+  lines of a private doc comment across sixteen rounds.
+
+  Filed in `BACKLOG.md` with the command that produced it, so the next window's figure is derived rather than
+  recalled, and with what the figure argues for: the weight is in how much of the tree is under reaction at
+  all, not in how loudly a reaction speaks, so the lever is retiring rules rather than softening verdicts. No
+  reaction is proposed for the ratio itself — it rests on which crates are the product, which is a judgement,
+  and the remedy it points at is removal, which no reaction performs.
+
+- **A record stated the gate's current answer, and was wrong three times running — the fourth correction
+  would have been the same mistake.** A *Version horizons* paragraph in `BACKLOG.md` ended by naming what
+  the release-coherence gate reports. It said `development: 0.4.0`; that was corrected to
+  `release-ready: 0.5.0`; and that was **already false at the commit that froze it**, because the release
+  squash makes HEAD's subject `release: X.Y.Z`, which is `State::Snapshot` — the tree it shipped in reports
+  `snapshot: 0.5.0`. Measured at `v0.5.0` itself.
+
+  The defect was never the label. A gate's answer is a **live state**, and a record cannot hold one: the
+  paragraph's own two earlier drifts are its evidence, and the paragraph already prescribed the remedy for
+  its commit counts one screen earlier — *re-derive rather than trusting a figure here*, with the command to
+  do it. It simply had not applied that to itself. It now states the property that survives — the gate reads
+  versions, never a branch name — and carries the command that prints the state for any checkout.
+
+  Two smaller carriers went with it: *has since done **all four*** was a hand-written count of the list
+  beside it, and *when this entry was written* was a relative anchor in a paragraph that names an absolute
+  date two sentences earlier.
+
+  It could not be fixed before the release. The only way was to rewrite `main`'s release snapshot — the act
+  that orphaned `0.2.2`'s tarballs — over one sentence in a document that ships in no crate and fails no
+  reaction. A BACKLOG entry is also a record, and this repository's own stated bound refuses rewriting a
+  record to satisfy a rule written afterwards.
+
+- **`0.5.0`'s published tarballs name the commit its tag names, and the record now says so from measurement.**
+  All six were pulled from `static.crates.io` on their publication day and their `.cargo_vcs_info.json` read:
+  one distinct sha1 across the six, and it is the commit `v0.5.0` names — so
+  `docs/history/published-artifact-provenance.md` records *agrees with the tag*, the verdict `0.4.0` could not
+  earn (it was published from the release branch) and `0.2.2` lost afterwards (its snapshot was force-pushed
+  away). This is the first release the publish-source gate stood in front of, and it is the first whose
+  provenance was audited from the artifacts rather than reconstructed later.
+
+  The row could not be written in `0.5.0` itself: it is an audit **of the tarballs**, so it cannot precede
+  them, and the branch that would have carried it is archived at the release squash while `main` takes nothing
+  except through a release branch. `BACKLOG.md` carried the pointer across that gap and is retired with it.
+  The lag is structural and remains — this row reaches `main` only when `0.5.1` is cut.
+
+  The audit's scope line was restated rather than having its number bumped: the 2026-08-05 audit covered the
+  96 tarballs then on the books, and the six new ones were audited on 2026-08-28, so the sentence says which
+  audit covered what instead of letting one date stand for both.
+
 ## [0.5.0] - 2026-08-28
 
 ### Documentation
@@ -10587,7 +12120,8 @@ adopter-written builder is a drop-in swap (see **Compatibility**).
   the 天衡 (`tianheng`) shell that composes them into one `check` with a `0` / `1` / `2` exit
   contract and `--format json` / `sarif` projections.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/tacticaldoll/tianheng/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/tacticaldoll/tianheng/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/tacticaldoll/tianheng/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tacticaldoll/tianheng/compare/v0.2.3...v0.3.0

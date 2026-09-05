@@ -315,6 +315,331 @@ fn a_path_substring_in_a_comment_or_attr_does_not_drop_a_reachable_module() {
     );
 }
 
+/// A `cfg_attr` PREDICATE spelled `path` is not an applied module target.
+///
+/// **The predicate and the applied metas are different positions**, and this scanner read the whole span.
+/// `#[cfg_attr(path = "bogus", path = "real.rs")] mod plat;` is legal source whatever cfg flags are set —
+/// the attribute parses either way — and reading `bogus` as a target scans a file rustc does not compile.
+/// A probe inside it then counts as coverage for a declared seam, so the audit reports **clean** over a
+/// seam nothing probes on any real build. That is the false negative the Core Contract forbids.
+///
+/// A comment in the scanner recorded the disagreement with 渾儀 and said the shape could not be shown in a
+/// real tree, and that it would take a nesting parser to close. Both were wrong: the declaration is
+/// ordinary source, and 圭表 tracks the same distinction with a byte scanner of its own by waiting for the
+/// top-level comma.
+///
+/// Negative run, against the whole-span read: `exit_code() == 0` — clean, on the strength of a probe in a
+/// file no build compiles.
+#[test]
+fn a_cfg_attr_predicate_is_not_an_applied_module_target() {
+    let tb = TempBase::new("predicate-not-a-target");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(path = \"bogus\", path = \"real.rs\")]\nmod plat;",
+    );
+    // `plat-seam` is probed ONLY in the predicate's file, which no build compiles. `real-seam` is probed
+    // in the applied target — so ONE run shows both halves: the predicate's probe does not count, and the
+    // applied file IS read. Asserting the exit code alone would leave the second half inferred from
+    // louke's semantics rather than seen.
+    tb.source("bogus", "fn live() { assert_boundary!(\"plat-seam\", o); }");
+    tb.source(
+        "real.rs",
+        "fn live() { assert_boundary!(\"real-seam\", o); }",
+    );
+
+    let outcome = tb.audit(
+        &[
+            boundary("plat-seam", Severity::Enforce),
+            boundary("real-seam", Severity::Enforce),
+        ],
+        std::slice::from_ref(&root),
+    );
+    let reported = format!("{outcome:?}");
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "a probe in the predicate's file is not coverage: {reported}"
+    );
+    assert!(
+        reported.contains("plat-seam"),
+        "the seam probed only in the predicate's file must be reported unprobed: {reported}"
+    );
+    assert!(
+        !reported.contains("real-seam"),
+        "the applied target IS read, so its probe counts: {reported}"
+    );
+}
+
+/// A `path` inside a COMPOUND predicate is still a predicate.
+///
+/// **The first repair tracked a predicate phase per parenthesised group, and `all(…)` is one.** So
+/// `#[cfg_attr(all(unix, path = "bogus"), path = "real.rs")]` set the phase past `all`'s own comma and
+/// collected `bogus` as an applied target — the same false clean the flat case produced, one nesting level
+/// in. A comma inside `all(…)`, `any(…)` or `not(…)` belongs to the predicate grammar and says nothing
+/// about the surrounding `cfg_attr`'s phase.
+///
+/// A group is an applied-meta position only where its `(` follows the identifier `cfg_attr`. Anything else
+/// — a compound predicate, or another attribute taking a `path` argument of its own — carries no module
+/// target.
+///
+/// Negative run, with ONLY the group-kind half reverted — the phase half kept, which is the state the
+/// previous repair left:
+///
+/// ```text
+/// assertion `left == right` failed: a `path` inside `all(…)` is a cfg key, not a module target: Clean(Subject { declared: 1, reached: 1 })
+///   left: 0
+///  right: 1
+/// ```
+///
+/// Clean, on the strength of a probe in the predicate's file. Reverting only that half is what shows the
+/// two are separate: the flat case's direction stays green throughout.
+#[test]
+fn a_path_inside_a_compound_predicate_is_still_a_predicate() {
+    let tb = TempBase::new("compound-predicate");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(all(unix, path = \"bogus\"), path = \"real.rs\")]\nmod plat;",
+    );
+    tb.source("bogus", "fn live() { assert_boundary!(\"plat-seam\", o); }");
+    tb.source(
+        "real.rs",
+        "fn live() { assert_boundary!(\"real-seam\", o); }",
+    );
+
+    let outcome = tb.audit(
+        &[
+            boundary("plat-seam", Severity::Enforce),
+            boundary("real-seam", Severity::Enforce),
+        ],
+        std::slice::from_ref(&root),
+    );
+    let reported = format!("{outcome:?}");
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "a `path` inside `all(…)` is a cfg key, not a module target: {reported}"
+    );
+    assert!(
+        reported.contains("plat-seam") && !reported.contains("real-seam"),
+        "the predicate's file is not read and the applied one is: {reported}"
+    );
+}
+
+/// A path-QUALIFIED look-alike is not the built-in `cfg_attr`, however the qualification is spelled.
+///
+/// **Rust has more than one way to write an identifier, and the qualification survives all of them.** These
+/// inputs are one invariant read several ways, so they sit in one table rather than a direction each:
+///
+/// - `foo::cfg_attr` — the segment's own text matches the built-in; what excludes it is the `::` before it.
+/// - `foo::/**/cfg_attr` — a comment is trivia and does not change what a path IS.
+/// - `foo::r#cfg_attr` — a raw identifier is ONE segment, `r` and `#` are not tokens of their own.
+///
+/// The control is the point of the whole thing. An **unqualified** `r#cfg_attr` names the built-in — `r#`
+/// changes the spelling and not the name — so narrowing must not cost a genuine nested group its applied
+/// metas.
+///
+/// Negative run, identical against each reader the spelling above it defeated:
+///
+/// ```text
+/// assertion `left == right` failed: a qualified look-alike carries no module target: Clean(Subject { declared: 2, reached: 1 })
+///   left: 0
+///  right: 1
+/// ```
+///
+/// Clean, on the strength of a probe in a file no build compiles.
+#[test]
+fn a_path_qualified_look_alike_is_not_cfg_attr() {
+    for (label, inner) in [
+        ("plain", "foo::cfg_attr(a, path = \"bogus\")"),
+        (
+            "comment-separated",
+            "foo::/**/cfg_attr(a, path = \"bogus\")",
+        ),
+        ("raw identifier", "foo::r#cfg_attr(a, path = \"bogus\")"),
+    ] {
+        let tb = TempBase::new(&format!("look-alike-{}", label.replace(' ', "-")));
+        let root = tb.source(
+            "lib.rs",
+            &format!("#[cfg_attr(any(), {inner}, path = \"real.rs\")]\nmod plat;"),
+        );
+        tb.source("bogus", "fn live() { assert_boundary!(\"plat-seam\", o); }");
+        tb.source(
+            "real.rs",
+            "fn live() { assert_boundary!(\"real-seam\", o); }",
+        );
+
+        let outcome = tb.audit(
+            &[
+                boundary("plat-seam", Severity::Enforce),
+                boundary("real-seam", Severity::Enforce),
+            ],
+            std::slice::from_ref(&root),
+        );
+        let reported = format!("{outcome:?}");
+        assert_eq!(
+            outcome.exit_code(),
+            1,
+            "{label}: a qualified look-alike carries no module target: {reported}"
+        );
+        assert!(
+            reported.contains("plat-seam") && !reported.contains("real-seam"),
+            "{label}: the look-alike's file is not read and the applied target is: {reported}"
+        );
+    }
+}
+
+/// The control: an UNQUALIFIED raw identifier is the built-in, so the narrowing costs nothing.
+///
+/// `r#cfg_attr` names the same identifier as `cfg_attr`: `r#` changes a lexical spelling and not a name,
+/// and says nothing about qualification. `cfg_attr` is not a keyword, so nothing here is being escaped —
+/// the form is admitted for any identifier. Without this, a repair that refused every `r#` segment would pass the direction
+/// above while silently dropping a genuine nested group's applied metas — the false negative the
+/// narrowing exists to close, arriving from the other side.
+#[test]
+fn an_unqualified_raw_cfg_attr_is_still_the_built_in() {
+    let tb = TempBase::new("raw-unqualified");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(any(), r#cfg_attr(a, path = \"real.rs\"))]\nmod plat;",
+    );
+    tb.source(
+        "real.rs",
+        "fn live() { assert_boundary!(\"real-seam\", o); }",
+    );
+
+    let outcome = tb.audit(
+        &[boundary("real-seam", Severity::Enforce)],
+        std::slice::from_ref(&root),
+    );
+    assert_eq!(
+        outcome.exit_code(),
+        0,
+        "an unqualified `r#cfg_attr` is the built-in, so its applied target is read: {outcome:?}"
+    );
+}
+
+/// A path component that is not a directory is an ABSENCE, not something this reader could not read.
+///
+/// **`NotFound` is not the only absence**, and the sibling direction's repair took it for the only one.
+/// Measured: with `src/gated` a plain file, `fs::metadata("src/gated/mod.rs")` answers `NotADirectory` —
+/// a path component that is not a directory cannot have children, so the target cannot exist. Routing that
+/// to the loud channel refused a `#[cfg]`-gated declaration over a tree rustc compiles cleanly.
+///
+/// Negative run, against the repair that matched only `NotFound`:
+///
+/// ```text
+/// exit 2: cannot read '…/gated/mod.rs' to decide whether it backs a module — Not a directory
+///         (os error 20); an unreadable target is not an absent one …
+/// ```
+///
+/// It is the class the sibling exists to close, one change after closing it.
+#[test]
+#[cfg(unix)]
+fn a_component_that_is_not_a_directory_is_an_absence() {
+    let tb = TempBase::new("not-a-directory");
+    let root = tb.source(
+        "lib.rs",
+        "fn live() { assert_boundary!(\"seam-x\", o); }\n#[cfg(feature = \"gated\")]\nmod gated;",
+    );
+    // A plain file where a module directory would be, so `gated/mod.rs` cannot exist and `gated.rs`
+    // does not: the declaration is cfg-gated, which is exactly the tolerance that covers it.
+    std::fs::write(
+        root.parent()
+            .expect("the source root has a directory")
+            .join("gated"),
+        "not a directory",
+    )
+    .expect("write the plain file");
+
+    let outcome = tb.audit(
+        &[boundary("seam-x", Severity::Enforce)],
+        std::slice::from_ref(&root),
+    );
+    assert_eq!(
+        outcome.exit_code(),
+        0,
+        "a component that is not a directory means the target is absent, which a cfg-gated declaration \
+         tolerates: {outcome:?}"
+    );
+}
+
+/// A module target this reader cannot read is refused, never tolerated as an absent one.
+///
+/// **`is_file()` answers `false` for two different facts.** Measured on this machine as uid 1000: a
+/// directory at mode `000` holding `mod.rs` gives `Path::is_file("gated/mod.rs") == false` with
+/// `fs::metadata(..).err().kind() == PermissionDenied`, while `Path::is_dir("gated") == true`. Read
+/// through `is_file()` alone the target is *absent* — and an absent target is exactly what a
+/// `#[cfg]`-gated declaration is allowed to have, so the whole subtree behind it was tolerated and never
+/// audited. Whatever probes it holds are probes nobody looked for.
+///
+/// The declaration here is `#[cfg]`-gated on purpose: that is the arm that TOLERATES an absence, so it is
+/// where a collapse of the two facts does its damage. An ungated one already failed loud for the wrong
+/// reason.
+///
+/// Negative run, before the two facts were separated — and it is worse than a silent skip:
+///
+/// ```text
+/// assertion `left == right` failed: an unreadable module target must stop the audit rather than be
+/// tolerated as absent: Violations(Report { violations: [Violation { kind: Runtime, target: "gated",
+/// finding: "declared seam 'gated' has no configured probe marker", … }] })
+///   left: 1
+///  right: 2
+/// ```
+///
+/// Exit `1`, reporting that the seam has **no probe** — over a file that declares one. The probe is there
+/// and the audit could not open the directory holding it, so the adopter is told their correct code
+/// violates, with a cause that sends them to the wrong place. Where the same seam is probed elsewhere the
+/// verdict is `0` instead and the subtree is simply unaudited. Both follow from one collapse.
+#[test]
+#[cfg(unix)]
+fn a_module_target_this_reader_cannot_read_is_not_an_absent_one() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tb = TempBase::new("unreadable-target");
+    let root = tb.source("lib.rs", "#[cfg(feature = \"gated\")]\nmod gated;");
+    let dir = root
+        .parent()
+        .expect("the source root has a directory")
+        .join("gated");
+    std::fs::create_dir_all(&dir).expect("create the module directory");
+    std::fs::write(
+        dir.join("mod.rs"),
+        "fn live() { assert_boundary!(\"gated\", o); }",
+    )
+    .expect("write the module file");
+
+    // Root bypasses mode bits entirely, so this direction would pass for a reason unrelated to the
+    // change. Refuse to skip in silence where the suite is meant to be exhaustive.
+    let restore = std::fs::metadata(&dir)
+        .expect("read the mode")
+        .permissions();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o000))
+        .expect("restrict the directory");
+    let readable_anyway = dir.join("mod.rs").is_file();
+    let outcome = if readable_anyway {
+        None
+    } else {
+        Some(tb.audit(
+            &[boundary("gated", Severity::Enforce)],
+            std::slice::from_ref(&root),
+        ))
+    };
+    std::fs::set_permissions(&dir, restore).expect("restore the mode");
+
+    let Some(outcome) = outcome else {
+        assert!(
+            std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+            "mode 000 did not restrict this target — running as root would make this direction vacuous"
+        );
+        return;
+    };
+    assert_eq!(
+        outcome.exit_code(),
+        2,
+        "an unreadable module target must stop the audit rather than be tolerated as absent: {outcome:?}"
+    );
+}
+
 #[test]
 fn an_unconditional_path_attribute_is_followed_to_its_target() {
     let tb = TempBase::new("path-attr");
@@ -371,17 +696,11 @@ fn a_semicolon_inside_an_earlier_doc_attributes_string_does_not_hide_a_later_pat
 
 #[test]
 fn a_brace_delimited_attribute_argument_does_not_hide_an_earlier_path_attribute() {
-    // Round-10 finding: round 9's fix made mod_preamble_attrs' backward-then-forward preamble
-    // scan literal/comment-aware, but not attribute-group-aware. Its forward pass found `start`
-    // by remembering the position just past the LAST raw `;`/`{`/`}` byte seen, with no tracking
-    // of nesting -- so a brace-delimited attribute ARGUMENT (`#[foo({ 1 })]`, a valid token tree,
-    // not a string literal) sitting between an earlier, real `#[path = "..."]` and the `mod`
-    // keyword had its own internal `{`/`}` mistaken for item-boundary terminators, resetting
-    // `start` to a point AFTER the real `#[path]` attribute -- reproducing the round-9 bug's exact
-    // failure mode (a #[path]-relocated module falsely reported as unresolvable) through a
-    // different vector. Fixed by skipping a whole `#[...]` group as one atomic unit (via the same
-    // attr_group_end already used by the second, attribute-matching pass) when scanning for the
-    // preamble's own start, so its internal bytes are never examined as boundary candidates.
+    // A brace-delimited attribute argument (`#[foo({ 1 })]`) sitting between an earlier real
+    // `#[path = "..."]` and the `mod` keyword must not have its internal `{`/`}` mistaken for
+    // item-boundary terminators (which would reset `start` past the real `#[path]`). Skipping a
+    // whole `#[...]` group as one unit when scanning for the preamble start ensures its internal
+    // bytes are never examined as boundary candidates.
     let tb = TempBase::new("brace-attr");
     let root = tb.source("lib.rs", "mod worker;\nfn live() {}");
     tb.source(
@@ -982,9 +1301,7 @@ fn audit_reacts_when_a_declaration_and_probe_decode_differently() {
 /// declaring it **or** by deleting the probe. Assigning a value would name a direction that does not exist, and an
 /// adopter's report and baseline both carry the label.
 ///
-/// The requirement stating this was written with no reaction, in the window whose subject was closing exactly that
-/// class — so it is measured here rather than trusted. The fixture is the one that produces **both** directions at
-/// once, so neither is asserted on a report that lacks it.
+/// The fixture produces **both** directions at once, so neither is asserted on a report that lacks it.
 #[test]
 fn neither_audit_direction_carries_a_repair_polarity() {
     let tb = TempBase::new("audit-polarity");
@@ -2984,10 +3301,8 @@ fn a_nested_absolute_path_literal_now_agrees_across_checkouts() {
 }
 
 /// `Path::display()` is lossy — it replaces each byte it cannot decode with U+FFFD — so two source
-/// paths differing only in invalid-UTF-8 bytes rendered to ONE label, hence one `UnauditableProbe`
-/// identity: baselining the first would silently suppress the second's never-accepted violation.
-/// That is the injectivity class the 0.4.0 window closed at five other identity sites; the `file`
-/// component of this identity is the same kind of component.
+/// paths differing only in invalid-UTF-8 bytes must not render to one label, which would cause
+/// baselining the first to silently suppress the second's violation.
 ///
 /// Unix-only because this is where such a path can be constructed: on Windows the analogous input is
 /// an unpaired surrogate, which the same encoder escapes (its `as_encoded_bytes()` WTF-8 form is

@@ -116,16 +116,12 @@ pub(super) fn an_impl_outside_the_allowed_location_is_a_finding() {
 #[test]
 pub(super) fn two_misplaced_impls_do_not_dedup_collapse_when_a_blanket_impls_param_shadows_an_alias()
  {
-    // Round-10 finding: `canonical_self_owner` never received round 9's impl_type_params shadow at
-    // all -- unlike resolve_self_type (containment.rs), it unconditionally resolved any bare self
-    // type via the resolver. This is not merely a cosmetic label: the `owner` it renders is part of
-    // `SemanticFact::MisplacedImpl`'s finding IDENTITY, deduplicated by exact equality. A module
+    // `canonical_self_owner` must shadow `impl_type_params`: the rendered `owner` is part of
+    // `SemanticFact::MisplacedImpl`'s finding identity, deduplicated by exact equality. A module
     // declaring `use Foo as T;` alongside BOTH a blanket `impl<T> Command for T {}` (T is the
-    // impl's own generic parameter) AND a genuine direct `impl Command for Foo {}` had the blanket
-    // impl's bare `T` incorrectly resolve through the alias to the SAME canonical owner string as
-    // the direct impl's own (correctly resolved) owner -- two textually and semantically distinct
-    // misplaced-impl violations collapsed into one reported finding, a real false negative (one
-    // genuine violation silently vanishing), not just a wrong display string. Fixed by giving
+    // impl's own generic parameter) AND a genuine direct `impl Command for Foo {}` must not have
+    // the blanket impl's `T` resolve through the alias to the direct impl's owner string — which
+    // would collapse two distinct misplaced-impl violations into one finding. Fixed by giving
     // `canonical_self_owner` the same `impl_type_params` shadow `resolve_self_type` already has.
     let out = locality_findings(
         "owner-collapse-blanket-and-direct",

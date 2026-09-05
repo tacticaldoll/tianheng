@@ -1314,8 +1314,7 @@ pub(super) fn mutually_exclusive_cfg_gated_use_aliases_react_regardless_of_decla
 }
 
 /// The identical `use`-alias collision expressed as a `cfg_if!` macro invocation rather than bare
-/// `#[cfg]` attributes — the audit's cited "identical shape via the 0.3.1 transparency" form, now
-/// that `cfg_if!` arm bodies are read as real code (a separate, already-closed finding).
+/// `#[cfg]` attributes, where `cfg_if!` arm bodies are observed as real code.
 #[test]
 pub(super) fn mutually_exclusive_cfg_if_use_aliases_both_react() {
     let out = semantic_findings(

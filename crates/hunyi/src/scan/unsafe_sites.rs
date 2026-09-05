@@ -23,7 +23,10 @@ struct UnsafeSiteCollector<'a> {
     // method is owner-qualified (`unsafe fn Foo::m`) — else two same-named `unsafe fn`s on
     // different owners in one module collapse to one finding and a baseline of the first masks the
     // second (a false negative), the same injectivity `unsafe impl` already guards.
-    current_owner: Option<String>,
+    // `Ok` where the enclosing impl's self type could be named, `Err` carrying WHY where it could not.
+    // Absent means no enclosing impl at all, which is a different fact again and was previously
+    // indistinguishable from an impl whose owner had no name.
+    current_owner: Option<Result<String, OwnerUnnameable>>,
     current_trait: Option<String>,
     // The trait of the enclosing *trait `impl`* (`None` for an inherent impl), so a trait-impl
     // `unsafe fn` is qualified by `<trait for self>` — else `impl Foo { unsafe fn m }` and
@@ -49,7 +52,24 @@ impl<'a> UnsafeSiteCollector<'a> {
         }
     }
 
-    fn unsupported(&mut self, role: &str) {
+    /// Refuse to name an owner, saying what was met rather than only what is not invented.
+    ///
+    /// The three causes reached one sentence — *cannot identify … without a positional fallback* — which
+    /// names the policy and not the fact. An adopter grepping for their own case found nothing to match.
+    fn unsupported(&mut self, role: &str, why: OwnerUnnameable) {
+        if self.error.is_none() {
+            self.error = Some(format!(
+                "cannot identify unsafe {role} in {} — {}; no positional fallback is invented for it, \
+                 because a label that names a traversal position is not an identity",
+                self.module,
+                why.cause()
+            ));
+        }
+    }
+
+    /// The one refusal here that is NOT about an owner: an impl block whose TRAIT could not be named.
+    /// It keeps its own sentence, because [`OwnerUnnameable`]'s causes are about a self type.
+    fn unsupported_trait(&mut self, role: &str) {
         if self.error.is_none() {
             self.error = Some(format!(
                 "cannot identify unsafe {role} in {} without a positional fallback",
@@ -65,7 +85,7 @@ fn canonical_unsafe_owner(
     local_types: &HashSet<String>,
     module: &str,
     impl_type_params: &HashSet<String>,
-) -> Option<String> {
+) -> Result<String, OwnerUnnameable> {
     if let syn::Type::Path(tp) = self_ty {
         if tp.qself.is_none() && !is_shadowed_param_path(&tp.path, impl_type_params) {
             let head = tp
@@ -89,14 +109,18 @@ fn canonical_unsafe_owner(
                     resolve_path_all(&tp.path, uses, module, BareFallback::CurrentModule);
                 candidates.sort();
                 candidates.dedup();
+                // Several candidates, never none: `resolve_path_all` with this fallback always yields
+                // at least one, so the empty case a first repair branched on could not be reached.
                 let [base] = candidates.as_slice() else {
-                    return None;
+                    return Err(OwnerUnnameable::AmbiguousAlias);
                 };
-                return Some(format!("{base}{}", render_last_segment_args(&tp.path)?));
+                let args =
+                    render_last_segment_args(&tp.path).ok_or(OwnerUnnameable::Unrenderable)?;
+                return Ok(format!("{base}{args}"));
             }
         }
     }
-    type_to_string(self_ty)
+    type_to_string(self_ty).ok_or(OwnerUnnameable::Unrenderable)
 }
 
 impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
@@ -127,18 +151,26 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
                 &self.current_impl_trait,
                 &self.current_owner,
             ) {
-                (true, Some(trait_ref), Some(owner)) => {
+                (true, Some(trait_ref), Some(Ok(owner))) => {
                     self.sites.push(UnsafeSiteFact::TraitImplMethod {
                         trait_ref: trait_ref.clone(),
                         owner: owner.clone(),
                         name,
                     });
                 }
-                (false, _, Some(owner)) => self.sites.push(UnsafeSiteFact::InherentMethod {
+                (false, _, Some(Ok(owner))) => self.sites.push(UnsafeSiteFact::InherentMethod {
                     owner: owner.clone(),
                     name,
                 }),
-                _ => self.unsupported("method owner"),
+                (_, _, Some(Err(why))) => {
+                    let why = *why;
+                    self.unsupported("method owner", why);
+                }
+                // What remains is a trait impl whose TRAIT did not render, with a nameable owner —
+                // not a fact about the self type, so it takes the trait sentence. Handing it an
+                // `OwnerUnnameable` said the owner's syntax has no supported rendering about an owner
+                // that renders perfectly, which is the defect this cause exists to close.
+                _ => self.unsupported_trait("method owner's trait"),
             }
         }
         visit::visit_impl_item_fn(self, node);
@@ -154,7 +186,7 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
                     owner: owner.clone(),
                     name,
                 }),
-                None => self.unsupported("trait-method owner"),
+                None => self.unsupported_trait("trait-method owner"),
             }
         }
         visit::visit_trait_item_fn(self, node);
@@ -183,21 +215,24 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
             .and_then(|(_, path, _)| path_to_string(path));
         if node.unsafety.is_some() {
             match (&impl_trait, &owner, node.trait_.is_some()) {
-                (Some(trait_ref), Some(owner), true) => {
+                (Some(trait_ref), Ok(owner), true) => {
                     self.sites.push(UnsafeSiteFact::TraitImpl {
                         trait_ref: trait_ref.clone(),
                         owner: owner.clone(),
                     });
                 }
-                (None, Some(owner), false) => self.sites.push(UnsafeSiteFact::InherentImpl {
+                (None, Ok(owner), false) => self.sites.push(UnsafeSiteFact::InherentImpl {
                     owner: owner.clone(),
                 }),
-                (None, _, true) => self.unsupported("impl trait"),
-                (_, None, _) => self.unsupported("impl self type"),
+                (None, _, true) => self.unsupported_trait("impl trait"),
+                (_, Err(why), _) => {
+                    let why = *why;
+                    self.unsupported("impl self type", why);
+                }
                 _ => unreachable!("trait presence and rendered trait stay aligned"),
             }
         }
-        let prev_owner = std::mem::replace(&mut self.current_owner, owner);
+        let prev_owner = self.current_owner.replace(owner);
         let prev_trait = self.current_impl_trait.take();
         let prev_is_trait = self.current_impl_is_trait;
         self.current_impl_is_trait = node.trait_.is_some();

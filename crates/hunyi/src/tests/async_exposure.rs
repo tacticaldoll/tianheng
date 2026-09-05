@@ -306,9 +306,12 @@ pub(super) fn async_subtree_and_seam_both_fail_loud_on_an_unrenderable_owner() {
     )];
     let seam = async_findings("const-generic-owner-parity-seam", files, "crate").unwrap_err();
     let subtree = async_subtree("const-generic-owner-parity-subtree", files, "crate").unwrap_err();
-    assert!(seam.contains("without a positional fallback"), "{seam}");
     assert!(
-        subtree.contains("without a positional fallback"),
+        seam.contains("no positional fallback is invented for it"),
+        "{seam}"
+    );
+    assert!(
+        subtree.contains("no positional fallback is invented for it"),
         "{subtree}"
     );
     assert!(!seam.contains("_#") && !subtree.contains("_#"));
@@ -331,7 +334,10 @@ pub(super) fn async_cfg_branches_never_share_an_unrenderable_owner_fallback() {
         ),
     ];
     let error = async_subtree("cfg-split-owner-fallback-collision", files, "crate::m").unwrap_err();
-    assert!(error.contains("without a positional fallback"), "{error}");
+    assert!(
+        error.contains("no positional fallback is invented for it"),
+        "{error}"
+    );
     assert!(!error.contains("_#"), "{error}");
 }
 

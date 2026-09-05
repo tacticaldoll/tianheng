@@ -303,7 +303,22 @@ pub(crate) fn mod_preamble_attrs(
             }
             if bytes.get(open) == Some(&b'[') {
                 // The attribute's meta name is the first identifier inside the brackets.
-                let name_start = skip_preamble_trivia(bytes, open + 1, mod_index);
+                //
+                // **A raw identifier is ONE segment**, here as much as inside a `cfg_attr`'s argument list,
+                // where `path_meta_values` already consumes the prefix with the segment it belongs to. `r#`
+                // changes a lexical spelling and not the name it spells, so `#[r#path = "…"]` IS the
+                // built-in remap and `#[r#cfg(…)]` IS the built-in `cfg` that removes the item — measured
+                // against rustc 1.96.0, edition 2021, `--crate-type lib`: the first compiles the remapped
+                // file even with the conventional one present, and the second leaves an absent backing file
+                // legal. Read as written, `r#path` lexed as the identifier `r` and matched no arm at all.
+                let mut name_start = skip_preamble_trivia(bytes, open + 1, mod_index);
+                if bytes[name_start..].starts_with(b"r#")
+                    && bytes
+                        .get(name_start + 2)
+                        .is_some_and(|byte| is_ident_byte(*byte))
+                {
+                    name_start += 2;
+                }
                 let mut name_end = name_start;
                 while name_end < mod_index && is_ident_byte(bytes[name_end]) {
                     name_end += 1;
@@ -324,26 +339,38 @@ pub(crate) fn mod_preamble_attrs(
                     // tolerance, so a `cfg_attr` sighting must never grant it (its own absence
                     // tolerance is additive, via `cfg_attr_paths` below, not this flag).
                     b"cfg" => attrs.cfg = true,
-                    // `#[cfg_attr(<pred>, …, path = "…")]`: extract the `path = "…"` value from
-                    // WITHIN this attribute's own argument list (skipping the leading predicate,
-                    // which is never itself an identifier spelled `path`), if one is present. A
-                    // module may carry more than one SEPARATE `cfg_attr`-wrapped `#[path]` (one per
-                    // platform predicate); this arm fires once per occurrence of the outer loop, so
-                    // every one is collected. `find_path_meta_value` searches linearly for `path`
-                    // anywhere in the argument span rather than parsing nesting structure, so a
-                    // doubly- (or deeper-) nested `#[cfg_attr(a, cfg_attr(b, path = "…"))]` resolves
-                    // the same way a single-level one does — measured directly
-                    // (`a_doubly_nested_cfg_attr_path_is_followed_the_same_as_a_single_nesting`), not
-                    // the undetected residual an earlier comment here claimed.
+                    // `#[cfg_attr(<pred>, …, path = "…")]`: extract EVERY `path = "…"` value from
+                    // WITHIN this attribute's own argument list.
+                    //
+                    // The predicate of each group is skipped, so all three dimensions agree about which
+                    // positions are applied targets — see [`path_meta_values`] for what reading it cost.
+                    //
+                    // Two axes, and only one of them was covered. A module may carry more than one
+                    // SEPARATE `cfg_attr`-wrapped `#[path]`, one per platform predicate — this arm
+                    // fires once per occurrence of the outer loop, so every one is collected. But ONE
+                    // such attribute may also carry several, nested under one predicate, and reading
+                    // the first alone made the rest invisible. [`path_meta_values`] records what that
+                    // cost, measured against rustc.
+                    //
+                    // The reader tracks nesting, but only enough to answer two questions per open
+                    // group: is this group a `cfg_attr`'s own argument list, and has that group's
+                    // predicate been passed. A doubly- (or deeper-) nested
+                    // `#[cfg_attr(a, cfg_attr(b, path = "…"))]` therefore resolves the same way a
+                    // single-level one does — measured directly
+                    // (`a_doubly_nested_cfg_attr_path_is_followed_the_same_as_a_single_nesting`) —
+                    // while a predicate's own group answers neither. It said *anywhere in the argument
+                    // span rather than parsing nesting structure*, which is what read predicates as
+                    // targets.
                     b"cfg_attr" => {
                         let paren_open = skip_preamble_trivia(bytes, name_end, mod_index);
                         if bytes.get(paren_open) == Some(&b'(') {
                             let paren_close = paren_group_end(bytes, paren_open, mod_index);
-                            if let Some(rel) =
-                                find_path_meta_value(bytes, paren_open + 1, paren_close, mod_index)
-                            {
-                                attrs.cfg_attr_paths.push(rel);
-                            }
+                            attrs.cfg_attr_paths.extend(path_meta_values(
+                                bytes,
+                                paren_open + 1,
+                                paren_close,
+                                mod_index,
+                            ));
                         }
                     }
                     _ => {}
@@ -365,41 +392,163 @@ pub(crate) fn paren_group_end(bytes: &[u8], open: usize, limit: usize) -> usize 
     delimiter_group_end(bytes, open, limit, b'(', b')')
 }
 
-/// The value of a `path = "…"` name-value meta somewhere in `[start, paren_close)` (the interior of
-/// a `cfg_attr`'s own argument list, bounded separately by `mod_index` for `read_path_string`'s own
-/// trivia skip) — `None` if no such meta is present. Scans identifier-by-identifier rather than a
-/// raw substring search, so a predicate that merely contains the text (`target_os = "path_os"`,
-/// a doc comment) is never mistaken for the applied `path` meta.
-pub(crate) fn find_path_meta_value(
+/// **Every** `path = "…"` name-value meta in `[start, paren_close)` — the interior of a `cfg_attr`'s
+/// own argument list, bounded separately by `mod_index` for `read_path_string`'s own trivia skip — in
+/// the textual order they appear. Empty if none is present.
+///
+/// Scans identifier-by-identifier rather than by a raw substring search, so a predicate that merely
+/// contains the text (`target_os = "path_os"`, a doc comment) is never mistaken for the applied `path`
+/// meta.
+///
+/// **A `path` in a predicate position is a cfg key, not a target** — before a `cfg_attr`'s own first comma,
+/// or anywhere inside a compound predicate such as `all(…)`. `#[cfg_attr(path = "bogus",
+/// path = "real.rs")] mod plat;` is legal source whatever cfg flags are set, and reading `bogus` as a
+/// target scanned a file rustc does not compile — a probe inside it then counted as coverage and the audit
+/// reported clean over a seam nothing probes on any real build. Each open group carries **two** facts —
+/// what kind of group it is, and whether its own predicate has been passed — because a phase alone read a
+/// compound predicate's comma as a `cfg_attr`'s. 圭表's own byte scanner draws the same distinction, so a
+/// comment here claiming the shape could not be met in a real tree and that closing it needed a nesting
+/// parser was wrong twice over.
+///
+/// **It returned only the first, and one attribute may carry several.** Measured against rustc
+/// (edition 2021, `--crate-type lib`), this compiles cleanly on Linux with only `linux.rs` on disk and
+/// neither `mac.rs` nor `plat.rs` present:
+///
+/// ```text
+/// #[cfg_attr(unix, cfg_attr(target_os = "macos", path = "mac.rs"),
+///                  cfg_attr(target_os = "linux", path = "linux.rs"))]
+/// pub mod plat;
+/// ```
+///
+/// Reading the first alone answered `mac.rs`, which resolves to nothing, so a module with no
+/// conventional file behind it reported *cannot resolve reachable module* — **exit 2 over valid code**.
+/// The union is not a hypothesis here: 圭表 already collects every `path =` across nested groups, so
+/// answering the first was the one dimension of the three disagreeing about a shape rustc accepts.
+pub(crate) fn path_meta_values(
     bytes: &[u8],
     start: usize,
     paren_close: usize,
     mod_index: usize,
-) -> Option<String> {
+) -> Vec<String> {
+    let mut found = Vec::new();
+    // One frame per open group: whether the group is a `cfg_attr`'s own argument list, and whether that
+    // group's PREDICATE has been passed.
+    //
+    // Both halves are needed and the first repair had only the second. `cfg_attr` takes its predicate
+    // first and its applied metas after the first comma AT THAT LEVEL — but a compound predicate is a
+    // parenthesised group too, so `all(unix, path = "bogus")` has a comma of its own, and a phase kept
+    // per group read `bogus` as applied. A comma inside `all(…)`, `any(…)` or `not(…)` belongs to the
+    // predicate grammar and says nothing about the surrounding `cfg_attr`.
+    //
+    // So a group is an applied-meta position only where its `(` follows the identifier `cfg_attr`.
+    // Anything else carries no module target — a compound predicate, and equally another attribute taking
+    // a `path` argument of its own.
+    struct Group {
+        applies_metas: bool,
+        past_predicate: bool,
+    }
+    // The span handed in IS a `cfg_attr`'s argument list, by this arm's own construction.
+    let mut groups = vec![Group {
+        applies_metas: true,
+        past_predicate: false,
+    }];
+    let mut last_ident_was_cfg_attr = false;
+    // Whether the previous SIGNIFICANT token was a path separator. Tracked forward through trivia rather
+    // than reconstructed by looking behind: a look-behind over whitespace alone stopped at the `/` of
+    // `foo::/**/cfg_attr` and read the segment as unqualified, which is the same false coverage through a
+    // third spelling. A comment is trivia and must not change what a path IS.
+    let mut after_path_sep = false;
     let mut i = start;
     while i < paren_close {
         if let Some(next) = skip_literal_or_comment(bytes, i) {
             i = next.min(paren_close);
             continue;
         }
+        if bytes[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if bytes[i] == b':' && bytes.get(i + 1) == Some(&b':') {
+            after_path_sep = true;
+            i += 2;
+            continue;
+        }
+        match bytes[i] {
+            b'(' => {
+                groups.push(Group {
+                    applies_metas: last_ident_was_cfg_attr,
+                    past_predicate: false,
+                });
+                last_ident_was_cfg_attr = false;
+                after_path_sep = false;
+                i += 1;
+                continue;
+            }
+            b')' => {
+                groups.pop();
+                last_ident_was_cfg_attr = false;
+                after_path_sep = false;
+                if groups.is_empty() {
+                    // Unbalanced past this span's own group: nothing further is this attribute's.
+                    return found;
+                }
+                i += 1;
+                continue;
+            }
+            b',' => {
+                if let Some(group) = groups.last_mut() {
+                    group.past_predicate = true;
+                }
+                last_ident_was_cfg_attr = false;
+                after_path_sep = false;
+                i += 1;
+                continue;
+            }
+            _ => {}
+        }
         if is_ident_byte(bytes[i]) && (i == start || !is_ident_byte(bytes[i - 1])) {
-            let name_start = i;
-            let mut name_end = i;
+            // **A raw identifier is ONE path segment.** `r#` changes an identifier's lexical spelling and
+            // not its name, so `r#cfg_attr` names `cfg_attr`; it is not escaping a keyword, since
+            // `cfg_attr` is not one, and the form is admitted for any identifier. The prefix is therefore
+            // consumed with the segment it belongs to, and the name compared is the one it spells —
+            // taking `r`, `#` and `cfg_attr` for separate events would clear the qualification a
+            // path separator had set.
+            let mut name_start = i;
+            if bytes[i] == b'r' && bytes.get(i + 1) == Some(&b'#') {
+                let after = i + 2;
+                if after < paren_close && is_ident_byte(bytes[after]) {
+                    name_start = after;
+                }
+            }
+            let mut name_end = name_start;
             while name_end < paren_close && is_ident_byte(bytes[name_end]) {
                 name_end += 1;
             }
-            if &bytes[name_start..name_end] == b"path" {
+            let name = &bytes[name_start..name_end];
+            // **The built-in is the SINGLE-segment path**, and matching the last identifier alone is not
+            // that: `foo::cfg_attr(a, path = "…")` ends in the same word while being somebody else's
+            // attribute, and reopening applied-meta scanning inside it restored the false coverage this
+            // reader had just closed. A segment reached through `::` carries no module target — and
+            // *reached through* is decided by the token before it, tracked forward past trivia, because a
+            // look-behind over whitespace alone read `foo::/**/cfg_attr` as unqualified.
+            last_ident_was_cfg_attr = name == b"cfg_attr" && !after_path_sep;
+            after_path_sep = false;
+            let applied = groups
+                .last()
+                .is_some_and(|group| group.applies_metas && group.past_predicate);
+            if name == b"path" && applied {
                 let eq = skip_preamble_trivia(bytes, name_end, paren_close);
                 if bytes.get(eq) == Some(&b'=') {
-                    return read_path_string(bytes, eq + 1, mod_index);
+                    found.extend(read_path_string(bytes, eq + 1, mod_index));
                 }
             }
             i = name_end;
             continue;
         }
+        after_path_sep = false;
         i += 1;
     }
-    None
+    found
 }
 
 /// Advance past whitespace, comments, and string/char literals to the next significant byte
@@ -1529,9 +1678,8 @@ pub(crate) fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
 /// exact `&str` value the Rust compiler produces — see `runtime-origin-assertion`'s "CI face —
 /// every declared seam is probed" requirement for the full decoded-value-matching and
 /// un-auditable-on-failure rationale (including backslash-newline line continuation). Also used
-/// for a `#[path]` value (the OTHER caller, below), matching 渾儀's syn-derived `s.value()` on the
-/// same input — the fix a v0.2.0..v0.2.1 cross-dimension sweep found missing here and in 圭表's
-/// independent copy. No real seam name spans lines, so this never meaningfully changes the
+/// for a `#[path]` value (the other caller, below), matching 渾儀's syn-derived `s.value()` on the
+/// same input. No real seam name spans lines, so this never meaningfully changes the
 /// seam-name caller's behavior. The escape set is the `&str` string-literal set only;
 /// byte-string-only escapes never reach here (byte strings are already un-auditable).
 pub(crate) fn decode_str_escapes(inner: &[u8]) -> Option<String> {

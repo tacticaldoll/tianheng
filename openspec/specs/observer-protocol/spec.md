@@ -212,12 +212,10 @@ attribute beginning with `#` remains executed Rust text.
 
 Where the built-in path obtains a dimension's outcome **by invoking that dimension's observer**, equality for
 that dimension holds **by construction rather than by observation**, and the spec SHALL say which dimensions
-those are — otherwise a reader takes a constructed equality for a measured one. The list is now held to that:
+those are — otherwise a reader takes a constructed equality for a measured one. The list is held both ways:
 a reaction reads the built-in path's own source and refuses if a dimension it declares construction-held is
-not constructed there, or if a dimension it does not declare so is. This was true in only one direction until
-the 0.5.0 window: the list named runtime alone, the shell's semantic arm changed under it, and the list was
-repaired by hand — a membership claim about a set with an enumerator, which is the shape this family refuses
-everywhere else. What answers it is textual rather than a perturbed build: for a construction-held dimension
+not constructed there, or if a dimension it does not declare so is. What answers it is textual rather than
+a perturbed build: for a construction-held dimension
 the built-in path does not call some *other* function that happens to agree with the observer today, it
 directly constructs that dimension's own `Observer` and calls `.observe()` on it, so there is exactly one
 implementation to read rather than two runs to compare. The **runtime** and **semantic** dimensions are such
@@ -305,9 +303,8 @@ comparison resting on the dimensions that did not.
 - **THEN** the reaction reads the method's real body, to its real closing brace, whichever construct the brace
   sits inside. The extent step parses the source with `syn` rather than counting braces by eye, so a comment or
   a string literal is tokenized as what it is before any brace inside either is ever available to be counted —
-  closing the bound this scenario used to declare, in both directions it named: neither a block comment nor a
-  string literal moves the extent any longer. What replaces that closed bound is this implementation's own
-  failure mode: if the source does not parse as a Rust file, or parses without a function-like item beginning
+  so neither a block comment nor a string literal moves the extent. What the implementation declares instead
+  is its own failure mode: if the source does not parse as a Rust file, or parses without a function-like item beginning
   exactly where the anchor step said the definition starts, the reaction refuses to verify rather than passing —
   never a silent acceptance of a body it could not attribute to that exact site
 - **PINNED-BY** `a_brace_in_a_block_comment_or_a_string_literal_no_longer_moves_the_body_extent`

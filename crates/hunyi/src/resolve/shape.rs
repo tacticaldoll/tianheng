@@ -428,6 +428,44 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
 /// already gets. "Cannot judge" (exit 2) over a silent collapse is the Core Contract's own ordering.
 struct AmbiguousOwnerAlias;
 
+/// Why an impl self type could not be named, for a caller whose refusal sentence must say so.
+///
+/// **One sentence carried two facts.** The renderers answer no name when two mutually-exclusive `#[cfg]`
+/// branches bind one alias to different types, and when the syntax has no supported rendering — and every
+/// caller wrote *cannot identify … without a positional fallback*, which names the policy rather than what
+/// it met. The refusal is right in both; the sentence sends an adopter to the wrong place in one of them,
+/// and there is nothing in the emitted text to grep for the one they have.
+///
+/// **Two arms, and a third was declared and could not be reached.** It named a path resolving to no
+/// candidate at all, which no producer can construct: `resolve_path_all` with `BareFallback::CurrentModule`
+/// always yields at least one candidate — a crate-relative path yields one, a `UseMap` entry holds at least
+/// one because it is pushed onto after `or_default`, and the bare fallback yields exactly one. Measured:
+/// with that arm's clause replaced by a panic, the whole suite stays green. The drift law admits no name
+/// without a reaction, so it is gone rather than left as a state a reader would take for a fact about the
+/// world.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OwnerUnnameable {
+    /// Two mutually-exclusive `#[cfg]` branches bind one alias to different types, so the candidate set
+    /// holds several and no injective label exists — see [`AmbiguousOwnerAlias`].
+    AmbiguousAlias,
+    /// The syntax has no supported rendering: an unrenderable generic argument, or a self type this
+    /// crate does not render.
+    Unrenderable,
+}
+
+impl OwnerUnnameable {
+    /// What this reader met, as the clause a refusal appends to what it was identifying.
+    pub(crate) fn cause(self) -> &'static str {
+        match self {
+            Self::AmbiguousAlias => {
+                "two mutually-exclusive `#[cfg]` branches bind that alias to different types, so it has \
+                 no one identity to record"
+            }
+            Self::Unrenderable => "its syntax has no supported rendering",
+        }
+    }
+}
+
 /// The internal sentinel an unnameable-because-ambiguous owner renders to. Carries the `_#` prefix
 /// every renderer-failure sentinel uses, so the shared `reject_positional_identity` gate refuses it
 /// like any other, plus its own cause so that gate can say WHICH failure it is without echoing the
@@ -490,22 +528,25 @@ pub(crate) fn canonical_self_owner(
     }
 }
 
-/// Canonicalize an impl self type without inventing traversal-position identity.
+/// Canonicalize an impl self type without inventing traversal-position identity, or say why it cannot
+/// be named.
 ///
-/// An unsupported self type returns `None`; a caller observing a seam that needs the owner can
-/// then fail loud instead of publishing `_#ordinal`. A cfg-collided alias (see
-/// [`AmbiguousOwnerAlias`]) returns `None` for the same reason — there is no injective label to
-/// publish, and this caller's own loud path is the right reaction.
+/// A caller observing a seam that needs the owner fails loud rather than publishing `_#ordinal`, and it
+/// is [`OwnerUnnameable`] that lets its refusal name what was met: a cfg-collided alias and an
+/// unrenderable type both refuse here, for the same reason and with different causes to report.
 pub(crate) fn canonical_self_owner_without_fallback(
     self_ty: &syn::Type,
     uses: &UseMap,
     module: &str,
     impl_type_params: &std::collections::HashSet<String>,
-) -> Option<String> {
+) -> Result<String, OwnerUnnameable> {
     match resolved_path_owner_parts(self_ty, uses, module, impl_type_params) {
-        Ok(Some((base, args))) => Some(format!("{base}{}", args?)),
-        Err(AmbiguousOwnerAlias) => None,
-        Ok(None) => type_to_string(self_ty),
+        Ok(Some((base, args))) => {
+            let args = args.ok_or(OwnerUnnameable::Unrenderable)?;
+            Ok(format!("{base}{args}"))
+        }
+        Err(AmbiguousOwnerAlias) => Err(OwnerUnnameable::AmbiguousAlias),
+        Ok(None) => type_to_string(self_ty).ok_or(OwnerUnnameable::Unrenderable),
     }
 }
 

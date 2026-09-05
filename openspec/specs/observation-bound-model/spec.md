@@ -278,7 +278,7 @@ below says why, and a guard fails if one ever appears there.
 #### Scenario: A spec declares a bound with no typed declaration
 
 - **WHEN** a bound scenario is added to a spec and no declaration is added in code
-- **THEN** the reaction fails, naming the id, because the qualifier slot it used to carry is gone and an
+- **THEN** the reaction fails, naming the id, because an id carries no qualifier slot of its own and an
   unclassified bound would otherwise pass silently
 
 #### Scenario: Code declares a bound no spec states

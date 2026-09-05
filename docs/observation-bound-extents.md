@@ -41,9 +41,9 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `repository-checks/a-gate-reached-without-the-wrapper-a-stated-bound` — owner: engine
 - `repository-checks/a-marker-is-reached-through-some-other-primitive-a-stated-bound` — owner: engine
 - `repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound` — owner: engine
-- `repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound` — owner: engine
 - `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound` — owner: engine
+- `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound` — owner: engine
 - `repository-checks/files-no-capability-claims-a-stated-bound` — owner: engine
 - `repository-checks/the-consumer-stands-on-a-later-statement-a-stated-bound` — owner: engine
 - `repository-checks/whether-a-mention-compiles-anything-is-not-observed-a-stated-bound` — owner: engine
@@ -373,7 +373,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > a code span in live prose carrying 4 to 40 lowercase hex characters with both a letter and a digit, which names something other than a commit
 
-- **because**: the reader decides by shape and nothing in the tree distinguishes a value with that shape from a citation without resolving it against an object database. Resolving was declined by measurement: CI checks out one commit, so the objects a citation names are absent there and the reader would either answer clean over all of them or refuse to judge at all. Measured over the live corpus: no span of this shape names anything but a commit, so the over-reaction is unrealised rather than tolerated
+- **because**: the reader decides by shape and nothing in the tree distinguishes a value with that shape from a citation without resolving it against an object database. Resolving is declined because the verdict would then depend on the object store rather than on the tracked text: the job running this reader checks out full history, but jobs checking out at the default depth would answer clean over every citation, so the reader would report clean for a reason unrelated to the content. The ground first written here — that CI checks out one commit — was false, and is corrected rather than restated. Measured over the live corpus: no span of this shape names anything but a commit, so the over-reaction is unrealised rather than tolerated
 - **its defence must show**: reacts on a harmless shape
 - **unpinned**, tracked by: `BACKLOG.md` — *a code span shaped like an object that names none*
 
@@ -747,14 +747,6 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a gate that is its own test is outside the refusal register*
 
-### `repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound`
-
-> a pull request title changing between the wrapper's post-gate re-read of it and `gh pr merge`
-
-- **because**: the wrapper pins two of its three judged inputs by construction -- the body travels as the value the gate judged, and the commit set is pinned through `--match-head-commit`, which the server decides atomically. `gh` offers no equivalent for the title, so a re-read shrinks the exposure from a whole `cargo test` to one API call rather than closing it
-- **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *the title race the wrapper can only narrow*
-
 ### `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound`
 
 > a value a sanctioned wrapper refuses as an argument, exported into its environment instead
@@ -770,6 +762,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: executed text is deleted, so a property about it is judged over less than the line carries — the direction the Core Contract forbids, and one a sentence in the classifier recorded as reaching the Rust region alone while both run the same rule
 - **its defence must show**: does not react
 - **pinned by**: `a_shell_marker_inside_quotes_is_cut_from_the_region`
+
+### `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound`
+
+> a pull request title, base branch or head branch changing between the wrapper's post-gate re-read of it and `gh pr merge`
+
+- **because**: the wrapper pins what the merge RECORDS by construction -- the body travels as the value the gate judged, and the commit set is pinned through `--match-head-commit`, which the server decides atomically. What the merge is JUDGED AGAINST has to be re-read instead, and `gh` offers no equivalent precondition for the title, the base or the head branch's name, so a re-read shrinks the exposure from a whole `cargo test` to one API call rather than closing it. One bound rather than one per input: the stop is a property of a client-side re-read not being atomic with the act it precedes
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *the re-read races the wrapper can only narrow*
 
 ### `repository-checks/files-no-capability-claims-a-stated-bound`
 

@@ -109,6 +109,9 @@ pub(crate) fn tracks(repo: &Path, source: &str) -> Tracked {
         // `Tracked` stopped one door short: it separated *git could not be started* from *git ran*, and
         // git running is not git answering.
         Err(crate::hermetic_git::Failure::Exit { code: Some(1), .. }) => Tracked::No,
+        // git ran and answered; the answer is bytes no `String` holds. That is not *untracked*, and it is
+        // not git declining either — it is this reader unable to represent what the repository holds.
+        Err(crate::hermetic_git::Failure::Unreadable(why)) => Tracked::Unreadable(why),
         Err(crate::hermetic_git::Failure::Exit { code, stderr }) => {
             let status = match code {
                 Some(code) => format!("exited {code}"),
@@ -167,6 +170,7 @@ pub(crate) fn tag_presence(repo: &Path, tag: &str) -> TagPresence {
     ) {
         Ok(_) => TagPresence::Present,
         Err(crate::hermetic_git::Failure::Exit { code: Some(1), .. }) => TagPresence::Absent,
+        Err(crate::hermetic_git::Failure::Unreadable(why)) => TagPresence::Unreadable(why),
         Err(crate::hermetic_git::Failure::Exit { code, stderr }) => {
             let status = match code {
                 Some(code) => format!("exited {code}"),
@@ -441,6 +445,11 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
             ),
             crate::hermetic_git::Failure::Exit { stderr, .. } => format!(
                 "repository root {} is not a git worktree: {stderr}",
+                repo.display()
+            ),
+            crate::hermetic_git::Failure::Unreadable(why) => format!(
+                "git answered about {} in bytes this reader cannot represent ({why}), so whether it is a \
+                 worktree was answered and not read",
                 repo.display()
             ),
         })

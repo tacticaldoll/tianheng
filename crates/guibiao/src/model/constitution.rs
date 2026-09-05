@@ -1,3 +1,5 @@
+use crate::module_scan::canonical_module_path;
+
 use super::crate_rule::CrateBoundary;
 use super::module_rule::ModuleBoundary;
 
@@ -15,12 +17,24 @@ where
     serde_json::to_string(&values).expect("a list of strings always serializes")
 }
 
+/// [`canonical_set`] over module paths, each folded to ONE identity first.
+///
+/// **The set was canonical and its members were not.** `canonical_set` sorts and dedups the spellings it is
+/// given; `canonical_module_path` decides which spellings are one path. Evaluation already applies the
+/// second — `module_check` maps it over an allowlist so a boundary may be written with `r#name` or `name`
+/// and match either way — while this built the key from the text as written, so the two disagreed about
+/// what one boundary is. A declaration rewritten from `crate::r#type` to `crate::type` is a rename to a
+/// reader and to the evaluator, and it moved the identity every recorded violation is filed under.
 pub(crate) fn canonical_module_set<I, S>(values: I) -> String
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    canonical_set(values)
+    canonical_set(
+        values
+            .into_iter()
+            .map(|value| canonical_module_path(value.as_ref())),
+    )
 }
 
 /// The governed shape, declared in Rust (the single source of truth).
