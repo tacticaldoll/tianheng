@@ -212,10 +212,10 @@ them.
   **Why a minor:** a tree with an unreadable module subtree was green and now exits `2`, in two more
   dimensions than the entry below already said.
 
-- **The claims that repair made about its own work, corrected where the code refuses them.** An independent
-  adversarial review of this window found four defects in changes that had already merged, three of them
-  self-inflicted by the two commits above and every one passing a green Definition of Done and eight CI
-  jobs.
+- **A repair of the absence class refused a tree rustc compiles, and three more defects rode in with it.**
+  An independent adversarial review of this window found four in changes that had already merged, three of
+  them self-inflicted by the two commits above and every one passing a green Definition of Done and eight
+  CI jobs. Only the last is a corrected claim; the first refuses source an adopter can legally write.
 
   *`NotFound` was taken for the only absence.* Measured: with `src/gated` a plain file,
   `fs::metadata("src/gated/mod.rs")` answers `NotADirectory` — the target cannot exist, so it is absent, and
@@ -1138,50 +1138,31 @@ them.
   that calls the document an inventory of *every* published version is left alone: rewriting a dated section
   to satisfy a rule written afterwards falsifies the record, which this repository holds as a stated bound.
 
-- **The release-state classifier read the commit while every other reader read the worktree, and the first
-  change of a new cycle fell between them.** `State::Snapshot` was decided by `head == release_commit` alone —
-  a fact about the **commit** — while the reaction takes its content through `std::fs::read_to_string`. Sitting
-  on the release commit, an author writes the `[Unreleased]` entry that development **requires**, and it is
-  judged in snapshot state, where `[Unreleased]` must be **empty**. Two real rules, no tree satisfying both,
-  and the only escape is to commit — which is the act that moves `head`. Measured on this repository:
-  `release/0.6.0`'s first change could not pass the Definition of Done until it was committed, and passed
-  immediately afterwards unaltered.
+- **A release checkout being edited was judged as a release checkout, and no tree could satisfy the state it
+  was put in.** `State::Snapshot` was decided by `head == release_commit` alone — a fact about the
+  **commit** — while every other reader in the reaction takes its content from the worktree through
+  `std::fs::read_to_string`. The first change of a new cycle falls between those two sources: sitting on the
+  release commit, an author writes the `[Unreleased]` entry that **development requires**, and it is judged
+  in **snapshot**, where `[Unreleased]` must be **empty**. Two real rules, no tree satisfying both, and the
+  only escape is to commit — the act that moves `HEAD`. Measured on this repository: `release/0.6.0`'s first
+  change could not pass the Definition of Done until it was committed, and passed immediately afterwards
+  unaltered.
 
   A snapshot is a **checkout**, not a commit. The state now also asks whether the `CHANGELOG.md` being judged
   is still the one that commit carries, so the state and the content come from one source.
 
   **Two wider spellings were tried and refuted by the corpus, which is the part worth keeping.** Asking
   whether *anything* tracked was modified made a release checkout whose `Cargo.lock` had been replaced by a
-  directory classify as development — it is a broken release checkout, not a new cycle — so it reported a
+  directory classify as development — that is a broken release checkout, not a new cycle — so it reported a
   missing `[Unreleased]` entry instead of the lockfile it could not read. And asking `git status` read the
   **index**, which intercepted a corrupt-index fixture another guard uses to reach its own refusal: measured,
-  that guard stopped reaching it. Reading `git show HEAD:CHANGELOG.md` takes the object database instead, and
-  the same corruption is left to the reader that owns it. Both were caught by existing directions rather than
-  by review.
+  that guard stopped reaching it, taking a WHEN that was not this reader's. `git show HEAD:CHANGELOG.md`
+  takes the object database instead, and the same corruption is left to the reader that owns it. Both were
+  caught by existing directions rather than by review.
 
-  This is a repair the reaction made *quieter*, not louder: the failure it removes was a misclassification,
-  not a rule being too strict. Downgrading the verdict would have kept the misdiagnosis and lowered its
-  volume, in the direction the Core Contract orders above every other.
-
-- **A release checkout being edited was judged as a release checkout, and no tree could satisfy the state it
-  was put in.** The phase was read from `HEAD` alone — is this commit the release commit — while every other
-  reader in the reaction takes its content from the worktree. The first change of a new cycle falls between
-  those two sources: sitting on the release commit, an author writes the `[Unreleased]` entry that
-  **development requires**, and it is judged in **snapshot**, where `[Unreleased]` must be **empty**. Two real
-  rules, and the only escape is to commit — the act that moves `HEAD`. Measured on this repository:
-  `release/0.6.0`'s first change could not pass the Definition of Done until it was committed, and passed
-  immediately afterwards unaltered.
-
-  The state now reads the same source the reaction judges. What it does **not** do is report the conflict as a
-  notice instead of a failure: the failure was a **misclassification**, not a policy that was too strict, and
-  a misdiagnosis delivered quietly is still a misdiagnosis. Nothing was relaxed.
-
-  Two wider spellings were tried and both were refuted by directions already in the corpus. *Any modified
-  tracked file* makes a release checkout whose `Cargo.lock` was replaced by a directory into "development",
-  which then reports a missing `[Unreleased]` entry instead of the lockfile it cannot read — that is a broken
-  release checkout, not a new cycle. And reading the index through `git status` intercepted a corrupt-index
-  fixture another guard uses to reach its own refusal, taking a WHEN that was not this reader's; `git show
-  HEAD:…` reads the object database and leaves it alone. Both measured.
+  This repair made the reaction **quieter** and relaxed nothing: the failure it removes was a
+  **misclassification**, not a rule that was too strict. Downgrading the verdict would have kept the
+  misdiagnosis and lowered its volume, in the direction the Core Contract orders above every other.
 
 - **The 0.5.0 window spent more than half its landed work on the machinery that judges this repository.**
   Measured over the window's own history, one landed change per squash: `284/540 (52%)` touched
