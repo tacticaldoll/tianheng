@@ -163,14 +163,14 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             BoundId::new(
                 "repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound",
             ),
-            "a pull request title or base branch changing between the wrapper's post-gate re-read of it and \
-             `gh pr merge`",
+            "a pull request title, base branch or head branch changing between the wrapper's post-gate \
+             re-read of it and `gh pr merge`",
             Extent::Reached(Reached::UnderReacts {
                 because: "the wrapper pins what the merge RECORDS by construction -- the body travels as the \
                           value the gate judged, and the commit set is pinned through `--match-head-commit`, \
                           which the server decides atomically. What the merge is JUDGED AGAINST has to be \
-                          re-read instead, and `gh` offers no equivalent precondition for either the title or \
-                          the base, so a re-read shrinks the exposure from a whole `cargo test` to one API \
+                          re-read instead, and `gh` offers no equivalent precondition for the title, the base \
+                          or the head branch's name, so a re-read shrinks the exposure from a whole `cargo test` to one API \
                           call rather than closing it. One bound rather than one per input: the stop is a \
                           property of a client-side re-read not being atomic with the act it precedes"
                     .into(),

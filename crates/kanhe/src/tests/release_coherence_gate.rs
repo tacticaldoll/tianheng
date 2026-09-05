@@ -174,8 +174,13 @@ fn a_single_quoted_path_or_version_is_read_and_a_non_string_is_not() {
 /// key, and refusing was the safe answer available to it; the parser decodes it, so the stale `0.0.1` is
 /// **judged** rather than stopped in front of.
 ///
-/// The second example is load-bearing rather than decoration: with only the quoted one present the per-example
-/// counter would reach zero and the vacuity guard would refuse for its own reason, which is not this one.
+/// The second example is **not** required for this direction to fail, and the reason given here for years was
+/// wrong: it said the per-example counter would reach zero and the vacuity guard would refuse instead. The
+/// counter is incremented before the pin is compared, so one example carrying one stale family pin reaches
+/// the violation and the vacuity guard is never reached — measured, this direction passes with the second
+/// example deleted. It stays because it holds the property the per-example counter exists for: a **passing
+/// sibling does not mask** the example that fails. Asserting the site rather than the refusal is what tells
+/// this direction from the vacuity guard, and it is what a second example cannot do.
 #[test]
 fn a_quoted_dependency_key_names_its_crate_and_its_pin_is_judged() {
     let root = std::env::temp_dir().join(format!("kanhe-quoted-key-{}", std::process::id()));
@@ -223,13 +228,17 @@ fn a_quoted_dependency_key_names_its_crate_and_its_pin_is_judged() {
 /// **An inherited dependency's key is a lookup key, never an identity.** Measured under cargo 1.96.0: a
 /// catalog offering `alias = { package = "realdep", version = "0.0.1", path = "dep" }` beside a dependency
 /// spelling `alias = { workspace = true }` resolves to `name=realdep, req=^0.0.1, rename=alias`. Cargo
-/// refuses both of the shapes that would make the key an identity — `package` written beside
-/// `workspace = true`, and a dependency inheriting under the crate's name rather than the catalog's key —
-/// so the lookup is the dependency key against the catalog key, always.
+/// answers both shapes that would make the key an identity against it: a `package` beside
+/// `workspace = true` is accepted and **ignored** — `warning: unused manifest key:
+/// dependencies.alias.package`, and the catalog's `realdep` resolves anyway — while inheriting under the
+/// crate's name rather than the catalog's key is refused, `dependency.realdep was not found in
+/// workspace.dependencies`. So the lookup is the dependency key against the catalog key, always.
 ///
-/// The second example is load-bearing rather than decoration, for the reason its sibling above records: with
-/// only the renamed one present the per-example counter reaches zero and the vacuity guard refuses for its
-/// own reason, which is not this one. Asserting the site rather than the refusal is what tells them apart.
+/// The second example holds that a **passing sibling does not mask** the one that fails, which is the property
+/// the per-example counter exists for. It is not what makes this direction fail: the counter is incremented
+/// before the pin is compared, so the renamed example alone reaches the violation — measured, this passes with
+/// the second example deleted. An earlier version of this comment said the vacuity guard would refuse instead,
+/// copied from the sibling above rather than checked. Asserting the site is what tells the two refusals apart.
 #[test]
 fn a_family_crate_the_catalog_renames_is_resolved_through_it() {
     let root = std::env::temp_dir().join(format!("kanhe-catalog-rename-{}", std::process::id()));

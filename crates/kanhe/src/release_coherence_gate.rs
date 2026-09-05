@@ -280,18 +280,24 @@ pub(crate) fn declared_dependencies(
 /// **The lookup is the dependency's key against a catalog key, and the crate comes from the entry.**
 /// Measured under cargo 1.96.0: a catalog offering `alias = { package = "realdep", version = "0.0.1" }`
 /// beside a dependency spelling `alias = { workspace = true }` resolves to `realdep` at `^0.0.1` under the
-/// rename `alias`. Cargo refuses both shapes that would make the dependency's own key an identity --
-/// `package` written beside `workspace = true`, and inheritance spelled under the crate's name rather than
-/// the catalog's key -- so there is one lookup and it is by key. Searching by resolved identity asked a
-/// question cargo never asks, and matched no entry at all for every crate the catalog renames.
+/// rename `alias`. Neither shape that would make the dependency's own key an identity survives the same
+/// measurement: a `package` written beside `workspace = true` is **accepted and ignored** -- cargo warns
+/// `unused manifest key: dependencies.alias.package`, resolves `realdep` from the catalog anyway, and builds
+/// -- and inheritance spelled under the crate's name rather than the catalog's key is refused outright,
+/// `dependency.realdep was not found in workspace.dependencies`. So there is one lookup, it is by key, and
+/// the crate is the catalog entry's even where the dependency names another. Searching by resolved identity
+/// asked a question cargo never asks, and matched no entry at all for every crate the catalog renames.
 ///
 /// **The catalog is in the same manifest, because every example in this repository is its own workspace
 /// root.** The root manifest's own comment says so and `exclude` enforces it, so a dependency spelling
 /// `workspace = true` resolves against `[workspace.dependencies]` beside it. Measured: cargo resolves the
 /// inline, dotted and detailed spellings of the offer to the catalog's requirement, and it resolves it even
 /// when a local `version` sits in the same inline table -- so the catalog is *the* answer rather than one of
-/// two. Cargo also refuses a manifest that inherits what its catalog does not declare, which is why
-/// [`Offered::Missing`] is a refusal rather than a fallback.
+/// two. Cargo refuses a manifest that inherits what its catalog does not declare, so [`Offered::Missing`]
+/// describes a manifest nothing builds -- but what to do about it depends on whether the local key names a
+/// family crate, so it is answered by the **caller** rather than here. This sentence said `Missing` *is a
+/// refusal rather than a fallback*, which held while this search was reached only for a crate already known
+/// to be in the family, and stopped holding when the search moved in front of that question.
 fn offered(catalog: &[Dependency], key: &str) -> Offered {
     for entry in catalog {
         if entry.key != key {
@@ -1497,16 +1503,12 @@ pub(crate) fn require_example_pins(
             path: _,
         } in declared_dependencies(&text, Subject::Requires)?
         {
-            // **Which crate a dependency names is its `package` field where it has one, and its key only
-            // otherwise** — asked of [`dependency_identity`], which the root's pin reader asks too. This
-            // reader resolved identity because an example carries no path, and the sibling selected on path
-            // and called the asymmetry earned; a family crate the catalog offers *without* a path is what
-            // that cost. One question, one reader.
             // **A dependency that takes the offer is resolved before it is identified, because its key is a
             // lookup key rather than a name.** The identity rule above holds for a dependency that declares
             // itself; cargo applies neither half of it to one spelling `workspace = true`. Measured under
-            // cargo 1.96.0, it refuses `package` written beside `workspace = true`, and refuses inheritance
-            // spelled under the crate's name rather than the catalog's key -- so the only lookup is the
+            // cargo 1.96.0, a `package` beside `workspace = true` is accepted and ignored with an
+            // `unused manifest key` warning, and inheritance spelled under the crate's name rather than the
+            // catalog's key is refused outright -- so the only lookup is the
             // dependency's key against a catalog key, and the crate is whatever that entry names. Deciding
             // membership on the local key first passed over every dependency the catalog renames, and a
             // stale pin behind one reached a release as clean: the example was then reported as declaring no

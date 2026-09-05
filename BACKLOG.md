@@ -2275,7 +2275,8 @@ consumer for an undemonstrated deduplication.
   or bound:* `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound`, and the
   re-reads themselves, pinned by `a_title_edited_while_the_gate_ran_stops_before_the_merge` and
   `a_base_changed_while_the_gate_ran_stops_before_the_merge`. *Risk:* the squash records a subject that is no
-  longer the title, or lands on a base the gate never judged, in the one act that cannot be repaired —
+  longer the title, or lands on a base or comes from a head branch the gate never judged, in the one act that
+  cannot be repaired —
   bounded by the window being a single API round trip and by the editor being a collaborator rather than an
   adversary. *Next trigger:* `gh` gaining a server-decided precondition for either. *Authority:* engine.
   *Compatibility:* patch; the wrapper
@@ -2289,8 +2290,9 @@ consumer for an undemonstrated deduplication.
   because the stop is a property of a client-side re-read not being atomic with the act it precedes, reached
   through whichever inputs are re-read. Its id moved with it — the retired spelling named the title alone, and
   is left to the commit and the dated changelog entry rather than written here, where a bare bound reference
-  has to resolve. The head branch was considered and left out: GitHub offers no way to change an existing
-  pull request's head, so a guard for it could be made to refuse only against a fixture. What has **not** fired is the toolchain half — `gh` 2.97.0 offers
+  has to resolve. The head branch was first left out on the premise that GitHub offers no way to change an
+  existing pull request's head; an independent review refuted it — renaming a branch retargets the pull
+  requests on it, so `headRefName` moves while `headRefOid` does not — and it is re-read on the same terms. What has **not** fired is the toolchain half — `gh` 2.97.0 offers
   `--match-head-commit` and no equivalent for either title or base, re-measured 2026-09-01.
 
 - **WATCH: a merge or publish made outside the wrapper is not observed.** *Observed pressure:* both

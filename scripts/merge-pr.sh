@@ -649,10 +649,8 @@ require_changed_files
 # wrapper's own criterion, both were filed on the wrong side; the title was moved first and the base was left
 # behind by the same reading that moved it.
 #
-# The HEAD BRANCH is the exception, and deliberately so. It is the exception's other endpoint, but GitHub
-# offers no way to change an existing pull request's head, and `--match-head-commit` already pins the head
-# object. A re-read of it could be made to refuse only against a fixture, never against the tool — a guard
-# nothing has been seen to refuse, which `AGENTS.md` does not count as a guard.
+# All three are read the same way, and an earlier version of this comment argued the head branch out of the
+# set on a premise that does not hold — see the re-read itself below.
 #
 # **This narrows the window; it does not close it, and the difference is the point.** `--match-head-commit`
 # is decided by the server, atomically. `gh` offers no `--match-title`, so a client-side re-read shrinks the
@@ -686,6 +684,21 @@ use — and the one message exception is named by where the squash lands, not by
 Re-run this wrapper and it will judge the base that exists now"
 fi
 
+# And the branch it comes from, the exception's other endpoint. This wrapper argued for a while that GitHub
+# offered no way to move it, so a guard here could only ever refuse against a fixture. That was wrong:
+# renaming a branch RETARGETS the pull requests on it, so `headRefName` moves while `headRefOid` does not —
+# and `--match-head-commit`, which pins the object, is satisfied either way. A premise that excused an
+# omission is worse than the omission, so the endpoint is read on the same terms as the other two.
+head_branch_now=$(gh pr view "$pr_number" --repo "$repository" --json headRefName --jq .headRefName) || cannot_judge \
+    "cannot re-read pull request $pr_number's head branch after the gate, so whether this squash still comes \
+from the branch the gate judged cannot be decided"
+if [[ $head_branch_now != "$head_branch" ]]; then
+    cannot_judge "the pull request's head branch changed while the gate ran. It judged a squash from \
+\"$head_branch\", the head branch is now \"$head_branch_now\", so the verdict in hand is about an origin \
+this merge will not have — and the one message exception names both endpoints. Re-run this wrapper and it \
+will judge the head branch that exists now"
+fi
+
 # Removed here, not left to the trap. An EXIT trap does not run when `exec` replaces the shell image —
 # measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while the same script without `exec` prints
 # `T`. So the trap fired on every path where nothing happened and was skipped on the one path that completes the
@@ -701,7 +714,7 @@ rm -f "$verdict_file"
 # that judged something else, permanently: the pull request's merge record cites the squash commit's hash, so
 # amending it afterwards decouples the two.
 #
-# The other three judged inputs already travelled this way and nothing said they were one set: the subject is a
+# The other judged inputs already travelled this way and nothing said they were one set: the subject is a
 # value, the repository is resolved once and named on every call, the head is captured before the commit set and
 # pinned with `--match-head-commit`, through which the live subjects are pinned too. This is the local half of
 # that pin — a pull request that moved is refused, and an input that moved on disk is never read a second time.
