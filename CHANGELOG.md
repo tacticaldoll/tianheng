@@ -24,6 +24,21 @@ them.
 
 ### Documentation
 
+- **The twin came back inside the module that exists to end twins, and it had already drifted.**
+  `hermetic_git::run` and `run_exact` were the same eight statements with one `.map` inserted — the
+  `Failure::Spawn` literal and the `Failure::Exit` construction character-identical, the two
+  `Failure::Unreadable` sentences **not**. One fact reached an operator two ways depending on which accessor
+  a caller reached for, and nothing compared them: the sentence occurs nowhere but its two constructions and
+  one doc line, so no direction could see the divergence. `run` is now the trim over `run_exact` and the
+  fuller sentence moved into the shared body rather than being dropped. A new direction holds that the two
+  answer an undecodable read **in the same words** — not that the words are any particular ones, which would
+  refuse an improvement to them.
+
+  A doc comment annexed onto the wrong item moved with it: the extraction history of `run` opened
+  `run_exact`'s doc, which the delegation would have made worse rather than better. The repository's own
+  relative-anchor sweep refused the first repair of it for writing *the paragraph below*, which names a
+  position rather than a thing.
+
 - **The `list` projection's coverage guard was blind to a dimension, and a typed count agreed with it.**
   The guard says a capability added to `list_document` without a `list_markdown` section fails CI rather
   than silently under-projecting. `unsafe_confinement_boundaries` was in neither its enumerated table nor

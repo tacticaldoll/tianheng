@@ -177,44 +177,18 @@ const CONFIG_CHANNELS: [&str; 2] = ["GIT_CONFIG_PARAMETERS", "GIT_CONFIG"];
 const REPOSITORY_SELECTORS: [&str; 3] = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"];
 
 /// One read of `git` in `repo` through [`hermetic`], with the output/success/failure mapping every gate's
-/// own `git()` wrapper otherwise has to restate.
+/// own `git()` wrapper otherwise has to restate — and the body [`run`] is this one plus a trim.
 ///
-/// It lived twice here too, byte-identical past the leading flags, in the same two files this module's own
-/// doc comment already names for [`hermetic`]. `flags` are spliced in before `args` — `&[]` for
-/// `release_coherence_gate`, `&["-c", "core.excludesFile=/dev/null"]` for `publish_source_gate`, which stated
-/// per command what [`hermetic`] now states for every caller. The flag is kept there rather than dropped: it
-/// is the narrower statement, it costs nothing, and the measurement that earned it is recorded beside it.
-/// [`run`] without the trailing-whitespace trim, for a caller comparing **content** rather than reading a
-/// value.
+/// **The extraction history that used to open this doc is [`run`]'s**, and is now written there. That is
+/// what an annexed doc looks like: a passage describing one item, attached to its neighbour, where both
+/// read plausibly enough that nobody re-attributed it.
 ///
-/// Most callers read one line — a sha, a ref, a status — and the trim is what makes those comparable. A
-/// caller comparing a committed file against a working one needs the bytes git gave: trimming both sides
-/// makes a worktree edited only in its trailing whitespace read as unmodified, which is a different tree
-/// reported as the same one.
+/// This accessor is the one **without** the trailing-whitespace trim, for a caller comparing **content**
+/// rather than reading a value. Most callers read one line — a sha, a ref, a status — and the trim is what
+/// makes those comparable. A caller comparing a committed file against a working one needs the bytes git
+/// gave: trimming both sides makes a worktree edited only in its trailing whitespace read as unmodified,
+/// which is a different tree reported as the same one.
 pub fn run_exact(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure> {
-    let out = hermetic("git")
-        .args(flags)
-        .args(args)
-        .current_dir(repo)
-        .output()
-        .map_err(|err| Failure::Spawn(format!("cannot run git {args:?}: {err}")))?;
-    if out.status.success() {
-        String::from_utf8(out.stdout).map_err(|err| {
-            Failure::Unreadable(format!(
-                "git {args:?} answered bytes this reader cannot represent as text — {err}"
-            ))
-        })
-    } else {
-        Err(Failure::Exit {
-            code: out.status.code(),
-            stderr: String::from_utf8_lossy(&out.stderr).trim_end().to_string(),
-        })
-    }
-}
-
-/// [`run_exact`] with git's trailing whitespace trimmed off, which is what a caller reading a **value**
-/// wants: a sha, a ref name, a status line.
-pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure> {
     let out = hermetic("git")
         .args(flags)
         .args(args)
@@ -232,21 +206,38 @@ pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure
         //
         // stderr below stays lossy, deliberately: it is a sentence for an operator, not a value anything
         // compares.
-        String::from_utf8(out.stdout)
-            .map(|text| text.trim_end().to_string())
-            .map_err(|err| {
-                Failure::Unreadable(format!(
-                    "git {args:?} answered bytes this reader cannot represent as text — {err}; a path that \
-                     is not UTF-8 keeps its own identity, and reporting a replaced one would compare \
-                     something the repository does not hold"
-                ))
-            })
+        String::from_utf8(out.stdout).map_err(|err| {
+            Failure::Unreadable(format!(
+                "git {args:?} answered bytes this reader cannot represent as text — {err}; a path that is \
+                 not UTF-8 keeps its own identity, and reporting a replaced one would compare something the \
+                 repository does not hold"
+            ))
+        })
     } else {
         Err(Failure::Exit {
             code: out.status.code(),
             stderr: String::from_utf8_lossy(&out.stderr).trim_end().to_string(),
         })
     }
+}
+
+/// [`run_exact`] with git's trailing whitespace trimmed off, which is what a caller reading a **value**
+/// wants: a sha, a ref name, a status line.
+///
+/// It lived twice here too, byte-identical past the leading flags, in the same two files this module's own
+/// doc comment already names for [`hermetic`]. `flags` are spliced in before `args` — `&[]` for
+/// `release_coherence_gate`, `&["-c", "core.excludesFile=/dev/null"]` for `publish_source_gate`, which stated
+/// per command what [`hermetic`] now states for every caller. The flag is kept there rather than dropped: it
+/// is the narrower statement, it costs nothing, and the measurement that earned it is recorded beside it.
+///
+/// **And then it lived twice again, inside the module that exists to end exactly that.** This body was the
+/// eight statements of [`run_exact`] with one `.map` inserted, and the copy had already drifted where
+/// nothing was watching: the two `Failure::Unreadable` sentences differed, so one fact reached an operator
+/// two ways depending on which accessor a caller reached for. The trim is the whole difference and is now
+/// the whole body;
+/// `both_accessors_report_an_undecodable_answer_in_the_same_words` holds that the two cannot part again.
+pub fn run(repo: &Path, flags: &[&str], args: &[&str]) -> Result<String, Failure> {
+    run_exact(repo, flags, args).map(|text| text.trim_end().to_string())
 }
 
 /// Run `program` in `dir` through [`hermetic`] and assert it succeeded — the fixture side of this module.
