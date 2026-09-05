@@ -35,10 +35,10 @@ them.
   class the entries declare, so the release would have passed every gate and shipped a patch requiring
   baseline regeneration. It was found by an independent review reading the markings against the branch name.
 
-  Git history shows twenty-odd pull requests merged into `release/0.5.1`: that is the same branch under its
-  former name, renamed in place through GitHub rather than recreated, so every merge record still resolves.
-  The nine tracked references to it were updated with it. **The workspace version is untouched at `0.5.0`**
-  — it moves at release preparation, not here.
+  Git history shows pull requests merged into `release/0.5.1`: that is the same branch under its former
+  name, renamed in place through GitHub rather than recreated, so every merge record still resolves. Its
+  tracked references were updated with it — the count is what a sweep prints, not what this paragraph
+  claims. **The workspace version is untouched at `0.5.0`** — it moves at release preparation, not here.
 
 ### Migration
 
@@ -64,6 +64,21 @@ them.
   accepts; it now resolves, and no baseline existed to move.
 
 ### Semantic and runtime
+
+- **A `path` inside a COMPOUND predicate was still read as a target.** The repair below tracked a predicate
+  phase per parenthesised group — and `all(…)` is one, with a comma of its own — so
+  `#[cfg_attr(all(unix, path = "bogus"), path = "real.rs")]` set the phase past `all`'s comma and collected
+  `bogus`. The same false clean, one nesting level in: measured,
+  `Clean(Subject { declared: 1, reached: 1 })` with only the group-kind half reverted.
+
+  A comma inside `all(…)`, `any(…)` or `not(…)` belongs to the predicate grammar and says nothing about the
+  surrounding `cfg_attr`. So a group is an applied-meta position only where its `(` follows the identifier
+  `cfg_attr` — which also excludes another attribute taking a `path` argument of its own. The phase alone
+  was half the rule; the kind is the other half.
+
+  `runtime-origin-assertion` required the shape that produced this — *the scanner locates the `path` value
+  anywhere within the outer attribute's argument span* — so the requirement is amended rather than the
+  reaction left disagreeing with it, and the two predicate positions are pinned by a scenario.
 
 - **A `cfg_attr` PREDICATE spelled `path` was read as an applied module target.** 漏刻's scanner walked the
   whole argument span, so `#[cfg_attr(path = "bogus", path = "real.rs")] mod plat;` recorded **both**. That

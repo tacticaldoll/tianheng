@@ -381,7 +381,8 @@ pub(crate) fn paren_group_end(bytes: &[u8], open: usize, limit: usize) -> usize 
 /// contains the text (`target_os = "path_os"`, a doc comment) is never mistaken for the applied `path`
 /// meta.
 ///
-/// **A `path` before this level's first comma is a PREDICATE, not a target.** `#[cfg_attr(path = "bogus",
+/// **A `path` in a predicate position is a cfg key, not a target** — before a `cfg_attr`'s own first comma,
+/// or anywhere inside a compound predicate such as `all(…)`.** `#[cfg_attr(path = "bogus",
 /// path = "real.rs")] mod plat;` is legal source whatever cfg flags are set, and reading `bogus` as a
 /// target scanned a file rustc does not compile — a probe inside it then counted as coverage and the audit
 /// reported clean over a seam nothing probes on any real build. One flag per open group closes it, which is
@@ -409,10 +410,28 @@ pub(crate) fn path_meta_values(
     mod_index: usize,
 ) -> Vec<String> {
     let mut found = Vec::new();
-    // One flag per open group: whether this level's own PREDICATE has been passed. `cfg_attr` takes its
-    // predicate first and its applied metas after the first comma AT THAT LEVEL, so a `path` before it is
-    // part of the condition and names no module.
-    let mut past_predicate = vec![false];
+    // One frame per open group: whether the group is a `cfg_attr`'s own argument list, and whether that
+    // group's PREDICATE has been passed.
+    //
+    // Both halves are needed and the first repair had only the second. `cfg_attr` takes its predicate
+    // first and its applied metas after the first comma AT THAT LEVEL — but a compound predicate is a
+    // parenthesised group too, so `all(unix, path = "bogus")` has a comma of its own, and a phase kept
+    // per group read `bogus` as applied. A comma inside `all(…)`, `any(…)` or `not(…)` belongs to the
+    // predicate grammar and says nothing about the surrounding `cfg_attr`.
+    //
+    // So a group is an applied-meta position only where its `(` follows the identifier `cfg_attr`.
+    // Anything else carries no module target — a compound predicate, and equally another attribute taking
+    // a `path` argument of its own.
+    struct Group {
+        applies_metas: bool,
+        past_predicate: bool,
+    }
+    // The span handed in IS a `cfg_attr`'s argument list, by this arm's own construction.
+    let mut groups = vec![Group {
+        applies_metas: true,
+        past_predicate: false,
+    }];
+    let mut last_ident_was_cfg_attr = false;
     let mut i = start;
     while i < paren_close {
         if let Some(next) = skip_literal_or_comment(bytes, i) {
@@ -421,13 +440,18 @@ pub(crate) fn path_meta_values(
         }
         match bytes[i] {
             b'(' => {
-                past_predicate.push(false);
+                groups.push(Group {
+                    applies_metas: last_ident_was_cfg_attr,
+                    past_predicate: false,
+                });
+                last_ident_was_cfg_attr = false;
                 i += 1;
                 continue;
             }
             b')' => {
-                past_predicate.pop();
-                if past_predicate.is_empty() {
+                groups.pop();
+                last_ident_was_cfg_attr = false;
+                if groups.is_empty() {
                     // Unbalanced past this span's own group: nothing further is this attribute's.
                     return found;
                 }
@@ -435,9 +459,10 @@ pub(crate) fn path_meta_values(
                 continue;
             }
             b',' => {
-                if let Some(level) = past_predicate.last_mut() {
-                    *level = true;
+                if let Some(group) = groups.last_mut() {
+                    group.past_predicate = true;
                 }
+                last_ident_was_cfg_attr = false;
                 i += 1;
                 continue;
             }
@@ -449,7 +474,12 @@ pub(crate) fn path_meta_values(
             while name_end < paren_close && is_ident_byte(bytes[name_end]) {
                 name_end += 1;
             }
-            if &bytes[name_start..name_end] == b"path" && past_predicate.last() == Some(&true) {
+            let name = &bytes[name_start..name_end];
+            last_ident_was_cfg_attr = name == b"cfg_attr";
+            let applied = groups
+                .last()
+                .is_some_and(|group| group.applies_metas && group.past_predicate);
+            if name == b"path" && applied {
                 let eq = skip_preamble_trivia(bytes, name_end, paren_close);
                 if bytes.get(eq) == Some(&b'=') {
                     found.extend(read_path_string(bytes, eq + 1, mod_index));
