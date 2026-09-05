@@ -13,6 +13,7 @@
 use std::path::PathBuf;
 
 use kanhe::refusal::{Kind, Refusal, cannot_judge, violation};
+use kanhe::region::Source;
 
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
@@ -61,10 +62,21 @@ fn subject_manifests(root: &std::path::Path) -> Result<Vec<String>, Refusal> {
 /// A line of its own, because `[workspace]` inside a string or after a `#` is not a table. The tables cargo
 /// admits here are the bare one and its sub-tables, so `[workspace.dependencies]` counts as declaring the
 /// root too.
+///
+/// **That sentence was the doc and not the reader.** This walked `manifest.lines()`, which is the file's
+/// bytes rather than its executed text, so it got both cases it names wrong — measured, both directions:
+/// `[workspace]` alone on a line inside a `"""` block read as a declared root, and `[workspace] # root`
+/// read as no root at all. `repository-checks` requires a check deciding a property over executed text to
+/// take its corpus from [`kanhe::region`], and the region reader crosses the multi-line string forms
+/// because a line is not a unit TOML respects.
 fn declares_a_workspace(manifest: &str) -> bool {
-    manifest.lines().map(str::trim).any(|line| {
-        line == "[workspace]" || (line.starts_with("[workspace.") && line.ends_with(']'))
-    })
+    Source::of(manifest)
+        .toml()
+        .lines()
+        .map(str::trim)
+        .any(|line| {
+            line == "[workspace]" || (line.starts_with("[workspace.") && line.ends_with(']'))
+        })
 }
 
 fn judge(root: &std::path::Path) -> Result<usize, Refusal> {
@@ -130,6 +142,25 @@ fn a_manifest_without_the_table_is_a_violation() {
     assert!(
         !declares_a_workspace("[package]\nname = \"x\"\n# [workspace]\n"),
         "a commented-out table is not a table"
+    );
+
+    // **The two the doc named and the reader got wrong**, measured against a raw-lines walk before this
+    // took the executed region. A line is not a unit TOML respects, and neither is a line's whole text.
+    //
+    // Each was run alone against that reader, because the first to fail hides the second and a run that
+    // stops on one direction says nothing about the other:
+    //
+    //   a table spelling inside a multi-line string is a string, not a declaration
+    //   a trailing comment does not stop the table before it from being one
+    assert!(
+        !declares_a_workspace(
+            "[package]\nname = \"x\"\ndescription = \"\"\"\n[workspace]\n\"\"\"\n"
+        ),
+        "a table spelling inside a multi-line string is a string, not a declaration"
+    );
+    assert!(
+        declares_a_workspace("[package]\nname = \"x\"\n\n[workspace] # the root\n"),
+        "a trailing comment does not stop the table before it from being one"
     );
     assert!(
         !declares_a_workspace("[package]\ndescription = \"see [workspace] in the root\"\n"),
