@@ -24,6 +24,15 @@ them.
 
 ### Documentation
 
+- **The workspace-isolation check decided a TOML question on raw lines, and its own doc said otherwise.**
+  Its reader walked `manifest.lines()` while its doc read *a line of its own, because `[workspace]` inside a
+  string or after a `#` is not a table* — and it got both of the cases that sentence names wrong. Measured,
+  each run alone against that reader: `[workspace]` on its own line inside a `"""` block read as a declared
+  root, and `[workspace] # root` read as no root at all. `repository-checks` states the corpus rule as a
+  SHALL over exactly this kind of reader, and the declared bound beside it explains why nothing reacted —
+  an absence is not a shape, so nothing can scan for a filter that was never written. It takes the executed
+  TOML region now, which crosses the multi-line string forms because a line is not a unit TOML respects.
+
 - **The TOML parse refusal had five copies and a helper whose doc said there were two.** `toml_edit` renders
   an error over several lines and a refusal message is one, so every reader flattened it — four by hand and
   two through a helper whose own doc read *both parse sites flatten it the same way, so the rule is written
