@@ -517,6 +517,36 @@ them.
   governance file may narrate its own reclassification, because choosing it alone is the shape this sweep
   kept finding wrong.
 
+- **The first reading under the new rule, and a `WATCH` moved because its proposal turned out to be already
+  running.** Four more entries evaluated, each recording what it checked rather than only what it concluded.
+
+  *A Shape that had been run without anyone noticing.* The entry watching `shengmo::workspace::MARKER`'s
+  out-of-reach literal copies proposes a comparison rather than a convergence — `kanhe` sees both the
+  constant and the text of the crates that cannot depend on it. Swept for its trigger, no mistype exists;
+  what does exist is a **second** constant of the same shape, `kanhe::verdict_channel::ENV`, whose
+  out-of-reach copies are the two shell wrappers — and whose copies are already **held**, by
+  `gate_exit_classes` asserting each wrapper's text against the constant. The trigger asked for a second
+  *unheld* constant and found a second *held* one, which answers a different and better question: the
+  proposal is not a hypothesis. The entry moves to `READY-PATCH` on this file's own definitions, `WATCH`
+  being for pressure without enough correctness evidence.
+
+  *And one trigger cannot fire yet, which is now something a verdict may say.* The prose-claim entry's
+  condition is a window **after** a `READY-PATCH` that has not landed, so no window has begun under the state
+  it measures from. It is recorded as **unevaluable** rather than *not fired* — the distinction the rule
+  adopted in this window requires, since a trigger whose precondition is unmet has neither been observed nor
+  passed.
+
+  Two clean negatives with their measurements: every tracked fixture corpus is still read by something
+  outside `fixtures/`, eight of eight; and the `bash <path>` sweep finds five occurrences, one live command
+  tracked executable and four that are a declaration, a fixture string, a constructed shell example and this
+  entry's own recorded instance.
+
+  *A guard caught the reading, for the class the reading was about.* The first draft of that last sentence
+  spelled the two untracked names out, and `reference_integrity` refused it — a reference to a path this
+  repository does not have. A sweep confirming that commands name targets which exist, writing a path that
+  does not. The repair is the one this window keeps arriving at: describe the thing, do not reproduce the
+  token that resolves to nothing.
+
 - **`BACKLOG.md`'s promotion triggers are read against the window before the cut, and that is a step someone
   performs rather than a thing built.** A live entry names what would promote it and nothing evaluated that,
   which this file already recorded from the inside: an entry whose trigger had fired on **both** halves sat

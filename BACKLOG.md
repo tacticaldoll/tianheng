@@ -1050,7 +1050,11 @@ consumer for an undemonstrated deduplication.
   and the eight-figure change that followed it. *Current reaction or bound:* none, and by construction: this
   is a question about the coverage of a discipline, not about a shape anything observes. *Risk:* the class is
   rediscovered once a window and each rediscovery pays the measurement again; bounded by every carrier being
-  prose. *Promotion trigger:* a third window in which this class costs a review round after the `READY-PATCH`
+  prose. **Cannot fire yet, and saying so is the point.** Its condition is a window *after* the `READY-PATCH`
+  entry it names has landed, and that entry has not: it is still `READY-PATCH`, so no window has yet begun
+  under the state this trigger measures from. Evaluated 2026-09-06 and recorded as **unevaluable** rather
+  than as *not fired*, which is the distinction `AGENTS.md` now requires of a verdict — a trigger whose
+  precondition is unmet has not been observed and has not passed. *Promotion trigger:* a third window in which this class costs a review round after the `READY-PATCH`
   above lands. *Version class:* patch. *Authority:* `AGENTS.md`'s *A repair loop is a diagnosis, not a
   schedule*.
 
@@ -1297,7 +1301,20 @@ consumer for an undemonstrated deduplication.
   *Risk:* a mistyped literal makes its guard's skip condition permanently true, so the test silently stops
   running — a false negative, which is the one bug this project's Core Contract forbids, in the direction
   nothing is watching. *Promotion trigger:* a second constant acquiring out-of-reach literal copies, or one
-  instance of the mistype. *Version class:* patch; test scaffolding only. *Authority:* `repository-checks`.
+  instance of the mistype. **Not fired, and reclassified `WATCH` -> `READY-PATCH` on what the check found
+  instead.** Swept 2026-09-06: every spelling of `TIANHENG_WORKSPACE_TESTS` in `crates/` is exact, and the
+  near-miss sweep over `TIANHENG[_A-Z]*` returns only distinct, legitimate names — no mistype. But the
+  repository holds a **second** `pub const` of this shape, `kanhe::verdict_channel::ENV`, whose out-of-reach
+  copies are the two shell wrappers, which cannot depend on a Rust crate at all. Its copies are **held**:
+  `gate_exit_classes` asserts each wrapper's text contains `{verdict_channel::ENV}=$verdict_file`.
+
+  So the trigger asked for a second **unheld** constant and what exists is a second constant that is held —
+  by *the comparison this entry proposes, verbatim*: `kanhe` sees both the constant and their text, so a
+  comparison is available where a convergence is not. **The Shape is no longer a hypothesis; it has been run
+  in this tree and works.** That is what moves the class, by this file's own definitions: `WATCH` is for
+  pressure without enough correctness evidence, and the evidence is the sibling. What remains is the work,
+  which is what `READY-PATCH` classifies. *Version class:* patch; test scaffolding only. *Authority:*
+  `repository-checks`.
   *Shape:* a direction in `kanhe` asserting every literal spelling of the token equals the constant, with a
   non-empty assertion over the set so a rename cannot empty it into a vacuous pass. Filed rather than built
   because it widens a check whose stated corpus was chosen deliberately, and changing that is a decision
@@ -1452,7 +1469,16 @@ consumer for an undemonstrated deduplication.
   *Current reaction or bound:* none for this shape; the pair shape is held by
   `every_command_a_document_hands_a_reader_names_a_target_that_exists`. *Risk:* a reader meets a command that
   does nothing and reports success — worse than one that fails, because the failure is silent. Bounded by the
-  sweep: one instance in the tree, now repaired. *Promotion trigger:* a second live instance of this shape, or
+  sweep: one instance in the tree, now repaired. **Not fired, re-swept 2026-09-06 over tracked Rust,
+  Markdown and the specs.** Five `bash <path>` occurrences, and the mode of each target read from git:
+  `scripts/publish.sh` is the one live command and is tracked `100755`; `crates/kanhe/tests/bound_register.rs`
+  is this entry's own recorded instance; `crates/kanhe/tests/pin_bites.rs` appears only inside the
+  `release-coherence` scenario **declaring** the shape it forbids; and the remaining two are untracked names
+  this repository does not have — one inside a doc comment's measured shell example, one a fixture string in
+  a failure matrix, and **neither is spelled here**, because `reference_integrity` refuses a reference to an
+  untracked path and refused the first draft of this sentence for spelling one. A sweep about commands whose
+  targets exist, caught writing a path that does not. Declaration, fixture and constructed example are the same three positional exemptions the
+  relative-phrase bound already grants. *Promotion trigger:* a second live instance of this shape, or
   a third shape of the same class. *Version class:* patch; repository-internal, shipping in no crate.
   *Authority:* `repository-checks`, which owns the pair-shape requirement. *Shape:* the corpus differs from the
   pair check's — this shape appears in **Rust doc comments** as well as Markdown, and the rule is *a `bash`
@@ -2142,7 +2168,9 @@ consumer for an undemonstrated deduplication.
   register's own reader, which the corpus was written for. *Risk:* a declaration written and then orphaned
   reads as coverage to anyone who finds it and holds nothing. Bounded by measurement: every tracked fixture
   corpus in this repository is referenced by at least one reader — eight of eight, swept the day this was
-  written — so this is one instance rather than a class. *Next trigger:* a second orphan, at which point the
+  written — so this is one instance rather than a class. **Re-swept 2026-09-06: eight tracked fixture corpora,
+  every one referenced by at least one reader outside `fixtures/` — the same eight-of-eight the entry was
+  written on, none added and none orphaned.** *Next trigger:* a second orphan, at which point the
   shape changes and a reaction enumerates them instead of a sweep run on purpose. **Not fired** (evaluated
   2026-08-31; `crates/kanhe/tests/fixtures/` holds `refusal_scan`, this entry's own subject and now read, and
   `pin_mutations.tsv`, which `pin_bites` reads on every run). *Authority:* engine.
