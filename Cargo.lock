@@ -10,7 +10,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "guibiao"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde_json",
  "xingbiao",
@@ -25,7 +25,7 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "hunyi"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde_json",
  "syn",
@@ -51,7 +51,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "kanhe"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "proc-macro2",
  "serde_json",
@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "louke"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "xingbiao",
  "xuanji",
@@ -138,7 +138,7 @@ dependencies = [
 
 [[package]]
 name = "shengmo"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde_json",
  "tianheng",
@@ -157,7 +157,7 @@ dependencies = [
 
 [[package]]
 name = "tianheng"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "guibiao",
  "hunyi",
@@ -220,14 +220,14 @@ dependencies = [
 
 [[package]]
 name = "xingbiao"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "xuanji"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde_json",
 ]
