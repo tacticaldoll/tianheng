@@ -1057,14 +1057,29 @@ pub fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal
                     format!("could not read {manifest:?}: {err}"),
                 )
             })?;
-            out.push((
-                manifest
-                    .strip_prefix(repo)
-                    .unwrap_or(&manifest)
-                    .display()
-                    .to_string(),
-                text,
-            ));
+            // **Spelled by the one owner, because this is the side `member_enumeration` compares
+            // against.** This read `strip_prefix(repo).unwrap_or(&manifest).display()`, which is the
+            // host's own separator and, on a failed strip, the absolute path carried forward as if it
+            // were relative. The comparison's other side joins components with `/`, so the two sets
+            // shared no member wherever that separator is not `/` — and the reader that stands beside
+            // this one records the identical defect at its own site.
+            match crate::repository_path::repository_path(repo, &manifest) {
+                crate::repository_path::RepositoryPath::Below(path) => out.push((path, text)),
+                // The manifest is built from `repo` a few lines above, so the strip cannot fail for the
+                // input this walk produces. It is answered rather than assumed away because the answer
+                // is what the type asks for, and a reader that cannot say where a file sits must not
+                // report it as sitting anywhere.
+                crate::repository_path::RepositoryPath::Outside => {
+                    return Err(cannot_judge_at(
+                        "release-coherence#crate-manifest-outside-repository",
+                        format!(
+                            "crate manifest {} is not under the repository root {} it was walked from",
+                            manifest.display(),
+                            repo.display()
+                        ),
+                    ));
+                }
+            }
         }
     }
     if out.is_empty() {
@@ -1870,26 +1885,14 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
                 "a package in cargo metadata carries no manifest_path, so its directory cannot be resolved",
             ));
         };
-        // **Compared through components, because a separator is not a character here.** This stripped
-        // `"{root}/"` from the manifest as **text**, and cargo reports native paths — so on a host where
-        // that separator is `\` no member sits under the prefix and every one of them reaches the refusal
-        // below. `Path::strip_prefix` compares component by component, which is the rule the sibling reader
-        // for a dependency's `path` already states as a requirement; a rule enforced at one site and not its
-        // neighbour is a rule about the site.
-        //
-        // The identity is joined back with `/` deliberately: it is compared against git's paths and cited in
-        // this repository's own prose, both of which spell a separator that way whatever the host does.
+        // **Spelled by the one owner**, which is where the component-wise strip and the `/` join now live
+        // for every reader that asks this question — see [`crate::repository_path`] for what the three
+        // hand-written spellings cost. What is this site's own is the *directory*: the member's own
+        // `Cargo.toml` is what cargo reports, and the tracked files under it are what this gate enumerates.
         let manifest_path = Path::new(manifest);
-        let Some(directory) = manifest_path
-            .strip_prefix(root)
-            .ok()
-            .and_then(Path::parent)
-            .map(|dir| {
-                dir.components()
-                    .map(|part| part.as_os_str().to_string_lossy().into_owned())
-                    .collect::<Vec<_>>()
-                    .join("/")
-            })
+        let Some(crate::repository_path::RepositoryPath::Below(directory)) = manifest_path
+            .parent()
+            .map(|dir| crate::repository_path::repository_path(root, dir))
         else {
             // `--no-deps` lists workspace members only, so every manifest sits under the root cargo reported
             // alongside them. One that does not is this gate's two sources describing different trees, which

@@ -99,6 +99,13 @@ pub fn unheld() -> Vec<Unheld> {
              disagreement inside cargo rather than a shape a manifest can carry",
         ),
         tool(
+            "release-coherence#crate-manifest-outside-repository",
+            "the manifest is joined onto `repo` in the same loop that strips it, so a walk output sitting \
+             outside `repo` is this reader disagreeing with itself rather than a tree a fixture can build \
+             — the sibling `member-manifest-outside-workspace-root` above records the same shape for the \
+             answer cargo gives, where the join is cargo's rather than this walk's",
+        ),
+        tool(
             "release-coherence#scripts-not-enumerable",
             "`git ls-files` failing while the same process already read the repository is a git failure \
              mid-run, and simulating it means putting a fake git on the path",
