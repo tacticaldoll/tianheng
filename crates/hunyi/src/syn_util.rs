@@ -518,18 +518,26 @@ pub(crate) fn cfg_attr_path_values(attrs: &[syn::Attribute]) -> Vec<String> {
         .filter_map(|attr| {
             attr.parse_args_with(cfg_attr_metas)
                 .ok()
-                .and_then(|metas| applied_metas_path_value(&metas))
+                .map(|metas| applied_metas_path_values(&metas))
         })
+        .flatten()
         .collect()
 }
 
-/// The **applied** metas of a `cfg_attr` (all but the first, which is the predicate): the value of
-/// a `path = "…"` name-value among them, or one nested inside a further `cfg_attr`.
-fn applied_metas_path_value(metas: &MetaList) -> Option<String> {
-    metas.iter().skip(1).find_map(meta_path_value)
+/// The **applied** metas of a `cfg_attr` (all but the first, which is the predicate): **every**
+/// `path = "…"` name-value among them, including those nested inside a further `cfg_attr`.
+///
+/// **The union has two axes and the earlier repair reached one.** [`cfg_attr_path_values`]'s own doc
+/// records a `find_map` that silently dropped every candidate but the first-declared, and it was
+/// corrected across ATTRIBUTES. Within one attribute a second `find_map` did the same thing, so
+/// `#[cfg_attr(unix, cfg_attr(target_os = "macos", path = "mac.rs"), cfg_attr(target_os = "linux",
+/// path = "linux.rs"))]` answered `mac.rs` and nothing else — measured against rustc, that declaration
+/// compiles on Linux with only `linux.rs` present.
+fn applied_metas_path_values(metas: &MetaList) -> Vec<String> {
+    metas.iter().skip(1).flat_map(meta_path_values).collect()
 }
 
-fn meta_path_value(meta: &syn::Meta) -> Option<String> {
+fn meta_path_values(meta: &syn::Meta) -> Vec<String> {
     match meta {
         syn::Meta::NameValue(syn::MetaNameValue {
             path,
@@ -539,12 +547,13 @@ fn meta_path_value(meta: &syn::Meta) -> Option<String> {
                     ..
                 }),
             ..
-        }) if path.is_ident("path") => Some(s.value()),
+        }) if path.is_ident("path") => vec![s.value()],
         syn::Meta::List(list) if list.path.is_ident("cfg_attr") => list
             .parse_args_with(cfg_attr_metas)
             .ok()
-            .and_then(|metas| applied_metas_path_value(&metas)),
-        _ => None,
+            .map(|metas| applied_metas_path_values(&metas))
+            .unwrap_or_default(),
+        _ => Vec::new(),
     }
 }
 
