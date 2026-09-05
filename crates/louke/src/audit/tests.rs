@@ -427,21 +427,16 @@ fn a_path_inside_a_compound_predicate_is_still_a_predicate() {
 
 /// A path-QUALIFIED look-alike is not the built-in `cfg_attr`, however the qualification is spelled.
 ///
-/// **Group kind was inferred from an identifier, and Rust has more than one way to write one.** Each
-/// spelling below defeated a different repair, and each was the same false coverage arriving again:
+/// **Rust has more than one way to write an identifier, and the qualification survives all of them.** The
+/// three inputs are one invariant read three ways, so they sit in one table rather than three directions:
 ///
-/// - `foo::cfg_attr` — the last identifier matched, so a scanner testing only that reopened scanning.
-/// - `foo::/**/cfg_attr` — a look-behind over whitespace stopped at the comment's `/` and read the segment
-///   as unqualified. A comment is trivia and must not change what a path IS.
-/// - `foo::r#cfg_attr` — a raw identifier is ONE segment, and a reader seeing `r`, then `#`, then
-///   `cfg_attr` cleared the qualification twice.
+/// - `foo::cfg_attr` — the segment's own text matches the built-in; what excludes it is the `::` before it.
+/// - `foo::/**/cfg_attr` — a comment is trivia and does not change what a path IS.
+/// - `foo::r#cfg_attr` — a raw identifier is ONE segment, `r` and `#` are not tokens of their own.
 ///
-/// They are one hole, so they are one direction: replacing a spelling rather than adding it is how the
-/// second was lost while the third was closed.
-///
-/// The control is the point of the whole thing. An **unqualified** `r#cfg_attr` names the built-in — the
-/// prefix escapes a keyword and says nothing else — so narrowing must not cost a genuine nested group its
-/// applied metas.
+/// The control is the point of the whole thing. An **unqualified** `r#cfg_attr` names the built-in — `r#`
+/// changes the spelling and not the name — so narrowing must not cost a genuine nested group its applied
+/// metas.
 ///
 /// Negative run, identical against each reader the spelling above it defeated:
 ///
@@ -495,8 +490,9 @@ fn a_path_qualified_look_alike_is_not_cfg_attr() {
 
 /// The control: an UNQUALIFIED raw identifier is the built-in, so the narrowing costs nothing.
 ///
-/// `r#cfg_attr` names the same identifier as `cfg_attr`; the prefix escapes a keyword and says nothing
-/// about qualification. Without this, a repair that refused every `r#` segment would pass the direction
+/// `r#cfg_attr` names the same identifier as `cfg_attr`: `r#` changes a lexical spelling and not a name,
+/// and says nothing about qualification. `cfg_attr` is not a keyword, so nothing here is being escaped —
+/// the form is admitted for any identifier. Without this, a repair that refused every `r#` segment would pass the direction
 /// above while silently dropping a genuine nested group's applied metas — the false negative the
 /// narrowing exists to close, arriving from the other side.
 #[test]
