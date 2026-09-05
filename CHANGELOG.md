@@ -24,6 +24,14 @@ them.
 
 ### Documentation
 
+- **The governable-crate-root predicate was spelled twice in one module.** `crate_root_files` and
+  `member_root_files` each carried the same `LIBRARY_KINDS`-or-`bin` filter over the same `src_path` read,
+  so admitting a target kind would have moved one and not the other. `member_root_files` is now the
+  per-package reader flat-mapped across the workspace; what stays its own is the scope and the ordering —
+  `crate_root_files` dedups within a package by first appearance, and this sorts across packages so the
+  corpus is deterministic whatever order cargo lists them in. `target_has_kind`'s doc named the pair it is
+  shared by and now names how each reaches it.
+
 - **The third reader of a `use` statement's body now shares the one home the other two do.**
   `lexer::scan_use_statement` declares itself *the one place both interpret what is a `use` statement's body
   identically* — and `pub_use_statements` re-spelled it, so it carried neither the shared guard nor the

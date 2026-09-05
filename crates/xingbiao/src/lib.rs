@@ -60,8 +60,9 @@ pub fn find_package<'a>(metadata: &'a Value, package: &str) -> Option<&'a Value>
 }
 
 /// Whether a `cargo metadata` target's `kind` array contains `wanted` — the one-target shape
-/// check shared by [`crate_root_file`] (picking one library/bin target) and
-/// [`member_root_files`] (filtering every library/bin target across the workspace).
+/// check shared by [`crate_root_file`] (picking one library/bin target) and [`crate_root_files`]
+/// (every library/bin target of one package), through which [`member_root_files`] reaches it for the
+/// whole workspace.
 fn target_has_kind(target: &Value, wanted: &str) -> bool {
     target["kind"]
         .as_array()
@@ -298,24 +299,15 @@ pub fn member_src_dirs(metadata: &Value) -> Vec<PathBuf> {
 
 /// Every workspace member library, proc-macro, and binary crate-root source file reported by Cargo.
 pub fn member_root_files(metadata: &Value) -> Vec<PathBuf> {
+    // **Which targets have a governable crate root is [`crate_root_files`]'s question**, and it was
+    // spelled here a second time: the same `LIBRARY_KINDS`-or-`bin` filter over the same `src_path` read.
+    // One of the two would have moved without the other the next time a target kind was admitted. What is
+    // this function's own is the SCOPE — every package rather than one — and the ordering: `crate_root_files`
+    // dedups within a package by first appearance, and this sorts across packages so the corpus is
+    // deterministic whatever order cargo lists them in.
     let mut roots: Vec<PathBuf> = metadata["packages"]
         .as_array()
-        .map(|packages| {
-            packages
-                .iter()
-                .flat_map(|package| {
-                    package["targets"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .filter(|target| {
-                            LIBRARY_KINDS.iter().any(|k| target_has_kind(target, k))
-                                || target_has_kind(target, "bin")
-                        })
-                        .filter_map(|target| target["src_path"].as_str().map(PathBuf::from))
-                })
-                .collect()
-        })
+        .map(|packages| packages.iter().flat_map(crate_root_files).collect())
         .unwrap_or_default();
     roots.sort();
     roots.dedup();
