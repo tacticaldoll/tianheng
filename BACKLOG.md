@@ -2265,31 +2265,31 @@ consumer for an undemonstrated deduplication.
   `jq`, which reads to EOF, and in the one `head` and the one `grep` the reaction already names. No stage
   reads a value through some other program that exits early.
 
-- **WATCH: a byte scanner over Rust's lexical surface keeps meeting spellings.** *Observed pressure:*
-  `louke`'s `path_meta_values` answers one question — which positions in a `cfg_attr` span are applied
-  module targets — and five consecutive adversarial reviews each found a spelling it answered wrong. In
-  order: the first `path` alone was taken and the rest dropped; a flat predicate `path` was taken as a
-  target; a compound predicate's own comma advanced the surrounding phase; a qualified `foo::cfg_attr`
-  matched on its last identifier; `foo::/**/cfg_attr` defeated a look-behind over whitespace; and
-  `foo::r#cfg_attr` split one segment into three scanner events. Each repair was small and correct, each
-  was measured, and each was followed by another spelling.
+- **WATCH: `path_meta_values` answers a lexical question with a byte scanner.** *Observed pressure:*
+  the reader decides which positions in a `cfg_attr` span are applied module targets, and every property
+  that decision rests on is lexical — where a group's predicate ends, whether a group is a `cfg_attr`'s,
+  whether a segment is reached through `::`, and what one identifier is. Each is answered from bytes rather
+  than from a parse, and a shape answered wrong produces a **clean** verdict over a file no build compiles.
 
-  *Observation source:* the five review rounds themselves, and the directions now pinning every shape —
+  *Observation source:* the directions that pin the corpus as it stands, each carrying the run in which the
+  reader before it answered `Clean` over such a file —
   `a_cfg_attr_predicate_is_not_an_applied_module_target`,
-  `a_path_inside_a_compound_predicate_is_still_a_predicate`, `a_path_qualified_look_alike_is_not_cfg_attr`
-  over three spellings, `an_unqualified_raw_cfg_attr_is_still_the_built_in`, and the nested-union
-  direction. Each carries the run that showed the previous reader answering `Clean` over a file no build
-  compiles.
+  `a_path_inside_a_compound_predicate_is_still_a_predicate`,
+  `a_path_qualified_look_alike_is_not_cfg_attr` over three qualification spellings,
+  `an_unqualified_raw_cfg_attr_is_still_the_built_in`, and
+  `a_doubly_nested_cfg_attr_path_is_followed_the_same_as_a_single_nesting`. What each shows is not that a
+  repair happened but that the property is decidable and was decided wrongly from bytes.
 
-  *What this is not:* an argument for a parser. 漏刻 is the runtime dimension and its prod face is
-  std-light by a recorded decision; taking `syn` here is the amendment `PROJECT.md` refuses for 圭表 for
-  the same reason, and 圭表 answers this same question with a byte scanner correctly. *Risk:* each spelling
-  produced a false clean — the Core Contract's forbidden bug — reachable only by a declaration an adopter
-  would have to write deliberately, which is why every one was found by reading rather than by a report
-  from the field. *Next trigger:* a sixth spelling. If one arrives, the question stops being *which shape
-  next* and becomes whether this reader's corpus can be enumerated at all — which is the audit-cycle shape
-  `PROJECT.md` records, and it would be the instrument rather than another patch. *Authority:* engine.
-  *Compatibility:* patch; every repair so far narrows.
+  *What this is not:* an argument for a parser. 漏刻's prod face is std-light by a recorded decision;
+  taking `syn` here is the amendment `PROJECT.md` refuses for 圭表 for the same reason, and 圭表 answers
+  this same question with a byte scanner correctly. *Risk:* a wrong answer is a false clean — the Core
+  Contract's forbidden bug — reachable only through a declaration an adopter writes deliberately, which is
+  why every shape so far was found by reading rather than reported from the field. *Next trigger:* a
+  Rust-valid spelling of any of those four properties that the pinned corpus does not already contain. What
+  it would decide is whether this reader's corpus can be **enumerated** — the audit-cycle shape
+  `PROJECT.md` records, where the enumeration is generated and staleness-checked rather than
+  hand-maintained — instead of answered one shape at a time. *Authority:* engine. *Compatibility:* patch;
+  every repair to date narrows what is read.
 
 - **WATCH: no fixture separates 圭表's two states for an unreadable module target.** *Observed pressure:*
   the `is_file()` absence/unreadable collapse was repaired in all three dimensions by routing every read

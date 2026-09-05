@@ -74,9 +74,9 @@ them.
   later. Measured, before each: `Clean(Subject { declared: 2, reached: 1 })`.
 
   A third spelling followed: `foo::r#cfg_attr`, where a raw identifier became three scanner events — `r`,
-  `#`, `cfg_attr` — and cleared the qualification twice. A raw identifier is ONE segment naming the same
-  identifier it escapes, so the prefix is consumed with the segment and the name compared is what it
-  escapes. The control matters as much: an **unqualified** `r#cfg_attr` IS the built-in, so the narrowing
+  `#`, `cfg_attr` — and cleared the qualification twice. A raw identifier is ONE segment, and `r#` changes
+  a lexical spelling without changing the name, so the prefix is consumed with its segment and the name
+  compared is the one it spells. The control matters as much: an **unqualified** `r#cfg_attr` IS the built-in, so the narrowing
   must not cost a genuine nested group its applied metas.
 
   The built-in is the **single-segment** path, and whether a segment is reached through `::` is a fact about
@@ -85,9 +85,11 @@ them.
   requirement had said nothing about qualified attribute paths at all. All three spellings are one
   direction now, because replacing one with another is how the second was lost while the third was closed.
 
-  **Five review rounds, one scanner, five spellings.** `BACKLOG.md` carries that as a shape rather than as
-  five entries: what a sixth would decide is whether this reader's corpus can be enumerated, not which
-  shape comes next.
+  **The shape is filed rather than answered one spelling at a time.** Every property this reader's decision
+  rests on is lexical — where a predicate ends, whether a group is a `cfg_attr`'s, whether a segment is
+  qualified, what one identifier is — and each is answered from bytes. `BACKLOG.md` carries that with the
+  directions that pin the corpus as it stands: what a further Rust-valid spelling would decide is whether
+  the corpus can be enumerated, not which shape comes next.
 
   Two carriers of the previous repair went with it: the call-site comment still said the reader searches
   *anywhere in the argument span rather than parsing nesting structure*, which is the shape that read
