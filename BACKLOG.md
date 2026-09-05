@@ -799,6 +799,21 @@ consumer for an undemonstrated deduplication.
   work moved into a category the classifier ignores, which is the corpus defect this file records under its
   own name elsewhere — a reader whose subject is narrower than the claim it serves.
 
+  **Those figures were taken at 42 of the window's 100 landed changes, and one of them has since inverted.**
+  Re-derived 2026-09-06 over the same range with the command above: the classifier as written answers
+  `34/100 (34%)`, by carrier `100/100 (100%)`, and **21/100 (21%) touched a published crate's `src/`** —
+  above `0.5.0`'s 18%, where the reading at 42 had none. The window's second half is where the lexical
+  false-negative closures landed, and those are product. So the by-carrier verdict stands and *the share did
+  not fall* still holds on it, while the sentence carrying the sharpest form of the claim — no published
+  source at all — was true of an **unfinished window** and is not true of the window.
+
+  *That is this entry's own discipline broken by this entry.* Its observation source says the figure was run
+  *after the release was cut*, which is what makes a window's ratio a fact about a window; a mid-window
+  reading recorded in the same sentence shape is a figure attached to an incomplete corpus. Nothing
+  disagreed with it because nobody re-ran it. Both readings are kept, each stating the count it was taken
+  over, so the next comparison is against a number that says when. **The figure for this window is the one
+  taken after the cut, and neither of these is it.**
+
   ```bash
   git log --format='@%H' --name-only <previous-release-commit>..<release-branch> | awk '
     function flush() { if (seen) { t++; if (p) prod++; else if (g || d) gov++; if (!p && !g && d) doc++ } }
@@ -1717,9 +1732,20 @@ consumer for an undemonstrated deduplication.
   path-checked and none content-checked. Filing this entry as a smaller problem than before would have been
   the comfortable reading and the false one. *Promotion trigger:* a claim in `PROJECT.md` about the tree
   found false **after** this entry — the three found before it are the control and cannot stand as evidence
-  for themselves. **Not fired** (evaluated 2026-08-31; `PROJECT.md` moved eight times since the last
-  evaluation and its two decidable graph claims were re-derived — `xuanji` and `xingbiao` depend on no
-  workspace member, and all three dimensions depend on `xuanji`). *Version class:* not release-affecting. *Authority:* `projection-register`,
+  for themselves. **FIRED 2026-09-06, on a claim this file's own next line contradicts.** `PROJECT.md`'s
+  `xingbiao` crate description read *the static and semantic dimensions read the workspace through one source
+  of truth* — two dimensions, where all three carry it. **The falsifier is `AGENTS.self-law.md`**, which
+  renders each dimension's dependency rule from the declaration and is staleness-checked, so the membership
+  is read there rather than restated here; what the projection does not carry is that 漏刻 reaches it through
+  a cargo feature rather than an unconditional dependency, and **`PROJECT.md`'s own runtime-identity decision
+  already records that feature by name**. So the document disagreed with itself, and the falsifier was on the
+  same page rather than in the tree. Found by re-reading the file after `xingbiao`'s module doc was corrected for the identical
+  omission in the same window — one carrier repaired, this one not swept, which is the retirement-sweep class
+  whose corpus is *every tracked live file*. Repaired to name all three and the face 漏刻 reaches it through.
+  The parenthesised function list went with it: enumerating three exports of a substrate that now holds path
+  identity and the filesystem-answer policy is the same defect one level down. (Prior evaluation 2026-08-31,
+  not fired; its two decidable graph claims were re-derived and hold — `xuanji` and `xingbiao` depend on no
+  workspace member, and all three dimensions depend on `xuanji`.) *Version class:* not release-affecting. *Authority:* `projection-register`,
   which already enumerates the documents a claim could cite, and `self-law-projection`, which owns the one
   carrying the architecture. *Shape, if it fires:* not a detector over prose — that instrument was measured
   three times and rejected. The reachable direction is to make more of what the file asserts **citable**, so
@@ -1957,7 +1983,24 @@ consumer for an undemonstrated deduplication.
   rather than forgotten, and a trigger nobody can trip converts filing into forgetting. Bounded by the
   triggers being read by a person against the tree — which is how all four were found, and also why three
   windows passed before they were. *Promotion trigger:* a fifth instance, or a trigger found to have fired
-  unnoticed for a whole window. *Why not a rule that triggers name their corpus:* it would be a rule about
+  unnoticed for a whole window. **BOTH HALVES FIRED 2026-09-06, in one sweep.**
+
+  *A trigger fired unnoticed for a whole window.* The positional-reference entry's trigger — *a positional
+  reference appearing again after this sweep* — fired **four times** across the 0.6.0 window's 100 landed
+  changes, and one of the four already pointed at the wrong entry. Nothing surfaced it until the triggers
+  were read against the window on purpose. That is the exact shape this half was written to catch, and what
+  it caught is that reading them is an act somebody has to schedule.
+
+  *And a fifth instance.* The entry sorting triggers into swept and witnessed named only the direction where
+  a witness-only one turns out cheap, leaving it unable to fire on a swept verdict that no sweep could have
+  reached — a trigger narrower than the residue it guards, which is this entry's own class. It is widened,
+  and the widening's first instance was standing when it landed.
+
+  Two independent instances in one reading raises what the entry can conclude: the four originals were found
+  *one at a time by a reader who happened to hold both halves*, and these two were found by asking the
+  question of every trigger at once. **The reachable half is therefore the occasion rather than the
+  instrument** — a per-window sweep is a thing a person can be asked for, where a rule that triggers name
+  their corpus still needs the judgement-over-text this file has rejected. The re-decision is the steward's. *Why not a rule that triggers name their corpus:* it would be a rule about
   how prose is written with no reaction behind it, and the bar the 0.5.1 window set is that a rule needs a
   reachable instance — this has four, so the rule is earned, but its instrument is not, and the honest form
   is prose with the reason stated. *Version class:* patch; this file ships in no crate. *Authority:* this
