@@ -24,6 +24,16 @@ them.
 
 ### Documentation
 
+- **The head-branch re-read's own carriers, swept by the rule the same window widened.** The re-read landed
+  and the summary comment above it still said *the title and the base*; the shared positive control was still
+  named `an_unchanged_title_still_reaches_the_merge` while controlling three guards, and that title-only name
+  was carried by `PINNED-BY` into the head-branch scenario as its evidence; the bound's rationale still said
+  declaring it per input would be *two records*, a count the set had already outgrown; and the backlog said
+  `gh` offers no equivalent precondition for *either title or base*, omitting the endpoint just added and the
+  direction pinning it. The control is renamed for what it controls, and the rest state the criterion. Found
+  by an independent review, in the window whose own subject is that identifiers carry superseded claims
+  furthest — the rule was widened and then not applied to the change sitting beside it.
+
 - **The retirement sweep's corpus says where the residue actually was.** The rule read *every live document*
   — corrected once already, from naming two files to naming the class — and that still reads as the files a
   narration sits in. Measured across this window, a superseded claim survived in a test function name, in

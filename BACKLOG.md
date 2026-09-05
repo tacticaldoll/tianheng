@@ -2273,8 +2273,10 @@ consumer for an undemonstrated deduplication.
   the title re-read, and the review that found the residue cited a tracker whose trigger — *an act reaching
   either without the wrapper* — can never fire for a race reached only by going through it. *Current reaction
   or bound:* `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound`, and the
-  re-reads themselves, pinned by `a_title_edited_while_the_gate_ran_stops_before_the_merge` and
-  `a_base_changed_while_the_gate_ran_stops_before_the_merge`. *Risk:* the squash records a subject that is no
+  re-reads themselves, pinned by `a_title_edited_while_the_gate_ran_stops_before_the_merge`,
+  `a_base_changed_while_the_gate_ran_stops_before_the_merge` and
+  `a_head_branch_renamed_while_the_gate_ran_stops_before_the_merge`, with
+  `an_unmoved_pull_request_still_reaches_the_merge` as their shared control. *Risk:* the squash records a subject that is no
   longer the title, or lands on a base or comes from a head branch the gate never judged, in the one act that
   cannot be repaired —
   bounded by the window being a single API round trip and by the editor being a collaborator rather than an
@@ -2293,7 +2295,8 @@ consumer for an undemonstrated deduplication.
   has to resolve. The head branch was first left out on the premise that GitHub offers no way to change an
   existing pull request's head; an independent review refuted it — renaming a branch retargets the pull
   requests on it, so `headRefName` moves while `headRefOid` does not — and it is re-read on the same terms. What has **not** fired is the toolchain half — `gh` 2.97.0 offers
-  `--match-head-commit` and no equivalent for either title or base, re-measured 2026-09-01.
+  `--match-head-commit` and no equivalent for the title, the base or the head branch's name, re-measured
+  2026-09-01.
 
 - **WATCH: a merge or publish made outside the wrapper is not observed.** *Observed pressure:* both
   assertions guard the sanctioned path — the wrapper's `1 passed` and the reaction pinning the identifier it
