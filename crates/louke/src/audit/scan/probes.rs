@@ -282,7 +282,7 @@ pub(crate) fn inline_mod_bases(
     name: &str,
     child_base: &Path,
     file_dir: &Path,
-) -> Vec<(PathBuf, bool)> {
+) -> Result<Vec<(PathBuf, bool)>, String> {
     // The flag is "this base was reached through an ABSOLUTE `#[path]` literal", and it must ride with
     // the base rather than be recovered later. `Path::join` discards its receiver exactly when the
     // joinee is absolute, so an absolute literal makes the base itself absolute and the children
@@ -296,19 +296,19 @@ pub(crate) fn inline_mod_bases(
         None => {
             for rel in &attrs.cfg_attr_paths {
                 let candidate = file_dir.join(rel);
-                if candidate.is_dir() {
+                if is_directory(&candidate)? {
                     inline_bases.push((candidate, Path::new(rel).is_absolute()));
                 }
             }
             let conventional = child_base.join(name);
-            if inline_bases.is_empty() || conventional.is_dir() {
+            if inline_bases.is_empty() || is_directory(&conventional)? {
                 // A conventional base derives from the enclosing base; whether THAT was absolute-reached
                 // is the caller's `absolute_base`, ORed in at the recursion below.
                 inline_bases.push((conventional, false));
             }
         }
     }
-    inline_bases
+    Ok(inline_bases)
 }
 
 /// A recursion-depth cap for [`collect_scope_modules`]'s native-stack descent into nested
@@ -435,7 +435,7 @@ pub(crate) fn collect_scope_modules(
                     // — i.e. `inline_base` becomes the body's `file_dir` too, NOT the enclosing
                     // `file_dir`. (Threading the enclosing `file_dir` here dropped the inline
                     // component and read a same-named orphan — a false negative.)
-                    let inline_bases = inline_mod_bases(&attrs, name, child_base, file_dir);
+                    let inline_bases = inline_mod_bases(&attrs, name, child_base, file_dir)?;
                     for (inline_base, base_is_absolute) in &inline_bases {
                         collect_scope_modules(
                             bytes,
@@ -496,6 +496,45 @@ pub(crate) fn collect_scope_modules(
     Ok(())
 }
 
+/// Whether `path` is a regular file, or why this reader could not tell.
+///
+/// **`is_file()` answers `false` for two different facts**, and one of them is not an absence. Measured on
+/// this machine as uid 1000: a directory at mode `000` containing `mod.rs` gives
+/// `Path::is_file("gated/mod.rs") == false` with `fs::metadata(..).err().kind() == PermissionDenied`, while
+/// `Path::is_dir("gated") == true`. Read through `is_file()` alone, that target is *absent* — and an absent
+/// target is what a `#[cfg]`-gated or `cfg_if!`-arm declaration is allowed to have, so the whole subtree
+/// behind it was tolerated and never audited. A probe inside it is a probe nobody looked for, which is the
+/// false negative the Core Contract forbids.
+///
+/// The three states were already here: `Ok(Some(..))`, `Ok(None)` and `Err` are what the resolvers return,
+/// and the fix is the routing rather than a new type — *unreadable* belongs on the channel that fails loud,
+/// beside the ambiguity it already carries, not on the one a caller is allowed to tolerate.
+fn is_regular_file(path: &Path) -> Result<bool, String> {
+    match std::fs::metadata(path) {
+        Ok(found) => Ok(found.is_file()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(err) => Err(format!(
+            "cannot read '{}' to decide whether it backs a module — {err}; an unreadable target is not an \
+             absent one, and tolerating it would leave whatever it holds unaudited",
+            path.display()
+        )),
+    }
+}
+
+/// Whether `path` is a directory, or why this reader could not tell — [`is_regular_file`]'s sibling, for
+/// the same reason and with the same routing.
+fn is_directory(path: &Path) -> Result<bool, String> {
+    match std::fs::metadata(path) {
+        Ok(found) => Ok(found.is_dir()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(err) => Err(format!(
+            "cannot read '{}' to decide whether it holds a module's children — {err}; an unreadable \
+             directory is not an absent one",
+            path.display()
+        )),
+    }
+}
+
 /// Resolve a `mod name;` to its conventional file and the base directory for its own children:
 /// `Ok(Some(..))` for `<base>/name.rs` or `<base>/name/mod.rs`, `Ok(None)` when neither exists (the
 /// caller decides whether an absent file is a legitimate `#[cfg]`-gated skip or a hard error), and
@@ -506,7 +545,7 @@ pub(crate) fn resolve_external_module(
 ) -> Result<Option<(PathBuf, PathBuf)>, String> {
     let flat = base.join(format!("{name}.rs"));
     let nested = base.join(name).join("mod.rs");
-    let file = match (flat.is_file(), nested.is_file()) {
+    let file = match (is_regular_file(&flat)?, is_regular_file(&nested)?) {
         (true, false) => flat,
         (false, true) => nested,
         (true, true) => {
@@ -548,7 +587,7 @@ pub(crate) fn resolve_path_module(
     rel: &str,
 ) -> Result<Option<(PathBuf, PathBuf, bool)>, String> {
     let file = base.join(rel);
-    if !file.is_file() {
+    if !is_regular_file(&file)? {
         return Ok(None);
     }
     let next_base = file.parent().unwrap_or(base).to_path_buf();

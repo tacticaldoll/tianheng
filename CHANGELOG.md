@@ -30,11 +30,37 @@ them.
   wherever a baseline is kept, and re-apply any `owner` / `tracker` annotations onto the newly observed
   facts. `#[cfg_attr(unix, cfg_attr(a, path = "x.rs"), cfg_attr(b, path = "y.rs"))]` is the shape; several
   SEPARATE `cfg_attr` attributes carrying one `path` each were already unioned and are unaffected.
+- **Make every module target readable, or expect exit `2` naming it.** A module file or directory the audit
+  cannot open is no longer tolerated as an absent one. Where a `#[cfg]`-gated declaration sat over an
+  unreadable subtree, the audit previously reported the seam inside it as unprobed — or passed clean where
+  that seam was probed elsewhere — and now refuses, naming the path and the reason. Fix the permission, or
+  exclude the path from the audited roots.
 - **Nothing to do if such a declaration previously stopped the run.** Where no conventional file backed it,
   the check reported the module unresolvable and exited `2`. That was a false refusal over code rustc
   accepts; it now resolves, and no baseline existed to move.
 
 ### Semantic and runtime
+
+- **BREAKING** — **A module target this reader cannot read is refused, never tolerated as an absent one.**
+  `is_file()` answers `false` for two different facts. Measured as uid 1000: a directory at mode `000`
+  holding `mod.rs` gives `Path::is_file("gated/mod.rs") == false` with
+  `fs::metadata(..).err().kind() == PermissionDenied`, while `Path::is_dir("gated") == true`. Read through
+  `is_file()` alone the target is *absent* — which is exactly what a `#[cfg]`-gated declaration is allowed
+  to have, so the whole subtree behind it was tolerated and never audited.
+
+  The visible half is worse than a silent skip. Measured: the audit exited **1** reporting
+  *declared seam 'gated' has no configured probe marker* — over a file that declares one. The probe is
+  there and the directory could not be opened, so an adopter is told their correct code violates, with a
+  cause that sends them to the wrong place. Where the same seam is probed elsewhere the verdict is `0`
+  instead and the subtree is simply unaudited.
+
+  The three states were already present: `Ok(Some(..))`, `Ok(None)` and `Err` are what the resolvers
+  return, so the repair is the **routing** rather than a new type — *unreadable* belongs on the channel
+  that fails loud, beside the ambiguity it already carries, not on the one a caller may tolerate.
+
+  **Why a minor:** a tree whose seams are probed elsewhere was green over an unreadable subtree and now
+  exits `2`. That is work the adopter did not choose, and *"the defect was ours" does not spare them
+  the work*.
 
 - **BREAKING** — **Every `path` in one `cfg_attr` span is read, where two dimensions took the first.**
   Measured against rustc (edition 2021, `--crate-type lib`), this compiles cleanly on Linux with only

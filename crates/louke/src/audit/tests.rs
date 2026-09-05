@@ -315,6 +315,83 @@ fn a_path_substring_in_a_comment_or_attr_does_not_drop_a_reachable_module() {
     );
 }
 
+/// A module target this reader cannot read is refused, never tolerated as an absent one.
+///
+/// **`is_file()` answers `false` for two different facts.** Measured on this machine as uid 1000: a
+/// directory at mode `000` holding `mod.rs` gives `Path::is_file("gated/mod.rs") == false` with
+/// `fs::metadata(..).err().kind() == PermissionDenied`, while `Path::is_dir("gated") == true`. Read
+/// through `is_file()` alone the target is *absent* — and an absent target is exactly what a
+/// `#[cfg]`-gated declaration is allowed to have, so the whole subtree behind it was tolerated and never
+/// audited. Whatever probes it holds are probes nobody looked for.
+///
+/// The declaration here is `#[cfg]`-gated on purpose: that is the arm that TOLERATES an absence, so it is
+/// where a collapse of the two facts does its damage. An ungated one already failed loud for the wrong
+/// reason.
+///
+/// Negative run, before the two facts were separated — and it is worse than a silent skip:
+///
+/// ```text
+/// assertion `left == right` failed: an unreadable module target must stop the audit rather than be
+/// tolerated as absent: Violations(Report { violations: [Violation { kind: Runtime, target: "gated",
+/// finding: "declared seam 'gated' has no configured probe marker", … }] })
+///   left: 1
+///  right: 2
+/// ```
+///
+/// Exit `1`, reporting that the seam has **no probe** — over a file that declares one. The probe is there
+/// and the audit could not open the directory holding it, so the adopter is told their correct code
+/// violates, with a cause that sends them to the wrong place. Where the same seam is probed elsewhere the
+/// verdict is `0` instead and the subtree is simply unaudited. Both follow from one collapse.
+#[test]
+#[cfg(unix)]
+fn a_module_target_this_reader_cannot_read_is_not_an_absent_one() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tb = TempBase::new("unreadable-target");
+    let root = tb.source("lib.rs", "#[cfg(feature = \"gated\")]\nmod gated;");
+    let dir = root
+        .parent()
+        .expect("the source root has a directory")
+        .join("gated");
+    std::fs::create_dir_all(&dir).expect("create the module directory");
+    std::fs::write(
+        dir.join("mod.rs"),
+        "fn live() { assert_boundary!(\"gated\", o); }",
+    )
+    .expect("write the module file");
+
+    // Root bypasses mode bits entirely, so this direction would pass for a reason unrelated to the
+    // change. Refuse to skip in silence where the suite is meant to be exhaustive.
+    let restore = std::fs::metadata(&dir)
+        .expect("read the mode")
+        .permissions();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o000))
+        .expect("restrict the directory");
+    let readable_anyway = dir.join("mod.rs").is_file();
+    let outcome = if readable_anyway {
+        None
+    } else {
+        Some(tb.audit(
+            &[boundary("gated", Severity::Enforce)],
+            std::slice::from_ref(&root),
+        ))
+    };
+    std::fs::set_permissions(&dir, restore).expect("restore the mode");
+
+    let Some(outcome) = outcome else {
+        assert!(
+            std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+            "mode 000 did not restrict this target — running as root would make this direction vacuous"
+        );
+        return;
+    };
+    assert_eq!(
+        outcome.exit_code(),
+        2,
+        "an unreadable module target must stop the audit rather than be tolerated as absent: {outcome:?}"
+    );
+}
+
 #[test]
 fn an_unconditional_path_attribute_is_followed_to_its_target() {
     let tb = TempBase::new("path-attr");
