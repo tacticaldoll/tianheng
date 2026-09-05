@@ -2265,24 +2265,33 @@ consumer for an undemonstrated deduplication.
   `jq`, which reads to EOF, and in the one `head` and the one `grep` the reaction already names. No stage
   reads a value through some other program that exits early.
 
-- **WATCH: the title race the wrapper can only narrow.** *Observed pressure:* the merge wrapper judges three
-  inputs and pins two by construction — the body travels as the value the gate judged, and the commit set
-  through `--match-head-commit`, which GitHub decides atomically. The title is the third, and `gh` offers no
-  `--match-title`, so it can only be re-read after the gate. That shrinks the window from a whole `cargo
-  test` to one API call and leaves it open inside that call. *Observation source:* the round that added the
-  re-read, and the review that found the residue cited a tracker whose trigger — *an act reaching either
-  without the wrapper* — can never fire for a race reached only by going through it. *Current reaction or
-  bound:* `repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound`, and the re-read
-  itself, pinned by `a_title_edited_while_the_gate_ran_stops_before_the_merge`. *Risk:* the squash records a
-  subject that is no longer the title, in the one act that cannot be repaired — bounded by the window being
-  a single API round trip and by the editor being a collaborator rather than an adversary. *Next trigger:*
-  `gh` gaining a `--match-title`, or another judged input arriving that can only be re-read — the second
-  would make this a shape rather than an instance. *Authority:* engine. *Compatibility:* patch; the wrapper
+- **WATCH: the re-read races the wrapper can only narrow.** *Observed pressure:* the merge wrapper pins what
+  the merge **records** by construction — the body travels as the value the gate judged, and the commit set
+  through `--match-head-commit`, which GitHub decides atomically. What it is **judged against** can only be
+  re-read after the gate, because `gh` offers no equivalent precondition. That shrinks the window from a whole
+  `cargo test` to one API call and leaves it open inside that call. *Observation source:* the round that added
+  the title re-read, and the review that found the residue cited a tracker whose trigger — *an act reaching
+  either without the wrapper* — can never fire for a race reached only by going through it. *Current reaction
+  or bound:* `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound`, and the
+  re-reads themselves, pinned by `a_title_edited_while_the_gate_ran_stops_before_the_merge` and
+  `a_base_changed_while_the_gate_ran_stops_before_the_merge`. *Risk:* the squash records a subject that is no
+  longer the title, or lands on a base the gate never judged, in the one act that cannot be repaired —
+  bounded by the window being a single API round trip and by the editor being a collaborator rather than an
+  adversary. *Next trigger:* `gh` gaining a server-decided precondition for either. *Authority:* engine.
+  *Compatibility:* patch; the wrapper
   ships in no crate.
 
-  **Not fired, re-measured 2026-09-01 against the installed toolchain.** `gh` 2.97.0 offers
-  `--match-head-commit` and no `--match-title`, and no second judged input has arrived that can only be
-  re-read.
+  **Half fired, 2026-09-05: the second judged input arrived, so this is a shape rather than an instance.**
+  The prior trigger read *another judged input arriving that can only be re-read — the second would make this
+  a shape rather than an instance*, and the base branch is that input: the one message exception is named by
+  where the squash lands, `gh pr merge` takes no base of its own, and the base was captured once as evidence
+  and never looked at again. The re-read is built and pinned; the bound is **widened rather than duplicated**,
+  because the stop is a property of a client-side re-read not being atomic with the act it precedes, reached
+  through whichever inputs are re-read. Its id moved with it — the retired spelling named the title alone, and
+  is left to the commit and the dated changelog entry rather than written here, where a bare bound reference
+  has to resolve. The head branch was considered and left out: GitHub offers no way to change an existing
+  pull request's head, so a guard for it could be made to refuse only against a fixture. What has **not** fired is the toolchain half — `gh` 2.97.0 offers
+  `--match-head-commit` and no equivalent for either title or base, re-measured 2026-09-01.
 
 - **WATCH: a merge or publish made outside the wrapper is not observed.** *Observed pressure:* both
   assertions guard the sanctioned path — the wrapper's `1 passed` and the reaction pinning the identifier it

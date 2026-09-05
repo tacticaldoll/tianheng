@@ -151,7 +151,18 @@ elif [[ $1 == pr && $2 == view && $* == *"--json baseRefName"* ]]; then
     # The base the squash lands on. The gate takes it as evidence because `AGENTS.md` states the one message
     # exception as the release-branch-to-`main` squash, and a subject is not a destination. These fixtures
     # merge onto a release branch, which is what an ordinary squash does.
-    printf '%s\n' "${FAKE_GH_BASE:-release/0.0.0}"
+    #
+    # Read TWICE, for the same reason the title is: it is one end of a relation the gate judged, and a base
+    # edited between the two makes the verdict in hand a verdict about a destination the merge will not use.
+    # The counter lives on disk because "the second call" has to mean second across two separate processes.
+    calls=$(cat "$FAKE_BASE_CALLS" 2>/dev/null || printf '0')
+    calls=$((calls + 1))
+    printf '%s' "$calls" > "$FAKE_BASE_CALLS"
+    if [[ $FAKE_GH_MODE == base-moved ]] && ((calls >= 2)); then
+        printf '%s\n' 'main'
+    else
+        printf '%s\n' "${FAKE_GH_BASE:-release/0.0.0}"
+    fi
 elif [[ $1 == pr && $2 == view && $* == *"--json title"* ]]; then
     # The wrapper reads the title TWICE: once as evidence for the gate, once after it, so the subject it is
     # about to record is still the title. Answering the same string both times is what left the second read
@@ -239,7 +250,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | invalid-number | unreadable-head | unreadable-base | unreadable-head-branch | unreadable-body | body-moved | title-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
+    subjects | invalid-number | unreadable-head | unreadable-base | unreadable-head-branch | unreadable-body | body-moved | title-moved | base-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -323,6 +334,7 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
         .env("FAKE_CARGO_LOG", &cargo_log)
         .env("FAKE_COMMITS", &commits)
         .env("FAKE_TITLE_CALLS", scratch.join("title-calls"))
+        .env("FAKE_BASE_CALLS", scratch.join("base-calls"))
         .env("TMPDIR", &tmp);
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
@@ -1166,10 +1178,12 @@ fn the_merge_records_the_body_the_gate_judged_not_the_file_it_came_from() {
 
 /// A title edited while the gate ran stops the wrapper, as a cannot-judge.
 ///
-/// **The guard this exercises was shipped without one.** The wrapper judges three inputs and pins two of them
-/// by construction — the body travels as the value the gate judged, the commit set through
-/// `--match-head-commit` — and the third was captured once. Re-reading it closed that, and the controlled
-/// `gh` answered the same string on every call, so no direction could tell the guard from its absence.
+/// **The guard this exercises was shipped without one.** The wrapper pins what the merge records by
+/// construction — the body travels as the value the gate judged, the commit set through
+/// `--match-head-commit` — and what the merge is judged against has to be re-read instead. The title was
+/// captured once; re-reading it closed that, and the controlled `gh` answered the same string on every call,
+/// so no direction could tell the guard from its absence. `a_base_changed_while_the_gate_ran_stops_before_the_merge`
+/// is the same shape, found by reading this comment's own criterion against what the wrapper had grown.
 ///
 /// The class is a **cannot-judge**, not a disagreement: the gate did not find the subject wrong, it found it
 /// right against a title that no longer exists, so what the wrapper holds is a verdict about a vanished
@@ -1202,10 +1216,60 @@ fn a_title_edited_while_the_gate_ran_stops_before_the_merge() {
     );
 }
 
+/// A base changed while the gate ran stops the wrapper, as a cannot-judge.
+///
+/// **The base is the other end of the same relation the title is, and it was filed on the value side.** The
+/// one message exception is the release-branch-to-`main` squash, so admission to it is decided by the base
+/// and the head branch together — not by the subject, which is not a destination. The base is therefore
+/// evidence the gate judged, and `gh pr merge` takes no base of its own: it lands wherever the pull request
+/// points **at merge time**. A base edited after the gate ran leaves an approved empty-body release message
+/// landing on a destination that was never judged, and the reverse — a release triple approved, then
+/// re-pointed at a development branch — carries the exception to a squash that is not one.
+///
+/// The head branch is deliberately **not** re-read beside it. GitHub offers no way to change an existing pull
+/// request's head, and `--match-head-commit` already pins the head object; a guard for it could be made to
+/// fail only against this stub, never against the tool, so it would be a guard nothing has been seen to
+/// refuse.
+///
+/// Negative run, before the post-gate base re-read existed:
+///
+/// ```text
+/// thread 'a_base_changed_while_the_gate_ran_stops_before_the_merge' panicked:
+/// a moved base is a cannot-judge, not a disagreement; got Some(0) with stderr ""
+/// ```
+///
+/// Exit `0`: the wrapper reached `pr merge` and completed, recording the message it had approved for the
+/// old base.
+#[test]
+fn a_base_changed_while_the_gate_ran_stops_before_the_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "base-moved", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a moved base is a cannot-judge, not a disagreement; got {:?} with stderr {:?}",
+        run.status.code(),
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("release/0.0.0") && run.stderr.contains("main"),
+        "the refusal must name both bases so an operator can see what moved, got {:?}",
+        run.stderr
+    );
+    assert!(
+        !run.gh_log.lines().any(|line| line.starts_with("pr merge")),
+        "the merge must not be reached, got {:?}",
+        run.gh_log
+    );
+}
+
 /// The control: an unchanged title still reaches the merge.
 ///
 /// Without it the direction above is satisfied by a wrapper that refuses every run, and the re-read would be
-/// indistinguishable from a stop-everything guard.
+/// indistinguishable from a stop-everything guard. It is the control for the base re-read too: both guards
+/// sit on the same path, so a wrapper refusing every run would satisfy either one alone.
 #[test]
 fn an_unchanged_title_still_reaches_the_merge() {
     let Some(root) = workspace_root() else {

@@ -161,19 +161,22 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::unpinned(
             BoundId::new(
-                "repository-checks/a-title-edited-inside-the-re-read-itself-a-stated-bound",
+                "repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound",
             ),
-            "a pull request title changing between the wrapper's post-gate re-read of it and `gh pr merge`",
+            "a pull request title or base branch changing between the wrapper's post-gate re-read of it and \
+             `gh pr merge`",
             Extent::Reached(Reached::UnderReacts {
-                because: "the wrapper pins two of its three judged inputs by construction -- the body \
-                          travels as the value the gate judged, and the commit set is pinned through \
-                          `--match-head-commit`, which the server decides atomically. `gh` offers no \
-                          equivalent for the title, so a re-read shrinks the exposure from a whole \
-                          `cargo test` to one API call rather than closing it"
+                because: "the wrapper pins what the merge RECORDS by construction -- the body travels as the \
+                          value the gate judged, and the commit set is pinned through `--match-head-commit`, \
+                          which the server decides atomically. What the merge is JUDGED AGAINST has to be \
+                          re-read instead, and `gh` offers no equivalent precondition for either the title or \
+                          the base, so a re-read shrinks the exposure from a whole `cargo test` to one API \
+                          call rather than closing it. One bound rather than one per input: the stop is a \
+                          property of a client-side re-read not being atomic with the act it precedes"
                     .into(),
                 owner: Owner::Engine,
             }),
-            "`BACKLOG.md` — *the title race the wrapper can only narrow*",
+            "`BACKLOG.md` — *the re-read races the wrapper can only narrow*",
         ),
         BoundDecl::pinned(
             BoundId::new(

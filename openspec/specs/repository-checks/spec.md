@@ -1709,12 +1709,22 @@ before that.
   rather than using it unguarded
 - **UNPINNED** `BACKLOG.md` — *a merge or publish made outside the wrapper is not observed*
 
-The subject SHALL be re-read against the pull request's title **after** the gate, and a title that moved
-SHALL be a **cannot-judge**. The wrapper judges three inputs and pins two of them by construction — the body
-travels as the value the gate judged, and the commit set through `--match-head-commit`, which the server
-decides atomically. The title was captured once, so an edit during the gate left the merge recording a
-subject that is no longer the title. The class is cannot-judge rather than violation because the gate did not
-find the subject wrong: it found it right, against a title that no longer exists.
+**Every judged input the merge is decided AGAINST SHALL be re-read after the gate, and one that moved SHALL
+be a cannot-judge.** The division is by that question rather than by a count of inputs: what the merge
+**records** is pinned by construction — the body travels as the value the gate judged, and the commit set
+through `--match-head-commit`, which the server decides atomically — while what the merge is **judged
+against** holds only for as long as nobody edits it. The title is one such input: `subject == title` is a
+relation, and it was captured once, so an edit during the gate left the merge recording a subject that is no
+longer the title. The **base** is another: `gh pr merge` takes no base of its own and lands wherever the pull
+request points at merge time, so a base edited after the gate leaves an approved empty-body release message
+landing on a destination nothing judged — and carries the one message exception to a squash that is not one.
+The class is cannot-judge rather than violation in both cases, because the gate did not find the input wrong:
+it found it right, against something that no longer exists.
+
+The **head branch** SHALL NOT be re-read, and the asymmetry is deliberate rather than an omission. It is the
+exception's other endpoint, but GitHub offers no way to change an existing pull request's head and
+`--match-head-commit` already pins the head object, so a guard for it could be made to refuse only against a
+fixture and never against the tool. A guard nothing has been seen to refuse is not one.
 
 #### Scenario: A title edited while the gate ran
 
@@ -1723,16 +1733,29 @@ find the subject wrong: it found it right, against a title that no longer exists
 - **PINNED-BY** `a_title_edited_while_the_gate_ran_stops_before_the_merge`
 - **PINNED-BY** `an_unchanged_title_still_reaches_the_merge`
 
-#### Scenario: A title edited inside the re-read itself — a stated bound
+#### Scenario: A base edited while the gate ran
 
-- **WHEN** the pull request's title changes between the wrapper's post-gate re-read of it and `gh pr merge`
-- **THEN** nothing observes it, and the merge records the subject the gate approved against a title that has
-  since moved. The wrapper judges three inputs and pins two of them by construction — the body travels as
-  the value the gate judged, and the commit set is pinned through `--match-head-commit`, which GitHub
-  decides atomically. `gh` offers no `--match-title`, so the third can only be re-read, which shrinks the
-  exposure from a whole `cargo test` to one API call rather than closing it. Closing it needs a
-  server-decided precondition this tool does not offer
-- **UNPINNED** `BACKLOG.md` — *the title race the wrapper can only narrow*
+- **WHEN** the pull request's base branch differs between the wrapper's evidence read and its post-gate
+  re-read
+- **THEN** the wrapper stops before `gh pr merge`, exits `2`, and names both bases
+- **AND** a re-read that cannot be performed is its own cannot-judge: not knowing where the squash lands is a
+  different fact from knowing it moved
+- **PINNED-BY** `a_base_changed_while_the_gate_ran_stops_before_the_merge`
+- **PINNED-BY** `an_unchanged_title_still_reaches_the_merge`
+
+#### Scenario: An input edited inside its own post-gate re-read — a stated bound
+
+- **WHEN** the pull request's title or base branch changes between the wrapper's post-gate re-read of it and
+  `gh pr merge`
+- **THEN** nothing observes it, and the merge proceeds against the value the gate approved. What the merge
+  records is pinned by construction — the body travels as the value the gate judged, and the commit set
+  through `--match-head-commit`, which GitHub decides atomically. `gh` offers no equivalent for either the
+  title or the base, so both can only be re-read, which shrinks the exposure from a whole `cargo test` to one
+  API call rather than closing it. Closing it needs a server-decided precondition this tool does not offer
+- **AND** this is one bound rather than one per input. The stop is a property of a **client-side re-read** —
+  it cannot be atomic with the act it precedes — so it is reached through whichever inputs are re-read, and
+  declaring it once per input would be two records of one fact that must then agree
+- **UNPINNED** `BACKLOG.md` — *the re-read races the wrapper can only narrow*
 
 ### Requirement: The squash-message gate SHALL refuse a shape by what it is, not by what it resembles
 
