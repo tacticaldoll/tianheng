@@ -41,11 +41,38 @@ them.
   unreadable subtree, the audit previously reported the seam inside it as unprobed — or passed clean where
   that seam was probed elsewhere — and now refuses, naming the path and the reason. Fix the permission, or
   exclude the path from the audited roots.
-- **Nothing to do if such a declaration previously stopped the run.** Where no conventional file backed it,
+- **Nothing to do where a multi-`path` `cfg_attr` declaration previously stopped the run.** Where no conventional file backed it,
   the check reported the module unresolvable and exited `2`. That was a false refusal over code rustc
   accepts; it now resolves, and no baseline existed to move.
 
 ### Semantic and runtime
+
+- **The claims that repair made about its own work, corrected where the code refuses them.** An independent
+  adversarial review of this window found four defects in changes that had already merged, three of them
+  self-inflicted by the two commits above and every one passing a green Definition of Done and eight CI
+  jobs.
+
+  *`NotFound` was taken for the only absence.* Measured: with `src/gated` a plain file,
+  `fs::metadata("src/gated/mod.rs")` answers `NotADirectory` — the target cannot exist, so it is absent, and
+  routing it to the loud channel refused a `#[cfg]`-gated declaration over a tree rustc compiles cleanly.
+  That is the class the same window closed one change earlier. `is_absence` carries the criterion now: an
+  error saying *this path cannot name anything* is an absence, one saying *this reader could not find out*
+  is not. `FilesystemLoop` stays loud deliberately, matching `read_dir_entries_sorted`'s own policy.
+
+  *A three-arm distinction had two reachable arms.* `OwnerUnnameable::Unresolved` named a path resolving to
+  no candidate, which no producer can construct — `resolve_path_all` with the current-module fallback always
+  yields at least one. Measured: with that arm's clause replaced by a panic, the whole suite stays green.
+  A name with no reaction is what the drift law forbids, so it is gone, and *three arms rather than two,
+  deliberately* is withdrawn with it.
+
+  *And the causes reached the wrong refusals.* A trait impl whose **trait** would not render, with a self
+  type rendering perfectly, was told *its syntax has no supported rendering* about the owner — which is
+  exactly the defect the causes exist to close, produced by the change that closed it. Both trait refusals
+  take the trait sentence now.
+
+  The `list` projection guard's summary is narrowed to what a fixture-derived corpus can hold; a Migration
+  bullet's antecedent, a hand-written count of one live set, a false claim about a scanner skipping its
+  predicate, and two ordinals for one event are corrected with it.
 
 - **An owner that cannot be named says which of three things was met.** A self type is unnameable because
   its path resolves to no candidate, because two mutually-exclusive `#[cfg]` branches bind one alias to
@@ -88,7 +115,8 @@ them.
   **Why a minor:** an adopter whose declaration carries `r#` anywhere has a baseline that no longer
   describes their tree. One carrying none is unaffected — every key is byte-identical.
 
-- **BREAKING** — **A module target this reader cannot read is refused, never tolerated as an absent one.**
+- **BREAKING** — **A module target this reader cannot read is refused, never tolerated as an absent one —
+  in 漏刻 only.**
   `is_file()` answers `false` for two different facts. Measured as uid 1000: a directory at mode `000`
   holding `mod.rs` gives `Path::is_file("gated/mod.rs") == false` with
   `fs::metadata(..).err().kind() == PermissionDenied`, while `Path::is_dir("gated") == true`. Read through
@@ -108,6 +136,13 @@ them.
   **Why a minor:** a tree whose seams are probed elsewhere was green over an unreadable subtree and now
   exits `2`. That is work the adopter did not choose, and *"the defect was ours" does not spare them
   the work*.
+
+  **What this does NOT reach, stated rather than left to be found.** The same `is_file()` collapse stands in
+  渾儀 (`module_resolve.rs`, `scan/items.rs`) and 圭表 (`reachability/walk.rs`, whose `!flat.is_file() &&
+  !nested.is_file()` arm is the identical cfg-gated tolerance this repaired). One of three dimensions moved,
+  in a window whose own cfg_attr entry argues the three must agree about module resolution. `BACKLOG.md`
+  carries the remainder with its measurement; it is not closed here because each dimension needs its own
+  falsifier and the repair is behaviour, not prose.
 
 - **BREAKING** — **Every `path` in one `cfg_attr` span is read, where two dimensions took the first.**
   Measured against rustc (edition 2021, `--crate-type lib`), this compiles cleanly on Linux with only
@@ -199,8 +234,8 @@ them.
   two through a helper whose own doc read *both parse sites flatten it the same way, so the rule is written
   once*, in a file carrying four of them. A claim about the code, wrong while the code was right. One owner
   now holds the flatten and the sentence; each caller keeps its own state or constructor, which is what
-  differs. Deleting the helper is what enumerated the callers: the compiler named a fifth site that a count
-  of them had missed.
+  differs. Deleting the helper is what enumerated its callers: a count of them said two, and the compiler named a
+  third.
 
   Two annexed doc comments moved with it — the paragraph describing `declared_dependencies` had been sitting
   above the helper, and `DEPENDENCY_KINDS`'s one-line doc above the enum before it. And `workspace_version`'s

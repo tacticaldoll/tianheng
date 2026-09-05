@@ -315,6 +315,51 @@ fn a_path_substring_in_a_comment_or_attr_does_not_drop_a_reachable_module() {
     );
 }
 
+/// A path component that is not a directory is an ABSENCE, not something this reader could not read.
+///
+/// **`NotFound` is not the only absence**, and the sibling direction's repair took it for the only one.
+/// Measured: with `src/gated` a plain file, `fs::metadata("src/gated/mod.rs")` answers `NotADirectory` —
+/// a path component that is not a directory cannot have children, so the target cannot exist. Routing that
+/// to the loud channel refused a `#[cfg]`-gated declaration over a tree rustc compiles cleanly.
+///
+/// Negative run, against the repair that matched only `NotFound`:
+///
+/// ```text
+/// exit 2: cannot read '…/gated/mod.rs' to decide whether it backs a module — Not a directory
+///         (os error 20); an unreadable target is not an absent one …
+/// ```
+///
+/// It is the class the sibling exists to close, one change after closing it.
+#[test]
+#[cfg(unix)]
+fn a_component_that_is_not_a_directory_is_an_absence() {
+    let tb = TempBase::new("not-a-directory");
+    let root = tb.source(
+        "lib.rs",
+        "fn live() { assert_boundary!(\"seam-x\", o); }\n#[cfg(feature = \"gated\")]\nmod gated;",
+    );
+    // A plain file where a module directory would be, so `gated/mod.rs` cannot exist and `gated.rs`
+    // does not: the declaration is cfg-gated, which is exactly the tolerance that covers it.
+    std::fs::write(
+        root.parent()
+            .expect("the source root has a directory")
+            .join("gated"),
+        "not a directory",
+    )
+    .expect("write the plain file");
+
+    let outcome = tb.audit(
+        &[boundary("seam-x", Severity::Enforce)],
+        std::slice::from_ref(&root),
+    );
+    assert_eq!(
+        outcome.exit_code(),
+        0,
+        "a component that is not a directory means the target is absent, which a cfg-gated declaration \
+         tolerates: {outcome:?}"
+    );
+}
+
 /// A module target this reader cannot read is refused, never tolerated as an absent one.
 ///
 /// **`is_file()` answers `false` for two different facts.** Measured on this machine as uid 1000: a

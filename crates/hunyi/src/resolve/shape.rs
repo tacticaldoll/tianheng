@@ -430,20 +430,21 @@ struct AmbiguousOwnerAlias;
 
 /// Why an impl self type could not be named, for a caller whose refusal sentence must say so.
 ///
-/// **One sentence carried three facts.** The renderers answer `None` when a path resolves to no
-/// candidate, when two mutually-exclusive `#[cfg]` branches bind one alias to different types, and when
-/// the syntax has no supported rendering — and every caller wrote *cannot identify … without a positional
-/// fallback*, which names the policy rather than what it met. The refusal is right in all three; the
-/// sentence sends an adopter to the wrong place in two of them, and there is nothing in the emitted text
-/// to grep for the one they have.
+/// **One sentence carried two facts.** The renderers answer no name when two mutually-exclusive `#[cfg]`
+/// branches bind one alias to different types, and when the syntax has no supported rendering — and every
+/// caller wrote *cannot identify … without a positional fallback*, which names the policy rather than what
+/// it met. The refusal is right in both; the sentence sends an adopter to the wrong place in one of them,
+/// and there is nothing in the emitted text to grep for the one they have.
 ///
-/// Three arms rather than two, and the third is why. Collapsing *unresolved* into *unrenderable* would say
-/// a path's syntax has no supported rendering about a path that renders perfectly and simply resolves
-/// nowhere — a smaller instance of the defect this exists to close.
+/// **Two arms, and a third was declared and could not be reached.** It named a path resolving to no
+/// candidate at all, which no producer can construct: `resolve_path_all` with `BareFallback::CurrentModule`
+/// always yields at least one candidate — a crate-relative path yields one, a `UseMap` entry holds at least
+/// one because it is pushed onto after `or_default`, and the bare fallback yields exactly one. Measured:
+/// with that arm's clause replaced by a panic, the whole suite stays green. The drift law admits no name
+/// without a reaction, so it is gone rather than left as a state a reader would take for a fact about the
+/// world.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OwnerUnnameable {
-    /// The path resolved to no candidate at all.
-    Unresolved,
     /// Two mutually-exclusive `#[cfg]` branches bind one alias to different types, so the candidate set
     /// holds several and no injective label exists — see [`AmbiguousOwnerAlias`].
     AmbiguousAlias,
@@ -456,7 +457,6 @@ impl OwnerUnnameable {
     /// What this reader met, as the clause a refusal appends to what it was identifying.
     pub(crate) fn cause(self) -> &'static str {
         match self {
-            Self::Unresolved => "its path resolves to no known type",
             Self::AmbiguousAlias => {
                 "two mutually-exclusive `#[cfg]` branches bind that alias to different types, so it has \
                  no one identity to record"

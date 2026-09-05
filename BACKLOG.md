@@ -460,6 +460,29 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
+- **READY-PATCH: the `is_file()` absence/unreadable collapse stands in 渾儀 and 圭表.** *Observed pressure:*
+  `is_file()` answers `false` both for a target that is not there and for one this reader could not stat, and
+  a `#[cfg]`-gated declaration tolerates an absence — so an unreadable subtree is swallowed and whatever it
+  holds goes unobserved, which is the false negative the Core Contract forbids. 漏刻's copy was repaired by
+  separating the two facts and routing *unreadable* to the channel that fails loud. *Observation source:*
+  measured as uid 1000 — a directory at mode `000` holding `mod.rs` gives `is_file` false with
+  `metadata` kind `PermissionDenied`; and with a plain file where a module directory would be, the kind is
+  `NotADirectory`, which is an absence and not an unreadability. The sites are
+  `crates/hunyi/src/module_resolve.rs`, `crates/hunyi/src/scan/items.rs`, and
+  `crates/guibiao/src/module_scan/reachability/walk.rs`, whose `!flat.is_file() && !nested.is_file()` arm is
+  the identical cfg-gated tolerance. *Current reaction or bound:* none in either dimension; 漏刻's is pinned
+  by `a_module_target_this_reader_cannot_read_is_not_an_absent_one` and
+  `a_component_that_is_not_a_directory_is_an_absence`. *Risk:* a probe, an import, or an exposure inside an
+  unreadable subtree is never observed, and the run reports clean. *Next trigger:* this entry is the trigger
+  — it is ready, and what it costs is one falsifier per dimension plus the absence criterion 漏刻 now
+  records, not new policy. *Authority:* engine. *Compatibility:* **minor**, by the same argument the 漏刻
+  repair carries: a tree that was green over an unreadable subtree exits `2`.
+
+  **Why it was not closed in the window that found it.** Each dimension needs its own falsifier and its own
+  reading of what its tolerance means, and the window that found it had already produced four defects of
+  exactly the kind that come from moving fast at the end of one. Filed with the measurement so the next
+  round starts from evidence rather than from a re-derivation.
+
 - **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
   register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
   in a worktree left the suite green and the register clean. `crates/kanhe/tests/pin_bites.rs` closes that for the citations
