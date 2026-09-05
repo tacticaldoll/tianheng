@@ -670,6 +670,25 @@ this file already names — a commit message, a dated `CHANGELOG.md` section, `d
 measurement of the moment it was taken, so holding one to `HEAD` would demand that the record change every
 time the tree does.
 
+**And the carriers are not only prose, which is the half the correction above still left narrow.** *Every live
+document* reads as the files a narration sits in, so a sweep written from it looks in `CHANGELOG.md`,
+`BACKLOG.md`, `PROJECT.md` and the specs — and measured across the `0.5.1` window, that is not where the
+residue was. A superseded claim survived in a **test function name**, in the **doc comments** beside two
+directions, in an **inline comment** in a shell script, in a **scenario heading**, and in the `PINNED-BY`
+names under it. One test file carried a `///` stating the opposite of the assertions twelve lines below it,
+and a review that read the specification alone reported that file as coherent code. A later repair in the
+same window claimed the corpus it had swept, named it, and was wrong: the same wording was still standing in
+more sites than the claim allowed, one of them a doc comment above the function that falsified it and one in
+the wrapper sixty-six lines below the block the repair had just rewritten.
+
+So the corpus is every **tracked live file**, and the seeds are the claim's wording **and** the identifiers
+that carry it — a test's name, a `PINNED-BY`, a scenario heading. The bound rule above already says this for
+its own subject (*run over the whole tree including `tests/`*), and it is the general case rather than a
+property of bounds: an identifier is a claim with no room for a caveat, so it is where a superseded one
+survives longest and reads most confidently. The repair idioms this rule names are `CHANGELOG.md`'s and
+`BACKLOG.md`'s because those are where a *narration* is annotated; a name is not annotated, it is changed,
+and the `PINNED-BY` that cites it changes in the same commit or the reference dangles.
+
 **An extraction's corpus is the pair of modules, not the function you came for.** Two extractions in
 `crates/kanhe` each closed a twin and each left a sibling behind, and both say so in their own headers:
 `hermetic_git`'s names a command builder that "lived twice, byte-identical, in `publish_source_gate` and
