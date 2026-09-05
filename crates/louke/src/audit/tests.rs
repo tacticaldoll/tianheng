@@ -315,6 +315,44 @@ fn a_path_substring_in_a_comment_or_attr_does_not_drop_a_reachable_module() {
     );
 }
 
+/// A `cfg_attr` PREDICATE spelled `path` is not an applied module target.
+///
+/// **The predicate and the applied metas are different positions**, and this scanner read the whole span.
+/// `#[cfg_attr(path = "bogus", path = "real.rs")] mod plat;` is legal source whatever cfg flags are set —
+/// the attribute parses either way — and reading `bogus` as a target scans a file rustc does not compile.
+/// A probe inside it then counts as coverage for a declared seam, so the audit reports **clean** over a
+/// seam nothing probes on any real build. That is the false negative the Core Contract forbids.
+///
+/// A comment in the scanner recorded the disagreement with 渾儀 and said the shape could not be shown in a
+/// real tree, and that it would take a nesting parser to close. Both were wrong: the declaration is
+/// ordinary source, and 圭表 tracks the same distinction with a byte scanner of its own by waiting for the
+/// top-level comma.
+///
+/// Negative run, against the whole-span read: `exit_code() == 0` — clean, on the strength of a probe in a
+/// file no build compiles.
+#[test]
+fn a_cfg_attr_predicate_is_not_an_applied_module_target() {
+    let tb = TempBase::new("predicate-not-a-target");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(path = \"bogus\", path = \"real.rs\")]\nmod plat;",
+    );
+    // The seam is probed ONLY in the predicate's file, which no build compiles.
+    tb.source("bogus", "fn live() { assert_boundary!(\"plat-seam\", o); }");
+    tb.source("real.rs", "fn live() {}");
+
+    let outcome = tb.audit(
+        &[boundary("plat-seam", Severity::Enforce)],
+        std::slice::from_ref(&root),
+    );
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "a probe in the predicate's file is not coverage: the seam is unprobed on every build \
+         rustc admits: {outcome:?}"
+    );
+}
+
 /// A path component that is not a directory is an ABSENCE, not something this reader could not read.
 ///
 /// **`NotFound` is not the only absence**, and the sibling direction's repair took it for the only one.

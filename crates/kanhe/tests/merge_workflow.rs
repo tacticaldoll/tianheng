@@ -1341,7 +1341,7 @@ fn an_unmoved_pull_request_still_reaches_the_merge() {
     assert_eq!(
         run.status.code(),
         Some(0),
-        "an unchanged title must not be refused; stderr {:?}",
+        "a pull request none of whose re-read inputs moved must not be refused; stderr {:?}",
         run.stderr
     );
     assert!(

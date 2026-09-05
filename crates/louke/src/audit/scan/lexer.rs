@@ -327,13 +327,8 @@ pub(crate) fn mod_preamble_attrs(
                     // `#[cfg_attr(<pred>, …, path = "…")]`: extract EVERY `path = "…"` value from
                     // WITHIN this attribute's own argument list.
                     //
-                    // The reader does not skip the leading predicate — it scans the whole span, and a
-                    // comment here said it skipped one "which is never itself an identifier spelled
-                    // `path`". A predicate CAN be spelled that way: `cfg_attr(path = "x", …)` needs
-                    // only `--cfg path="x"`, and this collects it. 渾儀's parser skips the predicate at
-                    // each level and does not. The two therefore disagree on a shape neither can be
-                    // shown to meet in a real tree, which is recorded here rather than closed by
-                    // widening this scanner into a nesting parser.
+                    // The predicate of each group is skipped, so all three dimensions agree about which
+                    // positions are applied targets — see [`path_meta_values`] for what reading it cost.
                     //
                     // Two axes, and only one of them was covered. A module may carry more than one
                     // SEPARATE `cfg_attr`-wrapped `#[path]`, one per platform predicate — this arm
@@ -386,6 +381,13 @@ pub(crate) fn paren_group_end(bytes: &[u8], open: usize, limit: usize) -> usize 
 /// contains the text (`target_os = "path_os"`, a doc comment) is never mistaken for the applied `path`
 /// meta.
 ///
+/// **A `path` before this level's first comma is a PREDICATE, not a target.** `#[cfg_attr(path = "bogus",
+/// path = "real.rs")] mod plat;` is legal source whatever cfg flags are set, and reading `bogus` as a
+/// target scanned a file rustc does not compile — a probe inside it then counted as coverage and the audit
+/// reported clean over a seam nothing probes on any real build. One flag per open group closes it, which is
+/// what 圭表's own byte scanner does by waiting for the top-level comma; a comment here claimed the shape
+/// could not be met in a real tree and that closing it needed a nesting parser, and both were wrong.
+///
 /// **It returned only the first, and one attribute may carry several.** Measured against rustc
 /// (edition 2021, `--crate-type lib`), this compiles cleanly on Linux with only `linux.rs` on disk and
 /// neither `mac.rs` nor `plat.rs` present:
@@ -407,11 +409,39 @@ pub(crate) fn path_meta_values(
     mod_index: usize,
 ) -> Vec<String> {
     let mut found = Vec::new();
+    // One flag per open group: whether this level's own PREDICATE has been passed. `cfg_attr` takes its
+    // predicate first and its applied metas after the first comma AT THAT LEVEL, so a `path` before it is
+    // part of the condition and names no module.
+    let mut past_predicate = vec![false];
     let mut i = start;
     while i < paren_close {
         if let Some(next) = skip_literal_or_comment(bytes, i) {
             i = next.min(paren_close);
             continue;
+        }
+        match bytes[i] {
+            b'(' => {
+                past_predicate.push(false);
+                i += 1;
+                continue;
+            }
+            b')' => {
+                past_predicate.pop();
+                if past_predicate.is_empty() {
+                    // Unbalanced past this span's own group: nothing further is this attribute's.
+                    return found;
+                }
+                i += 1;
+                continue;
+            }
+            b',' => {
+                if let Some(level) = past_predicate.last_mut() {
+                    *level = true;
+                }
+                i += 1;
+                continue;
+            }
+            _ => {}
         }
         if is_ident_byte(bytes[i]) && (i == start || !is_ident_byte(bytes[i - 1])) {
             let name_start = i;
@@ -419,7 +449,7 @@ pub(crate) fn path_meta_values(
             while name_end < paren_close && is_ident_byte(bytes[name_end]) {
                 name_end += 1;
             }
-            if &bytes[name_start..name_end] == b"path" {
+            if &bytes[name_start..name_end] == b"path" && past_predicate.last() == Some(&true) {
                 let eq = skip_preamble_trivia(bytes, name_end, paren_close);
                 if bytes.get(eq) == Some(&b'=') {
                     found.extend(read_path_string(bytes, eq + 1, mod_index));

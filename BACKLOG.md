@@ -2297,7 +2297,8 @@ consumer for an undemonstrated deduplication.
   longer the title, or lands on a base or comes from a head branch the gate never judged, in the one act that
   cannot be repaired —
   bounded by the window being a single API round trip and by the editor being a collaborator rather than an
-  adversary. *Next trigger:* `gh` gaining a server-decided precondition for either. *Authority:* engine.
+  adversary. *Next trigger:* `gh` gaining a server-decided precondition for any of the three.
+  *Authority:* engine.
   *Compatibility:* patch; the wrapper
   ships in no crate.
 
