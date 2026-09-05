@@ -47,6 +47,28 @@ them.
 
 ### Semantic and runtime
 
+- **An owner that cannot be named says which of three things was met.** A self type is unnameable because
+  its path resolves to no candidate, because two mutually-exclusive `#[cfg]` branches bind one alias to
+  different types, or because its syntax has no supported rendering — and all three emitted
+  *cannot identify … without a positional fallback*, which names the **policy** rather than the fact. The
+  refusal is right in every case; the sentence sent an adopter to the wrong place in two of them, with
+  nothing in the emitted text to grep for the one they had. Measured, before: a `#[cfg]`-collided alias
+  reported `cannot identify unsafe impl self type in crate::net without a positional fallback`, not
+  mentioning the collision at all.
+
+  `OwnerUnnameable` carries the cause to the callers that refuse. Three arms rather than two, deliberately:
+  collapsing *unresolved* into *unrenderable* would say a path's syntax has no supported rendering about a
+  path that renders perfectly and simply resolves nowhere — a smaller instance of the defect this closes.
+  The collector's one refusal that is **not** about a self type, an impl whose trait could not be named,
+  keeps its own sentence.
+
+  `current_owner` gains the same distinction: `Ok` where the enclosing impl's self type could be named,
+  `Err` carrying why where it could not, and absent where there is no enclosing impl — three facts that had
+  two representations between them.
+
+  **Patch-class:** no verdict, exit code, finding identity or emitted document moves. Refusing was correct
+  before and is correct now; what changes is whether the refusal can be acted on.
+
 - **BREAKING** — **A rule's key canonicalizes every module path it carries, as its evaluation already did.**
   `module_check` maps `canonical_module_path` over an allowlist so a boundary may be written with `r#name`
   or `name` and match either way, and folds a confined crate the same way. Two key arms did not:
