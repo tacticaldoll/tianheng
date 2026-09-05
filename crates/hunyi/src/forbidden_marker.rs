@@ -13,7 +13,7 @@ use crate::driver::run_boundaries;
 use crate::dsl::ForbiddenMarkerBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::errors::unknown_module_error;
-use crate::file_scope::{is_anchor_absent_from_unit, resolve_crate_units};
+use crate::file_scope::{over_each_unit, resolve_crate_units};
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
     BareFallback, UseMap, canonical_path_str, canonical_self_owner, path_to_string,
@@ -57,13 +57,10 @@ pub(crate) fn check_forbidden_marker_boundary(
     // Each of a package's crate roots is its own compilation unit: same module path `crate`,
     // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
     // is observed, with the unit carried into each finding's identity.
-    let mut governed_somewhere = false;
-    let mut deferred: Option<String> = None;
-    for (root_file, src_dir, unit) in &units {
-        let unit_outcome = (|| -> Result<(), String> {
-            let src_dir = src_dir.as_path();
-            let unit = unit.as_str();
-
+    over_each_unit(
+        &units,
+        &unknown_module_error(&boundary.module, &boundary.crate_package),
+        |root_file, src_dir, unit| {
             let findings = forbidden_marker_findings(
                 src_dir,
                 root_file,
@@ -91,26 +88,8 @@ pub(crate) fn check_forbidden_marker_boundary(
                 findings,
             );
             Ok(())
-        })();
-        match unit_outcome {
-            Ok(()) => governed_somewhere = true,
-            Err(reason)
-                if is_anchor_absent_from_unit(
-                    &reason,
-                    &unknown_module_error(&boundary.module, &boundary.crate_package),
-                ) =>
-            {
-                if deferred.is_none() {
-                    deferred = Some(reason);
-                }
-            }
-            Err(reason) => return Err(reason),
-        }
-    }
-    match deferred {
-        Some(reason) if !governed_somewhere => Err(reason),
-        _ => Ok(()),
-    }
+        },
+    )
 }
 
 /// The pure heart: scan the crate, then for each forbidden trait emit findings two ways — a

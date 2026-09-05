@@ -14,7 +14,7 @@ use crate::driver::run_boundaries;
 use crate::dsl::TraitImplBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::errors::{ambiguous_trait_anchor_error, unknown_trait_error};
-use crate::file_scope::{is_anchor_absent_from_unit, resolve_crate_units};
+use crate::file_scope::{over_each_unit, resolve_crate_units};
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
     AliasMap, BareFallback, canonical_path_str, canonical_self_owner, expand_canonical_paths,
@@ -46,13 +46,13 @@ pub(crate) fn check_trait_impl_boundary(
     // Each of a package's crate roots is its own compilation unit: same module path `crate`,
     // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
     // is observed, with the unit carried into each finding's identity.
-    let mut governed_somewhere = false;
-    let mut deferred: Option<String> = None;
-    for (root_file, src_dir, unit) in &units {
-        let unit_outcome = (|| -> Result<(), String> {
-            let src_dir = src_dir.as_path();
-            let unit = unit.as_str();
-
+    // A governed TRAIT is as unit-varying as a governed module: it exists in the library root's graph and
+    // not in a `src/bin/*.rs` root's, which is why this boundary fans out per unit at all. What to DO about
+    // an absence is `over_each_unit`'s and was written out here.
+    over_each_unit(
+        &units,
+        &unknown_trait_error(&boundary.trait_path, &boundary.crate_package),
+        |root_file, src_dir, unit| {
             let TraitImplReaction { anchor, findings } = trait_impl_findings(
                 src_dir,
                 root_file,
@@ -95,29 +95,8 @@ pub(crate) fn check_trait_impl_boundary(
                 findings,
             );
             Ok(())
-        })();
-        // A governed TRAIT is as unit-varying as a governed module: it exists in the library root's
-        // graph and not in a `src/bin/*.rs` root's. Absence defers to the other units; every other
-        // failure propagates now.
-        match unit_outcome {
-            Ok(()) => governed_somewhere = true,
-            Err(reason)
-                if is_anchor_absent_from_unit(
-                    &reason,
-                    &unknown_trait_error(&boundary.trait_path, &boundary.crate_package),
-                ) =>
-            {
-                if deferred.is_none() {
-                    deferred = Some(reason);
-                }
-            }
-            Err(reason) => return Err(reason),
-        }
-    }
-    match deferred {
-        Some(reason) if !governed_somewhere => Err(reason),
-        _ => Ok(()),
-    }
+        },
+    )
 }
 
 /// One trait-impl-locality evaluation's result: the anchor the declaration resolved to, and the

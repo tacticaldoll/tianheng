@@ -24,6 +24,13 @@ them.
 
 ### Documentation
 
+- **The per-unit fan-out policy had two halves and only one of them had a home.** `is_anchor_absent_from_unit`
+  decided what an absence *means*; what to *do* about it — govern where the anchor is, refuse only where it
+  is nowhere — was written out at each of the seven boundary checkers, head and tail identical in all seven
+  and differing only in the body between them. `over_each_unit` now holds it beside the half that already
+  lived there. What was genuinely per-boundary stays at its call site: `trait_impl`'s note that a governed
+  trait is as unit-varying as a governed module is why *that* boundary fans out at all, and is kept.
+
 - **A gate's label was also its dispatch key, so renaming it would have dropped `-D warnings` in silence.**
   The examples suite decided two independent properties — whether warnings fail the build, and whether the
   family patch applies — by comparing a label against a literal written twelve and sixteen lines away in the
