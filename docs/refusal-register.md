@@ -8,7 +8,7 @@ A site that no direction holds is **declared unheld**, with why, an owner and a 
 
 Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.rs`. **Do not edit by hand** — regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_register`. A stale projection fails that gate.
 
-**18 of 142 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
+**19 of 144 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
 
 ## Declared unheld
 
@@ -57,6 +57,12 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 ### `release-coherence#member-manifest-outside-workspace-root`
 
 - because cargo resolves member paths against the root it reports, so a member outside it is a disagreement inside cargo rather than a shape a manifest can carry
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `release-coherence#member-directory-not-utf8`
+
+- because the manifest this reader spells is a `&str` cargo's JSON handed over, so the parser made its components UTF-8 before this gate saw them and no path built from one can carry a byte the decode refuses — the same arm reached from a filesystem walk IS observed, by `a_crate_directory_that_is_not_utf8_is_refused_by_the_walk`, which is where the bytes are the operating system's rather than a parser's
 - owner: Engine
 - tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
 
@@ -286,6 +292,11 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
+
+### `release-coherence#crate-directory-not-utf8`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/src/tests/release_coherence_gate.rs`
 
 ### `release-coherence#crate-manifest-unreadable`
 

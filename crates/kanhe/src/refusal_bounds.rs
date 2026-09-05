@@ -99,6 +99,14 @@ pub fn unheld() -> Vec<Unheld> {
              disagreement inside cargo rather than a shape a manifest can carry",
         ),
         tool(
+            "release-coherence#member-directory-not-utf8",
+            "the manifest this reader spells is a `&str` cargo's JSON handed over, so the parser made its \
+             components UTF-8 before this gate saw them and no path built from one can carry a byte the \
+             decode refuses — the same arm reached from a filesystem walk IS observed, by \
+             `a_crate_directory_that_is_not_utf8_is_refused_by_the_walk`, which is where the bytes are the \
+             operating system's rather than a parser's",
+        ),
+        tool(
             "release-coherence#crate-manifest-outside-repository",
             "the manifest is joined onto `repo` in the same loop that strips it, so a walk output sitting \
              outside `repo` is this reader disagreeing with itself rather than a tree a fixture can build \

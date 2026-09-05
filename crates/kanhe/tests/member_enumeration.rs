@@ -45,6 +45,13 @@ fn relative_to(manifest: &str, root: &std::path::Path) -> String {
              alongside it, so the two enumerations describe different trees",
             root.display()
         ),
+        // `manifest` arrives as a `&str` from cargo's JSON, so the parser has already made its components
+        // UTF-8 and this arm cannot fire for it. Answered rather than folded into the one above, because
+        // *outside the root* and *not spellable at all* send a reader to different places.
+        kanhe::repository_path::RepositoryPath::NotUtf8(component) => panic!(
+            "cargo reported member manifest {manifest} under a component that is not UTF-8 — {component} \
+             — which the JSON it was read from cannot carry"
+        ),
     }
 }
 

@@ -67,3 +67,51 @@ fn the_root_itself_is_below_the_root_and_spells_as_nothing() {
         RepositoryPath::Below(String::new())
     );
 }
+
+/// A component that is not UTF-8 is refused, never spelled with a replacement.
+///
+/// **Measured rather than reasoned about**, and the same measurement `hermetic_git`'s own decode records:
+/// a path carrying bytes no `String` holds is legal on Unix, and it is the repository's own name for that
+/// file. `to_string_lossy` substitutes U+FFFD per undecodable byte, so the answer names nothing git holds
+/// — and two distinct names collapse onto one spelling, which is the collision a walk must not make.
+///
+/// Negative run: with the decode restored to `to_string_lossy`, this returns
+/// `Below("crates/\u{fffd}kanhe")` — a verdict reached over a directory that is not the one on disk.
+#[test]
+#[cfg(unix)]
+fn a_component_that_is_not_utf8_is_refused_rather_than_replaced() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let name = OsStr::from_bytes(b"\xffkanhe");
+    let path = Path::new("/r").join("crates").join(name);
+
+    assert!(
+        matches!(
+            repository_path(Path::new("/r"), &path),
+            RepositoryPath::NotUtf8(_)
+        ),
+        "a component the repository holds as bytes is refused, not replaced; answered {:?}",
+        repository_path(Path::new("/r"), &path)
+    );
+}
+
+/// The refusal names the component it could not read, not merely that one existed.
+///
+/// A message saying only *some component is not UTF-8* leaves an operator with a workspace to search. The
+/// carried spelling is lossy on purpose and only here: it is the message, never the identity.
+#[test]
+#[cfg(unix)]
+fn the_refusal_names_the_component_it_could_not_read() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let path = Path::new("/r")
+        .join("crates")
+        .join(OsStr::from_bytes(b"\xffkanhe"));
+
+    assert_eq!(
+        repository_path(Path::new("/r"), &path),
+        RepositoryPath::NotUtf8("\u{fffd}kanhe".to_string())
+    );
+}

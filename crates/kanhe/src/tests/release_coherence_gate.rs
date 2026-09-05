@@ -571,3 +571,35 @@ fn a_dotted_internal_pin_is_read_and_a_stale_one_refused() {
     require_internal_pins(&with_features, "0.5.0", &family())
         .expect("`features` is not a field this reader judges, dotted or inline");
 }
+
+/// The walk refuses a crate directory whose name the repository holds as bytes.
+///
+/// **This is the call site the owner's third state exists for.** `workspace_manifests` takes its paths from
+/// `read_dir`, so a component reaches it as the bytes the operating system holds rather than as a string a
+/// parser has already validated — unlike its two sibling readers, which are handed `manifest_path` out of
+/// cargo's JSON and are UTF-8 before they start. A crate directory whose name is not UTF-8 is legal on Unix,
+/// and spelling it lossily hands every reader downstream a name resolving to nothing.
+///
+/// Negative run: with `repository_path`'s decode restored to `to_string_lossy`, this returns `Ok` carrying
+/// `crates/\u{fffd}kanhe/Cargo.toml` — a manifest identity naming no file in the fixture.
+#[test]
+#[cfg(unix)]
+fn a_crate_directory_that_is_not_utf8_is_refused_by_the_walk() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let root = std::env::temp_dir().join(format!("kanhe-crate-dir-bytes-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("the scratch root is writable");
+
+    let member = root.join("crates").join(OsStr::from_bytes(b"\xffkanhe"));
+    std::fs::create_dir_all(&member).expect("the crate directory is writable");
+    std::fs::write(member.join("Cargo.toml"), "[package]\nname = \"k\"\n")
+        .expect("the crate manifest is writable");
+
+    let refusal = super::super::release_coherence_gate::workspace_manifests(&root)
+        .expect_err("a crate directory this reader cannot spell is refused, not spelled lossily");
+    crate::refusal::expect("release-coherence#crate-directory-not-utf8", &refusal);
+
+    let _ = std::fs::remove_dir_all(&root);
+}

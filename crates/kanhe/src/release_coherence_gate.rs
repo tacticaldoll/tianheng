@@ -1079,6 +1079,23 @@ pub fn workspace_manifests(repo: &Path) -> Result<Vec<(String, String)>, Refusal
                         ),
                     ));
                 }
+                // **This is the arm a filesystem walk can actually reach.** The path comes from
+                // `read_dir`, so its components are the bytes the operating system holds rather than a
+                // string a parser already validated: a crate directory whose name is not UTF-8 is legal
+                // on Unix, and spelling it lossily would hand every reader downstream a name that
+                // resolves to nothing — and collapse two distinct names onto one spelling.
+                crate::repository_path::RepositoryPath::NotUtf8(component) => {
+                    return Err(cannot_judge_at(
+                        "release-coherence#crate-directory-not-utf8",
+                        format!(
+                            "the crate directory holding {} carries a component this reader cannot \
+                             represent as text — {component}; a path that is not UTF-8 keeps its own \
+                             identity, and reporting a replaced one would name a file this repository \
+                             does not hold",
+                            manifest.display()
+                        ),
+                    ));
+                }
             }
         }
     }
@@ -1889,21 +1906,46 @@ fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> {
         // for every reader that asks this question — see [`crate::repository_path`] for what the three
         // hand-written spellings cost. What is this site's own is the *directory*: the member's own
         // `Cargo.toml` is what cargo reports, and the tracked files under it are what this gate enumerates.
+        // **Matched rather than pattern-bound**, because a `let … else` reads every answer that is not the
+        // one it wants as the one fact its `else` names. When the owner gained a third state this site
+        // absorbed it into *not under the workspace root*, which is a different repair in a different place
+        // — the shape the owner's own type exists to stop.
         let manifest_path = Path::new(manifest);
-        let Some(crate::repository_path::RepositoryPath::Below(directory)) = manifest_path
-            .parent()
-            .map(|dir| crate::repository_path::repository_path(root, dir))
-        else {
+        let outside = || {
             // `--no-deps` lists workspace members only, so every manifest sits under the root cargo reported
             // alongside them. One that does not is this gate's two sources describing different trees, which
             // is a fact to report rather than a member to skip — skipping is what kept the collapse silent.
-            return Err(cannot_judge_at(
+            cannot_judge_at(
                 "release-coherence#member-manifest-outside-workspace-root",
                 format!(
                     "member manifest {manifest} is not under the workspace root {} cargo reported for it",
                     root.display()
                 ),
-            ));
+            )
+        };
+        let Some(spelled) = manifest_path
+            .parent()
+            .map(|dir| crate::repository_path::repository_path(root, dir))
+        else {
+            return Err(outside());
+        };
+        let directory = match spelled {
+            crate::repository_path::RepositoryPath::Below(directory) => directory,
+            crate::repository_path::RepositoryPath::Outside => return Err(outside()),
+            // `manifest` is a `&str` the JSON parser handed over, so its components are UTF-8 before this
+            // reader sees them and no path built from it can reach here. It is answered rather than folded
+            // into the arm above because the two are repaired in opposite directions, and because the fold
+            // is what this site had.
+            crate::repository_path::RepositoryPath::NotUtf8(component) => {
+                return Err(cannot_judge_at(
+                    "release-coherence#member-directory-not-utf8",
+                    format!(
+                        "member manifest {manifest} sits under a component this reader cannot represent as \
+                         text — {component}; a path that is not UTF-8 keeps its own identity, and judging a \
+                         replaced one would compare something the repository does not hold"
+                    ),
+                ));
+            }
         };
         let directory = if directory.is_empty() {
             String::new()
