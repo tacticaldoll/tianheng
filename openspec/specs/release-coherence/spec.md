@@ -118,7 +118,7 @@ different things.
 - **THEN** the check refuses as a cannot-judge, quoting the value as written and naming what it could not
   decide — never as a version that is absent
 
-#### Scenario: A key spelling cargo accepts, and a table cargo writes as a value
+#### Scenario: A key spelling cargo accepts, however its table is composed
 
 - **WHEN** the key is written in a spelling cargo accepts and this reader's heading side already decoded —
   `"version" = "0.5.0"`, `'version' = "0.5.0"`, or the same spellings of `[package]`'s `name`
@@ -139,10 +139,14 @@ different things.
   `[package]` and nowhere else, and the line-walking reader took such an assignment in any table; narrowing
   to `[package]` is the answer agreeing with cargo rather than a tightening of this requirement
 - **AND** where the table is written as a **value** inside its parent — `[workspace]` with
-  `package.version = "0.5.0"`, or with `package = { version = "0.5.0" }`, both of which cargo resolves — the
-  check refuses naming the line. Composing a table out of a dotted key path or an inline table is structure
-  this reader does not build; refusing names what it met, where reporting absence names a declaration nobody
-  made
+  `package.version = "0.5.0"`, with `package = { version = "0.5.0" }`, or with `package."version" = "0.5.0"`
+  — the value is read as the declared workspace version, because a parser builds the table those spellings
+  compose and that is what cargo builds too. Measured under cargo 1.96.0, all three resolve a member at
+  `0.5.0`. Refusing them was a false refusal over legal Cargo syntax rather than a bound worth declaring: the
+  hand-rolled reader could not compose the table, and *this reader does not build that structure* was a fact
+  about the reader, not about the manifest. A `package`-headed key that cannot carry the version — `[workspace]`
+  with `package.authors = ["a"]` — leaves the version **absent**, which is the fact about a workspace that
+  declares none
 - **AND** a dependency whose classification the reader could not read is **refused, not treated as external**.
   Which crate a dependency names decides whether it is internal; one whose path could not be read names a
   family crate whose source is undecided, and *might be this workspace's* is not an answer. Measured: `xuanji."path" = "xuanji"` beside `xuanji.version = "0.5"` is a path
@@ -150,7 +154,7 @@ different things.
   internal check's subject in silence while one correct pin elsewhere satisfied its non-vacuity floor, and the
   release reported clean. That is the aggregate-counter shape the per-example check records having fixed, in its
   sibling
-- **PINNED-BY** `a_key_spelling_cargo_accepts_is_read_and_a_table_written_as_a_value_is_refused`
+- **PINNED-BY** `a_key_spelling_cargo_accepts_is_read_however_its_table_is_composed`
 - **PINNED-BY** `a_stale_internal_pin_behind_a_quoted_tail_is_refused`
 - **PINNED-BY** `every_inherit_spelling_cargo_honours_is_read_as_inheriting`
 - **PINNED-BY** `a_member_inheriting_through_a_sub_table_heading_is_read_as_inheriting`
@@ -262,17 +266,20 @@ and SHALL NOT perform a version bump, commit, merge, tag, or publish action.
   equals nor is the minor series of
 - **THEN** the coherence check fails and names the example, the crate, and the version found
 
-#### Scenario: A dependency key this reader cannot decode
+#### Scenario: A dependency key cargo decodes names its crate
 
 - **WHEN** an example declares a family crate under a key that is not a bare TOML key — `"xuanji" = "0.0.1"`,
   which cargo decodes to a dependency named `xuanji` — and no `package` value names the crate explicitly
-- **THEN** the check refuses as a cannot-judge naming the key it could not decode, rather than passing the
-  entry over. A key whose decoded value is not its text names some crate and this reader cannot say which, so
-  it can neither be matched against the family nor skipped: skipping it is what let a stale pin reach a
-  release as clean, while the aggregate requirement counter stayed non-zero on the strength of the other
-  examples. It is the same false negative as a renamed dependency, through a second door, and the identity
-  rule that closed the first — a dependency names the crate its `package` field names, and its key only
-  otherwise — is where the key's own spelling has to be judged
+- **THEN** the key is decoded and the pin behind it judged, rather than the entry being passed over or
+  stopped in front of. A key's spelling is the parser's question: measured, `"serde_json" = "1"` resolves to a
+  dependency named `serde_json`, so `"xuanji" = "0.0.1"` is a real family requirement at a stale version and
+  the check names it. Passing such an entry over is what let a stale pin reach a release as clean while the
+  aggregate requirement counter stayed non-zero on the strength of the other examples — the same false
+  negative as a renamed dependency, through a second door
+- **AND** refusing it was the answer available to a reader that could not decode the key, and is no longer
+  the answer available to one that can. A cannot-judge says *this reader cannot decide*, so it is a claim
+  about the reader; where the reader decides, saying otherwise stops an operator in front of a manifest cargo
+  reads without difficulty
 - **PINNED-BY** `a_quoted_dependency_key_names_its_crate_and_its_pin_is_judged`
 
 #### Scenario: A dependency table whose heading cargo decodes
