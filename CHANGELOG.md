@@ -540,6 +540,26 @@ them.
 
 ### Self-governance
 
+- **The Definition of Done said staging is enough, and it is not for a gate whose corpus is `HEAD`.**
+  `AGENTS.md` told an operator to `git add` a created file and then, in the same paragraph, that *committing
+  is not required*. That is true of a gate taking its path list from `git ls-files` and its content from
+  disk, which is how the paragraph's own measurement was taken — and false of `pin_bites`, which reads both
+  halves of its subject through `git show HEAD:…`: the declared-mutation records, and the source each
+  mutation perturbs. An uncommitted record is no record, so the direction reports green over an **empty
+  set**.
+
+  Measured while landing the raw-identifier repair: two mutations added and staged, `pin_bites` green
+  locally, and both CI's Definition of Done and the MSRV job red on the same tree the moment it was
+  committed — `all_three_dimensions_read_a_raw_identifier_spelling_of_a_cfg_attr_path` *is cited but
+  resolves to no bound id*. The local pass was not merely weaker than CI's; it was a pass over nothing.
+
+  The paragraph now states the criterion — the read, not the gate — and names the search that finds them:
+  `git grep -nE '"HEAD:|ls-tree", "HEAD' -- crates/kanhe`. It returns one other pair of sites, and that one
+  is not this case: `release_coherence` compares HEAD's `CHANGELOG.md` against the worktree's, so the
+  difference is its subject rather than a blind spot. There is no reaction, for the reason the surrounding
+  paragraph already gives: in CI nothing is ever uncommitted, so a check would be vacuous exactly where it
+  runs.
+
 - **The branch written to tolerate a member sitting at the workspace root could not carry one.** A root
   declaring `[workspace]` and `[package]` together is a shape cargo accepts — measured on cargo 1.96.0, it
   reports that member's `manifest_path` as the root's own `Cargo.toml` — so the member's directory strips to
