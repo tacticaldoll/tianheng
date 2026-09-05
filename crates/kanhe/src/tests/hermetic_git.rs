@@ -459,6 +459,63 @@ fn the_builder_writes_the_config_count_and_takes_index_zero() {
     );
 }
 
+/// Both accessors report the undecodable answer as the same fact, in the same words.
+///
+/// **The two are one operation with one difference — a trailing-whitespace trim — and they were spelled
+/// twice.** That is the class this module exists to close: its own header records taking `hermetic` and
+/// `run` out of two gates that had them byte-identical. The twin came back inside it, and it had already
+/// drifted where nothing was watching: one accessor named only what it could not do, the other went on to
+/// say why a replaced path would be the wrong answer. One fact reached an operator two ways depending on
+/// which accessor a caller happened to reach for, and no direction compared them.
+///
+/// This direction is the comparison. It does not assert the sentence — pinning wording would refuse an
+/// improvement to it — it asserts the two are the SAME sentence, which is the property the delegation
+/// makes structural rather than remembered.
+///
+/// Negative run, against the two hand-written bodies:
+///
+/// ```text
+/// assertion `left == right` failed: both accessors answer the same fact, so they must answer it in the same words; a caller should not learn more by reaching for one than for the other
+///   left: "git [\"ls-files\", \"-z\"] answered bytes this reader cannot represent as text — invalid utf-8 sequence of 1 bytes from index 0; a path that is not UTF-8 keeps its own identity, and reporting a replaced one would compare something the repository does not hold"
+///  right: "git [\"ls-files\", \"-z\"] answered bytes this reader cannot represent as text — invalid utf-8 sequence of 1 bytes from index 0"
+/// ```
+///
+/// The fuller sentence is the one kept, and it moved into the shared body rather than being dropped.
+#[test]
+#[cfg(unix)]
+fn both_accessors_report_an_undecodable_answer_in_the_same_words() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let root = std::env::temp_dir().join(format!("kanhe-git-bytes-twin-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("create the fixture root");
+    for args in [
+        &["init", "-q", "."][..],
+        &["config", "user.email", "fixture@example.invalid"][..],
+        &["config", "user.name", "fixture"][..],
+    ] {
+        crate::hermetic_git::run(&root, &[], args).expect("the fixture repository is built");
+    }
+    let name = std::ffi::OsStr::from_bytes(&[0xFF]);
+    std::fs::write(root.join(name), b"x").expect("a path may be bytes on unix");
+    crate::hermetic_git::run(&root, &[], &["add", "-A"]).expect("git stages what is there");
+
+    let trimmed = crate::hermetic_git::run(&root, &[], &["ls-files", "-z"]);
+    let exact = crate::hermetic_git::run_exact(&root, &[], &["ls-files", "-z"]);
+    let _ = std::fs::remove_dir_all(&root);
+
+    let sentence = |result| match result {
+        Err(crate::hermetic_git::Failure::Unreadable(why)) => why,
+        other => panic!("git answered bytes no `String` holds; got {other:?}"),
+    };
+    assert_eq!(
+        sentence(trimmed),
+        sentence(exact),
+        "both accessors answer the same fact, so they must answer it in the same words; a caller should \
+         not learn more by reaching for one than for the other"
+    );
+}
+
 /// git answering in bytes no `String` holds is refused, never replaced.
 ///
 /// **Measured rather than reasoned about.** A tracked path that is not UTF-8 is legal on Unix, and
