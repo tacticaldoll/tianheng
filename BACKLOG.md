@@ -3725,6 +3725,17 @@ that also holds a closed READY-PATCH record.
   is not a release-eve edit. *Promotion trigger:* the next change to either reader, or an adopter manifest in
   the subject corpus spelling a dependency key non-bare. *Compatibility class:* patch.
 
+  **Note — the paragraph above is closed, and every noun in it is gone.** The trigger fired: a real parser
+  replaced the hand-rolled reader, so the entry key is decoded and its pin judged, which is the conversion the
+  paragraph defers as *better* and *not a release-eve edit*. `Package::of` and its `KeyUnreadable` state no
+  longer exist, and neither does
+  `a_dependency_key_this_reader_cannot_decode_is_refused_rather_than_skipped` — the direction now sits under
+  `a_quoted_dependency_key_names_its_crate_and_its_pin_is_judged`, and its scenario requires the decoding it
+  used to forbid. Found by sweeping for the retired **test name** while repairing the specification the same
+  migration left behind, not by the commit that did the converting: that commit described what it had just
+  done and had no reason to know which deferral it had just closed. That is the shape `AGENTS.md` records
+  under the retirement sweep, and this entry is one of its instances rather than an exception to it.
+
   **The surface grew by an escape decoder, and that was the cheaper of two wrong answers rather than a
   reversal of this entry.** `manifest::decoded` resolves the escapes cargo resolves in a table heading or a
   key. It was added because the alternative was measured and was worse: `cargo metadata` reads `serde` under

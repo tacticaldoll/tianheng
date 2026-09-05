@@ -24,6 +24,27 @@ them.
 
 ### Documentation
 
+- **A claim the parser migration superseded is corrected wherever it was still written down.** Replacing the
+  hand-rolled readers changed what this repository can decide, and the reaction moved while the carriers
+  stating the old answer did not. `release-coherence` still required a **cannot-judge** for a quoted
+  dependency key — `"xuanji" = "0.0.1"` — that the parser decodes and the cited pin judges, and still required
+  a **refusal** for `[workspace]` carrying `package.version` as a dotted key or an inline table, which the
+  reader returns as the declared version. Measured under cargo 1.96.0, every one of those spellings resolves,
+  so refusing them was a false refusal over legal Cargo syntax. A cannot-judge is a claim about the *reader*;
+  where the reader decides, saying otherwise stops an operator in front of a manifest cargo reads without
+  difficulty.
+
+  The residue was not only in the requirement. The pin held the superseded claim in its own **function name**
+  and in the last paragraph of its **doc comment**, twelve lines above assertions expecting the opposite and
+  an inline comment recording that the refusal had been false — a file disagreeing with itself, which a review
+  reading only the specification reported as coherent code. Sweeping for the retired test name then reached a
+  third carrier: a `BACKLOG.md` entry deferring this exact conversion, whose trigger had fired and whose open
+  paragraph named a function, a state and a direction that no longer exist. Annotated in that file's idiom
+  rather than rewritten.
+
+  The dated section below states the old behaviour and is left as it stands: a record is a measurement of the
+  moment it was taken.
+
 - **Provenance trimmed from the published crates' rustdoc.** Doc comments that named the window or the review
   round a behaviour came from now state the behaviour itself: a canonical path label says why one separator
   makes a baseline portable rather than which release found that out, and the cycle guards say they share one

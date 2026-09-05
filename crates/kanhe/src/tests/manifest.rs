@@ -318,7 +318,7 @@ fn two_workspace_version_keys_refuse_rather_than_the_first_answering() {
     );
 }
 
-/// A key cargo accepts is read, and one it writes as a table value is refused rather than called absent.
+/// A key cargo accepts is read, however the table carrying it is composed.
 ///
 /// **Every row was put to `cargo metadata` first, through a member inheriting `version.workspace = true`.**
 /// Each of `"version" = "0.5.0"`, `'version' = "0.5.0"` and `["workspace".package]` resolves the member at
@@ -329,11 +329,13 @@ fn two_workspace_version_keys_refuse_rather_than_the_first_answering() {
 /// *workspace version is missing or malformed* about a manifest that declares it plainly. A review found it in
 /// the last pass before the cut.
 ///
-/// The last two are refused rather than read: composing a table out of a dotted key path or an inline table is
-/// structure this reader does not build. Refusing names the line; reporting absence names nothing, and that
-/// difference is the whole of this type's third state.
+/// The parent-composed spellings are read the same way, because a parser builds the table they compose and so
+/// does cargo. Refusing them was a false refusal over legal Cargo syntax: *this reader does not build that
+/// structure* was a fact about the hand-rolled reader rather than about the manifest, and it did not survive
+/// the reader. `Unreadable` keeps its subject — a `version` declared twice, which is a count this reader can
+/// see and cargo refuses whole — and `Absent` keeps a `package` table that carries no version at all.
 #[test]
-fn a_key_spelling_cargo_accepts_is_read_and_a_table_written_as_a_value_is_refused() {
+fn a_key_spelling_cargo_accepts_is_read_however_its_table_is_composed() {
     for (label, manifest) in [
         (
             "quoted key",
