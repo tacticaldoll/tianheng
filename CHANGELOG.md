@@ -480,6 +480,26 @@ them.
 
 ### Self-governance
 
+- **A path that is not UTF-8 kept its own identity at one end of a comparison and not at the other.**
+  `hermetic_git` refuses git output it cannot decode, in so many words — *a path that is not UTF-8 keeps its
+  own identity, and reporting a replaced one would compare something the repository does not hold*. The
+  reader that spells this repository's own side of that comparison decoded lossily, so a component the
+  operating system holds as bytes came back as U+FFFD per byte: a name resolving to nothing, and two
+  distinct names collapsing onto one spelling.
+
+  **One of its three call sites can reach it, and stating which is half the repair.** `machinery_names` and
+  the member-enumeration comparison are handed `manifest_path` as a `&str` out of cargo's JSON, so the
+  parser has already made every component UTF-8 and no arm of the decode can fire for them — an earlier
+  reading of this defect claimed a silent false negative in the machinery set on exactly that path, and it
+  was wrong. `workspace_manifests` takes its paths from `read_dir`, where the bytes are the operating
+  system's, and a crate directory whose name is not UTF-8 is legal on Unix.
+
+  `RepositoryPath` gains a third state, so *not under the root* and *not spellable at all* stay apart —
+  two facts an operator repairs in opposite directions — and `machinery_names`' `let … else`, which had
+  folded the new state into the first of them, is a `match`. The walk's arm is held by
+  `a_crate_directory_that_is_not_utf8_is_refused_by_the_walk` against a real fixture directory; the
+  JSON-fed arm is declared unheld, naming the direction that observes the same shape where a walk feeds it.
+
 - **A path below the root had three spellings, and the two that had to agree did not.** Turning an absolute
   path cargo reports into the repository-relative identity git uses was written out at three sites.
   `machinery_names` and the member-enumeration comparison both stripped the root component-wise and joined

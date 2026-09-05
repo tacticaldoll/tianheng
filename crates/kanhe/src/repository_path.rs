@@ -24,17 +24,21 @@
 
 use std::path::Path;
 
-/// Where a path sits relative to a root, or that it does not sit under one.
+/// Where a path sits relative to a root, or why this reader cannot say.
 ///
-/// Typed apart rather than an `Option`, because the two consumers of the answer read a missing value
-/// differently: one refuses, one used it as licence to carry the absolute path forward. A variant each
-/// leaves no reading to choose.
+/// Typed apart rather than an `Option`, because the consumers of a missing value read it differently: one
+/// refuses, one used it as licence to carry the absolute path forward. A variant each leaves no reading to
+/// choose, and the third keeps *not under the root* apart from *not spellable at all* — two facts an
+/// operator repairs in opposite directions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RepositoryPath {
     /// The path below the root, spelled with `/` whatever separator the host uses.
     Below(String),
     /// The path does not sit under the root it was resolved against.
     Outside,
+    /// A component below the root is not UTF-8, so this reader cannot spell the identity the repository
+    /// holds. Carries the component as this reader sees it, for the message only.
+    NotUtf8(String),
 }
 
 /// `path` spelled relative to `root`, the way git spells one.
@@ -42,15 +46,25 @@ pub enum RepositoryPath {
 /// The comparison is component-wise, so a prefix matches on its own boundaries rather than on a separator
 /// byte, and the answer is rebuilt with `/` so it can be handed to `git` and compared against what git
 /// answers.
+///
+/// **A component that is not UTF-8 is refused, never replaced** — the policy `hermetic_git` states for the
+/// other end of the same comparison: *a path that is not UTF-8 keeps its own identity, and reporting a
+/// replaced one would compare something the repository does not hold*. A lossy decode substitutes U+FFFD
+/// per undecodable byte, so the answer names nothing git holds, and two distinct names collapse onto one
+/// spelling — the collision `xingbiao::path_identity` exists to keep out of a walk.
+///
+/// Reaching it needs a `path` whose components come from the filesystem: a caller handing over a `&str` it
+/// read out of cargo's JSON has already been given UTF-8 by the parser, and no arm of this can fire for it.
 pub fn repository_path(root: &Path, path: &Path) -> RepositoryPath {
     let Ok(below) = path.strip_prefix(root) else {
         return RepositoryPath::Outside;
     };
-    RepositoryPath::Below(
-        below
-            .components()
-            .map(|part| part.as_os_str().to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join("/"),
-    )
+    let mut spelled = Vec::new();
+    for part in below.components() {
+        let Some(text) = part.as_os_str().to_str() else {
+            return RepositoryPath::NotUtf8(part.as_os_str().to_string_lossy().into_owned());
+        };
+        spelled.push(text.to_string());
+    }
+    RepositoryPath::Below(spelled.join("/"))
 }
