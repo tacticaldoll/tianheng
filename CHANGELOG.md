@@ -47,6 +47,27 @@ them.
 
 ### Semantic and runtime
 
+- **A `cfg_attr` PREDICATE spelled `path` was read as an applied module target.** 漏刻's scanner walked the
+  whole argument span, so `#[cfg_attr(path = "bogus", path = "real.rs")] mod plat;` recorded **both**. That
+  declaration is legal source whatever cfg flags are set, and reading `bogus` scanned a file rustc does not
+  compile: a probe inside it counted as coverage, and the audit reported **clean** over a seam nothing
+  probes on any real build. Measured, before: `Clean(Subject { declared: 1, reached: 1 })`.
+
+  One flag per open group closes it — a `path` before that level's first comma is part of the condition and
+  names nothing. 圭表 already waits for the top-level comma and 渾儀 skips the predicate at each level, so
+  this was the third dimension disagreeing about which positions are applied targets, on the same shape the
+  entry above found them disagreeing about.
+
+  **The comment that recorded the disagreement and left it open was wrong three times**: the shape needs no
+  special build to appear in a tree, reading it is not harmless, and closing it does not need a nesting
+  parser — 圭表 does it with a byte scanner. Left open on the strength of that comment, in the same window
+  that wrote it.
+
+  Two carriers of the earlier title/base/head widening also survived its sweep: a positive control whose
+  assertion still spoke of an unchanged title alone, and a tracker saying `gh` offers no precondition *for
+  either* where the set is three. The sweep that missed them named identifiers and prose; assertion
+  messages and cardinality words are the classes it did not carry.
+
 - **BREAKING** — **One owner decides what a failed `metadata` means, and all three dimensions ask it.**
   `Path::is_file` answers `false` both for a target that is not there and for one this reader could not
   stat, and the `#[cfg]` tolerance is what an ABSENCE is owed — so an unreadable subtree was swallowed by
