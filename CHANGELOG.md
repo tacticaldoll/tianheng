@@ -24,6 +24,17 @@ them.
 
 ### Documentation
 
+- **The retirement sweep's corpus says where the residue actually was.** The rule read *every live document*
+  — corrected once already, from naming two files to naming the class — and that still reads as the files a
+  narration sits in. Measured across this window, a superseded claim survived in a test function name, in
+  doc comments beside two directions, in an inline comment in a shell script, in a scenario heading and in
+  the `PINNED-BY` names under it. One test file carried a `///` stating the opposite of the assertions twelve
+  lines below it, and a review reading the specification alone called that file coherent. The corpus is now
+  every tracked live **file**, and the seeds are the wording **and** the identifiers carrying it. No check is
+  added: this file already records a prose detector as designed, measured three times and rejected, and the
+  bound rule already said the same thing for its own subject — what was missing was that it is the general
+  case.
+
 - **A claim the parser migration superseded is corrected wherever it was still written down.** Replacing the
   hand-rolled readers changed what this repository can decide, and the reaction moved while the carriers
   stating the old answer did not. `release-coherence` still required a **cannot-judge** for a quoted
