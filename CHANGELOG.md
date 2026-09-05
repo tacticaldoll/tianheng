@@ -24,9 +24,10 @@ them.
 
 ### Release
 
-- **This release line is `0.6.0`, and its branch was renamed to say so.** The window carries four
-  `**BREAKING**` markings — two false-negative closures, a rule-key identity change, and a module-resolution
-  widening — and this repository's rule past `0.1.0` is that breaking earns a **minor**. `AGENTS.md` also
+- **This release line is `0.6.0`, and its branch was renamed to say so.** The window carries `**BREAKING**`
+  markings — false-negative closures, a rule-key identity change, a module-resolution widening — and this
+  repository's rule past `0.1.0` is that breaking earns a **minor**. What decides the number is that any
+  such marking is present, so the classes are named and the tally is left to whatever enumerates them. `AGENTS.md` also
   holds that a branch name encodes the exact target version, so `release/0.5.1` was a name disagreeing with
   its own contents, on the one surface an operator consults to know what is being cut.
 

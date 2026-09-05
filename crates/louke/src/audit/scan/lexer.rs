@@ -382,12 +382,14 @@ pub(crate) fn paren_group_end(bytes: &[u8], open: usize, limit: usize) -> usize 
 /// meta.
 ///
 /// **A `path` in a predicate position is a cfg key, not a target** — before a `cfg_attr`'s own first comma,
-/// or anywhere inside a compound predicate such as `all(…)`.** `#[cfg_attr(path = "bogus",
+/// or anywhere inside a compound predicate such as `all(…)`. `#[cfg_attr(path = "bogus",
 /// path = "real.rs")] mod plat;` is legal source whatever cfg flags are set, and reading `bogus` as a
 /// target scanned a file rustc does not compile — a probe inside it then counted as coverage and the audit
-/// reported clean over a seam nothing probes on any real build. One flag per open group closes it, which is
-/// what 圭表's own byte scanner does by waiting for the top-level comma; a comment here claimed the shape
-/// could not be met in a real tree and that closing it needed a nesting parser, and both were wrong.
+/// reported clean over a seam nothing probes on any real build. Each open group carries **two** facts —
+/// what kind of group it is, and whether its own predicate has been passed — because a phase alone read a
+/// compound predicate's comma as a `cfg_attr`'s. 圭表's own byte scanner draws the same distinction, so a
+/// comment here claiming the shape could not be met in a real tree and that closing it needed a nesting
+/// parser was wrong twice over.
 ///
 /// **It returned only the first, and one attribute may carry several.** Measured against rustc
 /// (edition 2021, `--crate-type lib`), this compiles cleanly on Linux with only `linux.rs` on disk and

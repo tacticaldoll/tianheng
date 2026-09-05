@@ -337,19 +337,36 @@ fn a_cfg_attr_predicate_is_not_an_applied_module_target() {
         "lib.rs",
         "#[cfg_attr(path = \"bogus\", path = \"real.rs\")]\nmod plat;",
     );
-    // The seam is probed ONLY in the predicate's file, which no build compiles.
+    // `plat-seam` is probed ONLY in the predicate's file, which no build compiles. `real-seam` is probed
+    // in the applied target — so ONE run shows both halves: the predicate's probe does not count, and the
+    // applied file IS read. Asserting the exit code alone would leave the second half inferred from
+    // louke's semantics rather than seen.
     tb.source("bogus", "fn live() { assert_boundary!(\"plat-seam\", o); }");
-    tb.source("real.rs", "fn live() {}");
+    tb.source(
+        "real.rs",
+        "fn live() { assert_boundary!(\"real-seam\", o); }",
+    );
 
     let outcome = tb.audit(
-        &[boundary("plat-seam", Severity::Enforce)],
+        &[
+            boundary("plat-seam", Severity::Enforce),
+            boundary("real-seam", Severity::Enforce),
+        ],
         std::slice::from_ref(&root),
     );
+    let reported = format!("{outcome:?}");
     assert_eq!(
         outcome.exit_code(),
         1,
-        "a probe in the predicate's file is not coverage: the seam is unprobed on every build \
-         rustc admits: {outcome:?}"
+        "a probe in the predicate's file is not coverage: {reported}"
+    );
+    assert!(
+        reported.contains("plat-seam"),
+        "the seam probed only in the predicate's file must be reported unprobed: {reported}"
+    );
+    assert!(
+        !reported.contains("real-seam"),
+        "the applied target IS read, so its probe counts: {reported}"
     );
 }
 
@@ -384,16 +401,27 @@ fn a_path_inside_a_compound_predicate_is_still_a_predicate() {
         "#[cfg_attr(all(unix, path = \"bogus\"), path = \"real.rs\")]\nmod plat;",
     );
     tb.source("bogus", "fn live() { assert_boundary!(\"plat-seam\", o); }");
-    tb.source("real.rs", "fn live() {}");
+    tb.source(
+        "real.rs",
+        "fn live() { assert_boundary!(\"real-seam\", o); }",
+    );
 
     let outcome = tb.audit(
-        &[boundary("plat-seam", Severity::Enforce)],
+        &[
+            boundary("plat-seam", Severity::Enforce),
+            boundary("real-seam", Severity::Enforce),
+        ],
         std::slice::from_ref(&root),
     );
+    let reported = format!("{outcome:?}");
     assert_eq!(
         outcome.exit_code(),
         1,
-        "a `path` inside `all(…)` is a cfg key, not a module target: {outcome:?}"
+        "a `path` inside `all(…)` is a cfg key, not a module target: {reported}"
+    );
+    assert!(
+        reported.contains("plat-seam") && !reported.contains("real-seam"),
+        "the predicate's file is not read and the applied one is: {reported}"
     );
 }
 
