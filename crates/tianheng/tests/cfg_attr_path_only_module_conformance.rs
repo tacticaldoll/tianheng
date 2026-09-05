@@ -244,6 +244,80 @@ fn all_three_dimensions_agree_every_candidate_absent_stays_a_scan_error() {
     );
 }
 
+/// 渾儀 refuses a module target it cannot READ, rather than tolerating it as absent.
+///
+/// **`is_file()` answers `false` for two different facts**, and the cfg tolerance is what an ABSENCE is
+/// owed — so a target this reader merely could not stat was swallowed by it, with whatever the subtree
+/// holds going unobserved. 漏刻 was repaired first; this is why the other two moved with it, since a
+/// window arguing the three must agree about module resolution cannot leave two of them disagreeing about
+/// what `false` means.
+///
+/// **The boundary governs a module that resolves either way, and that is the whole design of this
+/// fixture.** A first version pointed it at the unreadable module itself and passed before the repair as
+/// well as after: tolerating the module makes it unknown, an unknown boundary target is a constitution
+/// error, and the exit code is `2` for a reason that has nothing to do with reading. Measured — `guibiao=2
+/// hunyi=2` both before and after. Governing `crate::readable` instead makes the tolerated run **clean**,
+/// so the two states differ.
+///
+/// Measured as uid 1000, which is why this refuses to skip in silence under `TIANHENG_WORKSPACE_TESTS`:
+/// root bypasses mode bits entirely and would make it vacuous.
+///
+/// Negative run, with only 渾儀's reader reverted:
+///
+/// ```text
+/// assertion `left == right` failed: 渾儀: an unreadable target is not an absent one
+///   left: 0
+///  right: 2
+/// ```
+///
+/// Clean, over a subtree it could not open.
+///
+/// **圭表 is not asserted here, and that is a declared gap rather than an omission.** Its reader takes the
+/// same criterion, but measured on this fixture it exits `2` **before and after** — loud for a reason this
+/// change does not touch — so an assertion over it would pass either way and say nothing. No fixture has
+/// been found that separates the two states for 圭表, so its repair travels on symmetry with the two that
+/// were seen to fail, and `BACKLOG.md` carries the search. 漏刻's own directions hold its half.
+#[test]
+#[cfg(unix)]
+fn a_module_target_that_cannot_be_read_is_not_tolerated_as_absent() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let package = "cfg-attr-path-only-unreadable";
+    // `readable` is what the boundary governs and it holds nothing forbidden, so a run that tolerates the
+    // unreadable sibling is CLEAN. `imp` is cfg-gated — the arm that is owed a real absence.
+    let lib = format!(
+        "{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}pub mod readable {{ pub fn ok() {{}} }}\n\
+         #[cfg(feature = \"gated\")]\npub mod imp;\n"
+    );
+    let fixture = fixture(package, &lib, &[]);
+
+    let dir = fixture
+        .lib()
+        .parent()
+        .expect("the lib has a directory")
+        .join("imp");
+    std::fs::create_dir_all(&dir).expect("create the module directory");
+    std::fs::write(dir.join("mod.rs"), IMP_VIOLATIONS).expect("write the module file");
+    let restore = std::fs::metadata(&dir)
+        .expect("read the mode")
+        .permissions();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o000)).expect("restrict it");
+
+    let restricted = !dir.join("mod.rs").is_file();
+    let exits =
+        restricted.then(|| hunyi_exit(package, fixture.manifest(), "crate::readable", REASON));
+    std::fs::set_permissions(&dir, restore).expect("restore the mode");
+
+    let Some(hunyi) = exits else {
+        assert!(
+            std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+            "mode 000 did not restrict the target — running as root would make this direction vacuous"
+        );
+        return;
+    };
+    assert_eq!(hunyi, 2, "渾儀: an unreadable target is not an absent one");
+}
+
 /// The sibling shape: a `cfg_attr(path)` on an **inline** `mod x { … }`, naming the base directory
 /// the body's own file-form children resolve from. 圭表 followed only the *unconditional* `#[path]`
 /// form here and reported a missing-module constitution error on source that compiles cleanly, while
