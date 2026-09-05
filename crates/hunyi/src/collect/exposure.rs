@@ -128,9 +128,12 @@ pub(crate) fn collect_item_async_exposures(
                 module,
                 &type_param_names(&item.generics),
             )
-            .ok_or_else(|| {
+            .map_err(|why| {
                 format!(
-                    "cannot identify public async method owner in {module} without a positional fallback"
+                    "cannot identify public async method owner in {module} — {}; no positional fallback \
+                     is invented for it, because a label that names a traversal position is not an \
+                     identity",
+                    why.cause()
                 )
             })?;
             for method in async_methods {
