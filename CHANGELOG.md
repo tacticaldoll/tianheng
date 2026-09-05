@@ -86,9 +86,19 @@ them.
   baseline regeneration. It was found by an independent review reading the markings against the branch name.
 
   Git history shows pull requests merged into `release/0.5.1`: that is the same branch under its former
-  name, renamed in place through GitHub rather than recreated, so every merge record still resolves. Its
+  name, renamed in place through GitHub rather than recreated, so every **commit** still resolves. Its
   tracked references were updated with it — the count is what a sweep prints, not what this paragraph
   claims. **The workspace version is untouched at `0.5.0`** — it moves at release preparation, not here.
+
+  **What the rename does not move, and what that cost.** GitHub retargets the open pull requests on a
+  renamed branch and leaves a **merged** one's recorded base as it was: measured 2026-09-06, 87 merged pull
+  requests still record `release/0.5.1` as their base and 12 record `release/0.6.0`, against a ref
+  `release/0.5.1` that no longer exists. So a sweep rewriting that name through tracked prose is right
+  wherever the name is a label and wrong wherever it is part of an **observation** — and it was wrong once:
+  a `BACKLOG.md` measurement over merged pull requests had its base rewritten, leaving a figure attached to a
+  set that does not contain the instance the sentence names. Repaired by restoring the base that was measured
+  and carrying the command beside the figure. The two cases are not mechanically separable, which is why the
+  remaining prose references to *the 0.5.1 window* are left for a reader rather than swept.
 
 ### Migration
 
@@ -212,7 +222,7 @@ them.
   was reachable at all rather than whether the repair is safe. `BACKLOG.md` carries the search.
 
   **Why a minor:** a tree with an unreadable module subtree was green and now exits `2`, in two more
-  dimensions than the entry below already said.
+  dimensions than *A module target this reader cannot read is refused* already said.
 
 - **A repair of the absence class refused a tree rustc compiles, and three more defects rode in with it.**
   An independent adversarial review of this window found four in changes that had already merged, three of
@@ -303,7 +313,8 @@ them.
   exits `2`. That is work the adopter did not choose, and *"the defect was ours" does not spare them
   the work*.
 
-  **All three dimensions take it now**, through one owner in the substrate — see the entry below.
+  **All three dimensions take it now**, through one owner in the substrate — see *One owner decides what a
+  failed `metadata` means*.
 
 - **BREAKING** — **Every `path` in one `cfg_attr` span is read, where two dimensions took the first.**
   Measured against rustc (edition 2021, `--crate-type lib`), this compiles cleanly on Linux with only
@@ -481,6 +492,47 @@ them.
   and the compiled behaviour is the `0.5.0` behaviour.
 
 ### Self-governance
+
+- **A promotion-trigger sweep of the entries this window touched, and the sweep this window already ran had
+  moved a measurement off its own corpus.** `BACKLOG.md` asks every live entry for a promotion trigger, and a
+  trigger nobody re-reads after the work that would fire it is a decision surface stating a stale answer. Eight
+  entries were evaluated against the 99 landed changes — chosen by whether this window plausibly touched them,
+  which is stated because it is **not** the whole live set.
+
+  *A rename rewrote a base inside a measurement.* The branch-name entry's evidence read *measured over all 22
+  pull requests merged into `release/0.6.0`* and named one instance,
+  `test-kanhe-a-fixture-sha-that-resolves-nowhere`. That instance is not in that set. GitHub retargets a
+  renamed branch's **open** pull requests and leaves a **merged** one's recorded base alone, so measured
+  2026-09-06: `--base release/0.5.1` returns 87, `--base release/0.6.0` returns 12, and the named instance is
+  in the first — against a ref that no longer exists. The rename's own sweep did it, one window after the
+  commit that wrote the figure, whose subject is *a trigger is a predicate, and nothing holds one to its
+  corpus*. **A branch name is a label in most prose and part of the observation inside a measurement, and
+  nothing separates the two mechanically** — so the base is restored, the figure now carries the command that
+  produces it, and the remaining prose references to *the 0.5.1 window* are deliberately left for a reader
+  rather than swept, because sweeping them is the move that caused this.
+
+  *A trigger fired.* *A positional reference appearing again after this sweep* — whose own control was the
+  0.5.0 sweep — fired four times in this section. Read out, two resolve, one is ambiguous, and
+  `see the entry below` pointed at the wrong entry: the one it means was written later and, entries being
+  newest-first, landed **above** it. That is the entry's recorded mechanism, unobserved because a group
+  merge's verification compares the multiset of lines and is blind to whether an entry still points at what
+  it meant. Both are named rather than positioned now.
+
+  *And a verdict was written in the wrong register.* The OpenSpec-lifecycle entry carried
+  `Not fired, swept 2026-09-01` on the ground that `openspec/changes/**` is untouched — but step 5 of that
+  lifecycle is *strip the change directory before the squash*, and the squash collapses the branch that would
+  hold the propose commit. **Both observables are erased by the ritual they were read as observing**, so the
+  emptiness is what either state looks like and *whether the event has happened is decidable* was false. It
+  is a witness-only trigger, and a dated verdict made it read as settled rather than unobserved. The entry
+  that sorts triggers into swept and witnessed named only the direction where a witness-only one turns out
+  cheap; it is widened to the direction where a swept one turns out impossible, which is the more dangerous
+  half, and it fires on that instance. A malformed heading fragment splitting an entry from its own closing
+  note goes with them — it begins with a space, so the classification check that reads `### ` never saw it
+  while a reader meets it as a section break.
+
+  No reaction is proposed for any of this. What would decide whether a version name in a sentence is a label
+  or an observation is a judgement about meaning, which is the prose detector this file records as designed,
+  measured and rejected three times.
 
 - **The head branch is re-read too, and the premise that excused it was false.** It was left out of the
   post-gate re-reads on the ground that GitHub offers no way to change an existing pull request's head, so a

@@ -704,10 +704,22 @@ consumer for an undemonstrated deduplication.
   *Version class:* not release-affecting; the section ships in no crate. *Authority:* `AGENTS.md` itself, and
   the steward's decision.
 
-  **Not fired, swept 2026-09-01.** `openspec/changes/**` is still untouched since `0.1.0` — the only commits
-  reaching it are the `0.1.0` release itself and one archive-scaffolding prune — so no capability change has
-  run the lifecycle. This trigger turns on an event, but whether the event has happened is decidable, and it
-  has not.
+  **Not fired, swept 2026-09-01 — and the sweep could not have decided it.** `openspec/changes/**` is still
+  untouched since `0.1.0`, re-measured 2026-09-06: the only commits reaching it are the `0.1.0` release
+  itself and one archive-scaffolding prune. What was inferred from that — *so no capability change has run
+  the lifecycle*, and *whether the event has happened is decidable* — **does not follow, and the second
+  sentence is false.** Step 5 of the lifecycle is *strip the change directory before the squash*, and `main`
+  carries only squashed snapshots, so a change that ran the lifecycle in full leaves `openspec/changes/**`
+  exactly as untouched as one that skipped it. The other observable is destroyed the same way: a
+  `docs(openspec): propose` commit lives on a development branch, which the squash collapses. **Both
+  observables are erased by the ritual they were read as observing**, so the emptiness is what either state
+  looks like.
+
+  So this is a **witness-only** trigger and always was, and reporting it twice with a date made it read as
+  decided rather than as unobserved — which is worse than reading as merely armed. What the entry asks for is
+  unchanged and now rests on the right footing: whoever runs the lifecycle records what did not work, because
+  nobody else can find out afterwards. Re-measured for the window regardless: 15 specs under
+  `openspec/specs/` were amended and **none added or removed**, so no new capability arose to run it.
 
 - **This repository's own commit objects are kept out of tracked content by prose, and the reaction that
   would hold it reaches only live prose.** *Class:* WATCH. *Observed pressure:* two instances, one caught and
@@ -859,8 +871,6 @@ consumer for an undemonstrated deduplication.
   class:* patch; comments in published crates, no API or behaviour. *Authority:* `AGENTS.md`'s *What earns a
   place in a doc comment* table, whose disposition for a review round number is `provenance`, and
   `repository-checks`'s requirement holding the doc-comment half.
-
- / ACCEPTED / DECLINED / BUILT
 
   **Built 2026-09-03.** Every one of the 27 inner comments across `guibiao`, `hunyi` and `louke` was
   reviewed and stripped of its round index while preserving its invariant and observation source,
@@ -1080,9 +1090,24 @@ consumer for an undemonstrated deduplication.
   exists to prevent. *Promotion trigger, rewritten 2026-09-01 over the corpus it watches:* a merged pull request whose head
   branch does not parse as `<type>/<scope>-<slug>` with `<type>` in the admitted set, or whose parsed type
   differs from its squash subject's, or a second retired role accumulating. **So rewritten it fires, on the
-  0.5.1 window's own work.** Measured over all 22 pull requests merged into `release/0.6.0`: 21 branches
+  0.5.1 window's own work.** Measured by
+  `gh pr list --state merged --base release/0.5.1 --limit 300 --json headRefName,title` over all 22 pull
+  requests that had merged into `release/0.5.1` when this was written: 21 branches
   parse and every one of those agrees with its squash subject's type, and one carries no `/` at all
   (`test-kanhe-a-fixture-sha-that-resolves-nowhere`), so it declares no type for a subject to disagree with.
+
+  **The base this names is `release/0.5.1` deliberately, and restoring it is a repair.** The branch was
+  renamed to `release/0.6.0` and the rename's sweep rewrote the name here too — but GitHub does not retarget
+  a **merged** pull request's recorded base, so re-running the command above against `release/0.6.0` answers
+  over a different set: measured 2026-09-06, `--base release/0.5.1` returns **87** and `--base release/0.6.0`
+  returns **12**, and `test-kanhe-a-fixture-sha-that-resolves-nowhere` — the one instance this sentence names
+  — is in the first. The sentence had come to name a corpus that does not contain its own evidence. The ref
+  `release/0.5.1` no longer exists, and the merge records naming it still do; that is what makes the base a
+  fact about the observation rather than a label to keep current, and a sweep cannot tell the two apart.
+  The figure is carried by its command from here on, so the next rewrite of a name inside it disagrees with a
+  re-run instead of passing silently. The commit that wrote this measurement is titled *a trigger is a
+  predicate, and nothing holds one to its corpus*.
+
   The old trigger could not fire on it: this entry's own *Observed pressure* had already counted seven
   slash-less branches in `0.5.0`, so the shape was known when the trigger was written, and the trigger was
   written over the other two. The convention drifted in the very next window, by the sole contributor,
@@ -1954,9 +1979,19 @@ consumer for an undemonstrated deduplication.
   whoever is present at the moment it happens, which is exactly what does not happen when the entry reads as
   already handled. Bounded, and this is the useful half: several of these entries already say in their own
   text that what they ask for is a record made at the time, so the discipline exists and only the label is
-  missing. *Promotion trigger:* a witness-only trigger found to have been trippable all along by something
-  anyone could have run — which would mean the two kinds were sorted wrong, not that the sorting is
-  worthless. *Why not a field on every entry:* a new field is a form to maintain, and the property is
+  missing. *Promotion trigger, widened 2026-09-06 to the second direction:* a trigger sorted into either
+  kind found to belong to the other — a witness-only one trippable all along by something anyone could have
+  run, **or** one carrying a swept verdict that no sweep could have reached. Either would mean the two kinds
+  were sorted wrong, not that the sorting is worthless.
+
+  **It fires on the widening's own instance, and the re-decision is the steward's.** *The OpenSpec capability
+  lifecycle is retained and has never been exercised* carried `Not fired, swept 2026-09-01` over an
+  observable the lifecycle's own step 5 destroys — so a verdict was written in the register of the kind that
+  can be swept, for a trigger belonging to the kind that can only be witnessed. The trigger as first written
+  could not have caught it: it named the direction in which a witness-only trigger turns out to be cheap, and
+  this is the direction in which a swept one turns out to be impossible. That is the more dangerous half,
+  because a dated verdict reads as **settled** rather than as waiting, which is a stronger claim than the
+  *looks armed* this entry's own *Risk* paragraph budgeted for. *Why not a field on every entry:* a new field is a form to maintain, and the property is
   already legible from the trigger's own sentence once someone has asked the question of it. What was
   missing was the question, and it is asked here. *Version class:* patch; this file ships in no crate.
   *Authority:* this entry, and the trigger-corpus entry above, of which this is the other half — that one
