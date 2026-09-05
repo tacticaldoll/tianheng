@@ -33,7 +33,6 @@ fn read(repo: &Path, rel: &str) -> Result<String, Refusal> {
     })
 }
 
-/// The kinds of table whose entries are dependency declarations.
 /// Which tables a caller means by *a dependency*, because this reader's consumers do not all mean the same
 /// thing by it.
 ///
@@ -64,6 +63,7 @@ pub(crate) enum Subject {
     Offers,
 }
 
+/// The kinds of table whose entries are dependency declarations.
 const DEPENDENCY_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
 
 /// What a dependency declares as its version requirement, or why this reader could not tell.
@@ -215,18 +215,6 @@ fn dependency_of(key: &str, item: &toml_edit::Item) -> Dependency {
 /// vacuity floor, which then said *found no dependency on a family crate* — a sentence about the declaration
 /// form over a file cargo will not read at all. That is the misdirection this crate's typed readers exist to
 /// prevent, so the refusal carries the parse error instead.
-/// A parse error on one line.
-///
-/// `toml_edit` renders its errors over several lines with a caret rule under the offending span, and a
-/// refusal message is one line. Both parse sites flatten it the same way, so the rule is written once — the
-/// spelling this repository's own `one_spelling` check exists to require.
-fn one_line(err: &toml_edit::TomlError) -> String {
-    err.to_string()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 pub(crate) fn declared_dependencies(
     text: &str,
     subject: Subject,
@@ -234,7 +222,7 @@ pub(crate) fn declared_dependencies(
     let doc = text.parse::<toml_edit::DocumentMut>().map_err(|err| {
         cannot_judge_at(
             "release-coherence#manifest-unparseable",
-            format!("a manifest this parser cannot read — {}", one_line(&err)),
+            crate::manifest::manifest_unreadable(&err),
         )
     })?;
     let mut found = Vec::new();
@@ -390,13 +378,7 @@ pub fn package_name(manifest: &str) -> PackageName {
         // send an operator to add a key that may already be there. The whole error, collapsed: a duplicate
         // key reports its position on the first line and names the key on later ones.
         Err(err) => {
-            return PackageName::Unreadable(format!(
-                "a manifest this parser cannot read — {}",
-                err.to_string()
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ));
+            return PackageName::Unreadable(crate::manifest::manifest_unreadable(&err));
         }
     };
     let Some(name) = doc
@@ -682,7 +664,7 @@ fn require_version_surfaces(
                 "release-coherence#member-manifest-unparseable",
                 format!(
                     "{name}: a member manifest this parser cannot read — {}",
-                    one_line(&err)
+                    crate::manifest::parse_error_on_one_line(&err)
                 ),
             )
         })?;
@@ -1661,10 +1643,7 @@ fn require_lock_versions(repo: &Path, members: &[Member], version: &str) -> Resu
             "release-coherence#lock-unreadable",
             format!(
                 "Cargo.lock is not a lock file this parser can read — {}",
-                err.to_string()
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ")
+                crate::manifest::parse_error_on_one_line(&err)
             ),
         )
     })?;
