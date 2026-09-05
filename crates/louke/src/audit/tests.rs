@@ -425,6 +425,48 @@ fn a_path_inside_a_compound_predicate_is_still_a_predicate() {
     );
 }
 
+/// A path-QUALIFIED look-alike is not the built-in `cfg_attr`.
+///
+/// **Group kind was inferred from the last identifier alone.** `foo::cfg_attr(a, path = "bogus")` ends in
+/// the identifier `cfg_attr`, so a scanner matching that one segment reopened applied-meta scanning inside
+/// an attribute that is not `cfg_attr` at all — restoring the same false coverage through a different
+/// spelling. The built-in is the single-segment path; anything reached through `::` is somebody else's
+/// attribute and carries no module target.
+///
+/// Negative run, against the last-identifier test: `exit_code() == 0`, clean on the strength of a probe in
+/// a file no build compiles.
+#[test]
+fn a_path_qualified_look_alike_is_not_cfg_attr() {
+    let tb = TempBase::new("qualified-look-alike");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(any(), foo::cfg_attr(a, path = \"bogus\"), path = \"real.rs\")]\nmod plat;",
+    );
+    tb.source("bogus", "fn live() { assert_boundary!(\"plat-seam\", o); }");
+    tb.source(
+        "real.rs",
+        "fn live() { assert_boundary!(\"real-seam\", o); }",
+    );
+
+    let outcome = tb.audit(
+        &[
+            boundary("plat-seam", Severity::Enforce),
+            boundary("real-seam", Severity::Enforce),
+        ],
+        std::slice::from_ref(&root),
+    );
+    let reported = format!("{outcome:?}");
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "a qualified look-alike carries no module target: {reported}"
+    );
+    assert!(
+        reported.contains("plat-seam") && !reported.contains("real-seam"),
+        "the look-alike's file is not read and the applied target is: {reported}"
+    );
+}
+
 /// A path component that is not a directory is an ABSENCE, not something this reader could not read.
 ///
 /// **`NotFound` is not the only absence**, and the sibling direction's repair took it for the only one.

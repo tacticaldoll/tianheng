@@ -337,11 +337,15 @@ pub(crate) fn mod_preamble_attrs(
                     // the first alone made the rest invisible. [`path_meta_values`] records what that
                     // cost, measured against rustc.
                     //
-                    // The reader searches linearly for `path` anywhere in the argument span rather
-                    // than parsing nesting structure, so a doubly- (or deeper-) nested
-                    // `#[cfg_attr(a, cfg_attr(b, path = "…"))]` resolves the same way a single-level
-                    // one does — measured directly
-                    // (`a_doubly_nested_cfg_attr_path_is_followed_the_same_as_a_single_nesting`).
+                    // The reader tracks nesting, but only enough to answer two questions per open
+                    // group: is this group a `cfg_attr`'s own argument list, and has that group's
+                    // predicate been passed. A doubly- (or deeper-) nested
+                    // `#[cfg_attr(a, cfg_attr(b, path = "…"))]` therefore resolves the same way a
+                    // single-level one does — measured directly
+                    // (`a_doubly_nested_cfg_attr_path_is_followed_the_same_as_a_single_nesting`) —
+                    // while a predicate's own group answers neither. It said *anywhere in the argument
+                    // span rather than parsing nesting structure*, which is what read predicates as
+                    // targets.
                     b"cfg_attr" => {
                         let paren_open = skip_preamble_trivia(bytes, name_end, mod_index);
                         if bytes.get(paren_open) == Some(&b'(') {
@@ -477,7 +481,17 @@ pub(crate) fn path_meta_values(
                 name_end += 1;
             }
             let name = &bytes[name_start..name_end];
-            last_ident_was_cfg_attr = name == b"cfg_attr";
+            // **The built-in is the SINGLE-segment path**, and matching the last identifier alone is not
+            // that: `foo::cfg_attr(a, path = "…")` ends in the same word while being somebody else's
+            // attribute, and reopening applied-meta scanning inside it restored the false coverage this
+            // reader had just closed, through a different spelling. Anything reached through `::` carries
+            // no module target.
+            let qualified = bytes[..name_start]
+                .iter()
+                .rev()
+                .find(|byte| !byte.is_ascii_whitespace())
+                == Some(&b':');
+            last_ident_was_cfg_attr = name == b"cfg_attr" && !qualified;
             let applied = groups
                 .last()
                 .is_some_and(|group| group.applies_metas && group.past_predicate);
