@@ -493,6 +493,33 @@ them.
 
 ### Self-governance
 
+- **A version this repository never released was written into its own governance, three times.** The sweep
+  had been treating this as 24 stale references to *the 0.5.1 window*. It is one class, and a different fault
+  from the relative anchor beside it in `AGENTS.md`'s table: `this window` names a **moving** reference,
+  while `0.5.1` names one that **never came to rest**. Release class is decided from what a window's changes
+  do, so a window's number is not knowable until its cut — and a number written into prose beforehand becomes
+  a pointer to nothing when the class moves.
+
+  **It has moved three times.** Measured over every `X.Y.Z` literal in tracked live Markdown outside
+  `CHANGELOG.md` and `docs/history/`: `0.3.1`, `0.4.1` and `0.5.1` each appear and none has a dated section
+  or a tag. The trend runs the wrong way — 15 occurrences, then 4, then 30 — and the reason it will continue
+  is that **reclassifying upward is this repository's SemVer honesty working correctly**, so windows will
+  keep being renumbered while their prose is written before the number is earned.
+
+  The repair is the form this repository already had right: the four `0.4.1` sites all name what the window
+  became in the same clause, and read correctly today because of it. The 24 unanchored sites now name the
+  version each window shipped as; the five inside the merged-pull-request measurement keep `release/0.5.1`,
+  because there the name is the value the query takes and the sentence beside it says the ref is gone.
+  `AGENTS.md`'s carrier taxonomy carries the row.
+
+  **A reaction is reachable here, which is unusual for this file's prose classes and is why it is filed
+  rather than waved at.** A version literal below the workspace version with neither a dated section nor a
+  tag is decidable with no judgement over meaning: above the workspace version is a plan, with a section or
+  tag is a release, and what is left is neither. The exemption — the same paragraph naming an earned version
+  — is positional. What is not taken is the design decision inside that exemption, which is whether a
+  governance file may narrate its own reclassification, because choosing it alone is the shape this sweep
+  kept finding wrong.
+
 - **The sweep's third pass, and the sweep wrote an instance of the class it was measuring.** Four more
   entries evaluated. The one that matters is the relative-anchor bound, whose corpus command was re-run: it
   answers three live offences against ten at the previous reading, and **one of the three had been written
