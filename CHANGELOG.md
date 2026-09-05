@@ -66,6 +66,18 @@ them.
 
 ### Semantic and runtime
 
+- **A path-QUALIFIED look-alike reopened the same hole.** Group kind was decided by the last identifier
+  before a `(`, and `foo::cfg_attr(a, path = "bogus")` ends in that word while being somebody else's
+  attribute — so applied-meta scanning resumed inside it and the false coverage came back through a
+  different spelling. Measured, before: `Clean(Subject { declared: 2, reached: 1 })`. The built-in is the
+  **single-segment** path; anything reached through `::` carries no module target.
+
+  Two carriers of the previous repair went with it: the call-site comment still said the reader searches
+  *anywhere in the argument span rather than parsing nesting structure*, which is the shape that read
+  predicates as targets, and the entry below still said one flag per open group closes it — true of the
+  repair before last, and half the rule since. Closing it took a phase **and** a kind, and each repair
+  carried one.
+
 - **A `path` inside a COMPOUND predicate was still read as a target.** The repair below tracked a predicate
   phase per parenthesised group — and `all(…)` is one, with a comma of its own — so
   `#[cfg_attr(all(unix, path = "bogus"), path = "real.rs")]` set the phase past `all`'s comma and collected
@@ -87,10 +99,12 @@ them.
   compile: a probe inside it counted as coverage, and the audit reported **clean** over a seam nothing
   probes on any real build. Measured, before: `Clean(Subject { declared: 1, reached: 1 })`.
 
-  One flag per open group closes it — a `path` before that level's first comma is part of the condition and
-  names nothing. 圭表 already waits for the top-level comma and 渾儀 skips the predicate at each level, so
-  this was the third dimension disagreeing about which positions are applied targets, on the same shape the
-  entry above found them disagreeing about.
+  Closing it took two rules, and this repair carried one: a phase per open group, so a `path` before that
+  level's first comma is part of the condition and names nothing. The entry above carries the other — the
+  group's KIND — after a phase alone read a compound predicate's comma as a `cfg_attr`'s. 圭表 already
+  waits for the top-level comma and 渾儀 skips the predicate at each level, so this was the third dimension
+  disagreeing about which positions are applied targets, on the same shape the cfg_attr union found them
+  disagreeing about.
 
   **The comment that recorded the disagreement and left it open was wrong three times**: the shape needs no
   special build to appear in a tree, reading it is not harmless, and closing it does not need a nesting
