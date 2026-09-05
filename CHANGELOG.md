@@ -517,6 +517,22 @@ them.
   governance file may narrate its own reclassification, because choosing it alone is the shape this sweep
   kept finding wrong.
 
+- **The reading finished, and the last thing it found was a typed list inside the paragraph reasoning from
+  it.** The workflow-pin entry bounds its own risk by naming which actions run and under what permission —
+  *the actions are `actions/checkout` and `EmbarkStudios/cargo-deny-action`*, two, while the workflow pins
+  **three**. `actions/setup-node` arrived with the Node interpreter pin **this same entry narrates**, and the
+  enumeration its disposition rests on did not move with it. What actually bounds the risk is the permission
+  grant, which is a property of the workflow rather than of which actions it happens to name, so the entry
+  states that criterion and the count is left to whatever reads `uses:`. *A census is produced, never typed*
+  — inside an `ACCEPTED DEBT` whose acceptance was argued from the typed half.
+
+  Three negatives close the pass, each recording what it checked. *The scanner count is three, not four* —
+  measured by which files `starts_with` or `strip_prefix` the markers rather than which mention them, a
+  distinction worth the care because counting mentions answers seven. *No scratch-directory helper reached
+  the wildcard prelude*, so the fixture that would migrate on it still cannot. And *`gh` 2.46.0 offers no
+  new server-decided precondition* — `--match-head-commit` pins the head object, which the wrapper already
+  uses and which is not one of the three names its re-read races are about.
+
 - **The first reading under the new rule, and a `WATCH` moved because its proposal turned out to be already
   running.** Four more entries evaluated, each recording what it checked rather than only what it concluded.
 

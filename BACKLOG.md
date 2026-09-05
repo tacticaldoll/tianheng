@@ -139,9 +139,14 @@ consumer for an undemonstrated deduplication.
   found every action on a mutable major tag while `Cargo.lock` and `package-lock.json` pinned their own
   ecosystems by digest; the refresh gap is this repair's own consequence rather than a second finding.
   *Current reaction or bound:* none, and that is the entry. Nothing here reads the workflow, and no
-  Dependabot or Renovate configuration exists in this repository. *Risk, bounded rather than assumed:* the
-  actions are `actions/checkout` and `EmbarkStudios/cargo-deny-action`, both running under
-  `permissions: contents: read` against a repository whose CI holds no secret beyond that grant. A stale
+  Dependabot or Renovate configuration exists in this repository. *Risk, bounded rather than assumed:* every
+  `uses:` in the workflow runs under `permissions: contents: read` against a repository whose CI holds no
+  secret beyond that grant — **stated as the criterion because the list was typed and went stale.** It read
+  *the actions are `actions/checkout` and `EmbarkStudios/cargo-deny-action`*, two, while the workflow pins
+  **three**: `actions/setup-node` arrived with the Node interpreter pin this entry itself narrates, and the
+  enumeration the disposition reasons from did not move with it. Measured 2026-09-06 by reading the `uses:`
+  lines. What bounds the risk is the permission grant, which is a property of the workflow rather than of
+  which actions it happens to name, so the criterion holds whatever the count becomes. A stale
   checkout is a stale checkout; the failure it invites is missing an upstream fix, not executing something
   unchosen — which is the direction the pin closed.
 
@@ -247,7 +252,9 @@ consumer for an undemonstrated deduplication.
   public prelude. Migrating this fixture would require either adding a new export to `tianheng` just for
   an example's own test helper, or adding `xingbiao` as a second dependency, either of which contradicts
   the example's stated purpose. *Promotion trigger:* `xingbiao::claim_scratch` (or an equivalent) becoming
-  reachable through `tianheng::prelude` for an unrelated reason, at which point migrating this one fixture
+  reachable through `tianheng::prelude` for an unrelated reason — **not fired, measured 2026-09-06: the
+  wildcard prelude re-exports no scratch-directory helper, so the fixture still could not reach one** — at
+  which point migrating this one fixture
   would cost nothing further. *Version class:* patch; an example, shipping in no package. *Authority:*
   `examples/observer-participant/Cargo.toml`'s own header comment, the one place this constraint is
   declared.
@@ -1646,7 +1653,11 @@ consumer for an undemonstrated deduplication.
   `observation_bound_model.rs` and the register disagree on a bound's existence or a citation's defended id,
   each internally consistent and both wrong relative to the other. *Promotion trigger:* either latent shape
   appearing in a tracked spec, or a fourth independent scanner of this grammar appearing anywhere in the
-  crate. *Version class:* patch; repository-internal, shipping in no crate. *Authority:* none declared yet —
+  crate. **Not fired, measured 2026-09-06** by counting the files that `starts_with` or `strip_prefix` the
+  markers themselves rather than the files mentioning them: **three** — `bound_register_parse.rs`, which
+  owns the grammar, and the two readers this entry already names. Counting files that merely carry the
+  tokens, in prose or in fixtures, would have answered seven, and the difference between those two numbers
+  is the whole of what this entry watches. *Version class:* patch; repository-internal, shipping in no crate. *Authority:* none declared yet —
   the three readers currently agree on every live spec, so nothing has been violated to anchor one. *Shape:*
   closing this fully needs one shared low-level walker (`"#### Scenario:"`-untrimmed to open,
   `"#### "`/`"### "`/`"## "`-trimmed to close, matching `bounds_in`'s own rules) that all three call sites use,
@@ -2493,8 +2504,10 @@ consumer for an undemonstrated deduplication.
   longer the title, or lands on a base or comes from a head branch the gate never judged, in the one act that
   cannot be repaired —
   bounded by the window being a single API round trip and by the editor being a collaborator rather than an
-  adversary. *Next trigger:* `gh` gaining a server-decided precondition for any of the three.
-  *Authority:* engine.
+  adversary. *Next trigger:* `gh` gaining a server-decided precondition for any of the three. **Not fired,
+  measured 2026-09-06 against `gh` 2.46.0:** `--match-head-commit` is still the only one on offer, and it
+  pins the head **object** — the endpoint the wrapper already uses, not one of the three names the races are
+  about. *Authority:* engine.
   *Compatibility:* patch; the wrapper
   ships in no crate.
 
