@@ -2297,6 +2297,52 @@ consumer for an undemonstrated deduplication.
   hand-maintained — instead of answered one shape at a time. *Authority:* engine. *Compatibility:* patch;
   every repair to date narrows what is read.
 
+  **Three options, their costs, and the precedents each rests on.** Recorded here rather than decided,
+  because where a shared lexical answer may live is an architectural call and this file is where such a
+  call waits for one.
+
+  **Null option — keep answering one spelling at a time.** Its cost is measured rather than feared: eight
+  wrong answers across two crates, every one a **clean verdict** over source no build compiles or a
+  violation reported against source the governed tree does not have. Each was found by reading, none by a
+  report from the field, and each repair was correct and followed by another shape. What it buys is that
+  nothing structural moves. What it does not buy is any statement about what remains: the corpus is *every
+  lexical form Rust admits*, which no inspection enumerates, so the next shape's arrival is the only
+  evidence available about the last one's completeness.
+
+  **Option A — a token boundary inside each dimension.** One reader per crate turns a span into tokens —
+  an identifier with its raw prefix consumed, a path separator, a comma, a group open and close — with
+  trivia handled once; the interpretation becomes a state machine over tokens whose states can be
+  enumerated, which is the audit-cycle shape `PROJECT.md` records. *For:* it keeps 三儀 ⊥ 三儀 exactly as
+  it stands, and the repository already treats independent hand-written implementations as a feature
+  rather than a cost — `cfg_if_transparency_conformance` exists to hold two of them in step rather than
+  merge them, and `PROJECT.md` records the `cfg_if` carve-out as *each hand-written*. *Against:* the same
+  lexical logic is written twice, and this window measured what that produces — 圭表 and 漏刻 each missed
+  a different subset, and neither was the correct one. Duplication is not neutral here; it is the
+  mechanism that generated two distinct hole sets from one question.
+
+  **Option B — one lexical substrate below the dimensions.** *For:* `xingbiao` exists for precisely this
+  failure mode — `PROJECT.md` records it as the shared workspace-data substrate *consolidated below the
+  三儀 to prevent twin-drift* — and this window put `is_absence` there for the same reason, after the same
+  collapse was found in all three. One owner means a new spelling is one fix. *Against:* two costs, and
+  the second is the one that decides it. First, `xingbiao`'s stated job is workspace data; a Rust
+  tokenizer is not that, so either its charter widens or a crate is born — and the drift law admits a
+  crate when it is built, not before. Second and sharper: **the conformance suites' value is that the
+  implementations are independent.** Three readers disagreeing is what surfaced every one of these
+  defects. A shared tokenizer makes a tokenizer defect invisible to all three at once, which trades a
+  class of divergence for a class of silent agreement. That trade is bounded — the tokenizer would carry
+  its own directions, and the suites would still cross-check interpretation — but it is a real one and
+  it is the argument Option A rests on.
+
+  *Evidence bearing on the choice, and it is not neutral:* 渾儀 answers this same question through `syn`
+  and has never carried one of these shapes. What failed is hand-rolled lexing specifically, in both
+  crates that do it. That is an argument for the boundary and **not** for `syn`, whose exclusion is a
+  recorded decision for 圭表's dependency-light core and 漏刻's std-light prod face.
+
+  *What would decide it:* a reading of whether the interpretation's states, once separated from lexing,
+  are enumerable and generable — because that is what distinguishes this from a fourth hand-rolling. If
+  they are, the enumeration is the instrument and the boundary is how it becomes possible; if they are
+  not, Option A's independence argument wins on the evidence above. *Authority:* steward — neither option
+  is a commit-level call.
 - **WATCH: no fixture separates 圭表's two states for an unreadable module target.** *Observed pressure:*
   the `is_file()` absence/unreadable collapse was repaired in all three dimensions by routing every read
   through `xingbiao::is_regular_file` / `is_directory`, which carry the criterion. 渾儀's repair was seen to
