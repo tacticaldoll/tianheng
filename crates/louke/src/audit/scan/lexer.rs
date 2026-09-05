@@ -438,10 +438,24 @@ pub(crate) fn path_meta_values(
         past_predicate: false,
     }];
     let mut last_ident_was_cfg_attr = false;
+    // Whether the previous SIGNIFICANT token was a path separator. Tracked forward through trivia rather
+    // than reconstructed by looking behind: a look-behind over whitespace alone stopped at the `/` of
+    // `foo::/**/cfg_attr` and read the segment as unqualified, which is the same false coverage through a
+    // third spelling. A comment is trivia and must not change what a path IS.
+    let mut after_path_sep = false;
     let mut i = start;
     while i < paren_close {
         if let Some(next) = skip_literal_or_comment(bytes, i) {
             i = next.min(paren_close);
+            continue;
+        }
+        if bytes[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if bytes[i] == b':' && bytes.get(i + 1) == Some(&b':') {
+            after_path_sep = true;
+            i += 2;
             continue;
         }
         match bytes[i] {
@@ -451,12 +465,14 @@ pub(crate) fn path_meta_values(
                     past_predicate: false,
                 });
                 last_ident_was_cfg_attr = false;
+                after_path_sep = false;
                 i += 1;
                 continue;
             }
             b')' => {
                 groups.pop();
                 last_ident_was_cfg_attr = false;
+                after_path_sep = false;
                 if groups.is_empty() {
                     // Unbalanced past this span's own group: nothing further is this attribute's.
                     return found;
@@ -469,6 +485,7 @@ pub(crate) fn path_meta_values(
                     group.past_predicate = true;
                 }
                 last_ident_was_cfg_attr = false;
+                after_path_sep = false;
                 i += 1;
                 continue;
             }
@@ -484,14 +501,11 @@ pub(crate) fn path_meta_values(
             // **The built-in is the SINGLE-segment path**, and matching the last identifier alone is not
             // that: `foo::cfg_attr(a, path = "…")` ends in the same word while being somebody else's
             // attribute, and reopening applied-meta scanning inside it restored the false coverage this
-            // reader had just closed, through a different spelling. Anything reached through `::` carries
-            // no module target.
-            let qualified = bytes[..name_start]
-                .iter()
-                .rev()
-                .find(|byte| !byte.is_ascii_whitespace())
-                == Some(&b':');
-            last_ident_was_cfg_attr = name == b"cfg_attr" && !qualified;
+            // reader had just closed. A segment reached through `::` carries no module target — and
+            // *reached through* is decided by the token before it, tracked forward past trivia, because a
+            // look-behind over whitespace alone read `foo::/**/cfg_attr` as unqualified.
+            last_ident_was_cfg_attr = name == b"cfg_attr" && !after_path_sep;
+            after_path_sep = false;
             let applied = groups
                 .last()
                 .is_some_and(|group| group.applies_metas && group.past_predicate);
@@ -504,6 +518,7 @@ pub(crate) fn path_meta_values(
             i = name_end;
             continue;
         }
+        after_path_sep = false;
         i += 1;
     }
     found

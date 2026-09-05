@@ -433,14 +433,25 @@ fn a_path_inside_a_compound_predicate_is_still_a_predicate() {
 /// spelling. The built-in is the single-segment path; anything reached through `::` is somebody else's
 /// attribute and carries no module target.
 ///
-/// Negative run, against the last-identifier test: `exit_code() == 0`, clean on the strength of a probe in
-/// a file no build compiles.
+/// Negative run, against the last-identifier test and again against the look-behind that replaced it —
+/// the same result from two different readers, which is what makes this the third spelling of one hole:
+///
+/// ```text
+/// assertion `left == right` failed: a qualified look-alike carries no module target: Clean(Subject { declared: 2, reached: 1 })
+///   left: 0
+///  right: 1
+/// ```
+///
+/// Clean, on the strength of a probe in a file no build compiles.
 #[test]
 fn a_path_qualified_look_alike_is_not_cfg_attr() {
     let tb = TempBase::new("qualified-look-alike");
     let root = tb.source(
         "lib.rs",
-        "#[cfg_attr(any(), foo::cfg_attr(a, path = \"bogus\"), path = \"real.rs\")]\nmod plat;",
+        // A comment between `::` and the identifier is trivia, and must not change what the path IS.
+        // A look-behind over whitespace alone stopped at the comment's `/` and read the segment as
+        // unqualified, which restored the same false coverage through a third spelling.
+        "#[cfg_attr(any(), foo::/**/cfg_attr(a, path = \"bogus\"), path = \"real.rs\")]\nmod plat;",
     );
     tb.source("bogus", "fn live() { assert_boundary!(\"plat-seam\", o); }");
     tb.source(

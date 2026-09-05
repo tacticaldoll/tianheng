@@ -66,11 +66,17 @@ them.
 
 ### Semantic and runtime
 
-- **A path-QUALIFIED look-alike reopened the same hole.** Group kind was decided by the last identifier
-  before a `(`, and `foo::cfg_attr(a, path = "bogus")` ends in that word while being somebody else's
-  attribute — so applied-meta scanning resumed inside it and the false coverage came back through a
-  different spelling. Measured, before: `Clean(Subject { declared: 2, reached: 1 })`. The built-in is the
-  **single-segment** path; anything reached through `::` carries no module target.
+- **A path-QUALIFIED look-alike reopened the same hole, twice.** Group kind was decided by the last
+  identifier before a `(`, and `foo::cfg_attr(a, path = "bogus")` ends in that word while being somebody
+  else's attribute — so applied-meta scanning resumed inside it and the false coverage came back through a
+  different spelling. The first repair asked whether the segment was qualified by looking **behind** it over
+  whitespace, and `foo::/**/cfg_attr` stopped that scan at the comment's `/`: the same over-read, a spelling
+  later. Measured, before each: `Clean(Subject { declared: 2, reached: 1 })`.
+
+  The built-in is the **single-segment** path, and whether a segment is reached through `::` is a fact about
+  the token before it — tracked forward past trivia, because a comment is trivia and must not change what a
+  path IS. `runtime-origin-assertion` gains the clause and the pin, since the reaction moved and the
+  requirement had said nothing about qualified attribute paths at all.
 
   Two carriers of the previous repair went with it: the call-site comment still said the reader searches
   *anywhere in the argument span rather than parsing nesting structure*, which is the shape that read
